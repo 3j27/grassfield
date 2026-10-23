@@ -201,13 +201,52 @@ TEST(LayerPointer, NoKeyboardOrAnotherClientsLayerOwesNothing) {
 
 TEST(LayerPointer, RefreshesAreBoundedPerSecond) {
     CRefreshState s;
+    for (uint32_t i = 0; i < kMaxRefreshesPerSecond; ++i) {
+        ASSERT_EQ(s.budgetWaitMs(1000 + i), 0U);
+        s.spend(1000);
+    }
+    EXPECT_EQ(s.budgetWaitMs(1500), 500U) << "over the budget within one second: wait for its end";
+    EXPECT_EQ(s.budgetWaitMs(1999), 1U);
+    EXPECT_EQ(s.budgetWaitMs(2000), 0U) << "a new second";
+    EXPECT_EQ(s.budgetWaitMs(500), 0U) << "a clock that went backwards starts a new window";
+}
+
+// Reviewer, 2026-10-23: the budget was checked after onAttempt had cleared the owed refresh, so a refresh over it was lost
+// and the next press landed at a stale position (FR51). Over the budget, the refresh stays owed and runs later.
+TEST(LayerPointer, AnAttemptOverTheBudgetIsDeferredNotDropped) {
+    CRefreshState s;
     for (uint32_t i = 0; i < kMaxRefreshesPerSecond; ++i)
-        ASSERT_TRUE(s.admit(1000 + i));
-    EXPECT_FALSE(s.admit(1500)) << "over the budget within one second";
-    EXPECT_FALSE(s.admit(1999));
-    EXPECT_EQ(s.dropped(), 2U);
-    EXPECT_TRUE(s.admit(2000)) << "a new second";
-    EXPECT_TRUE(s.admit(500)) << "a clock that went backwards starts a new window";
+        s.spend(1000);
+    ASSERT_TRUE(s.onLayerEvent("grassfield-overlay"));
+    EXPECT_EQ(s.attemptAt(true, false, 1400), Step::Defer);
+    EXPECT_TRUE(s.owed()) << "still owed";
+    EXPECT_TRUE(s.scheduled()) << "the timer's attempt is the scheduled one";
+    EXPECT_EQ(s.deferred(), 1U);
+    EXPECT_FALSE(s.onLayerEvent("grassfield-menubar")) << "nothing more is scheduled meanwhile";
+    EXPECT_EQ(s.attemptAt(true, false, 2000), Step::Refresh) << "the window is over: the refresh runs";
+    EXPECT_FALSE(s.owed());
+    EXPECT_FALSE(s.scheduled());
     s.reset();
-    EXPECT_EQ(s.dropped(), 0U);
+    EXPECT_EQ(s.deferred(), 0U);
+}
+
+TEST(LayerPointer, APressIsNeverDeferred) {
+    CRefreshState s;
+    for (uint32_t i = 0; i < kMaxRefreshesPerSecond; ++i)
+        s.spend(1000);
+    ASSERT_TRUE(s.onLayerEvent("grassfield-overlay"));
+    ASSERT_EQ(s.attemptAt(true, false, 1400), Step::Defer);
+    EXPECT_EQ(s.beforeButton(true, true, false), Step::Refresh) << "the user's press refreshes at once, over the budget too";
+    EXPECT_EQ(s.attemptAt(true, false, 2000), Step::None) << "the deferred attempt then finds nothing owed";
+    EXPECT_FALSE(s.scheduled());
+}
+
+TEST(LayerPointer, AnAttemptThatWaitsForADeviceIsNotDeferred) {
+    CRefreshState s;
+    for (uint32_t i = 0; i < kMaxRefreshesPerSecond; ++i)
+        s.spend(1000);
+    ASSERT_TRUE(s.onLayerEvent("grassfield-overlay"));
+    EXPECT_EQ(s.attemptAt(false, false, 1400), Step::Wait) << "no pointer device: the next press refreshes";
+    EXPECT_EQ(s.attemptAt(true, true, 1400), Step::Wait) << "a button held: its release schedules";
+    EXPECT_EQ(s.deferred(), 0U);
 }

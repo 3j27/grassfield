@@ -62,21 +62,31 @@ namespace gf::layerpointer {
         m_inRefresh = false;
     }
 
-    bool CRefreshState::admit(uint64_t nowMs) {
+    uint64_t CRefreshState::budgetWaitMs(uint64_t nowMs) const {
+        if (nowMs < m_windowStartMs || nowMs - m_windowStartMs >= 1000 || m_inWindow < kMaxRefreshesPerSecond)
+            return 0;
+        return 1000 - (nowMs - m_windowStartMs);
+    }
+
+    void CRefreshState::spend(uint64_t nowMs) {
         if (nowMs < m_windowStartMs || nowMs - m_windowStartMs >= 1000) {
             m_windowStartMs = nowMs;
             m_inWindow      = 0;
         }
-        if (m_inWindow >= kMaxRefreshesPerSecond) {
-            ++m_dropped;
-            return false;
-        }
         ++m_inWindow;
-        return true;
     }
 
-    uint64_t CRefreshState::dropped() const {
-        return m_dropped;
+    uint64_t CRefreshState::deferred() const {
+        return m_deferred;
+    }
+
+    Step CRefreshState::attemptAt(bool pointerDevice, bool buttonsHeld, uint64_t nowMs) {
+        if (m_owed && pointerDevice && !buttonsHeld && budgetWaitMs(nowMs) > 0) {
+            m_scheduled = true;
+            ++m_deferred;
+            return Step::Defer;
+        }
+        return onAttempt(pointerDevice, buttonsHeld);
     }
 
     void CRefreshState::reset() {
@@ -87,7 +97,7 @@ namespace gf::layerpointer {
         m_inRefresh       = false;
         m_windowStartMs   = 0;
         m_inWindow        = 0;
-        m_dropped         = 0;
+        m_deferred        = 0;
     }
 
     bool CRefreshState::scheduled() const {

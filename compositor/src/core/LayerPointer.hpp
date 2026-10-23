@@ -34,10 +34,13 @@ namespace gf::layerpointer {
         Wait,     // owed, but not now: no pointer device (Hyprland refuses any pointer focus change then) or a button is held
                   // (Hyprland keeps the pressed surface): done after the release or before the next press
         Schedule, // schedule an attempt from the event loop (after Hyprland has handled the event being delivered)
+        Defer,    // owed, but over kMaxRefreshesPerSecond: the attempt runs again in budgetWaitMs() (still owed, still scheduled)
     };
 
-    // At most this many refreshes a second, whatever happens (a backstop: a loop this class does not foresee stays bounded
-    // and the compositor keeps answering).
+    // At most this many refreshes from the event loop a second (a backstop: a loop this class does not foresee stays bounded
+    // and the compositor keeps answering). Over it the refresh stays owed and is tried again when the second is over
+    // (deferred, never dropped: a press would otherwise land at a stale position, FR51). A refresh before a press is the
+    // user's and never waits.
     inline constexpr uint32_t kMaxRefreshesPerSecond = 20;
 
     // One refresh owed per burst of events: the first one schedules an attempt from the event loop (after Hyprland's own
@@ -59,14 +62,22 @@ namespace gf::layerpointer {
         void     beginRefresh();
         void     endRefresh();
 
-        // The refresh about to run fits the budget (kMaxRefreshesPerSecond per one-second window from `nowMs`); false: it is
-        // dropped (counted in dropped()).
-        bool     admit(uint64_t nowMs);
-        uint64_t dropped() const;
+        // An event-loop attempt may refresh at `nowMs` (kMaxRefreshesPerSecond per one-second window); 0 when it may, else
+        // the milliseconds until the window is over (the attempt is then tried again, the refresh still owed). Read only.
+        uint64_t budgetWaitMs(uint64_t nowMs) const;
+        // A refresh ran at `nowMs` (counted in its window, whatever started it).
+        void     spend(uint64_t nowMs);
+        // Event-loop attempts that had to wait for the next window.
+        uint64_t deferred() const;
+
 
         // The scheduled attempt runs (or could not be scheduled: no event loop). Refresh (and nothing owed any more) when
         // a pointer device exists and no button is held; Wait otherwise; None when nothing is owed.
         Step     onAttempt(bool pointerDevice, bool buttonsHeld);
+        // The event loop's attempt at `nowMs`: onAttempt, except Defer when it would refresh over the budget. Then the
+        // refresh stays owed and the attempt stays scheduled (the caller runs it again in budgetWaitMs(nowMs); meanwhile a
+        // new layer event schedules nothing more, and a press still refreshes at once: beforeButton has no budget).
+        Step     attemptAt(bool pointerDevice, bool buttonsHeld, uint64_t nowMs);
 
         // A pointer button event, before Hyprland handles it. A press while a refresh is owed: Refresh now (the press is
         // then delivered at the right place) when a device exists and no other button is held, else None. A release while
@@ -88,7 +99,7 @@ namespace gf::layerpointer {
         bool     m_inRefresh       = false;
         uint64_t m_windowStartMs   = 0; // the budget's one-second window
         uint32_t m_inWindow        = 0;
-        uint64_t m_dropped         = 0;
+        uint64_t m_deferred        = 0;
     };
 
 } // namespace gf::layerpointer

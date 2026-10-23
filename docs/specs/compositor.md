@@ -522,11 +522,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `isGrassfieldNamespace`, `CRefreshState`). Only a keyboard that MOVES to a Grassfield layer counts, and what a refresh
   itself causes is never a new reason: Hyprland sets the keyboard focus again on the on-demand layer under the cursor (the
   desktop icons) on every refresh, and counting that looped for ever (stages.sh on 2026-10-23: 10 million refreshes after a
-  press on the desktop, the nested compositor stopped answering IPC, its log grew to 3.3 GB). A backstop drops refreshes
-  beyond 20 a second (logged at the 1st, 10th, ... dropped).
+  press on the desktop, the nested compositor stopped answering IPC, its log grew to 3.3 GB). A backstop bounds the
+  event loop's refreshes to 20 a second: over it the refresh stays owed and its attempt runs again from an event-loop timer
+  when the second is over (`attemptAt` → `Defer`; logged at the 1st, 10th, ... deferral). It is never dropped (a dropped
+  refresh left the next press at the stale position, reviewer 2026-10-23), and a press is never deferred (the user's,
+  it cannot loop). `beginRefresh`/`endRefresh` wrap Hyprland's code in a scope guard.
 - **FR52** `layer-pointer` (no verb; the shell needs no change) is advertised when its two listeners registered, after
-  `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners and the scheduled event-loop callback
-  (`deferredFocus::CLater`) before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log
+  `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners, the scheduled event-loop callback
+  (`deferredFocus::CLater`) and the budget timer before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log
   line at the 1st, 10th, 100th, ... refresh (request log budget, FR24).
 - **FR53** The chrome follows the appearance (audit UX-06; feature `appearance`, advertised with `config`): the shell pushes
   `hl.plugin.grassfield.config("appearance", "dark" | "light")` (the appearance it shows, `Appearance.dark`) after each

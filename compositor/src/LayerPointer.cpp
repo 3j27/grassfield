@@ -9,8 +9,11 @@
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <string>
@@ -26,6 +29,7 @@ namespace gf::layerPointer {
             std::vector<CHyprSignalListener> listeners;
             lp::CRefreshState                refresh;
             deferredFocus::CLater            attempt;       // its callback is code of this library: cancelled in stop()
+            SP<CEventLoopTimer>              budgetTimer;   // an attempt over the budget, again when the second is over
             std::string                      lastNamespace; // the layer that made the refresh owed (log only)
             bool                             ready = false;
         };
@@ -56,31 +60,74 @@ namespace gf::layerPointer {
             return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
         }
 
+        // beginRefresh / endRefresh around Hyprland's code, whatever it does (an exception leaves through the guard).
+        class CRefreshScope {
+          public:
+            explicit CRefreshScope(lp::CRefreshState& state) : m_state(state) {
+                m_state.beginRefresh();
+            }
+            ~CRefreshScope() {
+                m_state.endRefresh();
+            }
+            CRefreshScope(const CRefreshScope&)            = delete;
+            CRefreshScope& operator=(const CRefreshScope&) = delete;
+            CRefreshScope(CRefreshScope&&)                 = delete;
+            CRefreshScope& operator=(CRefreshScope&&)      = delete;
+
+          private:
+            lp::CRefreshState& m_state;
+        };
+
         void refreshNow(std::string_view when) {
             auto& s = st();
-            if (!s.refresh.admit(nowMs())) {
-                if (events::isLogMilestone(s.refresh.dropped()))
-                    logRequest(Log::WARN, "layer pointer: refresh dropped: more than {} a second ({}; {} dropped)", lp::kMaxRefreshesPerSecond, s.lastNamespace, s.refresh.dropped());
-                return;
+            s.refresh.spend(nowMs());
+            {
+                // What the refresh causes (Hyprland sets the keyboard focus again on an on-demand layer under the cursor) is
+                // its own effect, never a new reason to refresh.
+                const CRefreshScope scope(s.refresh);
+                g_pInputManager->simulateMouseMovement();
+                g_pSeatManager->sendPointerFrame();
             }
-            // What the refresh causes (Hyprland sets the keyboard focus again on an on-demand layer under the cursor) is
-            // its own effect, never a new reason to refresh.
-            s.refresh.beginRefresh();
-            g_pInputManager->simulateMouseMovement();
-            g_pSeatManager->sendPointerFrame();
-            s.refresh.endRefresh();
             const auto n = s.refresh.refreshes();
             if (events::isLogMilestone(n))
                 logRequest(Log::DEBUG, "layer pointer: pointer focus refreshed at the cursor {} ({}; {} refresh(es))", when, s.lastNamespace, n);
+        }
+
+        void scheduleAttempt();
+
+        // An attempt over the budget: tried again when the second is over (the refresh stays owed; a press before then
+        // refreshes at once, FR51).
+        void deferAttempt(uint64_t waitMs) {
+            auto& s = st();
+            if (events::isLogMilestone(s.refresh.deferred()))
+                logRequest(Log::WARN, "layer pointer: more than {} refreshes a second: the next one waits {} ms ({}; {} deferred)", lp::kMaxRefreshesPerSecond, waitMs,
+                           s.lastNamespace, s.refresh.deferred());
+            if (!g_pEventLoopManager) {
+                s.refresh.onAttempt(false, true); // no event loop: nothing scheduled, the refresh waits for a button
+                return;
+            }
+            if (!s.budgetTimer) {
+                s.budgetTimer = makeShared<CEventLoopTimer>(std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) {
+                    gf::guarded("layer pointer budget", [] { scheduleAttempt(); });
+                }, nullptr);
+                g_pEventLoopManager->addTimer(s.budgetTimer);
+            }
+            s.budgetTimer->updateTimeout(std::chrono::milliseconds(std::max<uint64_t>(waitMs, 1)));
         }
 
         void attempt() {
             auto& s = st();
             if (!s.ready)
                 return;
-            if (s.refresh.onAttempt(pointerDevice(), buttonsHeld()) == lp::Step::Refresh)
-                refreshNow("after a Grassfield layer mapped or took the keyboard");
-            // Wait: the release of the held button schedules the next attempt; without a pointer device the next press does.
+            const auto now = nowMs();
+            switch (s.refresh.attemptAt(pointerDevice(), buttonsHeld(), now)) {
+                case lp::Step::Refresh: refreshNow("after a Grassfield layer mapped or took the keyboard"); break;
+                case lp::Step::Defer: deferAttempt(s.refresh.budgetWaitMs(now)); break;
+                // Wait: the release of the held button schedules the next attempt; without a pointer device the next press does.
+                case lp::Step::Wait:
+                case lp::Step::Schedule:
+                case lp::Step::None: break;
+            }
         }
 
         void scheduleAttempt() {
@@ -141,6 +188,9 @@ namespace gf::layerPointer {
         s.ready = false;
         s.listeners.clear();
         s.attempt.cancel();
+        if (s.budgetTimer && g_pEventLoopManager)
+            g_pEventLoopManager->removeTimer(s.budgetTimer); // its callback is code of this library
+        s.budgetTimer.reset();
         s.refresh.reset();
         s.lastNamespace.clear();
     }
@@ -157,6 +207,7 @@ namespace gf::layerPointer {
             case lp::Step::Refresh: refreshNow("before a press"); break;
             case lp::Step::Schedule: scheduleAttempt(); break;
             case lp::Step::Wait:
+            case lp::Step::Defer:
             case lp::Step::None: break;
         }
     }
