@@ -8,7 +8,7 @@
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor grassfield-icons)
 pkgver=0.4.0
-pkgrel=11
+pkgrel=12
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
