@@ -304,7 +304,9 @@ SettingsPage {
     property var previous: null
 
     function useVideo(p: string): void {
-        const was = {source: root.source, path: root.path};
+        // `overridden`: the chosen display had a wallpaper of its own. Without one, Cancel removes the override again (the display
+        // follows All Displays as before) instead of writing a copy of the inherited values.
+        const was = {source: root.source, path: root.path, overridden: root.overridden};
         if (root.choose({"wallpaper.source": "video", "wallpaper.path": p}, "video", p) && !(was.source === "video" && was.path === p))
             root.previous = was;
     }
@@ -313,7 +315,9 @@ SettingsPage {
     function cancelVideo(): void {
         const was = root.previous;
         root.previous = null;
-        if (was && !(was.source === "video" && was.path === root.path))
+        if (was && root.currentDisplay !== null && !was.overridden)
+            root.useAllDisplays();
+        else if (was && !(was.source === "video" && was.path === root.path))
             root.writeFields({"wallpaper.source": was.source, "wallpaper.path": was.path});
         else
             root.useArtwork();

@@ -49,15 +49,17 @@ ShellRoot {
         const s = JSON.parse(stateText());
         const paths = (s.videoStarting || []).map(m => m.path).sort();
         check(JSON.stringify(paths) === JSON.stringify(["/v/new.mp4", "/v/second.mp4"]), "markers not written: " + JSON.stringify(paths));
-        // One output's pause clears its own marker only.
-        WallpaperState.clearVideoStarting("A");
-        WallpaperState.clearVideoStarting("A");
+        // One output's pause clears its own marker only, and only when it still names the same video (the old slot of an output
+        // pausing after the new one wrote its marker must not clear it).
+        WallpaperState.clearVideoStarting("B", "/v/old.mp4");
+        WallpaperState.clearVideoStarting("A", "/v/new.mp4");
+        WallpaperState.clearVideoStarting("A", "/v/new.mp4");
     }
 
     function step3(): void {
         const s = JSON.parse(stateText());
         check(s.videoStarting && s.videoStarting.length === 1 && s.videoStarting[0].path === "/v/second.mp4", "A's pause touched B's marker: " + JSON.stringify(s.videoStarting));
-        WallpaperState.clearVideoStarting("B");
+        WallpaperState.clearVideoStarting("B", "/v/second.mp4");
         check(JSON.stringify(s.videoBlocked) === JSON.stringify(["/v/crash.mp4"]), "clearing a marker lost the block");
         // The lock's still.
         const v = WallpaperState.videoDir;

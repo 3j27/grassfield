@@ -110,8 +110,10 @@ Singleton {
         writeNow();
     }
 
-    function clearVideoStarting(owner: string): void {
-        if (videoStartingBy[owner] === undefined)
+    // Clears the marker of `owner` only when it still names `path`: the two slots of one output share the owner, and the old slot's
+    // pause or release must not clear the marker of the video that replaced it.
+    function clearVideoStarting(owner: string, path: string): void {
+        if (videoStartingBy[owner] === undefined || videoStartingBy[owner] !== path)
             return;
         const next = Object.assign({}, videoStartingBy);
         delete next[owner];

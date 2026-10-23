@@ -102,7 +102,7 @@ Item {
                 player.pause();
             // Paused on purpose, the shell is alive: nothing is starting any more.
             stable.stop();
-            WallpaperState.clearVideoStarting(root.markerOwner);
+            WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath);
         }
     }
 
@@ -126,7 +126,7 @@ Item {
         onFinished: {
             player.pause();
             stable.stop();
-            WallpaperState.clearVideoStarting(root.markerOwner);
+            WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath);
         }
     }
 
@@ -134,13 +134,13 @@ Item {
     Timer {
         id: stable
         interval: Tokens.wallpaperVideoStableMs
-        onTriggered: WallpaperState.clearVideoStarting(root.markerOwner)
+        onTriggered: WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath)
     }
 
     Component.onDestruction: {
         // Releasing the layer (another wallpaper took over) is a deliberate stop too.
         if (player.playbackState !== MediaPlayer.StoppedState)
             player.stop();
-        WallpaperState.clearVideoStarting(root.markerOwner);
+        WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath);
     }
 }
