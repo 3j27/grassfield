@@ -5,8 +5,9 @@
 
 For every dump `coredumpctl list` reports since TIME (default: today 00:00; anything coredumpctl --since accepts), runs
 `coredumpctl info` (read-only) and prints: time, pid, signal, executable, unit, session, command line and a class:
-  GRASSFIELD   the command line or unit names grassfield or the packaged shell config (qs ... /usr/share/grassfield/shell)
+  GRASSFIELD   the installed session: /usr/share/grassfield or /usr/lib/grassfield in the command, a grassfield-* unit
   DEV-SHELL    a quickshell/qs started with -p <path> (a development shell)
+  DEV          a nested dev Hyprland or any program run from a checkout
   OTHER        everything else
 It never reads or copies a core file, never writes anything, never uses sudo. A missing coredumpctl or an unreadable journal
 is said on one line and exits 0 (nothing to attribute). `COREDUMPCTL` overrides the binary (tests).
@@ -42,11 +43,17 @@ def clean(text):
 
 
 def classify(info):
-    blob = " ".join([info.get("cmdline", ""), info.get("unit", ""), info.get("exe", "")])
-    if "grassfield" in blob:
+    cmd, unit, exe = info.get("cmdline", ""), info.get("unit", ""), info.get("exe", "")
+    # The installed session: the packaged shell path, a grassfield unit, a packaged grassfield program.
+    if "/usr/share/grassfield/" in cmd or unit.startswith("grassfield-") or "/usr/lib/grassfield/" in exe or "/usr/lib/grassfield/" in cmd:
         return "GRASSFIELD"
-    if re.search(r"(^|/)(qs|quickshell)\b", blob) and re.search(r"(\s-p\s|--path)", blob):
+    # Development: a shell started with -p <repository path>, a nested Hyprland with a dev config, anything run from a checkout.
+    if re.search(r"(^|/)(qs|quickshell)\b", cmd + " " + exe) and re.search(r"(\s-p\s|--path)", cmd):
         return "DEV-SHELL"
+    if re.search(r"Hyprland.*--config\s+\S*/dev\.lua", cmd) or "/worktrees/" in cmd or "/.dev/" in cmd:
+        return "DEV"
+    if "grassfield" in (cmd + " " + unit + " " + exe):
+        return "GRASSFIELD"
     return "OTHER"
 
 
