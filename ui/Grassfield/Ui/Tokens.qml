@@ -1395,6 +1395,8 @@ QtObject {
     readonly property int wallpaperOnlineMeteredRecheckMs: 3600000
     // ADR-0016 step 2: the nmcli metered query that runs longer than this is killed and counted as not metered (a hung NetworkManager never blocks the fetch)
     readonly property int wallpaperMeteredTimeoutMs: 10000
+    // ADR-0016 section 6: the lock screen draws a wallpaper still only when it is a regular file of at most this many bytes under the wallpaper cache (a prepared JPEG at 4K is a few MB; a PNG of a centred or tiled picture is the largest case)
+    readonly property int wallpaperLockStillMaxBytes: 67108864
     // ADR-0016 section 5: a video wallpaper settles (rate eases to 0.25, then pauses) after this many idle seconds
     readonly property int wallpaperVideoIdleSeconds: 60
     // ADR-0016 section 5: the playback rate eases from 1 to the settle rate over this long when the user goes idle (macOS: the video slows down and comes to rest)

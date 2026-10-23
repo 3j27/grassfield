@@ -75,7 +75,7 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons grassfield-icons)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
@@ -84,6 +84,7 @@ package_grassfield-desktop() {
     'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
     'udiskie: mounts removable media when they are connected'
     'hyprsunset: Night Shift (grassfield-nightshift)'
+    'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
   )
   # Login screen entry and a login-path check after install and upgrade (GF-015); the SDDM drop-in is a config file.
   install=grassfield-desktop.install

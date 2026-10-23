@@ -273,6 +273,7 @@
  {"path": "tests/visual/wallpaper-pending.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/wallpaper-transitions.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/wallpaper.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/wallpaper-video.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/appmenu.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/apps.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/controlcenter-detail.sh", "layer": "visual", "runner": "bare"},
