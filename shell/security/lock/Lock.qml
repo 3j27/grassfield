@@ -1,7 +1,8 @@
 pragma ComponentBehavior: Bound
 pragma Singleton
 // Portions adapted from Omarchy shell/plugins/lock/Service.qml (omacom/omarchy, branch quattro),
-// MIT License, Copyright (c) the Omarchy authors: the PamContext prompt/response wiring and the
+// Copyright (c) David Heinemeier Hansson, MIT License (upstream LICENSE, basecamp/omarchy v4.0.4; notice shipped as
+// packaging/licenses/omarchy-MIT.txt): the PamContext prompt/response wiring and the
 // WlSessionLock secure-state handling; the stranded-lock signal (LOCK in solitaryBlockedBy) comes
 // from Omarchy's omarchy-hyprland-session-locked. Upstream base reviewed against Omarchy v4.0.6
 // (basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0, shell/plugins/lock/Service.qml): its

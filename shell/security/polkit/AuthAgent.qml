@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 // Portions adapted from Omarchy shell/plugins/polkit/PolkitAgent.qml (omacom/omarchy, branch
-// quattro), MIT License, Copyright (c) the Omarchy authors: PolkitAgent/AuthFlow wiring.
+// quattro): PolkitAgent/AuthFlow wiring. Copyright (c) David Heinemeier Hansson, MIT License (upstream LICENSE,
+// basecamp/omarchy v4.0.4; notice shipped as packaging/licenses/omarchy-MIT.txt).
 import QtQuick
 import Quickshell
 import Quickshell.Io
