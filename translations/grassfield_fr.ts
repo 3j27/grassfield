@@ -2197,6 +2197,10 @@
         <translation>, demande votre attention</translation>
     </message>
     <message>
+        <source>%1, folder stack</source>
+        <translation>%1, pile de dossier</translation>
+    </message>
+    <message>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
@@ -2238,6 +2242,70 @@
     <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
+    </message>
+    <message>
+        <source>Sort by</source>
+        <translation>Trier par</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Date Added</source>
+        <translation>Date d’ajout</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>Date de modification</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Display as</source>
+        <translation>Afficher comme</translation>
+    </message>
+    <message>
+        <source>Stack</source>
+        <translation>Pile</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>View content as</source>
+        <translation>Afficher le contenu comme</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Fan</source>
+        <translation>Éventail</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation>Grille</translation>
+    </message>
+    <message>
+        <source>List</source>
+        <translation>Liste</translation>
+    </message>
+    <message>
+        <source>Open in Files</source>
+        <translation>Ouvrir dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Recent Documents</source>
+        <translation>Documents récents</translation>
     </message>
     <message>
         <source>Are you sure you want to permanently erase the items in the Trash?</source>
@@ -3753,6 +3821,10 @@
         <source>Volume %1%</source>
         <translation>Volume %1&#xa0;%</translation>
     </message>
+    <message>
+        <source>Keyboard brightness %1%</source>
+        <translation>Luminosité du clavier %1&#xa0;%</translation>
+    </message>
 </context>
 <context>
     <name>OverviewWindow</name>
@@ -4303,6 +4375,21 @@
     <message>
         <source>Mute input</source>
         <translation>Couper l’entrée</translation>
+    </message>
+</context>
+<context>
+    <name>StackPopup</name>
+    <message>
+        <source>%1 more in Files</source>
+        <translation>%1 de plus dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Open in Files</source>
+        <translation>Ouvrir dans Fichiers</translation>
+    </message>
+    <message>
+        <source>%1 stack</source>
+        <translation>Pile %1</translation>
     </message>
 </context>
 <context>

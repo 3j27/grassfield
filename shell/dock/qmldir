@@ -1,2 +1,3 @@
 module qs.dock
 Dock 1.0 Dock.qml
+StackIcon 1.0 StackIcon.qml

@@ -306,6 +306,8 @@ QtObject {
     readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications
     readonly property int dockRecentMax: 3
+    // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short)
+    readonly property int dockRecentDocsMax: 5
     // shrink to fit: free room kept at each end of the shelf along the Dock, px (same as the margin off the screen edge, dock.bottomMargin)
     readonly property int dockFitMargin: 6
     // shrink to fit: smallest tile the Dock shrinks to, px (below this it would be unusable; the shelf then overflows the screen)

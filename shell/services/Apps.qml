@@ -356,7 +356,19 @@ Singleton {
     function openWith(entry: var, files: var, resolved: var): bool {
         if (!entry || !DockModel.acceptsFiles(entry, files, mimeData, resolved))
             return false;
-        const commands = DockModel.commandsForFiles(DockModel.entryArgs(entry), files);
+        return runCommands(entry, DockModel.commandsForFiles(DockModel.entryArgs(entry), files));
+    }
+
+    // Opens one document (the Dock menu's recent documents) with the app that used it: the same command building as a drop,
+    // without the MIME check (the app registered the document itself). Refused for a relative path or an app whose Exec has
+    // no file field code.
+    function openDocument(entry: var, path: string): bool {
+        if (!entry || typeof path !== "string" || !path.startsWith("/"))
+            return false;
+        return runCommands(entry, DockModel.commandsForFiles(DockModel.entryArgs(entry), [path]));
+    }
+
+    function runCommands(entry: var, commands: var): bool {
         const environment = launchEnvironment();
         whenScopeKnown(() => {
             for (const c of commands) {
