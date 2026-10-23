@@ -23,7 +23,7 @@ WidgetBase {
     }
 
     Accessible.role: Accessible.StaticText
-    Accessible.name: qsTr("Calendar, %1").arg(Qt.locale().toString(now, "dddd d MMMM yyyy"))
+    Accessible.name: qsTr("Calendar, %1").arg(Qt.locale().toString(now, Qt.locale().dateFormat(Locale.LongFormat)))
 
     // Small and medium: the day.
     Column {

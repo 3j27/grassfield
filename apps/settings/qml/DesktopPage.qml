@@ -79,7 +79,7 @@ SettingsPage {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Tokens.settingsShortcutKeyMinWidth + Tokens.spacingSm
                 horizontalAlignment: Text.AlignRight
-                text: qsTr("%1x").arg(root.store.value("dock.magnification").toFixed(2))
+                text: qsTr("%1x").arg(Qt.locale().toString(root.store.value("dock.magnification"), "f", 2))
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize

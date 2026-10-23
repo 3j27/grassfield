@@ -1667,8 +1667,16 @@
 <context>
     <name>Clock</name>
     <message>
+        <source>dddd, MMMM d</source>
+        <translation>dddd d MMMM</translation>
+    </message>
+    <message>
         <source>Clock, %1, %2</source>
         <translation>Horloge, %1, %2</translation>
+    </message>
+    <message>
+        <source>MMMM d</source>
+        <translation>d MMMM</translation>
     </message>
 </context>
 <context>

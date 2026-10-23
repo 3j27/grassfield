@@ -41,7 +41,7 @@ Singleton {
         const m = text.match(/^MemTotal:\s*(\d+) kB/m);
         if (!m)
             return "";
-        return qsTr("%1 GB").arg((parseInt(m[1]) / 1048576).toFixed(1));
+        return qsTr("%1 GB").arg(Qt.locale().toString(parseInt(m[1]) / 1048576, "f", 1));
     }
 
     // GPU lines: "00:02.0 VGA compatible controller: Intel ... (rev 05)" -> device description.
