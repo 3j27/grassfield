@@ -8,8 +8,12 @@
 #   overview-open, overview-close   the Overview (Mission Control) opened and closed through the shell's IPC
 #   launchpad-open                  the Apps panel (Launchpad) opened (then closed, not measured)
 #   dock-magnification              the pointer glides along the Dock and back twice (Dock magnification on for the run)
-# Frames come only while something changes on the output: an interval longer than 100 ms is a pause with nothing to draw,
-# not a frame of an animation, and is left out. Each scenario's frames are those of the WINDOW_MS after its request.
+#   overview-open-4w, -close-4w     the Overview with four windows (the plugin's live window transforms, docs/specs/overview.md)
+#   overview-open-flat, -close-flat the same with Reduce Transparency on (no blur): what the blur costs, by difference
+# The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
+# Frames come only while something changes on the output: the interval that spans a request (from the last frame before it,
+# often a pause with nothing to draw, to the first frame after it) is left out; every other interval counts. Each
+# scenario's frames are those of the WINDOW_MS after its request.
 #   tests/visual/presented-frames.sh [CYCLES=3] [PROFILE=balanced] [WINDOW_MS=1500]
 # Run as a BARE command with a relative path; needs this tree's plugin loaded in the nested session (just plugin-build; the
 # session started by nested-up loads it). The nested output is paced by Hyprland's own timer: the numbers are an indication
@@ -57,18 +61,34 @@ hz=$(nestctl monitors -j | jq -r '[.[] | select(.name == "'"$VS_OUTPUT"'") | .re
 read -r mx my < <(nestctl monitors -j | jq -r '.[] | select(.name == "'"$VS_OUTPUT"'") | "\(.x) \(.y)"')
 read -r dx dy dw dh < <(nestctl -j layers | jq -r '[.. | objects | select(.namespace? == "grassfield-dock")][0] | "\(.x) \(.y) \(.w) \(.h)"')
 
-# The frames presented since the last collection, appended as "<monotonic us> <interval us>" (pauses over 100 ms left out).
+# The frames presented since the last collection, appended as "<monotonic us> <interval us>".
 last=0
 collect() {
   local answer=$out/frames-$(date +%s%N).json
   nestctl -j grassfield-frames >"$answer" 2>/dev/null || return 0
   jq -r --arg o "$VS_OUTPUT" --argjson last "$last" '
     .monitors[] | select(.name == $o) | .presented as $p
-    | range(1; $p | length) | select($p[.] > $last and ($p[.] - $p[. - 1]) <= 100000) | "\($p[.]) \($p[.] - $p[. - 1])"' \
-    "$answer" >>"$out/frames.txt"
+    | range(1; $p | length) | select($p[.] > $last) | "\($p[.]) \($p[.] - $p[. - 1])"' \
+    "$answer" >>"$out/frames.all"
   last=$(jq -r --arg o "$VS_OUTPUT" '[.monitors[] | select(.name == $o) | .presented[-1]][0] // 0' "$answer")
 }
+# The intervals that span a request (the previous frame before it, this one after it) are left out: the wait for the
+# request is not a frame of the animation. <frames.all> <events.txt> -> frames.txt
+drop_spanning() {
+  awk 'NR == FNR { ev[NR] = int($2 / 1000); n = NR; next }
+       { t = $1; i = $2; skip = 0; for (k = 1; k <= n; k++) if (t - i < ev[k] && ev[k] <= t) skip = 1; if (!skip) print }' "$2" "$1"
+}
 event() { echo "$1 $(mono_ns)" >>"$out/events.txt"; }
+
+overview_round() { # <label suffix>
+  event "overview-open$1"
+  vs_ipc overview open >/dev/null
+  sleep 1.6
+  event "overview-close$1"
+  vs_ipc overview close >/dev/null
+  sleep 1.6
+  collect
+}
 
 collect
 for ((c = 1; c <= cycles; c++)); do
@@ -97,7 +117,20 @@ for ((c = 1; c <= cycles; c++)); do
   fi
 done
 
+# The Overview again: with four windows (the plugin's live transforms), then without blur (Reduce Transparency).
+for i in 1 2 3 4; do
+  vs_foot "Terminal $i" 60x16
+  vs_wait_clients "$i"
+done
+vs_park
+for ((c = 1; c <= cycles; c++)); do overview_round -4w; done
+vs_ipc controlcenter reduceTransparency true >/dev/null
+sleep 1
+for ((c = 1; c <= cycles; c++)); do overview_round -flat; done
+vs_ipc controlcenter reduceTransparency false >/dev/null
+
 [[ -n ${dw:-} && ${dw:-0} != null ]] || echo "NOTE dock-magnification not measured: no Dock layer found"
-echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames, refresh $hz Hz, window $window ms"
+drop_spanning "$out/frames.all" "$out/events.txt" >"$out/frames.txt"
+echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, window $window ms"
 python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.txt" "$hz" "$window" | tee "$out/stats.txt"
 exit "${PIPESTATUS[0]}"
