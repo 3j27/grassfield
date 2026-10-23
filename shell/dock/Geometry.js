@@ -1,5 +1,6 @@
 .pragma library
 .import "DockModel.js" as DockModel
+.import "Magnify.js" as Magnify
 
 // Dock geometry (pure, unit-tested): the tile size (Settings > Desktop & Dock > Size) and what follows from it.
 // `base` is the dock token set {iconSize, padding, indicatorSize, spacing, bottomMargin, separatorHeight, badgeSize,
@@ -181,6 +182,41 @@ function tooltipTailSide(edge) {
 // of the minimize animation. `margin`/`padding` as in the metrics, `indicatorArea` = indicator + spacing.
 function tileRect(edge, w, h, mainCenter, iconSize, margin, padding, indicatorArea) {
     return rect(edge, w, h, mainCenter - iconSize / 2, iconSize, margin + padding + indicatorArea, iconSize);
+}
+
+// The rectangle, in the output's own coordinates, of the unmagnified icon of minimized slot `index` (0 = the first minimized
+// tile, after the divider and the folder stacks): where a window minimized into the Dock lands (`adding`: the tile does not
+// exist yet and is inserted before the Trash) or leaves from. Pure: it depends on the tiles, not on any window. `items` are
+// the Dock items ({kind, divider}), `o` = {index, adding, iconSize, spacing, separatorWidth, edge, screenW, screenH, depth,
+// margin, padding, indicatorArea}. null when there is no divider, the slot does not exist or the numbers are not usable.
+function minimizedSlotRect(items, o) {
+    const list = Array.from(items || []);
+    const sep = list.findIndex(it => it.kind === "separator" && !it.divider);
+    if (sep < 0 || !(o.index >= 0) || !(o.iconSize > 0) || !(o.screenW > 0) || !(o.screenH > 0))
+        return null;
+    const widths = list.map(it => it.kind === "separator" ? o.separatorWidth : o.iconSize);
+    const first = sep + 1 + list.filter(it => it.kind === "folder").length;
+    if (o.adding)
+        widths.splice(first + o.index, 0, o.iconSize);
+    const room = mainSize(o.edge, o.screenW, o.screenH);
+    const slot = Magnify.centersFor(widths, o.spacing, (room - Magnify.totalWidth(widths, o.spacing)) / 2)[first + o.index];
+    if (slot === undefined || !isFinite(slot))
+        return null;
+    const vertical = isVertical(o.edge);
+    const winW = vertical ? o.depth : o.screenW;
+    const winH = vertical ? o.screenH : o.depth;
+    const r = tileRect(o.edge, winW, winH, slot, o.iconSize, o.margin, o.padding, o.indicatorArea);
+    const origin = windowOrigin(o.edge, o.screenW, o.screenH, winW, winH);
+    return clampInto({x: origin.x + r.x, y: origin.y + r.y, w: r.w, h: r.h}, {x: 0, y: 0, w: o.screenW, h: o.screenH});
+}
+
+// `rect` {x, y, w, h} moved (never resized) to lie inside `box` {x, y, w, h}; a rect larger than the box is left at the box's
+// origin. The compositor plugin refuses a minimize target that is not wholly inside one output (no animation then), so the
+// Dock never hands it a rectangle that sticks out, whatever size its window had when the question came.
+function clampInto(rect, box) {
+    const x = Math.max(box.x, Math.min(rect.x, box.x + box.w - rect.w));
+    const y = Math.max(box.y, Math.min(rect.y, box.y + box.h - rect.h));
+    return {x: x, y: y, w: rect.w, h: rect.h};
 }
 
 // Where the Dock menu of a tile opens (screen coordinates; `center` is the tile centre along the main axis in screen
