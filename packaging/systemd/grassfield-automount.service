@@ -1,0 +1,33 @@
+[Unit]
+Description=Grassfield removable media (mounts USB drives and cards when they are connected)
+Documentation=file:///usr/share/doc/grassfield/README.md
+# macOS mounts connected volumes and shows them in Files; Omarchy's session starts udiskie for this and Grassfield does not
+# load that autostart. udiskie only asks udisks2 over the system bus (polkit decides); it has no tray and no notifications.
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+ConditionPathExists=/usr/bin/udiskie
+
+[Service]
+Type=simple
+Slice=session.slice
+ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+MemoryMax=128M
+TasksMax=32
+
+[Install]
+WantedBy=graphical-session.target

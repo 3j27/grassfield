@@ -1,0 +1,35 @@
+[Unit]
+Description=Grassfield: pending Omarchy migrations notice
+Documentation=file:///usr/share/doc/grassfield/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+ConditionPathIsDirectory=/usr/share/omarchy/migrations
+
+[Service]
+Type=simple
+Slice=session.slice
+ExecStart=/usr/lib/grassfield/grassfield-migrate-notify
+TimeoutStopSec=5
+# Hardening: it asks Omarchy which migrations are pending (read-only), notifies, and starts the migration terminal
+# through the user manager (systemd-run), outside this sandbox.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+MemoryMax=64M
+TasksMax=16
+
+[Install]
+WantedBy=graphical-session.target

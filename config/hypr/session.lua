@@ -28,6 +28,7 @@ hl.env("GRASSFIELD_SESSION", "1")
 
 require("grassfield.core")
 require("grassfield.autostart")
+require("grassfield.system")
 
 -- Hyprland would write cursor-theme/cursor-size into the owner's dconf (org.gnome.desktop.interface), a database shared
 -- with the Omarchy session. Never touch it from this session; the theme reaches clients through XCURSOR_* (cursor.lua).

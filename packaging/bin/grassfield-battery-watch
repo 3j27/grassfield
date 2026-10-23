@@ -1,0 +1,77 @@
+#!/usr/bin/python3 -I
+"""Low-battery warnings (macOS warns at 20 %, 10 % and 5 %; Omarchy's battery plugin does not run in Grassfield).
+
+Reads /sys/class/power_supply/BAT*/{capacity,status} every 30 s and sends one notification each time the charge falls
+through 20, 10 and 5 percent while discharging; the warnings are armed again when the battery charges or is back above
+20 percent. A desktop without a battery does nothing (the service exits). Run by grassfield-battery-watch.service.
+
+Test hooks: GRASSFIELD_POWER_SUPPLY (default /sys/class/power_supply), GRASSFIELD_BATTERY_INTERVAL (seconds).
+Standard library only.
+"""
+import glob
+import os
+import subprocess
+import sys
+import time
+
+LEVELS = (20, 10, 5)
+
+
+def level_for(capacity):
+    """The lowest warning level the charge has fallen to (20, 10 or 5), or None above 20 percent."""
+    reached = [level for level in LEVELS if capacity <= level]
+    return min(reached) if reached else None
+
+
+def next_warning(last_level, capacity, status):
+    """(level to announce or None, state to keep). `last_level` is the lowest level announced since the charge was last above 20."""
+    level = level_for(capacity)
+    if status != "Discharging" or level is None:
+        return None, None
+    if last_level is None or level < last_level:
+        return level, level
+    return None, last_level
+
+
+def read_battery(base):
+    """(capacity, status) of the first battery, or None."""
+    for dev in sorted(glob.glob(os.path.join(base, "BAT*"))):
+        try:
+            with open(os.path.join(dev, "capacity")) as f:
+                capacity = int(f.read().strip())
+            with open(os.path.join(dev, "status")) as f:
+                status = f.read().strip()
+            return capacity, status
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def notify(level, capacity):
+    critical = level <= 5
+    title = "Low battery" if not critical else "Very low battery"
+    body = "%d%% of the battery is left. Connect the charger%s." % (capacity, " now, the computer will shut down soon" if critical else "")
+    subprocess.run(["notify-send", "-a", "Grassfield", "-u", "critical" if critical else "normal", "--", title, body],
+                   capture_output=True, timeout=10, check=False)
+
+
+def main():
+    base = os.environ.get("GRASSFIELD_POWER_SUPPLY", "/sys/class/power_supply")
+    interval = float(os.environ.get("GRASSFIELD_BATTERY_INTERVAL", "30"))
+    if read_battery(base) is None:
+        return 0  # no battery: nothing to watch
+    last = None
+    while True:
+        reading = read_battery(base)
+        if reading:
+            level, last = next_warning(last, *reading)
+            if level is not None:
+                try:
+                    notify(level, reading[0])
+                except (OSError, subprocess.SubprocessError):
+                    pass
+        time.sleep(interval)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
