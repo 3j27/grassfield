@@ -44,13 +44,24 @@ function problem(list) {
     return "";
 }
 
-// The valid entries of a stored value, without repeats and at most MAX_APPS; anything else gives [].
-function normalize(raw) {
-    if (!Array.isArray(raw))
+// A list as a plain array: the shell's JSON adapter hands lists over as array-likes (a length and indexes), not as
+// JavaScript arrays. Anything else, strings included, gives [].
+function asArray(raw) {
+    if (Array.isArray(raw))
+        return raw;
+    if (raw === null || typeof raw !== "object" || typeof raw.length !== "number")
         return [];
     const out = [];
+    for (let i = 0; i < raw.length && i < MAX_APPS * 2; i++)
+        out.push(raw[i]);
+    return out;
+}
+
+// The valid entries of a stored value, without repeats and at most MAX_APPS; anything else gives [].
+function normalize(raw) {
+    const out = [];
     const seen = {};
-    for (const e of raw) {
+    for (const e of asArray(raw)) {
         if (e === null || typeof e !== "object" || !validApp(e.app) || !validPreviews(e.previews))
             continue;
         const k = keyOf(e.app);

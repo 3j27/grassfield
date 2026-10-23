@@ -4,7 +4,6 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
-import qs.security.lock
 import qs.services
 import "Calc.js" as Calc
 import "Files.js" as Files
@@ -60,7 +59,8 @@ Scope {
         })
 
     // Lock Screen: the lock module (shell/security/lock) exposes the `lock` IPC target and the Lock singleton the System
-    // menu already calls; the command locks through it (REQ-SRCH-PRV-d2). It is always on offer: a failed lock stays locked.
+    // menu already calls; the command locks through it (SessionState.requestLock, wired to Lock.lock in shell.qml;
+    // REQ-SRCH-PRV-d2). It is always on offer: a failed lock stays locked.
     readonly property bool lockAvailable: true
 
     // The pages of Grassfield Settings the provider offers (REQ-SRCH-PRV-d1); ids are the Settings sections.
@@ -434,7 +434,7 @@ Scope {
     function runCommand(id: string): void {
         switch (id) {
         case "lock":
-            Lock.lock("search");
+            SessionState.requestLock("search");
             return;
         case "sleep":
             Power.sleepNow();

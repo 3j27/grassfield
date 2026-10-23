@@ -6,7 +6,6 @@ import Quickshell.Io
 import Quickshell.Services.Notifications
 import Grassfield.Ui
 import qs.platform
-import qs.security.lock
 import qs.services
 import "History.js" as History
 import "Sanitizer.js" as Sanitizer
@@ -34,8 +33,8 @@ Singleton {
     readonly property bool dnd: Settings.notificationsDnd
     // The global previews default is Settings.notificationsPreviews; each app may override it
     // (Settings.notificationsAppPreviews, NotificationPrefs.js).
-    // Stays false in a session that has no lock service answering (the lock singleton reports false until it locks).
-    readonly property bool sessionLocked: Lock.locked
+    // The session lock (SessionState mirrors shell/security/lock; false where nothing feeds it).
+    readonly property bool sessionLocked: SessionState.locked
     // Wall clock for relative times, refreshed every 30 s.
     property real nowMs: Date.now()
 
