@@ -13,7 +13,8 @@
 # Report: .dev/gate-runs/<UTC stamp>-<name>.md (git-ignored, survives `git clean`-free worktree life) with
 #   gate, date (UTC), result (PASS exit 0, FAIL otherwise; a log line with "NOT VERIFIED" or "SKIP" is counted and
 #   named, never hidden), exit code, commit (+dirty), branch, build id (VERSION file, built plugin and its hash), log
-#   path and its sha256, counts of PASS/FAIL/SKIP/NOT VERIFIED/PROXY lines.
+#   path and its sha256, counts of PASS/FAIL/SKIP/NOT VERIFIED/PROXY lines, and the core dumps made during the run
+#   (scripts/dev/coredump-summary.py, read-only coredumpctl).
 # Environment (tests): GATE_RUNS_DIR (default .dev/gate-runs), GATE_ARCHIVE_DIR (default docs/testing/runs),
 # GATE_STAMP (fixed timestamp).
 set -uo pipefail
@@ -75,6 +76,9 @@ write_report() { # NAME EXIT LOG
     echo "- log: $log"
     echo "- log sha256: $logsum"
     echo "- lines: PASS $pass, FAIL $fail, SKIP $skip, NOT VERIFIED $nv, PROXY $proxy"
+    if [[ -s ${log%.log}.coredumps ]]; then
+      echo "- coredumps: $(head -n1 "${log%.log}.coredumps") (details: ${log%.log}.coredumps)"
+    fi
     if ((skip + nv + proxy > 0)); then
       echo "- note: this run is not a plain pass: SKIP, NOT VERIFIED and PROXY lines are listed in the log; read them before citing it"
     fi
@@ -103,6 +107,7 @@ case ${1:-} in
       if [[ -f $log ]]; then
         if (($(stat -c %s "$log") <= max_log)); then cp -- "$log" "$archive/$base.log"; else tail -n 2000 -- "$log" | sed -e "\$a\\" >"$archive/$base.log"; echo "(archived: last 2000 lines only; full log was $log)" >>"$archive/$base.log"; fi
       fi
+      [[ -f ${log%.log}.coredumps ]] && cp -- "${log%.log}.coredumps" "$archive/$base.coredumps"
       n=$((n + 1))
     done
     echo "gate-run: archived $n report(s) to $archive (review, then commit)" >&2
@@ -117,8 +122,11 @@ case ${1:-} in
     mkdir -p "$runs" || die "cannot create $runs"
     stamp=${GATE_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
     log=$runs/$stamp-$name.log
+    started=$(date "+%Y-%m-%d %H:%M:%S")
     "$@" 2>&1 | tee -- "$log"
     rc=${PIPESTATUS[0]}
+    # GF-082: dumps made while the gate ran, attributed (read-only coredumpctl list/info, never a core file).
+    python3 -I "$root/scripts/dev/coredump-summary.py" --since "$started" >"${log%.log}.coredumps" 2>/dev/null || rm -f -- "${log%.log}.coredumps"
     GATE_STAMP=$stamp write_report "$name" "$rc" "$log"
     exit "$rc"
     ;;

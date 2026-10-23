@@ -62,4 +62,26 @@ rm -rf "$tmp/archive"
 bash "$gr" --archive 2>/dev/null
 desc="a log over 256 KiB is archived as its last 2000 lines plus a note"
 check bash -c '[ "$(wc -l <"$1")" = 2001 ] && tail -n 1 "$1" | grep -q "last 2000 lines only"' _ "$tmp/archive/20261023T120300Z-big.log"
+
+# GF-082: a read-only core dump summary per dump, from a fake coredumpctl (never the host's journal).
+cat >"$tmp/coredumpctl" <<'FAKE'
+#!/usr/bin/env bash
+# fake: list gives two dumps as JSON, info prints coredumpctl-style fields; any other verb is a failure
+case " $* " in
+  *" list "*) echo '[{"time":1,"pid":4242,"sig":11,"exe":"/usr/bin/quickshell"},{"time":2,"pid":4343,"sig":6,"exe":"/usr/lib/xdg-desktop-portal-hyprland"}]' ;;
+  *" info 4242 "*) printf '           PID: 4242 (qs)\n        Signal: 11 (SEGV)\n     Timestamp: Fri 2026-10-23 12:00:00 UTC\n          Unit: grassfield-shell.service\n       Session: 2\n    Executable: /usr/bin/quickshell\n  Command Line: qs -n -p /usr/share/grassfield/shell\n' ;;
+  *" info 4343 "*) printf '           PID: 4343\n        Signal: 6 (ABRT)\n    Executable: /usr/lib/xdg-desktop-portal-hyprland\n  Command Line: /usr/lib/xdg-desktop-portal-hyprland\n' ;;
+  *) exit 9 ;;
+esac
+FAKE
+chmod +x "$tmp/coredumpctl"
+out=$(COREDUMPCTL="$tmp/coredumpctl" python3 -I "$root/scripts/dev/coredump-summary.py" --since today)
+desc="coredump-summary: one attributed line per dump (class, pid, signal, executable, unit, session, command line)"
+check bash -c 'grep -q "^  GRASSFIELD pid 4242 sig 11 exe /usr/bin/quickshell unit grassfield-shell.service session 2 cmd qs -n -p /usr/share/grassfield/shell" <<<"$1" && grep -q "^  OTHER      pid 4343 sig 6 " <<<"$1" && grep -q "classes: GRASSFIELD 1, OTHER 1" <<<"$1"' _ "$out"
+out=$(COREDUMPCTL="$tmp/does-not-exist" python3 -I "$root/scripts/dev/coredump-summary.py")
+desc="coredump-summary: without coredumpctl it says so and exits 0"
+check grep -q "^coredumps: coredumpctl unavailable" <<<"$out"
+GATE_STAMP=20261023T130000Z COREDUMPCTL="$tmp/coredumpctl" bash "$gr" demo-dump -- true >/dev/null 2>&1
+desc="a gate run's report names the dumps made during the run and keeps the details next to the log"
+check bash -c 'grep -q -- "^- coredumps: coredumps since .*: 2" "$1" && grep -q "GRASSFIELD pid 4242" "$2"' _ "$tmp/runs/20261023T130000Z-demo-dump.md" "$tmp/runs/20261023T130000Z-demo-dump.coredumps"
 exit "$fail"
