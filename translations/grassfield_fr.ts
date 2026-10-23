@@ -1071,6 +1071,14 @@
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
     <message>
+        <source>Keyboard brightness up</source>
+        <translation>Luminosité du clavier +</translation>
+    </message>
+    <message>
+        <source>Keyboard brightness down</source>
+        <translation>Luminosité du clavier -</translation>
+    </message>
+    <message>
         <source>Previous word</source>
         <translation>Mot précédent</translation>
     </message>
