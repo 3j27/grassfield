@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Grassfield.Ui
 import "Rfkill.js" as Logic
 
 // rfkill soft block for Airplane Mode (REQ-QS-CC3). Opening /dev/rfkill needs no root: logind gives the seat's user
@@ -93,7 +94,7 @@ Singleton {
 
     Timer {
         id: debounce
-        interval: Tokens.rfkillDebounce
+        interval: Tokens.quicksettingsRfkillDebounce
         onTriggered: root.refresh()
     }
 }

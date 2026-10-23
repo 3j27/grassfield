@@ -34,7 +34,7 @@ FocusScope {
     readonly property real bodyHeight: expanded === "" ? gridBottom : detail.height
 
     // The visible glass surfaces, for the Overlay's blur regions.
-    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, appearanceSide, display, keyboard, sound, appearanceBottom, detail, note].filter(m => m.visible)
+    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, appearanceSide, display, keyboard, sound, appearanceBottom, battery, detail, note].filter(m => m.visible)
 
     function toggleSection(id: string): void {
         if (expanded === id)
@@ -139,6 +139,9 @@ FocusScope {
     readonly property bool scanWanted: expanded === "wifi" && Connectivity.wifiEnabled
     onScanWantedChanged: Connectivity.setScanning(scanWanted)
 
+    // Night Shift has no event source: read its state each time Quick Settings opens.
+    Component.onCompleted: NightShift.refresh()
+
     Component.onDestruction: {
         Connectivity.setScanning(false);
     }
@@ -168,6 +171,20 @@ FocusScope {
 
     Connections {
         target: Audio
+        function onDevSuppressed() {
+            root.showDevNote();
+        }
+    }
+
+    Connections {
+        target: NightShift
+        function onDevSuppressed() {
+            root.showDevNote();
+        }
+    }
+
+    Connections {
+        target: Battery
         function onDevSuppressed() {
             root.showDevNote();
         }
@@ -315,6 +332,29 @@ FocusScope {
 
                 ModuleTitle {
                     text: qsTr("Display")
+                }
+
+                // Night Shift (macOS: in the Display module): warmer colours, grassfield-nightshift. Hidden without hyprsunset.
+                Row {
+                    visible: NightShift.available
+                    anchors.right: parent.right
+                    anchors.rightMargin: root.pad
+                    y: Tokens.spacingXs
+                    spacing: Tokens.spacingSm
+
+                    Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Night Shift")
+                        font.pixelSize: Tokens.typographyCaptionSize
+                        color: Appearance.colors.textSecondary
+                    }
+
+                    Toggle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        checked: NightShift.on
+                        accessibleName: qsTr("Night Shift")
+                        onToggled: value => NightShift.setOn(value)
+                    }
                 }
 
                 Row {
@@ -483,6 +523,69 @@ FocusScope {
                                 root.toggleSection("sound");
                             }
                         }
+                    }
+                }
+            }
+
+            // Battery (macOS Battery menu): percentage, power source and time remaining, Low Power Mode. Hidden without a battery.
+            Module {
+                id: battery
+                visible: Battery.present
+                cols: 4
+                rows: 2
+                radius: Tokens.quicksettingsRadiusSlider
+
+                ModuleTitle {
+                    text: qsTr("Battery")
+                }
+
+                Label {
+                    anchors.right: parent.right
+                    anchors.rightMargin: root.pad
+                    y: Tokens.spacingSm
+                    text: qsTr("%1%").arg(Battery.percent)
+                    font.pixelSize: Tokens.quicksettingsTitleSize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                }
+
+                Row {
+                    x: root.pad
+                    y: Tokens.spacingSm + Tokens.quicksettingsTitleSize + Tokens.spacingXs
+                    width: parent.width - 2 * root.pad
+                    spacing: Tokens.spacingSm
+
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.menuIconSize
+                        name: Battery.iconName
+                    }
+
+                    Caption {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - Tokens.menuIconSize - parent.spacing
+                        text: Battery.description
+                    }
+                }
+
+                Item {
+                    x: root.pad
+                    y: parent.height - height - root.pad
+                    width: parent.width - 2 * root.pad
+                    height: Tokens.controlToggleHeight
+
+                    Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - lowPowerToggle.width - Tokens.spacingSm
+                        text: qsTr("Low Power Mode")
+                    }
+
+                    Toggle {
+                        id: lowPowerToggle
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        checked: Battery.lowPower
+                        accessibleName: qsTr("Low Power Mode")
+                        onToggled: value => Battery.setLowPower(value)
                     }
                 }
             }
