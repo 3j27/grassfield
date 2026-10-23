@@ -4776,10 +4776,6 @@
         <translation>Ce chemin ne peut pas être utilisé.</translation>
     </message>
     <message>
-        <source>Video wallpapers aren&apos;t available yet.</source>
-        <translation>Les fonds d’écran vidéo ne sont pas encore disponibles.</translation>
-    </message>
-    <message>
         <source>The wallpaper can&apos;t be shown.</source>
         <translation>Le fond d’écran ne peut pas être affiché.</translation>
     </message>
@@ -4856,16 +4852,116 @@
         <translation>En ligne</translation>
     </message>
     <message>
-        <source>Once a day Grassfield contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org. These services see your IP address.</source>
-        <translation>Une fois par jour, Grassfield contacte commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org. Ces services voient votre adresse IP.</translation>
-    </message>
-    <message>
         <source>Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.</source>
         <translation>Grassfield télécharge l’image du jour de Wikimedia Commons une fois par jour. Il contacte commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org, uniquement lorsque vous êtes en ligne sur une connexion non limitée. Ces services voient votre adresse IP et l’image demandée. Rien n’est contacté tant que vous ne choisissez pas Utiliser l’image du jour.</translation>
     </message>
     <message>
         <source>Cancel</source>
         <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>The video &quot;%1&quot; can&apos;t be played.</source>
+        <translation>La vidéo « %1 » ne peut pas être lue.</translation>
+    </message>
+    <message>
+        <source>This video is too long for a wallpaper (10 minutes at most).</source>
+        <translation>Cette vidéo est trop longue pour un fond d’écran (10 minutes au plus).</translation>
+    </message>
+    <message>
+        <source>The video &quot;%1&quot; couldn&apos;t be prepared.</source>
+        <translation>La vidéo « %1 » n’a pas pu être préparée.</translation>
+    </message>
+    <message>
+        <source>Video wallpapers can&apos;t be prepared: ffmpeg is missing.</source>
+        <translation>Les fonds d’écran vidéo ne peuvent pas être préparés : ffmpeg est absent.</translation>
+    </message>
+    <message>
+        <source>Preparing the video was cancelled.</source>
+        <translation>La préparation de la vidéo a été annulée.</translation>
+    </message>
+    <message>
+        <source>The video wallpaper was stopped; a still is shown.</source>
+        <translation>Le fond d’écran vidéo a été arrêté ; une image fixe s’affiche.</translation>
+    </message>
+    <message>
+        <source>The picture of the day can&apos;t be downloaded right now.</source>
+        <translation>L’image du jour ne peut pas être téléchargée pour le moment.</translation>
+    </message>
+    <message>
+        <source>Today&apos;s entry is not a picture; yesterday&apos;s picture is shown.</source>
+        <translation>L’entrée du jour n’est pas une image ; celle d’hier s’affiche.</translation>
+    </message>
+    <message>
+        <source>The picture of the day can&apos;t be read.</source>
+        <translation>L’image du jour ne peut pas être lue.</translation>
+    </message>
+    <message>
+        <source>Astronomy Picture of the Day (NASA)</source>
+        <translation>Image astronomique du jour (NASA)</translation>
+    </message>
+    <message>
+        <source>Preparing the video… %1%</source>
+        <translation>Préparation de la vidéo… %1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Écran</translation>
+    </message>
+    <message>
+        <source>The wallpaper of every display that has none of its own.</source>
+        <translation>Le fond d’écran de chaque écran qui n’en a pas un propre.</translation>
+    </message>
+    <message>
+        <source>This display has a wallpaper of its own.</source>
+        <translation>Cet écran a son propre fond d’écran.</translation>
+    </message>
+    <message>
+        <source>This display follows All Displays.</source>
+        <translation>Cet écran suit Tous les écrans.</translation>
+    </message>
+    <message>
+        <source>All Displays</source>
+        <translation>Tous les écrans</translation>
+    </message>
+    <message>
+        <source>Follow All Displays</source>
+        <translation>Suivre Tous les écrans</translation>
+    </message>
+    <message>
+        <source>Removes the wallpaper of this display.</source>
+        <translation>Supprime le fond d’écran de cet écran.</translation>
+    </message>
+    <message>
+        <source>Use the All Displays Wallpaper</source>
+        <translation>Utiliser le fond d’écran de Tous les écrans</translation>
+    </message>
+    <message>
+        <source>Play on battery power</source>
+        <translation>Lire sur batterie</translation>
+    </message>
+    <message>
+        <source>A video wallpaper pauses on battery, when you are away, under a full-screen window, and with Reduce Motion.</source>
+        <translation>Un fond d’écran vidéo se met en pause sur batterie, quand vous êtes absent, sous une fenêtre en plein écran et avec Réduire les animations.</translation>
+    </message>
+    <message>
+        <source>Preparing the video</source>
+        <translation>Préparation de la vidéo</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.</source>
+        <translation>Une fois par jour, Grassfield contacte la source que vous choisissez : commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org, ou api.nasa.gov et apod.nasa.gov. Ces services voient votre adresse IP.</translation>
+    </message>
+    <message>
+        <source>Grassfield will download NASA&apos;s Astronomy Picture of the Day once a day. It contacts api.nasa.gov and apod.nasa.gov, and only while you are online on a connection that is not metered. These services see your IP address and the day you ask for; the shared demonstration key is used, so no account is involved. A picture that has a copyright holder is shown with its credit. Nothing is contacted until you choose Use Picture of the Day.</source>
+        <translation>Grassfield téléchargera l’Image astronomique du jour de la NASA une fois par jour. Il contacte api.nasa.gov et apod.nasa.gov, et seulement quand vous êtes en ligne sur une connexion non limitée. Ces services voient votre adresse IP et le jour demandé ; la clé de démonstration partagée est utilisée, aucun compte n’est donc concerné. Une image qui a un titulaire de droits d’auteur est affichée avec son crédit. Rien n’est contacté tant que vous n’avez pas choisi Utiliser l’image du jour.</translation>
     </message>
     <message>
         <source>Use Picture of the Day</source>
@@ -4890,6 +4986,10 @@
     <message>
         <source>Wikimedia Commons</source>
         <translation>Wikimedia Commons</translation>
+    </message>
+    <message>
+        <source>NASA APOD</source>
+        <translation>NASA APOD</translation>
     </message>
     <message>
         <source>Licence</source>
@@ -4940,8 +5040,28 @@
         <translation>Ajouter une image…</translation>
     </message>
     <message>
+        <source>Videos</source>
+        <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Add a video to play it as the wallpaper. It is prepared once, and pauses on battery, when you are away and under a full-screen window.</source>
+        <translation>Ajoutez une vidéo pour la lire comme fond d’écran. Elle est préparée une seule fois, et se met en pause sur batterie, quand vous êtes absent et sous une fenêtre en plein écran.</translation>
+    </message>
+    <message>
+        <source>Add Video…</source>
+        <translation>Ajouter une vidéo…</translation>
+    </message>
+    <message>
         <source>Choose a folder of pictures</source>
         <translation>Choisir un dossier d’images</translation>
+    </message>
+    <message>
+        <source>Choose a video</source>
+        <translation>Choisir une vidéo</translation>
+    </message>
+    <message>
+        <source>Videos (%1)</source>
+        <translation>Vidéos (%1)</translation>
     </message>
     <message>
         <source>Choose a picture</source>
