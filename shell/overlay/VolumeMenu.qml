@@ -71,8 +71,8 @@ FocusScope {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
                     color: "transparent"
-                    border.width: muteButton.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: muteButton.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
                 }
 
                 Icon {

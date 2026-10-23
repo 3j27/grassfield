@@ -164,8 +164,8 @@ Variants {
                 anchors.fill: parent
                 radius: height / 2
                 color: "transparent"
-                border.width: pill.activeFocus ? Tokens.controlFocusRing : 0
-                border.color: Appearance.colors.accent
+                border.width: pill.activeFocus ? Tokens.controlFocusOutline : 0
+                border.color: Appearance.focusRingColor
             }
 
             MouseArea {
@@ -544,8 +544,8 @@ Variants {
                             anchors.fill: parent
                             radius: width / 2
                             color: "transparent"
-                            border.width: closeDisk.activeFocus ? Tokens.controlFocusRing : 0
-                            border.color: Appearance.colors.accent
+                            border.width: closeDisk.activeFocus ? Tokens.controlFocusOutline : 0
+                            border.color: Appearance.focusRingColor
                         }
 
                         MouseArea {

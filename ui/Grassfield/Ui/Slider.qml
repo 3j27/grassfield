@@ -98,8 +98,8 @@ Item {
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
         color: Appearance.colors.knob
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 1
-        border.color: root.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 1
+        border.color: root.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
     }
 
     MouseArea {

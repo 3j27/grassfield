@@ -22,7 +22,7 @@ Window {
         {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
         {id: "wallpaper", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
-        {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill")},
+        {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
         {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
@@ -82,6 +82,18 @@ Window {
         target: Appearance
         property: "reduceMotion"
         value: cfg.value("accessibility.reduceMotion")
+    }
+
+    Binding {
+        target: Appearance
+        property: "increaseContrast"
+        value: cfg.value("accessibility.increaseContrast")
+    }
+
+    Binding {
+        target: Appearance
+        property: "textScale"
+        value: cfg.value("accessibility.textSize")
     }
 
     Binding {
@@ -169,8 +181,8 @@ Window {
             height: Tokens.settingsSearchHeight
             radius: Tokens.radiusControl
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            border.width: search.activeFocus ? Tokens.controlFocusRing : 0
-            border.color: Appearance.colors.accent
+            border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
+            border.color: Appearance.focusRingColor
 
             Icon {
                 id: searchIcon
@@ -297,7 +309,7 @@ Window {
                     visible: entry.selected && list.activeFocus
                     color: "transparent"
                     border.width: Tokens.controlFocusOutline
-                    border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.controlFocusOutlineOpacity)
+                    border.color: Appearance.focusRingColor
                 }
 
                 Icon {

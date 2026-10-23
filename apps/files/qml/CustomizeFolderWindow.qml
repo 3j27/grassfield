@@ -185,8 +185,8 @@ Window {
                     height: parent.height
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: hexField.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: hexField.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
 
                     TextInput {
                         id: hexField
@@ -307,8 +307,8 @@ Window {
                                 height: Tokens.folderIconPickerCell
                                 radius: Tokens.radiusControl
                                 color: cell.chosen ? Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity) : (cellHover.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
-                                border.width: glyphGrid.activeFocus && glyphGrid.current === cell.index ? Tokens.controlFocusRing : 0
-                                border.color: Appearance.colors.accent
+                                border.width: glyphGrid.activeFocus && glyphGrid.current === cell.index ? Tokens.controlFocusOutline : 0
+                                border.color: Appearance.focusRingColor
                                 Accessible.role: Accessible.RadioButton
                                 Accessible.name: cell.modelData
                                 Accessible.checked: cell.chosen
@@ -350,8 +350,8 @@ Window {
                     height: parent.height
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: glyphField.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: glyphField.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
 
                     TextInput {
                         id: glyphField

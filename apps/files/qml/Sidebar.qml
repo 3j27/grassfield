@@ -184,8 +184,8 @@ FocusScope {
             radius: Tokens.radiusControl
             color: entry.current ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 1.5)
                  : mouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
-            border.width: entry.keyed || drop.containsDrag ? Tokens.controlFocusRing : 0
-            border.color: Appearance.colors.accent
+            border.width: entry.keyed || drop.containsDrag ? Tokens.controlFocusOutline : 0
+            border.color: Appearance.focusRingColor
         }
 
         ThemeIcon {

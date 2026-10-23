@@ -44,8 +44,8 @@ Item {
         radius: height / 2
         color: root.checked ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * Tokens.materialHoverActiveFactor)
              : (mouse.containsMouse && root.enabled ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
     }
 
     Glyph {

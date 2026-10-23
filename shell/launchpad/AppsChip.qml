@@ -43,7 +43,7 @@ Item {
         visible: root.focused
         color: "transparent"
         border.width: Tokens.controlFocusOutline
-        border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.controlFocusOutlineOpacity)
+        border.color: Appearance.focusRingColor
     }
 
     Text {
