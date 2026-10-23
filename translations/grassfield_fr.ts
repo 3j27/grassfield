@@ -5847,6 +5847,14 @@
         <translation>La compilation a échoué. Lancez grassfield-compositor-rebuild dans un terminal pour en savoir plus.</translation>
     </message>
     <message>
+        <source>Log out to finish updating</source>
+        <translation>Fermez la session pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>Grassfield was updated. Log out and back in to use the new version.</source>
+        <translation>Grassfield a été mis à jour. Fermez la session puis rouvrez-la pour utiliser la nouvelle version.</translation>
+    </message>
+    <message>
         <source>Grassfield Settings is not installed</source>
         <translation>Réglages Grassfield n’est pas installé</translation>
     </message>
