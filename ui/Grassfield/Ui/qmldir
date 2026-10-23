@@ -29,3 +29,4 @@ GrassfieldArtwork 1.0 GrassfieldArtwork.qml
 MenuPlace 1.0 MenuPlace.js
 singleton IconShape 1.0 IconShape.qml
 IconTile 1.0 IconTile.js
+IconShapePrewarm 1.0 IconShapePrewarm.qml

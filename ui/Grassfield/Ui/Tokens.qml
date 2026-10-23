@@ -1244,6 +1244,8 @@ QtObject {
     readonly property int iconModeOwnTileConcurrency: 8
     // estimate: ms after which a shape read that did not finish is given up (the icon then sits on the system plate like a glyph)
     readonly property int iconModeOwnTileTimeout: 3000
+    // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
+    readonly property int iconModePrewarmGapMs: 40
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.

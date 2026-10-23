@@ -608,6 +608,12 @@ Scope {
                 height: BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away)
             }
 
+            // The menu bar window is mapped for the whole session: it hosts the idle reads of the icon shapes (the first output's
+            // bar only), so that the Apps panel opens with every icon's shape known (PERF-01).
+            IconShapePrewarm {
+                sources: Quickshell.screens.length > 0 && Quickshell.screens[0].name === win.screen.name ? Apps.listedIconSources : []
+            }
+
             HoverHandler {
                 id: winHover
                 onPointChanged: if (hovered)
