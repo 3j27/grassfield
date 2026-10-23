@@ -501,7 +501,7 @@ def verify(out):
                     die("dangling link: %s -> %s" % (p, t))
 
 
-PATH_D = re.compile(r'\sd="([^"]+)"')
+PATH_D = re.compile(r"""\sd\s*=\s*(?:"([^"]+)"|'([^']+)')""")
 FIRST_MOVE = re.compile(r"^\s*[Mm]\s*-?[\d.]+(?:e-?\d+)?[\s,]*-?[\d.]+(?:e-?\d+)?")
 
 
@@ -510,7 +510,7 @@ def path_signature(d):
     return FIRST_MOVE.sub("", re.sub(r"\s+", " ", d.strip()), count=1).strip()
 
 
-DATA_IMAGE = re.compile(r'href\s*=\s*"data:image/[a-z+.-]+;base64,([^"]+)"', re.S)
+DATA_IMAGE = re.compile(r"""href\s*=\s*(?:"data:image/[a-z+.-]+;base64,([^"]+)"|'data:image/[a-z+.-]+;base64,([^']+)')""", re.S)
 
 
 def raster_bytes(b64):
@@ -551,10 +551,10 @@ def verify_signatures(out, sig_file, listed_hashes):
                     die("an Apple-mark raster (raster: fingerprint in %s) is %s" % (sig_file, rel))
                 continue
             text = raw.decode("utf-8", errors="replace")
-            for path in PATH_D.findall(text):
+            for path in (a or b for a, b in PATH_D.findall(text)):
                 if hashlib.sha256(path_signature(path).encode()).hexdigest() in paths:
                     die("an Apple-mark glyph (signature in %s) is drawn by %s" % (sig_file, rel))
-            for b64 in DATA_IMAGE.findall(text):
+            for b64 in (a or b for a, b in DATA_IMAGE.findall(text)):
                 img = raster_bytes(b64)
                 if img is not None and hashlib.sha256(img).hexdigest() in rasters:
                     die("an Apple-mark raster (raster: fingerprint in %s) is embedded in %s" % (sig_file, rel))

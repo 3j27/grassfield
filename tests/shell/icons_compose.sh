@@ -179,7 +179,7 @@ link(P, "scalable/apps/appstore.svg", "softwarecenter.svg")
 link(P, "scalable/apps/software-center.svg", "appstore.svg")
 link(P, "scalable/apps/org.gnome.Software.svg", "softwarecenter.svg")
 put(P, "scalable/apps/pb-only.svg", G)
-write(P + "/scalable/apps/pb-mark.svg", MARK % "M30 40  l5 0 l0 5 z")
+write(P + "/scalable/apps/pb-mark.svg", (MARK % "M30 40  l5 0 l0 5 z").replace('d="M30 40  l5 0 l0 5 z"', "d='M30 40  l5 0 l0 5 z'"))  # single quotes
 put(P, "scalable/apps/shared.svg", G)
 put(P, "scalable/apps/calendar.svg", G)
 put(P, "scalable/apps/own-app.svg", G)
@@ -215,6 +215,7 @@ mactahoe:src/apps/scalable/doubtful.svg doubt
 """)
 write(tmp + "/list-missing.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/places/16/no-such-icon.svg\n")
 write(tmp + "/list-pebble.txt", "pebble:Pebble/scalable/apps/start-here.svg\n")
+write(tmp + "/list-sq.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/apps/scalable/glyph-mark.svg\n")
 # shared.svg of MacTahoe is the same bytes as calendar.svg, which stays: listing it must fail the composition
 write(tmp + "/list-copy.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/apps/scalable/shared.svg\n")
 
@@ -314,6 +315,8 @@ printf 'l5 0 l0 5 z' | sha256sum | cut -d' ' -f1 >"$tmp/sigs.txt"
 check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs.txt" --out "$2/sigfail" 2>&1) && exit 1; grep -qE "Apple-mark glyph .* (base/apps/scalable/glyph-mark|extra/scalable/apps/pb-mark)\.svg" <<<"$out"' _ "$composer" "$tmp"
 desc="signature guard: the default fingerprints file (packaging/arch/icons-apple-signatures.txt) holds SHA-256 and raster:SHA-256 lines only and the fixtures pass it"
 check bash -ec '[ "$(grep -v "^#" "$1" | grep -cvE "^(raster:)?[0-9a-f]{64}$")" = 0 ] && [ "$(grep -cE "^[0-9a-f]{64}$" "$1")" -ge 1 ] && [ -f "$2/index.theme" ]' _ "$root/packaging/arch/icons-apple-signatures.txt" "$out"
+desc="signature guard: a path written with single quotes (d='...') is read too (Pebble's pb-mark, MacTahoe's twin listed)"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-sq.txt" --signatures "$2/sigs.txt" --out "$2/sqfail" 2>&1) && exit 1; grep -q "Apple-mark glyph .* extra/scalable/apps/pb-mark\.svg" <<<"$out"' _ "$composer" "$tmp"
 desc="raster guard: an image hidden in an SVG (display none) whose bytes have a raster: fingerprint fails the composer"
 { printf 'no such path' | sha256sum | cut -d' ' -f1; sed 's/^/raster:/' "$tmp/raster.sha256"; } >"$tmp/sigs-raster.txt"
 check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs-raster.txt" --out "$2/rasterfail" 2>&1) && exit 1; grep -q "Apple-mark raster .* embedded in extra/scalable/apps/pb-raster.svg" <<<"$out"' _ "$composer" "$tmp"

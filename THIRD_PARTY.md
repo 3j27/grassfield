@@ -157,7 +157,7 @@ holds only `icon-theme='grassfield-icons'`. Dev sessions compose the same theme 
   `185da58c2f4caf3c2a038aa0869fd2772acc0933`, only its main `Pebble/` variant. **Pebble: no licence file at the pin; its
   README states GPL-3.0 (and links a LICENSE file that does not exist); owner accepted the risk 2026-10-23.** It credits
   MacTahoe, Hatter (`https://github.com/Mibea/Hatter`, the base of its folders and structure; its licence was not verified
-here) and Adwaita (pacman licence field CC-BY-SA-3.0 OR LGPL-3.0-only) as its sources. The credit note ships as `/usr/share/licenses/grassfield-icons/PEBBLE`, the
+  here) and Adwaita (pacman licence field CC-BY-SA-3.0 OR LGPL-3.0-only) as its sources. The credit note ships as `/usr/share/licenses/grassfield-icons/PEBBLE`, the
   two sources and commits as `SOURCE`.
 - The composed package declares `license=(MIT GPL-3.0-only)`: MIT for Grassfield's own glyphs, GPL-3.0 for the third-party art.
   **needs legal review:** Apple trademark artwork that the by-eye sweep and the fingerprints may have missed in either
