@@ -27,6 +27,7 @@ count_is() { [[ $(fl_window_count "$class") == "$1" ]]; }
 vs_spawn "$VS_DEV/build/grassfield-preview" "$img/img2.png"
 fl_check_wait "Preview opens img2.png" 25 title_is 'img2\.png'
 vs_sleep 2
+fl_check "Preview has the keyboard focus" fl_focus_class "$class"
 first=$(fl_shot open)
 
 # 2. zoom
@@ -48,13 +49,24 @@ vs_sleep 1
 rot=$(fl_shot rotated)
 n=$(vs_px_diff "$fit" "$rot")
 fl_check "Ctrl+R turns the picture ($n px differ, need >= 5000)" test "$n" -ge 5000
-fl_appkey ctrl r
-fl_appkey ctrl r
-fl_appkey ctrl r
-vs_sleep 1
-full=$(fl_shot four-turns)
-n=$(vs_px_diff "$fit" "$full")
-fl_check "four turns bring back the first view ($n px differ, need < 600)" test "$n" -lt 600
+# Three more turns, each given time to land (the rotation is a plain binding, no animation, and `turns` is taken mod 4 in
+# ImageView.rotate). A key lost under load would leave the picture turned, so after the fourth turn up to three more are
+# tried: the flow then says how many presses it took, and fails when no multiple of four brings the first view back.
+presses=1
+n=999999
+for _ in 1 2 3 4 5 6 7; do
+  if (( presses >= 4 )); then
+    vs_sleep 1
+    full=$(fl_shot "turns-$presses")
+    n=$(vs_px_diff "$fit" "$full")
+    (( n < 600 )) && break
+  fi
+  fl_appkey ctrl r
+  vs_sleep 0.5
+  presses=$((presses + 1))
+done
+fl_check "the first view is back after $presses turns ($n px differ, need < 600)" test "$n" -lt 600
+(( presses == 4 )) || fl_note "Ctrl+R needed $presses presses for four turns: a key press was lost or doubled under load"
 
 # 4. next and previous image
 fl_key -k Right

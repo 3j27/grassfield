@@ -134,11 +134,43 @@ fl_start() {
   local covering
   covering=$("$VS_ROOT/scripts/nestctl" clients -j | jq -r --arg n "$VS_OUTPUT" '.[] | select(.mapped) | "\(.class):\(.title)"' | head -n 5 | paste -sd, -)
   [[ -z $covering ]] || fl_note "windows already on the nested session before the flow: $covering"
+  fl_focus_output
+}
+
+# fl_focus_output: make GF-REF the focused output (surfaces that open on "the focused output" must open there, not on
+# WAYLAND-1). The pointer is already parked on GF-REF by vs_reset; this also asks the compositor (nestctl, nested only).
+fl_focus_output() {
+  "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({ monitor = '$VS_OUTPUT' })" >/dev/null 2>&1 || true
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null 2>&1 || true
+  vs_sleep 0.5
+}
+
+# fl_active_is CLASS_REGEX: the window with the keyboard is of that class.
+fl_active_is() { [[ $("$VS_ROOT/scripts/nestctl" activewindow -j 2>/dev/null | jq -r '.class // ""') =~ $1 ]]; }
+
+# fl_focus_class CLASS_REGEX: give the first window of that class the keyboard (the compositor's focus, then a click on
+# its middle as a fallback) and wait until it has it. Keys typed before that go to whatever else holds the keyboard (the
+# desktop icons took a Ctrl+I once), so every flow calls this before it types into an app.
+fl_focus_class() {
+  local addr n cx cy
+  for n in 1 2 3; do
+    fl_active_is "$1" && return 0
+    addr=$("$VS_ROOT/scripts/nestctl" clients -j 2>/dev/null | jq -r --arg re "$1" '[.[] | select(.mapped and (.class | test($re)))][0].address // empty')
+    [[ -n $addr ]] || { sleep 0.5; continue; }
+    "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({ window = 'address:$addr' })" >/dev/null 2>&1 || true
+    fl_wait 2 fl_active_is "$1" && return 0
+    read -r cx cy <<<"$("$VS_ROOT/scripts/nestctl" clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | "\(.at[0] + (.size[0] / 2 | floor)) \(.at[1] + 12)"')"
+    [[ -n ${cx:-} ]] && vs_pointer abs "$((cx - $("$VS_ROOT/scripts/nestctl" monitors -j | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .x')))" "$cy" sleep 200 click >/dev/null 2>&1
+    fl_wait 2 fl_active_is "$1" && return 0
+  done
+  fl_active_is "$1"
 }
 
 # Ends everything a flow may have left: windows it started, popups, banners, DND, settings it changed.
 fl_cleanup() {
   vs_kill_clients
+  # Windows the flow's apps opened (also after a failure: an info window must not outlive its flow).
+  fl_close_windows '^(org\.grassfield\.(Files|Preview|Settings)|foot)$' 2>/dev/null || true
   vs_ipc menubar close >/dev/null 2>&1 || true
   vs_ipc search close >/dev/null 2>&1 || true
   vs_ipc notifications clearAll >/dev/null 2>&1 || true

@@ -70,7 +70,7 @@ class='org\.grassfield\.Files'
 title_is() { fl_title_has "$class" "$1"; }
 files_windows() { fl_window_count "$class"; }
 more_windows() { [[ $(files_windows) -gt $1 ]]; }
-settle() { vs_sleep 1.2; } # the type-to-select buffer expires after about a second
+settle() { vs_sleep 1.5; files_ready >/dev/null; } # the type-to-select buffer expires after about a second; the keyboard is back in Files
 
 # Open the app on the folder; the window opens on the output under the pointer, so click the empty desktop first.
 vs_pointer abs 960 540 sleep 100 click >/dev/null
@@ -80,13 +80,14 @@ env DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_FILES_NO_LAUNCH=1 QML_IMPORT_PATH
 app=$!
 fl_check_wait "Files opens the folder (title names 'top')" 25 title_is '(^|[^a-z])top'
 vs_sleep 2
-# Focus: a click on empty space inside the window, below the listing.
-read -r wx wy ww wh <<<"$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.class == "org.grassfield.Files") | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -n 1)"
-vs_pointer abs $((wx + ww / 2 + 100)) $((wy + wh - 120)) sleep 200 click >/dev/null
+# Focus: the keyboard must be in the Files window before anything is typed (otherwise the desktop icons get the keys).
+files_ready() { fl_focus_class "$class"; }
+fl_check "Files has the keyboard focus" files_ready
 vs_sleep 0.6
 fl_shot top >/dev/null
 
 # 1. open a folder and go back up
+settle
 fl_type Documents
 fl_key -k Return
 fl_check_wait "Return opens the Documents folder (title)" 10 title_is 'Documents'
@@ -105,7 +106,7 @@ fl_shot info >/dev/null
 fl_appkey ctrl w
 windows_le() { [[ $(files_windows) -le $1 ]]; }
 fl_check_wait "Ctrl+W closes the info window" 10 windows_le "$before"
-vs_sleep 0.6
+settle
 
 # 3. New Folder, Rename
 fl_appkey ctrl+shift n

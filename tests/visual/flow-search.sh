@@ -16,6 +16,16 @@
 # Run (bare command, starts a nested session when none is up, cleans up its windows):  tests/visual/flow-search.sh
 # Expected: a PASS line per check and "search: all checks passed"; exit 0.
 source "$(dirname "$0")/flow-lib.sh"
+
+# The shell's file provider is plocate (localsearch when installed): the system database never holds a file created a
+# moment ago. A private database of the Search root (the Files sandbox, GRASSFIELD_SEARCH_ROOT) is built here; shell-run.sh
+# hands .dev/plocate.db to the shell as GRASSFIELD_SEARCH_PLOCATE_DB, and vs_session below restarts the shell with it.
+vs_fixtures
+if type -P updatedb >/dev/null; then
+  updatedb --database-root "$VS_FILES" --output "$VS_DEV/plocate.db" --require-visibility no || echo "NOTE: updatedb failed: the file steps cannot pass"
+else
+  echo "NOTE: updatedb (plocate) is not installed: the file steps cannot pass"
+fi
 fl_start search
 
 st() { fl_jq search status -- "$1"; }
@@ -39,6 +49,8 @@ select_item() {
 }
 # Open Search empty, check it is open, type TEXT, wait for the query to be what was typed.
 open_and_type() {
+  vs_ipc search close >/dev/null
+  vs_sleep 0.4
   vs_ipc search open "" >/dev/null
   fl_wait 5 is .open true || { echo "search did not open" >&2; return 1; }
   fl_type "$1"
@@ -65,8 +77,8 @@ fl_check_wait "the Preview window is closed" 10 no_window 'org\.grassfield\.Prev
 # 3. an application: foot
 before=$(fl_window_count '^foot$')
 fl_check "type 'foot'" open_and_type foot
-fl_check_wait "the foot application is among the results" 10 have_item app '^foot$|^foot '
-fl_check "the arrow keys select the foot result" select_item app '^foot$|^foot '
+fl_check_wait "the foot application is among the results" 10 have_item app '^foot$'
+fl_check "the arrow keys select the foot result" select_item app '^foot$'
 fl_tap Return
 fl_check_wait "Return launches it: a foot window appears" 20 foot_more_than "$before"
 fl_shot app-launched >/dev/null

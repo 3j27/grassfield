@@ -58,7 +58,7 @@ wait "$sender" 2>/dev/null
 # 3. history in the Notification Center
 vs_ipc notifications dismissAll >/dev/null
 fl_check_wait "banners are dismissed (banners=0)" 5 n_is banners 0
-fl_check "the history still holds what was received ($(fl_notif history) entries, need >= 2)" n_ge history 2
+fl_check_wait "acting on a notification clears it from the history, as on macOS (history=1: only the first is left)" 5 n_is history 1
 vs_ipc notifications toggleCenter >/dev/null
 fl_check_wait "the Notification Center opens (center=true)" 5 n_is center true
 vs_sleep 2
@@ -88,7 +88,7 @@ fl_check_wait "with DND off the banner shows again (banners=1)" 10 n_is banners 
 # 5. dismiss keeps the history, clear empties it
 vs_ipc notifications dismissAll >/dev/null
 fl_check_wait "dismissing the banner leaves banners=0" 5 n_is banners 0
-fl_check "dismissing keeps the history ($(fl_notif history) entries, need >= 4)" n_ge history 4
+fl_check "dismissing keeps the history ($(fl_notif history) entries, need >= 3)" n_ge history 3
 vs_ipc notifications clearAll >/dev/null
 fl_check_wait "clearing empties the history (history=0)" 5 n_is history 0
 

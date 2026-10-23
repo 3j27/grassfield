@@ -26,13 +26,7 @@ vs_spawn "$VS_DEV/build/grassfield-settings" --section=appearance
 fl_check_wait "Grassfield Settings opens" 20 fl_has_window "$class"
 vs_sleep 2
 dark=$(fl_shot appearance-dark)
-if ! active_is_settings; then
-  # (the window may open without the keyboard: a click on its title bar, the usual way a user focuses it)
-  read -r wx wy ww _ <<<"$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.class == "org.grassfield.Settings") | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -n 1)"
-  vs_pointer abs $((wx + ww / 2)) $((wy + 10)) sleep 200 click >/dev/null
-  vs_sleep 0.8
-fi
-fl_check "Settings has the keyboard focus" active_is_settings
+fl_check "Settings has the keyboard focus" fl_focus_class "$class"
 
 # 2. change the setting with the keyboard
 found=""
@@ -60,8 +54,6 @@ fl_check_wait "the shell applies Auto (appearance=auto, dark=$auto_dark by the c
 fl_shot appearance-auto >/dev/null
 
 # Back to dark for whatever runs next, and close the window
-fl_tap Left
-fl_tap Left
 vs_ipc controlcenter appearance dark >/dev/null
 fl_check_wait "the config is dark again" 5 cfg_is dark
 fl_close_windows "$class"
