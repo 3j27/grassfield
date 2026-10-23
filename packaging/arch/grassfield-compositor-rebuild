@@ -10,8 +10,9 @@
 # user (or, with the opt-in setting windows.rebuildExtension, the shell) builds it here: CMake and the compiler from the
 # shipped sources, in a private temporary directory, as the user, never as root. The result goes to
 # $XDG_CACHE_HOME/grassfield/compositor/<abi>/grassfield-compositor.so with the stamp of that build, written last. The
-# session loads it (config/hypr/grassfield/compositor.lua) only after --vetted has checked every directory from the cache
-# root down and both files: not symlinks, owned by the user, not writable by group or others.
+# session loads it (config/hypr/grassfield/compositor.lua) only after --vetted has checked the cache root (an absolute,
+# canonical path whose ancestors are root's or the user's and not writable by group or others unless sticky), every
+# directory from it down and both files: not symlinks, owned by the user, not writable by group or others.
 #
 # Usage: grassfield-compositor-rebuild [--check | --status | --vetted [ABI] | --session | --print-abi [VERSION_H]]
 #   (none)            build now when no build matches the installed Hyprland, then log out and back in
@@ -84,9 +85,40 @@ private_entry() { # <path> <d|f>
   return 0
 }
 
-# The directories from the cache root down to <dir> pass private_entry.
+# An owner trusted above the cache root: root or the user. In a user namespace that does not map root (a build sandbox)
+# root's files show as the overflow uid, which then stands for root; in a session root is mapped and that uid is a user
+# like any other.
+overflow_uid=$(cat /proc/sys/kernel/overflowuid 2>/dev/null || echo 65534)
+root_unmapped() { [[ -r /proc/self/uid_map ]] && ! awk '$1 <= 0 && 0 < $1 + $3 { found = 1 } END { exit !found }' /proc/self/uid_map; }
+trusted_owner() { [[ $1 == 0 || $1 == "$me" ]] || { [[ $1 == "$overflow_uid" ]] && root_unmapped; }; }
+
+# The cache root cannot be redirected: an absolute, canonical path (realpath gives it back unchanged: no symlink anywhere
+# on it, no "." or "..", no trailing or double slash), every ancestor root's or the user's and not writable by group or
+# others unless sticky (/tmp). Ancestors that do not exist yet (before a first build creates them) are skipped. Prints why
+# when it is not.
+cache_root_ok() {
+  local real d owner mode
+  [[ $cache_root == /* ]] || { echo "the cache directory '$cache_root' is not an absolute path (XDG_CACHE_HOME, HOME)"; return 1; }
+  real=$(realpath -m -- "$cache_root" 2>/dev/null) || real=""
+  [[ $real == "$cache_root" ]] || { echo "the cache directory $cache_root is not a canonical path (it resolves to ${real:-nothing})"; return 1; }
+  d=$cache_root
+  while [[ $d != / ]]; do
+    d=${d%/*}
+    [[ -n $d ]] || d=/
+    [[ -e $d ]] || continue
+    read -r owner mode < <(stat -c '%u %a' -- "$d" 2>/dev/null) || { echo "$d cannot be read"; return 1; }
+    trusted_owner "$owner" || { echo "$d, above the cache directory, belongs to uid $owner"; return 1; }
+    if ((8#$mode & 8#022)) && ! ((8#$mode & 8#1000)); then
+      echo "$d, above the cache directory, is writable by group or others (mode $mode)"
+      return 1
+    fi
+  done
+}
+
+# The cache root passes cache_root_ok, and the directories from it down to <dir> pass private_entry.
 private_dirs() { # <dir under cache_base, or cache_base>
   local d why
+  why=$(cache_root_ok) || { echo "$why"; return 1; }
   for d in "$cache_root" "$cache_root/grassfield" "$cache_base" "$@"; do
     why=$(private_entry "$d" d) || { echo "$why"; return 1; }
   done
@@ -148,8 +180,9 @@ build_into() { # <dir> <log>
 # session will. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build failed.
 build_and_install() { # <abi>
   local abi=$1 dest work so stamp tmp log why
+  why=$(cache_root_ok) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
   mkdir -p "$cache_root" 2>/dev/null
-  why=$(private_entry "$cache_root" d) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
+  why=$(cache_root_ok) && why=$(private_entry "$cache_root" d) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
   why=$(own_dir "$cache_root/grassfield") && why=$(own_dir "$cache_base") || { say "cannot use the cache directory: $why"; return 2; }
   # One build at a time (the shell's background build and a manual one).
   [[ -L $cache_base/.lock ]] && { say "refusing: $cache_base/.lock is a symlink"; return 2; }

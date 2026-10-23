@@ -23,14 +23,24 @@ check-version:
 check-licenses:
     scripts/dev/check-licenses.sh
 
-# Validate the Grassfield Hyprland Lua config with the installed Hyprland.
+# Validate the Grassfield Hyprland Lua config with the installed Hyprland. Verify mode inherits this environment, a
+# running Hyprland's signature included: it runs with a scratch runtime directory and a signature of the installed
+# Hyprland's commit that no instance has, and fails if the session's loader wrote a runtime note there (it must not in
+# verify mode, config/hypr/grassfield/compositor.lua verifying()).
 check-config:
+    rt=$(mktemp -d); trap 'rm -rf "$rt"' EXIT; \
+    [[ -r /usr/include/hyprland/src/version.h ]] || { echo "check-config: no Hyprland headers (/usr/include/hyprland/src/version.h): install hyprland" >&2; exit 1; }; \
+    commit=$(sed -n 's/^#define[[:space:]]*GIT_COMMIT_HASH[[:space:]]*"\([0-9a-f]*\)".*/\1/p' /usr/include/hyprland/src/version.h); \
     for cfg in dev session; do \
-      out=$(GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
+      out=$(XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
+        GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
         | sed -n '/Config parsing result/,$p'); \
       printf '%s\n' "$out"; \
       printf '%s\n' "$out" | grep -qx 'config ok' || { echo "check-config: $cfg.lua: no 'config ok'" >&2; exit 1; }; \
-    done
+    done; \
+    if compgen -G "$rt/grassfield-compositor-*" >/dev/null; then \
+      echo "check-config: verify mode wrote a compositor runtime note" >&2; exit 1; \
+    fi
 
 # Validate the default grassfield.json (and any given files) against the versioned schema.
 check-schema *files:
@@ -39,6 +49,8 @@ check-schema *files:
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
+    python3 -I tests/ci/qmldir_types.py --selftest
+    python3 -I tests/ci/qmldir_types.py
 
 # The committed .qsb shaders are current with their .frag sources (rebuild: scripts/dev/build-shaders.sh).
 check-shaders:
