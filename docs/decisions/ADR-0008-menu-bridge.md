@@ -1,5 +1,5 @@
 # ADR-0008: Menu bridge language and transport
-Status: Proposed · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 D4: global menus through `org_kde_kwin_appmenu`. The plugin implements the protocol server and learns, per

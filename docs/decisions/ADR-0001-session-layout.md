@@ -1,5 +1,5 @@
 # ADR-0001: Grassfield session layout
-Status: Proposed (applied provisionally per owner instruction of 2026-10-17) · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (applied provisionally per owner instruction of 2026-10-17)) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 Grassfield Desktop is an add-on session on an unmodified Omarchy 4 (D1). Omarchy's Hyprland config
