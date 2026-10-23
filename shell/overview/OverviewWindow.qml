@@ -66,12 +66,31 @@ Variants {
         // that was active when the overview opened (macOS: the frontmost window is the one the eye lands on).
         readonly property string marked: selected !== "" ? selected : (byKey[root.controller.previousAddress] ? root.controller.previousAddress : "")
         readonly property int spaceFocus: root.controller.spaceScreen === screenName ? root.controller.spaceFocus : -1
+        readonly property int minFocus: root.controller.minScreen === screenName ? root.controller.minFocus : -1
         // Drag state.
         property string dragKey: ""
         property point dragPoint: Qt.point(0, 0)
         property int dropIndex: -1
 
         readonly property real barBottom: Tokens.overviewBarHeight
+
+        // Minimized windows (macOS: a separate row below a divider, smaller than the open windows): the ones the shell
+        // minimized, on the output that has the Dock (the tiles of the Dock are there). Kept while the close animation runs.
+        readonly property bool hasMinimized: Compositor.dockScreenName === "" || Compositor.dockScreenName === modelData.name
+        readonly property var liveMinimized: shown ? (hasMinimized ? Compositor.minimized : []) : null
+        property var minimizedItems: []
+        readonly property var tileSpec: ({
+                w: Tokens.overviewMinimizedWidth,
+                h: Tokens.overviewMinimizedHeight,
+                label: Tokens.overviewMinimizedLabelHeight,
+                gap: Tokens.overviewMinimizedGap,
+                pad: Tokens.overviewMinimizedPad
+            })
+        readonly property real stripReserve: Layout.stripHeight(minimizedItems.length, tileSpec)
+        onLiveMinimizedChanged: {
+            if (liveMinimized)
+                minimizedItems = liveMinimized;
+        }
         // Free region in this window's coordinates (the overlay starts below the menu bar). Taken
         // from the screen, never from the window size, which is 0 until the compositor configures
         // the layer surface.
@@ -89,8 +108,15 @@ Variants {
             label: Tokens.overviewLabelHeight,
             dock: dockReserve,
             dockLeft: dockInsets.left,
-            dockRight: dockInsets.right
+            dockRight: dockInsets.right,
+            strip: stripReserve
         })
+        // The strip's tiles and divider, in this window's coordinates (the window starts below the menu bar).
+        readonly property var strip: Layout.stripRects(minimizedItems.length, {
+            x: Tokens.overviewAreaMargin + dockInsets.left,
+            w: modelData.width - 2 * Tokens.overviewAreaMargin - dockInsets.left - dockInsets.right,
+            bottom: modelData.height - Tokens.menubarHeight - Tokens.overviewAreaMargin - dockReserve
+        }, tileSpec)
         // Layout of `wins`, recomputed only when the inputs change (see relayout()).
         property var placement: ({
                 scale: Tokens.overviewMaxScale,
@@ -247,6 +273,16 @@ Variants {
 
         // ---- Actions ----
 
+        // A tile of the minimized strip chosen: the overview closes, then the window is restored and focused.
+        function activateMinimized(index: int): void {
+            const rec = minimizedItems[index];
+            if (rec)
+                root.controller.closeAnd({
+                    kind: "minimized",
+                    toplevel: rec.toplevel
+                });
+        }
+
         function activateWindow(key: string): void {
             const info = byKey[key];
             if (info)
@@ -369,6 +405,18 @@ Variants {
         function statusData(): var {
             return {
                 name: screenName,
+                minimized: minimizedItems.map((m, i) => ({
+                            address: m.address,
+                            appId: m.appId,
+                            title: m.title,
+                            rect: strip.rects[i] ? {
+                                x: Math.round(strip.rects[i].x),
+                                y: Math.round(strip.rects[i].y + Tokens.menubarHeight),
+                                w: Math.round(strip.rects[i].w),
+                                h: Math.round(strip.rects[i].h)
+                            } : null
+                        })),
+                minFocus: minFocus,
                 tileRects: tileRects(),
                 v2: v2,
                 v2Rects: v2 ? v2Rects() : [],
@@ -628,7 +676,7 @@ Variants {
                     readonly property var info: win.byKey[modelData]
                     readonly property var target: win.placedMap[modelData]
                     readonly property bool valid: info !== undefined && target !== undefined
-                    readonly property bool isSelected: win.marked === modelData && win.spaceFocus < 0
+                    readonly property bool isSelected: win.marked === modelData && win.spaceFocus < 0 && win.minFocus < 0
                     readonly property bool dragging: win.dragKey === modelData
 
                     // Layout rectangle, animated when the layout changes while open.
@@ -828,6 +876,97 @@ Variants {
                             thumb.ox = 0;
                             thumb.oy = 0;
                         }
+                    }
+                }
+            }
+
+            // Minimized windows: a hairline divider and a row of smaller tiles below the open windows (macOS Mission Control).
+            // Clicking one (or Return on it) closes the overview and restores that window.
+            Rectangle {
+                visible: win.minimizedItems.length > 0
+                x: win.strip.rects.length > 0 ? win.strip.rects[0].x : 0
+                y: win.strip.dividerY
+                width: win.strip.rects.length > 0 ? win.strip.rects[win.strip.rects.length - 1].x + win.strip.rects[win.strip.rects.length - 1].w - x : 0
+                height: 1
+                opacity: win.progress
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                Accessible.ignored: true
+            }
+
+            Repeater {
+                model: win.minimizedItems
+
+                delegate: Item {
+                    id: mini
+
+                    required property var modelData
+                    required property int index
+
+                    readonly property var box: win.strip.rects[index] ? win.strip.rects[index] : ({x: 0, y: 0, w: 1, h: 1})
+                    readonly property var entry: Apps.lookup(modelData.appId)
+                    readonly property string name: modelData.title !== "" ? modelData.title : Apps.nameFor(modelData.appId)
+                    readonly property bool focused: win.minFocus === index
+                    readonly property bool live: root.controller.profile === "full"
+
+                    x: box.x
+                    y: box.y
+                    width: box.w
+                    height: box.h + Tokens.overviewMinimizedLabelHeight
+                    opacity: win.progress
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("%1, minimized").arg(name)
+                    Accessible.onPressAction: win.activateMinimized(index)
+
+                    Rectangle {
+                        id: plate
+                        width: mini.width
+                        height: mini.box.h
+                        radius: Tokens.overviewThumbRadius
+                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (miniMouse.containsMouse ? 3 : 2))
+                        border.width: mini.focused || miniMouse.containsMouse ? Tokens.overviewSelectionWidth : 1
+                        border.color: mini.focused || miniMouse.containsMouse ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+
+                        ScreencopyView {
+                            // Fit inside the plate keeping the aspect ratio; live only in the full profile (a still icon otherwise).
+                            readonly property real ratio: implicitWidth > 0 && implicitHeight > 0 ? implicitWidth / implicitHeight : 1
+                            readonly property real room: Math.max(1, parent.width - 2 * Tokens.spacingXs)
+                            readonly property real roomH: Math.max(1, parent.height - 2 * Tokens.spacingXs)
+                            visible: mini.live && hasContent
+                            width: ratio >= room / roomH ? room : roomH * ratio
+                            height: ratio >= room / roomH ? room / ratio : roomH
+                            anchors.centerIn: parent
+                            captureSource: mini.live && win.shown ? mini.modelData.toplevel : null
+                            live: true
+                            paintCursor: false
+                        }
+
+                        TintedIcon {
+                            anchors.centerIn: parent
+                            size: Math.round(parent.height * Tokens.dockMinimizedBadgeScale * 1.5)
+                            source: Quickshell.iconPath(mini.entry ? mini.entry.icon : mini.modelData.appId, "application-x-executable")
+                        }
+                    }
+
+                    Text {
+                        anchors.top: plate.bottom
+                        anchors.topMargin: Tokens.spacingXs
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        text: mini.name
+                        textFormat: Text.PlainText
+                        color: Appearance.colors.text
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyCaptionSize
+                        font.weight: mini.focused ? Tokens.typographyMenuWeight : Tokens.typographySmallWeight
+                    }
+
+                    MouseArea {
+                        id: miniMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        onClicked: win.activateMinimized(mini.index)
                     }
                 }
             }

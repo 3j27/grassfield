@@ -71,6 +71,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // those of the newly active one take their colours (macOS).
     static void onActiveWindowChanged(const PHLWINDOW& window);
 
+    // The appearance changed (config "appearance", audit UX-06): every titlebar is drawn again in its palette.
+    static void onAppearanceChanged();
+
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);
@@ -90,6 +93,7 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
         std::string          text;
         float                scale      = 0.F;
         int                  maxWidthPx = 0;
+        gf::theme::Appearance appearance = gf::theme::kDefaultAppearance; // the title colour is in the texture
     } m_title;
 
     // One glyph texture per light (kButtonOrder), built on the first hover at a given size and scale.

@@ -66,8 +66,9 @@ Item {
     // False while the artwork is not drawn because its scale is not known yet (it fades in once, no icon jumps from one scale to the other).
     readonly property bool shapeKnown: !root.shapeWanted || root.tileSide !== undefined
     // The scale the artwork is drawn at in an effect mode.
-    readonly property real artScale: IconTile.artScale(root.tileSide === undefined ? 0 : root.tileSide, Tokens)
-    readonly property bool ownTile: root.tileSide !== undefined && root.tileSide > 0
+    // Over an accent fill (a selected row) the icon keeps the system plate whatever its shape: the plate is what separates it from the fill.
+    readonly property bool ownTile: root.tileSide !== undefined && root.tileSide > 0 && !root.overAccent
+    readonly property real artScale: IconTile.artScale(root.ownTile ? root.tileSide : 0, Tokens)
 
     implicitWidth: size
     implicitHeight: size
@@ -82,7 +83,9 @@ Item {
         width: root.textureOnly ? root.size * root.oversample : root.width
         height: root.textureOnly ? root.size * root.oversample : root.height
         source: root.source
-        sourceSize: Qt.size(root.size * root.oversample, root.size * root.oversample)
+        // A tile icon is decoded at the size it is drawn at (decoded pixels per drawn pixel = oversample, as in Default): the shader then reads
+        // the mip level that holds one texel group per pixel and does not blur the artwork by resampling it at a fraction of a level (A2 rule I at 24 px).
+        sourceSize: Qt.size(root.size * root.oversample * (root.textureOnly && root.ownTile ? root.artScale : 1), root.size * root.oversample * (root.textureOnly && root.ownTile ? root.artScale : 1))
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: true
@@ -114,6 +117,7 @@ Item {
             recolorTint: root.recolorTint
             nominalSize: root.size
             artScale: root.artScale
+            ownTile: root.ownTile
             shaderUrl: root.shaderUrl
         }
     }

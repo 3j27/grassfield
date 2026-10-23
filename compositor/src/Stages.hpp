@@ -4,12 +4,15 @@
 // core/Stages.* (model, validation, geometry). The windows of inactive stages stay mapped on their workspace, at their
 // real places, live: a Render::IWindowTransformer draws each one into the shell's strip tile, and a plugin-owned input
 // block reason (CWindow::setInputBlocked) keeps pointer and keyboard away from their real places. Nothing is ever moved,
-// resized or configured, so turning Stages off or unloading the plugin only detaches transformers and lifts the blocks.
+// resized or configured (the one exception: a window a titlebar drag dropped on the strip gets back its place from before
+// that drag, dropOnStrip), so turning Stages off or unloading the plugin only detaches transformers and lifts the blocks.
 // Compositor thread only, nothing blocks. Spec: docs/specs/stages.md; decision: docs/decisions/ADR-0013-stages.md.
 
 #include "core/Stages.hpp"
 
 #include <hyprland/src/desktop/DesktopTypes.hpp>
+
+#include <optional>
 
 namespace gf::stager {
 
@@ -38,5 +41,12 @@ namespace gf::stager {
 
     // A refused request: posts the current state with `reason` (nothing changes).
     void refuse(gf::stages::Reason reason);
+
+    // A titlebar drag of `window` released at (x, y) (layout); `tiling`: the release tiles the window. When the release is on
+    // the strip of that monitor (core inDropZone, dropAction; macOS: a window dragged onto the strip becomes a stage of its
+    // own), the window goes to the strip as a stage of its own (what op move "new" does) and is drawn into its tile from
+    // where it was dropped; `before` (its box at the press) given, its real place goes back there once it is drawn in the
+    // strip. A stages event follows as for any change. True when it did.
+    bool dropOnStrip(const PHLWINDOW& window, double x, double y, bool tiling, std::optional<gf::stages::Box> before);
 
 } // namespace gf::stager

@@ -2,7 +2,8 @@
 # Window tiling (macOS 15+ model, docs/specs/compositor.md FR47-FR50) on GF-REF, whose left edge is shared with WAYLAND-1
 # and whose right edge is free. A foot window is dragged by its titlebar (one pointer invocation per press and release):
 #   right-edge     released at the free right edge: the right half of the free area (margins 8, below the menu bar)
-#   preview        a capture while the button is still down at the edge shows the translucent frame (checked by eye)
+#   preview        a capture while the button is still down at the edge shows the frame as the blurred material (D-8):
+#                  a pattern window behind it loses its detail (measured), and the capture is kept for the eye
 #   drag-out       a drag of the tiled window away from the edge: it gets its size from before back
 #   top-right      released at the top of the right edge: the top-right quarter
 #   left-edge      released at the left edge: no tiling when another output touches it (the window just moves over),
@@ -102,7 +103,41 @@ is_box() { # x y w h (surface), 1 px slack
 size_is() { local _x _y w h _a; read -r _x _y w h _a < <(geometry); say "  foot ${w}x${h} (want ${1}x${2})"; (( w == $1 && h == $2 )); }
 
 rx=$((ax + 2 * m + halfw)) ry=$((ay + m + tb)) fullh=$((ah - 2 * m - tb))
+# preview (owner decision D-8): the frame is the blurred material, not alpha only. A pattern window (black text on white)
+# lies behind the right half; the detail of a crop of it (grey standard deviation) seen through the preview must fall
+# far below what an alpha-only pane leaves (a pane at the tint's opacity keeps about 1 - alpha = 55 % of it; Hyprland's
+# blur keeps almost none). The crop (output px) is inside the preview, left of the dragged window, over the pattern.
+env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
+  foot -T tiling-pattern -w 760x600 -o colors-dark.background=ffffff -o colors-light.background=ffffff \
+  -o colors-dark.foreground=000000 -o colors-light.foreground=000000 -o colors-dark.alpha=1 -o colors-light.alpha=1 \
+  sh -c 'i=0; while [ $i -lt 60 ]; do echo "MWMW#### |||| ==== MWMW#### |||| ==== MWMW#### ||||"; i=$((i + 1)); done; printf "\033[?25l"; exec sleep 100000' \
+  >>"$run/foot.out" 2>&1 </dev/null &
+pattern_pid=$!
+pids+=("$pattern_pid")
+pattern_addr=""
+for _ in $(seq 1 50); do
+  pattern_addr=$(nestctl clients -j | jq -r '[.[] | select(.title == "tiling-pattern")][0].address // ""')
+  [[ -n $pattern_addr ]] && break
+  sleep 0.2
+done
+detail() { magick "$1" -crop 300x200+1150+330 +repage -colorspace Gray -format '%[fx:int(standard_deviation*2550)/10]' info: 2>>"$log"; }
+if [[ -n $pattern_addr ]]; then
+  nestctl dispatch "hl.dsp.window.move({ x = $((mx + 1100)), y = $((my + 300)), window = 'address:$pattern_addr' })" >>"$log" 2>&1
+  nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+  sleep 1
+  "$root/scripts/dev/shot.sh" tiling-pattern-baseline "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-pattern-baseline.png" "$run/" 2>/dev/null
+fi
 drag $((mx + mw - 1)) $((my + mh / 2)) tiling-preview-right
+if [[ -n $pattern_addr ]]; then
+  d0=$(detail "$run/tiling-pattern-baseline.png")
+  d1=$(detail "$run/tiling-preview-right.png")
+  check "preview: the windows behind the frame are blurred (detail ${d1:-?} under it, ${d0:-?} without it; under 30 %)" \
+    awk -v a="${d1:-999}" -v b="${d0:-0}" 'BEGIN { exit !(b >= 20 && a < 0.3 * b) }'
+else
+  check "preview: the pattern window opened" false
+fi
+kill "$pattern_pid" 2>/dev/null
+sleep 0.5
 check "right-edge: released at the free right edge, the window fills the right half" is_box "$rx" "$ry" "$halfw" "$fullh"
 drag $((mx + mw / 2)) $((my + mh / 2))
 check "drag-out: dragged away from the tile, the window gets ${w0}x${h0} back" size_is "$w0" "$h0"

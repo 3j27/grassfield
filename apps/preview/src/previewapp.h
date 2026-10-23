@@ -6,6 +6,7 @@
 #include <QQuickImageProvider>
 #include <QStringList>
 #include <QThread>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
 
@@ -93,6 +94,8 @@ private:
     std::atomic_bool m_cancel{false};
     QThread *m_worker = nullptr;
     bool m_dark = true;
+    bool m_autoAppearance = false;
+    QTimer m_autoTimer;
     bool m_reduceMotion = false;
     QString m_titlebarDoubleClick = QStringLiteral("zoom");
     bool m_canMinimize = true;

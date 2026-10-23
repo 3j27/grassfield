@@ -14,7 +14,11 @@ for Hyprland's focused window without the keyboard (FR30 (d)) and the keyboard b
 FR44-FR46, Track B3, owner defect #6), plugin 0.9.0-genie; the macOS 26 titlebar (F2a: 32-px bar, 14-px lights,
 hover glyphs, grey lights on inactive windows, square bar/content join, FR3-FR4c), plugin 0.10.0-chrome; window tiling
 (feature `window-tiling`, FR47-FR50), plugin 0.11.0-tiling; the pointer focus on a shell layer that maps or takes the
-keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52). Plugin 0.12.0-pointer.
+keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52), plugin 0.12.0-pointer; the GF-AUDIT-001
+remediation (2026-10-23): restore on the window's own display at its frame (FR15, owner decision D-1), a dialog that opens
+during the Overview close gets the keys (overview.md "Close focus", GF-038), the chrome follows the appearance (feature
+`appearance`, FR53, UX-06), the tiling preview is the blurred material (FR48, D-8), `CLater` cancels on destruction
+(ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -105,8 +109,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
-  registered; `stages` only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer"]`
+  registered; `appearance` (FR53) with `config`; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
@@ -131,14 +135,23 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   Then `grassfield>>{"v":"gfc/1","type":"minimized","address":"<hex>"}` is posted (at once without
   animation). A window already on `special:minimized` is left alone.
 - **FR15** `hl.plugin.grassfield.restore(address, x, y, w, h)`: same validation. A window on
-  `special:minimized` moves back to the focused monitor's active workspace at its floating geometry (Hyprland
-  keeps it on the special workspace), is focused and raised at once, and stays transparent while its snapshot
+  `special:minimized` moves back to **the display it was minimized from, on the Desktop that display shows now, at its
+  frame** (owner decision D-1 2026-10-23, the macOS model; audit GF-001): never to the display of the Dock that was
+  clicked. The plugin records the display (the one under the window's middle, else Hyprland's monitor of the window)
+  and the floating box when it minimizes the window (core `planRestore`); the record goes with the restore, the window's
+  close and a move of the window off `special:minimized` by any other way, and survives a plugin reload only when the
+  library stayed mapped (FR23). A display that moved keeps the frame at the same place relative to it; a display that is
+  gone hands the window to the focused one, its frame fitted into the area below the menu bar; without a record (a window
+  parked by the shell's fallback) the focused display's Desktop takes it and Hyprland's placement stays. A zoomed or
+  full-screen window keeps its state, only its display is chosen. The window is focused and raised at once, and stays
+  transparent while its snapshot
   plays the configured effect backwards (Scale: grows from the tile to its box in 300 ms, ease-out, the time-reverse
   of FR14's curve, fading in over the first 20 %); then it is shown and `{"type":"restored"}` is posted. A restore
   during a minimize animation (or a minimize during a restore) completes the running one first; a Scale minimize
   interrupting a restore starts from the restore's current box, a funnel one (either way) from the shape on screen.
 - **FR16** `hl.plugin.grassfield.config(key, value)`: allowlist `titlebarDoubleClick` = `zoom` | `minimize` |
-  `none`, `stagesEnabled` (FR33) and `minimizeEffect` = `funnel` | `shrink` | `fade` (FR45) (exact strings); anything
+  `none`, `appearance` = `dark` | `light` (FR53), `stagesEnabled` (FR33), `minimizeEffect` = `funnel` | `shrink` | `fade`
+  (FR45) and the tiling keys (FR50) (exact strings); anything
   else is rejected (logged, no change); returns `hl.dsp.no_op()`. The shell pushes the settings after each
   capabilities event and whenever Settings change.
 - **FR17** Minimize robustness: a window closed during its animation drops the animation (no event); a
@@ -450,9 +463,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   over). Not for full-screen, maximized, pinned or tiled-by-layout windows. Pure logic `core/Tiling.*`
   (`placeForPointer`, `surfaceFor`), unit tests `TilingDrag.*`, `TilingPlace.*`.
 - **FR48** Preview: while the release would tile, the place's frame (titlebar included) is drawn under the dragged window
-  and over the windows behind it (the titlebar decoration's DECORATION_LAYER_UNDER pass), a translucent white rim
-  (`kTilePreviewFill`) and lighter inside (`kTilePreviewInner`), corners at the window's rounding; old and new frames
-  are damaged when the place changes and when the gesture ends or is cancelled.
+  and over the windows behind it (the titlebar decoration's DECORATION_LAYER_UNDER pass) as the **blurred material**
+  (owner decision D-8, macOS's frosted pane; audit UX-07 / GF-027): an edge of `kTilePreviewRim` px in the appearance's
+  rim colour, and inside it Hyprland's own blur of what is behind (`CRectPassElement` with `blur`, live, not xray: the
+  windows behind count) under the appearance's material tint (tokens `titlebar.previewTint*`, `previewRim*`, FR53),
+  corners at the window's rounding. One blurred element, drawn only while a drag has a place; with Hyprland's blur
+  disabled in the config the tint is drawn alone. Old and new frames are damaged when the place changes and when the
+  gesture ends or is cancelled. Measured by `tests/compositor/tiling.sh` (a pattern window behind the preview keeps under
+  30 % of its detail; an alpha-only pane keeps about 55 %).
 - **FR49** Placement: the release sets the surface box (`setTargetGeom`) to `surfaceFor(place)`: margins `kMargin` (8)
   around and between the tiles when "Tiled windows have margins" is on, the titlebar (`kTitlebarHeight`) inside the
   frame below the menu bar. The box from before the FIRST tiling is remembered (per window, forgotten when the window
@@ -495,6 +513,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners and the scheduled event-loop callback
   (`deferredFocus::CLater`) before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log
   line at the 1st, 10th, 100th, ... refresh (request log budget, FR24).
+- **FR53** The chrome follows the appearance (audit UX-06; feature `appearance`, advertised with `config`): the shell pushes
+  `hl.plugin.grassfield.config("appearance", "dark" | "light")` (the appearance it shows, `Appearance.dark`) after each
+  capabilities event and when it changes; the plugin draws every titlebar (bar, title, grey lights of inactive windows)
+  and the tiling preview (FR48) in that appearance's palette and redraws them at once (the title textures are rebuilt).
+  The colours are design tokens: `ui/tokens/tokens.json` group `titlebar` (both appearances), generated by
+  `ui/tools/gen-tokens.py` into `compositor/src/core/ThemeTokens.hpp` (`--check` fails on a stale header, run by `just
+  check-shell`), read by `core/Theme.hpp titlebarPalette`. Until the shell pushes it the appearance is dark (Grassfield's
+  default); an older shell never sends the key, an older plugin rejects it (the shell sends it only with the feature).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -549,6 +575,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR44-FR46 | unit `GenieEdge.*`, `GenieGeometry.*` (exact window at 0, exact target at 1, inside the bounds, monotonic, rows never cross, genie not scale midway, only toward the Dock), `GenieMesh.*`, `GenieTiming.*`, `MinimizeEffect.*`; QML `tst_minimized` `configCallMinimizeEffect`; nested `tests/compositor/genie.sh` (shape of captures, timing, unload / load mid-animation), `genie.sh c2` (C2) | L0 / L1 | 2026-10-20, plugin 0.9.0-genie, Hyprland v0.56.2 (efb50993), headless GF-REF 1920x1080@60 on i915, host load 9-18 (other agents' sessions): unit 248/248; `genie.sh` **PASS** (`.dev/genie/run-20261020-163707`): genie minimize 4 of 5 slow-motion captures classified genie (funnel, top 4-7x wider than the neck), restore 4 of 5; scale 0 genie (3 + 5 rectangles); Reduce Motion: every footprint at the window's own box, move -> event 101 / 102 ms; unload 1 s into a slow genie minimize: Hyprland alive, window on `special:minimized`; reload advertises `minimize-effect`; unload 1 s into a slow genie restore: window fully shown at its place; no core dump, 0 exceptions. Timing at normal speed, no capture: genie 10 animations / 310 frames, frame interval mean 16.9 ms, worst 20.2 ms (0 frames over 25 ms), Genie draw CPU 0.35-5.0 ms; scale 6 / 114 frames worst 18.9 ms; fade 6 / 42 worst 19.8 ms. Captures (grim screencopy) stalled the nested compositor for 0.4-3.8 s per capture burst with every effect, hence slow motion for the captures. Two multi-second frames without captures were seen in genie rounds (3.0 s in `run-20261020-162322`, 1 of 10; 2.2 s in `.dev/minimize/run-20261020-171057`, 1 of 20) under that load; cause not isolated. `genie.sh c2 993 1032` **PASS** (`.dev/genie/run-20261020-172150`, `nested-up.sh --no-plugin`): `hyprctl grassfield` "unknown request", shell degraded, SUPER+M parks the window, the Dock tile restores it. `minimize.sh 20`: FAIL twice under load (`run-20261020-171057`: 3 events late beyond 3 s, the shell answering minimize-requests 1.4-1.5 s late; `run-20261020-172302`: the nested shell vanished without a core dump or a log line between 17:24:09 and 17:24:12, next to an i915 GPU hang of another nested Hyprland reported at 17:24:16 ("Resetting rcs0 for preemption time out"), with 6 fence timeouts on this instance); a third and fourth run on 2026-10-20 (Genie and Scale) also failed on late events, and the nested shell vanished once more with Genie. 2026-10-22, after merging main 072824f (minimize.sh rounds wait on the event socket, `MZ_ROUND_MS` 10 s, c7969ff; the shell's hello retries, ff5f888), host load ~7, 0 fence timeouts in the previous 20 min: `tests/compositor/minimize.sh` (20 rounds, Genie default) **PASS** (`.dev/minimize/run-20261022-081719`: 0 missing events, 22 minimized / 21 restored / 23 minimize-request, the shell alive to the end); `genie.sh` **PASS** (`.dev/genie/run-20261022-081918`: genie 4 of 5 captures, restore 4 of 5, scale 0 genie, fade in place, unload / load mid-animation; normal speed: genie 10 animations / 310 frames, interval mean 16.7 ms, worst 17.8 ms, 0 over 25 ms, frame CPU mean 2.23 ms, worst 5.73 ms, Genie draw worst 0.46 ms; scale 6 / 114 frames worst 17.3 ms; fade 6 / 42 worst 16.8 ms); `genie.sh c2 1019 1032` **PASS** (`.dev/genie/run-20261022-082227`). The 500 ms Genie needs no timing change in minimize.sh: its mid-animation click comes 0.12 s after the move, inside both effects. `soak.sh 300`: not run |
 | FR47-FR50 | unit `TilingDrag.*`, `TilingPlace.*`, `TilingNames.*` (7); QML `tst_appmenumodel` `test_windowMenuTilingItems`, `settings_apply` (tiling keys); nested `tests/compositor/tiling.sh` | L0 / L1 | 2026-10-22, plugin 0.11.0-tiling (integrator): unit 280/280; `tiling.sh` **10/10 PASS** on GF-REF (left edge shared with WAYLAND-1, right edge free): right edge -> 948x926 at 2404,64, drag-out -> 800x500 back, top of the right edge -> 948x443 quarter, shared left edge -> no tiling, menu bar -> 1904x926 at 1448,64, IPC `left` then `previous`, `tilingEdges false` -> no tiling; preview captures viewed (right half, fill); Window > Move & Resize capture viewed. Not run: C2 without the plugin, soak, R13 |
 | FR51-FR52 | unit `LayerPointer.*` (9; also under `-fsanitize=address,undefined`); nested `tests/compositor/layer_pointer.sh` (`check`, `--output WAYLAND-1`, `--expect plugin` against an older build and with the plugin unloaded, C2) | L0 / L1 | Final, after the merge with window tiling (plugin 0.12.0-pointer, Hyprland v0.56.2 efb50993, host load 0.8-4.6): unit 290/290 and the ASan/UBSan build 290/290 (0 reports); `layer_pointer.sh check` **PASS** on a fresh instance (`.dev/layer-pointer/run-20261022-231314-check`) and after the soak (`run-20261022-232723-check`); C2 `nested-up.sh --no-plugin`: `hyprctl grassfield` "unknown request", shell "ready degraded", 0 QML errors, `layer_pointer.sh check` PASS with the 3 map cases KNOWN (`run-20261022-232743-check`); regressions PASS: `menubar-macos.sh` 10/10, `click_focus.sh` 43/43, `chrome.sh`, `window_reachable.sh` 12/12, `tiling.sh` 10/10, `soak.sh 600` (C1 below). Before the merge, plugin 0.11.0-pointer (the same code), GF-REF at x = 1440 next to WAYLAND-1 at 0,0, host load ~3: unit 283/283 (ASan/UBSan build 283/283, 0 sanitizer reports); `layer_pointer.sh check` **PASS** on GF-REF (`.dev/layer-pointer/run-20261022-223323-check`): a second click without motion closes the menu opened by a press (same pointer, and a new pointer device sending no motion), and the menu opened by IPC under the still pointer; 1-px control and the click after a menu closed over foot PASS; `--output WAYLAND-1` PASS. Defect shown: the 0.10.0-chrome build (loaded from another path with `scripts/nestctl plugin load`) with `--expect plugin` **FAIL** 3/3 map cases (`run-20261022-223421-check`), the plugin unloaded likewise (`run-20261022-223339-check`); without the plugin the map cases pass on WAYLAND-1 (at the origin) and fail on GF-REF (baseline probes `run-20261022-221741-probe`, `run-20261022-221846-probe`). First fix (map only) left the menu opened by a press failing: diagnostic lines showed the overlay maps while the button is still down with keyboard None and takes the keyboard after the release (`CLayerSurface::onCommit`, same miscomputed position): hence the keyboard trigger and the wait for the release. Runtime unload / load: rc 0 both, Hyprland alive, `layer-pointer` withdrawn and advertised again, check PASS after the reload (`run-20261022-223449-check`) |
+| FR53 | unit `Protocol.AppearanceConfigAndFeature`, `Theme.PaletteComesFromTheTokensForBothAppearances`; `gen-tokens.py --check`; QML `tst_minimized` `configCallAppearance`; nested `tests/compositor/chrome.sh` step 3b (light bar, lights, grey inactive, back to dark) | L0 / L1 | unit PASS (2026-10-23, this branch); nested chrome.sh 3b NOT RUN yet (no nested session in the agent sandbox) |
 
 ## Interfaces / contracts (versions)
 
@@ -718,7 +745,8 @@ Chosen in Hyprland 0.56.2 after reading its headers and the v0.56.2 sources of `
   focused monitor). Consequences: the shell rebuilds its Dock tiles from it after a restart; a plugin unload,
   crash or mismatch leaves windows minimized and restorable by the fallback; a window minimized by the
   fallback is restored by the plugin and the other way round. Hyprland keeps the floating geometry of a window
-  on a special workspace, so restore puts it back where it was (translated if restored on another monitor).
+  on a special workspace (translated when that workspace is on another monitor); the plugin gives the recorded frame
+  back exactly (FR15), and the shell's fallback moves the window to the Desktop its own display shows now (D-1).
 - **State first, animation second.** Minimize moves the window at once and animates a snapshot; restore moves
   it back at once (focused, transparent through `WINDOW_ALPHA_MOVE_FROM_WORKSPACE`, the alpha Hyprland itself
   animates 0 → 1 when a window arrives on a visible workspace) and shows it when the snapshot has grown back.
@@ -1264,7 +1292,8 @@ manual 9 (unload and reload, P1) still wait for the plugin.
 - A restoring window is transparent but still receives input during its 300 ms animation (as during
   Hyprland's own fade-in).
 - No hover glyphs (×, −, +), no grey inactive-window buttons, no pressed state.
-- Appearance is fixed to dark; light colors exist in `Theme.hpp` but are not switchable yet.
+- Appearance follows the shell's light/dark appearance (FR53); before the shell's first push (a few hundred ms after a load)
+  the titlebars are dark.
 - Titlebar drags don't snap to screen edges or other windows (SUPER+drag still does).
 - Client-side-decorated apps that ignore the server-side decoration request get a second titlebar.
 - Long titles are clamped to the available width by Hyprland's text renderer; ellipsis behaviour depends on it.

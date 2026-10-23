@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "CapabilityEvent.js" as CapabilityEvent
 import "CapabilitiesFile.js" as CapabilitiesFile
+import "../services/DevGate.js" as DevGate
 
 // Capability detection for grassfield-compositor (contract gfc/1).
 // Sends the hello every helloRetryMs (the first ones can predate Quickshell's event socket, so
@@ -73,11 +74,13 @@ Singleton {
     }
 
     // Test hook (tests/visual waits on it before capturing): `qs ipc call capabilities status` is "pending" until the
-    // hello reply arrived or timed out, then "ready present <features>" or "ready degraded".
+    // hello reply arrived or timed out, then "ready present <features>" or "ready degraded". Dev session only (SEC-04).
     IpcHandler {
         target: "capabilities"
 
         function status(): string {
+            if (!DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION")))
+                return DevGate.REFUSED;
             if (!root.settled)
                 return "pending";
             return root.pluginPresent ? "ready present " + root.features.join(",") : "ready degraded";

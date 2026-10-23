@@ -148,4 +148,55 @@ namespace gf::minimize {
         return a.w > 0 && a.h > 0 && b.w > 0 && b.h > 0 && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     }
 
+    Box fitFrame(const Box& frame, const Box& usable, double titlebarHeight) {
+        if (!isFinite(frame) || !isFinite(usable) || !std::isfinite(titlebarHeight) || usable.w < 1.0 || usable.h - titlebarHeight < 1.0)
+            return frame;
+        const double w    = std::clamp(frame.w, 1.0, usable.w);
+        const double h    = std::clamp(frame.h, 1.0, usable.h - titlebarHeight);
+        const double minY = usable.y + titlebarHeight;
+        return Box{std::clamp(frame.x, usable.x, usable.x + usable.w - w), std::clamp(frame.y, minY, usable.y + usable.h - h), w, h};
+    }
+
+    namespace {
+        // `frame` at the same place relative to `to` as it was relative to `from`.
+        Box translated(const Box& frame, const Box& from, const Box& to) {
+            return Box{to.x + (frame.x - from.x), to.y + (frame.y - from.y), frame.w, frame.h};
+        }
+
+        bool usableFrame(const SavedPlace& saved) {
+            return saved.floating && isFinite(saved.frame) && saved.frame.w > 0 && saved.frame.h > 0 && isFinite(saved.monitorBox);
+        }
+    } // namespace
+
+    RestorePlan planRestore(const std::optional<SavedPlace>& saved, std::span<const MonitorPlace> monitors, std::optional<size_t> focused, double titlebarHeight) {
+        RestorePlan plan;
+        const auto  fallback = [&]() -> std::optional<size_t> {
+            if (focused && *focused < monitors.size())
+                return focused;
+            return monitors.empty() ? std::nullopt : std::optional<size_t>{0};
+        };
+        if (!saved) {
+            plan.monitor = fallback();
+            return plan;
+        }
+        for (size_t i = 0; i < monitors.size(); ++i) {
+            if (!saved->monitor.empty() && monitors[i].name == saved->monitor) {
+                plan.monitor = i;
+                break;
+            }
+        }
+        if (!plan.monitor) {
+            plan.monitor = fallback();
+            plan.moved   = plan.monitor.has_value();
+        }
+        if (!plan.monitor || !usableFrame(*saved))
+            return plan;
+        const auto& m = monitors[*plan.monitor];
+        if (!plan.moved && m.box == saved->monitorBox)
+            plan.frame = saved->frame; // the same display, unchanged: the very frame
+        else
+            plan.frame = fitFrame(translated(saved->frame, saved->monitorBox, m.box), m.usable, titlebarHeight);
+        return plan;
+    }
+
 } // namespace gf::minimize

@@ -11,6 +11,11 @@
 //       Clear  monochrome ink (light on dark, smoked on light) whose opacity follows the lightness of the artwork's luminance.
 //       Tinted the lightness of the artwork's luminance mapped onto a two-tone ramp of the tint.
 //     Every map is increasing and keeps a minimum slope, so the internal contrast of an icon survives (A2 "internal contrast").
+//  TILES. An icon that is already a rounded square covers the plate, so nothing has to separate from it and the maps keep the luminance of
+//     every pixel (a contrast ratio between two parts of the icon survives, so does the one against the background; A2 rules I, S, N, E):
+//       Dark   no lift (tileDarkArtLift), the same desaturation.
+//       Clear  neutral grey at the luminance of the pixel, opaque (a translucent ink would take the backdrop into the contrast).
+//       Tinted the tint at the luminance of the pixel: darker than the tint scaled, lighter than the tint mixed toward white.
 //  There is no rim (owner decision 2026-10-23): a mode only changes the colour; the plate has no edge highlight.
 // The folder colour (FolderIcon) recolours the artwork only, after the mode transform: the plate stays.
 
@@ -30,6 +35,13 @@ layout(std140, binding = 0) uniform buf {
     float darkArtSaturation;
     float darkArtScale;
     float darkArtLift;
+    float tile;               // 1: the icon is its own rounded-square tile (own-tile rule): luminance-preserving maps, see below
+    float tileDarkArtLift;
+    float tileTintedPlateScaleLight;
+    float tileClearPlateAlphaLight;
+    float tileClearPlateLightLuma;
+    float clearPlateWallpaperLuma;
+    float clearPlateLightLuma;
     float clearPlateAlphaDark;
     float clearPlateAlphaWallpaper;
     float overWallpaper;      // 1: drawn over the bare wallpaper (desktop), not over a window material
@@ -73,6 +85,17 @@ vec3 fromLinear(vec3 c) {
     return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
 }
 
+// The exact sRGB transfer, for the maps of tile icons: a map that keeps the relative luminance must keep the one the A2 rules and WCAG measure
+// (a gamma of 2.2 differs from it by a few percent in the darks and in saturated colours, enough to cost a contrast ratio at the margin).
+vec3 srgbToLinear(vec3 c) {
+    return mix(c / 12.92, pow((c + vec3(0.055)) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+
+vec3 linearToSrgb(vec3 c) {
+    c = max(c, vec3(0.0));
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - vec3(0.055), step(vec3(0.0031308), c));
+}
+
 void main() {
     bool wall = overWallpaper > 0.5;
     bool accent = accentFill > 0.5;
@@ -85,7 +108,8 @@ void main() {
     vec4 px = texture(iconTexture, clamp(uv, vec2(0.0), vec2(1.0))) * (inBox ? 1.0 : 0.0);
     float a = px.a;
     vec3 c = px.rgb / max(a, 0.0001);
-    vec3 lin = toLinear(c);
+    bool isTile = tile > 0.5;
+    vec3 lin = isTile ? srgbToLinear(c) : toLinear(c);
     float Y = dot(lin, vec3(0.2126, 0.7152, 0.0722));   // relative luminance of the artwork pixel
 
     // Per-mode transform of the artwork: rgb (straight) and the opacity it is drawn with.
@@ -94,8 +118,15 @@ void main() {
     if (modeIndex < 1.5) {
         // Affine from darkArtLift (black) to darkArtScale (white): monotonic, a minimum slope, black stays darker than light art.
         vec3 d = mix(vec3(Y), lin, darkArtSaturation);
-        vec3 lo = toLinear(vec3(darkArtLift));
-        art = fromLinear(lo + (toLinear(vec3(darkArtScale)) - lo) * d);
+        if (isTile) {
+            vec3 lo = srgbToLinear(vec3(tileDarkArtLift));
+            art = linearToSrgb(lo + (srgbToLinear(vec3(darkArtScale)) - lo) * d);
+        } else {
+            vec3 lo = toLinear(vec3(darkArtLift));
+            art = fromLinear(lo + (toLinear(vec3(darkArtScale)) - lo) * d);
+        }
+    } else if (modeIndex < 2.5 && isTile) {
+        art = linearToSrgb(vec3(Y));
     } else if (modeIndex < 2.5) {
         // Over an accent fill the ink is the opposite of the fill (light on a bright accent, dark on a dark one).
         bool lightInk = accent ? accentBright : isDark;
@@ -104,12 +135,17 @@ void main() {
         // The ink opacity is solved so that the colour on screen is affine in linear light between the glass (black art) and the ink
         // (white art), the glass being the plate over an assumed material: the contrast between two parts of the artwork survives.
         float pa = accent ? clearPlateAlphaAccent : (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight));
-        float pg = accent ? (accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? 1.0 : 0.0);
+        float pg = accent ? (accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? 1.0 : (wall ? clearPlateWallpaperLuma : clearPlateLightLuma));
         float bd = (accent || wall) ? clearBackdropMid : (isDark ? clearBackdropDark : clearBackdropLight);
         float under = pg * pa + (1.0 - pa) * bd;
         float yEff = clearInkFloor + (1.0 - clearInkFloor) * (lightInk ? Y : 1.0 - Y);
         float target = mix(pow(under, 2.2), pow(ink, 2.2), yEff);
         artA = a * clamp((pow(target, 1.0 / 2.2) - under) / (ink - under), 0.0, 1.0);
+    } else if (isTile) {
+        // The tint at the luminance Y: scaled down below the luminance of the tint, mixed toward white above it.
+        vec3 tl = srgbToLinear(tint.rgb);
+        float Yt = max(dot(tl, vec3(0.2126, 0.7152, 0.0722)), 0.0001);
+        art = Y <= Yt ? linearToSrgb(tl * (Y / Yt)) : linearToSrgb(mix(tl, vec3(1.0), (Y - Yt) / max(1.0 - Yt, 0.0001)));
     } else {
         vec3 t = tint.rgb;
         vec3 lo = isDark ? t * tintedRampLowDark : t * tintedRampLowLight;
@@ -141,11 +177,16 @@ void main() {
         plateA = 1.0;
     } else if (modeIndex < 2.5) {
         // Light glass on a dark material; smoked glass on a light one, and over the bare wallpaper (any brightness).
-        plateRgb = accent ? vec3(accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? vec3(1.0) : vec3(0.0));
+        plateRgb = accent ? vec3(accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? vec3(1.0) : vec3(wall ? clearPlateWallpaperLuma : clearPlateLightLuma));
         plateA = accent ? clearPlateAlphaAccent : (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight));
+        if (isTile && !isDark && !accent) {
+            // Under a tile the plate shows only in the antialiased fringe of its edge: dark in the light appearance, so that the edge keeps its contrast against a light material.
+            plateRgb = vec3(tileClearPlateLightLuma);
+            plateA = tileClearPlateAlphaLight;
+        }
     } else {
         vec3 t = tint.rgb;
-        plateRgb = isDark ? t * tintedPlateScale : mix(t, vec3(1.0), tintedPlateMixLight);
+        plateRgb = isDark ? t * tintedPlateScale : (isTile ? t * tileTintedPlateScaleLight : mix(t, vec3(1.0), tintedPlateMixLight));
         plateA = 1.0;
     }
     vec4 plateP = vec4(plateRgb * plateA, plateA);

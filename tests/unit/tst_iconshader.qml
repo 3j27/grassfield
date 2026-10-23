@@ -29,7 +29,7 @@ import Grassfield.Ui
 //   S (separation) artwork of nearly one luminance (a pale sky on a green hill) keeps 85 percent of the default's glyph-vs-plate contrast, or 1.5.
 // The plate is the median luminance of the ring 4 to 8 px (scaled with the size) inside the edge; the glyph is the 2nd or
 // 98th percentile luminance of the core, whichever is farther from the plate; the outline is the 90th percentile of the
-// contrast of the pixels of the edge band (the plate's inset, its rim and one pixel of antialiasing: 3 to 4 px; a maximum would let a few
+// contrast of the pixels of the edge band (the plate's inset, one pixel of antialiasing and one of solid artwork: 3 to 4 px; a maximum would let a few
 // pixels carry an invisible edge).
 // Contrast is the WCAG ratio of relative luminances. It needs a GPU scene graph (ShaderEffect does not run on the
 // software renderer used by the offscreen platform): the test skips there; tests/visual/icon-a2.sh runs it in the
@@ -184,9 +184,11 @@ TestCase {
         const at = (x, y) => x < 0 || y < 0 || x >= n || y >= n ? false : mask[y * n + x];
         const u = n / 48;
         const d2 = Math.max(1, Math.round(2 * u));
-        // The outline band holds the plate's edge: the system plate is inset from the box by iconMode.sysPlateInset and one more pixel is antialiasing
-        // (no rim since the owner decision of 2026-10-23: the modes only change the colour).
-        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1));
+        // The outline band holds the edge of the icon: the system plate is inset from the box by iconMode.sysPlateInset, one more pixel is antialiasing, and one
+        // pixel of solid artwork is added. A tile icon fills the plate (own-tile rule), so without that pixel the band of a 24 or 32 px icon would be the
+        // antialiased fringe alone, whose contrast is that of a half-covered pixel, while Default's tile (inset about 7 percent) always has solid pixels in it.
+        // No rim since the owner decision of 2026-10-23: the modes only change the colour.
+        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1) + 1);
         const d4 = Math.max(2, Math.round(4 * u));
         const d8 = Math.max(3, Math.round(8 * u));
         const ring = [];

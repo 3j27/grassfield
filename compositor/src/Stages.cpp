@@ -18,6 +18,8 @@
 #include <hyprland/src/desktop/view/WLSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/EventManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
@@ -123,6 +125,15 @@ namespace {
         std::optional<uint64_t>          pointerLater; // doLater sequence of a pending pointer refresh (code of this library)
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
         bool                             warnedNoBuffer = false;
+        // A window a titlebar drag dropped on the strip (dropOnStrip): drawn from where it was dropped, then put back at its
+        // place from before the drag once it is drawn in the strip (sync), invisibly (the strip draws it in a tile).
+        struct SDrop {
+            PHLWINDOWREF           window;
+            uint64_t               address = 0;
+            st::Box                from;
+            std::optional<st::Box> restore;
+        };
+        std::optional<SDrop> drop;
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -858,17 +869,9 @@ namespace {
                             targets.push_back(STarget{.w = w, .inStrip = false, .to = std::nullopt, .thumb = std::nullopt});
                         continue;
                     }
-                    const size_t slot    = k - 1;
-                    const bool   hasTile = slot < strip->tiles.size();
-                    const auto   rects   = st::thumbRects(hasTile ? strip->tiles[slot] : strip->tiles.back(), surfaces);
-                    const double shift   = (strip->hidden || !hasTile || fs) ? st::hiddenShift(strip->tiles, monitorBox(mon)) : 0.0;
-                    for (size_t i = 0; i < ws.size(); ++i) {
-                        const st::Box r = rects[i];
-                        targets.push_back(STarget{.w       = ws[i],
-                                                  .inStrip = true,
-                                                  .to      = st::Box{r.x + shift, r.y, r.w, r.h},
-                                                  .thumb   = hasTile ? std::optional<st::Box>{r} : std::nullopt});
-                    }
+                    const auto drawn = st::stripTargets(k - 1, strip->tiles, strip->hidden, fs, monitorBox(mon), surfaces);
+                    for (size_t i = 0; i < ws.size() && i < drawn.size(); ++i)
+                        targets.push_back(STarget{.w = ws[i], .inStrip = true, .to = drawn[i].to, .thumb = drawn[i].thumb});
                 }
             }
         }
@@ -918,7 +921,8 @@ namespace {
             changed = setBlocked(e, true) || changed;
             if (!e.transformer) {
                 if (const auto w = e.window.lock()) {
-                    e.from        = std::nullopt; // from its live box
+                    // From where a drag dropped it on the strip, else from its live box.
+                    e.from        = s.drop && s.drop->address == e.address ? std::optional<st::Box>{s.drop->from} : std::nullopt;
                     e.transformer = attach(w);
                 }
             } else
@@ -949,8 +953,10 @@ namespace {
         s.syncLater.reset();
         const auto refocus   = std::exchange(s.refocusSpace, std::nullopt);
         const auto requested = std::exchange(s.focusLater, PHLWINDOWREF{}).lock();
-        if (!s.on)
+        if (!s.on) {
+            s.drop.reset();
             return;
+        }
         PHLWINDOW focus = requested;
         bool      clear = false;
         if (!focus && refocus) {
@@ -968,6 +974,15 @@ namespace {
             }
         }
         const bool changed = retarget(s.durationMs, focus);
+        // A window dropped on the strip is drawn in it now: its real place goes back to where it was before the drag.
+        if (auto drop = std::exchange(s.drop, std::nullopt); drop && drop->restore) {
+            const auto  w = drop->window.lock();
+            const auto* e = w ? winOf(drop->address) : nullptr;
+            if (e && e->inStrip && e->transformer && g_layoutManager && w->layoutTarget()) {
+                const st::Box& r = *drop->restore;
+                g_layoutManager->setTargetGeom(CBox{r.x, r.y, r.w, r.h}, w->layoutTarget());
+            }
+        }
         if (clear && Desktop::focusState() && !windowFocusRefused()) {
             const auto current = Desktop::focusState()->window();
             if (current && !mayHoldKeyboard(current)) {
@@ -1297,6 +1312,7 @@ namespace {
         s.syncLater.reset();
         s.refocusSpace.reset();
         s.focusLater.reset();
+        s.drop.reset();
         cancelPendingFocus();
         cancelPress();
         if (retarget(durationMs)) // nothing is targeted any more: every window animates back to its live box
@@ -1353,9 +1369,13 @@ namespace {
             }
             const st::Box box{ls->m_geometry.x, ls->m_geometry.y, ls->m_geometry.w, ls->m_geometry.h};
             const bool    layerOk = ls->m_layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
-            const bool    inputOk = std::ranges::all_of(strip.tiles, [&ls](const st::Box& t) { return inputCovers(ls, t); });
-            if (!layerOk || !st::tilesCovered(strip.tiles, box, monitorBox(mon)) || !inputOk) {
-                gf::logRequest(Log::WARN, "stages: rejected: the {} surface on {} (layer {}, box {:.0f},{:.0f} {:.0f}x{:.0f}) must be on the Top or Overlay layer and cover every tile with its input region",
+            // The tiles always lie on their monitor; a hidden strip (its thumbnails off the monitor) may keep only its reveal
+            // zone as input region (core stripAccepted).
+            const bool inside  = st::tilesInMonitor(strip.tiles, monitorBox(mon));
+            const bool boxOk   = strip.hidden || st::tilesCovered(strip.tiles, box, monitorBox(mon));
+            const bool inputOk = strip.hidden || std::ranges::all_of(strip.tiles, [&ls](const st::Box& t) { return inputCovers(ls, t); });
+            if (!st::stripAccepted(strip.hidden, layerOk, inside, boxOk, inputOk)) {
+                gf::logRequest(Log::WARN, "stages: rejected: the {} surface on {} (layer {}, box {:.0f},{:.0f} {:.0f}x{:.0f}) must be on the Top or Overlay layer, its tiles on the monitor and, while the strip is shown, under its box and input region",
                                STRIP_NAMESPACE, strip.monitor, ls->m_layer, box.x, box.y, box.w, box.h);
                 return false;
             }
@@ -1376,6 +1396,7 @@ namespace gf::stager {
         auto& s   = S();
         s.enabled = false;
         s.on      = false;
+        s.drop.reset();
         s.spaces.clear();
         s.wins.clear();
         s.strips.clear();
@@ -1481,6 +1502,7 @@ namespace gf::stager {
         s.pointerLater.reset();
         s.refocusSpace.reset();
         s.focusLater.reset();
+        s.drop.reset();
         cancelPendingFocus();
         cancelPress();
         const bool wasOn = s.on || !s.wins.empty();
@@ -1528,6 +1550,38 @@ namespace gf::stager {
 
     void refuse(st::Reason reason) {
         post(reason);
+    }
+
+    bool dropOnStrip(const PHLWINDOW& w, double x, double y, bool tiling, std::optional<st::Box> before) {
+        auto& s = S();
+        if (!s.ready || !s.on || !w || !State::monitorState())
+            return false;
+        PHLMONITOR mon;
+        for (const auto& m : State::monitorState()->monitors()) {
+            if (m && m->m_enabled && m->logicalBox().containsPoint(Vector2D{x, y})) {
+                mon = m;
+                break;
+            }
+        }
+        const SStrip*  strip   = mon ? stripOn(mon) : nullptr;
+        const uint64_t address = addressOf(w);
+        SSpace*        sp      = spaceHolding(address);
+        const bool     shown   = sp && mon && shownOn(sp->id) == mon;
+        const auto&    stages  = shown ? sp->model.stages() : std::vector<st::Stage>{};
+        const st::DropFacts facts{.on       = true,
+                                  .hasStrip = strip != nullptr,
+                                  .hidden   = strip && strip->hidden,
+                                  .inZone   = strip && st::inDropZone(x, y, strip->tiles, monitorBox(mon)),
+                                  .managed  = shown,
+                                  .active   = shown && sp->model.isActive(address),
+                                  .alone    = !stages.empty() && stages.front().windows.size() == 1,
+                                  .tiling   = tiling};
+        if (st::dropAction(facts) != st::DropAction::NewStage || !sp->model.moveWindow(address, std::nullopt, s.nextId))
+            return false;
+        s.drop = SStagesState::SDrop{.window = w, .address = address, .from = tf::surfaceBox(w), .restore = before};
+        gf::logRequest(Log::INFO, "stages: window {:x} dropped on the strip of {}: a stage of its own", address, mon->m_name);
+        scheduleSync(std::nullopt, frontOfActive(*sp)); // out of the active stage: its front window keeps or takes the keyboard
+        return true;
     }
 
     void request(const st::Request& r) {

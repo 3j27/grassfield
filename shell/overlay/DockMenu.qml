@@ -7,6 +7,7 @@ import qs.platform
 import qs.services
 import "../dock/DockModel.js" as DockModel
 import "../dock/Launch.js" as Launch
+import "../dock/Stacks.js" as Stacks
 import "../services/AppLaunch.js" as AppLaunch
 
 // Dock item context menu. Payload (Popups.data): key, entry (DesktopEntry or null),
@@ -31,8 +32,56 @@ PopupMenu {
     }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()))
 
     readonly property bool isTrash: info.kind === "trash"
+    readonly property bool isFolder: info.kind === "folder"
+    // The documents this app used (macOS lists them in the app's Dock menu), newest first.
+    readonly property var recentDocs: entry && !isTrash && !isFolder ? RecentItems.documentsFor(entry, Tokens.dockRecentDocsMax) : []
+
+    // Radio rows of the stack menu's submenus: the chosen value is checked.
+    function choice(key: string, current: string, rows: var): var {
+        return rows.map(r => ({id: "stackOption", key: key, value: r.value, text: r.text, checked: current === r.value}));
+    }
+
+    function folderModel(): var {
+        return [
+            {
+                id: "stackSort",
+                text: qsTr("Sort by"),
+                submenu: choice("sort", info.sort, [
+                    {value: "name", text: qsTr("Name")},
+                    {value: "dateAdded", text: qsTr("Date Added")},
+                    {value: "dateModified", text: qsTr("Date Modified")},
+                    {value: "dateCreated", text: qsTr("Date Created")},
+                    {value: "kind", text: qsTr("Kind")}
+                ])
+            },
+            {
+                id: "stackDisplay",
+                text: qsTr("Display as"),
+                submenu: choice("display", info.display, [
+                    {value: "stack", text: qsTr("Stack")},
+                    {value: "folder", text: qsTr("Folder")}
+                ])
+            },
+            {
+                id: "stackView",
+                text: qsTr("View content as"),
+                submenu: choice("view", info.view, [
+                    {value: "automatic", text: qsTr("Automatic")},
+                    {value: "fan", text: qsTr("Fan")},
+                    {value: "grid", text: qsTr("Grid")},
+                    {value: "list", text: qsTr("List")}
+                ])
+            },
+            {separator: true},
+            {id: "folderRemove", text: qsTr("Remove from Dock")},
+            {separator: true},
+            {id: "folderOpen", text: qsTr("Open in Files")}
+        ];
+    }
 
     model: {
+        if (isFolder)
+            return folderModel();
         // macOS Trash menu: Open, Empty Trash… (disabled while the Trash is empty).
         if (isTrash)
             return [{id: "trashOpen", text: qsTr("Open")}, {id: "trashEmpty", text: qsTr("Empty Trash…"), enabled: !Trash.empty}];
@@ -41,6 +90,13 @@ PopupMenu {
         if (windowRows.length > 0) {
             for (const w of windowRows)
                 items.push({id: "window", ref: w.ref, text: w.minimized ? qsTr("%1 (minimized)").arg(w.title) : w.title, checked: w.checked});
+            items.push({separator: true});
+        }
+        // macOS: the documents the app used come next, under their own header.
+        if (recentDocs.length > 0) {
+            items.push({id: "recentHeader", text: qsTr("Recent Documents"), enabled: false});
+            for (const d of recentDocs)
+                items.push({id: "recentDocument", path: d.path, text: Stacks.baseName(d.path), enabled: entry !== null});
             items.push({separator: true});
         }
         items.push(info.running ? {id: "new", text: qsTr("New Window"), enabled: entry !== null} : {id: "open", text: qsTr("Open"), enabled: entry !== null});
@@ -214,6 +270,22 @@ PopupMenu {
         }
         Popups.close();
         switch (item.id) {
+        case "stackOption":
+            Settings.setDockStackOptions(Stacks.withOption(Settings.dockStackOptions, data.path, item.key, item.value));
+            break;
+        case "folderRemove": {
+            const home = Quickshell.env("HOME");
+            Settings.setDockFolders(Settings.dockFolders.filter(f => Stacks.folderList([f], home, 1)[0] !== data.path));
+            break;
+        }
+        case "folderOpen":
+            Apps.openDetached(["gio", "open", data.path]);
+            break;
+        case "recentDocument":
+            // Opened by the app that used it (its Exec line with the file field code), refused when that is not possible.
+            if (data.entry && !Apps.openDocument(data.entry, item.path))
+                Apps.openDetached(["gio", "open", item.path]);
+            break;
         case "trashOpen":
             Trash.open();
             Trash.refresh();

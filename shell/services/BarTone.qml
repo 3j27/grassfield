@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
 import "BarToneLogic.js" as Logic
+import "DevGate.js" as DevGate
 
 // Adaptive menu bar foreground, one tone per output (macOS model: over a transparent bar the text and glyphs follow what is
 // behind them). The wallpaper (shell/desktop/Wallpaper.qml: the artwork, or an image) reports the luminance of the strip under
@@ -21,11 +22,14 @@ Singleton {
     // {output name: {white, black}} worst-case contrast of each tone, for the status hook and the journal.
     property var contrasts: ({})
 
-    // Test hook: qs ipc call bartone status -> JSON {output: {tone, luminance, assist, white, black}} (read-only).
+    // Test hook: qs ipc call bartone status -> JSON {output: {tone, luminance, assist, white, black}} (read-only; dev
+    // session only, SEC-04).
     IpcHandler {
         target: "bartone"
 
         function status(): string {
+            if (!DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION")))
+                return DevGate.REFUSED;
             const out = {};
             for (const name of Object.keys(root.tones))
                 out[name] = {tone: root.tones[name], luminance: root.luminances[name], assist: root.assists[name] === true, white: root.contrasts[name] ? root.contrasts[name].white : null, black: root.contrasts[name] ? root.contrasts[name].black : null};

@@ -14,8 +14,8 @@ check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi;
 shims=$root/packaging/shims
 omarchy=${OMARCHY_PATH:-/usr/share/omarchy}
 
-desc="the stand-ins exist for exactly the two commands that start Omarchy's shell, and are executable"
-check bash -c '[[ -x "$1/omarchy-restart-shell" && -x "$1/omarchy-launch-shell" && $(ls "$1" | wc -l) == 2 ]]' _ "$shims"
+desc="the stand-ins exist for exactly the two commands that start Omarchy's shell, its IPC wrapper and its clamshell helper (the D-12 sleep-lock fail-safe, tests/security/sleep_lock_units.sh), and are executable"
+check bash -c '[[ -x "$1/omarchy-restart-shell" && -x "$1/omarchy-launch-shell" && -x "$1/omarchy-shell" && -x "$1/omarchy-hyprland-monitor-clamshell" && $(ls "$1" | wc -l) == 4 ]]' _ "$shims"
 
 # Fake process-starting tools; their log must stay empty.
 mkdir -p "$tmp/fake"

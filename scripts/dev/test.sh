@@ -130,7 +130,7 @@ for dir in tests/shell/*/ tests/security/*/; do
   # A test that loads the real notification singleton carries a `dev-session` marker file: it runs as a dev session
   # (GRASSFIELD_DEV=1: no D-Bus server on the owner's bus) with its state and config under the scratch dir.
   dev_env=()
-  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config")
+  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config")
   out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE "${dev_env[@]}" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
     XDG_RUNTIME_DIR="$GRASSFIELD_TEST_TMP/runtime" XDG_CACHE_HOME="$GRASSFIELD_TEST_TMP/cache" \
     timeout 60 qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; record "$layer" "${dir}shell.qml" fail; continue; }
@@ -151,9 +151,11 @@ if want headless; then
     record headless scripts/dev/i18n-cmake-check.sh skip
   fi
 fi
-# Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure.
-for script in tests/shell/*.sh; do
+# Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure. tests/security/*.sh run here only when
+# registered with the test.sh runner (the nested security scenarios are bare commands; helpers are not registered).
+for script in tests/shell/*.sh tests/security/*.sh; do
   [[ -f $script ]] || continue
+  [[ $script == tests/security/* && ${inv_runner[$script]:-} != test.sh ]] && continue
   layer=$(layer_of "$script") || { status=1; continue; }
   want "$layer" || continue
   script_out=$(bash "$script" 2>&1) && script_rc=0 || script_rc=$?
@@ -215,6 +217,11 @@ if want logic; then
   python3 -I tests/visual/test_contrast.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/visual/test_contrast.py "$rc" PASS
+  # Gate P3's frame statistics (tests/visual/frame-stats.py) on synthetic frame streams.
+  rc=0
+  python3 -I tests/visual/test_frame_stats.py >/dev/null || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/visual/test_frame_stats.py "$rc" PASS
   # Gate A2, exact token calculation (primary evidence): every text role over the worst-case wallpapers, both appearances, transparency 0..0.6.
   rc=0
   python3 -I tests/visual/test_contrast_tokens.py || rc=1

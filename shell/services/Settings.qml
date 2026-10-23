@@ -22,7 +22,10 @@ Singleton {
 
     // Validated by the store (out-of-range or unknown values fall back to the schema defaults).
     readonly property string appearance: store.appearance
-    readonly property bool dark: store.appearance !== "light"
+    // What the shell renders: "auto" follows the fixed local schedule (AutoAppearance.js, dark 19:00 to 07:00 by default),
+    // re-evaluated each minute while it is selected (a timer of the minute, not a poll of any service).
+    property date now: new Date()
+    readonly property bool dark: AutoAppearance.isDark(store.appearance, now, Tokens.autoAppearanceDarkFromHour, Tokens.autoAppearanceDarkToHour)
     readonly property real transparency: store.transparency
     readonly property string materialProfile: store.materialProfile
     readonly property bool reduceTransparency: store.data.accessibility.reduceTransparency
@@ -49,6 +52,8 @@ Singleton {
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
     readonly property var dockRecent: store.dockRecent
+    readonly property var dockFolders: store.dockFolders
+    readonly property var dockStackOptions: store.dockStackOptions
     readonly property bool dockShowRecents: store.data.dock.showRecents
     readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
     readonly property bool dockAnimateOpening: store.data.dock.animateOpening
@@ -74,10 +79,14 @@ Singleton {
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
+    readonly property var notificationsAppPreviews: store.notificationsAppPreviews
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
     readonly property bool windowsTilingMargins: store.data.windows.tilingMargins
+    readonly property bool windowsStages: store.data.windows.stages
+    // Opt-in: the shell builds the compositor extension when none is made for the installed Hyprland (shell.qml).
+    readonly property bool windowsRebuildExtension: store.data.windows.rebuildExtension
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons
@@ -154,6 +163,14 @@ Singleton {
         store.setDockRecent(list);
     }
 
+    function setDockFolders(list: var): void {
+        store.setDockFolders(list);
+    }
+
+    function setDockStackOptions(options: var): void {
+        store.setDockStackOptions(options);
+    }
+
     function setIconMode(value: string): void {
         store.setIconMode(value);
     }
@@ -170,8 +187,20 @@ Singleton {
         store.setNotificationsDnd(value);
     }
 
+    function setNotificationsAppPreview(app: string, value: string): void {
+        store.setNotificationsAppPreview(app, value);
+    }
+
     function setNotificationsPreviews(value: string): void {
         store.setNotificationsPreviews(value);
+    }
+
+    Timer {
+        interval: Tokens.autoAppearanceRecheckInterval
+        repeat: true
+        running: store.appearance === "auto"
+        triggeredOnStart: true
+        onTriggered: root.now = new Date()
     }
 
     SettingsStore {

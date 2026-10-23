@@ -54,6 +54,10 @@ done
 have "omarchy-capture-screenshot still takes the modes fullscreen, region and smart" bash -c 'grep -q "smart" "$1" && grep -q "region" "$1" && grep -q "fullscreen" "$1"' _ "$omarchy/bin/omarchy-capture-screenshot"
 have "omarchy-migrate still has --pending (the migration notice asks it)" has_grep '--pending' "$omarchy/bin/omarchy-migrate"
 have "omarchy-hook still runs ~/.config/omarchy/hooks/<name>(.d)" has_grep 'config/omarchy/hooks' "$omarchy/bin/omarchy-hook"
+# D-12 fail-safe: Grassfield's omarchy-shell stand-in answers exactly these two calls and this status contract.
+have "omarchy-system-sleep-lock still asks 'lock lock' through omarchy-shell (Grassfield stand-in)" has_grep 'lock_ipc "$lock_timeout_ms" lock lock' "$omarchy/bin/omarchy-system-sleep-lock"
+have "omarchy-system-sleep-lock still polls 'lock status' for .secure/.requested" has_grep 'if .secure == true then "secure"' "$omarchy/bin/omarchy-system-sleep-lock"
+have "omarchy-system-sleep-lock still calls omarchy-hyprland-monitor-clamshell by name (Grassfield stand-in)" has_grep 'omarchy-hyprland-monitor-clamshell' "$omarchy/bin/omarchy-system-sleep-lock"
 
 # --- User units that Grassfield's drop-ins and replacements target ----------------------------------------------------
 for u in omarchy-sleep-lock omarchy-crash-watch omarchy-migrate-notify; do

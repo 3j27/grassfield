@@ -54,6 +54,10 @@ namespace gf::deferredFocus {
     // Exclusive-layer list (CInputManager::mouseMoveUnified), run on a copy of the list (it is only read).
     bool cursorOnExclusiveLayer(const Vector2D& at);
 
+    // The mapped Exclusive layer surface at `at` (itself or one of its popups; the same hit test as cursorOnExclusiveLayer),
+    // or null.
+    PHLLS exclusiveLayerAt(const Vector2D& at);
+
     // Where a press that arrives now goes (before Hyprland handles it). `pointer`: a pointer button at the cursor; otherwise
     // a touch or a tablet tool, whose point is not the cursor (they count as presses into an Exclusive layer while one is
     // mapped).
@@ -62,29 +66,16 @@ namespace gf::deferredFocus {
     // Hyprland 0.56.2's focus reasons, one to one (no default: a new reason in an update is a compiler warning).
     gf::deferredfocus::FocusCause causeOf(Desktop::eFocusReason reason);
 
-    // One callback from Hyprland's event loop at a time (coalesced): after Hyprland's own handling of the event that
-    // scheduled it. Its callback is code of this library: cancel() before dlclose. Not copyable (the callback refers to it).
-    class CLater {
-      public:
-        CLater() = default;
-        CLater(const CLater&)            = delete;
-        CLater& operator=(const CLater&) = delete;
-        ~CLater()                        = default;
-
-        // Schedules `fn` unless a callback is already scheduled. `fn` must not throw (wrap it in gf::guarded). False when
-        // nothing was scheduled (already scheduled, or no event loop).
-        bool schedule(std::function<void()> fn);
-
-        bool scheduled() const;
-
-        // Removes the scheduled callback (Hyprland will not call it).
-        void cancel();
-
-        // Forgets the scheduled callback without removing it (start(): a reload after a previous stop(), which cancelled).
-        void clear();
-
-      private:
-        std::optional<uint64_t> m_seq; // doLater sequence
+    // Hyprland's event loop for gf::deferredfocus::CLaterOn: CEventLoopManager::doLater / removeDoLater (nothing is
+    // scheduled without an event loop).
+    struct SHyprlandLoop {
+        static std::optional<uint64_t> post(const std::function<void()>& fn);
+        static void                    remove(uint64_t seq);
     };
+
+    // One callback from Hyprland's event loop at a time (coalesced): after Hyprland's own handling of the event that
+    // scheduled it. Its callback is code of this library: owners cancel() in stop() before dlclose, and the destructor
+    // removes a callback still scheduled (core/DeferredFocus.hpp CLaterOn, audit ARCH-21).
+    using CLater = gf::deferredfocus::CLaterOn<SHyprlandLoop>;
 
 } // namespace gf::deferredFocus

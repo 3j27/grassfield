@@ -245,6 +245,8 @@ namespace gf::stages {
             const Box tile{values[0], values[1], values[2], values[3]};
             if (tile.w < kMinTileSide || tile.h < kMinTileSide || tile.w > kMaxTileSide || tile.h > kMaxTileSide)
                 return Error{std::format("{}: w and h must be in {:.0f}..{:.0f}", where, kMinTileSide, kMaxTileSide)};
+            if (std::abs(tile.x) > kMaxTileCoord || std::abs(tile.y) > kMaxTileCoord)
+                return Error{std::format("{}: x and y must be within +-{:.0f}", where, kMaxTileCoord)};
             return tile;
         }
 
@@ -516,6 +518,44 @@ namespace gf::stages {
             y1 = std::max(y1, t.y + t.h);
         }
         return Box{x0 - margin, y0 - margin, (x1 - x0) + (2 * margin), (y1 - y0) + (2 * margin)};
+    }
+
+    std::vector<StripTarget> stripTargets(size_t slot, std::span<const Box> tiles, bool hidden, bool fullscreen, const Box& monitor,
+                                          std::span<const Box> surfacesBackToFront) {
+        std::vector<StripTarget> out;
+        if (tiles.empty())
+            return out;
+        const bool   hasTile = slot < tiles.size();
+        const auto   rects   = thumbRects(hasTile ? tiles[slot] : tiles.back(), surfacesBackToFront);
+        const double shift   = (hidden || !hasTile || fullscreen) ? hiddenShift(tiles, monitor) : 0.0;
+        out.reserve(rects.size());
+        for (const auto& r : rects)
+            out.push_back(StripTarget{.to = Box{r.x + shift, r.y, r.w, r.h}, .thumb = hasTile ? std::optional<Box>{r} : std::nullopt});
+        return out;
+    }
+
+    bool tilesInMonitor(std::span<const Box> tiles, const Box& monitor) {
+        return !tiles.empty() && std::ranges::all_of(tiles, [&monitor](const Box& t) { return isFinite(t) && gf::overview::insideMonitor(t, monitor); });
+    }
+
+    bool stripAccepted(bool hidden, bool layerOk, bool tilesInside, bool boxCovers, bool inputCovers) {
+        return layerOk && tilesInside && (hidden || (boxCovers && inputCovers));
+    }
+
+    bool inDropZone(double x, double y, std::span<const Box> tiles, const Box& monitor) {
+        if (tiles.empty() || !std::isfinite(x) || !std::isfinite(y))
+            return false;
+        if (x < monitor.x || x >= monitor.x + monitor.w || y < monitor.y || y >= monitor.y + monitor.h)
+            return false;
+        double right = tiles[0].x + tiles[0].w;
+        for (const auto& t : tiles)
+            right = std::max(right, t.x + t.w);
+        return x <= right + kStripDropMargin;
+    }
+
+    DropAction dropAction(const DropFacts& f) {
+        const bool drop = f.on && f.hasStrip && !f.hidden && f.inZone && f.managed && f.active && !f.alone && !f.tiling;
+        return drop ? DropAction::NewStage : DropAction::None;
     }
 
     // ---- events ----

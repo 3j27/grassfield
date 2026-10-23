@@ -6,15 +6,31 @@ After=graphical-session.target
 Requisite=graphical-session.target
 # Only inside the Grassfield session, never in the Omarchy session.
 ConditionEnvironment=GRASSFIELD_SESSION=1
+# A crash loop (10 starts within 30 s) stops the restarts and the unit fails: the shell is broken, not stopped.
+StartLimitIntervalSec=30
+StartLimitBurst=10
+# Fail-safe for lock before sleep (D-12). With the default RestartMode=normal (systemd 254+) this unit passes through
+# "failed" on EVERY crash, before the restart, so OnFailure= starts Omarchy's sleep-lock unit after each crash, not
+# only at the start limit (a clean exit, SIGTERM or `qs kill`, ends "inactive" and does not). That unit holds a
+# logind delay inhibitor while this shell restarts or stays failed and, before a sleep, asks this shell to lock
+# through Grassfield's `omarchy-shell` stand-in (packaging/shims), starting it again if needed. Its Grassfield
+# drop-in skips it once this shell is up again (active/running), at its next start.
+OnFailure=omarchy-sleep-lock.service
 
 [Service]
 Type=simple
 Slice=session.slice
 # Quickshell's own reload is off: package upgrades must not hot-reload a half-written tree.
 Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
+# While this shell runs it locks before sleep itself (shell/security/idle/SleepInhibitor.qml). An Omarchy sleep-lock unit
+# that happens to run as well is never stopped from here: it may be in the middle of a sleep it is delaying, and with the
+# stand-in it only ever asks this shell to lock (a second, harmless path).
 ExecStart=/usr/bin/qs -n -c grassfield
-# Gate R1: restart within 3 s; Hyprland keeps a lock alive while the shell restarts (ADR-0010).
-Restart=on-failure
+# Gate R1 and GF-030: back within ~1 s after ANY exit while the session runs: a crash, SIGTERM, `qs kill`, exit 0.
+# Hyprland keeps a lock alive while the shell is away (ext-session-lock) and the restarted shell takes it back
+# (ADR-0010). A stop through systemd is never restarted: logout (graphical-session.target stops, PartOf=) or
+# `systemctl --user stop`; Requisite= refuses a start once the session target is gone.
+Restart=always
 RestartSec=1
 TimeoutStopSec=5
 # No NoNewPrivileges/ProtectSystem here on purpose: the lock screen and polkit agent rely on the

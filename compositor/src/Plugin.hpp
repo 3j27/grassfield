@@ -4,6 +4,7 @@
 
 #include "core/EventThrottle.hpp"
 #include "core/Protocol.hpp"
+#include "core/Theme.hpp"
 #include "core/Tiling.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
@@ -24,7 +25,7 @@ class IHyprWindowDecoration;
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.12.0-pointer";
+    inline constexpr const char* kPluginVersion = "0.13.0-audit";
 
     struct SPluginState {
         HANDLE                             handle = nullptr;
@@ -48,6 +49,8 @@ namespace gf {
         // Window tiling (core/Tiling.hpp, Settings windows.tilingEdges / tilingMenuBar / tilingMargins): macOS defaults, all on.
         tiling::DragOptions tilingDrag;
         bool                tilingMargins = true;
+        // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.
+        theme::Appearance appearance = theme::kDefaultAppearance;
 
         // Live titlebars. Owned by their windows; each removes itself in its destructor.
         std::vector<CGrassfieldTitlebar*> titlebars;

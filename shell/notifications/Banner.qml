@@ -76,7 +76,7 @@ Item {
             urgency: root.urgency
             actionsJson: root.actionsJson
             live: root.nid >= 0
-            body: Notifications.bodyFor(root.bodyHtml)
+            body: Notifications.bodyFor(root.bodyHtml, root.appName)
             timeText: Notifications.timeFor(root.time)
             iconSource: Notifications.iconSource(root.image, root.appIcon)
             onActionTriggered: actionId => Notifications.invokeAction(root.key, actionId)

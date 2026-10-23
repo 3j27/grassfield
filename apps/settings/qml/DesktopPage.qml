@@ -1,4 +1,6 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Dialogs
 import Grassfield.Ui
 
 SettingsPage {
@@ -156,6 +158,62 @@ SettingsPage {
         }
     }
 
+    // Folders kept in the Dock as stacks (dock.folders). Dragging a folder onto the Dock's right section adds one too.
+    readonly property var dockFolders: store.value("dock.folders")
+
+    function urlToPath(u: url): string {
+        const s = u.toString();
+        return s.indexOf("file://") === 0 ? decodeURIComponent(s.substring(7)) : "";
+    }
+
+    function addDockFolder(path: string): void {
+        if (path === "" || dockFolders.indexOf(path) >= 0 || dockFolders.length >= 12)
+            return;
+        store.set("dock.folders", dockFolders.concat([path]));
+    }
+
+    function openAddFolder(): void {
+        addFolderDialog.open();
+    }
+
+    function removeDockFolder(path: string): void {
+        store.set("dock.folders", dockFolders.filter(f => f !== path));
+    }
+
+    FolderDialog {
+        id: addFolderDialog
+        title: qsTr("Choose a folder for the Dock")
+        onAccepted: root.addDockFolder(root.urlToPath(selectedFolder))
+    }
+
+    SettingsGroup {
+        caption: qsTr("Folders in the Dock")
+        footnote: qsTr("A folder in the Dock opens as a stack. You can also drag a folder to the right of the divider in the Dock.")
+
+        Repeater {
+            model: root.dockFolders
+
+            delegate: SettingsRow {
+                id: folderRow
+                required property string modelData
+                title: modelData
+                Button {
+                    text: qsTr("Remove")
+                    Accessible.name: qsTr("Remove %1 from the Dock").arg(folderRow.modelData)
+                    onClicked: root.removeDockFolder(folderRow.modelData)
+                }
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Add a folder")
+            Button {
+                text: qsTr("Add Folder…")
+                onClicked: root.openAddFolder()
+            }
+        }
+    }
+
     SettingsGroup {
         caption: qsTr("Menu Bar")
 
@@ -253,6 +311,18 @@ SettingsPage {
                 accessibleName: qsTr("Tiled windows have margins")
                 checked: root.store.value("windows.tilingMargins")
                 onToggled: c => root.store.set("windows.tilingMargins", c)
+            }
+        }
+
+        // ADR-0009 amendment 2026-10-23 (audit GF-033): opt-in; off, a Hyprland update leaves the extension off until the
+        // user runs grassfield-compositor-rebuild (the session's notice says so).
+        SettingsRow {
+            title: qsTr("Rebuild the compositor extension after Hyprland updates")
+            subtitle: qsTr("Window titlebars, minimize and global menus need it. After an update of Hyprland, Grassfield builds it again in the background.")
+            Toggle {
+                accessibleName: qsTr("Rebuild the compositor extension after Hyprland updates")
+                checked: root.store.value("windows.rebuildExtension")
+                onToggled: c => root.store.set("windows.rebuildExtension", c)
             }
         }
     }

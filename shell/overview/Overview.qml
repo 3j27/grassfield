@@ -71,6 +71,11 @@ Scope {
     property string selected: ""
     property int spaceFocus: -1
     property string spaceScreen: ""
+    // Keyboard in the minimized strip of the output `minScreen`: the tile index (-1 while the windows have it).
+    property int minFocus: -1
+    property string minScreen: ""
+    // The minimized window to restore once the overview has closed (a click or Return on a tile of the strip).
+    property var restoreAfter: null
 
     function show(): void {
         if (open)
@@ -80,6 +85,9 @@ Scope {
         selected = "";
         spaceFocus = -1;
         spaceScreen = "";
+        minFocus = -1;
+        minScreen = "";
+        restoreAfter = null;
         stayOnSpace = 0;
         Compositor.refreshSpaces();
         phase = "idle";
@@ -312,6 +320,7 @@ Scope {
     function closeAnd(choice: var): void {
         if (stage !== "open")
             return;
+        restoreAfter = choice && choice.kind === "minimized" ? choice.toplevel : null;
         const target = V2.closeTarget(choice, previous, stayOnSpace);
         focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);
         pending = target;
@@ -356,6 +365,12 @@ Scope {
         }
         if (!viaPlugin && !locked)
             FocusReturn.startFallback(target, 0);
+        // A minimized window chosen in the strip comes back to the current Desktop and takes the focus (the same call as a
+        // click on its Dock tile), once the chromes have let go of the keyboard.
+        const restore = restoreAfter;
+        restoreAfter = null;
+        if (restore && !locked)
+            Compositor.unminimize(restore);
     }
 
     // Without the plugin capability the focus, check and retry run in FocusReturn.startFallback (shared with the Exclusive
@@ -369,6 +384,7 @@ Scope {
 
     function hoverSelect(address: string): void {
         spaceFocus = -1;
+        minFocus = -1;
         selected = address;
     }
 
@@ -376,6 +392,16 @@ Scope {
     // on that output, else the window entered on the output lying that way; up with nothing above enters the Desktops bar.
     function arrow(dir: string): void {
         const all = windows.instances;
+        if (minFocus >= 0) {
+            // In the minimized strip: Left and Right move along it, Up returns to the windows.
+            const owner = all.find(w => w.screenName === minScreen);
+            if (dir === "up" || !owner) {
+                minFocus = -1;
+            } else if (dir === "left" || dir === "right") {
+                minFocus = Math.max(0, Math.min(minFocus + (dir === "left" ? -1 : 1), owner.minimizedItems.length - 1));
+            }
+            return;
+        }
         if (spaceFocus >= 0) {
             const owner = all.find(w => w.screenName === spaceScreen);
             if (dir === "down") {
@@ -410,6 +436,12 @@ Scope {
             selected = next;
             return;
         }
+        // Down from the last row: the minimized strip of that output (macOS: the windows below the divider).
+        if (dir === "down" && owner.minimizedItems.length > 0) {
+            minScreen = owner.screenName;
+            minFocus = 0;
+            return;
+        }
         if (dir === "up") {
             if (owner.tiles.length > 0) {
                 spaceScreen = owner.screenName;
@@ -432,6 +464,7 @@ Scope {
 
     // Tab order: windows (-1), then each Desktop tile of the output holding the selection, then back to the windows.
     function cycle(step: int): void {
+        minFocus = -1;
         const owner = spaceFocus >= 0 ? windows.instances.find(w => w.screenName === spaceScreen) : (windowOf(selected) ?? windows.instances[0]);
         if (!owner)
             return;
@@ -443,6 +476,13 @@ Scope {
     }
 
     function activateSelection(): void {
+        if (minFocus >= 0) {
+            const owner = windows.instances.find(w => w.screenName === minScreen);
+            if (owner) {
+                owner.activateMinimized(minFocus);
+                return;
+            }
+        }
         if (spaceFocus >= 0) {
             const owner = windows.instances.find(w => w.screenName === spaceScreen);
             if (owner) {
@@ -539,15 +579,17 @@ Scope {
         // in its "releasing" stage at least `ms` (1 to 10000), so that a click during the release can be tested. Refused
         // otherwise.
         function holdNextRelease(ms: int): string {
-            if (Quickshell.env("GRASSFIELD_DEV") !== "1" || Quickshell.env("GRASSFIELD_SESSION") === "1" || ms < 1 || ms > 10000)
+            if (!VisualFixtures.dev || ms < 1 || ms > 10000)
                 return "refused";
             root.testReleaseHoldNext = ms;
             return "held";
         }
 
-        // Test hook: JSON {open, stage, thumbnailMode, profile, screens: [{name, windows: [{address,
-        // appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
+        // Test hook (dev session only, VisualFixtures.dev, SEC-04): JSON {open, stage, thumbnailMode, profile,
+        // screens: [{name, windows: [{address, appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             const screens = [];
             const all = windows.instances;
             for (let i = 0; i < all.length; i++)

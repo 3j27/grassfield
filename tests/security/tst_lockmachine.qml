@@ -78,6 +78,39 @@ TestCase {
         compare(Machine.markerName("", ""), "grassfield-lock-default");
     }
 
+    // Follow-up N1: the marker records the kernel's count of completed suspends; a restarted shell locks when the
+    // machine slept since an "unlocked" line was written (a crash or restart right before or during that sleep).
+    function test_markerWithSleepCount() {
+        compare(Machine.markerLine("unlocked", 12), "unlocked sleeps=12");
+        compare(Machine.markerLine("locked", 0), "locked sleeps=0");
+        compare(Machine.markerLine("unlocked", -1), "unlocked");
+        compare(Machine.markerLine("locked", NaN), "locked");
+        compare(Machine.markerLine("garbage", 3), "locked sleeps=3", "anything unknown is written as locked");
+        compare(Machine.parseSleepCount("7\n"), 7);
+        compare(Machine.parseSleepCount(" 0 "), 0);
+        const bad = ["", "x", "-1", "1.5", "12 13", undefined, null];
+        for (let i = 0; i < bad.length; i++)
+            compare(Machine.parseSleepCount(bad[i]), -1, String(bad[i]));
+        verify(!Machine.markerSaysLocked("unlocked sleeps=12\n"));
+        verify(Machine.markerSaysLocked("locked sleeps=12\n"));
+        verify(Machine.markerSaysLocked("unlocked sleeps=\n"));
+        verify(Machine.markerSaysLocked("unlocked sleeps=-1"));
+        verify(Machine.markerSaysLocked("unlocked sleeps=12 extra"));
+        // Slept since the unlocked line: lock. Same count, unknown counts, an old line without a count: no evidence.
+        verify(Machine.sleptSince("unlocked sleeps=12\n", 13));
+        verify(!Machine.sleptSince("unlocked sleeps=12\n", 12));
+        verify(!Machine.sleptSince("unlocked sleeps=12\n", -1));
+        verify(!Machine.sleptSince("unlocked sleeps=12\n", undefined));
+        verify(!Machine.sleptSince("unlocked\n", 13));
+        verify(!Machine.sleptSince(null, 13));
+        verify(Machine.restoreAtStart(false, true, "unlocked sleeps=12\n", 13));
+        verify(Machine.restoreAtStart(false, true, "unlocked sleeps=12\n", 11), "a lower count (reboot of the counter) is a difference too");
+        verify(!Machine.restoreAtStart(false, true, "unlocked sleeps=12\n", 12));
+        verify(!Machine.restoreAtStart(false, true, "unlocked sleeps=12\n", -1));
+        verify(Machine.restoreAtStart(false, true, "locked sleeps=12\n", 12));
+        verify(!Machine.restoreAtStart(false, true, null, 13), "fresh session (no marker): unlocked");
+    }
+
     // Start/reload decision (R12 review blocker): fail closed; only a proven unlock starts unlocked.
     function test_restoreAtStart() {
         // Soft reload while locked: the carried intent wins over a missing or forged marker.
@@ -231,5 +264,30 @@ TestCase {
     function test_clockFormat() {
         compare(Machine.clockFormat("h:mm AP"), "h:mm");
         compare(Machine.clockFormat("HH:mm"), "H:mm");
+    }
+
+    // Lock.currentlySecure() (Omarchy 4.0.6 port): only locked/authenticating hold a lock; anything else waits.
+    function test_isHolding() {
+        verify(Machine.isHolding("locked"));
+        verify(Machine.isHolding("authenticating"));
+        const others = ["unlocked", "locking", "", "LOCKED", undefined, null, "garbage"];
+        for (let i = 0; i < others.length; i++)
+            verify(!Machine.isHolding(others[i]), String(others[i]));
+    }
+
+    // D-4: the lid locks unless a physical external display is active (clamshell, macOS); unreadable input locks.
+    function test_lidShouldLock() {
+        verify(Machine.lidShouldLock(["eDP-1"]));
+        verify(Machine.lidShouldLock([]));
+        verify(Machine.lidShouldLock(["eDP-1", "HEADLESS-1"]), "a headless output is not a display in use");
+        verify(Machine.lidShouldLock(["WAYLAND-1", "GF-REF"]), "nested outputs are not external displays");
+        verify(Machine.lidShouldLock(["LVDS-1", "DSI-1"]));
+        verify(Machine.lidShouldLock(["eDP-1", "DPX-1", "HDMI-1", "dp-1", "DP-"]), "not a DRM connector name");
+        verify(Machine.lidShouldLock(undefined));
+        verify(Machine.lidShouldLock(null));
+        verify(Machine.lidShouldLock("DP-1"), "a string is not a list of names");
+        const docked = [["eDP-1", "DP-1"], ["DP-3"], ["eDP-1", "HDMI-A-1"], ["eDP-1", "DVI-D-2"], ["VGA-1"], ["eDP-1", "USB-1"]];
+        for (let i = 0; i < docked.length; i++)
+            verify(!Machine.lidShouldLock(docked[i]), docked[i].join(","));
     }
 }

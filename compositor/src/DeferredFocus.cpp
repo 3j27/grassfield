@@ -80,6 +80,21 @@ namespace gf::deferredFocus {
         return tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) || tester.layerSurfaceAt(at, &exclusive, &local, &found);
     }
 
+    PHLLS exclusiveLayerAt(const Vector2D& at) {
+        if (!g_pInputManager || !Desktop::viewState())
+            return nullptr;
+        std::vector<PHLLSREF> exclusive = g_pInputManager->m_exclusiveLSes;
+        Vector2D              local;
+        PHLLS                 found;
+        const auto            tester = Desktop::viewState()->hitTest();
+        if (tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) && found)
+            return found;
+        found.reset();
+        if (tester.layerSurfaceAt(at, &exclusive, &local, &found) && found)
+            return found;
+        return nullptr;
+    }
+
     df::PressContext pressContext(bool pointer) {
         df::PressContext context{.exclusive = exclusiveLayerMapped(), .onExclusive = true, .under = 0};
         if (pointer && context.exclusive && g_pInputManager && Desktop::viewState()) {
@@ -118,28 +133,15 @@ namespace gf::deferredFocus {
         return df::FocusCause::Unknown;
     }
 
-    bool CLater::schedule(std::function<void()> fn) {
-        if (m_seq || !g_pEventLoopManager)
-            return false;
-        m_seq = g_pEventLoopManager->doLater([this, fn = std::move(fn)] {
-            m_seq.reset();
-            fn();
-        });
-        return true;
+    std::optional<uint64_t> SHyprlandLoop::post(const std::function<void()>& fn) {
+        if (!g_pEventLoopManager)
+            return std::nullopt;
+        return g_pEventLoopManager->doLater(fn);
     }
 
-    bool CLater::scheduled() const {
-        return m_seq.has_value();
-    }
-
-    void CLater::cancel() {
-        if (m_seq && g_pEventLoopManager)
-            g_pEventLoopManager->removeDoLater(*m_seq);
-        m_seq.reset();
-    }
-
-    void CLater::clear() {
-        m_seq.reset();
+    void SHyprlandLoop::remove(uint64_t seq) {
+        if (g_pEventLoopManager)
+            g_pEventLoopManager->removeDoLater(seq);
     }
 
 } // namespace gf::deferredFocus

@@ -200,9 +200,9 @@ namespace {
         s.active = false;
     }
 
-    void notify(const std::string& text, const CHyprColor& color) {
+    void notify(const std::string& text, const CHyprColor& color, float timeMs = 8000.F) {
         if (state().handle)
-            HyprlandAPI::addNotification(state().handle, text, color, 8000);
+            HyprlandAPI::addNotification(state().handle, text, color, timeMs);
     }
 } // namespace
 
@@ -221,7 +221,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     if (serverHash != clientHash) {
         // Refuse cleanly: nothing is hooked, so the session keeps Hyprland's defaults (C2).
         gf::log(Log::ERR, "ABI mismatch: Hyprland {} vs plugin built for {}; plugin inactive", serverHash, clientHash);
-        notify("[Grassfield] Compositor plugin built for another Hyprland version: titlebars disabled.", CHyprColor{1.F, 0.35F, 0.3F, 1.F});
+        // The degraded-mode notice (audit GF-033): what is off and how to get it back. The session normally never loads a
+        // build stamped for another Hyprland (ADR-0009 "Amendment 2026-10-23", config/hypr/grassfield/compositor.lua);
+        // this shows when one is loaded anyway (by hand, or a stamp that lies).
+        notify("[Grassfield] The compositor extension was built for another Hyprland: titlebars, minimize and global menus are off. "
+               "Run grassfield-compositor-rebuild in a terminal, then log out and back in.",
+               CHyprColor{1.F, 0.35F, 0.3F, 1.F}, 30000.F);
         info.description += " [inactive: Hyprland version mismatch]";
         return info;
     }
@@ -252,7 +257,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
             gf::guarded("desktop focus rollback", [] { gf::desktopFocus::stop(); });
             gf::log(Log::WARN, "desktop focus listeners failed to register; desktop-focus not advertised");
         }
-        // Optional feature behind a flag (off at load): without it the shell hides the Stages toggle.
+        // Optional feature behind a flag (off at load; the shell pushes Settings windows.stages): without it the shell sends
+        // no Stages flag and no Stages operation.
         bool stagesOk = false;
         gf::guarded("stages start", [&] { stagesOk = gf::stager::start(); });
         if (!stagesOk) {
