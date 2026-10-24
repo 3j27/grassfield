@@ -34,7 +34,7 @@ FocusScope {
     readonly property bool canBack: root.historyIndex > 0
     readonly property bool canForward: root.historyIndex >= 0 && root.historyIndex < root.history.length - 1
     readonly property var segments: root.app.pathSegments(root.url)
-    readonly property string title: root.segments.length > 0 ? root.segments[root.segments.length - 1].label : ""
+    readonly property string title: root.segments.length > 0 ? DisplayName.text(root.segments[root.segments.length - 1].label) : ""
     readonly property bool isTrash: String(root.url).startsWith("trash:")
 
     Accessible.role: Accessible.Pane
@@ -221,7 +221,7 @@ FocusScope {
         const urls = root.selection();
         if (urls.length === 0)
             return;
-        const message = urls.length === 1 ? qsTr("“%1” will be deleted immediately. You can’t undo this action.").arg(root.activeFolder.nameAt(root.activeFolder.selectedRows()[0]))
+        const message = urls.length === 1 ? qsTr("“%1” will be deleted immediately. You can’t undo this action.").arg(DisplayName.text(root.activeFolder.nameAt(root.activeFolder.selectedRows()[0])))
                                           : qsTr("%1 items will be deleted immediately. You can’t undo this action.").arg(urls.length);
         root.win.confirm(qsTr("Delete immediately?"), message, qsTr("Delete"), () => root.app.deletePermanently(urls));
     }
@@ -480,7 +480,7 @@ FocusScope {
         const rows = model.selectedRows();
         const count = rows.length;
         const first = count > 0 ? rows[0] : -1;
-        const name = first >= 0 ? model.nameAt(first) : "";
+        const name = first >= 0 ? DisplayName.text(model.nameAt(first)) : "";
         if (model.isTrash) {
             return [
                 {id: "putback", text: qsTr("Put Back"), shortcut: qsTr("Ctrl+Backspace")},

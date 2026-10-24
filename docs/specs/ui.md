@@ -53,6 +53,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
 | `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies; `unlocked` hides them while locked) |
 | `notifications.appPreviews` | list of `{app, previews}` | `[]` | Per-app override of `notifications.previews` (docs/specs/notifications.md) |
+| `notifications.appStyles` | list of `{app, style}` | `[]` | Per-app alert style: banners (default), alerts (stay until dismissed), none (no banner; still listed in the panel) |
+| `notifications.history` | `week`, `day` or `never` | `week` | How long the history stays on disk; never keeps nothing at rest |
 | `accent.color` | `"multicolor"` \| `"blue"` \| `"purple"` \| `"pink"` \| `"red"` \| `"orange"` \| `"yellow"` \| `"green"` \| `"graphite"` | `"multicolor"` | `Appearance.accentSetting`, resolved into `Appearance.colors.accent` / `accentText` (see Accent colour) |
 | `icons.mode` | `"default"` \| `"dark"` \| `"clear"` \| `"tinted"` | `"default"` | `Appearance.iconMode` (ADR-0014; the ADR names it `appearance.iconMode`, see Icon appearance modes) |
 | `icons.tint` | `"accent"` or `"#rrggbb"` | `"accent"` | `Appearance.iconTintSetting`, resolved to `Appearance.iconTint` |

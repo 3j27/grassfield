@@ -130,6 +130,102 @@ function appsToList(seen, list) {
     return out.sort((a, b) => a.localeCompare(b));
 }
 
+// ---- alert style per app (GF-107; macOS: System Settings > Notifications > <app> > Banners / Alerts / None) ----------
+// `notifications.appStyles` lists the apps that do not use the default style: [{app, style}]. "banners" (the default)
+// disappear after a few seconds, "alerts" stay until they are dismissed, "none" shows no banner at all (the
+// notification still collects in the Notifications panel).
+
+const STYLES = ["banners", "alerts", "none"];
+
+function validStyle(value) {
+    return STYLES.indexOf(value) >= 0;
+}
+
+// "" when `list` is a valid appStyles array (at most MAX_APPS valid entries, no app twice), else the reason.
+function problemStyles(list) {
+    if (!Array.isArray(list))
+        return "expected a list";
+    if (list.length > MAX_APPS)
+        return "at most " + MAX_APPS + " apps";
+    const seen = {};
+    for (const e of list) {
+        if (e === null || typeof e !== "object" || Array.isArray(e))
+            return "each entry must be an object {app, style}";
+        if (!validApp(e.app))
+            return "app: expected a name of 1 to " + MAX_NAME + " characters without control characters";
+        if (!validStyle(e.style))
+            return "style: expected one of " + STYLES.join(", ");
+        const k = keyOf(e.app);
+        if (seen[k])
+            return "app " + e.app + " appears twice";
+        seen[k] = true;
+    }
+    return "";
+}
+
+// The valid entries of a stored value, without repeats and at most MAX_APPS; anything else gives [].
+function normalizeStyles(raw) {
+    const out = [];
+    const seen = {};
+    for (const e of asArray(raw)) {
+        if (e === null || typeof e !== "object" || !validApp(e.app) || !validStyle(e.style))
+            continue;
+        const k = keyOf(e.app);
+        if (seen[k] || out.length >= MAX_APPS)
+            continue;
+        seen[k] = true;
+        out.push({app: e.app, style: e.style});
+    }
+    return out;
+}
+
+// The style that applies to `app`: its own, else "banners".
+function styleFor(list, app) {
+    const k = keyOf(app);
+    for (const e of normalizeStyles(list)) {
+        if (keyOf(e.app) === k)
+            return e.style;
+    }
+    return "banners";
+}
+
+// A new list with `app` set to `style`; "banners" (the default) removes the entry.
+function withStyle(list, app, style) {
+    const k = keyOf(app);
+    const rest = normalizeStyles(list).filter(e => keyOf(e.app) !== k);
+    if (!validApp(app) || !validStyle(style) || style === "banners")
+        return rest;
+    return rest.concat([{app: app, style: style}]).slice(0, MAX_APPS);
+}
+
+// Banner timeout for a new notification under `style`, from the timeout the sender and urgency would give (0 = stays):
+// null when no banner is shown ("none"), 0 for an alert (stays until dismissed), else `timeoutMs` unchanged.
+function bannerTimeoutFor(style, timeoutMs) {
+    if (style === "none")
+        return null;
+    if (style === "alerts")
+        return 0;
+    return timeoutMs;
+}
+
+// ---- history (GF-113) -----------------------------------------------------------------------------------------------
+// `notifications.history`: how long the notification history is kept on disk: "week" (default, as before), "day", or
+// "never" (nothing is written; the Notifications panel still lists the session's notifications).
+
+const HISTORY = ["week", "day", "never"];
+
+function validHistory(value) {
+    return HISTORY.indexOf(value) >= 0;
+}
+
+// Retention in ms for the setting; 0 when nothing is kept on disk. An invalid value reads as "week".
+function historyMaxAge(value) {
+    const day = 24 * 3600 * 1000;
+    if (value === "never")
+        return 0;
+    return value === "day" ? day : 7 * day;
+}
+
 // What a notification shows: with previews hidden the app name is the title (`generic` when the sender has no name) and
 // `generic` is the only line of text, never the sender's title or body (macOS); otherwise title and body as sent.
 function display(shown, summary, body, appName, generic) {

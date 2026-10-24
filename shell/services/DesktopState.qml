@@ -6,4 +6,6 @@ import Quickshell
 // name instead of the last window's app, like Finder on macOS.
 Singleton {
     property bool holdsKeyboard: false
+    // The keyboard asks for the desktop (Show Desktop, GF-106): the icons surface asks the compositor for the keyboard.
+    signal focusRequested
 }

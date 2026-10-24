@@ -47,6 +47,7 @@ add IconTile
 add IconShapePrewarm
 add AutoAppearance
 add NotificationPrefs
+add DisplayName
 add FocusRing
 add ToolButton
 add CheckBox

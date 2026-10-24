@@ -15,7 +15,42 @@
 
 #include <algorithm>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 namespace preview {
+
+QString textSnippetOf(const QString &path, qint64 maxSize)
+{
+    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0)
+        return {};
+    struct stat st;
+    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size > maxSize) {
+        ::close(fd);
+        return {};
+    }
+    QFile file;
+    if (!file.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        ::close(fd);
+        return {};
+    }
+    const QString head = QString::fromUtf8(file.read(2048));
+    QStringList lines;
+    for (const QString &raw : head.split(QLatin1Char('\n'))) {
+        QString line = raw.left(40);
+        for (QChar &c : line) {
+            if (c.unicode() < 0x20)
+                c = QLatin1Char(' ');
+        }
+        lines << line;
+        if (lines.size() >= 12)
+            break;
+    }
+    const QString out = lines.join(QLatin1Char('\n'));
+    return out.trimmed().isEmpty() ? QString() : out;
+}
 
 QString localPathFromArgument(const QString &arg, const QString &cwd, QString *error)
 {

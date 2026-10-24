@@ -1165,6 +1165,17 @@ QtObject {
     // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
 
+    // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
+    readonly property int showDesktopRefreshMs: 150
+    // estimate: ms after a workspace or monitor event before the shell compares the Space each display shows with the Space Show Desktop was pressed on (the monitor list has caught up by then)
+    readonly property int showDesktopCheckMs: 120
+    // estimate: ms after Show Desktop ended before the shell checks that no window is left on the parking workspace and sends a straggler back (at most three checks)
+    readonly property int showDesktopVerifyMs: 500
+    // estimate: how many recovery steps (one per recoverMs) the shell takes after a start to bring back the windows a previous run left parked by Show Desktop (the window list may load late)
+    readonly property int showDesktopRecoverTries: 10
+    // estimate: ms after start before the windows a previous run left parked by Show Desktop are brought back (the window list must be known)
+    readonly property int showDesktopRecoverMs: 1500
+
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewWindowWidth: 860
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
@@ -1239,6 +1250,10 @@ QtObject {
     readonly property int previewGlanceOpenButtonHeight: 24
     // F1 reference (meas-B, gs-015-029): content inset about 5 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlanceContentInset: 5
+    // estimate: font size of the text lines in a text file's sidebar thumbnail (tiny, like the page it stands for)
+    readonly property int previewThumbnailTextSize: 6
+    // estimate: ink of the text lines in the sidebar thumbnail of a text file (drawn on the white paper, in both themes)
+    readonly property string previewPaperInk: "#4A4A4A"
     // estimate: time one image stays in a slideshow [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewSlideshowInterval: 3000
 

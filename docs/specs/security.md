@@ -81,7 +81,8 @@ does not check its gate.
 | overview | holdNextRelease, status | dev | `status` lists window titles and app ids |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
-| windows | minimize, tile, hide, cycleApp | action | SUPER+M, SUPER+CTRL+arrows/R, SUPER+H, SUPER+` |
+| windows | minimize, tile, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R, SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything) |
+| zoom | toggle, zoomIn, zoomOut | action | SUPER+ALT+8, SUPER+ALT+= and SUPER+ALT+- (`config/hypr/grassfield/bindings.lua`); change `accessibility.zoom` and `zoomLevel` only |
 | notifications | toggleCenter | action | SUPER+N, screen corner (in process) |
 | notifications | dnd, status | dev | `dnd` would let another process silence notices (security notices too) |
 | notifications | invoke, clearAll, dismissAll | fixtures | runs another app's action / removes history |

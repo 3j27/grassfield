@@ -61,7 +61,7 @@ Item {
                         width: label.implicitWidth + 2 * Tokens.spacingXs
                         height: parent.height
                         Accessible.role: Accessible.Button
-                        Accessible.name: segment.modelData.label
+                        Accessible.name: DisplayName.text(segment.modelData.label)
                         Accessible.onPressAction: root.tab.navigate(segment.modelData.url, true)
 
                         Rectangle {
@@ -78,7 +78,7 @@ Item {
                             id: label
                             textFormat: Text.PlainText
                             anchors.centerIn: parent
-                            text: segment.modelData.label
+                            text: DisplayName.text(segment.modelData.label)
                             color: segment.last ? Appearance.colors.text : Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyCaptionSize

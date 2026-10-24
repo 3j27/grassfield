@@ -19,6 +19,51 @@ TestCase {
         compare(History.prune(list, now).map(e => e.key).join(","), "new,edge");
     }
 
+    // GF-113: retention, nothing at rest, no bodies for apps whose previews are Never.
+    function test_serializeRetentionAndBodies() {
+        const list = [entry("a", "Signal", now - 1000, {body: "secret"}), entry("b", "Mail", now - 2 * day, {body: "hello"})];
+        const day1 = JSON.parse(History.serialize(list, now, {maxAgeMs: day}));
+        compare(day1.notifications.map(e => e.key), ["a"]);
+        const never = JSON.parse(History.serialize(list, now, {keep: false}));
+        compare(never.notifications.length, 0);
+        const noBody = JSON.parse(History.serialize(list, now, {textKept: app => app !== "Signal"}));
+        compare(noBody.notifications[0].body, "");
+        compare(noBody.notifications[1].body, "hello");
+        // The title and the action labels are text too: an app whose previews are Never leaves none of it on disk.
+        compare(noBody.notifications[0].summary, "");
+        compare(noBody.notifications[0].appName, "Signal");
+        compare(noBody.notifications[1].summary, "sb");
+        const withActions = JSON.parse(History.serialize([entry("c", "Signal", now - 5, {actions: [{id: "reply", text: "Reply to Alice"}]})], now, {textKept: () => false}));
+        compare(withActions.notifications[0].actions, []);
+        compare(JSON.parse(History.serialize(list, now)).notifications[0].body, "secret");
+    }
+
+    // Review: a damaged file is moved aside, a file of a newer version is never rewritten, and neither is read as "no history".
+    function test_inspectTellsEmptyCorruptAndFutureApart() {
+        compare(History.inspect("", now).status, "empty");
+        compare(History.inspect("  \n", now).status, "empty");
+        compare(History.inspect("not json", now).status, "corrupt");
+        compare(History.inspect("[]", now).status, "corrupt");
+        compare(History.inspect("{\"version\":0,\"notifications\":[]}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":1.5,\"notifications\":[]}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":\"1\",\"notifications\":[]}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":1,\"notifications\":{}}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":2,\"notifications\":[{\"time\":1}]}", now).status, "future");
+        compare(History.inspect("{\"version\":2,\"notifications\":[{\"time\":1}]}", now).entries.length, 0);
+        const ok = History.inspect(History.serialize([entry("a", "Mail", now - 1000)], now), now);
+        compare(ok.status, "ok");
+        compare(ok.entries.length, 1);
+    }
+
+    // "1 Day" is applied to what is read and what arrives, not only to what is written.
+    function test_oneDayRetentionAppliesInMemory() {
+        const text = History.serialize([entry("a", "Mail", now - 1000), entry("b", "Mail", now - 2 * day)], now);
+        compare(History.inspect(text, now).entries.length, 2);
+        compare(History.inspect(text, now, day).entries.map(e => e.key), ["a"]);
+        const pushed = History.pushNewest([entry("a", "Mail", now - 2 * day)], entry("n", "Mail", now), now, day);
+        compare(pushed.map(e => e.key), ["n"]);
+    }
+
     function test_pruneCapsAt200NewestFirst() {
         const list = [];
         for (let i = 0; i < 250; i++)

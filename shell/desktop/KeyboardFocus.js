@@ -14,6 +14,8 @@
 //
 // Events ({type, ...}):
 //   press                 a left press on the desktop surface
+//   request               the keyboard asked for the desktop (Show Desktop, GF-106): like a press, but the kicker
+//                         runs even under the compositor policy (no click will come to hand the keyboard over)
 //   keys {hasKeys}        the surface gained / lost the keyboard (activeFocus)
 //   pointerLeft           the pointer left the surface (onto a window, another output, the Dock)
 //   armTimeout            the keyboard was not granted in time
@@ -33,9 +35,10 @@ function initial() {
     };
 }
 
-function make(mode) {
+function make(mode, forced) {
     return {
-        mode: mode
+        mode: mode,
+        forced: forced === true
     };
 }
 
@@ -46,7 +49,7 @@ function interactivity(state) {
 
 // The transient kicker surface is mapped.
 function kicking(state, policy) {
-    return policy !== true && state.mode === "armed";
+    return state.mode === "armed" && (policy !== true || state.forced === true);
 }
 
 // The desktop keyboard actions may run.
@@ -71,6 +74,8 @@ function next(state, event, policy) {
     switch (event.type) {
     case "press":
         return m === "idle" ? make("armed") : state;
+    case "request":
+        return m === "idle" ? make("armed", true) : state;
     case "keys":
         if (event.hasKeys === true)
             return m === "armed" ? make("held") : state;

@@ -1,4 +1,5 @@
 .pragma library
+.import "Ranking.js" as Ranking
 
 // Pure helpers for the Documents/Files and Recent providers: parsing of `localsearch search`
 // and `plocate` output, and of recently-used.xbel. All input is untrusted text.
@@ -82,13 +83,13 @@ function parseLocalsearch(text, home, limit) {
 // plocate prints one absolute path per line: keep paths under home without hidden segments.
 // Basename prefix matches first.
 function parsePlocate(text, query, home, limit) {
-    const q = query.toLowerCase();
+    const q = Ranking.norm(query);
     const hits = [];
     for (const line of text.split("\n")) {
         const path = homePath(line, home);
         if (path === "")
             continue;
-        const name = baseName(path).toLowerCase();
+        const name = Ranking.norm(baseName(path));
         hits.push({path: path, rank: name.startsWith(q) ? 0 : (name.indexOf(q) >= 0 ? 1 : 2)});
     }
     hits.sort((a, b) => a.rank - b.rank || a.path.length - b.path.length);

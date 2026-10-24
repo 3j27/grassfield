@@ -24,7 +24,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool open: Popups.active && Popups.screenName === modelData.name
+        readonly property bool open: Popups.active && Popups.screenName === (modelData ? modelData.name : "")
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -96,13 +96,13 @@ Variants {
 
             function onPointerTracked(screen: string, x: real, y: real): void {
                 const menu = holder.item as PopupMenu;
-                if (win.open && menu && screen === win.modelData.name)
+                if (win.open && menu && screen === (win.modelData ? win.modelData.name : ""))
                     menu.trackPointer(x, y);
             }
 
             function onPointerReleased(screen: string, x: real, y: real): void {
                 const menu = holder.item as PopupMenu;
-                if (win.open && menu && screen === win.modelData.name)
+                if (win.open && menu && screen === (win.modelData ? win.modelData.name : ""))
                     menu.releasePointer(x, y);
             }
         }
@@ -172,7 +172,7 @@ Variants {
 
             HoverHandler {
                 onPointChanged: {
-                    const bar = Popups.bars[win.modelData.name];
+                    const bar = Popups.bars[(win.modelData ? win.modelData.name : "")];
                     if (hovered && bar)
                         bar.trackAt(point.position.x);
                 }
@@ -182,7 +182,7 @@ Variants {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
                 onPressed: mouse => {
-                    const bar = Popups.bars[win.modelData.name];
+                    const bar = Popups.bars[(win.modelData ? win.modelData.name : "")];
                     if (bar)
                         bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left");
                     else
@@ -191,11 +191,11 @@ Variants {
                 // Held, the pointer stays with this strip when it moves down onto the menu: relay it (press, drag, release).
                 onPositionChanged: mouse => {
                     if (pressed && mouse.buttons === Qt.LeftButton)
-                        Popups.trackPointer(win.modelData.name, mouse.x, mouse.y);
+                        Popups.trackPointer((win.modelData ? win.modelData.name : ""), mouse.x, mouse.y);
                 }
                 onReleased: mouse => {
                     if (mouse.button === Qt.LeftButton)
-                        Popups.releasePointer(win.modelData.name, mouse.x, mouse.y);
+                        Popups.releasePointer((win.modelData ? win.modelData.name : ""), mouse.x, mouse.y);
                 }
             }
         }

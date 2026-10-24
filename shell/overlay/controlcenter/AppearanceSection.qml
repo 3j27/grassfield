@@ -15,12 +15,16 @@ Column {
         property alias checked: toggle.checked
         signal toggled(bool checked)
         width: parent.width
-        height: Tokens.menuItemHeight
+        height: Math.max(Tokens.menuItemHeight, label.implicitHeight + Tokens.spacingXs)
 
+        // Wraps to a second line instead of ending in an ellipsis (GF-097).
         Label {
+            id: label
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - toggle.width - Tokens.spacingSm
             text: sw.text
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
         }
 
         Toggle {

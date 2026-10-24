@@ -1,0 +1,85 @@
+{
+  "scenario": "dispatcher",
+  "focusBefore": "0x5701f48ec760",
+  "window": "0x5701f45c76b0",
+  "windows": [
+    {
+      "address": "0x5701f45c76b0",
+      "workspace": 2,
+      "x": 2050,
+      "y": 302,
+      "class": "gf-sd-main"
+    },
+    {
+      "address": "0x5701f48d4380",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-main"
+    },
+    {
+      "address": "0x5701f48ec760",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-other"
+    }
+  ],
+  "events": [
+    {
+      "t": 0,
+      "name": "activespecial",
+      "data": "special:desktop,GF-REF"
+    },
+    {
+      "t": 0,
+      "name": "activespecialv2",
+      "data": "-98,special:desktop,GF-REF"
+    },
+    {
+      "t": 0,
+      "name": "activewindow",
+      "data": "gf-sd-main,"
+    },
+    {
+      "t": 0,
+      "name": "activewindowv2",
+      "data": "5701f45c76b0"
+    },
+    {
+      "t": 5,
+      "name": "activespecial",
+      "data": ",GF-REF"
+    },
+    {
+      "t": 5,
+      "name": "activespecialv2",
+      "data": ",,GF-REF"
+    },
+    {
+      "t": 6,
+      "name": "movewindowv2",
+      "data": "5701f45c76b0,2,2"
+    },
+    {
+      "t": 7,
+      "name": "movewindowv2",
+      "data": "5701f48d4380,2,2"
+    },
+    {
+      "t": 8,
+      "name": "movewindowv2",
+      "data": "5701f48ec760,2,2"
+    },
+    {
+      "t": 139,
+      "name": "activewindow",
+      "data": "gf-sd-main,"
+    },
+    {
+      "t": 139,
+      "name": "activewindowv2",
+      "data": "5701f45c76b0"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Qt.labs.platform as Platform
+import Grassfield.Ui
 
 // A browser window's menus in the global menu bar (T1: master-prompt 5.7, ADR-0008), exported by Qt through DBusMenu.
 // BrowserWindow.qml creates one per window, only while the registrar is there, and a fresh one when the registrar
@@ -62,7 +63,7 @@ Platform.MenuBar {
         // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
     // mnemonic in Qt menus).
     function label(text: string): string {
-        return String(text).replace(/[\r\n]+/g, "⏎").replace(/&/g, "&&");
+        return DisplayName.text(text).replace(/&/g, "&&");
     }
 
     Platform.Menu {

@@ -14,6 +14,7 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -24,6 +25,7 @@
 #include <QPair>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStandardPaths>
 #include <QStorageInfo>
 
 #include <memory>
@@ -70,6 +72,38 @@ QUrl childUrl(const QUrl &directory, const QString &name)
 bool localExists(const QUrl &url)
 {
     return url.isLocalFile() && QFileInfo::exists(url.toLocalFile());
+}
+
+// Whether `directory` (local) holds an entry named `name` or a canonically equivalent one (NFC/NFD), other than `except`.
+bool nameTaken(const QUrl &directory, const QString &name, const QString &except = QString())
+{
+    if (!directory.isLocalFile())
+        return false;
+    const QStringList entries = QDir(directory.toLocalFile()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+    for (const QString &entry : entries) {
+        if (entry != except && FileLogic::sameName(entry, name))
+            return true;
+    }
+    return false;
+}
+
+// True (after saying why) when an item of `sources` would land next to a name that only differs from its own by Unicode
+// normalization in the local folder `destination`: the file system would keep both, the person sees two of the same name.
+// An exact match is left to the file operation (its conflict handling asks).
+bool refuseTwin(FilesApp *app, const QUrl &destination, const QList<QUrl> &sources)
+{
+    if (!destination.isLocalFile())
+        return false;
+    const QStringList entries = QDir(destination.toLocalFile()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+    for (const QUrl &u : sources) {
+        const QString twin = FileLogic::equivalentName(entries, u.fileName());
+        if (!twin.isEmpty() && !entries.contains(u.fileName())) {
+            emit app->operationFailed(FilesApp::tr("“%1” can’t be copied or moved here: the folder has “%2”, which has the same name once accents are composed. Rename one of them first.")
+                                          .arg(FileLogic::displayName(u.fileName()), FileLogic::displayName(twin)));
+            return true;
+        }
+    }
+    return false;
 }
 
 // Scripted scenarios set GRASSFIELD_FILES_NO_LAUNCH=1: opening reports an error instead of starting
@@ -605,6 +639,8 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
             return;
         }
     }
+    if (refuseTwin(this, destination, urls))
+        return;
     // KIO::paste records the copy or move in FileUndoManager itself.
     KIO::PasteJob *job = KIO::paste(data, destination, KIO::HideProgressInfo);
     if (!job)
@@ -656,6 +692,19 @@ void FilesApp::restore(const QList<QUrl> &urls)
     }
     if (trashed.isEmpty())
         return;
+    // Put Back also refuses to land next to an NFC/NFD twin of the original name (the home trash keeps the original path).
+    const QString infoDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Trash/info/");
+    for (const QUrl &u : std::as_const(trashed)) {
+        QFile info(infoDir + u.fileName() + QStringLiteral(".trashinfo"));
+        if (!info.open(QIODevice::ReadOnly))
+            continue;
+        const QString original = FileLogic::trashInfoOriginalPath(info.read(4096));
+        if (original.isEmpty())
+            continue;
+        const QUrl parent = QUrl::fromLocalFile(QFileInfo(original).absolutePath());
+        if (refuseTwin(this, parent, {QUrl::fromLocalFile(original)}))
+            return;
+    }
     KIO::RestoreJob *job = KIO::restoreFromTrash(trashed, KIO::HideProgressInfo);
     attachDelegate(job);
     track(job, countText(tr("Putting back 1 item…"), tr("Putting back %1 items…"), trashed.size()));
@@ -687,7 +736,7 @@ void FilesApp::emptyTrash()
 
 void FilesApp::newFolder(const QUrl &directory, QObject *folder)
 {
-    const QString name = FileLogic::uniqueName(tr("untitled folder"), [&directory](const QString &n) { return localExists(childUrl(directory, n)); });
+    const QString name = FileLogic::uniqueName(tr("untitled folder"), [&directory](const QString &n) { return nameTaken(directory, n); });
     const QUrl url = childUrl(directory, name);
     KIO::MkdirJob *job = KIO::mkdir(url);
     attachDelegate(job);
@@ -711,13 +760,15 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     if (newName == url.fileName())
         return;
     if (!FileLogic::isValidFileName(newName)) {
-        emit operationFailed(tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(newName));
+        emit operationFailed(tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(FileLogic::displayName(newName)));
         return;
     }
     const QUrl destination = childUrl(url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash), newName);
     // A case-only change on a case-sensitive filesystem is a different name and fine.
-    if (localExists(destination) && QFileInfo(destination.toLocalFile()).canonicalFilePath() != QFileInfo(url.toLocalFile()).canonicalFilePath()) {
-        emit operationFailed(tr("The name “%1” is already taken. Please choose a different name.").arg(newName));
+    const QUrl parent = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
+    if ((localExists(destination) && QFileInfo(destination.toLocalFile()).canonicalFilePath() != QFileInfo(url.toLocalFile()).canonicalFilePath())
+        || nameTaken(parent, newName, url.fileName())) {
+        emit operationFailed(tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(newName)));
         return;
     }
     // KIO::moveAs (a CopyJob) rather than KIO::rename: FileUndoManager records CopyJob operations only.
@@ -791,7 +842,7 @@ void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
             continue;
         const QUrl directory = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
         const bool isDir = url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir();
-        const QString name = FileLogic::duplicateName(url.fileName(), isDir, tr("copy"), [&directory](const QString &n) { return localExists(childUrl(directory, n)); });
+        const QString name = FileLogic::duplicateName(url.fileName(), isDir, tr("copy"), [&directory](const QString &n) { return nameTaken(directory, n); });
         const QUrl destination = childUrl(directory, name);
         KIO::CopyJob *job = KIO::copyAs(url, destination, KIO::HideProgressInfo);
         attachDelegate(job);
@@ -802,7 +853,7 @@ void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
                     f->expect(destination, false);
             }
         });
-        track(job, tr("Duplicating “%1”…").arg(url.fileName()));
+        track(job, tr("Duplicating “%1”…").arg(FileLogic::displayName(url.fileName())));
     }
 }
 
@@ -824,14 +875,14 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
     for (const QUrl &u : urls) {
         const QUrl clean = u.adjusted(QUrl::StripTrailingSlash);
         if (clean == dest || clean.isParentOf(dest)) {
-            emit operationFailed(tr("“%1” can’t be moved or copied into itself.").arg(clean.fileName()));
+            emit operationFailed(tr("“%1” can’t be moved or copied into itself.").arg(FileLogic::displayName(clean.fileName())));
             return;
         }
         // Dropping an item on the folder it is already in does nothing.
         if (clean.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash) != dest)
             sources << clean;
     }
-    if (sources.isEmpty())
+    if (sources.isEmpty() || refuseTwin(this, dest, sources))
         return;
     const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
     bool copy = mods & (Qt::ControlModifier | Qt::AltModifier);
@@ -915,7 +966,7 @@ QString FilesApp::tagsReason(const QUrl &url, TagStore::Support support) const
     case TagStore::Support::Supported:
         break;
     case TagStore::Support::Missing:
-        return tr("“%1” is no longer there.").arg(url.fileName());
+        return tr("“%1” is no longer there.").arg(FileLogic::displayName(url.fileName()));
     case TagStore::Support::Link:
         return tr("Links can’t carry tags.");
     case TagStore::Support::NotRegular:
@@ -992,7 +1043,7 @@ void FilesApp::toggleColorTag(const QList<QUrl> &urls, int index)
         QByteArray stored;
         QString error;
         if (!TagStore::readRawChecked(url.toLocalFile(), &stored, &error)) {
-            emit operationFailed(tr("The tags of “%1” couldn’t be read: %2").arg(url.fileName(), error));
+            emit operationFailed(tr("The tags of “%1” couldn’t be read: %2").arg(FileLogic::displayName(url.fileName()), error));
             return;
         }
         all = all && TagLogic::ownsTag(stored, key);
@@ -1055,7 +1106,7 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
         emit tagsChanged(changed);
     }
     if (failed.size() == 1)
-        emit operationFailed(tr("The tags of “%1” couldn’t be changed: %2").arg(failed.first(), reason));
+        emit operationFailed(tr("The tags of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(failed.first()), reason));
     else if (failed.size() > 1)
         emit operationFailed(tr("The tags of %1 items couldn’t be changed: %2").arg(failed.size()).arg(reason));
 }
@@ -1138,7 +1189,7 @@ QVariantMap FilesApp::changeFolderStyles(const QList<QUrl> &urls, const FolderSt
     out[QStringLiteral("ok")] = failed.isEmpty();
     out[QStringLiteral("fellBack")] = fellBack;
     if (failed.size() == 1)
-        out[QStringLiteral("error")] = tr("The look of “%1” couldn’t be changed: %2").arg(failed.first(), reason);
+        out[QStringLiteral("error")] = tr("The look of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(failed.first()), reason);
     else if (failed.size() > 1)
         out[QStringLiteral("error")] = tr("The look of %1 folders couldn’t be changed: %2").arg(failed.size()).arg(reason);
     return out;

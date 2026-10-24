@@ -38,7 +38,7 @@ Window {
     }
     readonly property string customizeReason: root.info.isDir ? root.app.folderStyleUnavailable([root.info.url]) : "x"
 
-    title: qsTr("%1 Info").arg(root.info.name)
+    title: qsTr("%1 Info").arg(DisplayName.text(root.info.name))
     width: Tokens.filesInfoWindowWidth
     height: Tokens.filesInfoWindowHeight
     minimumWidth: Tokens.filesInfoWindowWidth
@@ -137,7 +137,7 @@ Window {
                     Text {
                         textFormat: Text.PlainText
                         width: parent.width
-                        text: root.info.name
+                        text: DisplayName.text(root.info.name)
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily

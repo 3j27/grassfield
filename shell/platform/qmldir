@@ -11,3 +11,4 @@ singleton StagesLink 1.0 StagesLink.qml
 singleton Usable 1.0 Usable.qml
 UsableProbe 1.0 UsableProbe.qml
 singleton InputSource 1.0 InputSource.qml
+singleton Zoom 1.0 Zoom.qml

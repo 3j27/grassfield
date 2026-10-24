@@ -8,7 +8,9 @@ import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
+import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice
+import "showdesktop"
 import "StagesFront.js" as StagesFront
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
@@ -95,6 +97,13 @@ Singleton {
     function activate(toplevel: var): void {
         if (!toplevel)
             return;
+        // Show Desktop ends: every window goes back first, then the chosen one gets the focus (both requests go through the
+        // same dispatch channel, in this order, so the focus is not lost to the windows that are still moving).
+        if (root.endShowDesktop()) {
+            const chosen = hyprlandToplevel(toplevel);
+            if (chosen)
+                dispatchRequest(Minimized.focusWindowRequest(chosen.address));
+        }
         if (isMinimized(toplevel)) {
             unminimize(toplevel);
             return;
@@ -242,6 +251,8 @@ Singleton {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
         if (!rec)
             return;
+        // Restoring a window (Dock tile, Overview) is an activation: Show Desktop ends first, as in activate().
+        root.endShowDesktop();
         const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false, toplevel);
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize")) {
@@ -579,6 +590,107 @@ Singleton {
         hiddenWindows(0).forEach(w => dispatchRequest(moveRequest(Minimized.normalizeAddress(w.address), String(root.focusedWorkspace.id))));
     }
 
+    // ---- Show Desktop (macOS F11 / Cmd+F3, GF-106) ----
+    //
+    // Moves the windows of every display's Space aside (to special:desktop) and hands the keyboard to the desktop icons.
+    // Switching Space, opening a window, activating a window (Dock, switcher, an app) or pressing it again ends it: every
+    // window goes back to its Space in its tiling order and, for the second press, the window that had the focus gets it again.
+    // The record is kept in the state dir, so a restarted shell (or one that crashed) puts the windows back at start.
+    // Does nothing with Stages on (a stage cannot be rebuilt window by window, docs/specs/stages.md ST8/ST9), and minimized
+    // or hidden windows are left alone.
+    //
+    // All the decisions are in ShowDesktopFlow.js (a pure reducer) run by ShowDesktopController.qml, which listens to the
+    // Hyprland events itself (tests/unit/tst_showdesktopflow.qml, tst_showdesktopreplay.qml, tst_showdesktopglue.qml). This file
+    // only tells it how to read the window list and the Spaces, where to send the requests and where the record file is.
+    readonly property string desktopStateDir: {
+        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
+        if (dev)
+            return dev;
+        const xdg = Quickshell.env("XDG_STATE_HOME");
+        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
+    }
+    readonly property string desktopStatePath: desktopStateDir + "/show-desktop.json"
+
+    function toplevelData(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => {
+            const at = t.lastIpcObject && Array.isArray(t.lastIpcObject.at) ? t.lastIpcObject.at : [0, 0];
+            return {
+                address: t.address,
+                workspace: t.workspace ? t.workspace.id : 0,
+                parked: t.workspace ? t.workspace.name === ShowDesktop.PARKING : false,
+                x: at[0],
+                y: at[1],
+                minimized: t.wayland ? isMinimized(t.wayland) : false,
+                hidden: t.wayland ? isHidden(t.wayland) : false
+            };
+        });
+    }
+
+    // [{name, workspace}]: the Space each display shows now.
+    function shownSpaces(): var {
+        const all = Hyprland.monitors ? Hyprland.monitors.values : [];
+        return all.filter(m => m.activeWorkspace).map(m => ({name: m.name, workspace: m.activeWorkspace.id}));
+    }
+
+    ShowDesktopController {
+        id: showDesktopFlow
+
+        eventSource: Hyprland
+        readWindows: () => root.toplevelData()
+        readShown: () => root.shownSpaces()
+        readFocused: () => {
+            const focused = root.focusedToplevel ? root.hyprlandToplevel(root.focusedToplevel) : null;
+            return focused ? focused.address : "";
+        }
+        readCurrentWorkspace: () => Hyprland.focusedMonitor && Hyprland.focusedMonitor.activeWorkspace ? Hyprland.focusedMonitor.activeWorkspace.id : 0
+        readLoaded: () => !!Hyprland.toplevels && Hyprland.toplevels.values.length > 0
+        stages: Settings.windowsStages
+        dispatch: request => root.dispatchRequest(request)
+        refreshWindows: () => Hyprland.refreshToplevels()
+        onPersistRequested: text => {
+            if (desktopFile.path !== "")
+                desktopFile.setText(text);
+        }
+        onFocusDesktopRequested: DesktopState.focusRequested()
+    }
+
+    // Ends Show Desktop for an activation by the shell itself (activate(), unminimize()): true when it was on.
+    function endShowDesktop(): bool {
+        return showDesktopFlow.endForActivation();
+    }
+
+    // Super+F3.
+    function showDesktop(): void {
+        showDesktopFlow.press();
+    }
+
+    // A display plugged or unplugged: the Spaces the displays show are compared again (a removed display ends Show Desktop).
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            showDesktopFlow.screensChanged();
+        }
+    }
+
+    Process {
+        id: desktopPrepare
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; chmod 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.desktopStateDir, root.desktopStatePath]
+        running: true
+        onRunningChanged: {
+            if (!running)
+                desktopFile.path = root.desktopStatePath;
+        }
+    }
+
+    FileView {
+        id: desktopFile
+        printErrors: false
+        atomicWrites: true
+        onLoaded: showDesktopFlow.recordsLoaded(desktopFile.text())
+    }
+
     // "Hide Others": hides every visible window of other apps.
     function hideOthers(appId: string): void {
         const keep = appId.toLowerCase();
@@ -675,6 +787,11 @@ Singleton {
         function hide(): void {
             if (root.focusedAppId !== "" && !SessionState.refuses("windows hide"))
                 root.hideApp(root.focusedAppId);
+        }
+
+        // SUPER+F3 (macOS Cmd+F3, Fn+F11): Show Desktop.
+        function showDesktop(): void {
+            root.showDesktop();
         }
 
         // SUPER+`: next window of the focused app (macOS Cmd+`).
