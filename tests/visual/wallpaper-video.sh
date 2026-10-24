@@ -96,7 +96,8 @@ frames_differ() {
 setcfg '.accessibility.reduceMotion = false | .wallpaper.source = "video" | .wallpaper.path = "'"$clip"'" | .wallpaper.videoOnBattery = false'
 vs_ipc wallpaper videoBattery 0 >/dev/null
 vs_ipc wallpaper videoIdle 0 >/dev/null
-check "the shell reports ready with a video (transcode done)" await 120 ready_video "ready|1"
+# The bound is not a speed requirement: a loaded machine transcodes the 4K clip slowly (60 % after 120 s at load 18).
+check "the shell reports ready with a video (transcode done)" await 300 ready_video "ready|1"
 mp4=$(ls "$cache"/*.mp4 2>/dev/null | head -1)
 check "a transcoded file exists in the video cache" test -n "$mp4"
 codec=$(ffprobe -v error -show_entries stream=codec_name,pix_fmt,width,height,avg_frame_rate -of json "$mp4" 2>/dev/null)
