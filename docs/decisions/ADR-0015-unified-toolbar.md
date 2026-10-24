@@ -717,6 +717,9 @@ window's own `xdgMoveRequest` listener is left in place, see spike step 3).
   toggles `FSMODE_FULLSCREEN` (menu bar hidden by the shell as in any full screen) instead of `FSMODE_MAXIMIZED`; while Alt is
   held over the group its glyph is the full-screen arrows. Tested in `tests/compositor/titlebar_geometry.sh`-based
   scenarios (a new case in `zoom_restore.sh` with `scripts/dev/keys.sh` holding Alt, or `ZoomOption` gtest).
+  - Added on 2026-10-23 (review of part B: no pointer way out of full screen): as on macOS, the pointer at the top edge
+    of the monitor reveals the full-screen window's titlebar below the menu bar; its zoom light (arrows) leaves full
+    screen and its minimize light is unavailable. Mechanism and limits: docs/specs/compositor.md, work item P6.
 - **P7 one token source.** `ui/tools/gen-tokens.py` also writes the plugin's light constants (`kButtonDiameter`,
   `kButtonSpacing`, `kTitlebarHeight`, `kButtonInsetLeft`, colours, glyph ratios) from `window.*`, or a GTest compares
   `Theme.hpp` with `tokens.json` (ADR test plan, "generated light constants equal what the titlebar draws").

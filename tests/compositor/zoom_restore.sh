@@ -16,8 +16,11 @@
 #     pointer at 25 % of the width and still on the titlebar (macOS);
 #   4 plain drag of the floating window -> moved by exactly the pointer delta;
 #   6 Option(Alt)+click on the zoom button (ADR-0015 P6, REQ-ADR0002-6): true full screen (fullscreen 2), not zoomed. Alt is
-#     held by scripts/dev/keys.sh (wtype -M alt, a pause, -m alt) while scripts/dev/pointer.sh clicks; the window is
-#     closed afterwards (in full screen it has no titlebar to leave it from).
+#     held by scripts/dev/keys.sh (wtype -M alt, a pause, -m alt) while scripts/dev/pointer.sh clicks;
+#   7 the pointer's way out of full screen (P6, macOS): a click where the zoom light of the revealed titlebar would be,
+#     with the pointer coming from below, is the window's (still full screen: negative control); the pointer at the top
+#     edge reveals the titlebar below the menu bar (`hyprctl layers`: grassfield-menubar's height on the output, 0
+#     without the shell), and a click on its zoom light leaves full screen (fullscreen 0).
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log: .dev/zoom-restore/run-<timestamp>.log.
 set -uo pipefail
 
@@ -148,6 +151,23 @@ wait "$keys" 2>/dev/null
 read -r x y w h fs < <(geom)
 [[ $fs == 2 ]]
 check "Alt+click enters full screen (PLUGIN P6)" $? "fullscreen ${fs:-?} (want 2: full screen, 1 would be the zoom), ${w}x${h}"
+
+say "7 the pointer at the top edge reveals the full-screen titlebar; its zoom light leaves full screen"
+if [[ $fs == 2 ]]; then
+  inset=$(query layers | jq -r --arg o "$out" '[.[$o].levels[][]? | select(.namespace == "grassfield-menubar") | .h] | max // 0')
+  [[ $inset =~ ^[0-9]+$ ]] || inset=0
+  light_y=$((inset + GF_TB_MID))
+  pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100 abs "$GF_TB_ZOOM_X" "$light_y" sleep 100 click sleep 700
+  read -r x y w h fs < <(geom)
+  [[ $fs == 2 ]]
+  check "no reveal from below: the click is the window's" $? "fullscreen ${fs:-?} (want 2), light at ($GF_TB_ZOOM_X,$light_y), menu bar $inset px"
+  pointer abs $((mon_w / 2)) 0 sleep 200 abs "$GF_TB_ZOOM_X" "$light_y" sleep 200 click sleep 700
+  read -r x y w h fs < <(geom)
+  [[ $fs == 0 ]]
+  check "top edge, then the zoom light: full screen left (PLUGIN P6 reveal)" $? "fullscreen ${fs:-?} (want 0), ${w}x${h} at ($x,$y)"
+else
+  check "top edge, then the zoom light: full screen left (PLUGIN P6 reveal)" 1 "not run: case 6 did not enter full screen"
+fi
 
 if ! kill -0 "$hypr_pid" 2>/dev/null; then
   say "check: FAIL nested Hyprland pid $hypr_pid is gone"

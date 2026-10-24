@@ -79,18 +79,48 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // again, so that their zoom glyph follows Alt (the full-screen arrows while it is held, ADR-0015 P6).
     static void onKey();
 
+    // P6, the titlebar of a full-screen window (macOS; core gf::chrome::nextRevealed): away in full screen, revealed by the
+    // pointer at the top edge of the window's monitor, below the shell's menu bar, over the window's content. Hyprland draws
+    // no decoration on a full-screen window and its decoration input sits above the window, outside the monitor: the
+    // revealed bar is drawn from the render stage and takes its presses from the bus.
+    // Pointer motion (and a change of the window) re-evaluates it.
+    static void updateReveal();
+    // RENDER_POST_WINDOWS (after the windows, before the overlay layers: the menu bar stays above it): the revealed
+    // titlebars on the monitor being rendered.
+    static void drawRevealed();
+    // A pointer button, before Hyprland handles it: true when it is a press on a revealed titlebar or the release of such
+    // a press, which the caller cancels on the bus (core gf::chrome::CRevealPresses: Hyprland's held-button state is not
+    // touched by a cancelled press and its cancelled release). The zoom light leaves full screen, close closes; minimize
+    // is unavailable in full screen.
+    static bool onRevealedBarButton(const IPointer::SButtonEvent& e);
+
+    // The titlebar of this full-screen window is revealed.
+    bool revealed() const;
+
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates
+    CBox revealBox() const; // the revealed bar of a full-screen window, global logical coordinates (P6)
+    CBox barBox() const;    // revealBox() while revealed, layoutBox() otherwise
+    bool barShown() const;  // revealed, or shouldShow()
+    // Mapped, not hidden, decorations allowed, not an X11 window without borders, not a client-chrome window.
+    bool titlebarAllowed() const;
+    // The window is in full screen on a visible workspace, drawn in place, and may have a titlebar.
+    bool revealable() const;
+    void damageRevealed();
+    // Background, lights, glyphs and title on `bar` (monitor-local logical coordinates); `fullscreen`: a revealed bar.
+    void drawBar(const PHLWINDOW& w, const CBox& bar, float scale, double rounding, float power, float alpha, bool hovered, bool fullscreen);
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);
     void activate(gf::titlebar::Button button);
     void drawTitlebar(const PHLMONITOR& monitor, float alpha);
-    // The glyphs over the lights; `bar` in monitor-local logical coordinates.
-    void drawGlyphs(const CBox& bar, float scale, float alpha);
+    // The glyphs over the lights; `bar` in monitor-local logical coordinates. `fullscreen`: the zoom light shows the arrows
+    // and minimize none (unavailable).
+    void drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen);
     // The content's own pixels in the surface's rounded top corners (under the surface), when its texture maps 1:1.
     void drawContentCorners(const PHLWINDOW& w, const CBox& bar, double rounding, float scale, float alpha);
 
     PHLWINDOWREF                m_owner;
     bool                        m_lastShown = false;
+    bool                        m_revealed  = false; // P6: the full-screen window's titlebar is revealed
     gf::titlebar::CClickTracker m_clicks;
 
     struct {

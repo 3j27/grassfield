@@ -35,8 +35,42 @@ namespace gf::chrome {
         return maximized ? ZoomAction::Unzoom : ZoomAction::Zoom;
     }
 
-    bool zoomGlyphIsArrows(bool altHeld) {
-        return altHeld;
+    bool zoomGlyphIsArrows(bool altHeld, bool fullscreen) {
+        return altHeld || fullscreen;
+    }
+
+    bool nextRevealed(bool revealed, const RevealInput& in) {
+        if (!in.fullscreen)
+            return false;
+        if (revealed && in.pressing)
+            return true; // a press on a light is decided at its release, over the bar
+        if (!in.onMonitor || in.pointerY < 0.0)
+            return false;
+        if (!revealed)
+            return in.pointerY <= kRevealEdge;
+        return in.pointerY < in.barTop + theme::kTitlebarHeight + kRevealSlack;
+    }
+
+    bool lightAvailableInFullscreen(titlebar::Button button) {
+        return button != titlebar::Button::Minimize;
+    }
+
+    void CRevealPresses::onPress(uint32_t button, bool onBar) {
+        m_owed.erase(button);
+        if (onBar)
+            m_owed.insert(button);
+    }
+
+    bool CRevealPresses::takeRelease(uint32_t button) {
+        return m_owed.erase(button) > 0;
+    }
+
+    bool CRevealPresses::pressing() const {
+        return !m_owed.empty();
+    }
+
+    void CRevealPresses::reset() {
+        m_owed.clear();
     }
 
 } // namespace gf::chrome

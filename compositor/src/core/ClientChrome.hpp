@@ -65,7 +65,48 @@ namespace gf::chrome {
     // leaves it whatever the modifier (macOS: the green light of a full-screen window exits it).
     ZoomAction zoomAction(bool maximized, bool fullscreen, bool altHeld);
 
-    // The zoom glyph shows the full-screen arrows while Alt is held (over the group, where glyphs show at all).
-    bool zoomGlyphIsArrows(bool altHeld);
+    // The zoom glyph shows the full-screen arrows while Alt is held (over the group, where glyphs show at all), and always
+    // on the titlebar of a full-screen window (its light leaves full screen).
+    bool zoomGlyphIsArrows(bool altHeld, bool fullscreen);
+
+    // ---- P6: the titlebar of a full-screen window (macOS) ----
+    // In full screen the titlebar is away. The pointer at the top edge of the window's monitor brings it back, below the
+    // menu bar and over the window's content; it goes when the pointer leaves it, or with the full screen. Its zoom light
+    // leaves full screen (the pointer's way out); its minimize light is unavailable (greyed and inert, as on macOS).
+    inline constexpr double kRevealEdge  = 2.0; // the pointer this close to the monitor's top edge (layout px) reveals it
+    inline constexpr double kRevealSlack = 8.0; // it stays until the pointer is this far below it (layout px)
+
+    struct RevealInput {
+        bool   fullscreen = false; // the window is in full screen on a visible workspace and has a plugin titlebar
+        bool   onMonitor  = false; // the pointer is on the window's monitor
+        double pointerY   = 0.0;   // the pointer below the monitor's top edge (layout px)
+        double barTop     = 0.0;   // where the bar starts below the top edge (the menu bar's height, or 0)
+        bool   pressing   = false; // a press on the revealed bar is not released yet
+    };
+
+    // Whether the titlebar is revealed after a pointer motion (or a change of the window), from whether it was.
+    bool nextRevealed(bool revealed, const RevealInput& in);
+
+    // Whether a light of a full-screen window's titlebar can be used (minimize cannot).
+    bool lightAvailableInFullscreen(titlebar::Button button);
+
+    // The presses on a revealed titlebar are the plugin's alone: they are cancelled on Hyprland's event bus with their
+    // releases. Hyprland 0.56.2 returns from CInputManager::onMouseButton right after the bus when an event is cancelled,
+    // before it records the button as held or released (read from the binary), so a cancelled press and its cancelled
+    // release leave its held-button state as it was. This tracks the releases owed.
+    class CRevealPresses {
+      public:
+        // A press, on the revealed bar or not. A release still owed for the same button was lost (its device went away):
+        // forgotten, so that the release of this press, which Hyprland records, is never cancelled.
+        void onPress(uint32_t button, bool onBar);
+        // A release: true when it belongs to a press on the bar (cancel it too); the debt is paid.
+        bool takeRelease(uint32_t button);
+        // A press on the bar is not released yet (the bar stays while it is).
+        bool pressing() const;
+        void reset();
+
+      private:
+        std::set<uint32_t> m_owed;
+    };
 
 } // namespace gf::chrome

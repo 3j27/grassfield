@@ -98,8 +98,10 @@ namespace {
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
         // its held-button state, which pins pointer focus while a button is down. Stages first: a pointer focus
         // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before
-        // anything else sees the press (R13 review of 46b3e9b).
-        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
+        // anything else sees the press (R13 review of 46b3e9b). One exception: a press on the revealed titlebar of a
+        // full-screen window and the release of that press are cancelled together (ADR-0015 P6): Hyprland returns before
+        // its held-button state for a cancelled event, so the pair leaves it unchanged.
+        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
             // A shell layer mapped or took the keyboard under the resting pointer and its pointer focus is not refreshed yet
             // (a button was held, no pointer device, or the press came in the same event loop pass): a press is delivered
             // at the right place, a release schedules the refresh after Hyprland handled it (FR51).
@@ -111,6 +113,13 @@ namespace {
             // that may follow takes it out of the zoom under the pointer (ADR-0015 P4).
             gf::guarded("client chrome press", [&] { gf::chrome::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
+            if (CGrassfieldTitlebar::onRevealedBarButton(e))
+                info.cancelled = true;
+        }));
+        // The revealed titlebar of a full-screen window: Hyprland draws no decoration in full screen (P6).
+        l.push_back(ev.render.stage.listen([](eRenderStage stage) {
+            if (stage == RENDER_POST_WINDOWS)
+                CGrassfieldTitlebar::drawRevealed();
         }));
         // Keys are observed, never cancelled: Alt changes the zoom glyph of the hovered lights (ADR-0015 P6).
         l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onKey(); }));

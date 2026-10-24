@@ -144,8 +144,77 @@ TEST(ClientChromeZoomLight, OptionClickIsTrueFullScreen) {
 }
 
 TEST(ClientChromeZoomLight, TheGlyphShowsTheArrowsWhileOptionIsHeld) {
-    EXPECT_TRUE(zoomGlyphIsArrows(true));
-    EXPECT_FALSE(zoomGlyphIsArrows(false));
+    EXPECT_TRUE(zoomGlyphIsArrows(true, false));
+    EXPECT_FALSE(zoomGlyphIsArrows(false, false));
+    EXPECT_TRUE(zoomGlyphIsArrows(false, true)) << "the light of a full-screen window leaves it: arrows";
+}
+
+// Reviewer, 2026-10-23: a window in full screen had no titlebar, so the pointer had no way out of it (LeaveFullscreen was
+// unreachable). macOS: the pointer at the top edge reveals the titlebar below the menu bar.
+TEST(ClientChromeFullscreenTitlebar, ThePointerAtTheTopEdgeRevealsIt) {
+    RevealInput in{.fullscreen = true, .onMonitor = true, .pointerY = 0.0, .barTop = 30.0, .pressing = false};
+    EXPECT_TRUE(nextRevealed(false, in)) << "at the top edge";
+    in.pointerY = kRevealEdge;
+    EXPECT_TRUE(nextRevealed(false, in));
+    in.pointerY = kRevealEdge + 1.0;
+    EXPECT_FALSE(nextRevealed(false, in)) << "below the edge: the content's own";
+    in.pointerY = 45.0;
+    EXPECT_FALSE(nextRevealed(false, in)) << "where the bar would be, coming from below: never revealed";
+}
+
+TEST(ClientChromeFullscreenTitlebar, ItStaysWhileThePointerIsOnItAndGoesBelowIt) {
+    RevealInput in{.fullscreen = true, .onMonitor = true, .pointerY = 30.0 + 16.0, .barTop = 30.0, .pressing = false};
+    EXPECT_TRUE(nextRevealed(true, in)) << "on the bar, below the menu bar";
+    in.pointerY = 5.0;
+    EXPECT_TRUE(nextRevealed(true, in)) << "over the menu bar";
+    in.pointerY = 30.0 + gf::theme::kTitlebarHeight + kRevealSlack - 0.5;
+    EXPECT_TRUE(nextRevealed(true, in)) << "within the slack";
+    in.pointerY = 30.0 + gf::theme::kTitlebarHeight + kRevealSlack;
+    EXPECT_FALSE(nextRevealed(true, in)) << "below the slack: away";
+    in.pressing = true;
+    EXPECT_TRUE(nextRevealed(true, in)) << "a press on a light is decided at its release";
+    in.pressing   = false;
+    in.pointerY   = 0.0;
+    in.onMonitor  = false;
+    EXPECT_FALSE(nextRevealed(true, in)) << "the pointer went to another monitor";
+    in.onMonitor  = true;
+    in.fullscreen = false;
+    EXPECT_FALSE(nextRevealed(true, in)) << "the window left full screen";
+    in.pressing = true;
+    EXPECT_FALSE(nextRevealed(true, in)) << "even during a press";
+}
+
+TEST(ClientChromeFullscreenTitlebar, MinimizeIsUnavailable) {
+    EXPECT_TRUE(lightAvailableInFullscreen(gf::titlebar::Button::Close));
+    EXPECT_FALSE(lightAvailableInFullscreen(gf::titlebar::Button::Minimize));
+    EXPECT_TRUE(lightAvailableInFullscreen(gf::titlebar::Button::Zoom));
+}
+
+TEST(ClientChromeFullscreenTitlebar, OnlyThePressesOnTheBarHaveTheirReleaseCancelled) {
+    constexpr uint32_t kLeft  = 0x110;
+    constexpr uint32_t kRight = 0x111;
+    CRevealPresses     p;
+    p.onPress(kLeft, true);
+    EXPECT_TRUE(p.pressing());
+    EXPECT_FALSE(p.takeRelease(kRight)) << "another button's release is Hyprland's";
+    EXPECT_TRUE(p.takeRelease(kLeft)) << "the bar's press: its release is cancelled too";
+    EXPECT_FALSE(p.pressing());
+    EXPECT_FALSE(p.takeRelease(kLeft)) << "only once";
+
+    p.onPress(kLeft, false);
+    EXPECT_FALSE(p.takeRelease(kLeft)) << "a press elsewhere: Hyprland records it and gets its release";
+}
+
+TEST(ClientChromeFullscreenTitlebar, ALostReleaseIsForgottenAtTheNextPress) {
+    constexpr uint32_t kLeft = 0x110;
+    CRevealPresses     p;
+    p.onPress(kLeft, true); // its release never comes (the device went away)
+    p.onPress(kLeft, false);
+    EXPECT_FALSE(p.takeRelease(kLeft)) << "the release of a press Hyprland recorded is never cancelled";
+    EXPECT_FALSE(p.pressing());
+    p.onPress(kLeft, true);
+    p.reset();
+    EXPECT_FALSE(p.pressing());
 }
 
 TEST(ClientChromeZoomLight, TheArrowsAreTwoTrianglesAtOppositeCorners) {
