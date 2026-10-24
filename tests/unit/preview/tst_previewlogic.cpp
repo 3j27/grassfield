@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 
+#include <sys/stat.h>
+
 #include "previewlogic.h"
 
 using namespace preview;
@@ -20,6 +22,30 @@ QString touch(const QTemporaryDir &dir, const QString &name, const QByteArray &d
     return path;
 }
 } // namespace
+
+TEST(TextSnippet, ReadsOnlyRegularFilesOfReasonableSize)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString plain = dir.filePath(QStringLiteral("a.txt"));
+    {
+        QFile f(plain);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("first\tline\nsecond\n");
+        for (int i = 0; i < 30; ++i)
+            f.write("more\n");
+    }
+    const QString snippet = preview::textSnippetOf(plain);
+    EXPECT_TRUE(snippet.startsWith(QStringLiteral("first line\nsecond")));
+    EXPECT_EQ(snippet.count(QLatin1Char('\n')), 11);
+    EXPECT_TRUE(preview::textSnippetOf(plain, 4).isEmpty()); // over the size cap
+    EXPECT_TRUE(preview::textSnippetOf(dir.filePath(QStringLiteral("missing"))).isEmpty());
+    // A FIFO with no writer would block an ordinary open: it gives "" at once.
+    const QString fifo = dir.filePath(QStringLiteral("pipe.txt"));
+    ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
+    EXPECT_TRUE(preview::textSnippetOf(fifo).isEmpty());
+    EXPECT_TRUE(preview::textSnippetOf(QStringLiteral("/dev/zero")).isEmpty());
+}
 
 TEST(PreviewLogic, AcceptsPathsAndFileUrls)
 {

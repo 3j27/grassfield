@@ -26,6 +26,12 @@ QString localPathFromArgument(const QString &arg, const QString &cwd, QString *e
 
 // Routing by MIME type: images, PDF, text and code, audio, video.
 Kind classify(const QString &path);
+
+// The first lines of a text file for a sidebar thumbnail: at most 12 lines of 40 characters, control characters and tabs
+// replaced by spaces; "" for an empty or unreadable file. Only a regular file is read (a FIFO or a device would block or
+// never end: it is opened without blocking and checked with fstat on the descriptor, so a swap after the check does not
+// matter), and one larger than `maxSize` bytes gives "" (a thumbnail of a huge log is not worth the disk).
+QString textSnippetOf(const QString &path, qint64 maxSize = 16 * 1024 * 1024);
 QString kindName(Kind kind);
 
 // An image of this size (4 bytes per pixel) fits the per-side and allocation caps.
