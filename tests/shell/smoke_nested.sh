@@ -52,9 +52,14 @@ if [[ $lock != unlocked ]]; then
   exit 1
 fi
 
-# 3. capabilities
-cap=$(ipc capabilities status)
-[[ $cap == "ready present"* || $cap == "ready degraded" ]]; check "capabilities: settled ('$cap')" $?
+# 3. capabilities (a shell started a moment ago is still 'pending': the handshake gets 10 s to settle)
+settled() { [[ $cap == "ready present"* || $cap == "ready degraded" ]]; }
+for _ in $(seq 1 20); do
+  cap=$(ipc capabilities status)
+  settled && break
+  sleep 0.5
+done
+settled; check "capabilities: settled ('$cap')" $?
 
 # 4. quick settings state, a menu
 cc=$(ipc controlcenter state)
