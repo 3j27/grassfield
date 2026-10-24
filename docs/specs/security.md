@@ -243,16 +243,24 @@ opened, and only a deliberate "Open Anyway" in System Settings runs it. Grassfie
 (`KIO::OpenUrlJob::setRunExecutables(false)` documents executables but not every `.desktop` case; KIO's source is not on
 the host): `apps/files/src/launchguard.{h,cpp}` `LaunchGuard::verdict(inspect(url))` for every item `FilesApp::open`
 gets (Return, double-click, File > Open, the context menu), before the scripted-test switch:
-- Refused, "app launcher": a desktop entry (named `*.desktop` / `*.kdelnk`, or of type `application/x-desktop`), with or
-  without the permission bit, wherever it is, unless it is `Type=Link` to an http(s) URL with a host (a web link, like a
-  `.webloc`: KIO opens the browser) or a folder's `.directory`. `Type=Application`, `Service`, a missing or unknown Type,
-  an unreadable file and a link to a file or another scheme are refused (fail closed).
+- A desktop entry (named `*.desktop` / `*.kdelnk` / `.directory`, or of type `application/x-desktop`) is never handed to
+  KIO, with or without the permission bit, wherever it is (review of a5646b8: KIO downloads a `Type=Link` target and runs
+  the handler of the type the server announces, or the application in `X-KDE-LastOpenedWith`; the reviewer ran an
+  attacker-chosen handler on a downloaded `.msi`). A web link (exactly one `Type=Link` and one http(s) `URL` with a host,
+  like a `.webloc`) opens ITS ADDRESS in the user's default web browser (`x-scheme-handler/http(s)` preferred
+  application, `ApplicationLauncherJob` with the URL), nothing else; with no default browser it is refused. Any other
+  entry is refused, "app launcher": `Type=Application`, `Service`, a missing or unknown Type, an unreadable file, a link to
+  a file or another scheme, and an ambiguous entry (a repeated `Type` or `URL`, also across repeated groups, or `URL` with
+  `URL[$e]`: KConfig keeps the last value; or longer than the 64 KiB read).
 - Refused, "program or script": an executable regular file whose type is a program or script (shared-mime-info:
-  `application/x-executable` and its sub-classes, scripts and AppImages included; `x-pie-executable`; `x-sharedlib`),
-  or that starts with `#!` or the ELF magic; Windows programs (`.exe`, `.msi`, …) even without the permission bit (their
-  handler, Wine, would run them).
+  `application/x-executable` and its sub-classes, scripts included; `x-pie-executable`; `x-sharedlib`), or that starts
+  with `#!` or the ELF magic; and, even without the permission bit, types whose handler runs them (by type and by name):
+  Windows programs and scripts (`.exe`, `.com`, `.scr`, `.cpl`, `.msi`, `.lnk`, `.bat`, `.cmd`, `.ps1`, `.vbs`, `.vbe`,
+  `.wsf`, `.hta`), registry files (`.reg`), Java archives and Web Start files (`.jar`, `.jnlp`), AppImages.
+- Remote items (a share, sftp, the Trash): desktop entries and the names above are refused (KIO downloads a remote file
+  and runs the handler of its type); everything else goes to KIO as before.
 - Opened as before: folders, documents (also with the permission bit: every file of a FAT/NTFS volume has it), scripts
-  without the permission bit (text, in their editor, as KIO and macOS do), remote items (KIO never runs remote programs).
+  without the permission bit (text, in their editor, as KIO and macOS do).
 - The user sees one banner: "“t.desktop” was not opened: it is an app launcher, and Files never starts apps from a folder.
   Open apps from the Dock, Apps or Search." (programs: "… To run it on purpose, use a terminal."); the journal gets
   `grassfield-files: open refused (<kind>)`. No "Open Anyway" in Files, on purpose: Grassfield has no signed-app notion to
@@ -261,8 +269,10 @@ gets (Return, double-click, File > Open, the context menu), before the scripted-
 - The desktop already never runs `.desktop` files (`DesktopFiles.qml`, DT-11). The shell's `gio open` / `xdg-open` paths
   (Search results, Dock stacks) hand files to their MIME handler; not changed here.
 Tests: `tests/unit/files/tst_launchguard.cpp` (verdicts; DT-10 on real files: `t.desktop` executable and not,
-`Invoice.pdf.desktop`, web and file links, an unreadable entry, scripts with and without the bit, a copied `/usr/bin/true`
-and a symlink to it, an `.exe` stub, a folder), nested `tests/apps/files_dt10.sh` (bare: pass 1 with the launch switch
+`Invoice.pdf.desktop`, web links to the browser only (the review's `.msi` link with `X-KDE-LastOpenedWith` included),
+repeated keys, an oversized entry, `.directory`, file links, an unreadable entry, scripts with and without the bit, a
+copied `/usr/bin/true` and a symlink to it, `.exe`, `.jar`, AppImage without +x, `.ps1`, `.vbs`, `.reg`, `.jnlp`, a
+folder; remote items by name), nested `tests/apps/files_dt10.sh` (bare: pass 1 with the launch switch
 on, four "open refused" and nothing reaching the launch path; pass 2 without it, the marker the launchers would create
 never appears).
 

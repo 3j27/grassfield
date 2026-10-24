@@ -73,11 +73,37 @@ TEST(LaunchGuardVerdict, LaunchersAreRefused)
     EXPECT_EQ(verdict(desktop(QStringLiteral("t.desktop"), QStringLiteral("Link"), QStringLiteral("https://"))), Verdict::RefuseLauncher) << "no host";
 }
 
-TEST(LaunchGuardVerdict, WebLinksAndFolderSettingsOpen)
+// Review of a5646b8: a web link handed to KIO is downloaded and run by the handler of the type the server announces (or
+// X-KDE-LastOpenedWith). A desktop entry never goes to KIO: a web link's address goes to the default web browser only.
+TEST(LaunchGuardVerdict, WebLinksGoToTheBrowserNeverToKio)
 {
-    EXPECT_EQ(verdict(desktop(QStringLiteral("site.desktop"), QStringLiteral("Link"), QStringLiteral("https://example.org/"))), Verdict::Open);
-    EXPECT_EQ(verdict(desktop(QStringLiteral("site.desktop"), QStringLiteral("Link"), QStringLiteral("HTTP://example.org/a"))), Verdict::Open);
-    EXPECT_EQ(verdict(desktop(QStringLiteral(".directory"), QStringLiteral("Directory"))), Verdict::Open);
+    const Facts site = desktop(QStringLiteral("site.desktop"), QStringLiteral("Link"), QStringLiteral("https://example.org/"));
+    EXPECT_EQ(verdict(site), Verdict::OpenWebLinkInBrowser);
+    EXPECT_EQ(webLink(site), QUrl(QStringLiteral("https://example.org/")));
+    EXPECT_EQ(verdict(desktop(QStringLiteral("site.desktop"), QStringLiteral("Link"), QStringLiteral("HTTP://example.org/a"))), Verdict::OpenWebLinkInBrowser);
+    // The attack of the review: a link to a .msi on a server is still only an address for the browser (never KIO's fetch-and-run).
+    EXPECT_EQ(verdict(desktop(QStringLiteral("invoice.desktop"), QStringLiteral("Link"), QStringLiteral("http://127.0.0.1:8000/payload.msi"))),
+              Verdict::OpenWebLinkInBrowser);
+    Facts ambiguous = site;
+    ambiguous.desktopAmbiguous = true;
+    EXPECT_EQ(verdict(ambiguous), Verdict::RefuseLauncher) << "a repeated key (KConfig keeps the last one): refused";
+    EXPECT_FALSE(webLink(ambiguous).isValid());
+    EXPECT_EQ(verdict(desktop(QStringLiteral(".directory"), QStringLiteral("Directory"))), Verdict::RefuseLauncher) << "never handed to KIO";
+    EXPECT_EQ(verdict(desktop(QStringLiteral("ftp.desktop"), QStringLiteral("Link"), QStringLiteral("ftp://example.org/x"))), Verdict::RefuseLauncher);
+    EXPECT_EQ(verdict(desktop(QStringLiteral("js.desktop"), QStringLiteral("Link"), QStringLiteral("javascript:alert(1)"))), Verdict::RefuseLauncher);
+    EXPECT_EQ(verdict(desktop(QStringLiteral("bad.desktop"), QStringLiteral("Link"), QStringLiteral("https://exa mple.org/"))), Verdict::RefuseLauncher);
+}
+
+TEST(LaunchGuardVerdict, TypesThatRunWhenOpenedAreRefusedWithoutThePermissionBit)
+{
+    for (const char *mime : {"application/java-archive", "application/x-java-archive", "application/x-java-jnlp-file", "application/vnd.appimage",
+                             "application/x-iso9660-appimage", "application/x-powershell", "text/vbscript", "text/vbscript.encode",
+                             "text/x-ms-regedit", "application/hta", "application/x-dosexec"})
+        EXPECT_EQ(verdict(localFile(QStringLiteral("item"), QLatin1String(mime))), Verdict::RefuseProgram) << mime;
+    // By name too, whatever the content says (the handler can follow the name).
+    for (const char *name : {"tool.jar", "start.jnlp", "App.AppImage", "fix.ps1", "a.VBS", "a.vbe", "keys.reg", "setup.MSI", "x.exe", "x.com",
+                             "x.scr", "x.lnk", "x.bat", "x.cmd", "x.wsf", "x.hta", "x.cpl"})
+        EXPECT_EQ(verdict(localFile(QLatin1String(name), QStringLiteral("text/plain"))), Verdict::RefuseProgram) << name;
 }
 
 TEST(LaunchGuardVerdict, ADesktopNameIsALauncherWhateverTheType)
@@ -117,28 +143,36 @@ TEST(LaunchGuardVerdict, WindowsProgramsAreRefusedWithoutThePermissionBit)
     EXPECT_EQ(verdict(localFile(QStringLiteral("setup.msi"), QStringLiteral("application/x-msi"))), Verdict::RefuseProgram);
 }
 
-TEST(LaunchGuardVerdict, RemoteItemsAndFoldersGoToKio)
+TEST(LaunchGuardVerdict, RemoteItemsAreJudgedByName)
 {
-    Facts remote = desktop(QStringLiteral("t.desktop"), QStringLiteral("Application"));
-    remote.local = false;
-    EXPECT_EQ(verdict(remote), Verdict::Open) << "KIO opens remote launchers and scripts as text";
+    Facts remote;
+    remote.fileName = QStringLiteral("t.desktop");
+    EXPECT_EQ(verdict(remote), Verdict::RefuseLauncher) << "a desktop entry on a share is never handed to KIO";
+    remote.fileName = QStringLiteral("setup.msi");
+    EXPECT_EQ(verdict(remote), Verdict::RefuseProgram) << "KIO downloads it and runs the handler of its type";
+    remote.fileName = QStringLiteral("report.pdf");
+    EXPECT_EQ(verdict(remote), Verdict::Open);
     Facts folder = localFile(QStringLiteral("bin"), QStringLiteral("inode/directory"), {}, true);
     folder.regularFile = false;
     EXPECT_EQ(verdict(folder), Verdict::Open);
 }
 
-TEST(LaunchGuardParse, DesktopEntryGroupOnly)
+TEST(LaunchGuardParse, DesktopEntryGroupOnlyAndRepeatedKeysAreAmbiguous)
 {
-    QString type, url;
-    parseDesktopEntry("# c\n[Other]\nType=Link\n[Desktop Entry]\n Type = Application \nURL=x\nType=Link\n[Desktop Action a]\nURL=y\n", &type, &url);
-    EXPECT_EQ(type, QStringLiteral("Application")) << "the first Type of [Desktop Entry] wins";
-    EXPECT_EQ(url, QStringLiteral("x"));
-    parseDesktopEntry("[KDE Desktop Entry]\nType=Link\nURL[$e]=https://example.org\n", &type, &url);
-    EXPECT_EQ(type, QStringLiteral("Link"));
-    EXPECT_EQ(url, QStringLiteral("https://example.org"));
-    parseDesktopEntry("Type=Link\nURL=https://example.org\n", &type, &url);
-    EXPECT_TRUE(type.isEmpty()) << "keys outside the group do not count";
-    EXPECT_TRUE(url.isEmpty());
+    DesktopKeys k = parseDesktopEntry("# c\n[Other]\nType=Link\n[Desktop Entry]\n Type = Link \nURL=https://example.org\n[Desktop Action a]\nURL=y\n");
+    EXPECT_EQ(k.type, QStringLiteral("Link"));
+    EXPECT_EQ(k.url, QStringLiteral("https://example.org"));
+    EXPECT_FALSE(k.ambiguous) << "keys of other groups do not count";
+    // KConfig keeps the LAST value of a repeated key: any repetition is refused, in one group or across repeated groups.
+    EXPECT_TRUE(parseDesktopEntry("[Desktop Entry]\nType=Link\nURL=https://example.org\nType=Application\n").ambiguous);
+    EXPECT_TRUE(parseDesktopEntry("[Desktop Entry]\nType=Link\nURL=https://a.example\n[Desktop Entry]\nURL=https://b.example\n").ambiguous);
+    EXPECT_TRUE(parseDesktopEntry("[Desktop Entry]\nType=Link\nURL=https://a.example\nURL[$e]=https://b.example\n").ambiguous);
+    k = parseDesktopEntry("[KDE Desktop Entry]\nType=Link\nURL[$e]=https://example.org\n");
+    EXPECT_EQ(k.url, QStringLiteral("https://example.org"));
+    EXPECT_FALSE(k.ambiguous);
+    k = parseDesktopEntry("Type=Link\nURL=https://example.org\n");
+    EXPECT_TRUE(k.type.isEmpty()) << "keys outside the group do not count";
+    EXPECT_TRUE(k.url.isEmpty());
 }
 
 // DT-10 on real files: t.desktop (Type=Application, Exec=touch …), once executable, once not, never opens.
@@ -151,7 +185,17 @@ TEST_F(Files, Dt10LauncherRefusedWithAndWithoutPermission)
     // The same content under another name is a document by name: KIO sees it as text too.
     const Facts renamed = inspect(QUrl::fromLocalFile(write(QStringLiteral("readme.txt"), kApp, false)));
     EXPECT_EQ(verdict(renamed), Verdict::Open) << renamed.mimeType.toStdString();
-    EXPECT_EQ(of(write(QStringLiteral("site.desktop"), "[Desktop Entry]\nType=Link\nURL=https://example.org/\n", false)), Verdict::Open);
+    EXPECT_EQ(of(write(QStringLiteral("site.desktop"), "[Desktop Entry]\nType=Link\nURL=https://example.org/\n", false)), Verdict::OpenWebLinkInBrowser);
+    // The review's file: a web link naming the application KIO should run the download with. Only the address is used.
+    const Facts lastOpened = inspect(QUrl::fromLocalFile(write(QStringLiteral("payload.desktop"),
+        "[Desktop Entry]\nType=Link\nURL=http://127.0.0.1:8000/payload.msi\nX-KDE-LastOpenedWith=attacker-chosen-app\n", false)));
+    EXPECT_EQ(verdict(lastOpened), Verdict::OpenWebLinkInBrowser);
+    EXPECT_EQ(webLink(lastOpened), QUrl(QStringLiteral("http://127.0.0.1:8000/payload.msi")));
+    EXPECT_EQ(of(write(QStringLiteral("twice.desktop"), "[Desktop Entry]\nType=Link\nURL=https://example.org/\nURL=file:///usr/bin/true\n", false)),
+              Verdict::RefuseLauncher) << "KConfig would use the last URL";
+    EXPECT_EQ(of(write(QStringLiteral("big.desktop"), "[Desktop Entry]\nType=Link\nURL=https://example.org/\n#" + QByteArray(70 * 1024, 'x') + "\n", false)),
+              Verdict::RefuseLauncher) << "longer than what is read: keys past the end are unknown";
+    EXPECT_EQ(of(write(QStringLiteral(".directory"), "[Desktop Entry]\nIcon=folder-red\n", false)), Verdict::RefuseLauncher);
     EXPECT_EQ(of(write(QStringLiteral("file.desktop"), "[Desktop Entry]\nType=Link\nURL=file:///usr/bin/true\n", false)), Verdict::RefuseLauncher);
     const QString unreadable = write(QStringLiteral("locked.desktop"), "[Desktop Entry]\nType=Link\nURL=https://example.org/\n", false);
     ASSERT_TRUE(QFile::setPermissions(unreadable, QFileDevice::Permissions()));
@@ -167,6 +211,13 @@ TEST_F(Files, ScriptsAndProgramsOnDisk)
     EXPECT_EQ(of(write(QStringLiteral("noext"), "#!/usr/bin/env python3\nprint(1)\n", true)), Verdict::RefuseProgram);
     EXPECT_EQ(of(write(QStringLiteral("notes.txt"), "just text\n", true)), Verdict::Open);
     EXPECT_EQ(of(write(QStringLiteral("setup.exe"), QByteArray("MZ\x90\x00", 4) + QByteArray(60, '\0'), false)), Verdict::RefuseProgram);
+    EXPECT_EQ(of(write(QStringLiteral("tool.jar"), QByteArray("PK\x03\x04", 4) + QByteArray(60, '\0'), false)), Verdict::RefuseProgram);
+    EXPECT_EQ(of(write(QStringLiteral("App.AppImage"), QByteArray("\x7f" "ELF", 4) + QByteArray(60, '\0'), false)), Verdict::RefuseProgram)
+        << "an AppImage without the permission bit";
+    EXPECT_EQ(of(write(QStringLiteral("fix.ps1"), "Remove-Item x\n", false)), Verdict::RefuseProgram);
+    EXPECT_EQ(of(write(QStringLiteral("a.vbs"), "MsgBox 1\n", false)), Verdict::RefuseProgram);
+    EXPECT_EQ(of(write(QStringLiteral("keys.reg"), "Windows Registry Editor Version 5.00\n", false)), Verdict::RefuseProgram);
+    EXPECT_EQ(of(write(QStringLiteral("start.jnlp"), "<jnlp/>\n", false)), Verdict::RefuseProgram);
     // A real native program, copied and through a symbolic link (the link's target decides).
     QFile truebin(QStringLiteral("/usr/bin/true"));
     if (truebin.exists()) {

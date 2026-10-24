@@ -2656,6 +2656,10 @@
         <translation>L’ouverture de fichiers est désactivée dans cette session (GRASSFIELD_FILES_NO_LAUNCH).</translation>
     </message>
     <message>
+        <source>The web link was not opened: no default web browser is set.</source>
+        <translation>Le lien web n’a pas été ouvert&#xa0;: aucun navigateur web par défaut n’est défini.</translation>
+    </message>
+    <message>
         <source>The application is no longer installed.</source>
         <translation>L’application n’est plus installée.</translation>
     </message>
