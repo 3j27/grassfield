@@ -512,7 +512,10 @@ namespace {
         const auto holderOwner = holder ? gf::surfaces::ownerOf(holder) : gf::surfaces::SOwner{};
         fs->resetWindowFocus();
         if (holder && holderOwner.layer && !holderOwner.window && fs->surface() != holder)
-            fs->rawSurfaceFocus(holder); // the same surface again, no window: the keyboard holder truly untouched
+            // The same surface again, no window. Hyprland 0.56.2 returns from rawSurfaceFocus at once when the seat's
+            // keyboard is already on that surface (read from the binary: the comparison at the function's start): then
+            // nothing is set again and only the seat keeps the holder; otherwise the holder is the focus surface again.
+            fs->rawSurfaceFocus(holder);
         if (old && old->m_isMapped && old->m_workspace) {
             if (old->m_ruleApplicator)
                 old->m_ruleApplicator->propertiesChanged(Desktop::Rule::RULE_PROP_FOCUS);
@@ -1184,33 +1187,10 @@ namespace {
     // (keepActiveOffStrip); a menu (popup grab) of a strip window closes, as a click outside it would, so that its keys are
     // not lost; if the keyboard is still on a blocked window it goes to the front window of that workspace's active stage,
     // or nowhere.
-    // Where a key goes while an Exclusive layer is mapped, for the log (budgeted, FR24): the seat's keyboard focus, Hyprland's
-    // focus state and whether a keyboard device exists (a key must reach the layer; stages.sh 8c-8h).
-    void logKeyUnderLayer() {
-        const auto fs      = Desktop::focusState();
-        const auto seat    = gf::surfaces::keyboardFocus();
-        const auto state   = fs ? fs->surface() : nullptr;
-        const auto nameOf  = [](const SP<CWLSurfaceResource>& surface) -> std::string {
-            if (!surface)
-                return "nothing";
-            const auto owner = gf::surfaces::ownerOf(surface);
-            if (owner.layer)
-                return "layer " + owner.layer->m_namespace;
-            if (owner.window)
-                return std::format("window {:x}", addressOf(owner.window));
-            return "another surface";
-        };
-        const bool keyboard = g_pSeatManager && !g_pSeatManager->m_keyboard.expired();
-        gf::logRequest(Log::DEBUG, "stages: a key while an Exclusive layer is mapped: seat keyboard on {}, focus state on {}, window {:x}, keyboard device {}", nameOf(seat),
-                       nameOf(state), fs && fs->window() ? addressOf(fs->window()) : 0, keyboard ? "yes" : "no");
-    }
-
     void beforeKey() {
         auto& s = S();
         if (!s.on)
             return;
-        if (exclusiveLayerMapped())
-            logKeyUnderLayer();
         if (s.pendingSpace) { // the layer may have released the keyboard before the deferred focus ran
             s.pendingAttempt.cancel();
             applyPendingFocus("before a key");
