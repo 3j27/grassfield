@@ -89,10 +89,11 @@ does not check its gate.
 | menubar | close, openKind, keyboardWait, statusState, autohide, bridgeState | dev | `bridgeState` returns the focused app's menu titles |
 | widgets | status, addDesktop, clearDesktop | dev | `tests/visual/widgets-blur.sh`; `addDesktop`/`clearDesktop` change the saved placements |
 | controlcenter | transparency, appearance, reduceTransparency, reduceMotion | dev | persisted settings changes |
+| controlcenter | state | dev | `tests/visual/flow-quicksettings.sh`, `flow-settings.sh`: what the shell applies (appearance, transparency, DND, Night Shift availability); read-only |
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
-| dock | pinned, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, stack, addfolder | fixtures | visual tests; `click` launches an app; `addfolder` changes `dock.folders` |
+| dock | pinned, dragstate, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, stack, addfolder | fixtures | visual tests; `click` launches an app; `addfolder` changes `dock.folders` |
 | dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
 | osd | display, hide, layout, state | dev | OSD spoofing (`layout` feeds a keyboard layout event) |
 | volume | up, down, mute | action | volume keys |
@@ -125,9 +126,16 @@ macOS model: the screen always locks before sleep, and the lock never silently g
     running until its first sleep; `OnFailure=omarchy-sleep-lock.service` starts it after EVERY crash of
     grassfield-shell, not only at the start limit (systemd 254+ `RestartMode=normal`, the default: the unit passes through
     `failed` before each restart; a clean exit, SIGTERM or `qs kill`, ends `inactive` and does not trigger it).
+  - Logout (GF-081): `qs` exits 255 when the compositor goes away first, so every logout also fails the unit (255 stays a
+    failure: it is also the exit code of a config error). The gate therefore skips only when the session's own compositor
+    is certainly gone: its Wayland socket or its own Hyprland instance directory (never "some instance directory": stale
+    ones accumulate) is absent with a searchable parent and a well-formed path. Anything undecidable (unreadable runtime
+    directory, an over-long or odd name, a missing variable) arms the lock. The remaining race is on the safe side: if
+    the compositor has not yet removed its socket, a logout arms the lock, which is harmless. The session target is not
+    used: it still reads inactive when this unit starts at login. Test: `tests/security/sleep_lock_units.sh`.
   - It never talks to Omarchy's shell: in this session `/usr/lib/grassfield/omarchy-shims` is first in PATH, and its
     `omarchy-shell` stand-in answers `lock lock` by starting grassfield-shell again when it is not running
-    (`reset-failed`, then a start) and asking it to lock (`qs ipc -c grassfield call lock lock`: WlSessionLock +
+    (`reset-failed`, then a start) and asking it to lock (`qs ipc -p /usr/share/grassfield/shell call lock lock`: WlSessionLock +
     PamContext, no other locker), and `lock status` with `secure` = Hyprland lists `LOCK` on every monitor, `requested` =
     grassfield-shell's crash-recovery marker says `locked`. Every other call fails as Omarchy's wrapper does without its
     shell; nothing unlocks. Its clamshell step (`omarchy-hyprland-monitor-clamshell`, also called by Omarchy's wake
@@ -333,7 +341,7 @@ VERIFIED until run).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
 - Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
-  `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -c grassfield call lock lid` on every close
+  `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -p /usr/share/grassfield/shell call lock lid` on every close
   (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
   `tests/shell/lid.sh`). `Lock.lockOnLid()` locks at
   once, whether or not logind suspends (`HandleLidSwitchExternalPower=ignore`, a docked lid, a failed suspend), except

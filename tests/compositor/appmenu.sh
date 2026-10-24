@@ -45,8 +45,14 @@ inner() {
   local v=$1 out=$2
   local sock sig
   . "$root/scripts/dev/pidfile.sh"
-  dev_nested_target "$dev" || return 2
-  sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG
+  # The outer part hands this tree's nested instance in WAYLAND_DISPLAY/HYPRLAND_INSTANCE_SIGNATURE (for the clients),
+  # so the "never the owner's instance" comparison must use the environment the outer part itself was started with
+  # (GF_OUTER_SIG / GF_OUTER_WL), else dev_nested_target refuses the very instance it was given (GF-075).
+  read -r sock sig < <(
+    export HYPRLAND_INSTANCE_SIGNATURE=${GF_OUTER_SIG:-} WAYLAND_DISPLAY=${GF_OUTER_WL:-}
+    dev_nested_target "$dev" && echo "$DEV_NESTED_SOCK $DEV_NESTED_SIG"
+  )
+  [[ -n ${sock:-} && -n ${sig:-} ]] || return 2
   if [[ -z ${DBUS_SESSION_BUS_ADDRESS:-} || $DBUS_SESSION_BUS_ADDRESS == "${GF_OUTER_BUS:-}" ]]; then
     echo "inner: not on a private bus; refusing" >&2
     return 2
@@ -282,7 +288,8 @@ for v in "${variants[@]}"; do
   out=$run/$v
   mkdir -p "$out"
   t0=${EPOCHREALTIME/./}
-  GF_OUTER_BUS=${DBUS_SESSION_BUS_ADDRESS:-} WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+  GF_OUTER_BUS=${DBUS_SESSION_BUS_ADDRESS:-} GF_OUTER_SIG=${HYPRLAND_INSTANCE_SIGNATURE:-} GF_OUTER_WL=${WAYLAND_DISPLAY:-} \
+    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
     timeout 90 dbus-run-session --config-file="$private_bus_config" -- "$self" --inner "$v" "$out" >"$out/inner.log" 2>&1
   rc=$?
   sleep 0.5

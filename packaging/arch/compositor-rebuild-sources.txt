@@ -1,0 +1,11 @@
+# The sources the user's compositor rebuild is made from (grassfield-compositor-rebuild builds /usr/src/grassfield-compositor):
+# "<path in the repository> <path under /usr/src/grassfield-compositor>". The PKGBUILD installs exactly this list and
+# tests/shell/gates.sh configures a build from the same list, so the two cannot drift. The plugin only: no unit tests, no build
+# directory. cmake/VERSION holds the product version for cmake/GrassfieldVersion.cmake (the top-level VERSION of the
+# installed sources is the pacman source id, written by the PKGBUILD).
+compositor/CMakeLists.txt CMakeLists.txt
+compositor/abi-stamp.cmake abi-stamp.cmake
+compositor/src src
+compositor/protocols protocols
+cmake/GrassfieldVersion.cmake cmake/GrassfieldVersion.cmake
+VERSION cmake/VERSION

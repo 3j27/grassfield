@@ -9,7 +9,9 @@ end
 
 require("grassfield.cursor").apply()
 require("grassfield.looknfeel")
-require("grassfield.input")
+-- Pointer defaults: in the real session omarchy.lua applies them before the user's input.lua (GF-066); the nested dev
+-- session has no user files and applies them here.
+if _G.grassfield_dev then require("grassfield.input") end
 require("grassfield.windows")
 -- Omarchy's screen-share protection for password managers (SEC-01).
 require("grassfield.privacy")

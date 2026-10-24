@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
-project(grassfield-files VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/GrassfieldVersion.cmake) # VERSION at the repository root
+project(grassfield-files VERSION ${GF_VERSION_NUMERIC} LANGUAGES CXX)
+add_compile_definitions(GRASSFIELD_VERSION="${GF_VERSION}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,7 +35,6 @@ target_link_libraries(grassfield-files PRIVATE
     KF6::KIOCore KF6::KIOGui KF6::KIOWidgets KF6::CoreAddons KF6::Service KF6::Solid)
 target_compile_definitions(grassfield-files PRIVATE
     KF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00
-    GRASSFIELD_FILES_VERSION="${PROJECT_VERSION}"
     GRASSFIELD_FILES_QML_DIR="${CMAKE_INSTALL_PREFIX}/share/grassfield/files/qml")
 
 install(TARGETS grassfield-files RUNTIME DESTINATION bin)

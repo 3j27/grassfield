@@ -354,17 +354,19 @@ check "the shell's Dock rectangle for A (plugin log line)" $? "tile centre ${tx:
 dock_pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$dock_out" "$@" >>"$log" 2>&1; }
 # The Dock tile: the Trash moved half a pitch to the right (the centred Dock grew by one tile; same image at the new
 # slot), and the tile the shell named, left of it, holds something else than the Trash.
-if command -v magick >/dev/null && [[ $dock_out == "$out" ]]; then
+# Two distinct reasons for "not verified", reported as what they are (GF-120: the old message blamed ImageMagick 7,
+# which is installed, when the Dock was merely on another output than the captured one).
+if ! command -v magick >/dev/null; then
+  say "  Dock tile appeared: NOT VERIFIED (no 'magick' binary on PATH: ImageMagick 7 is required)"
+elif [[ $dock_out != "$out" ]]; then
+  say "  Dock tile appeared: NOT VERIFIED (the Dock is on $dock_out, the captured output is $out)"
+else
   crop() { echo "${icon}x${icon}+$(($1 - icon / 2))+$((tile_y - icon / 2))"; }
   ae() { magick compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 | cut -d' ' -f1 | cut -d. -f1; }
   trash_moved=$(ae "$run/before-minimize.png[$(crop $((tx + pitch / 2)))]" "$run/after-minimize.png[$(crop $((tx + pitch)))]")
   tile_vs_trash=$(ae "$run/after-minimize.png[$(crop "$tx")]" "$run/after-minimize.png[$(crop $((tx + pitch)))]")
   [[ $trash_moved =~ ^[0-9]+$ && $tile_vs_trash =~ ^[0-9]+$ ]] && ((trash_moved < icon * icon / 20 && tile_vs_trash > icon * icon / 10))
   check "Dock tile appeared at ($tx,$tile_y)" $? "Trash half a pitch right: $trash_moved px differ; tile vs Trash: $tile_vs_trash of $((icon * icon)) px differ"
-elif ! command -v magick >/dev/null; then
-  say "  Dock tile appeared: NOT VERIFIED (ImageMagick 7, the magick command, is not installed)"
-else
-  say "  Dock tile appeared: NOT VERIFIED (the Dock is on $dock_out; the captures before and after cover $out only)"
 fi
 say "  minimize animation: $(animation_ms "$to_minimized" minimized) (move to special:minimized -> minimized event)"
 contact_sheet min "$run/minimize-frames.png"

@@ -50,7 +50,7 @@ desc="the lock request is sent first, before the panel changes (logind may suspe
 check bash -c '[[ $(head -n 1 "$1/calls.log") == lock ]]' _ "$tmp"
 
 desc="the default lock command is the shell's lid entry point (lock lid), never an unlock or another locker"
-check bash -c 'grep -qx "LOCK_CMD=\${GRASSFIELD_LID_LOCK:-qs ipc -c grassfield call lock lid}" "$1"' _ "$root/packaging/bin/grassfield-lid"
+check bash -c 'grep -qx "LOCK_CMD=\${GRASSFIELD_LID_LOCK:-qs ipc -p /usr/share/grassfield/shell call lock lid}" "$1"' _ "$root/packaging/bin/grassfield-lid"
 
 desc="the lid switch is bound once: system.lua, not bindings.lua"
 check bash -c '[[ $(grep -c "switch:on:Lid Switch" "$1") == 1 ]] && ! grep -q "Lid Switch" "$2"' _ "$root/config/hypr/grassfield/system.lua" "$root/config/hypr/grassfield/bindings.lua"

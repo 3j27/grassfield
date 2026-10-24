@@ -1,5 +1,5 @@
 # ADR-0008: Menu bridge language and transport
-Status: Proposed · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 D4: global menus through `org_kde_kwin_appmenu`. The plugin implements the protocol server and learns, per
@@ -164,6 +164,14 @@ The change is defense in depth against same-uid apps; failure is bounded (T0 men
 - 2026-10-18 (integrator, closing the attribution work): any interpreter option before the script sends the peer to the
   shared `unknown` bucket (no per-interpreter option table: values were mistaken for scripts in review); KIO's 32-hex
   scope instance is stripped. Further attribution hardening is out of scope (residual risks accepted above).
+
+## Amendment 2026-10-23 (GF-080): the memory budget is PSS
+"Budget: <= 20 MB RSS" named neither a unit nor a metric, and the nested run printed 20,772 kB RSS against it. Decision: the
+budget is the bridge's **PSS** (proportional set size, `Pss` in `/proc/<pid>/smaps_rollup`) of at most **20 MiB (20480 kB)**,
+measured after the Qt reference app, a Qt/KDE app and Chromium have each been focused once. PSS divides the Qt and libc pages
+the bridge shares with the shell and other processes by their users, so it counts what the bridge adds to the machine; RSS is
+printed for trend only. `tests/integration/global_menus.sh` asserts it (a bridge whose smaps_rollup cannot be read fails).
+The hostile-application cap (`MemoryMax=256M`, `menu_bridge_memory.sh`) is a different limit and is unchanged.
 
 ## Amendment 2026-10-24: org.freedesktop.ScreenSaver idle inhibitors (GF-AUDIT-001 GF-016 residual)
 Context: applications that play video or present (VLC, Chromium and Electron apps, Steam, the GTK portal's Inhibit

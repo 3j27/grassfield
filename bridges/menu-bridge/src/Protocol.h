@@ -30,10 +30,15 @@
 
 #include <optional>
 
+#ifndef GRASSFIELD_VERSION
+#define GRASSFIELD_VERSION "unknown" // only a build without the VERSION file's definition
+#endif
+
 namespace gf::menubridge {
 
     inline constexpr char kProtocol[]      = "menu/1";
-    inline constexpr char kBridgeVersion[] = "0.1.0";
+    // The product version, from the VERSION file (cmake/GrassfieldVersion.cmake, build-direct.sh).
+    inline constexpr char kBridgeVersion[] = GRASSFIELD_VERSION;
 
     namespace limits {
         inline constexpr qsizetype kShellLine    = 4096; // bytes of one shell -> bridge line (newline excluded)

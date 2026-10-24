@@ -1,5 +1,5 @@
 # ADR-0010: Security modules design (lock, polkit, idle)
-Status: Proposed · Date: 2026-10-17 · Decider: owner · Requires opus reviewer PASS per change (R12)
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed) · Date: 2026-10-17 · Decider: owner · Requires opus reviewer PASS per change (R12)
 
 ## Context
 D2: grassfield-shell replaces omarchy-shell in the Grassfield session, including lock, polkit agent and

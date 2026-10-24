@@ -194,9 +194,11 @@ click_row() { # <regex>
 
 log_has() { grep -q -- "$2" "$1" 2>/dev/null; }
 
-shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shell.log; the polkit agent line is environmental)
+# shellcheck source=env_lines.sh
+. "$root/tests/integration/env_lines.sh" # ENV_LINES and filter_env_lines: the dev-only lines that are not issues (GF-035)
+shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shell.log), minus the environmental lines
   (($# > 0)) || set -- "$dev/shell.log"
-  grep -h -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$@" | grep -v -E "grassfield-polkit: not registered|quickshell.service.polkit" || true
+  grep -h -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$@" | filter_env_lines || true
 }
 
 start_session() { # [nested-up options]
@@ -291,7 +293,15 @@ before=$(windows_of "$cr_pid")
 click_row '^New [Ww]indow$'
 check "pointer click on File > New window opened a window ($before -> 2)" wait_for 10 has_window "$cr_pid" 2
 say "  Chromium windows now: $(windows_of "$cr_pid")"
-say "  bridge resources (ADR-0008 budget: <= 20 MB RSS): $(ps -o rss=,time= -p "$(cat "$dev/menu-bridge.pid")" | awk '{printf "RSS %d kB, CPU time %s", $1, $2}')"
+# GF-080: the budget metric is PSS (proportional set size, /proc/PID/smaps_rollup "Pss"): the bridge shares its Qt and libc
+# pages with the shell and other processes, so RSS counts memory it does not own; PSS divides shared pages by their users.
+# Budget (ADR-0008, amendment 2026-10-23): PSS <= 20 MiB = 20480 kB with the Qt reference app, a Qt/KDE app and Chromium
+# mapped; RSS is printed for trend only. A bridge pid without smaps_rollup (not readable) is a failure, not a pass.
+bridge_pid=$(cat "$dev/menu-bridge.pid")
+pss_kb() { awk "/^Pss:/ {print \$2; exit}" "/proc/$1/smaps_rollup" 2>/dev/null; }
+bridge_pss=$(pss_kb "$bridge_pid")
+say "  bridge resources (ADR-0008 budget: PSS <= 20480 kB): PSS ${bridge_pss:-unreadable} kB; $(ps -o rss=,time= -p "$bridge_pid" | awk "{printf \"RSS %d kB (trend only), CPU time %s\", \$1, \$2}")"
+check "bridge PSS ${bridge_pss:-unreadable} kB is within the 20480 kB budget (GF-080)" test -n "${bridge_pss:-}" -a "${bridge_pss:-999999}" -le 20480
 
 # ---- Qt Linguist: a third-party Qt app (qt6-tools), master-prompt §12 ----
 say ""
@@ -361,7 +371,7 @@ check "$gtk_app window mapped" wait_for 20 has_window "$gtk_pid"
 gtk_addr=$(address_of "$gtk_pid")
 check "menu bar keeps T0 menus for $gtk_app (no bridge titles, Window present)" wait_for 10 menus_are "$gtk_addr" '.menus == [] and ([.bar[].kind] | index("window")) != null and ([.bar[].kind] | index("bridge")) == null'
 say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
-say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-gtk4 "$output")"
+say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-t0-foot "$output")"
 
 cleanup_apps
 issues=$(shell_qml_issues "$run/shell-a-before-restart.log" "$dev/shell.log")

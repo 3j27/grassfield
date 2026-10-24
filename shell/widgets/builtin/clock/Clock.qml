@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Grassfield.Ui
+import qs.services
 import qs.widgets
 
 // Clock widget: digital time and date (small); analog face drawn in QML plus digital time (medium, large).
@@ -9,7 +10,7 @@ WidgetBase {
     id: root
 
     readonly property bool analog: !isSmall
-    readonly property date now: clock.date
+    readonly property date now: FixedTime.date(clock.date)
     readonly property string timeText: Qt.locale().toString(now, Qt.locale().timeFormat(Locale.ShortFormat))
     readonly property string dateText: Qt.locale().toString(now, "dddd d MMMM")
 

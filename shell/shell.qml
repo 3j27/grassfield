@@ -239,6 +239,19 @@ ShellRoot {
         }
     }
 
+    // GF-083: a package update leaves the old shell and compositor plugin running until the next login (macOS: "Restart to
+    // finish installing"). One notice per run; nothing is shown while the versions are unknown.
+    UpdateNotice {
+        id: updateNotice
+        property bool announced: false
+        onUpdatePendingChanged: {
+            if (updatePending && !announced) {
+                announced = true;
+                Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version."));
+            }
+        }
+    }
+
     Connections {
         target: SettingsApp
 
@@ -320,5 +333,5 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened).
-    Component.onCompleted: console.info("grassfield-shell: started, plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max)
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max)
 }
