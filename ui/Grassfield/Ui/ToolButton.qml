@@ -47,7 +47,7 @@ T.ToolButton {
     }
 
     // Return and Enter act like Space (which the template handles itself); a hidden or disabled button that still holds the
-    // focus swallows all three.
+    // focus swallows them (Space, Return, Enter, Select).
     Keys.onPressed: event => {
         const activation = ActivationKeys.activation(event.key);
         if (!root.visible || !root.enabled) {

@@ -80,6 +80,13 @@ TestCase {
             }
         }
 
+        LinkText {
+            id: link
+            text: "licence"
+            target: "https://example.org"
+            onActivated: tc.clicks++
+        }
+
         CheckBox {
             id: check
             text: "Remember"
@@ -434,6 +441,28 @@ TestCase {
         button.visible = true;
         button.Accessible.toggleAction();
         compare(tc.clicks, 1);
+    }
+
+    // A link activates on Return, Enter, Space, Select and an accessibility press; hidden or disabled it does none of them.
+    function test_aHiddenOrDisabledLinkNeverActivates() {
+        link.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Select);
+        link.Accessible.pressAction();
+        compare(tc.clicks, 3, "a shown link acts on Return, Select and an accessibility press");
+        tc.clicks = 0;
+        link.visible = false;
+        link.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Space);
+        keyClick(Qt.Key_Select);
+        link.Accessible.pressAction();
+        compare(tc.clicks, 0, "a hidden link does nothing");
+        link.visible = true;
+        link.enabled = false;
+        link.Accessible.pressAction();
+        compare(tc.clicks, 0, "nor a disabled one");
+        link.enabled = true;
     }
 
     function test_reduceMotionCapsTheSwitchAnimation() {

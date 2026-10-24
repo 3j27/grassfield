@@ -41,7 +41,7 @@ T.Control {
 
     Keys.onPressed: event => {
         if (!root.visible || !root.enabled) {
-            event.accepted = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+            event.accepted = ActivationKeys.navigation(event.key);
             return;
         }
         if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) {

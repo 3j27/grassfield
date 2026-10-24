@@ -12,6 +12,14 @@ function activation(key) {
     return ACTIVATION.indexOf(key) >= 0;
 }
 
+// Keys a hidden or disabled control never swallows, whatever it holds: Tab and Backtab move the focus on, Escape reaches the
+// dialog around it (the keyboard is never trapped).
+var PROPAGATING = [0x01000001, 0x01000002, 0x01000000]; // Tab, Backtab, Escape
+
+function propagates(key) {
+    return PROPAGATING.indexOf(key) >= 0;
+}
+
 function navigation(key) {
     return ARROWS.indexOf(key) >= 0;
 }

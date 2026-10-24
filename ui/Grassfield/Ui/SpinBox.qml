@@ -23,7 +23,7 @@ T.SpinBox {
     // Page Up / Page Down step by ten, as AppKit.
     Keys.onPressed: event => {
         if (!root.visible || !root.enabled) {
-            event.accepted = event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown || event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+            event.accepted = !ActivationKeys.propagates(event.key);
             return;
         }
         if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
@@ -34,10 +34,16 @@ T.SpinBox {
         }
     }
 
-    // A hidden or disabled spin box never takes input, whoever gives it the focus: no key (the field swallows them too, below),
-    // no assistive-technology increase. It keeps the focus while it is hidden in the middle of an edit (moving it away would
-    // commit the typed text): the edit stays as typed and only an explicit action, Return or leaving the field when it is
-    // shown again, commits it. (FocusGuard is not used for that reason.)
+    // A hidden or disabled spin box never takes input, whoever gives it the focus: every key but Tab, Backtab and Escape is
+    // swallowed (press and release), no assistive-technology increase. It hands the focus on (FocusGuard) and the edit in
+    // progress commits as on any focus-out (AppKit: the field resigns first responder).
+    FocusGuard {}
+
+    Keys.onReleased: event => {
+        if ((!root.visible || !root.enabled) && !ActivationKeys.propagates(event.key))
+            event.accepted = true;
+    }
+
     Accessible.onIncreaseAction: if (root.visible && root.enabled) {
         root.increase();
         root.valueModified();
@@ -62,15 +68,19 @@ T.SpinBox {
         selectedTextColor: Appearance.highlightText
         horizontalAlignment: Qt.AlignLeft
         verticalAlignment: Qt.AlignVCenter
-        readOnly: !root.editable
+        readOnly: !root.editable || !root.visible || !root.enabled  // also refuses the accessibility InsertText
         validator: root.validator
         inputMethodHints: Qt.ImhFormattedNumbersOnly
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
         Accessible.role: Accessible.EditableText
         Accessible.name: root.accessibleName
-        // Never takes input while hidden or disabled (a key typed into it, Return included, is swallowed).
+        // Never takes input while hidden or disabled: every key but Tab, Backtab and Escape is swallowed, on press and on release.
         Keys.onPressed: event => {
-            if (!root.visible || !root.enabled)
+            if ((!root.visible || !root.enabled) && !ActivationKeys.propagates(event.key))
+                event.accepted = true;
+        }
+        Keys.onReleased: event => {
+            if ((!root.visible || !root.enabled) && !ActivationKeys.propagates(event.key))
                 event.accepted = true;
         }
 

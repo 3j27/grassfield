@@ -39,7 +39,7 @@ T.RadioButton {
     }
 
     Keys.onPressed: event => {
-        const arrows = event.key === Qt.Key_Down || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Left;
+        const arrows = ActivationKeys.navigation(event.key);
         if (!root.visible || !root.enabled) {
             if (arrows || ActivationKeys.activation(event.key))
                 event.accepted = true;
