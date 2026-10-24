@@ -1018,7 +1018,7 @@ ListView {
                             live: row.live
                             body: Notifications.bodyFor(item.bodyHtml, item.appName)
                             timeText: Notifications.timeFor(item.time)
-                            iconSource: Notifications.iconSource(Notifications.imageFor(item.image, item.appName), item.appIcon)
+                            iconSource: Notifications.iconSource(Notifications.imageFor(item.image, item.appName), Notifications.appIconFor(item.appIcon, item.appName))
                             onActionTriggered: actionId => {
                                 if (item.actable(rowContent))
                                     Notifications.invokeAction(item.key, actionId);

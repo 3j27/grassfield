@@ -143,6 +143,14 @@ function imageShown(shown, image) {
     return shown ? image : "";
 }
 
+// The app icon: with previews hidden only a plain theme name stays (no path, URL or `..`: `notify-send -i /path/photo.jpg` is a
+// picture of the sender's choosing, so the icon falls back to the generic one); shown as sent otherwise.
+function appIconShown(shown, appIcon) {
+    if (shown || typeof appIcon !== "string")
+        return shown ? appIcon : "";
+    return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(appIcon) && appIcon.indexOf("..") < 0 ? appIcon : "";
+}
+
 // The sender's action buttons: shown once the content may be shown (macOS), none while previews are hidden.
 function actionsShown(shown, actionsJson) {
     return shown ? actionsJson : "[]";

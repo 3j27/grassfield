@@ -159,6 +159,10 @@ Singleton {
         return NotificationPrefs.imageShown(previewShown(appName), image);
     }
 
+    function appIconFor(appIcon: string, appName: string): string {
+        return NotificationPrefs.appIconShown(previewShown(appName), appIcon);
+    }
+
     function actionsFor(actionsJson: string, appName: string): string {
         return NotificationPrefs.actionsShown(previewShown(appName), actionsJson);
     }

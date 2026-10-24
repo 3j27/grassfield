@@ -78,6 +78,19 @@ TestCase {
         compare(NotificationPrefs.actionsShown(true, "[{\"id\":\"a\"}]"), "[{\"id\":\"a\"}]");
     }
 
+    function test_hiddenPreviewKeepsOnlyAPlainThemeAppIcon() {
+        compare(NotificationPrefs.appIconShown(true, "/home/u/photo.jpg"), "/home/u/photo.jpg");
+        compare(NotificationPrefs.appIconShown(false, "/home/u/photo.jpg"), "");
+        compare(NotificationPrefs.appIconShown(false, "file:///tmp/p.png"), "");
+        compare(NotificationPrefs.appIconShown(false, "image://x/y"), "");
+        compare(NotificationPrefs.appIconShown(false, "../secret"), "");
+        compare(NotificationPrefs.appIconShown(false, "a..b"), "");
+        compare(NotificationPrefs.appIconShown(false, "org.mozilla.firefox"), "org.mozilla.firefox");
+        compare(NotificationPrefs.appIconShown(false, "mail-unread"), "mail-unread");
+        compare(NotificationPrefs.appIconShown(false, ""), "");
+        compare(NotificationPrefs.appIconShown(false, undefined), "");
+    }
+
     function test_appsToList() {
         compare(NotificationPrefs.appsToList(["Zed", "mail", "Alpha"], list), ["Alpha", "Mail", "Signal", "Zed"]);
         compare(NotificationPrefs.appsToList(undefined, []), []);

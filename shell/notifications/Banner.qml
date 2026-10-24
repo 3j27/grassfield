@@ -78,7 +78,7 @@ Item {
             live: root.nid >= 0
             body: Notifications.bodyFor(root.bodyHtml, root.appName)
             timeText: Notifications.timeFor(root.time)
-            iconSource: Notifications.iconSource(Notifications.imageFor(root.image, root.appName), root.appIcon)
+            iconSource: Notifications.iconSource(Notifications.imageFor(root.image, root.appName), Notifications.appIconFor(root.appIcon, root.appName))
             onActionTriggered: actionId => Notifications.invokeAction(root.key, actionId)
         }
 
