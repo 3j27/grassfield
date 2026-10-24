@@ -71,6 +71,13 @@ TestCase {
         compare(shown.body, "text");
     }
 
+    function test_hiddenPreviewShowsNoImageAndNoSenderActions() {
+        compare(NotificationPrefs.imageShown(false, "file:///photo.png"), "");
+        compare(NotificationPrefs.imageShown(true, "file:///photo.png"), "file:///photo.png");
+        compare(NotificationPrefs.actionsShown(false, "[{\"id\":\"reply\",\"text\":\"Reply to Anna\"}]"), "[]");
+        compare(NotificationPrefs.actionsShown(true, "[{\"id\":\"a\"}]"), "[{\"id\":\"a\"}]");
+    }
+
     function test_appsToList() {
         compare(NotificationPrefs.appsToList(["Zed", "mail", "Alpha"], list), ["Alpha", "Mail", "Signal", "Zed"]);
         compare(NotificationPrefs.appsToList(undefined, []), []);

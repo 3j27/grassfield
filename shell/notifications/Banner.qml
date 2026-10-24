@@ -74,11 +74,11 @@ Item {
             summary: Notifications.summaryFor(root.summary, root.appName)
             appName: root.appName
             urgency: root.urgency
-            actionsJson: root.actionsJson
+            actionsJson: Notifications.actionsFor(root.actionsJson, root.appName)
             live: root.nid >= 0
             body: Notifications.bodyFor(root.bodyHtml, root.appName)
             timeText: Notifications.timeFor(root.time)
-            iconSource: Notifications.iconSource(root.image, root.appIcon)
+            iconSource: Notifications.iconSource(Notifications.imageFor(root.image, root.appName), root.appIcon)
             onActionTriggered: actionId => Notifications.invokeAction(root.key, actionId)
         }
 

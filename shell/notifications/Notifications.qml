@@ -154,6 +154,15 @@ Singleton {
         return NotificationPrefs.display(previewShown(appName), "", bodyHtml, appName, qsTr("Notification")).body;
     }
 
+    // The sender's picture and action buttons are previews too: hidden with the title and the text.
+    function imageFor(image: string, appName: string): string {
+        return NotificationPrefs.imageShown(previewShown(appName), image);
+    }
+
+    function actionsFor(actionsJson: string, appName: string): string {
+        return NotificationPrefs.actionsShown(previewShown(appName), actionsJson);
+    }
+
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the
     // UI falls back to the bell tile without asking Qt for a missing icon.
     function iconSource(image: string, appIcon: string): string {

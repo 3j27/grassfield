@@ -137,3 +137,13 @@ function display(shown, summary, body, appName, generic) {
         return {title: summary, body: body};
     return {title: typeof appName === "string" && appName !== "" ? appName : generic, body: generic};
 }
+
+// The sender's picture (contact photo, attachment): with previews hidden only the app icon shows, so no image.
+function imageShown(shown, image) {
+    return shown ? image : "";
+}
+
+// The sender's action buttons: shown once the content may be shown (macOS), none while previews are hidden.
+function actionsShown(shown, actionsJson) {
+    return shown ? actionsJson : "[]";
+}

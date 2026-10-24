@@ -1014,11 +1014,11 @@ ListView {
                             summary: Notifications.summaryFor(item.summary, item.appName)
                             appName: item.appName
                             urgency: item.urgency
-                            actionsJson: item.actionsJson
+                            actionsJson: Notifications.actionsFor(item.actionsJson, item.appName)
                             live: row.live
                             body: Notifications.bodyFor(item.bodyHtml, item.appName)
                             timeText: Notifications.timeFor(item.time)
-                            iconSource: Notifications.iconSource(item.image, item.appIcon)
+                            iconSource: Notifications.iconSource(Notifications.imageFor(item.image, item.appName), item.appIcon)
                             onActionTriggered: actionId => {
                                 if (item.actable(rowContent))
                                     Notifications.invokeAction(item.key, actionId);
