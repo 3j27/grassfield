@@ -84,6 +84,8 @@ write_report() { # NAME EXIT LOG
       echo "- verdict: FAIL (exit $rc)"
     elif ((skip + nv + proxy > 0)); then
       echo "- verdict: exit 0 with caveats (SKIP $skip, NOT VERIFIED $nv, PROXY $proxy): not a measured pass of the gate"
+    elif ((pass == 0)); then
+      echo "- verdict: NOT VERIFIED (exit 0 but the log has no PASS line: nothing in it says that anything was measured)"
     else
       echo "- verdict: measured pass (no SKIP, NOT VERIFIED or PROXY line)"
     fi

@@ -98,7 +98,24 @@ desc="...nor in the gate report or the archive copied from it"
 check bash -c '! grep -rq "abc123SECRET\|Bearer" "$1/runs" "$1/archive"' _ "$tmp"
 out=$(COREDUMPCTL="$tmp/does-not-exist" python3 -I "$root/scripts/dev/coredump-summary.py")
 desc="coredump-summary: without coredumpctl it says so and exits 0"
-check grep -q "^coredumps: coredumpctl unavailable" <<<"$out"
+check grep -q "^coredumps: unknown (coredumpctl unavailable" <<<"$out"
+# GF-082/GF-036 review: no access is "unknown", never "none"; a command that measures nothing is NOT VERIFIED.
+printf '#!/bin/sh\necho "Failed to acquire bus: Operation not permitted" >&2\nexit 1\n' >"$tmp/coredumpctl-nobus"
+printf '#!/bin/sh\necho "No coredumps found." >&2\nexit 1\n' >"$tmp/coredumpctl-none"
+chmod +x "$tmp/coredumpctl-nobus" "$tmp/coredumpctl-none"
+out=$(COREDUMPCTL="$tmp/coredumpctl-nobus" python3 -I "$root/scripts/dev/coredump-summary.py")
+desc="coredump-summary: no access to the journal or bus is 'unknown (no access)', not 'none'"
+check bash -c 'grep -q "^coredumps: unknown (no access to the journal" <<<"$1" && ! grep -q "none" <<<"$1"' _ "$out"
+out=$(COREDUMPCTL="$tmp/coredumpctl-none" python3 -I "$root/scripts/dev/coredump-summary.py")
+desc="coredump-summary: coredumpctl's own 'No coredumps found' is 'none'"
+check grep -q "^coredumps: none since" <<<"$out"
+GATE_STAMP=20261023T130500Z bash "$gr" demo-silent -- true >/dev/null 2>&1
+desc="a gate command that prints nothing (a silent true) is NOT VERIFIED, not a measured pass"
+check grep -q "^- verdict: NOT VERIFIED (exit 0 but the log has no PASS line" "$tmp/runs/20261023T130500Z-demo-silent.md"
+printf '#!/bin/sh\necho "PASS: a"\n' >"$tmp/measures.sh"; chmod +x "$tmp/measures.sh"
+GATE_STAMP=20261023T130600Z bash "$gr" demo-measured -- "$tmp/measures.sh" >/dev/null 2>&1
+desc="a gate command with a PASS line and no caveat is a measured pass"
+check grep -q "^- verdict: measured pass" "$tmp/runs/20261023T130600Z-demo-measured.md"
 GATE_STAMP=20261023T130000Z COREDUMPCTL="$tmp/coredumpctl" bash "$gr" demo-dump -- true >/dev/null 2>&1
 desc="a gate run's report names the dumps made during the run and keeps the details next to the log"
 check bash -c 'grep -q -- "^- coredumps: coredumps since .*: 2" "$1" && grep -q "GRASSFIELD pid 4242" "$2"' _ "$tmp/runs/20261023T130000Z-demo-dump.md" "$tmp/runs/20261023T130000Z-demo-dump.coredumps"

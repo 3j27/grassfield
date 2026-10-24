@@ -76,16 +76,22 @@ def main():
     try:
         listed = run([ctl, "--no-pager", "--json=short", "--since", args.since, "list"])
     except (OSError, subprocess.TimeoutExpired) as e:
-        print(f"coredumps: coredumpctl unavailable ({type(e).__name__}); nothing attributed")
+        print(f"coredumps: unknown (coredumpctl unavailable: {type(e).__name__})")
         return 0
     if listed.returncode != 0:
-        reason = clean((listed.stderr or "no dumps").strip().splitlines()[0] if (listed.stderr or "").strip() else "no dumps")
-        print(f"coredumps: none since {args.since} ({reason})")
+        err = (listed.stderr or "") + (listed.stdout or "")
+        reason = clean(err.strip().splitlines()[0]) if err.strip() else "no message"
+        # Only coredumpctl's own "No coredumps found" is "none". Anything else (no bus, no journal access, a sandbox) says
+        # nothing about dumps: it must never read as a clean run.
+        if "no coredumps found" in err.lower():
+            print(f"coredumps: none since {args.since}")
+        else:
+            print(f"coredumps: unknown (no access to the journal: {reason})")
         return 0
     try:
         dumps = json.loads(listed.stdout or "[]")
     except ValueError:
-        print("coredumps: coredumpctl list output not readable; nothing attributed")
+        print("coredumps: unknown (coredumpctl list output not readable)")
         return 0
     if not isinstance(dumps, list):
         dumps = []
