@@ -25,6 +25,13 @@ namespace gf::gfc {
     inline constexpr std::string_view kVersion        = "gfc/1";
     inline constexpr std::string_view kEventName      = "grassfield"; // socket2 event name
     inline constexpr std::string_view kHyprctlCommand = "grassfield"; // `hyprctl grassfield`
+    // `hyprctl grassfield-stages`: the full Stages state (the `stages` event is only a change notice, ADR-0007 amendment
+    // 2026-10-24).
+    inline constexpr std::string_view kHyprctlStagesCommand = "grassfield-stages";
+    // Hyprland 0.56.2 cuts the data of a socket2 event at 1024 bytes (CEventManager::formatEvent: the payload view is
+    // min(size, 0x400), then "{}>>{}\n"; read from the binary), so every gfc/1 event must stay below it whatever the number
+    // of windows or monitors. The request socket (`hyprctl`) has no such limit.
+    inline constexpr size_t kMaxEventBytes = 1024;
     inline constexpr std::string_view kLuaNamespace   = "grassfield"; // hl.plugin.grassfield
     inline constexpr std::string_view kLuaHello       = "hello";      // hl.plugin.grassfield.hello(): re-posts capabilities
     inline constexpr std::string_view kLuaMinimize    = "minimize";   // hl.plugin.grassfield.minimize(address, x, y, w, h)

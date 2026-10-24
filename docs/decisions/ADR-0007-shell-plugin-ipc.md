@@ -99,7 +99,10 @@ The block below is the contract of record for event types, their fields, closed 
 prose above gives the reasons. `tests/ci/gfc_parity.py` (`just check-contracts`) fails when it differs from
 `compositor/src` (the JSON builders and `core/Protocol.hpp`) or when the shell reads something the plugin never sends.
 Every event also carries `v` and `type`. Nested fields are flattened. `version` is only in the `hyprctl grassfield` reply;
-`error` is that reply's failure form. Change the block in the same commit as the code.
+`error` is that reply's failure form. `stages` lists the fields of the event (a change notice: `gen`, `on`, `reason`) and
+of the `hyprctl grassfield-stages` reply (the state: the same plus `monitors` and below); `frames` and `frames-recording`
+are the replies of `hyprctl grassfield-frames` / `grassfield-frames-start`, never events. Change the block in the same
+commit as the code.
 
 ```gfc1
 event capabilities: features version
@@ -109,7 +112,7 @@ event restored: address
 event appmenu: address service path pid
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
-event stages: on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+event stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
 event frames: clock marks monitors name presented refreshHz renders t total unit what
 event frames-recording: ms recording
 event error:
@@ -132,6 +135,27 @@ Spike S2 (2026-10-17, nested Hyprland 0.56.2, Quickshell 0.3.1):
   `rawEvent grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}`.
 - `hyprctl grassfield` returns the capabilities JSON plus a trailing `"version"` member (the event is unchanged).
 
+## Amendment 2026-10-24: events stay under Hyprland's 1024-byte socket2 limit; the Stages state is a request
+Found in the integrator's nested run on main 8b0db19: 22 `stages` events cut at exactly 1024 bytes of data (17 bytes of
+timestamp, `grassfield>>`, then 1024 bytes of JSON), so the test's jq and the shell's strip got broken JSON with about ten
+windows under Stages. Hyprland 0.56.2 cuts every socket2 event's data at 1024 bytes: `CEventManager::formatEvent` passes
+`min(data.size(), 0x400)` bytes to `std::format("{}>>{}\n")` and turns newlines into spaces (read from the binary). The
+request socket has no such limit (a `hyprctl` reply is written whole).
+- Every gfc/1 event has a bounded size under that limit (gtest `Protocol.EveryEventStaysUnderHyprlandsSocket2Limit`, at the
+  worst case): capabilities (every feature) about 300 bytes; minimize-request, minimized, restored 70; appmenu 609 (service
+  and path are validated to at most 255 bytes of characters that need no escaping); overview 103; overview-focus 188.
+- `stages` grew with every window (about 25 bytes per window, 70 with a tile rect, plus the app name of each monitor's
+  front window): the event is now a change notice, `{"v":"gfc/1","type":"stages","gen":N,"on":bool}` plus `reason` (at
+  most 90 bytes), and the state, with exactly the former payload plus `gen`, is the reply of `hyprctl grassfield-stages`
+  (the state of the latest notice). `gen` grows with every notice; the shell applies a fetched state only when it is a
+  complete one and not older than the one shown, and fetches again when a notice came during a fetch.
+- Still `gfc/1`: the notice keeps `on` and `reason`, the state keeps its shape, and the shell accepts both forms (an event
+  that carries `monitors`, from an older plugin, is used as before), so the plugin and the shell of one release need no
+  version bump; a shell older than this amendment would show empty strips with a newer plugin (they ship together).
+  `stages-available` is advertised only when `hyprctl grassfield-stages` is registered.
+
 ## Consequences
 - Breaking payload changes bump `gfc/N` and need a new ADR.
+- No event may grow with the number of windows or monitors: a payload that can grow is a `hyprctl` reply announced by a
+  small event (amendment 2026-10-24).
 - Depends on Quickshell keeping the `usingLua` dispatch wrapping; re-verify on every Quickshell minor update.

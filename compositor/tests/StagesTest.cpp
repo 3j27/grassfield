@@ -476,10 +476,17 @@ TEST(StagesEvents, Json) {
     monitors[0].overlap   = true;
     monitors[0].stages    = {EventStage{.id = 5, .slot = -1, .windows = {EventWindow{.id = 0xab, .thumb = std::nullopt}}},
                              EventStage{.id = 7, .slot = 0, .windows = {EventWindow{.id = 0xcd, .thumb = Box{16.04, 120.26, 180, 128.5}}}}};
-    EXPECT_EQ(eventJson(true, monitors),
-              R"({"v":"gfc/1","type":"stages","on":true,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":true,"stages":[)"
+    EXPECT_EQ(stateJson(3, true, monitors),
+              R"({"v":"gfc/1","type":"stages","gen":3,"on":true,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":true,"stages":[)"
               R"({"id":5,"slot":-1,"windows":[{"address":"ab"}]},{"id":7,"slot":0,"windows":[{"address":"cd","x":16,"y":120.3,"w":180,"h":128.5}]}]}]})");
-    EXPECT_EQ(eventJson(false, {}, Reason::Unavailable), R"({"v":"gfc/1","type":"stages","on":false,"reason":"unavailable","monitors":[]})");
+    EXPECT_EQ(stateJson(4, false, {}, Reason::Unavailable), R"({"v":"gfc/1","type":"stages","gen":4,"on":false,"reason":"unavailable","monitors":[]})");
+}
+
+// The event is a change notice (ADR-0007 amendment 2026-10-24): generation, on, and the reason when there is one.
+TEST(StagesEvents, TheEventIsAChangeNotice) {
+    EXPECT_EQ(noticeJson(3, true), R"({"v":"gfc/1","type":"stages","gen":3,"on":true})");
+    EXPECT_EQ(noticeJson(18446744073709551615ULL, false, Reason::Interrupted),
+              R"({"v":"gfc/1","type":"stages","gen":18446744073709551615,"on":false,"reason":"interrupted"})");
 }
 
 // R13 counter-review #4 of 0.6.3-stages: while an Exclusive layer holds the keyboard after a swap Hyprland has no active
@@ -491,8 +498,8 @@ TEST(StagesEvents, TheFrontWindowAndItsApp) {
     monitors[0].active    = 5;
     monitors[0].front     = EventFront{.id = 0xab, .app = "org.example \"Q\"\n"};
     monitors[0].stages    = {EventStage{.id = 5, .slot = -1, .windows = {EventWindow{.id = 0xab, .thumb = std::nullopt}}}};
-    EXPECT_EQ(eventJson(true, monitors),
-              R"({"v":"gfc/1","type":"stages","on":true,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,)"
+    EXPECT_EQ(stateJson(1, true, monitors),
+              R"({"v":"gfc/1","type":"stages","gen":1,"on":true,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,)"
               R"("front":{"address":"ab","app":"org.example \"Q\"\n"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"ab"}]}]}]})");
 }
 
