@@ -1,6 +1,8 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
+#include <QLibraryInfo>
 #include <QQuickWindow>
 #include <QGuiApplication>
 #include <QImageReader>
@@ -26,9 +28,20 @@ int main(int argc, char *argv[])
 {
     QElapsedTimer t0; // GRASSFIELD_PREVIEW_TIMING=1 prints the time to the first frame and to the folder list on stderr
     t0.start();
-    // QtPdf's views are Qt Quick Controls; the Basic style draws nothing of its own that we do not restyle.
-    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE"))
-        qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+    // QtPdf's views are Qt Quick Controls: they use the Grassfield style (ui/Grassfield, installed next to Grassfield.Ui) when
+    // that module is installed, the Basic style otherwise (and for every control the Grassfield style does not cover). The
+    // style is chosen here, for this app only, never for the session (GF-085); an explicit environment value wins.
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+        QStringList roots = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
+        roots += qEnvironmentVariable("QML2_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
+        roots << QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
+        bool installed = false;
+        for (const QString &root : std::as_const(roots))
+            installed = installed || QFileInfo::exists(root + QStringLiteral("/Grassfield/qmldir"));
+        qputenv("QT_QUICK_CONTROLS_STYLE", installed ? "Grassfield" : "Basic");
+        if (installed && qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_FALLBACK_STYLE"))
+            qputenv("QT_QUICK_CONTROLS_FALLBACK_STYLE", "Basic");
+    }
     // Untrusted images: bound every decoder (also QML Image and AnimatedImage) to this much memory.
     QImageReader::setAllocationLimit(preview::kAllocationLimitMb);
 

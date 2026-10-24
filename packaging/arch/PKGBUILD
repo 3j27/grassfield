@@ -104,6 +104,8 @@ package_grassfield-desktop() {
   rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"
+  # The Qt Quick Controls style "Grassfield" (module Grassfield, next to Grassfield.Ui): selected by Grassfield's own apps only.
+  install -m644 "$root/ui/Grassfield/qmldir" "$root"/ui/Grassfield/*.qml "$pkgdir/usr/lib/qt6/qml/Grassfield/"
 
   # Grassfield.I18n -> /usr/lib/qt6/qml/Grassfield/I18n; grassfield_<lang>.qm -> /usr/share/grassfield/translations.
   DESTDIR="$pkgdir" cmake --install "$srcdir/i18n-build"
