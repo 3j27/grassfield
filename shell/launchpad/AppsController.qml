@@ -5,6 +5,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "../services/ScreenChoice.js" as ScreenChoice
 import "../search/Ranking.js" as Ranking
 import "Model.js" as Model
 
@@ -104,6 +105,16 @@ Scope {
 
     // ---- state changes -------------------------------------------------------------------
 
+    // The screen the Apps panel is on went away (a display unplugged): the panel moves to a live screen.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            if (root.screenName !== "" && ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
+                root.screenName = ScreenChoice.resolve(root.screenName, Quickshell.screens.map(s => s.name));
+        }
+    }
+
     function show(): void {
         if (open)
             return;
@@ -116,7 +127,7 @@ Scope {
             if (s.name === name)
                 found = name;
         }
-        screenName = found !== "" ? found : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        screenName = ScreenChoice.resolve(found, Quickshell.screens.map(s => s.name));
         query = "";
         category = "all";
         chipFocus = "all";

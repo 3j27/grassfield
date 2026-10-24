@@ -80,6 +80,8 @@
  {"path": "tests/unit/tst_displayname.qml", "layer": "headless"},
  {"path": "tests/shell/display_names.sh", "layer": "logic"},
  {"path": "tests/shell/history_quarantine.sh", "layer": "logic"},
+ {"path": "tests/unit/tst_screenchoice.qml", "layer": "headless"},
+ {"path": "tests/shell/display_unplug_nested.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/shell/show_desktop_wiring.sh", "layer": "logic"},
  {"path": "tests/unit/tst_showdesktop.qml", "layer": "headless"},
  {"path": "tests/shell/show_desktop_nested.sh", "layer": "nested", "runner": "bare"},

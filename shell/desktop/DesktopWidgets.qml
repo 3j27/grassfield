@@ -29,15 +29,17 @@ Variants {
 
         required property ShellScreen modelData
 
+        readonly property string screenName: modelData ? modelData.name : ""
+
         readonly property var grid: Widgets.gridFor(modelData)
         readonly property int cols: grid.cols
         readonly property int rows: grid.rows
         readonly property real pitch: grid.cell + grid.gap
         // Placements of this screen that lie on the grid (the rest are moved by fitScreen below).
-        readonly property var mine: Widgets.desktop.filter(e => e.screen === modelData.name && e.col >= 0 && e.row >= 0 && e.col + Placements.cells(e.size).w <= cols && e.row + Placements.cells(e.size).h <= rows)
+        readonly property var mine: Widgets.desktop.filter(e => e.screen === screenName && e.col >= 0 && e.row >= 0 && e.col + Placements.cells(e.size).w <= cols && e.row + Placements.cells(e.size).h <= rows)
         // Windows of the workspace shown on this screen (geometry relative to the screen).
-        readonly property var shownWindows: mine.length > 0 ? Compositor.windowsOn(modelData.name, Compositor.topologyRevision) : []
-        readonly property bool windowFocused: Compositor.focusedToplevel !== null && Compositor.focusedScreenName === modelData.name
+        readonly property var shownWindows: mine.length > 0 ? Compositor.windowsOn(screenName, Compositor.topologyRevision) : []
+        readonly property bool windowFocused: Compositor.focusedToplevel !== null && Compositor.focusedScreenName === screenName
         property bool desktopActive: false
         readonly property bool dimmed: windowFocused && !desktopActive
         property real dimAmount: dimmed ? 1 : 0
@@ -50,9 +52,9 @@ Variants {
         // Key focus returns to the window active when the menu opened (FocusReturn); one name per screen.
         onMenuEntryChanged: {
             if (menuEntry !== null)
-                FocusReturn.opened("widgets-menu-" + modelData.name);
+                FocusReturn.opened("widgets-menu-" + screenName);
             else
-                FocusReturn.closed("widgets-menu-" + modelData.name, true);
+                FocusReturn.closed("widgets-menu-" + screenName, true);
         }
         property point menuAt: Qt.point(0, 0)
 
@@ -77,7 +79,7 @@ Variants {
             const spot = Placements.snap(at.x - grid.x0, at.y - grid.y0, entry.size, grid.cell, grid.gap, grid.cols, grid.rows);
             dragUid = "";
             dragOffset = Qt.point(0, 0);
-            Widgets.moveDesktop(entry.uid, spot.col, spot.row, modelData.name);
+            Widgets.moveDesktop(entry.uid, spot.col, spot.row, screenName);
         }
 
         // A click on a widget keeps the desktop active (full color) for a while, as long as the
@@ -101,14 +103,14 @@ Variants {
             else if (action.startsWith("size:"))
                 Widgets.setSize(entry.uid, action.substring(5));
             else if (action.startsWith("move:"))
-                Widgets.stepDesktop(entry.uid, action.substring(5), modelData.name);
+                Widgets.stepDesktop(entry.uid, action.substring(5), screenName);
         }
 
         // Off-grid or overlapping placements (screen geometry changed, hand-edited file) move to
         // the nearest free cell.
-        onColsChanged: Widgets.fitScreen(modelData.name)
-        onRowsChanged: Widgets.fitScreen(modelData.name)
-        Component.onCompleted: Widgets.fitScreen(modelData.name)
+        onColsChanged: Widgets.fitScreen(screenName)
+        onRowsChanged: Widgets.fitScreen(screenName)
+        Component.onCompleted: Widgets.fitScreen(screenName)
 
         Behavior on dimAmount {
             NumberAnimation {
@@ -145,7 +147,7 @@ Variants {
             enabled: scope.anyCovered
 
             function onMoved(screen: string): void {
-                if (screen === scope.modelData.name)
+                if (screen === scope.screenName)
                     recheck.restart();
             }
         }
@@ -347,10 +349,10 @@ Variants {
                 sourceComponent: WidgetMenu {
                     entry: scope.menuEntry
                     moves: ({
-                            left: Widgets.canStepDesktop(scope.menuEntry.uid, "left", scope.modelData.name),
-                            right: Widgets.canStepDesktop(scope.menuEntry.uid, "right", scope.modelData.name),
-                            up: Widgets.canStepDesktop(scope.menuEntry.uid, "up", scope.modelData.name),
-                            down: Widgets.canStepDesktop(scope.menuEntry.uid, "down", scope.modelData.name)
+                            left: Widgets.canStepDesktop(scope.menuEntry.uid, "left", scope.screenName),
+                            right: Widgets.canStepDesktop(scope.menuEntry.uid, "right", scope.screenName),
+                            up: Widgets.canStepDesktop(scope.menuEntry.uid, "up", scope.screenName),
+                            down: Widgets.canStepDesktop(scope.menuEntry.uid, "down", scope.screenName)
                         })
                     onChoose: action => scope.applyMenu(action)
                     onCloseRequested: scope.closeMenu()

@@ -19,7 +19,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool primary: Quickshell.screens.length > 0 && modelData.name === Quickshell.screens[0].name
+        readonly property bool primary: Quickshell.screens.length > 0 && modelData !== null && modelData.name === Quickshell.screens[0].name
         readonly property int pad: Tokens.spacingLg
 
         screen: modelData

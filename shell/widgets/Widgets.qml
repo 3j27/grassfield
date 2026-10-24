@@ -50,6 +50,9 @@ Singleton {
 
     // Grid of a screen: {cols, rows, x0, y0, cell, gap} in screen px, below the menu bar and above the Dock.
     function gridFor(screen: var): var {
+        // A screen that was just unplugged reads as null while its surfaces go away: an empty grid, never an error.
+        if (!screen)
+            return {cols: 0, rows: 0, x0: 0, y0: 0, cell: Tokens.widgetCell, gap: Tokens.widgetGap};
         const g = Placements.gridFor(screen.width, screen.height, Tokens.widgetCell, Tokens.widgetGap, Tokens.widgetDesktopMargin, Tokens.menubarHeight, dockReserve, Settings.dockFootprint.left, Settings.dockFootprint.right);
         return {
             cols: g.cols,

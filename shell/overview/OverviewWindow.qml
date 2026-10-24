@@ -36,7 +36,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property string screenName: modelData.name
+        readonly property string screenName: modelData ? modelData.name : ""
         readonly property bool shown: root.controller.open
         readonly property bool v2: !root.controller.thumbnailMode
         // Every chrome is Exclusive while open (Hyprland sends pointer input to Exclusive layers only); when the close
@@ -75,7 +75,7 @@ Variants {
 
         // Minimized windows (macOS: a separate row below a divider, smaller than the open windows): the ones the shell
         // minimized, on the output that has the Dock (the tiles of the Dock are there). Kept while the close animation runs.
-        readonly property bool hasMinimized: Compositor.dockScreenName === "" || Compositor.dockScreenName === modelData.name
+        readonly property bool hasMinimized: Compositor.dockScreenName === "" || Compositor.dockScreenName === screenName
         readonly property var liveMinimized: shown ? (hasMinimized ? Compositor.minimized : []) : null
         property var minimizedItems: []
         readonly property var tileSpec: ({
@@ -95,11 +95,11 @@ Variants {
         // the layer surface.
         // The Dock's area (when it takes space) is reserved, as is the menu bar's (the surface starts below it).
         // Only the output that has the Dock (it is on one output at a time).
-        readonly property var dockInsets: Compositor.dockScreenName === "" || Compositor.dockScreenName === modelData.name ? DockGeometry.footprint(Settings.dockPosition, Settings.dockMetrics, Settings.dockAutohide) : ({left: 0, right: 0, bottom: 0})
+        readonly property var dockInsets: Compositor.dockScreenName === "" || Compositor.dockScreenName === screenName ? DockGeometry.footprint(Settings.dockPosition, Settings.dockMetrics, Settings.dockAutohide) : ({left: 0, right: 0, bottom: 0})
         readonly property int dockReserve: dockInsets.bottom
         readonly property var area: Layout.freeArea({
-            w: modelData.width,
-            h: modelData.height
+            w: modelData ? modelData.width : 0,
+            h: modelData ? modelData.height : 0
         }, {
             menubar: Tokens.menubarHeight,
             barBottom: barBottom,
@@ -113,8 +113,8 @@ Variants {
         // The strip's tiles and divider, in this window's coordinates (the window starts below the menu bar).
         readonly property var strip: Layout.stripRects(minimizedItems.length, {
             x: Tokens.overviewAreaMargin + dockInsets.left,
-            w: modelData.width - 2 * Tokens.overviewAreaMargin - dockInsets.left - dockInsets.right,
-            bottom: modelData.height - Tokens.menubarHeight - Tokens.overviewAreaMargin - dockReserve
+            w: (modelData ? modelData.width : 0) - 2 * Tokens.overviewAreaMargin - dockInsets.left - dockInsets.right,
+            bottom: (modelData ? modelData.height : 0) - Tokens.menubarHeight - Tokens.overviewAreaMargin - dockReserve
         }, tileSpec)
         // Layout of `wins`, recomputed only when the inputs change (see relayout()).
         property var placement: ({

@@ -568,6 +568,16 @@ Singleton {
         return true;
     }
 
+    // A display plugged or unplugged: the Spaces the displays show are compared again (a removed display ends Show Desktop).
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            if (root.desktopRecords.length > 0)
+                desktopCheck.restart();
+        }
+    }
+
     Timer {
         id: desktopCheck
         interval: Tokens.showDesktopCheckMs

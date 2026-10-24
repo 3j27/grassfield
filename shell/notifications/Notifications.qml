@@ -8,6 +8,7 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "History.js" as History
+import "../services/ScreenChoice.js" as ScreenChoice
 import "Sanitizer.js" as Sanitizer
 
 // The session's org.freedesktop.Notifications server, banner queue, history (ADR-0004) and
@@ -246,12 +247,22 @@ Singleton {
             toggleCenter(screen);
     }
 
+    // The screen the Notifications panel is on went away (a display unplugged): the panel moves to a live screen.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            if (root.centerScreen !== "" && ScreenChoice.gone(root.centerScreen, Quickshell.screens.map(s => s.name)))
+                root.centerScreen = ScreenChoice.resolve(root.centerScreen, Quickshell.screens.map(s => s.name));
+        }
+    }
+
     function toggleCenter(screen: string): void {
         if (centerOpen) {
             closeCenter();
             return;
         }
-        centerScreen = screen !== "" ? screen : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        centerScreen = ScreenChoice.resolve(screen, Quickshell.screens.map(s => s.name));
         Popups.close();
         centerOpen = true;
     }

@@ -40,7 +40,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool open: Notifications.centerOpen && Notifications.centerScreen === modelData.name
+        readonly property bool open: Notifications.centerOpen && Notifications.centerScreen === (modelData ? modelData.name : "")
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -186,7 +186,7 @@ Variants {
             onKeyboardHeldChanged: host.report(keyboardHeld)
             Component.onDestruction: host.report(false)
             function report(held: bool): void {
-                const name = win.modelData.name;
+                const name = (win.modelData ? win.modelData.name : "");
                 if (held)
                     Notifications.centerKeyboardScreen = name;
                 else if (Notifications.centerKeyboardScreen === name)
@@ -595,7 +595,7 @@ Variants {
                 height: Math.min(Tokens.widgetGalleryMaxHeight, (host.height - Tokens.menubarHeight) * Tokens.widgetGalleryHeightFraction)
                 active: panel.galleryOpen
                 sourceComponent: WidgetGallery {
-                    screenName: win.modelData.name
+                    screenName: (win.modelData ? win.modelData.name : "")
                     surfaceHost: host
                     onClosed: {
                         panel.galleryOpen = false;

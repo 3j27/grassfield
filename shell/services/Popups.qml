@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import "ScreenChoice.js" as ScreenChoice
 
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
 // of the matching screen renders it; menus, status items and the Dock only call open()/close().
@@ -73,7 +74,7 @@ Singleton {
 
     function open(popupKind: string, screen: string, x: real, y: real, alignment: string, payload: var): void {
         data = payload ? payload : {};
-        screenName = screen;
+        screenName = ScreenChoice.resolve(screen, Quickshell.screens.map(s => s.name));
         anchorX = x;
         anchorY = y;
         align = alignment;
@@ -82,8 +83,18 @@ Singleton {
 
     // Opens on the screen of the current popup, or the first screen (IPC and keyboard use).
     function openCentered(popupKind: string, payload: var): void {
-        const name = screenName !== "" ? screenName : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        const name = ScreenChoice.resolve(screenName, Quickshell.screens.map(s => s.name));
         open(popupKind, name, 0, 0, "center", payload);
+    }
+
+    // The screen of the open popup went away (a display unplugged): the popup moves to a live screen.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            if (root.screenName !== "" && ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
+                root.screenName = ScreenChoice.resolve(root.screenName, Quickshell.screens.map(s => s.name));
+        }
     }
 
     // Toggle: the same kind at the same screen closes it.

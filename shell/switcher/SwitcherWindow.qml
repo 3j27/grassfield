@@ -26,7 +26,7 @@ Variants {
         required property ShellScreen modelData
 
         // Session running on this output: the surface is mapped and holds the keyboard.
-        readonly property bool grabbing: root.controller.active && root.controller.screenName === modelData.name
+        readonly property bool grabbing: root.controller.active && root.controller.screenName === (modelData ? modelData.name : "")
         readonly property bool shown: root.controller.shown && grabbing
         readonly property var layout: Model.grid(root.controller.apps.length, width - 2 * (Tokens.switcherEdgeMargin + Tokens.switcherPadding), Tokens.switcherPitch)
         readonly property int selected: root.controller.selected

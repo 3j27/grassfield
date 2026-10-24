@@ -236,7 +236,7 @@ Scope {
             // Gate P5: the first frame of this bar counts toward "grassfield-shell: usable" (platform/Usable.qml).
             UsableProbe {
                 kind: "bar"
-                screenName: win.modelData.name
+                screenName: win.modelData ? win.modelData.name : ""
             }
 
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
@@ -323,7 +323,7 @@ Scope {
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
             onShownAppIdChanged: {
                 // The app is gone: its open app menu would act on nothing.
-                if (shownAppId === "" && ["app", "appfile", "appwindow", "appbridge"].indexOf(Popups.kind) >= 0 && Popups.screenName === win.screen.name)
+                if (shownAppId === "" && ["app", "appfile", "appwindow", "appbridge"].indexOf(Popups.kind) >= 0 && Popups.screenName === (win.screen ? win.screen.name : ""))
                     Qt.callLater(Popups.close);
                 const entry = shownAppId !== "" ? Apps.lookup(shownAppId) : null;
                 if (entry)
@@ -365,7 +365,7 @@ Scope {
             // A menu of this bar open (or Notification Center from the clock) keeps it in view; the pointer on the bar or its edge strip too.
             readonly property var hideInhibitors: ({
                     pointer: winHover.hovered,
-                    popup: tracking || (Notifications.centerOpen && Notifications.centerScreen === win.screen.name)
+                    popup: tracking || (Notifications.centerOpen && Notifications.centerScreen === (win.screen ? win.screen.name : ""))
                 })
             readonly property var hideTiming: ({
                     hideGrace: Tokens.menubarHideGrace,
@@ -383,13 +383,13 @@ Scope {
             }
 
             function isOpen(kind: string): bool {
-                return Popups.kind === kind && Popups.screenName === win.screen.name;
+                return Popups.kind === kind && Popups.screenName === (win.screen ? win.screen.name : "");
             }
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
             readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying"]
-            readonly property bool tracking: Popups.active && Popups.screenName === win.screen.name && trackedKinds.indexOf(Popups.kind) >= 0
+            readonly property bool tracking: Popups.active && Popups.screenName === (win.screen ? win.screen.name : "") && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
                 if (win.tracking && Popups.kind !== kind)
@@ -413,7 +413,7 @@ Scope {
                     return;
                 }
                 const x = button.mapToItem(null, button.width, 0).x;
-                Popups.open("tray", win.screen.name, x, Tokens.menubarHeight, "right", {item: item});
+                Popups.open("tray", (win.screen ? win.screen.name : ""), x, Tokens.menubarHeight, "right", {item: item});
             }
 
             // Left titles that open a menu, in bar order: [{kind, button, menu}] (menu: the bridge entry, else null).
@@ -503,7 +503,7 @@ Scope {
                 target: Popups
 
                 function onMenuStepRequested(screen: string, direction: int): void {
-                    if (screen === win.screen.name)
+                    if (screen === (win.screen ? win.screen.name : ""))
                         win.stepMenu(direction);
                 }
             }
@@ -552,7 +552,7 @@ Scope {
             // Opens a popup under (left) or aligned to the right edge of (right) a bar button.
             function openFor(kind: string, button: Item, alignment: string, payload: var): void {
                 const x = button.mapToItem(null, alignment === "right" ? button.width : 0, 0).x;
-                Popups.toggle(kind, win.screen.name, x, Tokens.menubarHeight, alignment, payload);
+                Popups.toggle(kind, (win.screen ? win.screen.name : ""), x, Tokens.menubarHeight, alignment, payload);
             }
 
             // Opens (or closes, if it is open) one of the app's own menus under its title.
@@ -564,7 +564,7 @@ Scope {
                     return;
                 }
                 const x = button.mapToItem(null, 0, 0).x;
-                Popups.open("appbridge", win.screen.name, x, Tokens.menubarHeight, "left", {dbusId: menu.dbusId, window: MenuBridge.window, title: menu.title});
+                Popups.open("appbridge", (win.screen ? win.screen.name : ""), x, Tokens.menubarHeight, "left", {dbusId: menu.dbusId, window: MenuBridge.window, title: menu.title});
                 MenuBridge.aboutToShow(menu.dbusId);
             }
 
@@ -682,7 +682,7 @@ Scope {
             // The menu bar window is mapped for the whole session: it hosts the idle reads of the icon shapes (the first output's
             // bar only), so that the Apps panel opens with every icon's shape known (PERF-01).
             IconShapePrewarm {
-                sources: Quickshell.screens.length > 0 && Quickshell.screens[0].name === win.screen.name ? Apps.listedIconSources : []
+                sources: Quickshell.screens.length > 0 && win.screen && Quickshell.screens[0].name === (win.screen ? win.screen.name : "") ? Apps.listedIconSources : []
             }
 
             HoverHandler {
@@ -729,8 +729,8 @@ Scope {
             // macOS: with several displays the menu bar of the one that is not active is dimmed (band and content). A single
             // output, no focused output known, or a bar with one of its menus open (the user is using it, whatever output
             // Hyprland counts as focused) is never dimmed.
-            readonly property bool dimmed: Quickshell.screens.length > 1 && Compositor.focusedScreenName !== "" && Compositor.focusedScreenName !== win.screen.name
-                && !(Popups.active && Popups.screenName === win.screen.name)
+            readonly property bool dimmed: Quickshell.screens.length > 1 && Compositor.focusedScreenName !== "" && Compositor.focusedScreenName !== (win.screen ? win.screen.name : "")
+                && !(Popups.active && Popups.screenName === (win.screen ? win.screen.name : ""))
             property real dimOpacity: win.dimmed ? Tokens.menubarInactiveOpacity : 1
 
             Behavior on dimOpacity {
@@ -1085,7 +1085,7 @@ Scope {
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
                             accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
-                            active: Notifications.centerOpen && Notifications.centerScreen === win.screen.name
+                            active: Notifications.centerOpen && Notifications.centerScreen === (win.screen ? win.screen.name : "")
                             onActivated: Notifications.toggleCenter(win.screen.name)
 
                             Text {

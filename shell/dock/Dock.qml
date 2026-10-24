@@ -765,7 +765,7 @@ Scope {
             // Gate P5: the first frame of this Dock counts toward "grassfield-shell: usable" (platform/Usable.qml).
             UsableProbe {
                 kind: "dock"
-                screenName: win.modelData.name
+                screenName: win.modelData ? win.modelData.name : ""
                 active: win.visible
             }
 
