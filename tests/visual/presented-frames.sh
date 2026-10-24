@@ -7,7 +7,11 @@
 # scenario and overall, the share of frames within 1.2 refresh periods (a dropped frame shows as two periods), PASS at 95 %.
 #   overview-open, overview-close   the Overview (Mission Control) opened and closed through the shell's IPC
 #   launchpad-open                  the Apps panel (Launchpad) opened (then closed, not measured)
-#   dock-magnification              the pointer glides along the Dock and back twice (Dock magnification on for the run)
+#   dock-magnification              the pointer glides along the Dock's icons and back twice (Dock magnification on, auto-hide
+#                                   off), from the first tile's centre to the last one's (`qs ipc call dock centre`). Not the
+#                                   middle of the Dock's layer: it spans the output's width and, above the shelf, the room for
+#                                   magnified icons, outside its input mask; the glide there magnified nothing and no frame came
+#                                   (integrator run 2026-10-24: the first frame 2.2 s after each request, 0 in the window)
 #   overview-open-4w, -close-4w     the Overview with four windows (the plugin's live window transforms, docs/specs/overview.md)
 #   overview-open-flat, -close-flat the same with Reduce Transparency on (no blur): what the blur costs, by difference
 # The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
@@ -58,8 +62,22 @@ sleep 1.5
 vs_park
 
 hz=$(nestctl monitors -j | jq -r '[.[] | select(.name == "'"$VS_OUTPUT"'") | .refreshRate][0] // 60')
-read -r mx my < <(nestctl monitors -j | jq -r '.[] | select(.name == "'"$VS_OUTPUT"'") | "\(.x) \(.y)"')
 read -r dx dy dw dh < <(nestctl -j layers | jq -r '[.. | objects | select(.namespace? == "grassfield-dock")][0] | "\(.x) \(.y) \(.w) \(.h)"')
+# The glide: over the icons, first tile to last (output coordinates; the Dock at the bottom, not auto-hidden).
+vs_ipc dock autohide false >/dev/null
+vs_ipc dock position bottom >/dev/null
+vs_ipc dock magnify 1.6 true >/dev/null
+sleep 0.5
+ntiles=$(vs_ipc dock tiles | jq -r 'length' 2>/dev/null)
+[[ $ntiles =~ ^[0-9]+$ && $ntiles -gt 1 ]] || ntiles=1
+read -r gx0 gy < <(vs_ipc dock centre 0 "$VS_OUTPUT")
+read -r gx1 _ < <(vs_ipc dock centre $((${ntiles:-1} - 1)) "$VS_OUTPUT")
+if [[ ${gx0:-} =~ ^[0-9]+$ && ${gx1:-} =~ ^[0-9]+$ && ${gy:-} =~ ^[0-9]+$ && $gx1 -gt $gx0 ]]; then
+  echo "dock glide: tiles $ntiles, from ($gx0,$gy) to ($gx1,$gy) (Dock layer ${dw:-?}x${dh:-?} at (${dx:-?},${dy:-?}))"
+else
+  echo "NOTE dock-magnification not measured: no tile centres from the shell (tiles ${ntiles:-?}, '${gx0:-}' '${gx1:-}' '${gy:-}')"
+  gx0="" gx1="" gy=""
+fi
 
 # The frames presented since the last collection, appended as "<monotonic us> <interval us>".
 last=0
@@ -105,8 +123,8 @@ for ((c = 1; c <= cycles; c++)); do
   vs_ipc apps close >/dev/null
   sleep 1.6
   collect
-  if [[ -n ${dw:-} && ${dw:-0} != null && ${dw:-0} -gt 48 ]]; then
-    y=$((dy - my + dh / 2)) x0=$((dx - mx + 24)) x1=$((dx - mx + dw - 24))
+  if [[ -n $gx0 ]]; then
+    y=$gy x0=$gx0 x1=$gx1
     vs_pointer abs "$x0" "$y" sleep 300 >/dev/null
     event dock-magnification
     vs_pointer drag "$x1" "$y" drag "$x0" "$y" drag "$x1" "$y" drag "$x0" "$y" >/dev/null
@@ -129,7 +147,7 @@ sleep 1
 for ((c = 1; c <= cycles; c++)); do overview_round -flat; done
 vs_ipc controlcenter reduceTransparency false >/dev/null
 
-[[ -n ${dw:-} && ${dw:-0} != null ]] || echo "NOTE dock-magnification not measured: no Dock layer found"
+[[ -n $gx0 ]] || echo "NOTE dock-magnification not measured: no Dock tile centres"
 drop_spanning "$out/frames.all" "$out/events.txt" >"$out/frames.txt"
 echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, window $window ms"
 python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.txt" "$hz" "$window" | tee "$out/stats.txt"
