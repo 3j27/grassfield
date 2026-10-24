@@ -5,7 +5,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
-import "../services/ScreenChoice.js" as ScreenChoice
+import "../platform/ScreenChoice.js" as ScreenChoice
 import "../search/Ranking.js" as Ranking
 import "Model.js" as Model
 
@@ -110,8 +110,8 @@ Scope {
         target: Quickshell
 
         function onScreensChanged(): void {
-            if (root.screenName !== "" && ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
-                root.screenName = ScreenChoice.resolve(root.screenName, Quickshell.screens.map(s => s.name));
+            if (ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
+                root.screenName = Compositor.activeScreenName;
         }
     }
 
@@ -121,13 +121,7 @@ Scope {
         openStartMs = Date.now();
         if (Popups.active)
             Popups.close();
-        const name = Compositor.focusedScreenName;
-        let found = "";
-        for (const s of Quickshell.screens) {
-            if (s.name === name)
-                found = name;
-        }
-        screenName = ScreenChoice.resolve(found, Quickshell.screens.map(s => s.name));
+        screenName = Compositor.activeScreenName;
         query = "";
         category = "all";
         chipFocus = "all";

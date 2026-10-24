@@ -3,9 +3,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.platform
 
 // Volume/brightness OSD: a compact pill under the menu bar at the top-right (icon + level bar),
-// on the first screen. Never takes input.
+// on the active display (Compositor.activeScreenName). Never takes input.
 Variants {
     id: root
 
@@ -19,7 +20,8 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool primary: Quickshell.screens.length > 0 && modelData !== null && modelData.name === Quickshell.screens[0].name
+        // The OSD shows on the active display (macOS), like Banners offsets for it.
+        readonly property bool primary: modelData !== null && modelData.name === Compositor.activeScreenName
         readonly property int pad: Tokens.spacingLg
 
         screen: modelData

@@ -9,6 +9,7 @@ import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
+import "ScreenChoice.js" as ScreenChoice
 import "StagesFront.js" as StagesFront
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
@@ -37,6 +38,9 @@ Singleton {
     readonly property var focusedWorkspace: Hyprland.focusedWorkspace
     // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
     readonly property string focusedScreenName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+    // Where a surface opens when nobody named an output (SUPER+N, IPC, keyboard): the active display, the first output only as
+    // a last resort (ScreenChoice.js). Every such surface uses this one rule.
+    readonly property string activeScreenName: ScreenChoice.pick("", focusedScreenName, Quickshell.screens.map(s => s.name))
 
     // A layer surface with this namespace was unmapped (`closelayer` event). The app switcher activates its target only
     // after its own exclusive surface is gone: Hyprland refuses to focus a window while one exists (FocusState.cpp).

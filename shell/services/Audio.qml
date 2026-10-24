@@ -15,6 +15,7 @@ Singleton {
     // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): an output at 50 percent, not muted.
     readonly property bool ready: VisualFixtures.active || (sink !== null && sink.audio !== null)
     // The real default sink on the shown scale (0 without one), whatever the fixtures say: what `wpctl get-volume` prints.
+    readonly property bool deviceReady: sink !== null && sink.audio !== null
     readonly property real deviceVolume: sink !== null && sink.audio !== null ? sink.audio.volume : 0
     readonly property real volume: VisualFixtures.active ? 0.5 : deviceVolume
     readonly property bool muted: VisualFixtures.active ? false : (ready ? sink.audio.muted : false)

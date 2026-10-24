@@ -1,0 +1,30 @@
+.pragma library
+
+// Which output a shell surface opens on when nobody named one (SUPER+N, IPC, keyboard): macOS opens Notification
+// Center, Spotlight, Mission Control... on the active display. One rule for every such surface
+// (`Compositor.activeScreenName`): the requested output when it exists, else the output with the keyboard or pointer
+// focus, else the first output as a last resort, else "".
+
+// `requested`: an output name or ""; `focused`: the compositor's focused output or ""; `names`: the outputs that exist.
+function pick(requested, focused, names) {
+    if (requested !== "" && names.indexOf(requested) >= 0)
+        return requested;
+    if (focused !== "" && names.indexOf(focused) >= 0)
+        return focused;
+    return names.length > 0 ? names[0] : "";
+}
+
+// Where a centred popup (confirm, notice) opens: on the output of the popup that is open right now (a menu on display B
+// asks "Restart?" on B), else on the active display. A popup that was closed leaves no screen behind.
+// `requested` (optional): the display of the panel that asked (Search's panel), which wins over both.
+function centered(popupOpen, popupScreen, activeScreen, requested) {
+    if (typeof requested === "string" && requested !== "")
+        return requested;
+    return popupOpen && popupScreen !== "" ? popupScreen : activeScreen;
+}
+
+// True when `name` is non-empty and no existing output has it any more (an output unplugged while something was open on it):
+// the owner of that state moves it to `Compositor.activeScreenName`.
+function gone(name, names) {
+    return typeof name === "string" && name !== "" && (Array.isArray(names) ? names : []).indexOf(name) < 0;
+}

@@ -1,7 +1,8 @@
 pragma Singleton
 import QtQuick
+import qs.platform
+import "../platform/ScreenChoice.js" as ScreenChoice
 import Quickshell
-import "ScreenChoice.js" as ScreenChoice
 
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
 // of the matching screen renders it; menus, status items and the Dock only call open()/close().
@@ -74,16 +75,17 @@ Singleton {
 
     function open(popupKind: string, screen: string, x: real, y: real, alignment: string, payload: var): void {
         data = payload ? payload : {};
-        screenName = ScreenChoice.resolve(screen, Quickshell.screens.map(s => s.name));
+        screenName = ScreenChoice.pick(screen, Compositor.activeScreenName, Quickshell.screens.map(s => s.name));
         anchorX = x;
         anchorY = y;
         align = alignment;
         kind = popupKind;
     }
 
-    // Opens on the screen of the current popup, or the first screen (IPC and keyboard use).
-    function openCentered(popupKind: string, payload: var): void {
-        const name = ScreenChoice.resolve(screenName, Quickshell.screens.map(s => s.name));
+    // Opens on the screen of the current popup, or the active display (IPC and keyboard use).
+    // `screen` (optional): the display of the panel that asked for it (a confirm opens where its asker is).
+    function openCentered(popupKind: string, payload: var, screen: string): void {
+        const name = ScreenChoice.centered(active, screenName, Compositor.activeScreenName, screen);
         open(popupKind, name, 0, 0, "center", payload);
     }
 
@@ -92,8 +94,8 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            if (root.screenName !== "" && ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
-                root.screenName = ScreenChoice.resolve(root.screenName, Quickshell.screens.map(s => s.name));
+            if (ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
+                root.screenName = Compositor.activeScreenName;
         }
     }
 
@@ -105,8 +107,8 @@ Singleton {
             open(popupKind, screen, x, y, alignment, payload);
     }
 
-    function confirm(title: string, message: string, confirmLabel: string, action: string, args: var, destructive: bool): void {
-        openCentered("confirm", {title: title, message: message, confirmLabel: confirmLabel, action: action, args: args, destructive: destructive});
+    function confirm(title: string, message: string, confirmLabel: string, action: string, args: var, destructive: bool, screen: string): void {
+        openCentered("confirm", {title: title, message: message, confirmLabel: confirmLabel, action: action, args: args, destructive: destructive}, screen);
     }
 
     function notice(title: string, message: string): void {

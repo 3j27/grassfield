@@ -5,7 +5,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
-import "../services/ScreenChoice.js" as ScreenChoice
+import "../platform/ScreenChoice.js" as ScreenChoice
 import "../dock/DockModel.js" as DockModel
 import "SwitcherModel.js" as Model
 
@@ -143,16 +143,16 @@ Scope {
         let name = Compositor.windowScreenName(Compositor.hyprlandToplevel(Compositor.focusedToplevel));
         if (name === "")
             name = Compositor.focusedScreenName;
-        return ScreenChoice.resolve(name, Quickshell.screens.map(s => s.name));
+        return name !== "" ? name : Compositor.activeScreenName;
     }
 
-    // The screen the session is shown on went away (a display unplugged): the session continues on a live one.
+    // The screen the session is shown on went away (a display unplugged): the session continues on the active one.
     Connections {
         target: Quickshell
 
         function onScreensChanged(): void {
-            if (root.screenName !== "" && ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
-                root.screenName = ScreenChoice.resolve(root.screenName, Quickshell.screens.map(s => s.name));
+            if (ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
+                root.screenName = Compositor.activeScreenName;
         }
     }
 
