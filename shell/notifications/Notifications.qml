@@ -550,7 +550,7 @@ Singleton {
 
     function addEntry(entry: var): void {
         const before = history;
-        history = History.pushNewest(history, entry, Date.now());
+        history = History.pushNewest(history, entry, Date.now(), keepMs);
         count = history.length;
         saveTimer.restart();
         // Only the tail can fall out: drop exactly those rows, without scanning the whole model.
@@ -774,14 +774,44 @@ Singleton {
 
     // ---- persistence ----
 
+    // How long the panel keeps notifications: a day with "1 Day", else a week (the "never" setting only means nothing is
+    // written to disk; the session's notifications stay in the panel).
+    readonly property real keepMs: Settings.notificationsHistory === "day" ? 24 * 3600 * 1000 : 0
+
+    // False once a file written by a newer version was found: it is never rewritten (read only).
+    property bool historyWritable: true
+
     function loadHistory(text: string): void {
         // Entries received before the file was read stay on top.
-        const restored = History.parse(text, Date.now());
-        restored.forEach(e => e.bodyHtml = Sanitizer.sanitize(e.body));
-        history = History.prune(history.concat(restored), Date.now());
+        const found = History.inspect(text, Date.now(), keepMs);
+        if (found.status === "future") {
+            historyWritable = false;
+            console.warn("notifications: " + historyPath + " was written by a newer version; it is left as it is and not rewritten");
+        } else if (found.status === "corrupt") {
+            // Moved aside (0600), a fresh file is written from here on; the notification history stays usable.
+            console.warn("notifications: " + historyPath + " is damaged; moving it aside as notifications.json.corrupt-<time>");
+            quarantine.running = true;
+        }
+        found.entries.forEach(e => e.bodyHtml = Sanitizer.sanitize(e.body));
+        history = History.prune(history.concat(found.entries), Date.now(), keepMs);
         count = history.length;
         rebuildCenter();
-        historyReady = true;
+        if (found.status !== "corrupt")
+            historyReady = true;
+        // Entries saved by an earlier version (bodies of an app whose previews are Never, entries past the retention) leave the
+        // file at the first write after the load.
+        if (found.status === "ok")
+            saveTimer.restart();
+    }
+
+    // A damaged history file is kept for inspection, never silently overwritten.
+    Process {
+        id: quarantine
+        command: ["sh", "-c", "umask 077; mv -f -- \"$1\" \"$1.corrupt-$2\" && chmod 600 \"$1.corrupt-$2\"; install -m 600 /dev/null \"$1\"", "sh", root.historyPath, String(Date.now())]
+        onRunningChanged: {
+            if (!running)
+                root.historyReady = true;
+        }
     }
 
     function checkOwner(output: string): void {
@@ -843,7 +873,7 @@ Singleton {
         id: saveTimer
         interval: 400
         onTriggered: {
-            if (root.historyReady && root.serverState !== "external")
+            if (root.historyReady && root.historyWritable && root.serverState !== "external")
                 file.setText(History.serialize(root.history, Date.now(), {
                     keep: Settings.notificationsHistory !== "never",
                     maxAgeMs: NotificationPrefs.historyMaxAge(Settings.notificationsHistory),
@@ -858,7 +888,7 @@ Singleton {
         repeat: true
         onTriggered: {
             root.nowMs = Date.now();
-            const kept = History.prune(root.history, root.nowMs);
+            const kept = History.prune(root.history, root.nowMs, root.keepMs);
             if (kept.length !== root.history.length) {
                 root.setHistory(kept);
                 root.pruneLive();

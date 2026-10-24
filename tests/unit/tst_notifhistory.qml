@@ -38,6 +38,32 @@ TestCase {
         compare(JSON.parse(History.serialize(list, now)).notifications[0].body, "secret");
     }
 
+    // Review: a damaged file is moved aside, a file of a newer version is never rewritten, and neither is read as "no history".
+    function test_inspectTellsEmptyCorruptAndFutureApart() {
+        compare(History.inspect("", now).status, "empty");
+        compare(History.inspect("  \n", now).status, "empty");
+        compare(History.inspect("not json", now).status, "corrupt");
+        compare(History.inspect("[]", now).status, "corrupt");
+        compare(History.inspect("{\"version\":0,\"notifications\":[]}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":1.5,\"notifications\":[]}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":\"1\",\"notifications\":[]}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":1,\"notifications\":{}}", now).status, "corrupt");
+        compare(History.inspect("{\"version\":2,\"notifications\":[{\"time\":1}]}", now).status, "future");
+        compare(History.inspect("{\"version\":2,\"notifications\":[{\"time\":1}]}", now).entries.length, 0);
+        const ok = History.inspect(History.serialize([entry("a", "Mail", now - 1000)], now), now);
+        compare(ok.status, "ok");
+        compare(ok.entries.length, 1);
+    }
+
+    // "1 Day" is applied to what is read and what arrives, not only to what is written.
+    function test_oneDayRetentionAppliesInMemory() {
+        const text = History.serialize([entry("a", "Mail", now - 1000), entry("b", "Mail", now - 2 * day)], now);
+        compare(History.inspect(text, now).entries.length, 2);
+        compare(History.inspect(text, now, day).entries.map(e => e.key), ["a"]);
+        const pushed = History.pushNewest([entry("a", "Mail", now - 2 * day)], entry("n", "Mail", now), now, day);
+        compare(pushed.map(e => e.key), ["n"]);
+    }
+
     function test_pruneCapsAt200NewestFirst() {
         const list = [];
         for (let i = 0; i < 250; i++)

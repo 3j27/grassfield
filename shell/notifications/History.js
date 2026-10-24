@@ -29,11 +29,12 @@ function prune(entries, now, maxAgeMs) {
 
 // `entries` (newest first, already pruned) with `entry` on top, pruned like prune() but in
 // O(dropped): only the tail can fall out. Falls back to prune() when `entry` is not the newest.
-function pushNewest(entries, entry, now) {
+function pushNewest(entries, entry, now, maxAgeMs) {
+    const maxAge = maxAgeMs > 0 ? maxAgeMs : MAX_AGE_MS;
     if (typeof entry.time !== "number" || (entries.length > 0 && entry.time < entries[0].time))
-        return prune([entry].concat(entries), now);
+        return prune([entry].concat(entries), now, maxAgeMs);
     const list = [entry].concat(entries);
-    while (list.length > MAX_ENTRIES || (list.length > 0 && now - list[list.length - 1].time > MAX_AGE_MS))
+    while (list.length > MAX_ENTRIES || (list.length > 0 && now - list[list.length - 1].time > maxAge))
         list.pop();
     return list;
 }
@@ -58,13 +59,35 @@ function serialize(entries, now, opts) {
     return JSON.stringify({version: FORMAT_VERSION, notifications: stored}, null, 1) + "\n";
 }
 
+// What the file holds (GF-113, review): {status, entries}. "empty": nothing stored yet (a new file). "ok": entries read, in
+// the order of prune(). "future": a version newer than this build writes: the file is read only here and is never rewritten,
+// so a downgrade cannot destroy it. "corrupt": not JSON, not this format, or a version that never existed: the caller moves it
+// aside before it writes a fresh one, so nothing is lost silently.
+function inspect(text, now, maxAgeMs) {
+    if (typeof text !== "string" || text.trim() === "")
+        return {status: "empty", entries: []};
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        return {status: "corrupt", entries: []};
+    }
+    if (!data || typeof data !== "object" || typeof data.version !== "number" || !Number.isInteger(data.version) || data.version < 1)
+        return {status: "corrupt", entries: []};
+    if (data.version > FORMAT_VERSION)
+        return {status: "future", entries: []};
+    if (!Array.isArray(data.notifications))
+        return {status: "corrupt", entries: []};
+    return {status: "ok", entries: parse(text, now, maxAgeMs)};
+}
+
 function str(value) {
     return typeof value === "string" ? value : "";
 }
 
 // Parses the file. Corrupt or foreign data yields []. Restored entries are non-actionable: their
 // actions keep the label only (empty id) and nid is -1.
-function parse(text, now) {
+function parse(text, now, maxAgeMs) {
     let data;
     try {
         data = JSON.parse(text);
@@ -92,7 +115,7 @@ function parse(text, now) {
             restored: true
         });
     }
-    return prune(entries, now);
+    return prune(entries, now, maxAgeMs);
 }
 
 // Group key: the app name ("" for senders without one; the UI shows a translated label).
