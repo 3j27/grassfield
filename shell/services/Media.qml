@@ -3,7 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Mpris
-import "../widgets/ArtUrl.js" as ArtUrl
+import "../widgets/ArtUrl.js" as ArtUrl // layering-exception: GF-087
 
 // Active MPRIS player: the first one that is playing, else the first one. null when none runs.
 Singleton {

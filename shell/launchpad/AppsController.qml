@@ -6,7 +6,7 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "../platform/ScreenChoice.js" as ScreenChoice
-import "../search/Ranking.js" as Ranking
+import "../search/Ranking.js" as Ranking // layering-exception: GF-087
 import "Model.js" as Model
 
 // Apps controller (spec docs/specs/apps.md): owns the open state, the search query, the category

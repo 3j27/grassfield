@@ -4,7 +4,7 @@ import QtQuick
 import Quickshell
 import Grassfield.Ui
 import qs.store
-import "../dock/Geometry.js" as DockGeometry
+import "../dock/Geometry.js" as DockGeometry // layering-exception: GF-087
 
 // User configuration facade over SettingsStore (grassfield.json, contract version 1).
 // Keys are documented in docs/specs/ui.md.

@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.I18n
 import Grassfield.Ui
-import "../widgets/ArtUrl.js" as ArtUrl
+import "../widgets/ArtUrl.js" as ArtUrl // layering-exception: GF-087
 
 // The one way an icon or picture the shell does not own reaches an Image: named by a notification, the polkit sheet, a
 // desktop entry, an application, a tray item (StatusNotifierItem) or a file (Notifications, AuthAgent, the Dock, the
