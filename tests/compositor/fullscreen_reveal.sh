@@ -6,11 +6,16 @@
 #   2 drag area    top edge, then a click on the revealed bar's drag area: the client gets neither the press nor the release,
 #                  the window stays in full screen
 #   3 minimize     top edge, then a click on the minimize light: inert (still full screen, not minimized), nothing to the client
-#   4 overlay      an Overlay layer of another client over the lights (tests/compositor/reveal-fixture): top edge, then a
-#                  click on the zoom light's place: the layer gets the press, the window stays in full screen
+#   4 overlay      an Overlay layer of another client over the lights (tests/compositor/reveal-fixture): a control click on
+#                  the layer below the bar reaches it (the layer takes input here); top edge, then a click on the zoom
+#                  light's place: the layer gets that press too, the window stays in full screen
 #   5 lock         the session locked (tests/security/foreign_locker, released over its IPC): top edge, then a click on the
-#                  zoom light's place: still full screen after the unlock (the bar never takes a click while locked)
+#                  zoom light's place: still full screen after the unlock (the bar never takes a click while locked); then
+#                  the session must be unlocked again: a click in the content reaches foot
 #   6 way out      top edge, then a click on the zoom light: full screen left (fullscreen 0), nothing to the client
+# After each step the plugin's own lines about the revealed bar (one INFO line per press over it: taken, or left to
+# Hyprland and why, with the number of held buttons; one per release of an armed light) are copied from the nested
+# hyprland.log into this log.
 # Not covered here: a pointer the client confines (no constraining client in the fixtures; the plugin checks
 # CInputManager::isConstrained).
 # Usage: tests/compositor/fullscreen_reveal.sh   (bare; NESTED only: scripts/dev/nested-up.sh with grassfield-compositor)
@@ -42,6 +47,11 @@ rm -f "$work"/*.cap "$work"/fixture.log
 log=$work/run-$(date +%Y%m%d-%H%M%S).log
 say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$log"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
+hyprlog=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/hyprland.log
+log_at() { grep -ac "" "$hyprlog" 2>/dev/null || echo 0; }
+plugin_lines() { # <line count before the step>: the plugin's lines about the revealed bar since then, into this log
+  tail -n +"$(($1 + 1))" "$hyprlog" 2>/dev/null | grep -a "revealed titlebar\|titlebar of a full-screen window" | sed 's/^/    plugin: /' | tee -a "$log" >/dev/null
+}
 query() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$1"; } # read-only: clients, monitors, layers
 
 foreign=$root/tests/security/foreign_locker/ForeignLocker.qml
@@ -101,13 +111,16 @@ reveal() { pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100 abs $((mon_w / 2)
 say "  menu bar ${inset} px: the revealed bar's middle at y $bar_y"
 
 say "1 control: a click in the content reaches foot"
+l0=$(log_at)
 off=$(size_of "$cap")
 pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 150 click sleep 400
 ev=$(sgr_since "$cap" "$off")
 [[ $ev == *M* && $ev == *m* ]]
 check "foot reports the press and the release" $? "events: ${ev:-none}"
+plugin_lines "$l0"
 
 say "2 drag area of the revealed bar"
+l0=$(log_at)
 off=$(size_of "$cap")
 reveal
 pointer abs $((mon_w / 2)) "$bar_y" sleep 200 click sleep 500
@@ -115,8 +128,10 @@ ev=$(sgr_since "$cap" "$off")
 read -r _ _ _ _ fs _ < <(geom)
 [[ -z $ev && $fs == 2 ]]
 check "the client gets neither the press nor the release; still full screen" $? "events: ${ev:-none}, fullscreen ${fs:-?}"
+plugin_lines "$l0"
 
 say "3 minimize light (unavailable in full screen)"
+l0=$(log_at)
 off=$(size_of "$cap")
 reveal
 pointer abs "$GF_TB_MIN_X" "$bar_y" sleep 200 click sleep 800
@@ -124,20 +139,39 @@ ev=$(sgr_since "$cap" "$off")
 read -r _ _ _ _ fs ws < <(geom)
 [[ -z $ev && $fs == 2 && $ws != special:minimized ]]
 check "inert: still full screen, not minimized, nothing to the client" $? "events: ${ev:-none}, fullscreen ${fs:-?}, workspace ${ws:-?}"
+plugin_lines "$l0"
 
 say "4 an Overlay layer over the lights"
+l0=$(log_at)
 fixlog=$work/fixture.log
 WAYLAND_DISPLAY=$sock GF_RV_OUTPUT=$out setsid "$root/scripts/dev/isolated.sh" --name reveal-fixture \
   qs -p "$root/tests/compositor/reveal-fixture" --no-color >"$fixlog" 2>&1 </dev/null &
 fixture_pid=$!
 pids+=("$fixture_pid")
 for _ in $(seq 1 40); do grep -aq "\[rv-fixture\] mapped" "$fixlog" && break; sleep 0.2; done
+# The fixture's presses so far, once it logged more than <count> or 3 s passed (its log is written by another process,
+# late under load).
+presses_after() { # <count before>
+  local n i
+  for i in $(seq 1 30); do
+    n=$(grep -ac "\[rv-fixture\] press" "$fixlog")
+    ((n > $1)) && break
+    sleep 0.1
+  done
+  echo "$n"
+}
 if grep -aq "\[rv-fixture\] mapped" "$fixlog"; then
   sleep 0.5
+  # Control: a click on the layer below the bar's band (the layer is 120 px tall): the layer takes input here.
+  c0=$(grep -ac "\[rv-fixture\] press" "$fixlog")
+  pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100 abs 200 100 sleep 200 click sleep 300
+  c1=$(presses_after "$c0")
+  [[ $((c1 - c0)) -ge 1 ]]
+  check "control: a click on the layer outside the bar reaches it" $? "presses to the layer $((c1 - c0))"
   p0=$(grep -ac "\[rv-fixture\] press" "$fixlog")
   reveal
-  pointer abs "$GF_TB_ZOOM_X" "$bar_y" sleep 200 click sleep 700
-  p1=$(grep -ac "\[rv-fixture\] press" "$fixlog")
+  pointer abs "$GF_TB_ZOOM_X" "$bar_y" sleep 200 click sleep 300
+  p1=$(presses_after "$p0")
   read -r _ _ _ _ fs _ < <(geom)
   [[ $((p1 - p0)) -ge 1 && $fs == 2 ]]
   check "the layer gets the press; still full screen" $? "presses to the layer $((p1 - p0)), fullscreen ${fs:-?}"
@@ -146,8 +180,10 @@ else
 fi
 kill "$fixture_pid" 2>/dev/null
 sleep 0.8
+plugin_lines "$l0"
 
 say "5 the session locked"
+l0=$(log_at)
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 \
   setsid "$root/scripts/dev/isolated.sh" --name reveal-locker qs -p "$foreign" --no-color >>"$work/locker.log" 2>&1 </dev/null &
 locker_pid=$!
@@ -162,18 +198,28 @@ if [[ $locked == "locked secure" ]]; then
   reveal
   pointer abs "$GF_TB_ZOOM_X" "$bar_y" sleep 200 click sleep 600
   foreign_ipc unlock >/dev/null
-  for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
-  kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
+  # The locker exits once the lock is released; killed instead, it would leave Hyprland's dead-locker screen (still locked).
+  exited=0
+  for _ in $(seq 1 100); do kill -0 "$locker_pid" 2>/dev/null || { exited=1; break; }; sleep 0.1; done
+  ((exited)) || kill "$locker_pid" 2>/dev/null
   locker_pid=""
   sleep 0.6
   read -r _ _ _ _ fs _ < <(geom)
   [[ $fs == 2 ]]
   check "a click on the zoom light's place while locked changes nothing" $? "fullscreen ${fs:-?} after the unlock (want 2)"
+  off=$(size_of "$cap")
+  pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 150 click sleep 400
+  ev=$(sgr_since "$cap" "$off")
+  [[ $exited == 1 && $ev == *M* && $ev == *m* ]]
+  check "unlocked again: the locker exited and a click in the content reaches foot" $? "locker exited: $exited, events: ${ev:-none}"
 else
   check "the foreign locker locked the session" 1 "status '${locked:-none}' (see $work/locker.log)"
 fi
 
+plugin_lines "$l0"
+
 say "6 the way out: top edge, then the zoom light"
+l0=$(log_at)
 off=$(size_of "$cap")
 reveal
 pointer abs "$GF_TB_ZOOM_X" "$bar_y" sleep 200 click sleep 800
@@ -181,6 +227,7 @@ ev=$(sgr_since "$cap" "$off")
 read -r _ _ _ _ fs _ < <(geom)
 [[ $fs == 0 && -z $ev ]]
 check "full screen left; nothing to the client" $? "fullscreen ${fs:-?} (want 0), events: ${ev:-none}"
+plugin_lines "$l0"
 
 if ! kill -0 "$hypr_pid" 2>/dev/null; then
   say "check: FAIL nested Hyprland pid $hypr_pid is gone"

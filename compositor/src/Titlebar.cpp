@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <set>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -82,6 +83,9 @@ namespace {
         CGrassfieldTitlebar*              hovered = nullptr; // lights under the pointer (glyphs); checked with isLive
         PHLWINDOWREF                      activeWindow;      // last window reported active (its lights are coloured)
         gf::chrome::CRevealPresses        revealPresses;     // presses on a revealed full-screen titlebar (P6)
+        // The buttons Hyprland holds as the bus shows them: presses it processed (not cancelled), until their release.
+        // Its own list (CInputManager::m_currentlyHeldButtons) is private; hasHeldButtons() only says whether it is empty.
+        std::set<uint32_t>                heldByHyprland;
         CGrassfieldTitlebar*              revealArmed = nullptr; // its light pressed, activated on release over it
         std::optional<tb::Button>         revealLight;
     };
@@ -990,6 +994,7 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
         input.presses.reset();
         // A release still owed reaches Hyprland, which has no such button held and returns (read from the binary).
         input.revealPresses.reset();
+        input.heldByHyprland.clear();
         input.revealArmed = nullptr;
         input.revealLight.reset();
         for (auto* deco : gf::state().titlebars) {
@@ -1064,32 +1069,45 @@ bool CGrassfieldTitlebar::onRevealedBarButton(const IPointer::SButtonEvent& e) {
             auto*      armed = std::exchange(input.revealArmed, nullptr);
             const auto light = std::exchange(input.revealLight, std::nullopt);
             if (e.button == BTN_LEFT && light && isLive(armed) && armed->m_revealed && g_pInputManager) {
-                const auto pos = g_pInputManager->getMouseCoordsInternal();
-                const CBox bar = armed->revealBox();
-                if (tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == light)
+                const auto pos     = g_pInputManager->getMouseCoordsInternal();
+                const CBox bar     = armed->revealBox();
+                const bool overIt  = tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == light;
+                gf::logRequest(Log::INFO, "revealed titlebar: release at {:.0f},{:.0f}: {}", pos.x, pos.y, overIt ? "the light acts" : "away from the light, nothing");
+                if (overIt)
                     armed->activate(*light);
-            }
+            } else if (light)
+                gf::logRequest(Log::INFO, "revealed titlebar: release of an armed light with the bar {}", isLive(armed) && armed->m_revealed ? "shown" : "gone: nothing");
             updateReveal(); // the pointer may have left the bar during the press
             return;
         }
         if (!g_pInputManager)
             return;
-        const auto           pos  = g_pInputManager->getMouseCoordsInternal();
-        CGrassfieldTitlebar* deco = nullptr;
+        const auto           pos     = g_pInputManager->getMouseCoordsInternal();
+        const auto&          held    = input.heldByHyprland;
+        CGrassfieldTitlebar* deco    = nullptr;
+        const char*          refused = nullptr;
         for (auto* d : gf::state().titlebars) {
-            if (d->m_revealed && d->revealable() && d->revealBox().containsPoint(pos)) {
-                const auto w = d->window();
-                if (w && !overlaySurfaceAt(pos, w->m_monitor.lock()))
-                    deco = d;
-                break;
-            }
+            if (!d->m_revealed || !d->revealBox().containsPoint(pos))
+                continue;
+            const auto w = d->window();
+            if (!w || !d->revealable())
+                refused = "the window cannot show it now";
+            else if (overlaySurfaceAt(pos, w->m_monitor.lock()))
+                refused = "a layer popup or an Overlay layer is over it";
+            // Hyprland's held buttons are per button and the bus event names no device (IPointer::SButtonEvent): a press
+            // of a button another device already holds goes to Hyprland, so that the other device's release is never
+            // mistaken for the bar's (review of part B: B holds LEFT, A presses LEFT on the bar).
+            else if (held.contains(e.button))
+                refused = "that button is already held";
+            else
+                deco = d;
+            break;
         }
-        // Only while no button is held anywhere: Hyprland's held buttons are per button, and the bus event names no device
-        // (IPointer::SButtonEvent), so a release could not be told apart from another device's release of the same button
-        // (review of part B: B holds LEFT, A presses LEFT on the bar, B's release must reach Hyprland). Such a press goes to
-        // the window, as without the bar.
-        if (deco && g_pInputManager->hasHeldButtons())
-            deco = nullptr;
+        // One line per press over the revealed bar (never a key): what it did and why (tests/compositor/fullscreen_reveal.sh
+        // prints them).
+        if (refused)
+            gf::logRequest(Log::INFO, "revealed titlebar: a press at {:.0f},{:.0f} left to Hyprland: {} ({} button(s) held as seen on the bus, Hyprland {})", pos.x,
+                           pos.y, refused, held.size(), g_pInputManager->hasHeldButtons() ? "holds some" : "holds none");
         if (deco)
             cancel = true; // first: whatever follows, the press never reaches Hyprland without its release owed
         input.revealPresses.onPress(e.button, deco != nullptr);
@@ -1102,12 +1120,24 @@ bool CGrassfieldTitlebar::onRevealedBarButton(const IPointer::SButtonEvent& e) {
             return; // other buttons do nothing on the bar
         const CBox bar = deco->revealBox();
         const auto hit = tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w);
-        gf::logRequest(Log::DEBUG, "revealed titlebar press at {:.1f},{:.1f} bar {:.1f},{:.1f} {:.0f}x{:.0f} -> {}", pos.x, pos.y, bar.x, bar.y, bar.w, bar.h, hitName(hit));
+        gf::logRequest(Log::INFO, "revealed titlebar: a press at {:.0f},{:.0f} taken (bar {:.0f},{:.0f} {:.0f}x{:.0f}) -> {} (Hyprland {})", pos.x, pos.y, bar.x, bar.y, bar.w,
+                       bar.h, hitName(hit), g_pInputManager->hasHeldButtons() ? "holds some button" : "holds none");
         focusAndRaise(w);
         if (const auto light = tb::buttonForHit(hit); light && gf::chrome::lightAvailableInFullscreen(*light)) {
             input.revealArmed = deco;
             input.revealLight = light;
         }
+    });
+    // What Hyprland holds from here on: a press it processes adds its button, a release it processes removes it (its list
+    // removes every entry of that button).
+    gf::guarded("titlebar held buttons", [&] {
+        auto& held = pointerInput().heldByHyprland;
+        if (cancel)
+            return;
+        if (e.state == WL_POINTER_BUTTON_STATE_PRESSED)
+            held.insert(e.button);
+        else
+            held.erase(e.button);
     });
     return cancel;
 }
