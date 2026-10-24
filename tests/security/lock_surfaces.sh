@@ -149,10 +149,24 @@ expect("polkit sheet: takes the keyboard only when shown and not held", re.searc
        and re.search(r"property bool takesKeys:\s*shown\s*&&\s*\(!root\.heldByLock\s*\|\|\s*root\.userFocused\)", agent) is not None)
 # Review of 1d2c856: a request held behind the lock takes the keyboard only after a click past the guard, never at once.
 expect("polkit sheet: a held request takes the keyboard only after a click past the guard",
-       re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?heldClickAccepted\(Date\.now\(\)\s*-\s*root\.shownAt\).*?root\.userFocused\s*=\s*true", agent, re.S) is not None)
+       re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?if\s*\(!dialogModel\.heldClickAccepted\(\)\)\s*return;.*?root\.userFocused\s*=\s*true", agent, re.S) is not None
+       and re.search(r"onShownChanged:\s*\{\s*if\s*\(shown\)\s*dialogModel\.noteShown\(\);", agent) is not None)
 expect("polkit sheet: a request arriving while locked, or just after an unlock, is held",
-       re.search(r"heldByLock\s*=\s*active\s*&&\s*dialogModel\.arrivesHeld\(SessionState\.locked,\s*root\.unlockedAt\s*>\s*0\s*\?\s*Date\.now\(\)\s*-\s*root\.unlockedAt\s*:\s*-1\)", agent) is not None
-       and re.search(r"if\s*\(!SessionState\.locked\)\s*\{\s*root\.unlockedAt\s*=\s*Date\.now\(\)", agent) is not None)
+       re.search(r"heldByLock\s*=\s*active\s*&&\s*dialogModel\.arrivesHeld\(SessionState\.locked\);", agent) is not None
+       and re.search(r"if\s*\(!SessionState\.locked\)\s*\{\s*dialogModel\.noteUnlock\(\);", agent) is not None)
+# Review of 6e24d36: the unlock hold and the click guard are timed by Timers (monotonic), never by the wall clock; the
+# agent reads Date.now() only for the arrival time the notice shows.
+model = code(read("shell/security/polkit/AuthDialogModel.qml"))
+bodies = {n: code(function(model, n) or "") for n in ("noteUnlock", "noteShown", "heldClickAccepted", "arrivesHeld")}
+expect("polkit holds: timed by Timers, never by the wall clock",
+       len(re.findall(r"\bDate\b", agent)) == 1 and re.search(r"requestStartedAt\s*=\s*active\s*\?\s*Date\.now\(\)\s*:\s*0", agent) is not None
+       and not any(re.search(r"\bDate\b", b) for b in bodies.values())
+       and re.search(r"property Timer unlockHold:\s*Timer\s*\{\s*interval:\s*root\.heldAfterUnlockMs\s*\}", model) is not None
+       and re.search(r"property Timer clickGuard:\s*Timer\s*\{\s*interval:\s*root\.heldGuardMs\s*\}", model) is not None
+       and re.search(r"^\s*unlockHold\.restart\(\);\s*$", bodies["noteUnlock"], re.M) is not None
+       and re.search(r"priv\.shown\s*=\s*true;\s*clickGuard\.restart\(\);", bodies["noteShown"]) is not None
+       and re.search(r"^\s*return\s+priv\.shown\s*&&\s*!clickGuard\.running;\s*$", bodies["heldClickAccepted"], re.M) is not None
+       and re.search(r"^\s*return\s+locked\s*\|\|\s*unlockHold\.running;\s*$", bodies["arrivesHeld"], re.M) is not None)
 expect("polkit sheet: a request open when the lock engages is held", re.search(r"else if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true", agent) is not None)
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
@@ -179,7 +193,8 @@ done <<<"$out"
 mut=$tmp/mutant
 for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.qml shell/search/Search.qml shell/launchpad/AppsController.qml \
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
-  shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml; do
+  shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
+  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -192,7 +207,11 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
   'shell/security/polkit/AuthAgent.qml#shown && (!root.heldByLock || root.userFocused)#shown' \
   'shell/security/polkit/AuthAgent.qml#if (shown && !root.heldByLock)#if (shown)' \
-  'shell/security/polkit/AuthAgent.qml#dialogModel.arrivesHeld(SessionState.locked, root.unlockedAt > 0 ? Date.now() - root.unlockedAt : -1)#SessionState.locked'; do
+  'shell/security/polkit/AuthAgent.qml#dialogModel.arrivesHeld(SessionState.locked)#SessionState.locked' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.noteUnlock();#root.unlockedAt = Date.now();' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.noteShown();#root.shownAt = Date.now();' \
+  'shell/security/polkit/AuthDialogModel.qml#return locked || unlockHold.running;#return locked || Date.now() - priv.unlockedAt < heldAfterUnlockMs;' \
+  'shell/security/polkit/AuthDialogModel.qml#return priv.shown && !clickGuard.running;#return !clickGuard.running;'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'

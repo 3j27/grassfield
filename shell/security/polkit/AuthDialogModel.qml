@@ -51,15 +51,34 @@ QtObject {
     // A request that arrives this soon after an unlock is held too (review of d8e654c): keys typed right after the unlock
     // must not land in a sheet that appeared a moment later.
     readonly property int heldAfterUnlockMs: 1000
-
-    function heldClickAccepted(sinceShownMs: real): bool {
-        return sinceShownMs >= heldGuardMs;
+    // Both delays are timed by Timers (a monotonic clock), never by Date.now() (review of 6e24d36: a wall-clock step back
+    // would hold a request for hours, a step forward would end the hold at once).
+    readonly property Timer unlockHold: Timer {
+        interval: root.heldAfterUnlockMs
+    }
+    readonly property Timer clickGuard: Timer {
+        interval: root.heldGuardMs
     }
 
-    // A request is held when it arrives while the session is locked, or within heldAfterUnlockMs of the last unlock
-    // (`sinceUnlockMs` < 0: no unlock yet).
-    function arrivesHeld(locked: bool, sinceUnlockMs: real): bool {
-        return locked || (sinceUnlockMs >= 0 && sinceUnlockMs < heldAfterUnlockMs);
+    // The session was unlocked: requests arriving in the next heldAfterUnlockMs are held.
+    function noteUnlock(): void {
+        unlockHold.restart();
+    }
+
+    // The sheet appeared: a click counts only heldGuardMs from now.
+    function noteShown(): void {
+        priv.shown = true;
+        clickGuard.restart();
+    }
+
+    // When in doubt, no: a click before the sheet was ever noted as shown does not count either.
+    function heldClickAccepted(): bool {
+        return priv.shown && !clickGuard.running;
+    }
+
+    // A request is held when it arrives while the session is locked, or within heldAfterUnlockMs of the last unlock.
+    function arrivesHeld(locked: bool): bool {
+        return locked || unlockHold.running;
     }
 
     // What the held sheet says, with the time the request arrived (the message names the program for pkexec).
@@ -77,6 +96,7 @@ QtObject {
     component Private: QtObject {
         property bool submitted: false
         property string error: ""
+        property bool shown: false
     }
 
     readonly property Private priv: Private {}

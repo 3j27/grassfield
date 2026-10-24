@@ -43,7 +43,7 @@ Scope {
 
         onActiveChanged: {
             root.heldWhileLocked = active && SessionState.locked;
-            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked, root.unlockedAt > 0 ? Date.now() - root.unlockedAt : -1);
+            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked);
             root.userFocused = false;
             root.requestStartedAt = active ? Date.now() : 0;
         }
@@ -52,20 +52,19 @@ Scope {
     // The request arrived, or was open, while the session was locked (review of 1d2c856), or arrived within
     // AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the keyboard until the
     // user clicks it (AuthDialogModel.heldGuardMs after it appeared), so keys typed right after the unlock never reach its
-    // field; it says when the request arrived.
+    // field; it says when the request arrived. Both delays are timed by the model's Timers (monotonic, review of 6e24d36);
+    // requestStartedAt is only the time shown in the notice.
     property bool heldByLock: false
     property bool heldWhileLocked: false
     property bool userFocused: false
     property double requestStartedAt: 0
-    property double shownAt: 0
-    property double unlockedAt: 0
 
     Connections {
         target: SessionState
 
         function onLockedChanged(): void {
             if (!SessionState.locked) {
-                root.unlockedAt = Date.now();
+                dialogModel.noteUnlock();
             } else if (dialogModel.active) {
                 root.heldByLock = true;
                 root.heldWhileLocked = true;
@@ -102,7 +101,7 @@ Scope {
         // held takes the keys at once; a held one waits for a click (takesKeys) with an empty field.
         onShownChanged: {
             if (shown)
-                root.shownAt = Date.now();
+                dialogModel.noteShown();
             const dialog = holder.item as AuthDialog;
             if (!dialog)
                 return;
@@ -161,7 +160,7 @@ Scope {
             enabled: root.heldByLock && !root.userFocused
             onPressed: mouse => {
                 mouse.accepted = false;
-                if (!dialogModel.heldClickAccepted(Date.now() - root.shownAt))
+                if (!dialogModel.heldClickAccepted())
                     return;
                 root.userFocused = true;
                 const dialog = holder.item as AuthDialog;

@@ -240,9 +240,12 @@ shell no longer relies on that alone:
   after the unlock, the end of the lock password or a Return, landed in its field): it says
   "This request arrived at <time>, while the screen was locked. Click the sheet to answer it.", its field is empty, and
   it takes the keyboard only after a click on the sheet that comes at least 500 ms (`AuthDialogModel.heldGuardMs`) after
-  it appeared (the click goes on to what it hit: the field, Cancel, Allow). polkit gives no program name to the agent
-  (only the message, which names the program for pkexec). Tests: `tst_authdialogmodel` `test_heldGuard`, `tst_authdialog`
-  `test_11_heldNotice`, `tests/security/lock_surfaces.sh` (wiring and three mutations). Seen on screen: NOT VERIFIED (L5).
+  it appeared (the click goes on to what it hit: the field, Cancel, Allow). Both delays are timed by Timers in the model
+  (`noteUnlock`, `noteShown`; a monotonic clock), never by `Date.now()` (review of 6e24d36: a wall-clock step would stretch
+  or end a hold); a click before the sheet was ever noted as shown does not count. polkit gives no program name to the agent
+  (only the message, which names the program for pkexec). Tests: `tst_authdialogmodel` `test_heldGuard`,
+  `test_heldJustAfterUnlock` (real timers), `tst_authdialog` `test_11_heldNotice`, `tests/security/lock_surfaces.sh`
+  (wiring, no `Date` in the hold functions, eight polkit mutations). Seen on screen: NOT VERIFIED (L5).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").
