@@ -14,6 +14,8 @@ T.Button {
 
     implicitWidth: Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg)
     implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : (root.push ? Tokens.controlButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm)
+    // Disabled: the whole button dims, once (callers no longer set an opacity of their own).
+    opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.Button
@@ -61,7 +63,6 @@ T.Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: root.text
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
         color: root.primary ? Appearance.colors.accentText : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize

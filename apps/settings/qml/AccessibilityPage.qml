@@ -168,7 +168,6 @@ SettingsPage {
             Button {
                 text: qsTr("Reset Colour")
                 enabled: root.customColors
-                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
                 onClicked: {
                     root.store.set("pointer.outlineColor", PointerColors.DEFAULT_OUTLINE);
                     root.store.set("pointer.fillColor", PointerColors.DEFAULT_FILL);

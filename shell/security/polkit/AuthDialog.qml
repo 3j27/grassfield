@@ -308,7 +308,6 @@ FocusScope {
                 text: qsTr("Allow")
                 primary: true
                 enabled: root.model.canSubmit
-                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
                 onClicked: field.submit()
             }
         }

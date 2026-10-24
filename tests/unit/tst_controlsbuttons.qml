@@ -127,6 +127,13 @@ TestCase {
         compare(tool.Accessible.name, "Info");
     }
 
+    function test_disabledButtonDimsOnceAsAWhole() {
+        compare(button.opacity, 1);
+        button.enabled = false;
+        compare(button.opacity, Tokens.materialDisabledOpacity);
+        compare(button.contentItem.opacity, 1, "the label is not dimmed a second time");
+    }
+
     function test_disabledButtonNeverActs() {
         button.enabled = false;
         mouseClick(button);
