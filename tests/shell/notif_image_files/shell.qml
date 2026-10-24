@@ -38,7 +38,10 @@ ShellRoot {
         id: setup
         running: true
         command: ["sh", "-c", "rm -rf \"$1\" && mkdir -p \"$1/folder.png\" && printf 'png' >\"$1/ok.png\" && mkfifo \"$1/fifo.png\" && ln -s fifo.png \"$1/link.png\" && truncate -s 20M \"$1/big.png\"", "sh", root.dir]
-        onExited: (code, status) => {
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: code => {
+            // qmllint enable signal-handler-parameters
             root.check("fixtures created", code === 0);
             const p = root.paths;
             for (const k in p)

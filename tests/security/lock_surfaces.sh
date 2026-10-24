@@ -92,6 +92,13 @@ windows = ipc(compositor, "windows")
 for name in ("minimize", "tile", "hide", "cycleApp"):
     first_decision("shell/platform/Compositor.qml", f"windows.{name}", R) if windows is None else first_decision("shell/platform/Compositor.qml", name, R, text=windows, lines=2)
 first_decision("shell/switcher/Switcher.qml", "step", "if (locked)", lines=8)
+# Review of 1d2c856: the desktop's context menu, its attribution card and the widget menu (an Overlay layer with the
+# keyboard) also refuse and close.
+first_decision("shell/desktop/IconsView.qml", "openMenu", R)
+first_decision("shell/desktop/IconsView.qml", "openAbout", R)
+widgets = code(read("shell/desktop/DesktopWidgets.qml"))
+m = re.search(r"onMenuRequested:\s*\(px, py\)\s*=>\s*\{", widgets)
+expect("shell/desktop/DesktopWidgets.qml: the widget menu refuses while locked first", m is not None and R in "\n".join(l for l in block_after(widgets, m.start()).split("\n") if l.strip())[:200])
 
 # Closing when the lock engages.
 def closes(path, pattern, what):
@@ -103,6 +110,8 @@ closes("shell/notifications/Notifications.qml", r"onSessionLockedChanged:.*?sess
 closes("shell/overview/Overview.qml", r"onLockedChanged:.*?if\s*\(locked\)\s*requestCloseForOther\(\)", "closes when the session locks")
 closes("shell/dock/Dock.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?keyboardMode\s*=\s*false", "leaves keyboard mode when the session locks")
 closes("shell/switcher/Switcher.qml", r"onLockedChanged:.*?if\s*\(locked\)\s*cancel\(\)", "ends when the session locks")
+closes("shell/desktop/IconsView.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?root\.closeMenu\(\"outside\"\).*?root\.closeAbout\(\"outside\"\)", "closes its menu and card when the session locks")
+closes("shell/desktop/DesktopWidgets.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?scope\.closeMenu\(\)", "closes the widget menu when the session locks")
 
 # IPC actions route through the refusing entry points.
 def route(path, target, name, pattern):
@@ -161,12 +170,14 @@ done <<<"$out"
 mut=$tmp/mutant
 for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.qml shell/search/Search.qml shell/launchpad/AppsController.qml \
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
-  shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml; do
+  shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
 python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1 && pass "mutation: the unchanged copy passes" || bad "mutation: the unchanged copy fails"
 for case_ in 'shell/dock/Dock.qml|SessionState.refuses("dock keyboard")|false' \
+  'shell/desktop/DesktopWidgets.qml|SessionState.refuses("widget menu")|false' \
+  'shell/desktop/IconsView.qml|root.closeMenu("outside");|root.closeAbout("outside");' \
   'shell/platform/Compositor.qml|SessionState.refuses("windows cycleApp")|false' \
   'shell/services/Popups.qml|SessionState.refuses("popup " + popupKind)|false' \
   'shell/security/polkit/AuthAgent.qml|dialogModel.active \&\& !SessionState.locked|dialogModel.active'; do

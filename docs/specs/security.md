@@ -217,10 +217,13 @@ shell no longer relies on that alone:
   popup kind: Control Center, menu-bar menus, tray, Dock menus and stacks, About, Force Quit, confirm and notice sheets;
   `toggle`, `openCentered`, `confirm` and `notice` go through `open`), `Search.show`, `AppsController.show`,
   `Overview.show` (also its own `locked`), `Notifications.toggleCenter` / `openWidgetGallery`, `Dock.enterKeyboardMode`,
-  and the window commands of IPC target `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
+  the desktop's context menu and attribution card (`IconsView.openMenu` / `openAbout`), the widget menu (an Overlay
+  layer with the keyboard, `DesktopWidgets` `onMenuRequested`; review of 1d2c856), and the window commands of IPC target
+  `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
   (`Switcher.step`). Bindings, IPC calls, screen corners and gestures all end in these entry points, so all are refused.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
-  the Overview (through its keyboard release), the Switcher, Dock keyboard mode. `Lock.lock()` also closes popups first.
+  the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
+  lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
 - Polkit: a request that arrives while locked waits (macOS shows the authorization sheet after the unlock): the sheet is
   neither mapped nor given the keyboard until `SessionState.locked` is false; text typed into an open sheet is dropped when
   the lock hides it. Nothing is answered meanwhile (polkit keeps the request pending; Cancel/Esc work once shown).

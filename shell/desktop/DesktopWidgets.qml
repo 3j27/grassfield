@@ -91,6 +91,17 @@ Variants {
             menuEntry = null;
         }
 
+        // The session locks: the widget menu (an Overlay layer with the keyboard) closes; none opens while locked
+        // (onMenuRequested) (GF-116, review of 1d2c856).
+        Connections {
+            target: SessionState
+
+            function onLockedChanged(): void {
+                if (SessionState.locked)
+                    scope.closeMenu();
+            }
+        }
+
         function applyMenu(action: string): void {
             const entry = menuEntry;
             menuEntry = null;
@@ -245,6 +256,8 @@ Variants {
                         scale: win.dragging ? Tokens.widgetLiftScale : 1
                         onPressed: scope.keepActive()
                         onMenuRequested: (px, py) => {
+                            if (SessionState.refuses("widget menu"))
+                                return;
                             const p = tile.mapToItem(null, px, py);
                             scope.menuAt = Qt.point(p.x + win.windowOrigin.x, p.y + win.windowOrigin.y);
                             scope.menuEntry = win.entry;
