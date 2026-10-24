@@ -191,7 +191,9 @@ top-level menus (Left/Right).
       4b8592d: 11 of 60 clients that sent Inhibit and exited at once kept their cookies for the session);
     - every other member (`Lock`, `SetActive`, `GetActive`, `SimulateUserActivity`, …) answers `NotSupported`, a wrong
       signature `InvalidArgs`; other interfaces on the paths are dropped, as on the registrar;
-    - the shell gets `{"type":"screensaver","inhibited":bool,"count":N}` on every change and when it connects; the log
+    - the shell gets `{"type":"screensaver","inhibited":bool,"count":N}` on every change, when it connects, and again
+      every 20 s (`kHeartbeatMs`): a bridge that hangs without exiting stops repeating it, and the shell drops
+      "inhibited" after 60 s without a line (`MenuBridge.screensaverStaleMs`; review of 4b8592d); the log
       names the applications (printable, 64 characters at most) on each change, never the reasons;
     - shell side: `MenuBridge.js` validates it (boolean, integer 0..1024), `MenuBridge.screenSaverInhibited` follows it
       and is false while no bridge is connected; `shell.qml` feeds `Idle.busInhibited`, which disarms only the idle dim

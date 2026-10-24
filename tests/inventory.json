@@ -146,6 +146,7 @@
  {"path": "tests/shell/notif_center_random3/shell.qml", "layer": "headless"},
  {"path": "tests/shell/notif_clear/shell.qml", "layer": "headless"},
  {"path": "tests/shell/notif_image_files/shell.qml", "layer": "headless"},
+ {"path": "tests/shell/menubridge_heartbeat/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_delivery/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_store/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_theme/shell.qml", "layer": "headless"},

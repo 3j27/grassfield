@@ -122,6 +122,14 @@ check "a second client and the legacy path: count 3" await '.count == 3'
 check "the bridge logs the applications" grep -q "from Chromium, Steam, VLC" "$log"
 
 say ""
+say "[2b] heartbeat: the line is repeated every 20 s (a hung bridge stops, and the shell then drops inhibited)"
+beats_before=$(jq -c 'select(.type == "screensaver")' "$shell_out" | wc -l)
+sleep 21
+beats_after=$(jq -c 'select(.type == "screensaver")' "$shell_out" | wc -l)
+check "at least one repeated screensaver line in 21 s ($beats_before -> $beats_after)" test "$beats_after" -gt "$beats_before"
+check "the repeated line carries the current state (count 3)" last_is '.count == 3'
+
+say ""
 say "[3] other clients' and unknown cookies"
 a_cookie=$(awk '/^cookie/ {print $2; exit}' "$a_out")
 start_client "uninhibit-raw $a_cookie" "uninhibit-raw 7" "sleep 200"

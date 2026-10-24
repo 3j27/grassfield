@@ -32,6 +32,9 @@ namespace gf::menubridge::screensaver {
     inline constexpr int  kMaxPerSender = 16;              // cookies one connection may hold
     inline constexpr int  kMaxSenders   = 64;              // connections holding cookies
     inline constexpr int  kMaxText      = 64;              // characters of an application name kept (logs only)
+    // The screensaver line is repeated this often while a shell is connected; the shell drops "inhibited" after three
+    // missed beats (shell/platform/MenuBridge.js limits.screensaverStaleMs), so a hung bridge cannot hold the idle lock off.
+    inline constexpr int  kHeartbeatMs  = 20000;
 
     // Cookies by sender. Every change of active() is reported by the caller.
     class Book {

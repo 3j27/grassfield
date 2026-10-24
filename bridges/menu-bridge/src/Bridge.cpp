@@ -63,6 +63,9 @@ namespace gf::menubridge {
           }) {
         connect(&m_launcher, &LauncherWatcher::line, this, [this](const QByteArray& line) { send(line); });
         m_screensaver.setConnection(m_bus);
+        m_screensaverHeartbeat.setInterval(screensaver::kHeartbeatMs);
+        connect(&m_screensaverHeartbeat, &QTimer::timeout, this,
+                [this] { send(screensaverMessage(m_screensaver.book().active(), m_screensaver.book().count())); });
         m_server.setSocketOptions(QLocalServer::UserAccessOption);
         m_server.setMaxPendingConnections(2);
         connect(&m_server, &QLocalServer::newConnection, this, [this] { onNewConnection(); });
@@ -118,6 +121,7 @@ namespace gf::menubridge {
         dropAll();
         m_calls.clear(); // a clean stop leaves nothing in flight
         m_heartbeat.stop();
+        m_screensaverHeartbeat.stop();
         m_running = false;
         saveState(); // "run 0": the next start knows this was not a crash
         if (m_client) {
@@ -174,6 +178,7 @@ namespace gf::menubridge {
             for (const QByteArray& launcherLine : m_launcher.snapshot())
                 send(launcherLine); // applications' badges set before this shell connected
             send(screensaverMessage(m_screensaver.book().active(), m_screensaver.book().count())); // idle inhibitors taken meanwhile
+            m_screensaverHeartbeat.start();
         }
     }
 
@@ -214,6 +219,7 @@ namespace gf::menubridge {
         m_client  = nullptr;
         m_appmenu = false;
         m_buffer.clear();
+        m_screensaverHeartbeat.stop();
         setRegistrar(false);
         dropAll();
     }

@@ -113,6 +113,9 @@ namespace gf::menubridge {
         LauncherWatcher             m_launcher; // ADR-0018: applications' own Dock badges (needs m_penalties and m_bus)
         screensaver::ScreenSaverObject m_screensaver; // GF-016: idle inhibitors
         bool                        m_screensaverOwned = false;
+        // The screensaver line is repeated every screensaver::kHeartbeatMs while a shell is connected: a bridge that
+        // hangs without exiting stops repeating it, and the shell then drops a stale "inhibited" (idle locking on).
+        QTimer                      m_screensaverHeartbeat;
         void                        setScreenSaver(bool wanted);
         struct Calls {
             int     count     = 0;

@@ -356,7 +356,9 @@ VERIFIED until run).
   (`docs/specs/menu-bridge.md` MB16). `Idle.busInhibited` (from `MenuBridge.screenSaverInhibited`) then disarms the idle
   dim and idle lock only (`IdleModel.idleArmed`), as a macOS power assertion does while a video plays; a manual lock, the
   lid, the lock before sleep and the display power-off on the lock screen are unaffected. Fail closed: no bridge, a dead
-  bridge or anything but an explicit `true` leaves idle locking on. Wayland-native players (mpv, Firefox, Chromium on
+  bridge, a hung bridge (the line is repeated every 20 s; 60 s without one drops "inhibited", `tests/shell/menubridge_heartbeat`),
+  a client that left before the bridge watched it (watch, then `NameHasOwner`) or anything but an explicit `true` leaves
+  idle locking on. Wayland-native players (mpv, Firefox, Chromium on
   Wayland) keep using the idle-inhibit protocol that `IdleMonitor { respectInhibitors: true }` honours (DT-16). Tests:
   `tests/unit/menu-bridge/tst_screensaver.cpp`, `tests/security/tst_idlemodel.qml` `test_idleArmed`,
   `tests/unit/tst_menubridge.qml` `test_screensaverLines`; `tests/integration/screensaver_inhibit.sh` (bare, private bus)

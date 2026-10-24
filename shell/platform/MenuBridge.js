@@ -19,7 +19,10 @@ var limits = {
     message: 256,          // characters of an error message
     launcherCount: 99999,  // largest badge count of a launcher message
     launcherApps: 64,      // apps whose launcher state is kept
-    inhibitors: 1024       // largest cookie count of a screensaver message
+    inhibitors: 1024,      // largest cookie count of a screensaver message
+    // The bridge repeats its screensaver line every 20 s (ScreenSaver.h kHeartbeatMs); after three missed beats the shell
+    // drops "inhibited" (a bridge that hangs without exiting must not hold the idle lock off).
+    screensaverStaleMs: 60000
 };
 
 // Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
