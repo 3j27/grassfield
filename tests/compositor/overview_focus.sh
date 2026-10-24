@@ -5,7 +5,10 @@
 # (with two outputs the keyboard was lost after a close); the protocol activate does nothing for the still-focused window.
 #
 # Usage: tests/compositor/overview_focus.sh [check|baseline|stress [seconds]] [--plugin PATH]
-#   check     the loaded plugin advertises overview-focus: every check must pass (exit 0), else exit 1
+#   check     the loaded plugin advertises overview-focus: every check must pass (exit 0), else exit 1. A case whose
+#             fixture or locker acted after the plugin's 1000-ms bound on a loaded host (cases 10, 12, 15) is NOT JUDGED:
+#             it drops out of the checks and the run ends "PASS (n/m judged, k NOT JUDGED: <cases>)" with exit 3, never
+#             a plain PASS (a FAIL still exits 1)
 #   stress    requests at ~4/s for <seconds> (default 600) against whatever windows exist, next to tests/compositor/soak.sh
 #             (no outputs, chromes or keys: see the stress block below)
 #   baseline  the loaded plugin does not (an older build loaded with scripts/nestctl plugin load, or a session started with
@@ -164,7 +167,10 @@ socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/.socket2
 socat_pid=$!
 
 fail=0 passed=0 total=0 safety_fail=0
+not_judged=()
 # check <label> <status> [detail]: a focus check. safe <label> <status> [detail]: a safety check (also fails a baseline).
+# unjudged <case> <why>: the case's outcome says nothing about the plugin (its fixture acted past the bound): listed in the
+# verdict, never counted as a pass.
 check() {
   total=$((total + 1))
   if [[ $2 == 0 ]]; then passed=$((passed + 1)); say "  PASS $1${3:+ ($3)}"; else say "  FAIL $1${3:+ ($3)}"; fail=1; fi
@@ -172,6 +178,23 @@ check() {
 safe() {
   total=$((total + 1))
   if [[ $2 == 0 ]]; then passed=$((passed + 1)); say "  PASS [safety] $1${3:+ ($3)}"; else say "  FAIL [safety] $1${3:+ ($3)}"; fail=1; safety_fail=1; fi
+}
+unjudged() {
+  not_judged+=("$1")
+  say "  NOT JUDGED $1: $2"
+}
+# ", k NOT JUDGED: case a, case b" when some cases were not judged, else "".
+unjudged_note() {
+  local IFS=,
+  ((${#not_judged[@]} == 0)) || printf ', %d NOT JUDGED: %s' "${#not_judged[@]}" "${not_judged[*]}" | sed 's/,case/, case/g'
+}
+# The verdict of check mode: exit 1 on a failed check; exit 3 when every judged check passed but cases were not judged;
+# exit 0 only when every case was judged and passed.
+verdict() {
+  if ((fail)); then say "FAIL ($passed/$total checks$(unjudged_note))"; exit 1; fi
+  if ((${#not_judged[@]} > 0)); then say "PASS ($passed/$total judged$(unjudged_note))"; exit 3; fi
+  say "PASS ($passed/$total checks)"
+  exit 0
 }
 
 # ---- windows ----
@@ -354,9 +377,7 @@ if [[ $mode == stress ]]; then
   ((floods > 0 && floods == flood_ok)); check "stress: every flood answered ($flood_ok/$floods)" $?
   ((outcomes > 0)); check "stress: outcomes posted" $? "$outcomes non-pending event(s) for $n requests ($inv invalid)"
   ! grep -aq "\[grassfield\] .*exception" "$hyprlog"; safe "stress: no grassfield exception in the log" $?
-  if ((fail)); then say "FAIL ($passed/$total checks)"; exit 1; fi
-  say "PASS ($passed/$total checks)"
-  exit 0
+  verdict
 fi
 
 # ---- setup ----
@@ -497,7 +518,7 @@ say "  holder $holder, press on $press_win ($p_out $p_x,$p_y), named target $tar
 t2=-1
 (($(grep -ac "timing: second chrome released" "$fixlog") > n_t2)) && t2=$(fix_timing "second chrome released")
 if ((t2 > 950)); then
-  say "  NOT JUDGED case 10: the fixture released the second chrome $t2 ms after the request (planned 830; the bound is 1000 ms)"
+  unjudged "case 10" "the fixture released the second chrome $t2 ms after the request (planned 830; the bound is 1000 ms)"
 else
   say "  the fixture released the second chrome $t2 ms after the request (planned 830)"
   type_to "case 10" "$press_cap" "pwin"
@@ -538,7 +559,7 @@ if [[ $mode == check ]]; then
   [[ -z $early ]]; check "case 12: no outcome while the dialog is up" $? "${early:-none}"
 fi
 if ((tp > 950)); then
-  say "  NOT JUDGED case 12: the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
+  unjudged "case 12" "the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
 else
   say "  the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
   type_to "case 12" "$cap_a" "pshort"
@@ -596,11 +617,14 @@ park
 focus_window "$addr_a"
 holder=$(open_chromes)
 id=$((id + 1))
-t_req=$(date +%s%3N)
 request "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}"
+# The clock starts once the request call returned (Hyprland ran it: the plugin has the request) and stops at the lock
+# itself: the locker's `secure=true` line (Hyprland's ext-session-lock `locked` event), stamped as it is written, not
+# when the status poll below sees it.
+t_req=$(date +%s%3N)
 ev_lock=$(grep -ac "" "$events")
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
-  setsid "$root/scripts/dev/isolated.sh" --name overview-focus-locker qs -p "$foreign" --no-color >"$run/locker.log" 2>&1 </dev/null &
+  setsid "$root/scripts/dev/isolated.sh" --name overview-focus-locker qs -p "$foreign" --no-color > >(stamp_events >"$run/locker.log") 2>&1 </dev/null &
 locker_pid=$!
 locked=""
 for i in $(seq 1 60); do
@@ -608,7 +632,16 @@ for i in $(seq 1 60); do
   [[ $locked == "locked secure" ]] && break
   sleep 0.1
 done
-t_lock=$(date +%s%3N)
+t_lock=""
+for i in $(seq 1 20); do
+  t_lock=$(grep -a -m1 "foreign-locker: secure=true" "$run/locker.log" 2>/dev/null | cut -d' ' -f1)
+  [[ $t_lock =~ ^[0-9]+$ ]] && break
+  t_lock=""
+  sleep 0.05
+done
+lock_ms=-1
+[[ -n $t_lock ]] && lock_ms=$((t_lock / 1000 - t_req))
+say "  the lock was confirmed $([[ $lock_ms -ge 0 ]] && echo "$lock_ms ms after the request" || echo "at no time the locker logged")"
 release holder-first 100 -1
 sleep 0.8
 focus_events=$(tail -n +"$((ev_lock + 1))" "$events" | grep -acE "^[0-9]+ activewindowv2>>[0-9a-f]+$" || true)
@@ -618,8 +651,8 @@ focus_events=$(tail -n +"$((ev_lock + 1))" "$events" | grep -acE "^[0-9]+ active
 # plugin's 1000-ms bound to lock, and the outcome is then a timeout that says nothing about the lock path (not judged,
 # never a pass: the safety checks above still count).
 if [[ $mode == check ]]; then
-  if [[ $(outcome_of "$id" | jq -r '.outcome' 2>/dev/null) != refused ]] && ((t_lock - t_req > 900)); then
-    say "  NOT JUDGED case 15 outcome: the lock was confirmed $((t_lock - t_req)) ms after the request (the plugin's bound is 1000 ms): $(outcome_of "$id")"
+  if [[ $(outcome_of "$id" | jq -r '.outcome' 2>/dev/null) != refused ]] && ((lock_ms < 0 || lock_ms > 900)); then
+    unjudged "case 15" "the lock was confirmed $lock_ms ms after the request (-1: no time; the plugin's bound is 1000 ms): $(outcome_of "$id")"
   else
     outcome_is "case 15" "$id" refused
   fi
@@ -640,11 +673,7 @@ grep -a '\[grassfield\] overview focus' "$hyprlog" 2>/dev/null | tail -n 40 >"$r
 i915=$(journalctl -k --since "-15 min" 2>/dev/null | grep -ci "fence expiration\|gpu hang" || true)
 say "kernel: ${i915:-0} i915 fence timeout / GPU hang line(s) in the last 15 min"
 
-if [[ $mode == check ]]; then
-  if ((fail)); then say "FAIL ($passed/$total checks)"; exit 1; fi
-  say "PASS ($passed/$total checks)"
-  exit 0
-fi
-say "baseline: $passed/$total checks pass; safety $([[ $safety_fail == 0 ]] && echo PASS || echo FAIL)"
+[[ $mode == check ]] && verdict
+say "baseline: $passed/$total checks pass$(unjudged_note); safety $([[ $safety_fail == 0 ]] && echo PASS || echo FAIL)"
 ((safety_fail)) && exit 1
 exit 0
