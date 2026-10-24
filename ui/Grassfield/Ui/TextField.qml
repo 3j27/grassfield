@@ -30,6 +30,7 @@ T.TextField {
     Accessible.name: root.accessibleName !== "" ? root.accessibleName : root.placeholderText
 
     TextCursor {}
+    FocusGuard {}
 
     background: Rectangle {
         radius: Tokens.radiusControl

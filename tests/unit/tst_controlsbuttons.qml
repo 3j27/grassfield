@@ -67,6 +67,19 @@ TestCase {
             Keys.onSpacePressed: tc.viewKeys++
         }
 
+        Item {
+            id: forwarder
+            property var reached: []
+            property Item target: null
+            width: 10
+            height: 10
+            Keys.forwardTo: [forwarder.target]
+            Keys.onPressed: event => {
+                forwarder.reached = forwarder.reached.concat([event.key]);
+                event.accepted = true;
+            }
+        }
+
         CheckBox {
             id: check
             text: "Remember"
@@ -318,6 +331,71 @@ TestCase {
         toggle.enabled = true;
         toggle.Accessible.toggleAction();
         compare(tc.toggles, 1);
+    }
+
+    // A hidden or disabled control that is handed key events (code can focus it, Keys.forwardTo reaches it) acts on none, and
+    // swallows its activation keys so that a parent does not act on them either.
+    function test_hiddenOrDisabledControlsSwallowTheirKeys() {
+        const keys = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter];
+        for (const state of ["hidden", "disabled"]) {
+            for (const c of [toggleTool, check, sw, toggle, radio1, radio2]) {
+                const before = c.checked;
+                const togglesBefore = tc.toggles;
+                if (state === "hidden")
+                    c.visible = false;
+                else
+                    c.enabled = false;
+                forwarder.target = c;
+                forwarder.reached = [];
+                if (state === "hidden")
+                    c.forceActiveFocus(Qt.TabFocusReason);  // code can still give a hidden control the focus
+                else
+                    forwarder.forceActiveFocus();
+                for (const k of keys)
+                    keyClick(k);
+                compare(c.checked, before, c.Accessible.name + " " + state + ": no change on an activation key");
+                compare(tc.toggles, togglesBefore, c.Accessible.name + " " + state + ": nothing reported");
+                compare(forwarder.reached, [], c.Accessible.name + " " + state + ": the activation keys were swallowed");
+                c.visible = true;
+                c.enabled = true;
+            }
+            // Radio groups: the arrows do not check a sibling either (a hidden radio is not in its own group: indexOf was -1).
+            radio1.checked = true;
+            if (state === "hidden")
+                radio1.visible = false;
+            else
+                radio1.enabled = false;
+            forwarder.target = radio1;
+            keyClick(Qt.Key_Down);
+            verify(!radio2.checked, "a " + state + " radio does not move the group");
+            radio1.visible = true;
+            radio1.enabled = true;
+        }
+        forwarder.target = null;
+    }
+
+    // Hiding or disabling the control that has the focus moves the focus on (macOS): it never stays on what cannot act.
+    function test_hidingOrDisablingTheFocusedControlMovesTheFocus() {
+        for (const c of [toggleTool, check, sw, toggle, radio2]) {
+            for (const state of ["hidden", "disabled"]) {
+                c.forceActiveFocus(Qt.TabFocusReason);
+                verify(c.activeFocus, c.Accessible.name + " has the focus");
+                if (state === "hidden")
+                    c.visible = false;
+                else
+                    c.enabled = false;
+                verify(!c.activeFocus, c.Accessible.name + " " + state + ": the focus left it");
+                c.visible = true;
+                c.enabled = true;
+            }
+        }
+        // An accessibility toggle on a hidden Button does nothing either (the Allow button of the polkit dialog).
+        button.visible = false;
+        button.Accessible.toggleAction();
+        compare(tc.clicks, 0);
+        button.visible = true;
+        button.Accessible.toggleAction();
+        compare(tc.clicks, 1);
     }
 
     function test_reduceMotionCapsTheSwitchAnimation() {

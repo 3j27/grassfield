@@ -22,6 +22,10 @@ T.SpinBox {
 
     // Page Up / Page Down step by ten, as AppKit.
     Keys.onPressed: event => {
+        if (!root.visible || !root.enabled) {
+            event.accepted = event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown || event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+            return;
+        }
         if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
             const direction = event.key === Qt.Key_PageUp ? 1 : -1;
             root.value = Math.max(root.from, Math.min(root.to, root.value + Tokens.controlPageStepFactor * direction * root.stepSize));
@@ -29,6 +33,8 @@ T.SpinBox {
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     validator: IntValidator {
         locale: root.locale.name

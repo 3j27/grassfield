@@ -42,14 +42,26 @@ T.ComboBox {
     onPressedChanged: if (pressed)
         root.openedByKey = false
 
+    // A combo that is hidden or disabled closes its list (macOS), and nothing it holds can pick any more.
+    onVisibleChanged: if (!root.visible)
+        root.popup.close()
+    onEnabledChanged: if (!root.enabled)
+        root.popup.close()
+
+    FocusGuard {}
+
     onModelChanged: root.currentIndex = Qt.binding(() => root.valueIndex)
 
     // The template steps the selection with the arrows; here every opening key shows the list instead.
     Keys.onPressed: event => {
+        if (!root.visible || !root.enabled) {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || event.key === Qt.Key_Down || event.key === Qt.Key_Up)
+                event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
             root.openedByKey = true;
-            if (root.enabled)
-                root.popup.open();
+            root.popup.open();
             event.accepted = true;
         }
     }
@@ -146,6 +158,9 @@ T.ComboBox {
         onOpened: menu.forceActiveFocus()
         // The focus goes back to the button with the reason the list was opened with: a key keeps the ring, the pointer shows none.
         onClosed: {
+            // Not back on a combo that was hidden or disabled meanwhile.
+            if (!root.visible || !root.enabled)
+                return;
             root.focus = false;
             root.forceActiveFocus(root.openedByKey ? Qt.TabFocusReason : Qt.MouseFocusReason);
         }
@@ -185,6 +200,8 @@ T.ComboBox {
                 onHeightChanged: if (popup.visible) popup.place()
                 onActivated: item => {
                     popup.close();
+                    if (!root.visible || !root.enabled)
+                        return;
                     root.picked(item.id);
                     // Back to what the host holds: it moves `value` if it accepts the choice.
                     root.currentIndex = Qt.binding(() => root.valueIndex);

@@ -47,6 +47,9 @@ T.Control {
     }
 
     function commit(v: real): void {
+        // A hidden or disabled slider reports nothing, whoever asks.
+        if (!root.visible || !root.enabled)
+            return;
         const next = clampValue(v);
         if (next === shown)
             return;
@@ -64,6 +67,10 @@ T.Control {
     }
 
     Keys.onPressed: event => {
+        if (!root.visible || !root.enabled) {
+            event.accepted = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Down || event.key === Qt.Key_Home || event.key === Qt.Key_End;
+            return;
+        }
         if (event.key === Qt.Key_Left || (verticalKeys && event.key === Qt.Key_Down)) {
             nudge(-1);
             event.accepted = true;
@@ -78,6 +85,8 @@ T.Control {
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     Rectangle {
         id: track

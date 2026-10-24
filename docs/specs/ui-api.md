@@ -60,4 +60,5 @@ add ComboBox
 add ProgressBar
 add ScrollBar
 add Sheet
+add FocusGuard
 ```

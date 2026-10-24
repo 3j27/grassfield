@@ -22,6 +22,8 @@ T.Button {
     Accessible.name: root.text
     // An assistive technology's press (AT-SPI "press" action) goes through the same guard as the keys and the pointer.
     Accessible.onPressAction: root.activate()
+    // A hidden or disabled Button ignores the assistive-technology toggle as well (main's Button did).
+    Accessible.onToggleAction: root.activate()
 
     // The Button's only way to act for the keys and the accessibility press: a hidden or disabled Button never acts, whatever
     // asks or still holds the focus (R12: the polkit sheet's Allow). Returns whether it acted.

@@ -30,7 +30,8 @@ T.RadioButton {
             if (siblings[i] instanceof T.RadioButton && siblings[i].visible && siblings[i].enabled)
                 mine.push(siblings[i]);
         }
-        const target = mine[mine.indexOf(root) + direction];
+        const at = mine.indexOf(root);
+        const target = at < 0 ? null : mine[at + direction];
         if (target) {
             target.forceActiveFocus(Qt.TabFocusReason);
             target.click();
@@ -38,6 +39,12 @@ T.RadioButton {
     }
 
     Keys.onPressed: event => {
+        const arrows = event.key === Qt.Key_Down || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Left;
+        if (!root.visible || !root.enabled) {
+            if (arrows || event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_Down || event.key === Qt.Key_Right) {
             root.step(1);
             event.accepted = true;
@@ -46,6 +53,8 @@ T.RadioButton {
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     indicator: Rectangle {
         x: 0

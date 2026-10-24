@@ -40,6 +40,10 @@ T.Control {
     }
 
     Keys.onPressed: event => {
+        if (!root.visible || !root.enabled) {
+            event.accepted = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+            return;
+        }
         if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) {
             root.step(-1);
             event.accepted = true;
@@ -113,6 +117,8 @@ T.Control {
             }
         }
     }
+
+    FocusGuard {}
 
     FocusRing {
         visible: root.visualFocus

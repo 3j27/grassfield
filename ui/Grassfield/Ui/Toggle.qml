@@ -27,6 +27,11 @@ T.Control {
         root.toggled(!root.checked)
 
     Keys.onPressed: event => {
+        if (!root.visible || !root.enabled) {
+            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.toggled(!root.checked);
             event.accepted = true;
@@ -44,6 +49,8 @@ T.Control {
             }
         }
     }
+
+    FocusGuard {}
 
     FocusRing {
         shapeRadius: root.height / 2

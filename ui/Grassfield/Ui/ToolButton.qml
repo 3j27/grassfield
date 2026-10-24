@@ -46,13 +46,22 @@ T.ToolButton {
         return true;
     }
 
-    // Return and Enter act like Space (which the template handles itself); a hidden or disabled button swallows them.
+    // Return and Enter act like Space (which the template handles itself); a hidden or disabled button that still holds the
+    // focus swallows all three.
     Keys.onPressed: event => {
+        const activation = event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
+        if (!root.visible || !root.enabled) {
+            if (activation)
+                event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.activate();
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     background: Rectangle {
         radius: root.capsule ? height / 2 : Tokens.radiusControl

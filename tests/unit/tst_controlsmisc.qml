@@ -149,6 +149,63 @@ TestCase {
         compare(tc.moves, 1);
     }
 
+    // The macOS rule: a hidden or disabled control cannot act, and hiding or disabling the one that has the focus closes its
+    // pop-up and moves the focus on.
+    function test_hiddenOrDisabledControlsCannotActAndLoseTheFocus() {
+        // SegmentedControl, Slider: handed the focus by code while hidden, their keys do nothing.
+        seg.visible = false;
+        seg.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Right);
+        keyClick(Qt.Key_Left);
+        compare(tc.picks, [], "a hidden SegmentedControl ignores the arrows");
+        seg.visible = true;
+        slider.visible = false;
+        slider.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Right);
+        keyClick(Qt.Key_Home);
+        compare(tc.moves, 0, "a hidden Slider ignores its keys");
+        slider.visible = true;
+        // Hiding or disabling the focused control moves the focus.
+        for (const c of [seg, slider, combo]) {
+            for (const state of ["hidden", "disabled"]) {
+                c.forceActiveFocus(Qt.TabFocusReason);
+                verify(c.activeFocus);
+                if (state === "hidden")
+                    c.visible = false;
+                else
+                    c.enabled = false;
+                verify(!c.activeFocus, state + ": the focus left " + c);
+                c.visible = true;
+                c.enabled = true;
+            }
+        }
+        // ComboBox: a list open while the combo is disabled or hidden is closed, never picks, and is not reopened by a key.
+        for (const state of ["disabled", "hidden"]) {
+            combo.forceActiveFocus(Qt.TabFocusReason);
+            keyClick(Qt.Key_Space);
+            tryCompare(combo, "open", true);
+            const menu = combo.list as PopupMenu;
+            if (state === "disabled")
+                combo.enabled = false;
+            else
+                combo.visible = false;
+            tryCompare(combo, "open", false);
+            menu.activated({id: "y", text: "Why"});
+            compare(tc.picks, [], "a " + state + " combo does not pick");
+            verify(!combo.activeFocus, "and does not take the focus back");
+            combo.enabled = true;
+            combo.visible = true;
+            verify(!combo.open, "showing it again does not reopen the list");
+        }
+        // A hidden combo handed the focus by code: its opening keys do nothing.
+        combo.visible = false;
+        combo.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Down);
+        verify(!combo.open, "a hidden combo does not open on a key");
+        combo.visible = true;
+    }
+
     function test_segmentedClickPicks() {
         const row = seg.contentItem;
         mouseClick(row.children[2]);

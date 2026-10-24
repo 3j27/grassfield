@@ -20,6 +20,14 @@ T.Switch {
     Accessible.onToggleAction: if (root.visible && root.enabled)
         root.click()
 
+    // A hidden or disabled control that still holds the focus ignores its activation keys.
+    Keys.onPressed: event => {
+        if ((!root.visible || !root.enabled) && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
+            event.accepted = true;
+    }
+
+    FocusGuard {}
+
     indicator: Item {
         width: root.width
         height: root.height
