@@ -95,8 +95,9 @@ sandbox and stays a bare command (`runner: bare`) until it has run on the owner'
 for a lower bound (a part of the path), `NOT VERIFIED` when nothing could be measured.
 
 - `scripts/gates/p4-search-latency.sh` (gate P4): builds a 100k-file fixture under `.dev/p4-fixture`, indexes it with user-mode
-  `updatedb` and times the same `plocate` argv the Search provider uses: `PROXY` (provider only, ~26 ms median, 63 ms p95 on the
-  dev machine 2026-10-24). `--shell-log-apps FILE` judges app results per keystroke against 50 ms from the shell's own log
+  `updatedb` and times the same `plocate` argv the Search provider uses: `PROXY` (provider only, a lower bound, not the gate: 26 ms
+  median, 61 ms p95 on the dev machine, archived as `docs/testing/runs/20261024T022341Z-p4-search-latency.md`; the report's
+  verdict line says "exit 0 with caveats"). `--shell-log-apps FILE` judges app results per keystroke against 50 ms from the shell's own log
   (`PASS`/`FAIL`); file results stay `PROXY` until the shell timestamps them end to end.
 - `scripts/gates/r1-restart.sh` (gate R1): `--journal` reads the real unit's journal (read-only) and times every restart the
   unit made itself (a logout is not one) and checks that the lock state came back; `--nested` times a nested shell restart

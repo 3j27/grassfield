@@ -79,6 +79,14 @@ write_report() { # NAME EXIT LOG
     if [[ -s ${log%.log}.coredumps ]]; then
       echo "- coredumps: $(head -n1 "${log%.log}.coredumps") (details: ${log%.log}.coredumps)"
     fi
+    # "result" is the exit status; "verdict" says what that is worth.
+    if [[ $rc != 0 ]]; then
+      echo "- verdict: FAIL (exit $rc)"
+    elif ((skip + nv + proxy > 0)); then
+      echo "- verdict: exit 0 with caveats (SKIP $skip, NOT VERIFIED $nv, PROXY $proxy): not a measured pass of the gate"
+    else
+      echo "- verdict: measured pass (no SKIP, NOT VERIFIED or PROXY line)"
+    fi
     if ((skip + nv + proxy > 0)); then
       echo "- note: this run is not a plain pass: SKIP, NOT VERIFIED and PROXY lines are listed in the log; read them before citing it"
     fi
