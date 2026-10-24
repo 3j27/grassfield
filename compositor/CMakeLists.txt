@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.27)
-project(grassfield-compositor VERSION 0.1.0 LANGUAGES CXX)
+# VERSION at the repository root; the shipped rebuild sources (/usr/src/grassfield-compositor) carry their own cmake/ directory.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GrassfieldVersion.cmake)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/GrassfieldVersion.cmake)
+else()
+  include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/GrassfieldVersion.cmake)
+endif()
+project(grassfield-compositor VERSION ${GF_VERSION_NUMERIC} LANGUAGES CXX)
+add_compile_definitions(GRASSFIELD_VERSION="${GF_VERSION}")
 
 # Build against the INSTALLED Hyprland headers (master-prompt §5.6). Outputs:
 #   build/grassfield-compositor.so      the plugin
@@ -63,6 +70,8 @@ add_custom_command(
   DEPENDS ${GF_HYPRLAND_VERSION_H} ${CMAKE_CURRENT_SOURCE_DIR}/abi-stamp.cmake
   VERBATIM)
 add_custom_target(grassfield-compositor-abi ALL DEPENDS ${GRASSFIELD_OUTPUT_DIR}/grassfield-compositor.abi)
+# Building the plugin alone (cmake --build --target grassfield-compositor, just plugin-build) refreshes its stamp too.
+add_dependencies(grassfield-compositor grassfield-compositor-abi)
 
 option(GRASSFIELD_BUILD_TESTS "Build unit tests" ON)
 if(GRASSFIELD_BUILD_TESTS)

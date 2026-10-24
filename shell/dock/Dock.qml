@@ -619,6 +619,21 @@ Scope {
             return "";
         }
 
+        // The tile drag state of `screen` as JSON (fixtures only; no tile names): {dragging, from, slot, out, removable,
+        // interrupted}. `out` is the drag past the removal distance (the "Remove" label shows when `out && removable`).
+        // tests/visual/contrast.sh reads it instead of looking for the label's pixels (GF-061).
+        function dragstate(screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    return JSON.stringify({dragging: all[i].dragFrom >= 0, from: all[i].dragFrom, slot: all[i].dragSlot, out: all[i].dragOut,
+                        removable: all[i].dragRemovable, interrupted: all[i].dragInterrupted});
+            }
+            return "";
+        }
+
         function reveal(on: bool): void {
             if (VisualFixtures.dev)
                 root.testReveal = on;
@@ -746,6 +761,13 @@ Scope {
             id: win
 
             required property ShellScreen modelData
+
+            // Gate P5: the first frame of this Dock counts toward "grassfield-shell: usable" (platform/Usable.qml).
+            UsableProbe {
+                kind: "dock"
+                screenName: win.modelData.name
+                active: win.visible
+            }
 
             // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
             // it (Geometry.metrics). The setting itself is never changed.
@@ -1164,30 +1186,41 @@ Scope {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
                     const at = root.items.findIndex(it => (it.kind === "app" || it.kind === "files") && it.windows.indexOf(toplevel) >= 0);
                     if (at >= 0)
-                        return globalTileRect(mon, baseCenters[at]);
+                        return globalTileRect(mon, Magnify.centersFor(widths, Tokens.dockSpacing, (Geometry.mainSize(edge, screen.width, screen.height) - Magnify.totalWidth(widths, Tokens.dockSpacing)) / 2)[at]);
                 }
-                if (sep < 0 || !mon || index < 0)
+                if (sep < 0 || !mon || index < 0) {
+                    console.warn("grassfield-shell: Dock tileRect refused on", win.screen.name, "(divider at", sep, ", monitor", mon ? mon.name : "unknown to Hyprland", ", slot", index + ")");
                     return null;
-                const w = widths.slice();
-                // The folder stacks sit between the separator and the minimized tiles.
-                const first = sep + 1 + root.items.filter(it => it.kind === "folder").length;
-                if (adding)
-                    w.splice(first + index, 0, iconSize);
-                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (mainTotal - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[first + index];
-                if (slot === undefined)
-                    return null;
-                return globalTileRect(mon, slot);
+                }
+                // Pure (Geometry.minimizedSlotRect, tests/unit/tst_dockgeometry.qml): from the output's size, not the window's, which
+                // may not have its size yet when the compositor asks; wholly inside this output, which the plugin requires.
+                const r = Geometry.minimizedSlotRect(root.items, {
+                    index: index,
+                    adding: adding,
+                    iconSize: iconSize,
+                    spacing: Tokens.dockSpacing,
+                    separatorWidth: separatorWidth,
+                    edge: edge,
+                    screenW: screen.width,
+                    screenH: screen.height,
+                    depth: depth,
+                    margin: Tokens.dockBottomMargin,
+                    padding: Tokens.dockPadding,
+                    indicatorArea: indicatorArea
+                });
+                return r ? {x: mon.x + r.x, y: mon.y + r.y, w: r.w, h: r.h} : null;
             }
 
             // The unmagnified icon of the tile whose centre is `mainCenter` along the Dock, in global layout coordinates (the monitor `mon`).
             function globalTileRect(mon: var, mainCenter: real): var {
-                const r = Geometry.tileRect(edge, width, height, mainCenter, iconSize, Tokens.dockBottomMargin, Tokens.dockPadding, indicatorArea);
-                return {
-                    x: mon.x + origin.x + r.x,
-                    y: mon.y + origin.y + r.y,
-                    w: r.w,
-                    h: r.h
-                };
+                const sw = screen.width;
+                const sh = screen.height;
+                const winW = vertical ? depth : sw;
+                const winH = vertical ? sh : depth;
+                const r = Geometry.tileRect(edge, winW, winH, mainCenter, iconSize, Tokens.dockBottomMargin, Tokens.dockPadding, indicatorArea);
+                const o = Geometry.windowOrigin(edge, sw, sh, winW, winH);
+                const c = Geometry.clampInto({x: o.x + r.x, y: o.y + r.y, w: r.w, h: r.h}, {x: 0, y: 0, w: sw, h: sh});
+                return {x: mon.x + c.x, y: mon.y + c.y, w: c.w, h: c.h};
             }
 
             // modelData is already null when a removed screen destroys this window: keep the name.

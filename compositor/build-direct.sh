@@ -40,7 +40,7 @@ protocols() {
 
 # Lua symbols are resolved at load time from Hyprland's own liblua (5.5): only Lua's headers are needed.
 # shellcheck disable=SC2207
-plugin_flags=(-std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
+plugin_flags=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <../VERSION)\"" -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
 # shellcheck disable=SC2207
 plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm glesv2))
 # Pure logic only (src/core): no Hyprland headers, no compositor needed.

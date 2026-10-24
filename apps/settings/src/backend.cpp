@@ -196,6 +196,7 @@ QVariantList Backend::screens() const
         out.append(QVariantMap{{"name", s->name()},
                                {"model", s->model()},
                                {"manufacturer", s->manufacturer()},
+                               {"serial", s->serialNumber()},
                                {"x", g.x()},
                                {"y", g.y()},
                                {"width", g.width()},

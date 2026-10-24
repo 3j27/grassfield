@@ -24,11 +24,12 @@ constexpr int kKeepDays = 14;
 constexpr qint64 kKeepBytes = qint64(200) * 1024 * 1024;
 
 struct Options {
-    QString date;            // YYYY-MM-DD, UTC (the POTD dates are UTC)
+    QString provider = QStringLiteral("commons"); // "commons" | "apod" (NASA Astronomy Picture of the Day, US Eastern dates)
+    QString date;            // YYYY-MM-DD (Commons: UTC; APOD: the US Eastern date of the entry)
     QString out;             // <...>/wallpapers/online/commons
     int width = kDefaultWidth;
     QString lang = QStringLiteral("en");
-    QString baseUrl;         // "" = https://commons.wikimedia.org; http://127.0.0.1:<port> only with dev = true
+    QString baseUrl;         // "" = the provider's own https origin; http://127.0.0.1:<port> only with dev = true
     bool dev = false;        // GRASSFIELD_DEV=1
     QString curl = QStringLiteral("curl");
 };
@@ -47,6 +48,11 @@ bool hostAllowed(const QUrl &url, const QString &baseUrl);
 // The same URL without its query string and fragment (the utm_* parameters).
 QUrl withoutQuery(const QUrl &url);
 
+// The same for a provider: "commons" as above; "apod" allows https on api.nasa.gov and apod.nasa.gov (nothing else, so that the
+// NASA Science logo that the API returned for a while, hosted elsewhere, is never fetched).
+bool hostAllowedFor(const QString &provider, const QUrl &url, const QString &baseUrl);
+bool providerKnown(const QString &provider);
+
 // The machine key of extmetadata "License": public-domain marks, cc0, cc-by-*, cc-by-sa-*.
 bool licenseAllowed(const QString &key);
 
@@ -62,6 +68,9 @@ bool imageSignatureOk(const QString &contentType, const QByteArray &head);
 
 // <...>/grassfield/wallpapers/online/commons or <...>/cache/wallpapers/online/commons, absolute, no "." or ".." component.
 bool outDirAllowed(const QString &out);
+
+// The online cache folder of a provider: <...>/grassfield/wallpapers/online/<provider> (or .../cache/wallpapers/online/<provider>).
+bool outDirAllowedFor(const QString &provider, const QString &out);
 
 // "YYYY-MM-DD.jpg" or ".json" (the online cache's own names; the folder is pruned by these names only).
 bool isOnlineCacheName(const QString &name);
@@ -79,8 +88,17 @@ QString parseCaption(const QByteArray &json);
 // or BadResponse (malformed, host not allowed, missing fields). `reason` is a short English note for the journal.
 ExitCode parseImageInfo(const QByteArray &json, const QString &fileName, const QString &baseUrl, Parsed *out, QString *reason);
 
+// ---- NASA APOD ----
+constexpr const char *kApodKey = "DEMO_KEY"; // the shared demo key (ADR-0016 owner answers): no account, no identifier
+// The request for a date (api_key, date). With a base URL (dev loopback server) the path is /planetary/apod on that origin.
+QUrl apodUrl(const QString &baseUrl, const QString &date);
+// The API's answer to what is shown and fetched. Ok; Skipped (not a picture: a video or "other"; no usable image address: a host
+// or path outside apod.nasa.gov/apod/image, which is what the NASA logo answer looked like); BadResponse (malformed, wrong date).
+// A copyrighted entry is accepted and carries its holder as `author` (owner decision: shown with the credit).
+ExitCode parseApod(const QByteArray &json, const QString &date, const QString &baseUrl, Parsed *out, QString *caption, QString *reason);
+
 // The sanitized sidecar the shell reads (through `latest`).
-QJsonObject sidecarOf(const Parsed &p, const QString &caption, const QString &date, const QString &fetchedAtIso, int width, int height);
+QJsonObject sidecarOf(const Parsed &p, const QString &caption, const QString &date, const QString &fetchedAtIso, int width, int height, const QString &provider = QStringLiteral("commons"));
 
 // The curl argument vector for one request (the program name is not part of it). `maxBytes` is --max-filesize.
 QStringList curlArgs(const QUrl &url, const QString &outFile, qint64 maxBytes, const QString &baseUrl);
@@ -94,10 +112,11 @@ void pruneOnline(const QString &dir, const QString &newest, int keepDays, qint64
 
 // ---- the network part ----
 
-// Runs the whole fetch. On success `result` holds the sidecar fields plus date and file; otherwise the exit code and `reason`.
+// Runs the whole fetch of opts.provider ("commons" or "apod"). On success `result` holds the sidecar fields plus date and file; otherwise the exit code and `reason`.
 ExitCode fetchCommons(const Options &opts, QJsonObject *result, QString *reason);
+ExitCode fetchApod(const Options &opts, QJsonObject *result, QString *reason);
 
 // The newest cached picture ({found, date, file, ...sidecar}), or that of `onlyDate`; never touches the network.
-QJsonObject latestCached(const QString &dir, const QString &onlyDate = QString());
+QJsonObject latestCached(const QString &dir, const QString &onlyDate = QString(), const QString &provider = QStringLiteral("commons"));
 
 } // namespace wallpaper::commons

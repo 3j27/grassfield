@@ -46,7 +46,7 @@ TestCase {
     }
 
     function test_invalidFieldsReadAsDefaults() {
-        const n = WallpaperConfig.normalize({source: "apod", path: "rel/x.jpg", color: "red", fit: 3, interval: "2s", shuffle: "yes", videoOnBattery: 1, online: {provider: "apod"}, outputs: "x"});
+        const n = WallpaperConfig.normalize({source: "apod", path: "rel/x.jpg", color: "red", fit: 3, interval: "2s", shuffle: "yes", videoOnBattery: 1, online: {provider: "nasa"}, outputs: "x"});
         compare(n.source, "builtin");
         compare(n.path, "");
         compare(n.color, "#000000");
@@ -470,7 +470,8 @@ TestCase {
         compare(WallpaperConfig.normalize({source: "online"}).source, "online", "needs no path");
         compare(WallpaperConfig.normalize({source: "online", online: {provider: "commons"}}).online, {provider: "commons"});
         compare(WallpaperConfig.normalize({source: "online", online: "x"}).online, {provider: "commons"});
-        compare(WallpaperConfig.normalize({source: "online", online: {provider: "apod"}}).online, {provider: "commons"}, "an unknown provider reads as the default");
+        compare(WallpaperConfig.normalize({source: "online", online: {provider: "apod"}}).online, {provider: "apod"});
+        compare(WallpaperConfig.normalize({source: "online", online: {provider: "nasa"}}).online, {provider: "commons"}, "an unknown provider reads as the default");
         compare(WallpaperConfig.resolve({source: "online"}, panel).source, "online");
         compare(WallpaperConfig.resolve({source: "online"}, panel).provider, "commons");
         // Off by default, and a display can opt out or in on its own.
@@ -488,7 +489,8 @@ TestCase {
         const out = "/home/u/.cache/grassfield/wallpapers/online/commons";
         compare(WallpaperConfig.fetchArgs("/usr/lib/grassfield/grassfield-wallpaper", "commons", "2026-10-22", out, "fr", ""), ["/usr/lib/grassfield/grassfield-wallpaper", "fetch", "commons", "--date", "2026-10-22", "--out", out, "--lang", "fr"]);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", out, "en", "http://127.0.0.1:8123").slice(-2), ["--base-url", "http://127.0.0.1:8123"]);
-        compare(WallpaperConfig.fetchArgs("/h", "apod", "2026-10-22", out, "en", ""), null);
+        compare(WallpaperConfig.fetchArgs("/h", "apod", "2026-10-22", out, "en", "").slice(0, 3), ["/h", "fetch", "apod"]);
+        compare(WallpaperConfig.fetchArgs("/h", "nasa", "2026-10-22", out, "en", ""), null);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22x", out, "en", ""), null);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "--out", out, "en", ""), null);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", "relative", "en", ""), null);
@@ -616,5 +618,262 @@ TestCase {
         compare(WallpaperConfig.displayUrl("https://a.org/x%E2%80%AEy"), "a.org/x%E2%80%AEy");
         compare(WallpaperConfig.displayUrl("https://a.org/x%E3%85%A4y"), "a.org/x%E3%85%A4y");
         compare(WallpaperConfig.displayUrl(undefined), "");
+    }
+
+    // ---- APOD, the aspect rule, video (ADR-0016 W7 and step 2) ----
+
+    function test_apodProvider() {
+        compare(WallpaperConfig.ONLINE_PROVIDERS, ["commons", "apod"]);
+        // The APOD day flips at 05:10 UTC (midnight US Eastern whatever the summer time), Commons at 00:10 UTC.
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 5, 9), "apod"), "2026-10-21");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 5, 10), "apod"), "2026-10-22");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 0, 10), "commons"), "2026-10-22");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 0, 10)), "2026-10-22", "no provider: Commons");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 0, 10), "nasa"), "2026-10-22", "unknown: Commons");
+        // The day's random slot lies within six hours after the flip.
+        const now = Date.UTC(2026, 9, 22, 12);
+        const s = WallpaperConfig.onlineSchedule({}, now, true, 0.0, "apod");
+        compare(s.date, "2026-10-22");
+        compare(s.state.slotAt, Date.UTC(2026, 9, 22, 5, 10));
+        compare(s.state.provider, "apod");
+        verify(WallpaperConfig.onlineSchedule({}, now, true, 0.999, "apod").state.slotAt <= Date.UTC(2026, 9, 22, 11, 10));
+    }
+
+    function test_eachProviderKeepsItsOwnAccounting() {
+        const now = Date.UTC(2026, 9, 22, 12);
+        let st = WallpaperConfig.onlineAfter({}, now, "2026-10-22", "ok", "commons");
+        compare(st.provider, "commons");
+        verify(!WallpaperConfig.onlineSchedule(st, now, true, 0, "commons").due, "Commons is done for the day");
+        // Switching to APOD: a day done for Commons says nothing about APOD, and nothing cached means fetch at once.
+        const a = WallpaperConfig.onlineSchedule(st, now, false, 0.9, "apod");
+        verify(a.due);
+        compare(a.state.provider, "apod");
+        compare(a.state.done, "");
+        // A state written before there were two providers belongs to Commons.
+        const old = {done: "2026-10-22", failures: 0};
+        verify(!WallpaperConfig.onlineSchedule(old, now, true, 0, "commons").due);
+        verify(WallpaperConfig.onlineSchedule(old, now, false, 0, "apod").due);
+        compare(WallpaperConfig.onlineStateOf({provider: "nasa"}).provider, "");
+    }
+
+    function test_onlineAspectRule() {
+        // Within 35 % of the output's aspect: Fill. Panoramas and portraits: Fit on the picture's mean colour.
+        compare(WallpaperConfig.onlineFit(1600, 1000, 1920, 1080, "#102030"), {fit: "fill", color: "#102030"});
+        compare(WallpaperConfig.onlineFit(1920, 1080, 1920, 1080, "#FFFFFF").fit, "fill");
+        compare(WallpaperConfig.onlineFit(1920, 1080, 1920, 1080, "#FFFFFF").color, "#ffffff");
+        compare(WallpaperConfig.onlineFit(4000, 1000, 1920, 1080, "#102030").fit, "fit", "a panorama");
+        compare(WallpaperConfig.onlineFit(1000, 1500, 1920, 1080, "#102030").fit, "fit", "a portrait");
+        // The limits: 1.35 times and 0.65 times the output's aspect are still Fill, a hair beyond is Fit.
+        const out = 1000 / 500;
+        compare(WallpaperConfig.onlineFit(out * 1.35 * 1000, 1000, 1000, 500, "#000000").fit, "fill");
+        compare(WallpaperConfig.onlineFit(out * 1.36 * 1000, 1000, 1000, 500, "#000000").fit, "fit");
+        compare(WallpaperConfig.onlineFit(out * 0.65 * 1000, 1000, 1000, 500, "#000000").fit, "fill");
+        compare(WallpaperConfig.onlineFit(out * 0.64 * 1000, 1000, 1000, 500, "#000000").fit, "fit");
+        // Anything unreadable is Fill on black.
+        compare(WallpaperConfig.onlineFit(0, 0, 1920, 1080, "red"), {fit: "fill", color: "#000000"});
+        compare(WallpaperConfig.onlineFit(1600, 1000, 1920, 1080, undefined).color, "#000000");
+    }
+
+    function test_videoHelperArguments() {
+        compare(WallpaperConfig.probeArgs("/h", "/v/a.mp4"), ["/h", "probe", "--", "/v/a.mp4"]);
+        compare(WallpaperConfig.probeArgs("/h", "rel.mp4"), null);
+        compare(WallpaperConfig.probeArgs("/h", "/v/a\nb.mp4"), null);
+        const out = "/home/u/.cache/grassfield/wallpapers/video";
+        const a = WallpaperConfig.transcodeArgs("/h", "/v/-evil.mp4", 1920, 1080, "fit", "#AABBCC", out, 24, 536870912, ["/c/k.mp4"], 600, 536870912);
+        compare(a.slice(0, 2), ["/h", "transcode"]);
+        compare(a.slice(-2), ["--", "/v/-evil.mp4"], "a path can never be read as an option");
+        compare(a[a.indexOf("--size") + 1], "1920x1080");
+        compare(a[a.indexOf("--color") + 1], "#aabbcc");
+        compare(a[a.indexOf("--keep") + 1], "/c/k.mp4");
+        compare(a[a.indexOf("--max-seconds") + 1], "600");
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 1920, 1080, "zoom", "#000000", out, 24, 0, [], 0, 0), null);
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 1920, 1080, "fill", "red", out, 24, 0, [], 0, 0), null);
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 1920, 1080, "fill", "#000000", "relative", 24, 0, [], 0, 0), null);
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 99999, 1080, "fill", "#000000", out, 0, 0, [], 9999, 0).slice(3, 4), ["16384x1080"]);
+        verify(WallpaperConfig.VIDEO_SUFFIXES.indexOf("mp4") >= 0);
+    }
+
+    function test_transcodeOutput() {
+        const t = WallpaperConfig.transcodeOutput('{"progress":0.25}\n{"progress":0.5}\nnot json\n{"ok":true,"code":0,"file":"/c/p.jpg"}\n');
+        compare(t.progress, 0.5);
+        compare(t.result.file, "/c/p.jpg");
+        const partial = WallpaperConfig.transcodeOutput('{"progress":0.3}\n{"progre');
+        compare(partial.progress, 0.3);
+        compare(partial.result, null);
+        compare(WallpaperConfig.transcodeOutput("").result, null);
+        compare(WallpaperConfig.transcodeOutput('{"progress":7}').progress, -1, "out of range");
+        compare(WallpaperConfig.transcodeOutput('[1,2]\n"x"\n').result, null);
+        compare(WallpaperConfig.transcodeOutput('{"ok":false,"code":14,"reason":"video too long"}').result.code, 14);
+    }
+
+    function test_videoFailureReasons() {
+        compare(WallpaperConfig.reasonOf(14), "video-too-long");
+        compare(WallpaperConfig.reasonOf(15), "transcode-failed");
+        compare(WallpaperConfig.reasonOf(16), "ffmpeg-missing");
+        compare(WallpaperConfig.reasonOf(17), "cancelled");
+        compare(WallpaperConfig.EXIT.VIDEO_TOO_LONG, 14);
+    }
+
+    function test_videoCrashMarker() {
+        compare(WallpaperConfig.videoMarkerOf({path: "/v/a.mp4", at: 5}), {path: "/v/a.mp4", at: 5});
+        compare(WallpaperConfig.videoMarkerOf({path: "/v/a.mp4"}).at, 0);
+        for (const bad of [null, 5, "x", [], {}, {path: "rel"}, {path: 3}, {path: "/v/a\nb"}])
+            compare(WallpaperConfig.videoMarkerOf(bad), null, JSON.stringify(bad));
+        verify(WallpaperConfig.videoBlocked("/v/a.mp4", "/v/a.mp4"));
+        verify(!WallpaperConfig.videoBlocked("/v/a.mp4", "/v/b.mp4"));
+        verify(!WallpaperConfig.videoBlocked("", ""));
+        verify(!WallpaperConfig.videoBlocked(undefined, "/v/a.mp4"));
+    }
+
+    function test_playbackInputsFeedThePolicy() {
+        const cfg = {videoOnBattery: false};
+        const play = WallpaperConfig.playbackInputs(false, false, false, false, cfg, false, "full");
+        compare(WallpaperConfig.playbackState(play).state, "play");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(true, false, false, false, cfg, false, "full")).reason, "locked");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, true, false, false, cfg, false, "full")).reason, "fullscreen");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, true, cfg, false, "full")).reason, "battery");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, true, {videoOnBattery: true}, false, "full")).state, "play");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, true, false, cfg, false, "full")).state, "settle");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, cfg, true, "full")).reason, "reduce-motion");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, cfg, false, "reduced")).reason, "reduced-profile");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, undefined, false, "full")).state, "play");
+    }
+
+    function test_videoMarkersAndBlockedLists() {
+        // One marker (older files) or a list of them; invalid ones are dropped; at most 16.
+        compare(WallpaperConfig.videoMarkersOf({path: "/v/a.mp4", at: 1}), [{path: "/v/a.mp4", at: 1}]);
+        compare(WallpaperConfig.videoMarkersOf([{path: "/v/a.mp4", at: 1}, {path: "rel"}, 5, {path: "/v/b.mp4"}]), [{path: "/v/a.mp4", at: 1}, {path: "/v/b.mp4", at: 0}]);
+        compare(WallpaperConfig.videoMarkersOf(null), []);
+        compare(WallpaperConfig.videoMarkersOf("x"), []);
+        compare(WallpaperConfig.videoMarkersOf(Array.from({length: 40}, (_, i) => ({path: "/v/" + i + ".mp4"}))).length, 16);
+        compare(WallpaperConfig.videoBlockedPaths("/v/a.mp4"), ["/v/a.mp4"]);
+        compare(WallpaperConfig.videoBlockedPaths(["/v/a.mp4", "rel", 3, "/v/b\nc"]), ["/v/a.mp4"]);
+        compare(WallpaperConfig.videoBlockedPaths(undefined), []);
+        verify(WallpaperConfig.videoBlocked(["/v/a.mp4", "/v/b.mp4"], "/v/b.mp4"));
+        verify(!WallpaperConfig.videoBlocked(["/v/a.mp4"], "/v/b.mp4"));
+        verify(!WallpaperConfig.videoBlocked([], "/v/a.mp4"));
+        verify(WallpaperConfig.videoBlocked("/v/a.mp4", "/v/a.mp4"));
+    }
+
+    function test_cancelRestoresPerDisplay() {
+        const A = "n:eDP-1";
+        const B = "n:HDMI-A-1";
+        let m = {};
+        // "All Displays" showed a picture; a video is chosen: Cancel puts the picture back.
+        m = WallpaperConfig.rememberPrevious(m, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        // Display A had its own folder; display B had none.
+        m = WallpaperConfig.rememberPrevious(m, A, {source: "folder", path: "/p/dir", overridden: true}, "/v/y.mp4");
+        m = WallpaperConfig.rememberPrevious(m, B, {source: "file", path: "/p/inherited.jpg", overridden: false}, "/v/z.mp4");
+        // The picker is on B when Cancel is pressed: B follows All Displays again; A's and All's entries are untouched.
+        let plan = WallpaperConfig.cancelPlan(m, B, true, true, "video", "/v/z.mp4");
+        compare(plan.action, "follow-all");
+        compare(Object.keys(plan.map).sort(), ["all", A].sort());
+        compare(plan.map[A], {source: "folder", path: "/p/dir", overridden: true});
+        m = plan.map;
+        // Cancel for A restores its own wallpaper, not what the others had.
+        plan = WallpaperConfig.cancelPlan(m, A, true, true, "video", "/v/y.mp4");
+        compare(plan.action, "restore");
+        compare(plan.scope, "display");
+        compare(plan.fields, {source: "folder", path: "/p/dir"});
+        compare(Object.keys(plan.map), ["all"]);
+        m = plan.map;
+        // Cancel for All Displays (not a display): the picture, at the top level.
+        plan = WallpaperConfig.cancelPlan(m, "all", false, false, "video", "/v/x.mp4");
+        compare(plan.action, "restore");
+        compare(plan.scope, "all");
+        compare(plan.fields, {source: "file", path: "/p/a.jpg"});
+        compare(Object.keys(plan.map), []);
+        // Nothing recorded for the display, and nothing for All: a display has nothing to undo; All Displays gets the artwork.
+        compare(WallpaperConfig.cancelPlan(plan.map, A, true, true, "video", "/v/y.mp4").action, "none");
+        compare(WallpaperConfig.cancelPlan(plan.map, "all", false, false, "video", "/v/x.mp4").action, "artwork");
+        // The video chosen again records nothing (the previous entry stays), and a missing map is harmless.
+        const again = WallpaperConfig.rememberPrevious({all: {source: "file", path: "/p/a.jpg", overridden: false}}, "all", {source: "video", path: "/v/x.mp4", overridden: false}, "/v/x.mp4");
+        compare(again.all.path, "/p/a.jpg");
+        compare(WallpaperConfig.cancelPlan(null, "all", false, false, "video", "/v/x.mp4").action, "artwork");
+    }
+
+    // The video was chosen under All Displays; the picker is then moved to display A, which follows All Displays (it shows the
+    // inherited video and its progress), and Cancel is pressed: it undoes the choice for All Displays and creates no override for A.
+    function test_cancelOnAFollowingDisplayActsOnAllDisplays() {
+        const A = "n:eDP-1";
+        const B = "n:HDMI-A-1";
+        let m = WallpaperConfig.rememberPrevious({}, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        const plan = WallpaperConfig.cancelPlan(m, A, true, false, "video", "/v/x.mp4");
+        compare(plan.action, "restore");
+        compare(plan.scope, "all");
+        compare(plan.fields, {source: "file", path: "/p/a.jpg"});
+        compare(Object.keys(plan.map), [], "the All Displays entry is used up");
+        // A display with an override of its own and no entry of its own does not borrow the All Displays entry.
+        const own = WallpaperConfig.cancelPlan(m, B, true, true, "video", "/v/x.mp4");
+        compare(own.action, "none");
+        compare(Object.keys(own.map), ["all"], "All's entry is untouched");
+        // After the plan was used, another Cancel on A finds nothing: no artwork override is created for A.
+        compare(WallpaperConfig.cancelPlan(plan.map, A, true, false, "video", "/v/x.mp4").action, "none");
+    }
+
+    // Review 5, blocking: display A had its own picture, a video was chosen on A (an entry for A), A went back to following All
+    // Displays ("Use the All Displays Wallpaper"), a video X was chosen under All Displays, and Cancel is pressed with the picker on A.
+    // Cancel acts on the All Displays choice; no override is created for A, whether the stale entry of A was forgotten or not.
+    function test_cancelNeverCreatesAnOverrideForADisplayThatFollowsAll() {
+        const A = "n:eDP-1";
+        let m = WallpaperConfig.rememberPrevious({}, A, {source: "file", path: "/p/own.jpg", overridden: true}, "/v/y.mp4");
+        m = WallpaperConfig.rememberPrevious(m, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        // The page forgets the entry of A when A goes back to following All; the plan does not depend on it.
+        for (const map of [WallpaperConfig.forgetPrevious(m, A), m]) {
+            const plan = WallpaperConfig.cancelPlan(map, A, true, false, "video", "/v/x.mp4");
+            compare(plan.action, "restore");
+            compare(plan.scope, "all");
+            compare(plan.fields, {source: "file", path: "/p/a.jpg"});
+            compare(plan.map, {}, "the stale entry of A and the All entry are both gone");
+        }
+        // The variant: A had no picture of its own before (the stale entry says "not overridden"): the same, not a silent no-op.
+        let v = WallpaperConfig.rememberPrevious({}, A, {source: "file", path: "/p/inherited.jpg", overridden: false}, "/v/y.mp4");
+        v = WallpaperConfig.rememberPrevious(v, "all", {source: "folder", path: "/p/dir", overridden: false}, "/v/x.mp4");
+        const plan2 = WallpaperConfig.cancelPlan(v, A, true, false, "video", "/v/x.mp4");
+        compare(plan2.action, "restore");
+        compare(plan2.scope, "all");
+        compare(plan2.fields, {source: "folder", path: "/p/dir"});
+        // A stale entry and no All Displays entry: nothing to undo for a display that follows All, and the stale entry is dropped.
+        const only = WallpaperConfig.cancelPlan(WallpaperConfig.rememberPrevious({}, A, {source: "file", path: "/p/own.jpg", overridden: true}, "/v/y.mp4"), A, true, false, "video", "/v/x.mp4");
+        compare(only.action, "none");
+        compare(only.map, {});
+        // Nothing to restore for All Displays (the video chosen again): the artwork, in the All Displays scope, never on the display.
+        const art = WallpaperConfig.cancelPlan({all: {source: "video", path: "/v/x.mp4", overridden: false}}, A, true, false, "video", "/v/x.mp4");
+        compare(art.action, "artwork");
+        compare(art.scope, "all");
+        // forgetPrevious touches one key only and tolerates a missing map.
+        compare(Object.keys(WallpaperConfig.forgetPrevious({all: {}, [A]: {}}, A)), ["all"]);
+        compare(WallpaperConfig.forgetPrevious(null, A), {});
+    }
+
+    // Review 6: an entry that only sets Fit is not a wallpaper of its own, and Cancel never drops what the display set besides.
+    function test_aFitOnlyEntryIsNotAnOverrideAndSurvivesCancel() {
+        const A = {name: "eDP-1", model: "", serial: ""};
+        const key = WallpaperConfig.displayKey(A);
+        const fitOnly = [{display: A, fit: "fit"}];
+        verify(!WallpaperConfig.sourceOverridden(fitOnly, A));
+        verify(!WallpaperConfig.sourceOverridden([{display: A, color: "#112233", interval: "5m", shuffle: false}], A));
+        verify(WallpaperConfig.sourceOverridden([{display: A, source: "color", color: "#112233"}], A));
+        verify(WallpaperConfig.sourceOverridden([{display: A, source: "file", path: "/p/a.jpg"}], A));
+        verify(WallpaperConfig.sourceOverridden([{display: A, path: "/p/a.jpg"}], A));
+        verify(!WallpaperConfig.sourceOverridden([], A));
+        verify(!WallpaperConfig.sourceOverridden(fitOnly, {name: "HDMI-A-1", model: "", serial: ""}), "another display");
+        // Cancel for A while All Displays' video prepares: it acts on the All Displays choice (the display follows All).
+        const m = WallpaperConfig.rememberPrevious({}, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        const plan = WallpaperConfig.cancelPlan(m, key, true, WallpaperConfig.sourceOverridden(fitOnly, A), "video", "/v/x.mp4");
+        compare(plan.action, "restore");
+        compare(plan.scope, "all");
+        // A video chosen on A (A had only Fit before) then Cancel: its source and path go, its Fit stays.
+        const own = [{display: A, fit: "fit", source: "video", path: "/v/y.mp4"}];
+        const kept = WallpaperConfig.withoutSource(own, A);
+        compare(kept.length, 1);
+        compare(kept[0], {display: A, fit: "fit"});
+        // An entry with nothing else is removed; other displays' entries and a missing list are untouched.
+        const B = {name: "HDMI-A-1", model: "", serial: ""};
+        const both = WallpaperConfig.withoutSource([{display: A, source: "video", path: "/v/y.mp4"}, {display: B, source: "color", color: "#000000"}], A);
+        compare(both.length, 1);
+        compare(both[0].display, B);
+        compare(both[0].source, "color");
+        compare(WallpaperConfig.withoutSource(null, A), []);
     }
 }

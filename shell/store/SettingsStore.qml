@@ -426,6 +426,11 @@ Scope {
             target[parts[parts.length - 1]] = dirty[path];
         }
         dirty = ({});
+        // FileView skips a write equal to the text it last wrote, even when another writer (the Settings app) changed
+        // the file since: a Quick Settings change back to an earlier value was applied but never saved. Re-read first
+        // so its cache is the file on disk (the same guard as the lock marker, Lock.qml writeMarker).
+        disk.reload();
+        disk.waitForJob();
         disk.setText(JSON.stringify(obj, null, 2) + "\n");
     }
 

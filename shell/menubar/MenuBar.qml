@@ -193,13 +193,30 @@ Scope {
         function volumeLevel(): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            return Audio.ready ? Audio.volume.toFixed(2) : "none";
+            return Audio.sink !== null && Audio.sink.audio !== null ? Audio.deviceVolume.toFixed(2) : "none";
         }
 
         function brightnessLevel(): string {
             if (!VisualFixtures.dev)
                 return "refused";
             return Brightness.available ? Brightness.level.toFixed(2) : "none";
+        }
+
+        // Read-only: what the shell applies of the Quick Settings values, as JSON (tests/visual/flow-quicksettings.sh,
+        // flow-settings.sh). `nightShift` is "hidden" when the helper or hyprsunset is missing (the switch is not
+        // shown), else "off" or "on". Dev session only.
+        function state(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            return JSON.stringify({
+                appearance: Settings.appearance,
+                dark: Settings.dark,
+                transparency: Math.round(Settings.transparency * 100) / 100,
+                reduceTransparency: Settings.reduceTransparency,
+                reduceMotion: Settings.reduceMotion,
+                dnd: Notifications.dnd,
+                nightShift: NightShift.available ? (NightShift.on ? "on" : "off") : "hidden"
+            });
         }
     }
 
@@ -215,6 +232,12 @@ Scope {
             id: win
 
             required property ShellScreen modelData
+
+            // Gate P5: the first frame of this bar counts toward "grassfield-shell: usable" (platform/Usable.qml).
+            UsableProbe {
+                kind: "bar"
+                screenName: win.modelData.name
+            }
 
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
             // It only counts while that app still has a window: a killed last window must not leave

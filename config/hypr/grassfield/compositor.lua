@@ -110,16 +110,35 @@ function M.stamp(path, line)
   return (line or first_line)((path:gsub("%.so$", ".abi")))
 end
 
+-- The check runs while Hyprland parses its config, on its main thread: bounded (coreutils timeout, then a kill one second
+-- later). A check that times out, fails or cannot run vouches for nothing.
+M.timeout = "/usr/bin/timeout"
+M.vetted_seconds = 5
+
 -- What grassfield-compositor-rebuild --vetted vouches for (the user's build for `abi`, default the installed Hyprland's),
 -- or nil. `abi` comes from M.user_build_abi (letters, digits, dots, dashes, underscores): nothing for the shell to expand.
 function M.vetted(abi)
-  if not exists(M.rebuild) or type(io.popen) ~= "function" then return nil end
+  if not exists(M.rebuild) or not exists(M.timeout) or type(io.popen) ~= "function" then return nil end
   if abi and not abi:match("^%w[%w%._%-]*$") then return nil end
-  local ok, p = pcall(io.popen, M.rebuild .. " --vetted" .. (abi and (" '" .. abi .. "'") or "") .. " 2>/dev/null")
+  local command = string.format("%s -k 1 %d %s --vetted%s 2>/dev/null", M.timeout, M.vetted_seconds, M.rebuild,
+    abi and (" '" .. abi .. "'") or "")
+  local ok, p = pcall(io.popen, command)
   if not ok or not p then return nil end
   local line = p:read("l")
-  p:close()
+  -- Lua 5.4+: true only for exit status 0 (a timeout exits 124, a kill reports the signal).
+  if not p:close() then return nil end
   return line
+end
+
+-- Hyprland --verify-config runs this config too, with the caller's environment (a running instance's signature
+-- included): in verify mode the loader writes nothing. `read` (tests) returns the process command line.
+function M.verifying(read_cmdline)
+  local cmdline = (read_cmdline or function() return read("/proc/self/cmdline") end)()
+  if type(cmdline) ~= "string" then return false end
+  for arg in cmdline:gmatch("[^\0]+") do
+    if arg == "--verify-config" then return true end
+  end
+  return false
 end
 
 -- The build to load, and why: path and "packaged" | "user" | "kept" (a config reload keeps the build of the first parse);

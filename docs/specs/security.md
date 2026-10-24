@@ -89,10 +89,11 @@ does not check its gate.
 | menubar | close, openKind, keyboardWait, statusState, autohide, bridgeState | dev | `bridgeState` returns the focused app's menu titles |
 | widgets | status, addDesktop, clearDesktop | dev | `tests/visual/widgets-blur.sh`; `addDesktop`/`clearDesktop` change the saved placements |
 | controlcenter | transparency, appearance, reduceTransparency, reduceMotion | dev | persisted settings changes |
+| controlcenter | state | dev | `tests/visual/flow-quicksettings.sh`, `flow-settings.sh`: what the shell applies (appearance, transparency, DND, Night Shift availability); read-only |
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
-| dock | pinned, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, stack, addfolder | fixtures | visual tests; `click` launches an app; `addfolder` changes `dock.folders` |
+| dock | pinned, dragstate, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, stack, addfolder | fixtures | visual tests; `click` launches an app; `addfolder` changes `dock.folders` |
 | dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
 | osd | display, hide, layout, state | dev | OSD spoofing (`layout` feeds a keyboard layout event) |
 | volume | up, down, mute | action | volume keys |
@@ -102,7 +103,7 @@ does not check its gate.
 | stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
 | stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
 | bartone | status | dev | visual tests |
-| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
+| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
 

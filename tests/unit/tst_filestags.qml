@@ -75,6 +75,16 @@ TestCase {
         tryCompare(dots, "width", Tokens.filesTagDotSize);
     }
 
+    // GF-073/GF-094: a QML model hands a list role back as a ListModel, not an array; the dots are palette indices only.
+    function test_dotsTakeAListModelRoleAndSkipWhatIsNotAnIndex() {
+        const list = Qt.createQmlObject("import QtQuick; ListModel { ListElement { color: 2 } ListElement { color: 5 } }", test);
+        const dots = createTemporaryObject(dotsComponent, test, {colors: list});
+        compare(dots.shown, [2, 5]);
+        dots.colors = ["x", 1, null, 4.5, 3];
+        compare(dots.shown, [1, 3]);
+        list.destroy();
+    }
+
     function test_swatchRowStatesCaptionAndChoice() {
         const names = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"];
         const row = createTemporaryObject(rowComponent, test, {model: TagColors.swatches(Tokens, names, [0, 0, 2, 0, 0, 0, 0]), caption: "Tags"});

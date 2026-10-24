@@ -120,10 +120,16 @@ check "keyboard-status: 'open status' opens the first status menu (got '${k:-non
 # status-switch: the network and volume items sit left of Quick Settings and the clock; open volume through IPC, then move
 # onto the network item, found from the bar's right side in the capture-free way: IPC opens give the anchor, so use
 # the popup's own x (volume opens aligned to its item's right edge) and step one item left.
+# (GF-058: the pointer rests on the app title after the checks above, and a resting pointer over a title switches an open
+# menu to that title's: the capture showed the app menu. Park it first, and assert the volume menu is the one that is open
+# before capturing.)
 reset_menus
+vs_park
 vs_ipc menubar open volume "$VS_OUTPUT" >/dev/null
-vs_sleep 0.5
+for _ in 1 2 3 4 5 6 7 8 9 10; do is_kind volume && break; vs_sleep 0.3; done
+check "status-switch: the volume menu is open before its capture (got '$(kind)')" is_kind volume
 read -r W _ < <(magick identify -format '%w %h\n' "$(VS_NOPARK=1 vs_capture mbm-volume-open)")
+check "status-switch: the volume menu is still the open one after its capture (got '$(kind)')" is_kind volume
 # Right side: clock (~140 px), Quick Settings, volume, network from the right edge; probe leftwards until the kind changes.
 k=""
 for x in $(seq $((W - 200)) -12 $((W - 330))); do
