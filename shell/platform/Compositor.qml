@@ -305,8 +305,16 @@ Singleton {
     // 18 / 3 (right at the default transparency).
     readonly property int blurSize: Appearance.compositorBlurSize
     readonly property int blurPasses: Appearance.compositorBlurPasses
-    onBlurSizeChanged: blurDebounce.restart()
-    onBlurPassesChanged: blurDebounce.restart()
+    // A change of the value is a new request: it is tried again even after an error answer (once per change, never in a loop;
+    // a config reload does not retry a refused request).
+    onBlurSizeChanged: {
+        root.blurRejected = false;
+        blurDebounce.restart();
+    }
+    onBlurPassesChanged: {
+        root.blurRejected = false;
+        blurDebounce.restart();
+    }
 
     // Hyprland answered a push with an error (a Hyprland that does not know the keys): nothing more is sent. The answer comes
     // on the request socket, one connection per push (Hyprland.dispatch does not return it).
@@ -323,34 +331,54 @@ Singleton {
         blurSocket.createObject(root, {"path": path, "line": "dispatch " + call});
     }
 
-    // One connection per push: it sends the dispatch, reads the answer and ends.
+    // One connection per push: it sends the dispatch and collects the whole answer (it may arrive in pieces) until Hyprland
+    // closes the connection; then it is judged once and the socket is destroyed (later: a Socket cannot be destroyed from its
+    // own error signal, that signal can fire inside createObject).
     Component {
         id: blurSocket
 
         Socket {
             id: sock
             property string line: ""
-            parser: SplitParser {
-                // No separator: Hyprland's answer has no newline, take what arrives.
-                splitMarker: ""
-                onRead: data => {
-                    if (Minimized.blurAnswer(data) === "rejected" && !root.blurRejected) {
-                        root.blurRejected = true;
-                        console.info("grassfield-shell: Hyprland rejected the blur request (" + data + "); the blur stays as configured");
-                    }
-                    sock.connected = false;
+            property string reply: ""
+            property bool judged: false
+
+            function finish(): void {
+                if (sock.judged)
+                    return;
+                sock.judged = true;
+                answerTimeout.stop();
+                if (Minimized.blurAnswer(sock.reply) === "rejected" && !root.blurRejected) {
+                    root.blurRejected = true;
+                    console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
                 }
+                sock.connected = false;
+                Qt.callLater(() => sock.destroy());
+            }
+
+            parser: SplitParser {
+                // No separator: Hyprland's answer has no newline, take what arrives and add it up.
+                splitMarker: ""
+                onRead: data => sock.reply += data
             }
             onConnectedChanged: {
                 if (connected) {
                     write(sock.line);
                     flush();
+                    answerTimeout.start();
                 } else {
-                    sock.destroy();
+                    sock.finish();
                 }
             }
+
+            Timer {
+                id: answerTimeout
+                interval: Tokens.settingsPointerAnswerMs
+                onTriggered: sock.finish()
+            }
+
             Component.onCompleted: {
-                sock.error.connect(() => sock.destroy());
+                sock.error.connect(() => sock.finish());
                 sock.connected = true;
             }
         }

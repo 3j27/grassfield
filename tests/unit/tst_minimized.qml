@@ -28,6 +28,11 @@ TestCase {
         compare(Minimized.blurAnswer("ok\n"), "ok");
         compare(Minimized.blurAnswer("error: =[C]:-1: unknown config key 'decoration.blur.no_such'"), "rejected");
         compare(Minimized.blurAnswer("error: return hl.dispatch(function() hl.config({ decoration = { blur = { no_such_key_gf = 1 } } }) end):1: unknown config key 'decoration.blur.no_such_key_gf'"), "rejected");
+        // The answer may arrive in pieces: the shell adds them up before judging (the whole text, not the first chunk).
+        compare(Minimized.blurAnswer("er"), "unknown");
+        compare(Minimized.blurAnswer("er" + "ror: =[C]:-1: unknown config key 'decoration.blur.x'"), "rejected");
+        compare(Minimized.blurAnswer("o"), "unknown");
+        compare(Minimized.blurAnswer("o" + "k"), "ok");
         compare(Minimized.blurAnswer(""), "unknown");
         compare(Minimized.blurAnswer("okay then"), "unknown");
         compare(Minimized.blurAnswer(undefined), "unknown");
