@@ -99,7 +99,10 @@ The block below is the contract of record for event types, their fields, closed 
 prose above gives the reasons. `tests/ci/gfc_parity.py` (`just check-contracts`) fails when it differs from
 `compositor/src` (the JSON builders and `core/Protocol.hpp`) or when the shell reads something the plugin never sends.
 Every event also carries `v` and `type`. Nested fields are flattened. `version` is only in the `hyprctl grassfield` reply;
-`error` is that reply's failure form. Change the block in the same commit as the code.
+`error` is that reply's failure form. `stages` lists the fields of the event (a change notice: `gen`, `on`, `reason`) and
+of the `hyprctl grassfield-stages` reply (the state: the same plus `monitors` and below); `frames` and `frames-recording`
+are the replies of `hyprctl grassfield-frames` / `grassfield-frames-start`, never events. Change the block in the same
+commit as the code.
 
 ```gfc1
 event capabilities: features version
@@ -109,15 +112,16 @@ event restored: address
 event appmenu: address service path pid
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
-event stages: on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+event stages: gen on reason
 event frames: clock marks monitors name presented refreshHz renders t total unit what
 event frames-recording: ms recording
 event error:
+reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
 enum overview-focus.target: window workspace remembered none press
-enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid
+enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid refused-by-hyprland
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
@@ -132,6 +136,35 @@ Spike S2 (2026-10-17, nested Hyprland 0.56.2, Quickshell 0.3.1):
   `rawEvent grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}`.
 - `hyprctl grassfield` returns the capabilities JSON plus a trailing `"version"` member (the event is unchanged).
 
+## Amendment 2026-10-24: events stay under Hyprland's 1024-byte socket2 limit; the Stages state is a request
+Found in the integrator's nested run on main 8b0db19: 22 `stages` events cut at exactly 1024 bytes of data (17 bytes of
+timestamp, `grassfield>>`, then 1024 bytes of JSON), so the test's jq and the shell's strip got broken JSON with about ten
+windows under Stages. Hyprland 0.56.2 cuts every socket2 event's data at 1024 bytes: `CEventManager::formatEvent` passes
+`min(data.size(), 0x400)` bytes to `std::format("{}>>{}\n")` and turns newlines into spaces (read from the binary). The
+request socket has no such limit (a `hyprctl` reply is written whole).
+- Every gfc/1 event has a bounded size under that limit (gtest `Protocol.EveryEventStaysUnderHyprlandsSocket2Limit`, at the
+  worst case): capabilities (every feature) about 300 bytes; minimize-request, minimized, restored 70; appmenu 609 (service
+  and path are validated to at most 255 bytes of characters that need no escaping); overview 103; overview-focus 192
+  (reason `refused-by-hyprland`, the longest).
+- `stages` grew with every window (about 25 bytes per window, 70 with a tile rect, plus the app name of each monitor's
+  front window): the event is now a change notice, `{"v":"gfc/1","type":"stages","gen":N,"on":bool}` plus `reason` (at
+  most 90 bytes), and the state, with exactly the former payload plus `gen`, is the reply of `hyprctl grassfield-stages`
+  (the state of the latest notice; table line `reply grassfield-stages`). `gen` grows with every notice. The shell
+  (StagesLink, the one consumer; it hands each state to Compositor for the menu bar) reads the event as a notice only,
+  fetches only while Stages is active, one fetch at a time (notices during a fetch ask one more), applies a state only
+  when it is complete and not older than the one shown, retries a failed or timed-out fetch (2 s) three times (200, 400,
+  800 ms) and then shows no state (the strip hides rather than show a stale state as current).
+- Exception to the first Consequence below (decided by the integrator under owner delegation D-5, review of
+  6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`. The shell and the plugin are
+  split packages of one PKGBUILD, built from one tree at one version, so a release always pairs them. The ABI stamp (C2)
+  checks the plugin against the running Hyprland, not against the shell: a mixed pair needs a partial upgrade of the split
+  packages (unsupported on Arch), and then degrades without broken JSON: a shell from before this amendment finds no
+  monitors in the notice and shows no strip; a shell from after it with an older plugin gets `unknown request` from
+  `hyprctl grassfield-stages` and, after its retries, shows no strip. `stages-available` is advertised only when
+  `hyprctl grassfield-stages` is registered.
+
 ## Consequences
 - Breaking payload changes bump `gfc/N` and need a new ADR.
+- No event may grow with the number of windows or monitors: a payload that can grow is a `hyprctl` reply announced by a
+  small event (amendment 2026-10-24).
 - Depends on Quickshell keeping the `usingLua` dispatch wrapping; re-verify on every Quickshell minor update.

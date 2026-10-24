@@ -23,10 +23,11 @@ Singleton {
     readonly property var focusedToplevel: ToplevelManager.activeToplevel
     readonly property string focusedAppId: focusedToplevel ? focusedToplevel.appId : ""
 
-    // Last Stages event (StagesFront.parse) or null; select() ignores it once it says `on:false`.
+    // Last Stages state (StagesFront.parse of the reply StagesLink fetched: the `stages` event is only a change notice) or
+    // null (Stages off, not active, or its state unknown). Set by applyStagesState only.
     property var stagesState: null
     // Window class the bar names while Hyprland has no active window under Stages (an Exclusive layer holds the keyboard
-    // after a swap): the front app of the last Stages event while its window still exists, else "". Display only: no
+    // after a swap): the front app of the last Stages state while its window still exists, else "". Display only: no
     // window has the keyboard. Never set with Stages off.
     readonly property string stagesFrontAppId: {
         const live = [];
@@ -34,6 +35,11 @@ Singleton {
         for (let i = 0; i < list.length; i++)
             live.push(list[i].address);
         return StagesFront.select(root.stagesState, !!root.focusedToplevel, Capabilities.pluginPresent, root.focusedScreenName, live);
+    }
+
+    // StagesLink hands over each Stages state it fetched (`hyprctl grassfield-stages`), "" when there is none.
+    function applyStagesState(text: string): void {
+        root.stagesState = text === "" ? null : StagesFront.parse(text);
     }
 
     readonly property var focusedWorkspace: Hyprland.focusedWorkspace
@@ -835,11 +841,6 @@ Singleton {
 
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "grassfield") {
-                const stages = StagesFront.parse(event.data);
-                if (stages) {
-                    root.stagesState = stages;
-                    return;
-                }
                 const address = Minimized.minimizeRequestAddress(event.data);
                 if (address !== "")
                     root.minimizeByAddress(address);

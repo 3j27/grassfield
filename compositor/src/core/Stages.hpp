@@ -251,7 +251,7 @@ namespace gf::stages {
     // it from Hyprland.
     struct EventFront {
         WindowId    id = 0;
-        std::string app; // the window's class (what stages group by), as received from the client: sanitized by eventJson
+        std::string app; // the window's class (what stages group by), as received from the client: sanitized by stateJson
     };
 
     struct EventMonitor {
@@ -271,12 +271,19 @@ namespace gf::stages {
     // boundary to at most `maxBytes` bytes (JSON escaping is done by the caller).
     std::string sanitizedText(std::string_view in, size_t maxBytes);
 
-    // {"v":"gfc/1","type":"stages","on":bool,"monitors":[{"monitor":"…","workspace":N,"active":N,"hidden":bool,
-    // "overlap":bool,"front":{"address":"<hex, no 0x>","app":"…"},"stages":[{"id":N,"slot":N,"windows":[{"address":"<hex,
-    // no 0x>","x":…,"y":…,"w":…,"h":…}]}]}]}, plus "reason":"…" when a request was refused (the state is the unchanged
-    // current one) or Stages ended without the shell's request. Window rects are present only for windows drawn in a tile;
-    // numbers are rounded to 0.1 px; "front" is absent when the Desktop has no stage.
-    std::string eventJson(bool on, std::span<const EventMonitor> monitors, Reason reason = Reason::None);
+    // The full state, the reply of `hyprctl grassfield-stages`: {"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":
+    // [{"monitor":"…","workspace":N,"active":N,"hidden":bool,"overlap":bool,"front":{"address":"<hex, no 0x>","app":"…"},
+    // "stages":[{"id":N,"slot":N,"windows":[{"address":"<hex, no 0x>","x":…,"y":…,"w":…,"h":…}]}]}]}, plus "reason":"…" when
+    // a request was refused (the state is the unchanged current one) or Stages ended without the shell's request. Window
+    // rects are present only for windows drawn in a tile; numbers are rounded to 0.1 px; "front" is absent when the Desktop
+    // has no stage. It grows with every window and monitor (about 25 bytes per window, 70 with a tile rect), so it is never
+    // an event: Hyprland cuts socket2 events at 1024 bytes (gfc::kMaxEventBytes; 22 events cut in the integrator's nested
+    // run of 2026-10-24).
+    std::string stateJson(uint64_t generation, bool on, std::span<const EventMonitor> monitors, Reason reason = Reason::None);
+
+    // The `stages` event: a change notice, {"v":"gfc/1","type":"stages","gen":N,"on":bool} plus "reason":"…" as above. The
+    // shell fetches the state of that generation (or a later one) with `hyprctl grassfield-stages`. At most 100 bytes.
+    std::string noticeJson(uint64_t generation, bool on, Reason reason = Reason::None);
 
     // ---- input on strip windows ----
     // A strip window keeps its real place and is input-blocked; Hyprland 0.56.2 updates pointer focus on pointer motion

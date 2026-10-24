@@ -36,6 +36,10 @@ namespace gf::stager {
     bool enabled();
     void setEnabled(bool on);
 
+    // The reply of `hyprctl grassfield-stages`: the state of the latest `stages` notice (core stateJson; an "off" state with
+    // generation 0 before the first one). Compositor thread.
+    std::string stateReply();
+
     // A validated hl.plugin.grassfield.stages(json) request.
     void request(const gf::stages::Request& request);
 

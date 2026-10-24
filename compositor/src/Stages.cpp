@@ -113,6 +113,8 @@ namespace {
         st::Curve                        curve;
         bool                             animating = false;
         uint64_t                         lockStayLogged = 0; // the strip window logged as staying active under the lock
+        uint64_t                         generation     = 0;  // of the latest `stages` notice
+        std::string                      stateJson;           // the state of that notice (`hyprctl grassfield-stages`)
         bool                             keysOnLayer = false; // the active window was cleared while an Exclusive layer held the keyboard (unload: restoreFocusSurface)
         Time::steady_tp                  start;
         double                           animMs = 0;
@@ -329,7 +331,11 @@ namespace {
                 monitors.push_back(std::move(m));
             }
         }
-        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Stages, .id = 0}, st::eventJson(s.on, monitors, reason));
+        // The event is a change notice: the state grows with every window and Hyprland cuts socket2 events at 1024 bytes
+        // (gfc::kMaxEventBytes); the shell fetches the state with `hyprctl grassfield-stages` (stateReply).
+        ++s.generation;
+        s.stateJson = st::stateJson(s.generation, s.on, monitors, reason);
+        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Stages, .id = 0}, st::noticeJson(s.generation, s.on, reason));
     }
 
     // ---- drawing ----
@@ -1844,6 +1850,11 @@ namespace gf::stager {
         }
         if (wasOn)
             post(st::Reason::Unavailable);
+    }
+
+    std::string stateReply() {
+        const auto& s = S();
+        return s.stateJson.empty() ? st::stateJson(0, false, {}) : s.stateJson;
     }
 
     bool ready() {

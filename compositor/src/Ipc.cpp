@@ -170,7 +170,7 @@ namespace gf::ipc {
     }
 
     bool stagesAvailable() {
-        return state().luaStagesRegistered && state().luaConfigRegistered && stager::ready();
+        return state().luaStagesRegistered && state().luaConfigRegistered && state().hyprctlStagesCommand != nullptr && stager::ready();
     }
 
     bool cursorRefreshAvailable() {
@@ -574,6 +574,15 @@ namespace gf::ipc {
             return out;
         }
 
+        // `hyprctl grassfield-stages`: the Stages state of the latest `stages` notice (the event carries no state: Hyprland
+        // cuts socket2 events at 1024 bytes). Read-only, no argument; the same JSON for both output formats.
+        std::string hyprctlStages(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+            std::string out;
+            if (!guarded("hyprctl grassfield-stages", [&] { out = stager::stateReply(); }))
+                out = R"({"v":"gfc/1","type":"error"})";
+            return out;
+        }
+
         bool addLua(std::string_view name, PLUGIN_LUA_FN fn) {
             const bool ok = HyprlandAPI::addLuaFunction(state().handle, std::string{gfc::kLuaNamespace}, std::string{name}, fn);
             if (!ok)
@@ -614,6 +623,12 @@ namespace gf::ipc {
             log(Log::ERR, "registerHyprCtlCommand({}) failed", gfc::kHyprctlCommand);
             ok = false;
         }
+        // Stages needs its state command: without it neither stages-available nor stages is advertised.
+        if (stager::ready()) {
+            s.hyprctlStagesCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlStagesCommand}, .exact = true, .fn = hyprctlStages});
+            if (!s.hyprctlStagesCommand)
+                log(Log::WARN, "registerHyprCtlCommand({}) failed; Stages not advertised", gfc::kHyprctlStagesCommand);
+        }
         // Optional: without it frame-times is not advertised, nothing else changes.
         if (frameProbe::ready()) {
             s.hyprctlFramesCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{frames::kHyprctlCommand}, .exact = true, .fn = hyprctlFrames});
@@ -643,6 +658,10 @@ namespace gf::ipc {
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();
+        }
+        if (s.hyprctlStagesCommand) {
+            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlStagesCommand);
+            s.hyprctlStagesCommand.reset();
         }
         if (s.hyprctlFramesStartCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlFramesStartCommand);

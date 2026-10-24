@@ -40,7 +40,10 @@
 # the pointer over an unrelated tiled window, the stage's back window or empty desktop, the stage's window now in front gets
 # them when the remembered one closed under the layer, a real click beside the layer or just after it wins, and the Stages
 # event names the front window and app while Hyprland has no active window (8i); a focus-matched window rule is rechecked
-# when the plugin clears the active window (8c). A keyboard device that appears while an Exclusive layer holds the keyboard
+# when the plugin clears the active window (8c). The `stages` event is a change notice under Hyprland's 1024-byte socket2
+# limit and the state comes from `hyprctl grassfield-stages` (ADR-0007 amendment 2026-10-24): with 20 more windows on two
+# outputs every notice stays whole and the state lists every window (12d); every gfc/1 event of the run is whole JSON
+# under 1024 bytes (16). A keyboard device that appears while an Exclusive layer holds the keyboard
 # after a swap (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) changes nothing: the layer
 # gets every key of the new device and of the next one, no window gets one, and after the layer the swapped-in front window
 # gets every key (8j; integrator decision 2026-10-24: stages.sh 8c, 8f, 8g, 8h, 8i(e) lost every key in the three runs
@@ -168,17 +171,41 @@ cleanup() {
 }
 trap cleanup EXIT
 
-stamp_events() { local l; while IFS= read -r l; do printf '%s %s\n' "${EPOCHREALTIME/./}" "$l"; done; }
+# Every socket2 line, stamped; a stages notice is followed by the state it announces, fetched at once from the request
+# socket (`hyprctl grassfield-stages`) and logged as a "grassfield-state>>" line: the checks below read those states.
+stamp_events() {
+  local l
+  while IFS= read -r l; do
+    printf '%s %s\n' "${EPOCHREALTIME/./}" "$l"
+    if [[ $l == 'grassfield>>{"v":"gfc/1","type":"stages"'*'"on":false'* ]]; then
+      printf '%s grassfield-state>>%s\n' "${EPOCHREALTIME/./}" "${l#grassfield>>}" # Stages off: nothing to fetch (as the shell)
+    elif [[ $l == 'grassfield>>{"v":"gfc/1","type":"stages"'* ]]; then
+      printf '%s grassfield-state>>%s\n' "${EPOCHREALTIME/./}" "$(timeout 5 "$root/scripts/nestctl" grassfield-stages 2>/dev/null | tr -d '\n')"
+    fi
+  done
+}
 socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/.socket2.sock" STDOUT 2>>"$log" </dev/null > >(stamp_events >"$events") &
 socat_pid=$!
 
-st_events() { grep -a 'grassfield>>{"v":"gfc/1","type":"stages"' "$events" 2>/dev/null; }
+st_events() { grep -a 'grassfield-state>>{"v":"gfc/1","type":"stages"' "$events" 2>/dev/null; }
 st_count() { st_events | grep -c -- "$1"; }
-last_st() { st_events | tail -n 1 | sed 's/^[0-9]* grassfield>>//'; }
+last_st() { st_events | tail -n 1 | sed 's/^[0-9]* grassfield-state>>//'; }
 # Waits until more than <before> stages events match <regex> (at most <ms>).
 wait_st() { # <regex> <before> <ms>
   local deadline=$(($(date +%s%3N) + $3))
   while (($(st_count "$1") <= $2)); do
+    (($(date +%s%3N) > deadline)) && return 1
+    sleep 0.02
+  done
+}
+# The notices themselves: a refusal or end `reason` is read there, since the state fetched after a notice can already be
+# a later one that carries no reason (two notices in a row, the fetch answers with the second's state).
+nt_events() { grep -a ' grassfield>>{"v":"gfc/1","type":"stages"' "$events" 2>/dev/null; }
+nt_count() { nt_events | grep -c -- "$1"; }
+last_nt() { nt_events | tail -n 1 | sed 's/^[0-9]* grassfield>>//'; }
+wait_nt() { # <regex> <before> <ms>
+  local deadline=$(($(date +%s%3N) + $3))
+  while (($(nt_count "$1") <= $2)); do
     (($(date +%s%3N) > deadline)) && return 1
     sleep 0.02
   done
@@ -478,7 +505,7 @@ if [[ $mode == perf ]]; then
   measure "special workspace alternative: 6 windows parked, idle"
   touch "$flag"; measure "special workspace alternative: ticker parked (not rendered: frozen)"; rm -f "$flag"
   kill -0 "$hypr_pid" 2>/dev/null || { say "perf: FAIL nested Hyprland is gone"; exit 1; }
-  say "perf: stages events posted: $(st_events | wc -l)"
+  say "perf: stages events posted: $(nt_events | wc -l)"
   say "perf: done (log $log)"
   exit 0
 fi
@@ -490,11 +517,11 @@ shot before
 # 1. the feature flag: off by default; a request is refused; only true|false accepted.
 ! has_feature stages
 check "flag off by default: stages-available advertised, stages not" $? "$(features)"
-d0=$(st_count '"reason":"disabled"')
+d0=$(nt_count '"reason":"disabled"')
 stages "$(on_json 0)"
 sleep 0.4
-(($(st_count '"reason":"disabled"') > d0))
-check "op on with the flag off: refused (disabled)" $? "$(last_st | cut -c1-120)"
+(($(nt_count '"reason":"disabled"') > d0))
+check "op on with the flag off: refused (disabled)" $? "$(last_nt | cut -c1-120)"
 config stagesEnabled yes
 sleep 0.3
 ! has_feature stages
@@ -505,11 +532,11 @@ has_feature stages
 check "config stagesEnabled=true: stages advertised" $? "$(features)"
 
 # 2. op on: refused without the strip surface; with it, one stage per app, the front app's stage active.
-n0=$(st_count '"reason":"no-strip"')
+n0=$(nt_count '"reason":"no-strip"')
 stages "$(on_json 0)"
 sleep 0.4
-(($(st_count '"reason":"no-strip"') > n0))
-check "op on without the shell's strip surface: refused (no-strip)" $? "$(last_st | cut -c1-120)"
+(($(nt_count '"reason":"no-strip"') > n0))
+check "op on without the shell's strip surface: refused (no-strip)" $? "$(last_nt | cut -c1-120)"
 start_fixture
 check "strip fixture mapped on $out" $? "$fixlog"
 o0=$(st_count '"on":true')
@@ -629,11 +656,11 @@ stages "{\"op\":\"move\",\"address\":\"$addr_a1\",\"stage\":\"new\"}"
 sleep 0.4
 [[ $(slot_id 0) == "$(stage_of "$addr_a1")" ]] && ! in_active "$addr_a1"
 check "move to a new stage: a1 dragged off the stage becomes a strip stage of its own (tile 0)" $? "a1 in $(stage_of "$addr_a1"), tile0 $(slot_id 0)"
-u0=$(st_count '"reason":"unknown"')
+u0=$(nt_count '"reason":"unknown"')
 stages '{"op":"activate","stage":999999}'
 sleep 0.3
-(($(st_count '"reason":"unknown"') > u0))
-check "activate an unknown stage: refused (unknown), nothing changes" $? "$(last_st | cut -c1-100)"
+(($(nt_count '"reason":"unknown"') > u0))
+check "activate an unknown stage: refused (unknown), nothing changes" $? "$(last_nt | cut -c1-100)"
 
 # 7. a new window opens a new active stage; closing it brings the previous stage back. b3 is focused first (its stage
 # comes forward), so that the keyboard has a known place to come back to.
@@ -1401,10 +1428,60 @@ distinct=$(tr ' ' '\n' <<<"$visited" | sort -u | grep -c .)
 check "12c cycle_next stays within the active stage (never a strip window, stages unchanged)" $? \
   "visited $visited($distinct distinct, $cyc_bad outside the active stage); active $(active_id) (was $act0)"
 
+# 12d. many windows (integrator's nested run of 2026-10-24: 22 stages events cut at 1024 bytes by Hyprland, broken JSON
+# for the test and the shell). 14 more windows of new apps on this output, and 6 on the other output with a second strip
+# fixture there when there is one: every stages notice stays whole JSON under 1024 bytes, and the state from `hyprctl
+# grassfield-stages` lists every window on both monitors.
+many_pids=()
+fix2_pid=""
+n_before=$(nestctl grassfield-stages | jq '[.monitors[].stages[].windows[]] | length' 2>/dev/null)
+ev0=$(event_lines)
+want_other=0
+read -r ox oy oh < <(nestctl -j monitors | jq -r --arg o "$other_out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.height)"')
+# The other output may be small (the nested window's size on the parent): as many tiles as fit, none under 300 px.
+sh2=$(( $(num "$oh") - 80 < 860 ? $(num "$oh") - 80 : 860 ))
+nt2=$(( sh2 >= 240 ? (sh2 - 200) / 190 + 1 : 0 ))
+((nt2 > 4)) && nt2=4
+if [[ -n $other_out ]] && ((nt2 >= 1)); then
+  strip2_json=$(jq -nc --argjson x "$ox" --argjson y "$oy" --argjson h "$sh2" '{x: $x, y: ($y + 60), w: 220, h: $h}')
+  tiles2_json=$(jq -nc --argjson x "$ox" --argjson y "$oy" --argjson n "$nt2" '[range(0; $n) as $i | {x: ($x + 16), y: ($y + 100 + $i * 190), w: 188, h: 160}]')
+  GF_STAGES_OUTPUT=$other_out GF_STAGES_STRIP=$strip2_json GF_STAGES_TILES=$tiles2_json WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+    DBUS_SESSION_BUS_ADDRESS=$fixture_bus setsid "$root/scripts/dev/isolated.sh" --name stages-fixture2 qs -p "$root/tests/compositor/stages-fixture" --no-color \
+    >"$run/fixture2.log" 2>&1 </dev/null &
+  fix2_pid=$!
+  wait_log "$run/fixture2.log" "output $other_out found" 50
+  stages "$(jq -nc --arg o "$out" --arg o2 "$other_out" --argjson t "$tiles_json" --argjson t2 "$tiles2_json" \
+    '{op: "on", durationMs: 0, strips: [{monitor: $o, hidden: false, tiles: $t}, {monitor: $o2, hidden: false, tiles: $t2}]}')"
+  sleep 0.5
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$other_out" abs 900 500 sleep 100 >>"$log" 2>&1
+  for i in 1 2 3 4 5 6; do p=$(foot_bg "gf-many-o$i"); many_pids+=("$p"); pids+=("$p"); sleep 0.3; done
+  want_other=6
+  pointer abs $((mon_w / 2)) $((mon_h - 160)) sleep 100
+fi
+for i in $(seq 1 14); do p=$(foot_bg "gf-many-$i"); many_pids+=("$p"); pids+=("$p"); sleep 0.3; done
+sleep 1.5
+state=$(nestctl grassfield-stages)
+n_after=$(jq '[.monitors[].stages[].windows[]] | length' <<<"$state" 2>/dev/null)
+n_other=$(jq --arg o "$other_out" '[.monitors[] | select(.monitor == $o) | .stages[].windows[]] | length' <<<"$state" 2>/dev/null)
+bad=0 big=0 notices=0
+while IFS= read -r line; do
+  payload=${line#*grassfield>>}
+  notices=$((notices + 1))
+  ((${#payload} >= 1024)) && big=$((big + 1))
+  jq -e . >/dev/null 2>&1 <<<"$payload" || bad=$((bad + 1))
+done < <(events_since "$ev0" | grep -a ' grassfield>>{"v":"gfc/1","type":"stages"')
+((notices >= 1 && bad == 0 && big == 0 && $(num "$n_after") >= $(num "$n_before") + 14 + want_other && $(num "$n_other") >= want_other)) && [[ ${#state} -gt 1024 ]]
+check "12d 20 more windows on two outputs: every stages notice is whole JSON under 1024 bytes, the state lists every window" $? \
+  "notices $notices (broken $bad, 1024 bytes or more $big); windows in the state ${n_before:-?} -> ${n_after:-?} (+$((14 + want_other)) expected, ${n_other:-?} on ${other_out:-no other output}); state ${#state} bytes"
+kill "${many_pids[@]}" 2>/dev/null
+[[ -n $fix2_pid ]] && reap "$fix2_pid"
+stages "$(on_json 0)"
+sleep 1
+
 # 13. failsafe: the strip surface going away shows every window normally at once; then Stages resumes.
-i0=$(st_count '"reason":"interrupted"')
+i0=$(nt_count '"reason":"interrupted"')
 stop_fixture
-wait_st '"reason":"interrupted"' "$i0" 2000
+wait_nt '"reason":"interrupted"' "$i0" 2000
 fs_rc=$?
 sleep 0.6
 shot strip-gone
@@ -1426,21 +1503,21 @@ sleep 0.6
 check "op on again after the strip came back: Stages resumes with its stages" $? "$(stage_count) stages"
 
 # 14. invalid payloads and a flood.
-v0=$(st_count '"reason":"invalid"')
+v0=$(nt_count '"reason":"invalid"')
 for bad in '{"op":"dance"}' '{"op":"on","durationMs":350}' '{"op":"activate","stage":0}' 'not json' '{"op":"move","address":"0xzz","stage":1}'; do
   stages "$bad"
 done
 nestctl dispatch 'hl.plugin.grassfield.stages(42)' >>"$log" 2>&1
 sleep 0.5
-(($(st_count '"reason":"invalid"') > v0)) && [[ $(last_st | jq -r '.on') == true ]]
+(($(nt_count '"reason":"invalid"') > v0)) && [[ $(last_st | jq -r '.on') == true ]]
 check "invalid payloads refused (invalid), Stages unchanged" $? "$(last_st | cut -c1-100)"
-f0=$(st_events | wc -l)
+f0=$(nt_events | wc -l)
 aw0=$(grep -ac "activewindowv2>>" "$events")
 flood_log0=$(grep -ac "" "$hyprlog")
 s_a=$(stage_of "$addr_a1"); s_c=$(stage_of "$addr_c1")
 nestctl dispatch "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.stages then for i = 1, 500 do p.stages([[{\"op\":\"activate\",\"stage\":$s_a}]]); p.stages([[{\"op\":\"activate\",\"stage\":$s_c}]]) end end end" >>"$log" 2>&1
 sleep 1.2
-flood=$(($(st_events | wc -l) - f0))
+flood=$(($(nt_events | wc -l) - f0))
 focus_events=$(($(grep -ac "activewindowv2>>" "$events") - aw0))
 kill -0 "$socat_pid" 2>/dev/null && kill -0 "$hypr_pid" 2>/dev/null && ((flood <= 10 && focus_events <= 10)) && [[ $(clients_of "$all") == "$before_clients" ]]
 check "flood of 1000 stages calls in one dispatch: coalesced (stages events and Hyprland's own focus events), sizes unchanged" $? \
@@ -1448,7 +1525,7 @@ check "flood of 1000 stages calls in one dispatch: coalesced (stages events and 
 
 # 15. unload during Stages, then load again.
 shot before-unload
-w0=$(st_count '"reason":"unavailable"')
+w0=$(nt_count '"reason":"unavailable"')
 plugin_unloaded=1
 nestctl plugin unload "$plugin" >>"$log" 2>&1
 unload_rc=$?
@@ -1462,7 +1539,7 @@ sleep 0.3
 capb0=$(stat -c %s "$cap_b")
 pointer abs "$ring_x" "$ring_y" sleep 150 click sleep 200
 capb_new=$(tail -c +"$((capb0 + 1))" "$cap_b" | cat -v | head -c 60)
-((unload_rc == 0 && alive == 0 && ug0 <= 2 && $(st_count '"reason":"unavailable"') > w0)) && [[ $capb_new == *"[<0;"*M* && $(clients_of "$all") == "$before_clients" ]]
+((unload_rc == 0 && alive == 0 && ug0 <= 2 && $(nt_count '"reason":"unavailable"') > w0)) && [[ $capb_new == *"[<0;"*M* && $(clients_of "$all") == "$before_clients" ]]
 check "unload during Stages: Hyprland alive, on:false/unavailable posted, no thumbnail, windows normal and unblocked" $? \
   "rc $unload_rc, tile0 $ug0 %, b3 got '$capb_new'"
 nestctl plugin load "$plugin" >>"$log" 2>&1
@@ -1475,6 +1552,12 @@ check "plugin loaded again: stages-available, flag back to off (no stages)" $((l
 stop_fixture
 
 # 16. health.
+broken=$(grep -a ' grassfield>>' "$events" | sed 's/^[0-9]* grassfield>>//' | while IFS= read -r payload; do
+  if ((${#payload} >= 1024)) || ! jq -e . >/dev/null 2>&1 <<<"$payload"; then echo x; fi
+done | wc -l)
+total_ev=$(grep -ac ' grassfield>>' "$events")
+((broken == 0 && total_ev > 0))
+check "every gfc/1 event of the run is whole JSON under Hyprland's 1024-byte socket2 limit" $? "$total_ev event(s), $broken broken or at the limit"
 kill -0 "$hypr_pid" 2>/dev/null
 check "nested Hyprland alive" $?
 dumps=$(coredumpctl --no-pager --json=short list Hyprland --since "$start_human" 2>/dev/null | jq -r '.[].pid' 2>/dev/null | grep -cx "$hypr_pid")
@@ -1487,7 +1570,7 @@ sleep 2 # Hyprland writes its log late
 overflow=$(tail -n +"$((flood_log0 + 1))" "$hyprlog" | grep -ac "overflowed event queue")
 ((${overflow:-0} == 0))
 check "no socket2 subscriber dropped since the flood (Hyprland: overflowed event queue)" $? "${overflow:-0} line(s)"
-say "stages log lines in the nested log so far: $(grep -ac '\[grassfield\] stages' "$hyprlog" 2>/dev/null) (Hyprland buffers its log); events: $(st_events | wc -l)"
+say "stages log lines in the nested log so far: $(grep -ac '\[grassfield\] stages' "$hyprlog" 2>/dev/null) (Hyprland buffers its log); events: $(nt_events | wc -l)"
 
 if ((fail == 0)); then say "stages: PASS ($passed/$total checks)"; else say "stages: FAIL ($passed/$total checks passed)"; fi
 say "stages: log $log"

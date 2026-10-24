@@ -37,7 +37,8 @@
 #        pointer's output when the focused window closes) -> fallback: the focused Desktop's front window A, outcome
 #        fallback/gone
 #   9    remembered D, D minimized during the close -> fallback A (minimized), D never gets a key
-#   10   a press beside the remaining Exclusive chrome on the other output's window -> that window wins (target press)
+#   10   a press beside the remaining Exclusive chrome on the other output's window -> that window wins (target press);
+#        the request and the release come from the fixture, timed from the request (fixture close())
 #   11   a polkit-like dialog appears during the close and stays past the bound: letters go to its field, no window gets
 #        one, outcome timeout; 12 a short dialog: nothing focused while it is up, A after it
 #   13   invalid payloads -> outcome invalid; 300 requests in one dispatch -> one outcome, the socket2 subscriber alive
@@ -237,6 +238,18 @@ start_fixture() {
   grep -q "\[ovf-fixture\] outputs $OUT_A found $OUT_B found" "$fixlog"
 }
 fix_count() { grep -c "\[ovf-fixture\] $1" "$fixlog" 2>/dev/null; } # <pattern>
+# When the fixture's close sequence did <what>, in ms after its request (its last timing line for it), waiting up to 2 s;
+# -1 when it never logged it. Over 950 ms the plugin's 1000-ms bound had passed before the fixture acted: a loaded host
+# delayed the fixture's own timers, and the case says nothing about the plugin (not judged, never a pass).
+fix_timing() { # <what>
+  local i t=""
+  for i in $(seq 1 40); do
+    t=$(grep -a "\[ovf-fixture\] timing: $1 at" "$fixlog" 2>/dev/null | tail -n 1 | sed 's/.* at +\([0-9]*\) ms.*/\1/')
+    [[ -n $t ]] && break
+    sleep 0.05
+  done
+  echo "${t:--1}"
+}
 # Both chromes Exclusive; prints the output whose chrome holds the keyboard ("" when none did within 3 s).
 open_chromes() {
   local h="" i
@@ -446,7 +459,12 @@ type_to "case 8" "$cap_a" "fgone"
 [[ $mode == check ]] && outcome_is "case 8" "$id" fallback "$addr_a"
 
 say "case 9: remembered D, D minimized during the close (fallback A, D never gets a key)"
-park
+# The pointer on an empty spot of D's output, not parked over B: Hyprland may show special:minimized for the moved window
+# and the shell hides it at once (Compositor.qml, activespecialv2), and Hyprland's refocus on that hide gives the keyboard to
+# the window under the pointer. When the hide landed after the plugin's outcome, the keys went to B (2 of 4 runs on
+# 2026-10-24, log: fallback A, the shell's request, then "Set keyboard focus ... B"): Hyprland's own rule after the
+# outcome, not what this case checks.
+pointer "$OUT_A" abs 1900 120 sleep 80
 focus_window "$addr_d"
 holder=$(open_chromes)
 id=$((id + 1))
@@ -467,15 +485,24 @@ focus_window "$addr_a"
 holder=$(open_chromes)
 if [[ $holder == "$OUT_A" ]]; then press_win=$addr_a press_cap=$cap_a target_win=$addr_b; else press_win=$addr_b press_cap=$cap_b target_win=$addr_a; fi
 id=$((id + 1))
-request "{\"target\":\"window\",\"address\":\"$target_win\",\"id\":$id}"
-release holder-first 900 -1 # the holder's chrome first; the other stays Exclusive for 0.9 s
-sleep 0.15
 read -r p_out p_x p_y < <(center_of "$press_win")
+# The request and the release from the fixture, timed from the request: the holder's chrome 30 ms after it, the other
+# stays Exclusive 800 ms more (released 830 ms after the request, inside the plugin's 1000-ms bound whatever `qs ipc`
+# takes to arrive; the press lands while it is still up).
+fx close "{\"target\":\"window\",\"address\":\"$target_win\",\"id\":$id}" holder-first 800 -1 >/dev/null
+n_t2=$(grep -ac "timing: second chrome released" "$fixlog")
 pointer "$p_out" abs "$p_x" "$p_y" sleep 60 click
 sleep 1.1
 say "  holder $holder, press on $press_win ($p_out $p_x,$p_y), named target $target_win"
-type_to "case 10" "$press_cap" "pwin"
-[[ $mode == check ]] && outcome_is "case 10" "$id" focused "$press_win"
+t2=-1
+(($(grep -ac "timing: second chrome released" "$fixlog") > n_t2)) && t2=$(fix_timing "second chrome released")
+if ((t2 > 950)); then
+  say "  NOT JUDGED case 10: the fixture released the second chrome $t2 ms after the request (planned 830; the bound is 1000 ms)"
+else
+  say "  the fixture released the second chrome $t2 ms after the request (planned 830)"
+  type_to "case 10" "$press_cap" "pwin"
+  [[ $mode == check ]] && outcome_is "case 10" "$id" focused "$press_win"
+fi
 
 say "case 11: a polkit-like dialog appears during the close and stays past the bound"
 park
@@ -498,21 +525,25 @@ focus_window "$addr_b"
 focus_window "$addr_a"
 holder=$(open_chromes)
 id=$((id + 1))
-t_req=$(date +%s%3N)
-request "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}"
-fx polkit "$OUT_B" >/dev/null
-release holder-first 60 -1
-sleep 0.2
+# The request, the dialog, the chromes' release and the dialog's end from the fixture, timed from the request (the dialog
+# released 500 ms after it, inside the plugin's 1000-ms bound whatever `qs ipc` takes to arrive).
+n_tp=$(grep -ac "timing: polkit released" "$fixlog")
+fx closeWithPolkit "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}" "$OUT_B" holder-first 60 500 >/dev/null
+sleep 0.15
 early=$(outcome_of "$id") # the chromes are released, the dialog is still up: nothing may be focused yet
-t_rel=$(date +%s%3N)
-fx polkitRelease >/dev/null
-sleep 0.8
+sleep 1
+tp=-1
+(($(grep -ac "timing: polkit released" "$fixlog") > n_tp)) && tp=$(fix_timing "polkit released")
 if [[ $mode == check ]]; then
   [[ -z $early ]]; check "case 12: no outcome while the dialog is up" $? "${early:-none}"
-  say "  the dialog was released $((t_rel - t_req)) ms after the request (the bound is 1000 ms)"
 fi
-type_to "case 12" "$cap_a" "pshort"
-[[ $mode == check ]] && outcome_is "case 12" "$id" focused "$addr_a"
+if ((tp > 950)); then
+  say "  NOT JUDGED case 12: the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
+else
+  say "  the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
+  type_to "case 12" "$cap_a" "pshort"
+  [[ $mode == check ]] && outcome_is "case 12" "$id" focused "$addr_a"
+fi
 
 if [[ $mode == check ]]; then
   say "case 13: invalid payloads and a flood"
@@ -565,6 +596,7 @@ park
 focus_window "$addr_a"
 holder=$(open_chromes)
 id=$((id + 1))
+t_req=$(date +%s%3N)
 request "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}"
 ev_lock=$(grep -ac "" "$events")
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
@@ -576,12 +608,22 @@ for i in $(seq 1 60); do
   [[ $locked == "locked secure" ]] && break
   sleep 0.1
 done
+t_lock=$(date +%s%3N)
 release holder-first 100 -1
 sleep 0.8
 focus_events=$(tail -n +"$((ev_lock + 1))" "$events" | grep -acE "^[0-9]+ activewindowv2>>[0-9a-f]+$" || true)
 [[ $locked == "locked secure" ]]; check "case 15: the foreign locker holds the session lock" $? "${locked:-no answer}"
 ((focus_events == 0)); safe "case 15: no window focused while locked" $? "$focus_events activewindowv2 event(s) naming a window"
-[[ $mode == check ]] && outcome_is "case 15" "$id" refused
+# The foreign locker is a Quickshell process started after the request: on a loaded host it can take more than the
+# plugin's 1000-ms bound to lock, and the outcome is then a timeout that says nothing about the lock path (not judged,
+# never a pass: the safety checks above still count).
+if [[ $mode == check ]]; then
+  if [[ $(outcome_of "$id" | jq -r '.outcome' 2>/dev/null) != refused ]] && ((t_lock - t_req > 900)); then
+    say "  NOT JUDGED case 15 outcome: the lock was confirmed $((t_lock - t_req)) ms after the request (the plugin's bound is 1000 ms): $(outcome_of "$id")"
+  else
+    outcome_is "case 15" "$id" refused
+  fi
+fi
 foreign_ipc unlock >/dev/null
 for i in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
 kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null

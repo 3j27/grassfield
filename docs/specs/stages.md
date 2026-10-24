@@ -210,7 +210,7 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
     nothing, without its keyboard change: the window is deactivated (`CHyprXWaylandManager::activateWindow(w, false)`, as
     Hyprland does for the previous window on a focus change), `activewindow` / `activewindowv2` name no window and
     `window.active` is emitted without a window (foreign-toplevel "activated", the appmenu server: the shell's menu bar
-    names no app from Hyprland; the Stages event still names the front app, contract item 4); then what Hyprland rechecks
+    names no app from Hyprland; the Stages state still names the front app, contract item 4); then what Hyprland rechecks
     on a focus change: the window rules matching on focus (`CWindowRuleApplicator::propertiesChanged(RULE_PROP_FOCUS)`, so
     a focus-only opacity or idle-inhibit rule leaves the window) and the idle inhibitors
     (`CInputManager::recheckIdleInhibitorStatus`; R13 counter-review #4 of 0.6.3-stages). No focus request, no monitor,
@@ -308,7 +308,14 @@ window, so it is not counted as evidence either way).
    - `op:on` again while on updates the strips, timing and `hidden` flags (no regrouping). Send it on every geometry
      change of the strip (output added or moved, Dock or menu bar size) and for the hover reveal (`hidden:false`).
    - `{"op":"off","durationMs":350}` ends Stages (animated back). Turning the flag off also ends it (at once).
-4. **Events** `grassfield>>{"v":"gfc/1","type":"stages","on":bool,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,"front":{"address":"<hex, no 0x>","app":"<class>"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"<hex, no 0x>"}]},{"id":7,"slot":0,"windows":[{"address":"…","x":…,"y":…,"w":…,"h":…}]}]}]}`
+4. **Events** (ADR-0007 amendment 2026-10-24: Hyprland cuts socket2 events at 1024 bytes, and this state grows with every
+   window): the event is a change notice, `grassfield>>{"v":"gfc/1","type":"stages","gen":N,"on":bool}` plus `"reason"`, and
+   the state below, with the same `gen`, is the reply of `hyprctl grassfield-stages` (`shell/platform/StagesLink.qml`, the
+   one consumer, reads the event as a notice only and fetches the state on each notice with `on:true` while Stages is
+   active; a notice with `on:false` needs no fetch. One fetch at a time, notices during it ask one more; a state older than
+   the one shown is dropped; a failed or timed-out (2 s) fetch is retried three times, 200, 400 and 800 ms later, then no
+   state is shown and the strip hides rather than show a stale state as current. Pure logic `StagesState.js`, tests
+   `tests/unit/tst_stages.qml`). State: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,"front":{"address":"<hex, no 0x>","app":"<class>"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"<hex, no 0x>"}]},{"id":7,"slot":0,"windows":[{"address":"…","x":…,"y":…,"w":…,"h":…}]}]}]}`
    plus `"reason":"invalid|disabled|no-strip|unknown|unavailable|interrupted"`. Coalesced (latest wins): treat as a
    state. Per monitor with a strip: the workspace shown there, the active stage id, the stages in recency order (active
    first, `slot` = tile index, −1 for the active stage and for stages beyond the tiles), each stage's windows back to
@@ -319,7 +326,7 @@ window, so it is not counted as evidence either way).
    that holds the keyboard, or takes it when a layer surface lets go: while an Exclusive layer holds the keyboard after a
    swap Hyprland has **no active window** (ST24: no `activewindow`, no foreign-toplevel `activated`), so the menu bar
    should name `front.app` while Stages is on and Hyprland names no window (macOS keeps naming the frontmost app); the
-   Desktop and Search keep their own names when they hold the keyboard. Shell side (menubar.md, `shell/platform/StagesFront.js`): used only while Stages is on (`on:true`), Hyprland names no window and the front window still exists; display only (window commands greyed); cleared by an active window, `on:false`, plugin gone or the window closing. `disabled`: flag off; `no-strip`: the strip
+   Desktop and Search keep their own names when they hold the keyboard. Shell side (menubar.md, `shell/platform/StagesFront.js`, given each fetched state by StagesLink through `Compositor.applyStagesState`: the event carries no `front`): used only while Stages is on (`on:true`), Hyprland names no window and the front window still exists; display only (window commands greyed); cleared by an active window, `on:false`, plugin gone, the state unknown (fetch given up) or the window closing. `disabled`: flag off; `no-strip`: the strip
    surface is missing, not Top/Overlay, or does not cover the tiles with its box and input region; `unknown`: the stage
    or window no longer exists (refresh from the next event); `interrupted`: the strip surface went away or the monitors
    changed: re-send `op:on`; `unavailable`: the plugin unloads (hide the strip).
@@ -516,8 +523,9 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
   (ST6), but a popup without a grab (a tooltip) stays drawn at its real place until the app closes it (it takes no input:
   ST6 guards).
 - While an Exclusive layer holds the keyboard after a swap, Hyprland has no active window (ST24): window key bindings and
-  dispatchers without a window act on nothing until the layer releases the keyboard; the menu bar names no app unless the
-  shell reads the Stages event's `front` (contract item 4; shell side: `shell/platform/StagesFront.js`). The
+  dispatchers without a window act on nothing until the layer releases the keyboard; the menu bar names the app of the
+  Stages state's `front` (contract item 4; shell side: StagesLink fetches the state and hands it to Compositor,
+  `shell/platform/StagesFront.js`). The
   plugin reads (never changes) Hyprland's Exclusive-layer list and lock state to know when Hyprland refuses window focus,
   and relies on the order of `CLayerSurface::onUnmap` (the `layer.closed` event before Hyprland's refocus) and on
   `CFocusState::resetWindowFocus`: re-verify `CFocusState::rawWindowFocus`, `CInputManager::{m_exclusiveLSes,

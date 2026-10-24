@@ -9,9 +9,10 @@ import "Minimized.js" as Minimized
 import "StagesState.js" as StagesState
 
 // The shell's side of the compositor plugin's Stages (docs/specs/stages.md "Shell contract"): capability, the user's
-// setting, the plugin's state events and the `stages` verb. Only this file (with Compositor and Capabilities) talks to
-// the compositor; the strip surfaces (shell/stages) read it. Event-driven; without the plugin or without `stages-available`
-// nothing here is ever active and nothing is sent.
+// setting, the plugin's change notices, the state they announce (`hyprctl grassfield-stages`) and the `stages` verb. Only
+// this file (with Compositor and Capabilities) talks to the compositor; the strip surfaces (shell/stages) read it, and
+// Compositor gets each state for the menu bar (applyStagesState). Event-driven; without the plugin or without
+// `stages-available` nothing here is ever active, fetched or sent.
 Singleton {
     id: root
 
@@ -23,8 +24,15 @@ Singleton {
     readonly property bool flagOn: Capabilities.has("stages")
     readonly property bool active: available && enabled && flagOn
 
-    // Last state event (StagesState.parse) or null; cleared when Stages ends.
+    // Last state (StagesState.parse of `hyprctl grassfield-stages`, or the off state of a notice) or null: none yet, Stages
+    // not active, or the state could not be fetched (the strip hides rather than show a stale state as current).
     property var state: null
+    // The fetch of the state (StagesState.newFetch: running, again, tries); StagesState decides, this file runs it.
+    property var fetch: StagesState.newFetch()
+    // The running fetch's reply is still wanted (false once it timed out: a stopped fetch's late output is dropped).
+    property bool awaiting: false
+    // A fetch was asked while the previous process was still exiting: start it when that one is gone.
+    property bool startPending: false
     readonly property bool on: state !== null && state.on
     // Last refusal or end reason of an event ("" none): invalid | disabled | no-strip | unknown | unavailable | interrupted.
     property string reason: ""
@@ -36,6 +44,43 @@ Singleton {
 
     function monitorState(name: string): var {
         return state && state.monitors[name] ? state.monitors[name] : null;
+    }
+
+    // Applies a step of the fetch (StagesState.onNotice/onReply/onTimeout/onRetry). `text`: the reply the step parsed ("" for
+    // the others); Compositor gets it with each new state, nothing when the state is off or unknown.
+    function step(out: var, text: string): void {
+        root.fetch = out.fetch;
+        if (out.state !== undefined) {
+            root.state = out.state;
+            Compositor.applyStagesState(out.state && out.state.on ? text : "");
+        }
+        if (out.retryMs > 0) {
+            retryTimer.interval = out.retryMs;
+            retryTimer.restart();
+        }
+        if (out.start)
+            root.startFetch();
+    }
+
+    function startFetch(): void {
+        retryTimer.stop();
+        root.awaiting = true;
+        fetchDeadline.restart();
+        if (stateFetch.running)
+            root.startPending = true;
+        else
+            stateFetch.running = true;
+    }
+
+    // Stages is no longer active: no state, no fetch, nothing pending (a fetch still running ends unheard).
+    function reset(): void {
+        retryTimer.stop();
+        fetchDeadline.stop();
+        root.awaiting = false;
+        root.startPending = false;
+        root.fetch = StagesState.newFetch();
+        root.state = null;
+        Compositor.applyStagesState("");
     }
 
     // Sends an operation through Compositor.stages (the plugin validates every field); false (nothing sent) when Stages is not
@@ -67,7 +112,7 @@ Singleton {
         if (active)
             resumed();
         else
-            state = null;
+            reset();
     }
 
     Connections {
@@ -86,14 +131,58 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name !== "grassfield")
                 return;
-            const parsed = StagesState.parse(event.data);
-            if (!parsed)
+            // The event is only a change notice (Hyprland cuts socket2 events at 1024 bytes): the state is fetched.
+            const notice = StagesState.parseNotice(event.data);
+            if (!notice)
                 return;
-            root.state = parsed;
-            root.reason = parsed.reason;
-            if (parsed.reason === "no-strip" || parsed.reason === "interrupted")
-                root.resendNeeded(parsed.reason);
+            root.reason = notice.reason;
+            root.step(StagesState.onNotice(root.fetch, notice, root.active), "");
+            if (notice.reason === "no-strip" || notice.reason === "interrupted")
+                root.resendNeeded(notice.reason);
         }
+    }
+
+    // One `hyprctl grassfield-stages` at a time; its reply, a failure or the deadline ends the fetch.
+    Process {
+        id: stateFetch
+
+        command: ["hyprctl", "grassfield-stages"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!root.awaiting)
+                    return;
+                root.awaiting = false;
+                fetchDeadline.stop();
+                root.step(StagesState.onReply(root.fetch, text, root.state, root.active), text);
+            }
+        }
+        onRunningChanged: {
+            if (!running && root.startPending) {
+                root.startPending = false;
+                running = true;
+            }
+        }
+    }
+
+    // A fetch that has not answered in this time failed (also covers a hyprctl that could not start).
+    Timer {
+        id: fetchDeadline
+
+        interval: StagesState.fetchDeadlineMs
+        onTriggered: {
+            if (!root.awaiting)
+                return;
+            root.awaiting = false;
+            root.startPending = false;
+            stateFetch.running = false;
+            root.step(StagesState.onTimeout(root.fetch, root.active), "");
+        }
+    }
+
+    Timer {
+        id: retryTimer
+
+        onTriggered: root.step(StagesState.onRetry(root.fetch, root.active), "")
     }
 
     // Test hook (tests/visual waits on it): `qs ipc call stages status` is "unavailable" without `stages-available`,
