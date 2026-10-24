@@ -309,8 +309,10 @@ Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff229
   (4.0.4-1) and the reviewed upstream revisions. `scripts/dev/upstream-drift.sh` (`just check-upstream`, part of
   `just check`) fails when the installed Omarchy changed or removed one of them, naming the forks to review; without
   Omarchy it says SKIP. It also fails, Omarchy or not, when a pinned fork is gone or no longer names its upstream file, and
-  when a source file says "adapted from Omarchy" without being pinned. After the review (port or reject, recorded in this
-  section): `scripts/dev/upstream-drift.sh --update` re-pins. Test: `tests/security/upstream_drift.sh` (fixture trees:
+  when a source file says "adapted from Omarchy" without being pinned, and on any read error (an unreadable fork or file of
+  the scanned tree, a file that cannot be hashed). No environment variable changes what it checks (`just check` runs it
+  bare); the fixture paths of its test are options (`--omarchy`, `--lock`, `--root`, `--package`; review of 395715e). After
+  the review (port or reject, recorded in this section): `scripts/dev/upstream-drift.sh --update` re-pins. Test: `tests/security/upstream_drift.sh` (fixture trees:
   unchanged, edited, removed, no Omarchy, `--update`, malformed lock, lost attribution, unpinned fork; the real lock
   against the installed Omarchy).
 

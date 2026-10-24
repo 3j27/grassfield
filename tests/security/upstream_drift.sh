@@ -39,11 +39,10 @@ write_lock() {
   } >"$lock"
 }
 write_lock
-# run [args...] -> sets out and rc (fixture environment).
+# run [args...] -> sets out and rc (fixture trees, through the script's test options).
 run() {
   rc=0
-  out=$(OMARCHY_PATH=${FIX_OMARCHY:-$up} GRASSFIELD_UPSTREAM_LOCK=$lock GRASSFIELD_UPSTREAM_ROOT=$tree GRASSFIELD_UPSTREAM_PACKAGE=9.9.9-1 \
-    bash "$script" "$@" 2>&1) || rc=$?
+  out=$(bash "$script" --omarchy "${FIX_OMARCHY:-$up}" --lock "$lock" --root "$tree" --package 9.9.9-1 "$@" 2>&1) || rc=$?
 }
 
 run
@@ -111,9 +110,37 @@ rm "$tree/shell/security/polkit/AuthAgent.qml"
 run
 [[ $rc == 0 ]] && pass "forks: back to a consistent tree" || bad "forks: rc=$rc: $out"
 
+# Review of 395715e: read errors fail the check instead of being hidden.
+if [[ $(id -u) != 0 ]]; then
+  chmod 000 "$tree/shell/security/idle/IdleModel.js"
+  run
+  [[ $rc == 1 && $out == *"shell/security/idle/IdleModel.js cannot be read"* ]] && pass "errors: an unreadable fork fails" || bad "errors: unreadable fork rc=$rc: $out"
+  chmod 644 "$tree/shell/security/idle/IdleModel.js"
+  printf 'x\n' >"$tree/shell/unreadable.qml"
+  chmod 000 "$tree/shell/unreadable.qml"
+  run
+  [[ $rc == 1 && $out == *"the scan for files adapted from Omarchy failed"* ]] && pass "errors: an unreadable file in the scanned tree fails" || bad "errors: scan rc=$rc: $out"
+  chmod 644 "$tree/shell/unreadable.qml"
+  rm "$tree/shell/unreadable.qml"
+else
+  echo "SKIP: upstream drift errors: running as root (permissions do not apply)"
+fi
+for opt in --omarchy --lock --root --package; do
+  rc=0
+  out=$(bash "$script" "$opt" 2>&1) || rc=$?
+  [[ $rc == 2 ]] && pass "usage: $opt without a value is refused" || bad "usage: $opt rc=$rc: $out"
+done
+
+# Review of 395715e: no environment variable redirects the check (`just check` runs it bare). The old hooks pointing at the
+# drifted fixture tree change nothing: the real check runs against the repository and /usr/share/omarchy.
+printf 'drifted again\n' >"$up/shell/plugins/lock/Service.qml"
+rc=0
+out=$(OMARCHY_PATH=$up GRASSFIELD_UPSTREAM_LOCK=$lock GRASSFIELD_UPSTREAM_ROOT=$tree GRASSFIELD_UPSTREAM_PACKAGE=0 bash "$script" 2>&1) || rc=$?
+[[ $out != *"$tmp"* ]] && pass "env: the old test variables are ignored (no fixture path in the output)" || bad "env: the variables still redirect the check: $out"
+
 # The repository's own lock: attribution always; drift against the installed Omarchy when it is there.
 rc=0
-out=$(OMARCHY_PATH=$tmp/none bash "$script" 2>&1) || rc=$?
+out=$(bash "$script" --omarchy "$tmp/none" 2>&1) || rc=$?
 [[ $rc == 0 ]] && pass "real: the repository's forks are all pinned and attributed" || bad "real: attribution rc=$rc: $out"
 if [[ -d /usr/share/omarchy ]]; then
   rc=0

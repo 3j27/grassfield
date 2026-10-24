@@ -10,21 +10,38 @@
 #
 # Also checked, without Omarchy: every pinned line names derived files that exist and still name their upstream file
 # (attribution kept), and every file of the tree whose header says "adapted from Omarchy" is pinned here.
-# Exit: 0 ok or skipped, 1 drift or attribution mismatch, 2 malformed lock file or usage.
-# Test hooks: OMARCHY_PATH (installed tree), GRASSFIELD_UPSTREAM_LOCK (lock file), GRASSFIELD_UPSTREAM_ROOT (tree whose
-# files are derived), GRASSFIELD_UPSTREAM_PACKAGE (package version for --update; default `pacman -Q omarchy`).
+# Exit: 0 ok or skipped, 1 drift, attribution mismatch or a read error, 2 malformed lock file or usage.
+# Options for tests only (`just check` passes none; no environment variable changes what is checked, review of 395715e):
+#   --omarchy DIR   the installed tree (default /usr/share/omarchy)
+#   --lock FILE     the lock file (default <repository>/docs/upstream/omarchy.lock)
+#   --root DIR      the tree whose files are derived (default the repository)
+#   --package V     the package version --update writes (default `pacman -Q omarchy`)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-repo=${GRASSFIELD_UPSTREAM_ROOT:-$(git -C "$here" rev-parse --show-toplevel)}
-omarchy=${OMARCHY_PATH:-/usr/share/omarchy}
-lock=${GRASSFIELD_UPSTREAM_LOCK:-$repo/docs/upstream/omarchy.lock}
+repo=$(cd "$here/../.." && pwd)
+omarchy=/usr/share/omarchy
+lock=""
+pkg_override=""
 mode=check
-case ${1:-} in
-  "") ;;
-  --require) mode=require ;;
-  --update) mode=update ;;
-  *) echo "usage: upstream-drift.sh [--require|--update]" >&2; exit 2 ;;
-esac
+while (($#)); do
+  case $1 in
+    --require) mode=require ;;
+    --update) mode=update ;;
+    --omarchy | --lock | --root | --package)
+      [[ $# -ge 2 && -n $2 ]] || { echo "upstream-drift: $1 needs a value" >&2; exit 2; }
+      case $1 in
+        --omarchy) omarchy=$2 ;;
+        --lock) lock=$2 ;;
+        --root) repo=$2 ;;
+        --package) pkg_override=$2 ;;
+      esac
+      shift
+      ;;
+    *) echo "usage: upstream-drift.sh [--require|--update] [--omarchy DIR] [--lock FILE] [--root DIR] [--package V]" >&2; exit 2 ;;
+  esac
+  shift
+done
+lock=${lock:-$repo/docs/upstream/omarchy.lock}
 
 [[ -r $lock ]] || { echo "upstream-drift: FAIL: no lock file $lock" >&2; exit 2; }
 
@@ -55,16 +72,32 @@ for i in "${!paths[@]}"; do
     pinned[$f]=1
     if [[ ! -f $repo/$f ]]; then
       bad "$f (derived from ${paths[$i]}) does not exist"
-    elif ! grep -qF -- "$needle" "$repo/$f"; then
-      bad "$f no longer names its upstream file $needle (attribution header)"
+      continue
     fi
+    grep -qF -- "$needle" "$repo/$f"
+    case $? in
+      0) ;;
+      1) bad "$f no longer names its upstream file $needle (attribution header)" ;;
+      *) bad "$f cannot be read (grep failed)" ;;
+    esac
   done
 done
-# Every fork the tree declares ("adapted from Omarchy" in a source file) is pinned.
-while IFS= read -r f; do
-  [[ -n $f ]] || continue
-  [[ -n ${pinned[$f]:-} ]] || bad "$f says it is adapted from Omarchy but is not pinned in ${lock#"$repo"/}"
-done < <(cd "$repo" && grep -rliI --exclude-dir=.git --exclude-dir=.dev --exclude-dir=docs --exclude-dir=tests --exclude-dir=licenses --exclude=upstream-drift.sh -e "adapted from omarchy" -- shell ui apps bridges compositor config packaging scripts 2>/dev/null | LC_ALL=C sort)
+
+# Every fork the tree declares ("adapted from Omarchy" in a source file) is pinned. A read error fails the check.
+scan_dirs=()
+for d in shell ui apps bridges compositor config packaging scripts; do
+  [[ -d $repo/$d ]] && scan_dirs+=("$d")
+done
+if ((${#scan_dirs[@]} > 0)); then
+  forks=$(cd "$repo" && grep -rliI --exclude-dir=.git --exclude-dir=.dev --exclude-dir=docs --exclude-dir=tests --exclude-dir=licenses \
+    --exclude=upstream-drift.sh -e "adapted from omarchy" -- "${scan_dirs[@]}")
+  rc=$?
+  ((rc <= 1)) || bad "the scan for files adapted from Omarchy failed (grep exit $rc)"
+  while IFS= read -r f; do
+    [[ -n $f ]] || continue
+    [[ -n ${pinned[$f]:-} ]] || bad "$f says it is adapted from Omarchy but is not pinned in ${lock#"$repo"/}"
+  done < <(LC_ALL=C sort <<<"$forks")
+fi
 
 if [[ ! -d $omarchy ]]; then
   if [[ $mode == require || $mode == update ]]; then
@@ -81,7 +114,7 @@ if [[ $mode == update ]]; then
   for i in "${!paths[@]}"; do
     [[ -r $omarchy/${paths[$i]} ]] || { echo "FAIL: $omarchy/${paths[$i]} is gone: remove or replace its line by hand"; exit 1; }
   done
-  pkg=${GRASSFIELD_UPSTREAM_PACKAGE:-$(pacman -Q omarchy 2>/dev/null | awk '{print $2}')}
+  pkg=${pkg_override:-$(pacman -Q omarchy 2>/dev/null | awk '{print $2}')}
   tmp=$(mktemp "$lock.XXXXXX") || exit 2
   while IFS= read -r line || [[ -n $line ]]; do
     if [[ $line =~ ^#\ omarchy-package\  && -n $pkg ]]; then
@@ -91,6 +124,7 @@ if [[ $mode == update ]]; then
     else
       read -r _ path from <<<"$line"
       sum=$(sha256sum -- "$omarchy/$path" | awk '{print $1}')
+      [[ $sum =~ ^[0-9a-f]{64}$ ]] || { rm -f -- "$tmp"; echo "FAIL: cannot hash $omarchy/$path"; exit 1; }
       echo "$sum $path $from"
     fi
   done <"$lock" >"$tmp"
@@ -106,7 +140,9 @@ for i in "${!paths[@]}"; do
     continue
   fi
   sum=$(sha256sum -- "$file" | awk '{print $1}')
-  if [[ $sum != "${shas[$i]}" ]]; then
+  if [[ ! $sum =~ ^[0-9a-f]{64}$ ]]; then
+    bad "${paths[$i]} cannot be hashed ($file)"
+  elif [[ $sum != "${shas[$i]}" ]]; then
     bad "${paths[$i]} changed upstream (pinned ${shas[$i]:0:12}, installed ${sum:0:12}): review it against ${derived[$i]//,/, }, then run scripts/dev/upstream-drift.sh --update"
   else
     echo "ok:   ${paths[$i]} (${derived[$i]//,/, })"
