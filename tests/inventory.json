@@ -290,6 +290,8 @@
  {"path": "tests/visual/osd-inputsource.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-perf.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/shell/gates.sh", "layer": "logic"},
+ {"path": "scripts/gates/p4-search-latency.sh", "layer": "logic", "runner": "bare"},
+ {"path": "scripts/gates/r1-restart.sh", "layer": "nested", "runner": "bare"},
  {"path": "scripts/gates/idle-cpu.sh", "layer": "nested", "runner": "bare"},
  {"path": "scripts/gates/rss.sh", "layer": "nested", "runner": "bare"},
  {"path": "scripts/gates/frame-pacing.sh", "layer": "nested", "runner": "bare"},
