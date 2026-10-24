@@ -233,6 +233,24 @@ TestCase {
         compare(radio2.Accessible.role, Accessible.RadioButton);
     }
 
+    function test_radioArrowKeysMoveWithinTheGroup() {
+        radio1.checked = true;
+        radio1.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Down);
+        verify(radio2.checked);
+        verify(radio2.activeFocus);
+        verify(radio2.visualFocus);
+        keyClick(Qt.Key_Down);
+        verify(radio2.checked, "no wrap past the last");
+        keyClick(Qt.Key_Up);
+        verify(radio1.checked);
+        verify(radio1.activeFocus);
+        keyClick(Qt.Key_Right);
+        verify(radio2.checked);
+        keyClick(Qt.Key_Left);
+        verify(radio1.checked);
+    }
+
     function test_switchTogglesItselfAndToggleLeavesTheValueToTheHost() {
         mouseClick(sw);
         verify(sw.checked);

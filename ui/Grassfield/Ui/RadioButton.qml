@@ -21,6 +21,32 @@ T.RadioButton {
     Accessible.onToggleAction: if (root.visible && root.enabled)
         root.click()
 
+    // The arrow keys move to the previous or next radio button of the group (the siblings under one parent), check it and
+    // give it the focus, without wrapping (macOS).
+    function step(direction: int): void {
+        const siblings = root.parent ? root.parent.children : [];
+        const mine = [];
+        for (let i = 0; i < siblings.length; i++) {
+            if (siblings[i] instanceof T.RadioButton && siblings[i].visible && siblings[i].enabled)
+                mine.push(siblings[i]);
+        }
+        const target = mine[mine.indexOf(root) + direction];
+        if (target) {
+            target.forceActiveFocus(Qt.TabFocusReason);
+            target.click();
+        }
+    }
+
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Down || event.key === Qt.Key_Right) {
+            root.step(1);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Left) {
+            root.step(-1);
+            event.accepted = true;
+        }
+    }
+
     indicator: Rectangle {
         x: 0
         y: (root.height - height) / 2
