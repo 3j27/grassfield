@@ -23,7 +23,14 @@ ipc() { "$root/tests/visual/ipc.sh" controlcenter "$@"; }
 wp() { wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '{printf "%.2f", $2}'; }
 
 if command -v wpctl >/dev/null && [[ -n $(wp) ]]; then
-  [[ $(ipc volumeLevel) == "$(wp)" ]]; check "volumeLevel equals wpctl get-volume" $?
+  # Right after a shell start the PipeWire sink binds a moment later: allow it up to 5 s.
+  level=""
+  for _ in $(seq 1 25); do
+    level=$(ipc volumeLevel)
+    [[ $level == "$(wp)" ]] && break
+    sleep 0.2
+  done
+  [[ $level == "$(wp)" ]]; check "volumeLevel equals wpctl get-volume (shell $level, wpctl $(wp))" $?
   before=$(wp)
   answer=$(ipc volume 0.30)
   [[ $answer == "refused: dev guard" ]]; check "volume 0.30 refused by the dev guard (answer: $answer)" $?

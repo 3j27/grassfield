@@ -100,7 +100,7 @@ does not check its gate.
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
 | capabilities | status | dev | visual tests wait on it |
 | bartone | status | dev | visual tests |
-| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
+| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
 

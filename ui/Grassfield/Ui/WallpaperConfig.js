@@ -6,8 +6,11 @@
 // grassfield.json goes through normalize(); an invalid field reads as its default, never as an error.
 
 const SOURCES = ["builtin", "color", "file", "folder", "video", "online"];
-// Online daily pictures (ADR-0016 step 2). One provider today; a second one is a new name here and a new `fetch` subcommand.
-const ONLINE_PROVIDERS = ["commons"];
+// Online daily pictures (ADR-0016 step 2): the Wikimedia Commons picture of the day and NASA's APOD. A provider is a name here
+// and a `fetch <provider>` subcommand of the helper.
+const ONLINE_PROVIDERS = ["commons", "apod"];
+// Video files the Settings pickers offer (ffprobe decides what it can actually read).
+const VIDEO_SUFFIXES = ["mp4", "m4v", "mov", "mkv", "webm", "avi", "ogv"];
 const FITS = ["fill", "fit", "stretch", "center", "tile"];
 // Interval name to milliseconds ("login" changes the picture once, at shell start: 0 means no timer).
 const INTERVALS = {"login": 0, "5s": 5000, "1m": 60000, "5m": 300000, "15m": 900000, "30m": 1800000, "1h": 3600000, "1d": 86400000};
@@ -32,7 +35,7 @@ const WALLPAPER_DEFAULTS = {
 };
 
 // Helper exit codes (apps/wallpaper-tool) and the failure each one means (ids; the UI translates them).
-const EXIT = {OK: 0, USAGE: 2, NOT_FOUND: 3, NOT_REGULAR: 4, TOO_LARGE_FILE: 5, TOO_LARGE_PICTURE: 6, UNREADABLE: 7, UNSUPPORTED: 8, TIMEOUT: 9, WRITE: 10, NETWORK: 11, SKIPPED: 12, BAD_RESPONSE: 13, MISSING: 127};
+const EXIT = {OK: 0, USAGE: 2, NOT_FOUND: 3, NOT_REGULAR: 4, TOO_LARGE_FILE: 5, TOO_LARGE_PICTURE: 6, UNREADABLE: 7, UNSUPPORTED: 8, TIMEOUT: 9, WRITE: 10, NETWORK: 11, SKIPPED: 12, BAD_RESPONSE: 13, VIDEO_TOO_LONG: 14, TRANSCODE_FAILED: 15, FFMPEG_MISSING: 16, CANCELLED: 17, MISSING: 127};
 const REASONS = {
     3: "not-found",
     4: "not-regular",
@@ -45,6 +48,10 @@ const REASONS = {
     11: "network",
     12: "skipped",
     13: "bad-response",
+    14: "video-too-long",
+    15: "transcode-failed",
+    16: "ffmpeg-missing",
+    17: "cancelled",
     127: "helper-missing"
 };
 
@@ -401,8 +408,15 @@ function keepPicture(state, intervalMs, now, loginKey, files, bad) {
 const MINUTE_MS = 60000;
 const HOUR_MS = 3600000;
 const DAY_MS = 86400000;
-// The POTD of a UTC date is final shortly after midnight UTC: nothing is asked before 00:10 UTC.
+// The Commons POTD of a UTC date is final shortly after midnight UTC: nothing is asked before 00:10 UTC. NASA's APOD follows US
+// Eastern time (midnight there is 04:00 or 05:00 UTC): its day flips at 05:10 UTC all year, so that the entry of the new date
+// exists whatever the summer time.
 const ONLINE_AFTER_MIDNIGHT_MS = 10 * MINUTE_MS;
+const ONLINE_FLIP_MS = {commons: ONLINE_AFTER_MIDNIGHT_MS, apod: 5 * HOUR_MS + 10 * MINUTE_MS};
+
+function onlineFlip(provider) {
+    return ONLINE_FLIP_MS[oneOf(ONLINE_PROVIDERS, provider) ? provider : "commons"];
+}
 // The fetch of a day happens at a random time in this window after 00:10 UTC (spreads the load; no fixed instant).
 const ONLINE_WINDOW_MS = 6 * HOUR_MS;
 // Wait after the first and the second failure of a day; a third failure waits for the next day.
@@ -428,9 +442,9 @@ function utcDayStart(date) {
     return utcDate(t) === date ? t : NaN;
 }
 
-// The POTD date that applies at `ms`: the UTC date of ten minutes ago (the day flips at 00:10 UTC).
-function onlineDate(ms) {
-    return utcDate(ms - ONLINE_AFTER_MIDNIGHT_MS);
+// The date of the picture that applies at `ms`: the UTC date of the provider's flip time ago (Commons: 00:10 UTC; APOD: 05:10 UTC).
+function onlineDate(ms, provider) {
+    return utcDate(ms - onlineFlip(provider));
 }
 
 // The persisted scheduler state ({done, failures, failDate, retryAt, slotDate, slotAt}) from anything: a bad field reads as unset.
@@ -443,7 +457,9 @@ function onlineStateOf(raw) {
         failDate: !isNaN(utcDayStart(r.failDate)) ? r.failDate : "",
         retryAt: num(r.retryAt),
         slotDate: !isNaN(utcDayStart(r.slotDate)) ? r.slotDate : "",
-        slotAt: num(r.slotAt)
+        slotAt: num(r.slotAt),
+        // The provider this accounting belongs to ("" in a state written before there were two: Commons).
+        provider: oneOf(ONLINE_PROVIDERS, r.provider) ? r.provider : ""
     };
 }
 
@@ -451,16 +467,22 @@ function onlineStateOf(raw) {
 // again (ms; only a bound: any event re-evaluates), `state` is the state with today's random slot filled in (persist it).
 // `cached` is true when a picture is already on disk (nothing cached: no waiting for the day's slot, the first fetch is at once).
 // `rand` is a number in [0, 1) for the slot, passed in so that the tests are exact.
-function onlineSchedule(rawState, now, cached, rand) {
-    const st = onlineStateOf(rawState);
-    const date = onlineDate(now);
+function onlineSchedule(rawState, now, cached, rand, provider) {
+    const prov = oneOf(ONLINE_PROVIDERS, provider) ? provider : "commons";
+    let st = onlineStateOf(rawState);
+    // Another provider starts its own accounting (a day done for Commons says nothing about APOD).
+    if ((st.provider === "" ? "commons" : st.provider) !== prov)
+        st = onlineStateOf({});
+    st.provider = prov;
+    const flip = onlineFlip(prov);
+    const date = onlineDate(now, prov);
     const dayStart = utcDayStart(date);
-    const tomorrow = dayStart + DAY_MS + ONLINE_AFTER_MIDNIGHT_MS;
+    const tomorrow = dayStart + DAY_MS + flip;
     if (st.done === date)
         return {date: date, due: false, at: tomorrow, state: st};
     if (st.slotDate !== date) {
         st.slotDate = date;
-        st.slotAt = dayStart + ONLINE_AFTER_MIDNIGHT_MS + Math.floor(Math.max(0, Math.min(0.999999, rand)) * ONLINE_WINDOW_MS);
+        st.slotAt = dayStart + flip + Math.floor(Math.max(0, Math.min(0.999999, rand)) * ONLINE_WINDOW_MS);
     }
     const failures = st.failDate === date ? st.failures : 0;
     if (failures >= ONLINE_MAX_FAILURES)
@@ -473,8 +495,10 @@ function onlineSchedule(rawState, now, cached, rand) {
 
 // The state after a fetch: "ok" and "skipped" (today's entry cannot be used: not retried today) finish the day; any other
 // outcome is a failure with the next wait (1 h, then 3 h, then the next day).
-function onlineAfter(rawState, now, date, outcome) {
+function onlineAfter(rawState, now, date, outcome, provider) {
     const st = onlineStateOf(rawState);
+    if (oneOf(ONLINE_PROVIDERS, provider))
+        st.provider = provider;
     if (outcome === "ok" || outcome === "skipped") {
         st.done = date;
         st.failures = 0;
@@ -539,6 +563,117 @@ function playbackState(s) {
     return {state: "play", reason: ""};
 }
 
+// The pause policy's inputs, per output, from what the shell knows (ADR-0016 section 5). `locked` and `onBattery` are session
+// wide, `fullscreen` is the output's, `idle` is the IdleMonitor's. Nothing here reads a clock or polls.
+function playbackInputs(locked, fullscreen, idle, onBattery, cfg, reduceMotion, profile) {
+    return {locked: !!locked, fullscreen: !!fullscreen, idle: !!idle, onBattery: !!onBattery, videoOnBattery: !!(cfg && cfg.videoOnBattery), reduceMotion: !!reduceMotion, profile: profile};
+}
+
+// The rate a video settles to when the user is idle, and how long the easing takes (the shell eases 1 -> 0.25 over 2 s, then pauses).
+const VIDEO_SETTLE_RATE = 0.25;
+
+// ---- video crash marker (ADR-0016 section 5, "Crash safety") ----
+
+// The marker as stored in wallpaper.json ({path, at}), or null. A path that is not a valid absolute path reads as no marker.
+function videoMarkerOf(raw) {
+    if (!isPlainObject(raw) || typeof raw.path !== "string" || pathProblem(raw.path) !== "")
+        return null;
+    return {path: raw.path, at: typeof raw.at === "number" && isFinite(raw.at) ? raw.at : 0};
+}
+
+// The markers as stored: one object (older files) or a list of them, at most 16, each valid one as videoMarkerOf.
+function videoMarkersOf(raw) {
+    const list = Array.isArray(raw) ? raw.slice(0, 16) : (asArray(raw, 16) || [raw]);
+    const out = [];
+    for (const m of list) {
+        const mk = videoMarkerOf(m);
+        if (mk)
+            out.push(mk);
+    }
+    return out;
+}
+
+// The blocked paths as stored: a string (older files) or a list of paths, at most 16, valid absolute paths only.
+function videoBlockedPaths(raw) {
+    const list = typeof raw === "string" ? [raw] : (Array.isArray(raw) ? raw.slice(0, 16) : (asArray(raw, 16) || []));
+    return list.filter(p => typeof p === "string" && pathProblem(p) === "");
+}
+
+// True when the video at `path` must not be played: the shell found a marker for it at start (it died while the video started),
+// and the video is still the wallpaper. `blocked` is a path or a list of paths. Another video, another source, or a re-selection
+// (a new path) is free to play.
+function videoBlocked(blocked, path) {
+    if (typeof path !== "string" || path === "")
+        return false;
+    if (typeof blocked === "string")
+        return blocked === path;
+    return videoBlockedPaths(blocked).indexOf(path) >= 0;
+}
+
+// ---- Cancel of the video preparation (Settings > Wallpaper): what the display showed before, per display ----
+
+// The map of what each display showed before a video was chosen: {key: {source, path, overridden}}, `key` being "all" or a
+// display key. Returns a new map with `was` recorded for `key`; a video chosen again (the one already on screen) records nothing.
+function rememberPrevious(map, key, was, chosenPath) {
+    const next = Object.assign({}, isPlainObject(map) ? map : {});
+    if (was.source === "video" && was.path === chosenPath)
+        return next;
+    next[key] = {source: was.source, path: was.path, overridden: !!was.overridden};
+    return next;
+}
+
+// What Cancel does on the page, which shows the display `key` ("all" or a display key; `isDisplay`, `overridden`: that display has
+// a wallpaper of its own). Cancel acts on the SCOPE the choice was made in, never on the display the picker happens to show:
+//   - a display that follows All Displays (`overridden` false) inherits the All Displays choice: any entry of its own is stale (it
+//     was made before the display went back to following All) and is dropped; Cancel undoes the All Displays choice ("all" scope) and
+//     never creates an override for the display; without an All Displays entry there is nothing to undo ("none");
+//   - otherwise the entry of `key` exists: the choice was made for that scope; it is undone there;
+//   - otherwise (nothing recorded): "none" for a display (nothing to undo here), "artwork" for All Displays.
+// Returns {action, scope, fields, map}. `action`: "follow-all" (a display that had no wallpaper of its own: remove its override),
+// "restore" (write `fields`, source and path, in `scope`: "all" = the top level, "display" = the display's entry), "artwork" or
+// "none". `map` is the map without the entry that was used; no other entry is touched.
+function cancelPlan(map, key, isDisplay, overridden, currentSource, currentPath) {
+    const all = Object.assign({}, isPlainObject(map) ? map : {});
+    let scopeKey = key;
+    let scope = isDisplay ? "display" : "all";
+    if (isDisplay && !overridden) {
+        delete all[key];
+        if (!all.all)
+            return {action: "none", scope: "all", fields: null, map: all};
+        scopeKey = "all";
+        scope = "all";
+    }
+    const was = all[scopeKey];
+    delete all[scopeKey];
+    if (!was)
+        return {action: isDisplay ? "none" : "artwork", scope: scope, fields: null, map: all};
+    if (scope === "display" && !was.overridden)
+        return {action: "follow-all", scope: scope, fields: null, map: all};
+    if (was.source === "video" && was.path === currentPath && currentSource === "video")
+        return {action: "artwork", scope: scope, fields: null, map: all};
+    return {action: "restore", scope: scope, fields: {source: was.source, path: was.path}, map: all};
+}
+
+// The map without the entry of `key` (the display went back to following All Displays: what it showed before a video was
+// chosen there is no longer what Cancel would restore).
+function forgetPrevious(map, key) {
+    const next = Object.assign({}, isPlainObject(map) ? map : {});
+    delete next[key];
+    return next;
+}
+
+// ---- the aspect rule of the online pictures (ADR-0016 step 2) ----
+
+// A daily picture within +-35 % of the output's aspect ratio is Filled, any other (a panorama, a portrait) is Fitted on the
+// picture's mean colour. Returns {fit, color}; `mean` is the sidecar's "#rrggbb" (anything else reads black).
+function onlineFit(picWidth, picHeight, outWidth, outHeight, mean) {
+    const color = validColor(mean) ? mean.toLowerCase() : "#000000";
+    if (!(picWidth > 0 && picHeight > 0 && outWidth > 0 && outHeight > 0))
+        return {fit: "fill", color: color};
+    const ratio = (picWidth / picHeight) / (outWidth / outHeight);
+    return {fit: ratio >= 0.65 && ratio <= 1.35 ? "fill" : "fit", color: color};
+}
+
 // ---- helper process (apps/wallpaper-tool) ----
 
 // Size "WxH" (physical pixels) of a window: each side at least 1 and at most 16384.
@@ -572,6 +707,59 @@ function thumbArgs(helper, src, width, outDir) {
     if (!validPath(src) || !validPath(outDir))
         return null;
     return [helper, "thumb", "--width", String(Math.max(16, Math.min(1024, Math.round(width)))), "--out", outDir, "--", src];
+}
+
+// `probe`: the video's duration, size, codec (one JSON object). Null for an invalid path.
+function probeArgs(helper, src) {
+    if (!validPath(src))
+        return null;
+    return [helper, "probe", "--", src];
+}
+
+// `transcode` (ADR-0016 W7): H.264 at most `width` x `height` physical pixels, the poster composed with `fit` and `color`, the
+// statistics of the menu bar strip. Prints {"progress":f} lines, then one result object. `maxSeconds` and `maxBytes` are optional.
+function transcodeArgs(helper, src, width, height, fit, color, outDir, stripRows, cacheMaxBytes, keepFiles, maxSeconds, maxBytes) {
+    if (!validPath(src) || !validPath(outDir) || !oneOf(FITS, fit) || !validColor(color))
+        return null;
+    const args = [helper, "transcode", "--size", sizeArg(width, height), "--fit", fit, "--color", color.toLowerCase(), "--out", outDir];
+    if (stripRows > 0)
+        args.push("--strip-rows", String(Math.max(1, Math.min(512, Math.round(stripRows)))));
+    if (cacheMaxBytes > 0)
+        args.push("--cache-max-bytes", String(Math.round(cacheMaxBytes)));
+    if (maxSeconds > 0)
+        args.push("--max-seconds", String(Math.max(1, Math.min(600, Math.round(maxSeconds)))));
+    if (maxBytes > 0)
+        args.push("--max-bytes", String(Math.round(maxBytes)));
+    for (const k of keepFiles || []) {
+        if (validPath(k))
+            args.push("--keep", k);
+    }
+    args.push("--", src);
+    return args;
+}
+
+// Reads the lines a transcode printed (or part of them): {progress: 0..1 | -1, result: object | null}. A line that is not JSON is
+// ignored; a progress line never counts as the result.
+function transcodeOutput(text) {
+    let progress = -1;
+    let result = null;
+    for (const line of String(text).split("\n")) {
+        if (line === "")
+            continue;
+        let o = null;
+        try {
+            o = JSON.parse(line);
+        } catch (e) {
+            continue;
+        }
+        if (!isPlainObject(o))
+            continue;
+        if (typeof o.code === "number")
+            result = o;
+        else if (typeof o.progress === "number" && o.progress >= 0 && o.progress <= 1)
+            progress = o.progress;
+    }
+    return {progress: progress, result: result};
 }
 
 function listArgs(helper, folder, max) {

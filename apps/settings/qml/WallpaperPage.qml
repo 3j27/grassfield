@@ -19,14 +19,42 @@ SettingsPage {
 
     title: qsTr("Wallpaper")
 
-    readonly property string source: root.store.value("wallpaper.source")
-    readonly property string path: root.store.value("wallpaper.path")
-    readonly property string color: root.store.value("wallpaper.color")
-    readonly property string fit: root.store.value("wallpaper.fit")
-    readonly property string interval: root.store.value("wallpaper.interval")
-    readonly property bool shuffle: root.store.value("wallpaper.shuffle")
-    // The tool's answer for the output the user looks at: {state, reason, source, path, name, files, file}.
+    // ---- which display the options are for (ADR-0016 section 8: "Display", shown with more than one output) ----
+    // "all" = All Displays (the top-level keys), else a display key (WallpaperConfig.displayKey): its entry of `wallpaper.outputs`
+    // overrides the top level for that display only. Every row below reads and writes through `eff` and `setFields`.
+    property string displayId: "all"
+    // The connected displays: [{key, name, model, serial, label}], read when the page opens and when the file changes.
+    property var displays: []
+    readonly property var currentDisplay: root.displayId === "all" ? null : (root.displays.find(d => d.key === root.displayId) || null)
+    // The whole stored object, as WallpaperConfig reads it.
+    readonly property var stored: ({
+            source: root.store.value("wallpaper.source"),
+            path: root.store.value("wallpaper.path"),
+            color: root.store.value("wallpaper.color"),
+            fit: root.store.value("wallpaper.fit"),
+            interval: root.store.value("wallpaper.interval"),
+            shuffle: root.store.value("wallpaper.shuffle"),
+            videoOnBattery: root.store.value("wallpaper.videoOnBattery"),
+            online: {provider: root.store.value("wallpaper.online.provider")},
+            outputs: root.store.value("wallpaper.outputs")
+        })
+    // The settings that apply to the chosen display (the top level for All Displays).
+    readonly property var eff: root.currentDisplay ? WallpaperConfig.resolve(root.stored, root.currentDisplay) : WallpaperConfig.resolve(root.stored, {name: "", model: "", serial: ""})
+    // The chosen display has an override of its own.
+    readonly property bool overridden: root.currentDisplay !== null && WallpaperConfig.normalize(root.stored).outputs.some(e => WallpaperConfig.sameDisplay(e.display, root.currentDisplay))
+
+    readonly property string source: root.eff.source
+    readonly property string path: root.eff.path
+    readonly property string color: root.eff.color
+    readonly property string fit: root.eff.fit
+    readonly property string interval: root.eff.interval
+    readonly property bool shuffle: root.eff.shuffle
+    readonly property bool videoOnBattery: root.store.value("wallpaper.videoOnBattery")
+    readonly property string provider: root.store.value("wallpaper.online.provider")
+    // The tool's answer for the output the user looks at: {state, reason, source, path, name, files, file, video, progress}.
     property var status: ({})
+    // Every output's answer, by output name.
+    property var allStatus: ({})
     // The online daily picture as the shell reports it: {phase, failure, entry: {title, author, credit, caption, licenseShort,
     // licenseUrl, sourceUrl, fetchedAt, file} | null}; {} before it reports. Plain text only.
     property var online: ({})
@@ -101,8 +129,24 @@ SettingsPage {
             return qsTr("In a development session only pictures inside the project's .dev folder can be used.");
         case "invalid-path":
             return qsTr("This path can't be used.");
-        case "video-unavailable":
-            return qsTr("Video wallpapers aren't available yet.");
+        case "video-unsupported":
+            return qsTr("The video \"%1\" can't be played.").arg(name);
+        case "video-too-long":
+            return qsTr("This video is too long for a wallpaper (10 minutes at most).");
+        case "transcode-failed":
+            return qsTr("The video \"%1\" couldn't be prepared.").arg(name);
+        case "ffmpeg-missing":
+            return qsTr("Video wallpapers can't be prepared: ffmpeg is missing.");
+        case "cancelled":
+            return qsTr("Preparing the video was cancelled.");
+        case "video-crashed":
+            return qsTr("The video wallpaper was stopped; a still is shown.");
+        case "network":
+            return qsTr("The picture of the day can't be downloaded right now.");
+        case "skipped":
+            return qsTr("Today's entry is not a picture; yesterday's picture is shown.");
+        case "bad-response":
+            return qsTr("The picture of the day can't be read.");
         }
         return qsTr("The wallpaper can't be shown.");
     }
@@ -133,21 +177,42 @@ SettingsPage {
         if (root.source === "color")
             return root.color;
         if (root.source === "online")
-            return root.onlineEntry && root.onlineEntry.title ? root.onlineEntry.title : qsTr("Picture of the Day (Wikimedia Commons)");
+            return root.onlineEntry && root.onlineEntry.title ? root.onlineEntry.title : root.providerName(root.provider);
         if (root.source === "folder")
             return root.baseName(root.path);
         return root.baseName(root.path);
     }
 
+    // The name of an online source as the tile and the disclosure call it.
+    function providerName(id: string): string {
+        return id === "apod" ? qsTr("Astronomy Picture of the Day (NASA)") : qsTr("Picture of the Day (Wikimedia Commons)");
+    }
+
+    // The hosts a provider contacts, as the disclosure names them.
+    function providerHosts(id: string): string {
+        return id === "apod" ? "api.nasa.gov, apod.nasa.gov" : "commons.wikimedia.org, thumb.wikimedia.org, upload.wikimedia.org";
+    }
+
+    // A video is being transcoded for the display shown (the shell reports its progress, 0..1).
+    readonly property bool transcoding: root.source === "video" && typeof root.status.progress === "number" && root.status.progress >= 0
+
     readonly property string caption: {
         if (root.status.state === "error")
             return root.reasonText(root.status.reason, root.source === "file" ? root.baseName(root.path) : root.baseName(root.path));
+        if (root.source === "video" && root.transcoding)
+            return qsTr("Preparing the video… %1%").arg(Math.round(root.status.progress * 100));
         if (root.status.state === "preparing")
             return qsTr("Preparing…");
+        // A video that crashed the shell is shown as its poster: said here, once the page shows it.
+        if (root.source === "video" && root.status.reason === "video-crashed")
+            return root.reasonText("video-crashed", "");
         if (root.source === "online") {
             // Nothing cached yet: the artwork shows, and the page says why.
             if (root.status.state === "waiting")
                 return root.online.phase === "fetching" ? qsTr("Downloading today's picture…") : qsTr("Waiting for a connection");
+            // Today's entry cannot be used (a video, a licence): the previous picture stays, and the page says so.
+            if (root.online.failure === "skipped")
+                return root.reasonText("skipped", "");
             return root.onlineEntry && root.onlineEntry.caption ? root.onlineEntry.caption : "";
         }
         if (root.source === "folder") {
@@ -162,19 +227,50 @@ SettingsPage {
         return WallpaperConfig.sourceProblem(p, root.backend.devSession, root.backend.devRoot);
     }
 
-    function choose(entries: var, recentKind: string, recentPath: string): void {
+    function choose(entries: var, recentKind: string, recentPath: string): bool {
         if (recentKind !== "") {
             const why = root.problem(recentPath);
             if (why !== "") {
                 root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(recentPath));
-                return;
+                return false;
             }
         }
         root.refusal = "";
-        if (!root.store.setMany(entries))
-            return;
+        if (!root.writeFields(entries))
+            return false;
         if (recentKind !== "")
             root.remember(recentKind, recentPath);
+        return true;
+    }
+
+    // Writes keys of grassfield.json in one write. For a chosen display the per-display keys go to that display's entry of
+    // wallpaper.outputs (the top level stays); the keys that are not per display (the online provider, play on battery)
+    // always go to the top level.
+    function writeFields(entries: var): bool {
+        if (root.currentDisplay === null)
+            return root.store.setMany(entries);
+        const perDisplay = ["source", "path", "color", "fit", "interval", "shuffle"];
+        const fields = {};
+        const next = {};
+        for (const k of Object.keys(entries)) {
+            const name = k.substring("wallpaper.".length);
+            if (perDisplay.indexOf(name) >= 0)
+                fields[name] = entries[k];
+            else
+                next[k] = entries[k];
+        }
+        if (Object.keys(fields).length > 0)
+            next["wallpaper.outputs"] = WallpaperConfig.withOutput(root.stored.outputs, root.currentDisplay, fields);
+        return root.store.setMany(next);
+    }
+
+    // The chosen display follows All Displays again (its override is removed).
+    function useAllDisplays(): void {
+        if (root.currentDisplay === null)
+            return;
+        // Back to following All Displays: what Cancel would have restored for this display is stale.
+        root.previousBy = WallpaperConfig.forgetPrevious(root.previousBy, root.displayId);
+        root.store.set("wallpaper.outputs", WallpaperConfig.withOutput(root.stored.outputs, root.currentDisplay, null));
     }
 
     function useArtwork(): void {
@@ -182,9 +278,10 @@ SettingsPage {
     }
 
     // The online tile asks first: what is contacted is shown, and nothing is turned on until the user agrees.
-    function askOnline(): void {
-        if (root.source === "online")
+    function askOnline(provider: string): void {
+        if (root.source === "online" && root.provider === provider)
             return;
+        root.disclosedProvider = provider;
         root.disclosing = true;
         Qt.callLater(root.revealDisclosure);
     }
@@ -197,9 +294,45 @@ SettingsPage {
         useOnlineButton.forceActiveFocus();
     }
 
+    // The provider whose disclosure is open ('' when none).
+    property string disclosedProvider: "commons"
+
     function useOnline(): void {
         root.disclosing = false;
-        root.choose({"wallpaper.source": "online", "wallpaper.online.provider": "commons"}, "", "");
+        root.choose({"wallpaper.source": "online", "wallpaper.online.provider": root.disclosedProvider}, "", "");
+    }
+
+    // What each scope ("all" or a display key) showed before a video was chosen there: {key: {source, path, overridden}}. Cancel on
+    // the progress row puts it back in that scope (macOS: Cancel leaves things as they were), see WallpaperConfig.cancelPlan.
+    property var previousBy: ({})
+
+    function useVideo(p: string): void {
+        // `overridden`: the chosen display had a wallpaper of its own. Without one, Cancel removes the override again (the display
+        // follows All Displays as before) instead of writing a copy of the inherited values.
+        const was = {source: root.source, path: root.path, overridden: root.overridden};
+        const key = root.displayId;
+        if (root.choose({"wallpaper.source": "video", "wallpaper.path": p}, "video", p))
+            root.previousBy = WallpaperConfig.rememberPrevious(root.previousBy, key, was, p);
+    }
+
+    // Cancel the preparation of the video: the wallpaper that was there before (the shell stops the job when the setting changes).
+    function cancelVideo(): void {
+        // The plan is for the display the page shows now; the entries of other displays stay (WallpaperConfig.cancelPlan).
+        const plan = WallpaperConfig.cancelPlan(root.previousBy, root.displayId, root.currentDisplay !== null, root.overridden, root.source, root.path);
+        root.previousBy = plan.map;
+        const entries = plan.fields ? {"wallpaper.source": plan.fields.source, "wallpaper.path": plan.fields.path} : null;
+        if (plan.action === "follow-all")
+            root.useAllDisplays();
+        else if (plan.action === "restore" && plan.scope === "all")
+            // The choice was made for All Displays: undone there (the top level), whatever display the picker shows.
+            root.store.setMany(entries);
+        else if (plan.action === "restore")
+            root.writeFields(entries);
+        else if (plan.action === "artwork" && plan.scope === "all")
+            // Nothing to restore, and the choice was for All Displays: the artwork there, no override for the display shown.
+            root.store.setMany({"wallpaper.source": "builtin"});
+        else if (plan.action === "artwork")
+            root.useArtwork();
     }
 
     function useColor(c: string): void {
@@ -212,6 +345,28 @@ SettingsPage {
 
     function useFolder(p: string): void {
         root.choose({"wallpaper.source": "folder", "wallpaper.path": p}, "folder", p);
+    }
+
+    // A file, a folder or a video dropped on the preview: a video or a picture by its suffix, anything else is asked of the helper
+    // (a folder lists, a file does not).
+    function dropped(p: string): void {
+        if (p === "" || !WallpaperConfig.validPath(p)) {
+            root.refusal = root.reasonText("invalid-path", "");
+            return;
+        }
+        const why = root.problem(p);
+        if (why !== "") {
+            root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(p));
+            return;
+        }
+        const dot = p.lastIndexOf(".");
+        const ext = dot > p.lastIndexOf("/") ? p.substring(dot + 1).toLowerCase() : "";
+        if (WallpaperConfig.VIDEO_SUFFIXES.indexOf(ext) >= 0)
+            root.useVideo(p);
+        else if (root.suffixes.indexOf(ext) >= 0)
+            root.usePicture(p);
+        else
+            root.backend.query([root.backend.wallpaperTool, "list", "--max", "1", "--", p], "wp.drop:" + p, 10000);
     }
 
     function urlToPath(u: url): string {
@@ -227,7 +382,7 @@ SettingsPage {
             try {
                 const o = JSON.parse(f.text);
                 if (Array.isArray(o))
-                    list = o.filter(e => e && (e.kind === "file" || e.kind === "folder") && typeof e.path === "string" && WallpaperConfig.validPath(e.path));
+                    list = o.filter(e => e && (e.kind === "file" || e.kind === "folder" || e.kind === "video") && typeof e.path === "string" && WallpaperConfig.validPath(e.path));
             } catch (e) {
                 list = [];
             }
@@ -289,6 +444,12 @@ SettingsPage {
                 } catch (e) {
                     // The built-in list stays.
                 }
+            } else if (tag.indexOf("wp.drop:") === 0) {
+                const p = tag.substring(8);
+                if (ok)
+                    root.useFolder(p);
+                else
+                    root.refusal = root.reasonText("not-regular", root.baseName(p));
             } else if (tag.indexOf("wp.thumb:") === 0) {
                 const p = tag.substring(9);
                 root.thumbBusy = Math.max(0, root.thumbBusy - 1);
@@ -327,26 +488,51 @@ SettingsPage {
     // ---- the shell's status ----
     function loadStatus(): void {
         const f = root.backend.readText(root.backend.wallpaperStatusFile);
-        let pick = {};
+        let outputs = {};
         let online = {};
         if (f.exists && f.ok) {
             try {
                 const parsed = JSON.parse(f.text);
                 online = parsed.online && typeof parsed.online === "object" ? parsed.online : {};
-                const outputs = parsed.outputs || {};
-                const all = Object.keys(outputs).map(k => outputs[k]);
-                // An error on any output is the one worth showing.
-                pick = all.find(o => o.state === "error") || all[all.length - 1] || {};
+                outputs = parsed.outputs && typeof parsed.outputs === "object" ? parsed.outputs : {};
             } catch (e) {
-                pick = {};
+                outputs = {};
             }
         }
-        root.status = pick;
+        root.allStatus = outputs;
         root.online = online;
+        root.pickStatus();
+    }
+
+    // The answer for the display the options are for; for All Displays the one worth showing (an error on any output first).
+    function pickStatus(): void {
+        const outputs = root.allStatus;
+        if (root.currentDisplay !== null && outputs[root.currentDisplay.name]) {
+            root.status = outputs[root.currentDisplay.name];
+            return;
+        }
+        const all = Object.keys(outputs).map(k => outputs[k]);
+        root.status = all.find(o => o.state === "error") || all[all.length - 1] || {};
+    }
+
+    onCurrentDisplayChanged: root.pickStatus()
+
+    // The connected displays (QScreen: name, model, serial), the same identity the shell uses (WallpaperConfig.displayKey).
+    function refreshDisplays(): void {
+        const list = root.backend.screens();
+        root.displays = list.map(s => {
+            const d = {name: s.name, model: s.model || "", serial: s.serial || ""};
+            d.key = WallpaperConfig.displayKey(d);
+            d.label = d.model !== "" ? qsTr("%1 (%2)").arg(d.name).arg(d.model) : d.name;
+            return d;
+        });
+        if (root.displayId !== "all" && !root.displays.some(d => d.key === root.displayId))
+            root.displayId = "all";
     }
 
     Component.onCompleted: {
         root.backend.watch(root.backend.wallpaperStatusFile);
+        root.refreshDisplays();
         root.loadStatus();
         root.loadRecents();
         root.refreshPictures();
@@ -359,9 +545,11 @@ SettingsPage {
         width: parent.width
         height: Tokens.settingsWallpaperPreviewHeight + captions.height + Tokens.spacingSm
 
+        // The display the options are for (its aspect ratio shapes the preview), else the primary one.
         readonly property var screen: {
             const list = root.backend.screens();
-            return list.length > 0 ? (list.find(s => s.primary) || list[0]) : null;
+            const chosen = root.currentDisplay ? list.find(s => s.name === root.currentDisplay.name) : null;
+            return chosen || (list.length > 0 ? (list.find(s => s.primary) || list[0]) : null);
         }
         readonly property real aspect: screen && screen.pixelHeight > 0 ? screen.pixelWidth / screen.pixelHeight : 16 / 9
 
@@ -375,6 +563,16 @@ SettingsPage {
             color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
             Accessible.role: Accessible.Graphic
             Accessible.name: qsTr("Current wallpaper: %1").arg(root.headline)
+
+            // Dropping a file, a folder or a video on the preview sets it (ADR-0016 section 8).
+            DropArea {
+                anchors.fill: parent
+                keys: ["text/uri-list"]
+                onDropped: drop => {
+                    if (drop.urls.length > 0)
+                        root.dropped(root.urlToPath(drop.urls[0]));
+                }
+            }
 
             GrassfieldArtwork {
                 anchors.fill: parent
@@ -450,25 +648,55 @@ SettingsPage {
         }
     }
 
+    // ---- display: All Displays, or one display with a wallpaper of its own (shown with more than one output) ----
+    SettingsGroup {
+        visible: root.displays.length > 1
+
+        SettingsRow {
+            title: qsTr("Display")
+            subtitle: root.currentDisplay === null ? qsTr("The wallpaper of every display that has none of its own.") : (root.overridden ? qsTr("This display has a wallpaper of its own.") : qsTr("This display follows All Displays."))
+            Picker {
+                anchors.verticalCenter: parent.verticalCenter
+                implicitWidth: Tokens.settingsWallpaperPickerWidth
+                accessibleName: qsTr("Display")
+                model: [{id: "all", text: qsTr("All Displays")}].concat(root.displays.map(d => ({id: d.key, text: d.label})))
+                value: root.displayId
+                onPicked: id => root.displayId = id
+            }
+        }
+
+        SettingsRow {
+            visible: root.overridden
+            title: qsTr("Follow All Displays")
+            subtitle: qsTr("Removes the wallpaper of this display.")
+            Button {
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Use the All Displays Wallpaper")
+                onClicked: root.useAllDisplays()
+            }
+        }
+    }
+
     // ---- options that apply to the current wallpaper ----
     SettingsGroup {
         visible: root.source !== "builtin"
 
         SettingsRow {
-            visible: root.source === "file" || root.source === "folder" || root.source === "online"
+            visible: root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video"
             title: qsTr("Fit")
             Picker {
                 anchors.verticalCenter: parent.verticalCenter
                 implicitWidth: Tokens.settingsWallpaperPickerWidth
                 accessibleName: qsTr("Fit")
-                model: root.fitModel
+                // A video is filled or fitted only; the other modes are for pictures.
+                model: root.source === "video" ? root.fitModel.filter(m => m.id === "fill" || m.id === "fit") : root.fitModel
                 value: root.fit
-                onPicked: id => root.store.set("wallpaper.fit", id)
+                onPicked: id => root.writeFields({"wallpaper.fit": id})
             }
         }
 
         SettingsRow {
-            visible: root.source === "color" || ((root.source === "file" || root.source === "folder" || root.source === "online") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile"))
+            visible: root.source === "color" || ((root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile"))
             title: qsTr("Colour")
             subtitle: root.source === "color" ? "" : qsTr("Shown around a picture that does not fill the screen.")
             ColorWell {
@@ -476,7 +704,7 @@ SettingsPage {
                 accessibleName: qsTr("Wallpaper colour")
                 color: root.color
                 presets: Tokens.iconModeTintColors.map((c, i) => ({color: c, name: root.colorNames[i]}))
-                onEdited: c => root.store.set("wallpaper.color", c)
+                onEdited: c => root.writeFields({"wallpaper.color": c})
             }
         }
 
@@ -489,7 +717,55 @@ SettingsPage {
                 accessibleName: qsTr("Change picture")
                 model: root.intervalModel
                 value: root.interval
-                onPicked: id => root.store.set("wallpaper.interval", id)
+                onPicked: id => root.writeFields({"wallpaper.interval": id})
+            }
+        }
+
+        SettingsRow {
+            visible: root.source === "video"
+            title: qsTr("Play on battery power")
+            subtitle: qsTr("A video wallpaper pauses on battery, when you are away, under a full-screen window, and with Reduce Motion.")
+            Toggle {
+                accessibleName: qsTr("Play on battery power")
+                checked: root.videoOnBattery
+                onToggled: c => root.store.set("wallpaper.videoOnBattery", c)
+            }
+        }
+
+        // The shell transcodes the video once (H.264 with at most the pixels of 4K UHD, in the display's orientation); its progress is reported in wallpaper-state.json.
+        SettingsRow {
+            visible: root.transcoding
+            title: qsTr("Preparing the video")
+            subtitle: qsTr("%1%").arg(root.transcoding ? Math.round(root.status.progress * 100) : 0)
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Tokens.spacingMd
+
+                Rectangle {
+                    id: progressTrack
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Tokens.settingsWallpaperPickerWidth - Tokens.spacingMd * 4
+                    height: Tokens.spacingXs
+                    radius: height / 2
+                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                    Accessible.role: Accessible.ProgressBar
+                    Accessible.name: qsTr("Preparing the video")
+                    Accessible.description: qsTr("%1%").arg(root.transcoding ? Math.round(root.status.progress * 100) : 0)
+
+                    Rectangle {
+                        width: parent.width * (root.transcoding ? Math.max(0, Math.min(1, root.status.progress)) : 0)
+                        height: parent.height
+                        radius: parent.radius
+                        color: Appearance.colors.accent
+                    }
+                }
+
+                // Cancel: the wallpaper that was there before (the shell stops the job).
+                Button {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Cancel")
+                    onClicked: root.cancelVideo()
+                }
             }
         }
 
@@ -500,7 +776,7 @@ SettingsPage {
             Toggle {
                 accessibleName: qsTr("Shuffle")
                 checked: root.shuffle
-                onToggled: c => root.store.set("wallpaper.shuffle", c)
+                onToggled: c => root.writeFields({"wallpaper.shuffle": c})
             }
         }
     }
@@ -529,7 +805,7 @@ SettingsPage {
     SettingsGroup {
         id: onlineGroup
         caption: qsTr("Online")
-        footnote: root.disclosing ? "" : qsTr("Once a day Grassfield contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org. These services see your IP address.")
+        footnote: root.disclosing ? "" : qsTr("Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.")
 
         Item {
             width: parent.width
@@ -541,19 +817,20 @@ SettingsPage {
                 y: Tokens.spacingMd
                 width: parent.width - 2 * Tokens.spacingMd
                 accessibleName: qsTr("Online")
-                model: [{kind: "image", wrap: true, label: qsTr("Picture of the Day (Wikimedia Commons)"), thumb: root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online"}]
-                onActivated: root.askOnline()
+                model: [{kind: "image", wrap: true, label: root.providerName("commons"), thumb: root.source === "online" && root.provider === "commons" && root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online" && root.provider === "commons"},
+                    {kind: "image", wrap: true, label: root.providerName("apod"), thumb: root.source === "online" && root.provider === "apod" && root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online" && root.provider === "apod"}]
+                onActivated: index => root.askOnline(index === 1 ? "apod" : "commons")
             }
         }
 
         // The opt-in: what is contacted, how often, who sees what. Esc or Cancel leaves everything as it was.
         Item {
             id: disclosure
-            visible: root.disclosing && root.source !== "online"
+            visible: root.disclosing && !(root.source === "online" && root.provider === root.disclosedProvider)
             width: parent.width
             height: visible ? disclosureColumn.height + 2 * Tokens.spacingMd : 0
             Accessible.role: Accessible.Grouping
-            Accessible.name: qsTr("Picture of the Day (Wikimedia Commons)")
+            Accessible.name: root.providerName(root.disclosedProvider)
             Keys.onEscapePressed: root.disclosing = false
 
             Column {
@@ -567,7 +844,7 @@ SettingsPage {
                     width: parent.width
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
-                    text: qsTr("Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.")
+                    text: root.disclosedProvider === "apod" ? qsTr("Grassfield will download NASA's Astronomy Picture of the Day once a day. It contacts api.nasa.gov and apod.nasa.gov, and only while you are online on a connection that is not metered. These services see your IP address and the day you ask for; the shared demonstration key is used, so no account is involved. A picture that has a copyright holder is shown with its credit. Nothing is contacted until you choose Use Picture of the Day.") : qsTr("Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.")
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
@@ -617,7 +894,7 @@ SettingsPage {
             readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.sourceUrl) : ""
             title: qsTr("Source")
             subtitle: sourceRow.link === "" && root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
-            valueText: sourceRow.link === "" ? qsTr("Wikimedia Commons") : ""
+            valueText: sourceRow.link === "" ? (root.provider === "apod" ? qsTr("NASA APOD") : qsTr("Wikimedia Commons")) : ""
 
             LinkText {
                 visible: sourceRow.link !== ""
@@ -717,20 +994,20 @@ SettingsPage {
     SettingsGroup {
         id: addedGroup
         caption: qsTr("Folders and Pictures")
-        footnote: root.recents.length === 0 ? qsTr("Add a folder to change the picture at an interval, or a single picture.") : ""
+        footnote: addedGroup.items.length === 0 ? qsTr("Add a folder to change the picture at an interval, or a single picture.") : ""
 
         // One tile per recent source: a picture shows its thumbnail, a folder reads "Shuffle <name>" (macOS wording).
-        readonly property var items: root.recents
+        readonly property var items: root.recents.filter(e => e.kind !== "video")
 
         onItemsChanged: {
             for (const e of items) {
-                if (e.kind === "file")
+                if (e.kind === "file" || e.kind === "video")
                     root.requestThumb(e.path);
             }
         }
 
         Item {
-            visible: root.recents.length > 0
+            visible: addedGroup.items.length > 0
             width: parent.width
             height: visible ? addedGrid.height + 2 * Tokens.spacingMd : 0
 
@@ -780,6 +1057,50 @@ SettingsPage {
         }
     }
 
+    // ---- videos (ADR-0016 W7): a video is prepared once by the shell, then plays under the pause policy ----
+    SettingsGroup {
+        id: videosGroup
+        caption: qsTr("Videos")
+        footnote: videosGroup.items.length === 0 ? qsTr("Add a video to play it as the wallpaper. It is prepared once, and pauses on battery, when you are away and under a full-screen window.") : ""
+
+        readonly property var items: root.recents.filter(e => e.kind === "video")
+
+        onItemsChanged: {
+            for (const e of items)
+                root.requestThumb(e.path);
+        }
+
+        Item {
+            visible: videosGroup.items.length > 0
+            width: parent.width
+            height: visible ? videoGrid.height + 2 * Tokens.spacingMd : 0
+
+            WallpaperGrid {
+                id: videoGrid
+                x: Tokens.spacingMd
+                y: Tokens.spacingMd
+                width: parent.width - 2 * Tokens.spacingMd
+                accessibleName: qsTr("Videos")
+                model: videosGroup.items.map(e => ({kind: "video", label: root.baseName(e.path), thumb: root.thumbs[e.path] || "", selected: root.source === "video" && root.path === e.path}))
+                onActivated: index => root.useVideo(videosGroup.items[index].path)
+            }
+        }
+
+        Item {
+            width: parent.width
+            height: addVideoButton.height + 2 * Tokens.spacingMd
+
+            Button {
+                id: addVideoButton
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.spacingMd
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Add Video…")
+                onClicked: videoDialog.open()
+            }
+        }
+    }
+
     Text {
         visible: root.refusal !== ""
         width: parent.width
@@ -804,6 +1125,17 @@ SettingsPage {
             const p = root.urlToPath(selectedFolder);
             if (p !== "")
                 root.useFolder(p);
+        }
+    }
+
+    FileDialog {
+        id: videoDialog
+        title: qsTr("Choose a video")
+        nameFilters: [qsTr("Videos (%1)").arg(WallpaperConfig.VIDEO_SUFFIXES.map(s => "*." + s).join(" "))]
+        onAccepted: {
+            const p = root.urlToPath(selectedFile);
+            if (p !== "")
+                root.useVideo(p);
         }
     }
 

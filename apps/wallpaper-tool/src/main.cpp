@@ -4,8 +4,11 @@
 //   grassfield-wallpaper thumb   --width W --out DIR -- SRC
 //   grassfield-wallpaper list    [--max N] -- FOLDER
 //   grassfield-wallpaper formats
-//   grassfield-wallpaper fetch commons --date YYYY-MM-DD --out DIR [--width N] [--lang en|fr] [--base-url URL]   (ADR-0016 step 2)
-//   grassfield-wallpaper latest commons --out DIR
+//   grassfield-wallpaper probe     -- VIDEO
+//   grassfield-wallpaper transcode --size WxH --fit F --color #rrggbb --out DIR [--strip-rows N] [--cache-max-bytes N] [--max-seconds N]
+//                                  [--max-bytes N] [--keep FILE] -- VIDEO     (ADR-0016 W7; progress lines {"progress":0.4} then the result)
+//   grassfield-wallpaper fetch commons|apod --date YYYY-MM-DD --out DIR [--width N] [--lang en|fr] [--base-url URL]   (ADR-0016 step 2)
+//   grassfield-wallpaper latest commons|apod --out DIR
 //
 // One JSON object on stdout, and the exit code (wallpaper::ExitCode). Never a daemon. Only `fetch` uses the network (curl). The shell and
 // the Settings app run it with an argument vector; the shell then decodes only this tool's own output.
@@ -23,6 +26,7 @@
 #include <QTextStream>
 
 #include "commonsfetch.h"
+#include "videotool.h"
 #include "wallpaperlogic.h"
 
 using namespace wallpaper;
@@ -103,6 +107,14 @@ const char *reasonName(int code)
         return "unreadable";
     case Unsupported:
         return "unsupported format";
+    case TooLongVideo:
+        return "video too long";
+    case TranscodeFailed:
+        return "transcode failed";
+    case FfmpegMissing:
+        return "ffmpeg is missing";
+    case Cancelled:
+        return "cancelled";
     default:
         return "failed";
     }
@@ -213,16 +225,24 @@ int cmdThumb(const QStringList &args)
     if (!out.startsWith(QLatin1Char('/')) || !a.positional.startsWith(QLatin1Char('/')))
         return fail(Usage, QStringLiteral("paths must be absolute"));
     qint64 bytes = 0, mtime = 0;
-    if (const ExitCode c = checkFile(a.positional, kMaxFileBytes, &bytes, &mtime))
+    if (const ExitCode c = checkFile(a.positional, video::isVideoPath(a.positional) ? video::kMaxSourceBytes : kMaxFileBytes, &bytes, &mtime))
         return fail(c, QString::fromLatin1(reasonName(c)));
     const QSize target(width, width * 10 / 16);
+    const bool isVideo = video::isVideoPath(a.positional);
     const QString key = QStringLiteral("t") + cacheKey(QFileInfo(a.positional).canonicalFilePath(), bytes, mtime, target, Fit::Fill, QColor(Qt::black), 0).mid(1);
     const QString image = out + QLatin1Char('/') + key + QStringLiteral(".jpg");
     if (!outDirAllowed(out))
         return fail(Usage, QStringLiteral("--out must be the wallpaper cache (.../grassfield/wallpapers/prepared or thumbs)"));
     if (!ensureCacheDir(out))
         return fail(WriteFailed, QStringLiteral("cannot create the output folder"));
-    if (!QFileInfo::exists(image)) {
+    if (!QFileInfo::exists(image) && isVideo) {
+        // A video's thumbnail is one of its frames (Settings > Wallpaper, the Videos grid).
+        video::installSignalHandlers();
+        QString why;
+        if (const ExitCode c = video::thumbnail(a.positional, image, width, &why))
+            return fail(c, why);
+        pruneCache(out, qint64(64) * 1024 * 1024, {image});
+    } else if (!QFileInfo::exists(image)) {
         QImage src;
         if (const ExitCode c = loadPicture(a.positional, target, Fit::Fill, &src))
             return fail(c, QString::fromLatin1(reasonName(c)));
@@ -254,21 +274,107 @@ int cmdList(const QStringList &args)
     return finish({{QStringLiteral("files"), QJsonArray::fromStringList(files)}, {QStringLiteral("truncated"), truncated}, {QStringLiteral("mtime"), double(mtime)}}, Ok);
 }
 
+// Writes one JSON line and flushes it at once (the progress of a transcode is read line by line while it runs).
+void emitLine(const QJsonObject &o)
+{
+    const QByteArray line = QJsonDocument(o).toJson(QJsonDocument::Compact) + '\n';
+    fwrite(line.constData(), 1, size_t(line.size()), stdout);
+    fflush(stdout);
+}
+
+int cmdProbe(const QStringList &args)
+{
+    const Args a = parseArgs(args, {}, true);
+    if (!a.ok)
+        return fail(Usage, a.error);
+    if (!a.positional.startsWith(QLatin1Char('/')))
+        return fail(Usage, QStringLiteral("the video path must be absolute"));
+    if (!video::isVideoPath(a.positional))
+        return fail(Unsupported, QStringLiteral("not a video file name"));
+    if (const ExitCode c = checkFile(a.positional, video::kMaxSourceBytes))
+        return fail(c, QString::fromLatin1(reasonName(c)));
+    video::installSignalHandlers();
+    video::Info info;
+    QString why;
+    if (const ExitCode c = video::probe(QStringLiteral("/usr/bin/ffprobe"), a.positional, video::kMaxSeconds, &info, &why))
+        return fail(c, why);
+    return finish({{QStringLiteral("duration"), info.duration},
+                   {QStringLiteral("width"), info.width},
+                   {QStringLiteral("height"), info.height},
+                   {QStringLiteral("fps"), info.fps},
+                   {QStringLiteral("codec"), info.codec},
+                   {QStringLiteral("audio"), info.audio},
+                   {QStringLiteral("real"), QFileInfo(a.positional).canonicalFilePath()}},
+                  Ok);
+}
+
+int cmdTranscode(const QStringList &args)
+{
+    const Args a = parseArgs(args, {QStringLiteral("size"), QStringLiteral("fit"), QStringLiteral("color"), QStringLiteral("out"), QStringLiteral("strip-rows"), QStringLiteral("cache-max-bytes"), QStringLiteral("max-seconds"), QStringLiteral("max-bytes"), QStringLiteral("keep")}, true);
+    if (!a.ok)
+        return fail(Usage, a.error);
+    video::TranscodeOptions o;
+    if (!parseSize(a.options.value(QStringLiteral("size")), &o.limit))
+        return fail(Usage, QStringLiteral("bad --size"));
+    if (!parseFit(a.options.value(QStringLiteral("fit")), &o.fit))
+        return fail(Usage, QStringLiteral("bad --fit"));
+    const QString color = a.options.value(QStringLiteral("color"));
+    o.color = QColor(color);
+    if (!o.color.isValid() || !color.startsWith(QLatin1Char('#')) || color.size() != 7)
+        return fail(Usage, QStringLiteral("bad --color"));
+    o.out = a.options.value(QStringLiteral("out"));
+    if (!video::outDirAllowed(o.out))
+        return fail(Usage, QStringLiteral("--out must be the video cache (.../grassfield/wallpapers/video)"));
+    bool ok = true;
+    if (a.options.contains(QStringLiteral("strip-rows"))) {
+        o.stripRows = a.options.value(QStringLiteral("strip-rows")).toInt(&ok);
+        if (!ok || o.stripRows < 1 || o.stripRows > 512)
+            return fail(Usage, QStringLiteral("bad --strip-rows"));
+    }
+    if (a.options.contains(QStringLiteral("cache-max-bytes")))
+        o.cacheMaxBytes = a.options.value(QStringLiteral("cache-max-bytes")).toLongLong();
+    if (a.options.contains(QStringLiteral("max-seconds"))) {
+        o.maxSeconds = a.options.value(QStringLiteral("max-seconds")).toInt(&ok);
+        if (!ok || o.maxSeconds < 1 || o.maxSeconds > video::kMaxSeconds)
+            return fail(Usage, QStringLiteral("bad --max-seconds"));
+    }
+    if (a.options.contains(QStringLiteral("max-bytes"))) {
+        o.maxBytes = a.options.value(QStringLiteral("max-bytes")).toLongLong(&ok);
+        if (!ok || o.maxBytes < 1024 || o.maxBytes > video::kMaxOutputBytes)
+            return fail(Usage, QStringLiteral("bad --max-bytes"));
+    }
+    if (!a.positional.startsWith(QLatin1Char('/')))
+        return fail(Usage, QStringLiteral("the video path must be absolute"));
+    if (!video::isVideoPath(a.positional))
+        return fail(Unsupported, QStringLiteral("not a video file name"));
+    video::installSignalHandlers();
+    o.src = a.positional;
+    o.keep = a.keeps;
+    QJsonObject result;
+    QString why;
+    const ExitCode c = video::transcode(o, [](double f) { emitLine({{QStringLiteral("progress"), f}}); }, &result, &why);
+    if (c != Ok)
+        return fail(c, why);
+    return finish(result, Ok);
+}
+
 // `fetch commons`: the day's Wikimedia Commons picture into the online cache (a fetch of a day already cached is a no-op).
 int cmdFetch(const QStringList &args)
 {
-    if (args.isEmpty() || args[0] != QLatin1String("commons"))
-        return fail(Usage, QStringLiteral("usage: fetch commons --date YYYY-MM-DD --out DIR"));
+    if (args.isEmpty() || !commons::providerKnown(args[0]))
+        return fail(Usage, QStringLiteral("usage: fetch commons|apod --date YYYY-MM-DD --out DIR"));
+    const QString provider = args[0];
     const Args a = parseArgs(args.mid(1), {QStringLiteral("date"), QStringLiteral("out"), QStringLiteral("width"), QStringLiteral("lang"), QStringLiteral("base-url")}, false);
     if (!a.ok)
         return fail(Usage, a.error);
     commons::Options o;
+    o.provider = provider;
     o.date = a.options.value(QStringLiteral("date"));
     if (!commons::validDate(o.date))
         return fail(Usage, QStringLiteral("bad --date"));
     o.out = a.options.value(QStringLiteral("out"));
-    if (!commons::outDirAllowed(o.out))
-        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/commons)"));
+    if (!commons::outDirAllowedFor(provider, o.out))
+        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/<provider>)"));
     bool ok = true;
     o.width = a.options.contains(QStringLiteral("width")) ? a.options.value(QStringLiteral("width")).toInt(&ok) : commons::kDefaultWidth;
     if (!ok || o.width < 640 || o.width > commons::kDefaultWidth)
@@ -284,7 +390,7 @@ int cmdFetch(const QStringList &args)
         o.curl = QStringLiteral("/usr/bin/curl");
     QJsonObject result;
     QString reason;
-    const ExitCode c = commons::fetchCommons(o, &result, &reason);
+    const ExitCode c = provider == QLatin1String("apod") ? commons::fetchApod(o, &result, &reason) : commons::fetchCommons(o, &result, &reason);
     if (c != Ok)
         return fail(c, reason);
     return finish(result, Ok);
@@ -292,15 +398,16 @@ int cmdFetch(const QStringList &args)
 
 int cmdLatest(const QStringList &args)
 {
-    if (args.isEmpty() || args[0] != QLatin1String("commons"))
-        return fail(Usage, QStringLiteral("usage: latest commons --out DIR"));
+    if (args.isEmpty() || !commons::providerKnown(args[0]))
+        return fail(Usage, QStringLiteral("usage: latest commons|apod --out DIR"));
+    const QString provider = args[0];
     const Args a = parseArgs(args.mid(1), {QStringLiteral("out")}, false);
     if (!a.ok)
         return fail(Usage, a.error);
     const QString out = a.options.value(QStringLiteral("out"));
-    if (!commons::outDirAllowed(out))
-        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/commons)"));
-    return finish(commons::latestCached(out), Ok);
+    if (!commons::outDirAllowedFor(provider, out))
+        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/<provider>)"));
+    return finish(commons::latestCached(out, QString(), provider), Ok);
 }
 
 } // namespace
@@ -312,7 +419,7 @@ int main(int argc, char *argv[])
     QCoreApplication app(argc, argv);
     const QStringList args = app.arguments().mid(1);
     if (args.isEmpty())
-        return fail(Usage, QStringLiteral("usage: grassfield-wallpaper prepare|thumb|list|formats|fetch|latest"));
+        return fail(Usage, QStringLiteral("usage: grassfield-wallpaper prepare|thumb|list|formats|probe|transcode|fetch|latest"));
     const QString sub = args[0];
     const QStringList rest = args.mid(1);
     if (sub == QLatin1String("prepare"))
@@ -321,6 +428,10 @@ int main(int argc, char *argv[])
         return cmdThumb(rest);
     if (sub == QLatin1String("list"))
         return cmdList(rest);
+    if (sub == QLatin1String("probe"))
+        return cmdProbe(rest);
+    if (sub == QLatin1String("transcode"))
+        return cmdTranscode(rest);
     if (sub == QLatin1String("fetch"))
         return cmdFetch(rest);
     if (sub == QLatin1String("latest"))
