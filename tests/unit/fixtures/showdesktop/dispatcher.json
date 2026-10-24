@@ -1,23 +1,23 @@
 {
   "scenario": "dispatcher",
   "focusBefore": "0x5e4dc8a7ff60",
-  "window": "0x5e4dc9076dc0",
+  "window": "0x5e4dc9061fb0",
   "windows": [
     {
-      "address": "0x5e4dc9076dc0",
+      "address": "0x5e4dc9061fb0",
       "workspace": 2,
       "x": 2050,
-      "y": 261,
+      "y": 302,
       "class": "gf-sd-main",
-      "pid": 2093556
+      "pid": 2192108
     },
     {
-      "address": "0x5e4dc8a82d00",
+      "address": "0x5e4dc8f380d0",
       "workspace": 2,
       "x": 2050,
       "y": 261,
       "class": "gf-sd-main",
-      "pid": 2093601
+      "pid": 2192294
     },
     {
       "address": "0x5e4dc8a7ff60",
@@ -25,7 +25,7 @@
       "x": 2050,
       "y": 261,
       "class": "gf-sd-other",
-      "pid": 2093658
+      "pid": 2192343
     }
   ],
   "events": [
@@ -47,42 +47,42 @@
     {
       "t": 0,
       "name": "activewindowv2",
-      "data": "5e4dc9076dc0"
+      "data": "5e4dc9061fb0"
     },
     {
-      "t": 4,
+      "t": 3,
       "name": "activespecial",
       "data": ",GF-REF"
     },
     {
-      "t": 4,
+      "t": 3,
       "name": "activespecialv2",
       "data": ",,GF-REF"
     },
     {
-      "t": 5,
+      "t": 4,
       "name": "movewindowv2",
-      "data": "5e4dc9076dc0,2,2"
+      "data": "5e4dc9061fb0,2,2"
     },
     {
       "t": 5,
       "name": "movewindowv2",
-      "data": "5e4dc8a82d00,2,2"
+      "data": "5e4dc8f380d0,2,2"
     },
     {
-      "t": 6,
+      "t": 5,
       "name": "movewindowv2",
       "data": "5e4dc8a7ff60,2,2"
     },
     {
-      "t": 139,
+      "t": 137,
       "name": "activewindow",
       "data": "gf-sd-main,user@gf-host:/home/user/workspace/grassfieldos/.claude/worktrees/agent-ad39980283bf69619"
     },
     {
-      "t": 139,
+      "t": 137,
       "name": "activewindowv2",
-      "data": "5e4dc9076dc0"
+      "data": "5e4dc9061fb0"
     }
   ]
 }

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Records, in the NESTED instance, the Hyprland event sequences of an app activating a parked window in both orders, as fixtures for
-# tests/unit/tst_showdesktopreplay.qml. Bare command, nested session only (scripts/dev/nested-up.sh first). Not part of the test run:
-# it is how tests/unit/fixtures/showdesktop/*.json were made, and it is run again when Hyprland changes (event orders are
-# Hyprland's, not ours). Usage: tests/shell/show_desktop_record.sh [outdir]   (default tests/unit/fixtures/showdesktop)
+# tests/unit/tst_showdesktopreplay.qml, and checks that Hyprland still posts the two orders the flow is written for (this is the
+# nested test that notices Hyprland changing them). Bare command, nested session only (scripts/dev/nested-up.sh first).
+# Usage: tests/shell/show_desktop_record.sh [--write]   (--write: replace tests/unit/fixtures/showdesktop/*.json, which is how they
+# were made and what to do when this test fails after a Hyprland update; without it the recordings go to a temporary directory)
 #
 #   dispatcher.json: windows A, B (gf-sd-main) and C (gf-sd-other) on one Space, C focused, Show Desktop on, then the focus dispatcher
 #                    (hl.dsp.focus) on the parked A;
@@ -13,7 +14,9 @@
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
-out=${1:-$root/tests/unit/fixtures/showdesktop}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/sdrec.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+if [[ ${1:-} == --write ]]; then out=$root/tests/unit/fixtures/showdesktop; else out=$tmp; fi
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
 dev_nested_target "$dev" || { echo "record: no verified nested instance (scripts/dev/nested-up.sh)"; exit 2; }
@@ -23,7 +26,6 @@ main=$(cat "$dev/main.instance" 2>/dev/null || true)
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
 [[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null || { echo "record: grassfield-shell is not running"; exit 2; }
 mkdir -p "$out"
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/sdrec.XXXXXX")
 
 hq() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$@"; }
 nest() { "$root/scripts/nestctl" "$@"; }
@@ -88,6 +90,18 @@ record() { # <scenario> <trigger: dispatcher|xdgact>
   sleep 1.5
 }
 
+fails=0
+# order <file> <first event> <second event>: the first event name comes before the second in the recording
+order() {
+  local a b
+  a=$(jq -r --arg n "$2" '[.events[].name] | index($n) // 9999' "$out/$1.json")
+  b=$(jq -r --arg n "$3" '[.events[].name] | index($n) // 9999' "$out/$1.json")
+  if ((a < b)); then echo "PASS: $1: $2 comes before $3"; else echo "FAIL: $1: $2 does not come before $3 (Hyprland changed the order the Show Desktop flow assumes)"; fails=$((fails + 1)); fi
+}
 record dispatcher dispatcher
 record xdgact xdgact
-echo "record: wrote $out"
+order dispatcher activespecial activewindowv2
+order xdgact activewindowv2 activespecial
+[[ $out == "$tmp" ]] || echo "record: wrote $out"
+echo "show_desktop_record: $fails failure(s)"
+exit $((fails > 0))

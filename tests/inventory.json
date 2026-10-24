@@ -22,7 +22,6 @@
 ],
 "ignore": [
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
- {"path": "tests/shell/show_desktop_record.sh", "reason": "recorder of the fixtures tests/unit/fixtures/showdesktop/*.json (nested, run by hand when Hyprland changes), not a test"},
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
  {"path": "tests/visual/ipc.sh", "reason": "helper: qs ipc against the nested shell"},
@@ -90,6 +89,7 @@
  {"path": "tests/unit/tst_showdesktopflow.qml", "layer": "headless"},
  {"path": "tests/unit/tst_showdesktopreplay.qml", "layer": "headless"},
  {"path": "tests/shell/show_desktop_nested.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/shell/show_desktop_record.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/unit/tst_localeformat.qml", "layer": "headless"},
  {"path": "tests/unit/tst_icontile.qml", "layer": "headless"},
  {"path": "tests/unit/tst_magnify.qml", "layer": "headless"},
