@@ -358,14 +358,20 @@ namespace gf::stages {
     // the keys of the new one until it gets a new wl_keyboard.leave and enter (nested 2026-10-24, plugin unloaded: a
     // Quickshell layer surface and a Quickshell window got the first burst only, foot every burst; after a focus cycle the
     // Quickshell window got the next burst). So before the first key of such a device the surface that holds the keyboard
-    // is announced again (leave, then enter), unless the session is locked, an input method grabs the keyboard, a seat grab
-    // is set (a menu), or the keyboard is on nothing.
+    // is announced again (leave, then enter), unless an input method grabs the keyboard or the keyboard is on nothing.
+    // Unlocked: not under a seat grab (a menu). Locked, or the lock state not known (integrator decision 2026-10-24: a lock
+    // screen gone deaf after the only keyboard reconnected, at resume, is a lock-out; "failures stay locked" never allows a
+    // deaf password field): only when the surface that holds the keyboard is a session-lock surface (ext-session-lock), and
+    // to that same surface; a seat grab must accept it. The surface that has the keyboard never changes, and nothing that
+    // is not a lock surface is ever given it.
     struct ReannounceFacts {
-        bool replaced        = false; // the previous key's keyboard device went away; the one typing now is the only one
-        bool locked          = true;  // the session is locked, or that is not known
-        bool inputMethodGrab = false;
-        bool seatGrab        = false;
-        bool focus           = false; // the seat's keyboard is on a surface
+        bool replaced         = false; // the previous key's keyboard device went away; the one typing now is the only one
+        bool locked           = true;  // the session is locked, or that is not known
+        bool inputMethodGrab  = false;
+        bool seatGrab         = false; // a seat grab is set
+        bool grabAcceptsFocus = false; // ... and accepts the surface that holds the keyboard
+        bool focus            = false; // the seat's keyboard is on a surface
+        bool focusIsLock      = false; // that surface is a session-lock surface, as Hyprland reports it (false when unknown)
     };
     bool reannounceFocus(const ReannounceFacts& facts);
 

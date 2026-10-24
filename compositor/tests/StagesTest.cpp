@@ -829,24 +829,52 @@ TEST(StagesKeyFocus, FromTheEventLoopOnlyTheLayerIsKept) {
 TEST(StagesKeyFocus, ANewKeyboardDeviceAnnouncesTheFocusAgainOnlyWhenNothingElseDecides) {
     using gf::stages::ReannounceFacts;
     using gf::stages::reannounceFocus;
-    const ReannounceFacts base{.replaced = true, .locked = false, .inputMethodGrab = false, .seatGrab = false, .focus = true};
+    const ReannounceFacts base{.replaced = true, .locked = false, .inputMethodGrab = false, .seatGrab = false, .grabAcceptsFocus = false, .focus = true, .focusIsLock = false};
     EXPECT_TRUE(reannounceFocus(base));
     auto f     = base;
     f.replaced = false;
     EXPECT_FALSE(reannounceFocus(f)) << "the same device as the previous key";
-    f        = base;
-    f.locked = true;
-    EXPECT_FALSE(reannounceFocus(f)) << "locked";
-    EXPECT_FALSE(reannounceFocus(ReannounceFacts{.replaced = true, .focus = true})) << "the lock state not known: locked";
     f                 = base;
     f.inputMethodGrab = true;
     EXPECT_FALSE(reannounceFocus(f)) << "an input method grabs the keyboard";
-    f          = base;
-    f.seatGrab = true;
-    EXPECT_FALSE(reannounceFocus(f)) << "a menu's grab";
+    f                  = base;
+    f.seatGrab         = true;
+    f.grabAcceptsFocus = true;
+    EXPECT_FALSE(reannounceFocus(f)) << "unlocked: never under a menu's grab";
     f       = base;
     f.focus = false;
     EXPECT_FALSE(reannounceFocus(f)) << "the keyboard on nothing";
+}
+
+// Integrator decision 2026-10-24: a lock screen gone deaf after the only keyboard reconnected is a lock-out. While locked
+// the same-surface announce is allowed for a session-lock surface only; the surface never changes.
+TEST(StagesKeyFocus, LockedWithTheLockSurfaceFocusedItIsAnnouncedAgain) {
+    using gf::stages::ReannounceFacts;
+    using gf::stages::reannounceFocus;
+    EXPECT_TRUE(reannounceFocus({.replaced = true, .locked = true, .focus = true, .focusIsLock = true}));
+}
+
+TEST(StagesKeyFocus, LockedWithAnotherSurfaceFocusedNothingHappens) {
+    using gf::stages::ReannounceFacts;
+    using gf::stages::reannounceFocus;
+    EXPECT_FALSE(reannounceFocus({.replaced = true, .locked = true, .focus = true, .focusIsLock = false})) << "a window or a layer under the lock";
+    EXPECT_FALSE(reannounceFocus({.replaced = true, .locked = true, .focus = false, .focusIsLock = false})) << "the keyboard on nothing: nothing is given it";
+    EXPECT_FALSE(reannounceFocus({.replaced = true, .locked = true, .inputMethodGrab = true, .focus = true, .focusIsLock = true}));
+    EXPECT_FALSE(reannounceFocus({.replaced = false, .locked = true, .focus = true, .focusIsLock = true})) << "no device replaced";
+}
+
+TEST(StagesKeyFocus, AnUnknownLockStateAllowsOnlyTheSameLockSurfaceAnnounce) {
+    using gf::stages::ReannounceFacts;
+    using gf::stages::reannounceFocus;
+    ReannounceFacts f{.replaced = true, .focus = true};
+    EXPECT_TRUE(f.locked) << "the default: unknown counts as locked";
+    EXPECT_FALSE(reannounceFocus(f)) << "not known to be a lock surface: nothing";
+    f.focusIsLock = true;
+    EXPECT_TRUE(reannounceFocus(f)) << "a lock surface: the same-surface announce only";
+    f.seatGrab = true;
+    EXPECT_FALSE(reannounceFocus(f)) << "a seat grab that does not accept it";
+    f.grabAcceptsFocus = true;
+    EXPECT_TRUE(reannounceFocus(f)) << "a seat grab that accepts it";
 }
 
 TEST(StagesKeyFocus, NoLayerAndNoWindowLeaveTheKeyboardOnNothing) {

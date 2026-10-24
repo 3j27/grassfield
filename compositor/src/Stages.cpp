@@ -1302,15 +1302,20 @@ namespace {
     }
 
     // Before the first key of a keyboard device that replaced the previous one: the surface that holds the keyboard gets
-    // wl_keyboard.leave and enter again (core reannounceFocus: why, and when not). Hyprland's focus state is not touched.
+    // wl_keyboard.leave and enter again, to that same surface (core reannounceFocus: why, and when not; while locked only a
+    // session-lock surface, CSessionLockManager::isSurfaceSessionLock). Hyprland's focus state is not touched; nothing is
+    // allocated or logged.
     void reannounceKeyboardFocus() {
         const auto seat = gf::surfaces::keyboardFocus();
-        const st::ReannounceFacts facts{.replaced        = true,
-                                        .locked          = sessionLocked(),
-                                        .inputMethodGrab = inputMethodGrabsKeyboard(),
-                                        .seatGrab        = g_pSeatManager && g_pSeatManager->m_seatGrab,
-                                        .focus           = seat != nullptr};
-        if (!st::reannounceFocus(facts))
+        const auto grab = g_pSeatManager ? g_pSeatManager->m_seatGrab : nullptr;
+        const st::ReannounceFacts facts{.replaced         = true,
+                                        .locked           = sessionLocked(),
+                                        .inputMethodGrab  = inputMethodGrabsKeyboard(),
+                                        .seatGrab         = grab != nullptr,
+                                        .grabAcceptsFocus = grab && seat && grab->accepts(seat),
+                                        .focus            = seat != nullptr,
+                                        .focusIsLock      = g_pSessionLockManager && seat && g_pSessionLockManager->isSurfaceSessionLock(seat)};
+        if (!g_pSeatManager || !st::reannounceFocus(facts))
             return;
         auto&      s         = S();
         const bool wasMoving = std::exchange(s.movingKeyFocus, true);

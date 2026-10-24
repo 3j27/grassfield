@@ -408,9 +408,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   Quickshell (Qt) client then ignores the keys of the new one (nested 2026-10-24, with the plugin unloaded: a Quickshell
   layer surface and a Quickshell window got the first burst only, foot every burst; after a keyboard leave/enter cycle the
   Quickshell window got the next one). So before the first key of a device that replaced the previous one while no other
-  keyboard was left, the surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again (`reannounceKeyboardFocus`,
-  core `reannounceFocus`; not while locked, under an input method's grab or a seat grab, or with the keyboard on nothing;
-  Hyprland's focus state untouched). Never while the session is locked or
+  keyboard was left, the surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again, to that same surface
+  (`reannounceKeyboardFocus`, core `reannounceFocus`; not under an input method's grab or with the keyboard on nothing;
+  unlocked, not under a seat grab; Hyprland's focus state untouched). While locked, or when the lock state is unknown
+  (integrator decision 2026-10-24: a lock screen gone deaf after a desktop's only keyboard reconnected at resume is a
+  lock-out; "failures stay locked" never allows a deaf password field): only when the surface that holds the keyboard is
+  a session-lock surface (`CSessionLockManager::isSurfaceSessionLock`), to that same surface, and only when a seat grab, if
+  any, accepts it; the surface that has the keyboard never changes and nothing else is given it
+  (`tests/security/lock_keyboard_replaced.sh`). The focus rules above never act while the session is locked or
   its state is unknown (a missing lock manager counts as locked: failures stay locked), never under an input method's
   keyboard grab, never against a seat grab that rejects the surface (checked first: Hyprland would log a refusal per
   key); a Bottom or Background Exclusive layer keeps Hyprland's normal focus, and no window gets the keyboard while an
@@ -1376,6 +1381,18 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
   handling, so with `follow_mouse = 1` (not Grassfield's setting, 2) it could also move the keyboard to a window under the
   pointer, as a real one-pixel motion would.
 - Stages (prototype behind a flag): limits and risks in `docs/specs/stages.md` "Known limitations and risks".
+- Keyboards that come and go, without the plugin (degraded mode): when the session's only keyboard device goes away and
+  another appears (a desktop's Bluetooth keyboard reconnecting; in the nested session every `wtype` burst when the parent
+  seat had no keyboard at start), the seat loses its keyboard capability in between and clients re-create their
+  `wl_keyboard`; a Quickshell (Qt) client then ignores the keys of the new one until it gets a new `wl_keyboard.leave` and
+  `enter`. So every Quickshell surface (the lock screen, the polkit dialog, Search, a Quickshell window) is deaf after
+  such a reconnect until the keyboard focus changes. The plugin announces the focus again (above); without it the limit
+  stays. Repro (nested, plugin unloaded, `devices` listing no keyboard of the session's own): map a Quickshell layer
+  surface with Exclusive keyboard interactivity that logs its keys (`tests/compositor/stages-fixture`, role exclusive), run
+  `wtype ab`, `wtype cd`, `wtype ef` one after another: it logs a and b only; foot in its place gets all six. A focus
+  cycle while the new device exists (another window focused, then this one) makes it take the next burst. Not
+  reproducible through `scripts/nestctl`: Hyprland 0.56.2 keeps a disabled keyboard (`enabled = false`) in the seat's
+  capabilities. Upstream: Quickshell (an issue text is in the integrator's report of 2026-10-24; filing is the owner's call).
 - Overview close focus (`overview-focus`): the shell sends it on every close (`Overview.closeAnd`) and keeps its own
   checked focus path without the capability. Keys typed before the last chrome released still reach that chrome (lost,
   as in the drop table of `docs/specs/overview.md`). The bound is fixed (1 s): a dialog open longer during the close ends the

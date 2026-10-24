@@ -701,7 +701,11 @@ namespace gf::stages {
     }
 
     bool reannounceFocus(const ReannounceFacts& facts) {
-        return facts.replaced && !facts.locked && !facts.inputMethodGrab && !facts.seatGrab && facts.focus;
+        if (!facts.replaced || !facts.focus || facts.inputMethodGrab)
+            return false;
+        if (facts.locked) // or not known: the same lock surface only, and only when a seat grab accepts it
+            return facts.focusIsLock && (!facts.seatGrab || facts.grabAcceptsFocus);
+        return !facts.seatGrab;
     }
 
     bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel) {
