@@ -33,6 +33,14 @@ SettingsPage {
 
     title: qsTr("Accessibility")
 
+    // The same steps as the keys (Super + Alt + = and -): 1.5 to 5 in halves.
+    readonly property var zoomLevels: {
+        const out = [];
+        for (let n = 3; n <= 10; n++)
+            out.push({id: String(n / 2), text: qsTr("%1×").arg(Qt.locale().toString(n / 2, "f", n % 2 === 0 ? 0 : 1))});
+        return out;
+    }
+
     // Why the colours could not be applied, in the user's language; the tool's own message (English, technical) follows
     // on a line of its own.
     function failureText(): string {
@@ -115,7 +123,7 @@ SettingsPage {
             title: qsTr("Zoom level")
             Segmented {
                 accessibleName: qsTr("Zoom level")
-                model: [{id: "1.5", text: qsTr("1.5×")}, {id: "2", text: qsTr("2×")}, {id: "3", text: qsTr("3×")}, {id: "4", text: qsTr("4×")}, {id: "5", text: qsTr("5×")}]
+                model: root.zoomLevels
                 value: String(root.store.value("accessibility.zoomLevel"))
                 onPicked: id => root.store.set("accessibility.zoomLevel", Number(id))
             }

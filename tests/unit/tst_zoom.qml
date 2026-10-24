@@ -27,6 +27,17 @@ TestCase {
         compare(Zoom.step(5, 1), 5);
     }
 
+    // The Settings page offers every step the keys reach: 1.5, 2, 2.5 ... 5.
+    function test_keysReachEveryLevelOfTheSettingsPage() {
+        const seen = [];
+        let level = 1.5;
+        while (seen.length < 20 && seen.indexOf(level) < 0) {
+            seen.push(level);
+            level = Zoom.step(level, 1);
+        }
+        compare(seen, [1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
+    }
+
     function test_requestIsALuaFunctionWithAPlainNumber() {
         compare(Zoom.request(2), "function() pcall(hl.config, { cursor = { zoom_factor = 2.00 } }) end");
         compare(Zoom.request(1), "function() pcall(hl.config, { cursor = { zoom_factor = 1.00 } }) end");

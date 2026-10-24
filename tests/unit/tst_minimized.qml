@@ -361,6 +361,12 @@ TestCase {
         compare(Minimized.motionCall(false).indexOf("popin 94%") >= 0, true);
     }
 
+    // GF-064: Reduce Motion also stops the compositor's screen zoom from gliding.
+    function test_reduceMotionStopsTheZoomAnimation() {
+        verify(Minimized.motionCall(true).indexOf("leaf = \"zoomFactor\", enabled = false") >= 0);
+        verify(Minimized.motionCall(false).indexOf("leaf = \"zoomFactor\", enabled = true") >= 0);
+    }
+
     function test_isZoomed() {
         compare(Minimized.isZoomed({fullscreen: 1}), true);
         compare(Minimized.isZoomed({fullscreen: 2}), false);

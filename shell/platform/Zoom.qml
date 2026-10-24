@@ -10,7 +10,10 @@ import "Zoom.js" as ZoomLogic
 // Screen magnification (Settings > Accessibility > Zoom, GF-064). The stored state (accessibility.zoom, zoomLevel) is
 // sent to Hyprland as `cursor:zoom_factor` whenever it changes and once when the settings are read; the keyboard
 // (Super+Alt+8 toggle, Super+Alt+= / Super+Alt+- level, config/hypr/grassfield/bindings.lua) goes through the `zoom` IPC
-// target and changes the stored state, so the Settings page follows. Degrades quietly: outside Hyprland (no IPC) nothing is
+// target and changes the stored state, so the Settings page follows. The zoom stays on at the lock screen (macOS keeps
+// accessibility Zoom there: whoever needs it must be able to read the password field); the compositor magnifies around the
+// pointer and the keyboard focus, so the field stays reachable. Reduce Motion turns the compositor's zoom animation off
+// (Minimized.js motionLeaves) and a config reload sends the factor again. Degrades quietly: outside Hyprland (no IPC) nothing is
 // sent; a Hyprland that rejects the call leaves the screen unmagnified (the Lua call is under pcall). Event-driven.
 Singleton {
     id: root
@@ -25,6 +28,16 @@ Singleton {
         const request = ZoomLogic.request(root.factor);
         if (request !== "")
             Hyprland.dispatch(request);
+    }
+
+    // A config reload resets the compositor's options: the zoom is sent again (as Pointer does for its theme).
+    Connections {
+        target: Hyprland
+
+        function onRawEvent(event: HyprlandEvent): void {
+            if (event.name === "configreloaded")
+                root.apply();
+        }
     }
 
     onFactorChanged: root.apply()

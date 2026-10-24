@@ -161,12 +161,15 @@ var motionLeaves = {
         {leaf: "windowsIn", speed: 2, bezier: "gfDecelerate", style: "popin 94%"},
         {leaf: "windowsOut", speed: 1.2, bezier: "gfAccelerate", style: "popin 96%"},
         {leaf: "windowsMove", speed: 3, bezier: "gfDecelerate"},
+        {leaf: "zoomFactor", speed: 3, bezier: "gfDecelerate"},
         {leaf: "workspaces", speed: 4, bezier: "gfDecelerate", style: "slide"}
     ],
     reduced: [
         {leaf: "windowsIn", speed: 1, bezier: "gfStandard", style: "popin 100%"},
         {leaf: "windowsOut", speed: 1, bezier: "gfStandard", style: "popin 100%"},
         {leaf: "windowsMove", speed: 1, bezier: "gfStandard", enabled: false},
+        // Screen zoom (Settings > Accessibility > Zoom) jumps to its level instead of gliding.
+        {leaf: "zoomFactor", speed: 1, bezier: "gfStandard", enabled: false},
         {leaf: "workspaces", speed: 1, bezier: "gfStandard", style: "fade"}
     ]
 };

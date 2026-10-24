@@ -170,6 +170,10 @@
         <translation>Vert</translation>
     </message>
     <message>
+        <source>%1×</source>
+        <translation>%1×</translation>
+    </message>
+    <message>
         <source>Display</source>
         <translation>Affichage</translation>
     </message>
@@ -240,26 +244,6 @@
     <message>
         <source>Zoom level</source>
         <translation>Niveau de zoom</translation>
-    </message>
-    <message>
-        <source>1.5×</source>
-        <translation>1,5×</translation>
-    </message>
-    <message>
-        <source>2×</source>
-        <translation>2×</translation>
-    </message>
-    <message>
-        <source>3×</source>
-        <translation>3×</translation>
-    </message>
-    <message>
-        <source>4×</source>
-        <translation>4×</translation>
-    </message>
-    <message>
-        <source>5×</source>
-        <translation>5×</translation>
     </message>
     <message>
         <source>Keyboard</source>
