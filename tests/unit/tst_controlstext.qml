@@ -148,7 +148,7 @@ TestCase {
                 keyClick(Qt.Key_Return);
                 keyClick(Qt.Key_Up);
                 compare(spin.value, 10, "a hidden spin box handed the focus ignores typing and Return");
-                compare(spin.contentItem.text, "10");
+                compare((spin.contentItem as TextInput).text, "10");
             }
             spin.enabled = true;
             spin.visible = true;
@@ -158,14 +158,14 @@ TestCase {
     // Hiding a spin box in the middle of an edit keeps the typed text and commits nothing; an explicit Return commits it.
     function test_hidingASpinBoxMidEditKeepsTheEditUncommitted() {
         spin.contentItem.forceActiveFocus(Qt.TabFocusReason);
-        spin.contentItem.selectAll();
+        (spin.contentItem as TextInput).selectAll();
         keyClick("5");
-        compare(spin.contentItem.text, "5");
+        compare((spin.contentItem as TextInput).text, "5");
         spin.visible = false;
         compare(spin.value, 10, "hiding did not commit the edit");
-        compare(spin.contentItem.text, "5", "and kept it as typed");
+        compare((spin.contentItem as TextInput).text, "5", "and kept it as typed");
         keyClick("7");
-        compare(spin.contentItem.text, "5", "a hidden spin box takes no more input");
+        compare((spin.contentItem as TextInput).text, "5", "a hidden spin box takes no more input");
         spin.visible = true;
         compare(spin.value, 10, "showing it again commits nothing either");
         keyClick(Qt.Key_Return);
