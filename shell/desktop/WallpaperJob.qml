@@ -16,6 +16,9 @@ Scope {
     property int timeoutMs: 30000
     // function (token, kind, code, out, timedOut)
     property var callback: null
+    // A streaming job reports the output so far through function (token, text) while it runs.
+    property bool streaming: false
+    property var progressCallback: null
 
     readonly property bool running: proc.running
     property string out: ""
@@ -53,6 +56,13 @@ Scope {
         id: proc
         command: job.command
         stdout: StdioCollector {
+            // A streaming job (a transcode prints its progress as it goes): the text grows while the process runs and
+            // `progressCallback(text)` hears every change; the final answer is still the whole text at the end.
+            waitForEnd: !job.streaming
+            onDataChanged: {
+                if (job.streaming && job.progressCallback)
+                    job.progressCallback(job.token, text);
+            }
             onStreamFinished: {
                 job.out = text;
                 job.gotOut = true;

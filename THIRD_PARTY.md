@@ -61,13 +61,15 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 | Quickshell 0.3.1 | host that runs the QML shell; `Grassfield.I18n` plugin loads into it | LGPL-3.0-only (`/usr/share/licenses/quickshell/LICENSE`) |
 | Qt 6.11.2 (base, declarative, wayland, svg, imageformats, tools) | linked and loaded | headers: "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only" |
 | QtPdf, QtPdfQuick (package qt6-webengine) | Preview | as Qt; Chromium/PDFium notices in `/usr/share/licenses/qt6-webengine/LICENSE.chromium` |
-| QtMultimedia + FFmpeg backend | Preview | as Qt; ffmpeg 9.0.1 is GPL-3.0-only per pacman. **Needs legal review.** |
+| QtMultimedia + FFmpeg backend | Preview, and the shell for video wallpapers (ADR-0016 W7) | as Qt; ffmpeg 9.0.1 is GPL-3.0-only per pacman. **Needs legal review** (docs/legal/licenses-audit.md, gap G9: now also loaded into the shell process). |
+| ffmpeg and ffprobe programs | `grassfield-wallpaper` transcodes and probes video wallpapers (argument vector, a separate process, plain-file protocol whitelist; ADR-0016) | GPL-3.0-only per pacman (ffmpeg 9.0.1). The programs are run, not linked. **Needs legal review.** |
+| curl | `grassfield-wallpaper fetch` downloads the online pictures of the day (argument vector, https only) | curl licence (MIT-style); run, not linked |
 | KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
 | extra-cmake-modules (build) | CMake modules | pacman "LGPL"; module headers BSD-3-Clause/BSD-2-Clause |
 | uwsm | session launcher | MIT |
 
 Grassfield patches none of these. **Needs legal review:** obligations for MIT code and plugins running inside or
-linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview.
+linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview and, through QtMultimedia, by the shell (video wallpapers).
 
 ## 3. Omarchy-derived code (MIT)
 
@@ -176,6 +178,21 @@ modified by Grassfield):
 Their licence texts ship with their packages. The WhiteSur icon theme was evaluated and dropped on 2026-10-21 (ADR-0017
 amendment): nothing of it is installed, fetched, filtered or referenced at runtime. **needs legal review:** the
 aggregation of these data packages with the MIT packages of this project, as for any dependency.
+
+## 5b. Online pictures of the day (fetched at run time, opt-in, never shipped)
+
+Settings > Wallpaper > Online (ADR-0016 step 2) lets the user turn on one of two daily pictures. Grassfield ships none of
+them; `grassfield-wallpaper fetch` downloads one picture a day to the user's cache (curl, https only, fixed host
+allow-list) and shows it with its credit. **Needs legal review** (ADR-0016, REQ-ADR0016-29).
+
+| Source | Hosts | Terms as Grassfield applies them | Shown with the picture |
+|---|---|---|---|
+| Wikimedia Commons, Picture of the Day (MediaWiki Action API) | `commons.wikimedia.org`, `thumb.wikimedia.org`, `upload.wikimedia.org` | each file has its own licence: only public-domain marks, CC0, CC BY and CC BY-SA are accepted (NC, ND, GFDL and any other are skipped, the previous picture stays); the Wikimedia User-Agent policy is followed (product, version and the project contact) | Title, Author, Source (link) and Licence (link to its URL), as plain text |
+| NASA Astronomy Picture of the Day (`api.nasa.gov/planetary/apod`, shared `DEMO_KEY`) | `api.nasa.gov`, `apod.nasa.gov` | NASA material is generally not copyrighted in the US, but many APOD pictures belong to third parties: the entry's `copyright` field is shown with the picture (owner decision 2026-10-20); a picture is accepted only under `apod.nasa.gov/apod/image/`, which excludes the NASA logo; a video entry is never downloaded; no NASA insignia or logo is used, "NASA" is only the name of the source | Title, credit and copyright holder (or "Public domain (NASA)" when there is none), link to the APOD page |
+
+The names "Wikimedia", "Wikimedia Commons", "NASA" and "APOD" appear in the interface only to name these sources (no
+logo). Resizing and re-encoding the picture for local display is the only processing; whether that needs anything beyond
+the attribution above is a question for counsel.
 
 ## 5a. Unicode character data (derived tables)
 

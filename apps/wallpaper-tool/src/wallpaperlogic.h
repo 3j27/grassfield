@@ -26,6 +26,10 @@ enum ExitCode {
     Network = 11,     // online fetch: no answer, an HTTP error, a refused host or redirect (retried later)
     Skipped = 12,     // online fetch: today's entry cannot be used (licence, not a picture, no entry); not retried that day
     BadResponse = 13, // online fetch: a malformed or oversized answer (retried later)
+    TooLongVideo = 14,   // video: longer than wallpaper.videoMaxSeconds
+    TranscodeFailed = 15, // video: ffmpeg failed (the codec cannot be decoded, disk full, output over the byte limit)
+    FfmpegMissing = 16,  // video: ffmpeg or ffprobe is not installed
+    Cancelled = 17,      // video: the helper was told to stop (SIGTERM)
 };
 
 // Caps (the same as Grassfield Preview, docs/specs/preview.md).
