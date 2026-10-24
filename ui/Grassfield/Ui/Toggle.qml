@@ -28,11 +28,11 @@ T.Control {
 
     Keys.onPressed: event => {
         if (!root.visible || !root.enabled) {
-            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+            if (ActivationKeys.activation(event.key))
                 event.accepted = true;
             return;
         }
-        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        if (ActivationKeys.activation(event.key)) {
             root.toggled(!root.checked);
             event.accepted = true;
         }

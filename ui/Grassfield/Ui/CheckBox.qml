@@ -24,7 +24,7 @@ T.CheckBox {
 
     // A hidden or disabled control that still holds the focus ignores its activation keys.
     Keys.onPressed: event => {
-        if ((!root.visible || !root.enabled) && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
+        if ((!root.visible || !root.enabled) && (ActivationKeys.activation(event.key)))
             event.accepted = true;
     }
 

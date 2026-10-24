@@ -12,6 +12,7 @@ Tooltip 1.0 Tooltip.qml
 Button 1.0 Button.qml
 FocusRing 1.0 FocusRing.qml
 FocusGuard 1.0 FocusGuard.qml
+ActivationKeys 1.0 ActivationKeys.js
 ToolButton 1.0 ToolButton.qml
 CheckBox 1.0 CheckBox.qml
 RadioButton 1.0 RadioButton.qml

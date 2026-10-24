@@ -41,7 +41,7 @@ T.RadioButton {
     Keys.onPressed: event => {
         const arrows = event.key === Qt.Key_Down || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Left;
         if (!root.visible || !root.enabled) {
-            if (arrows || event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+            if (arrows || ActivationKeys.activation(event.key))
                 event.accepted = true;
             return;
         }

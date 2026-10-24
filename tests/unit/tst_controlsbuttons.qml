@@ -336,7 +336,7 @@ TestCase {
     // A hidden or disabled control that is handed key events (code can focus it, Keys.forwardTo reaches it) acts on none, and
     // swallows its activation keys so that a parent does not act on them either.
     function test_hiddenOrDisabledControlsSwallowTheirKeys() {
-        const keys = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter];
+        const keys = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Select];
         for (const state of ["hidden", "disabled"]) {
             for (const c of [toggleTool, check, sw, toggle, radio1, radio2]) {
                 const before = c.checked;
@@ -375,6 +375,44 @@ TestCase {
     }
 
     // Hiding or disabling the control that has the focus moves the focus on (macOS): it never stays on what cannot act.
+    // Qt.Key_Select is an activation key too (the templates click on it): a hidden or disabled Button, ToolButton, CheckBox or
+    // Switch that holds the focus swallows it as it does Space, Return and Enter; an enabled Button acts on it.
+    function test_selectKeyIsGuardedLikeTheOtherActivationKeys() {
+        button.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Select);
+        compare(tc.clicks, 1, "an enabled Button acts on Select");
+        for (const state of ["hidden", "disabled"]) {
+            tc.clicks = 0;
+            if (state === "hidden")
+                button.visible = false;
+            else
+                button.enabled = false;
+            forwarder.target = button;
+            forwarder.reached = [];
+            if (state === "hidden")
+                button.forceActiveFocus(Qt.TabFocusReason);  // Keys.forwardTo skips a hidden item: give it the focus itself
+            else
+                forwarder.forceActiveFocus();
+            keyClick(Qt.Key_Select);
+            compare(tc.clicks, 0, "a " + state + " Button ignores Select");
+            compare(forwarder.reached, [], "and swallows it");
+            if (state === "hidden")
+                verify(button.activeFocus, "a hidden Button keeps the focus (the polkit contract)");
+            button.visible = true;
+            button.enabled = true;
+        }
+        forwarder.target = null;
+        // Hidden and focused by code: ToolButton, CheckBox, Switch (the template would act on Select).
+        for (const c of [toggleTool, check, sw]) {
+            const before = c.checked;
+            c.visible = false;
+            c.forceActiveFocus(Qt.TabFocusReason);
+            keyClick(Qt.Key_Select);
+            compare(c.checked, before, c.Accessible.name + ": hidden, Select does nothing");
+            c.visible = true;
+        }
+    }
+
     function test_hidingOrDisablingTheFocusedControlMovesTheFocus() {
         for (const c of [toggleTool, check, sw, toggle, radio2]) {
             for (const state of ["hidden", "disabled"]) {

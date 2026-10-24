@@ -55,11 +55,11 @@ T.ComboBox {
     // The template steps the selection with the arrows; here every opening key shows the list instead.
     Keys.onPressed: event => {
         if (!root.visible || !root.enabled) {
-            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || event.key === Qt.Key_Down || event.key === Qt.Key_Up)
+            if (ActivationKeys.activation(event.key) || event.key === Qt.Key_Down || event.key === Qt.Key_Up)
                 event.accepted = true;
             return;
         }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+        if (ActivationKeys.activation(event.key) || event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
             root.openedByKey = true;
             root.popup.open();
             event.accepted = true;

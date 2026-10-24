@@ -35,7 +35,7 @@ T.Button {
     }
 
     Keys.onPressed: event => {
-        if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
+        if (!ActivationKeys.activation(event.key))
             return;
         // A hidden or disabled button never acts (activate()); its activation keys are swallowed all the same (they would
         // otherwise bubble up to a parent that acts on them). Every other key (Escape above all) propagates.
