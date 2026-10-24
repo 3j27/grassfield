@@ -206,6 +206,9 @@ FocusScope {
     readonly property bool menuOpen: menuKind !== ""
 
     function openMenu(kind: string, x: real, y: real): void {
+        // Nothing opens over the lock screen (GF-116).
+        if (SessionState.refuses("desktop menu"))
+            return;
         menuAt = Qt.point(x, y);
         // What the menu offers beyond the fixed items is read now: the clipboard's files (Paste) or the apps that open
         // the selection (Open With ▸); the rows appear as soon as the answer is in.
@@ -234,6 +237,8 @@ FocusScope {
 
     // The attribution card: like the menu, a PopupWindow with a grab; the keyboard state machine sees it as a menu.
     function openAbout(): void {
+        if (SessionState.refuses("desktop attribution card"))
+            return;
         aboutOpen = true;
         aboutPopup.visible = true;
         focusEvent({
@@ -250,6 +255,19 @@ FocusScope {
             type: "menuClosed",
             how: how
         });
+    }
+
+    // The session locks: the context menu and the attribution card close, and the desktop lets the keyboard go ("outside",
+    // as a dismissal by a click elsewhere) (GF-116, review of 1d2c856).
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (!SessionState.locked)
+                return;
+            root.closeMenu("outside");
+            root.closeAbout("outside");
+        }
     }
 
     function applyMenu(action: string): void {

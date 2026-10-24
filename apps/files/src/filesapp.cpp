@@ -3,6 +3,7 @@
 #include "autoappearance.h"
 
 #include "filelogic.h"
+#include "launchguard.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "placesmodel.h"
@@ -419,11 +420,62 @@ QUrl FilesApp::resolveLocation(const QString &text, const QUrl &base) const
 
 void FilesApp::open(const QList<QUrl> &urls)
 {
-    if (!urls.isEmpty() && launchingBlocked()) {
+    // macOS Gatekeeper model (GF-070, DT-10): opening never runs a program, a script or an app launcher; they are refused
+    // here, before KIO sees them, whatever KIO would do. Decided before the test switch below so a scripted test sees it.
+    QList<QUrl> allowed;
+    QList<QUrl> webLinks; // addresses of web-link files, for the default web browser only
+    QString refusedName;
+    LaunchGuard::Verdict refusedKind = LaunchGuard::Verdict::Open;
+    int refused = 0;
+    for (const QUrl &url : urls) {
+        const LaunchGuard::Facts facts = LaunchGuard::inspect(url);
+        const LaunchGuard::Verdict v = LaunchGuard::verdict(facts);
+        if (v == LaunchGuard::Verdict::Open) {
+            allowed << url;
+            continue;
+        }
+        if (v == LaunchGuard::Verdict::OpenWebLinkInBrowser) {
+            webLinks << LaunchGuard::webLink(facts);
+            continue;
+        }
+        qInfo("grassfield-files: open refused (%s)", v == LaunchGuard::Verdict::RefuseLauncher ? "app launcher" : "program or script");
+        if (refused++ == 0) {
+            refusedName = url.fileName();
+            refusedKind = v;
+        }
+    }
+    if (refused == 1 && refusedKind == LaunchGuard::Verdict::RefuseLauncher)
+        emit operationFailed(tr("“%1” was not opened: it is an app launcher, and Files never starts apps from a folder. Open apps from the Dock, Apps or Search.").arg(refusedName));
+    else if (refused == 1)
+        emit operationFailed(tr("“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.").arg(refusedName));
+    else if (refused > 1)
+        emit operationFailed(tr("%1 items were not opened: Files never runs programs, scripts or app launchers from a folder.").arg(refused));
+    if (allowed.isEmpty() && webLinks.isEmpty())
+        return;
+    if (launchingBlocked()) {
         emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
         return;
     }
-    for (const QUrl &url : urls) {
+    // A web link file opens its address in the user's default web browser and nowhere else (macOS: a .webloc opens in the
+    // browser): never through KIO, which would fetch the address and run whatever handles the type the server announces,
+    // and never with the application the file names (X-KDE-LastOpenedWith).
+    for (const QUrl &address : std::as_const(webLinks)) {
+        const KService::Ptr browser = KApplicationTrader::preferredService(QStringLiteral("x-scheme-handler/") + address.scheme().toLower());
+        if (!browser) {
+            emit operationFailed(tr("The web link was not opened: no default web browser is set."));
+            continue;
+        }
+        qInfo("grassfield-files: web link opened in the default web browser");
+        auto *job = new KIO::ApplicationLauncherJob(browser, this);
+        job->setUrls({address});
+        attachDelegate(job);
+        connect(job, &KJob::result, this, [this, job] {
+            if (job->error() && job->error() != KIO::ERR_USER_CANCELED)
+                emit operationFailed(job->errorString());
+        });
+        job->start();
+    }
+    for (const QUrl &url : std::as_const(allowed)) {
         auto *job = new KIO::OpenUrlJob(url, this);
         attachDelegate(job);
         // Never run programs or scripts from the file manager: they open in their associated app.

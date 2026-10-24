@@ -17,6 +17,9 @@
 //       (additive, ADR-0018, Launcher.h: an application's own Dock badge, progress and attention hint, from
 //        com.canonical.Unity.LauncherEntry. null: the update did not touch the value. count 0 hides the badge,
 //        progress -1 hides the bar; all three null: forget the app, the sender left the bus.)
+//   {"type":"screensaver","inhibited":true|false,"count":N}
+//       (additive, GF-016, ScreenSaver.h: applications hold org.freedesktop.ScreenSaver idle inhibitors; sent on every
+//        change and when a shell connects. The shell's idle module neither dims nor locks on idle while true.)
 //
 // Everything the shell sends is untrusted: every field is type- and range-checked, unknown types are refused.
 
@@ -84,5 +87,8 @@ namespace gf::menubridge {
     QByteArray errorMessage(const QString& window, const QString& code, const QString& message);
     QByteArray statusMessage(const QString& state, bool registrar);
     QByteArray launcherMessage(const QString& app, std::optional<qint64> count, std::optional<double> progress, std::optional<bool> urgent);
+    // {"type":"screensaver","inhibited":true|false,"count":N} (additive, GF-016, ScreenSaver.h): applications hold
+    // org.freedesktop.ScreenSaver idle inhibitors (N cookies, capped at 1024 in the line).
+    QByteArray screensaverMessage(bool inhibited, int count);
 
 } // namespace gf::menubridge

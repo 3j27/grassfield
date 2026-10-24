@@ -23,7 +23,7 @@
   {"id": "text on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": [
    {"file": "shell/security/PasswordField.qml", "class": "primary", "count": 1},
    {"file": "shell/security/PasswordField.qml", "class": "backdrop", "count": 2},
-   {"file": "shell/security/polkit/AuthDialog.qml", "class": "primary", "count": 5},
+   {"file": "shell/security/polkit/AuthDialog.qml", "class": "primary", "count": 6},
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "backdrop", "count": 2},
    {"file": "shell/security/polkit/AuthAgent.qml", "class": "backdrop", "count": 1}
   ]},
