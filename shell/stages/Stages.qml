@@ -49,13 +49,17 @@ Scope {
     }
 
     // Geometry of the strip of a screen (layout coordinates), for the number of strip stages it shows now.
+    // A screen being torn down (a display unplugged) reads as null for a moment: it gets an empty geometry, not an error.
     function geometryOf(screen: var): var {
+        const scr = screen ? screen : ({name: "", x: 0, y: 0, width: 0, height: 0});
         const ins = insets();
-        const availH = screen.height - ins.top - Tokens.stagesEdgeMargin - Math.max(ins.bottom, Tokens.stagesEdgeMargin);
-        return Layout.geometry(screen, ins, Layout.tileCount(stripCount(screen.name), availH, metrics), metrics);
+        const availH = scr.height - ins.top - Tokens.stagesEdgeMargin - Math.max(ins.bottom, Tokens.stagesEdgeMargin);
+        return Layout.geometry(scr, ins, Layout.tileCount(stripCount(scr.name), availH, metrics), metrics);
     }
 
     function isShown(screen: var): bool {
+        if (!screen)
+            return false;
         const mon = StagesLink.monitorState(screen.name);
         return Layout.shown(StagesLink.on, stripCount(screen.name), !!mon && mon.overlap, !!revealed[screen.name]);
     }
@@ -136,9 +140,9 @@ Scope {
             required property ShellScreen modelData
 
             readonly property var geo: root.geometryOf(modelData)
-            readonly property var monitorState: StagesLink.monitorState(modelData.name)
+            readonly property var monitorState: modelData ? StagesLink.monitorState(modelData.name) : null
             readonly property bool shown: root.isShown(modelData)
-            readonly property bool revealedNow: !!root.revealed[modelData.name]
+            readonly property bool revealedNow: modelData ? !!root.revealed[modelData.name] : false
             // Tile being dragged (-1 none) and the pointer in surface coordinates while it is.
             property int dragSlot: -1
             property point dragPoint: Qt.point(0, 0)
@@ -151,8 +155,8 @@ Scope {
                 left: true
             }
             // qmllint disable unqualified unresolved-type
-            margins.top: geo.surface.y - modelData.y
-            margins.left: geo.surface.x - modelData.x
+            margins.top: modelData ? geo.surface.y - modelData.y : 0
+            margins.left: modelData ? geo.surface.x - modelData.x : 0
             // qmllint enable unqualified unresolved-type
             implicitWidth: geo.surface.w
             implicitHeight: geo.surface.h

@@ -15,16 +15,17 @@ trap 'rm -rf "$tmp"' EXIT
 
 fresh() { # a new copy of what the checks read
   rm -rf "$tmp/t"
-  mkdir -p "$tmp/t/ui/Grassfield/Ui" "$tmp/t/tests/unit"
+  mkdir -p "$tmp/t/tests/unit"
   cp -r "$root/shell" "$tmp/t/shell"
-  cp "$root/ui/Grassfield/Ui/Tokens.qml" "$tmp/t/ui/Grassfield/Ui/Tokens.qml"
+  # the copy's own ui/ (the QML module Grassfield.Ui), never the one installed under /usr/lib/qt6/qml
+  cp -r "$root/ui" "$tmp/t/ui"
   cp "$root/tests/unit/tst_showdesktop.qml" "$root/tests/unit/tst_showdesktopflow.qml" "$root/tests/unit/tst_showdesktopreplay.qml" "$root/tests/unit/tst_showdesktopglue.qml" "$root/tests/unit/tst_screenchoice.qml" "$tmp/t/tests/unit/"
   cp -r "$root/tests/unit/fixtures" "$tmp/t/tests/unit/fixtures"
 }
 # one qml test file of the copy: a positive result is required (a runner that printed nothing could not start: no pass)
 unit() {
   local out
-  out=$(cd "$tmp/t" && QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 timeout 120 /usr/lib/qt6/bin/qmltestrunner -input "tests/unit/$1" 2>&1)
+  out=$(cd "$tmp/t" && QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 timeout 120 /usr/lib/qt6/bin/qmltestrunner -import ui -input "tests/unit/$1" 2>&1)
   grep -qE 'Totals: [1-9][0-9]* passed, 0 failed' <<<"$out" && ! grep -q '^FAIL' <<<"$out"
 }
 # the offline tests on the copy: 0 when all pass
@@ -147,7 +148,7 @@ try "a window that is still parked is focused (the workspace is shown again)" $F
             // never ask for the focus"
 try "a window that is still parked is never looked at again" $F "            if (act.tries < ctx.maxActivationTries) {" "            if (false) {"
 try "a window that is still parked is looked at for ever" $F "            if (act.tries < ctx.maxActivationTries) {" "            if (true) {"
-try "a parked orphan does not come back" $F "        } else if (ctx.currentWorkspace > 0) {" "        } else if (false) {"
+try "a parked orphan does not come back" $F "        } else if (ctx.currentWorkspace > 0 && !inRecords(s.records, a)) {" "        } else if (false) {"
 try "a parked orphan is not focused" $F "            send(r, Minimized.moveRequest(a, String(ctx.currentWorkspace)));
             send(r, Minimized.focusWindowRequest(a));" "            send(r, Minimized.moveRequest(a, String(ctx.currentWorkspace)));"
 try "a parked orphan is focused before it is moved" $F "            send(r, Minimized.moveRequest(a, String(ctx.currentWorkspace)));
@@ -168,6 +169,10 @@ try "the window before the workspace event wins over the one after" $F 'const a 
 try "only the window after the workspace event counts" $F 'before: before, after: "", tries: 0};
             r.timers.activation' 'before: "", after: "", tries: 0};
             r.timers.activation'
+try "the controller's look at a window that is still parked is unbounded" $K "maxActivationTries: 3" "maxActivationTries: 1000000"
+try "the controller's verify is unbounded" $K "maxVerify: 3," "maxVerify: 1000000,"
+try "the window list is not built while an activation is open" $F "    if (state.records.length > 0 || state.verify.records.length > 0 || state.activation.open)" "    if (state.records.length > 0 || state.verify.records.length > 0)"
+try "an orphan branch takes a window a record lists" $F "} else if (ctx.currentWorkspace > 0 && !inRecords(s.records, a)) {" "} else if (ctx.currentWorkspace > 0) {"
 try "the window before the workspace event has no limit" $F "const before = s.seq - seen.seq <= ctx.lookbackEvents ? seen.address : \"\";" "const before = seen.address;"
 try "every event counts for the lookback" $F 'if (COUNTED.indexOf(name) >= 0)
         s.seq++;' 's.seq++;'
@@ -260,8 +265,7 @@ try "the verify bound does not persist" $F "        s.records = s.records.concat
         r.persist = true;" "        s.records = s.records.concat(strandedOnly(s.verify.records, parked, s.records));"
 try "capture does not stop the verify" $F "    s.verify = {records: [], tries: 0};
     s.ended = [];
-    r.timers.verify = \"stop\";
-    const records = SD.captureAll" "    const records = SD.captureAll"
+    r.timers.verify = \"stop\";" "    s.ended = [];"
 try "R2 the stragglers are read after the verify records are cleared" $F "    let stragglers = [];
     if (s.verify.records.length > 0) {" "    let stragglers = [];
     s.verify = {records: [], tries: 0};

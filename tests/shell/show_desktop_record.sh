@@ -11,7 +11,7 @@
 #                    token (SIGUSR1): a real client request.
 # Each file: {scenario, focusBefore, window, windows: [{address, workspace, x, y, class}], events: [{t, name, data}]} where t is
 # ms since the trigger and the events are those between the trigger and 3 s later (including what the running shell caused). The
-# window title of "activewindow" events is dropped (a terminal's title carries the user, the host and the working directory: no
+# window title of "activewindow" and "openwindow" events is dropped (a terminal's title carries the user, the host and the working directory: no
 # personal data goes into a fixture); the window list has class and address only.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -83,7 +83,7 @@ record() { # <scenario> <trigger: dispatcher|xdgact>
   jq -s --arg scenario "$scenario" --arg fb "$focus_before" --arg w "$window" --argjson windows "$windows" '
     (map(select(.ready | not))) as $ev
     | ($ev | if length > 0 then .[0].t else 0 end) as $t0
-    | {scenario: $scenario, focusBefore: $fb, window: $w, windows: $windows, events: ($ev | map({t: (.t - $t0), name: .name, data: (if .name == "activewindow" then ((.data | split(",")[0]) + ",") else .data end)}))}' \
+    | {scenario: $scenario, focusBefore: $fb, window: $w, windows: $windows, events: ($ev | map({t: (.t - $t0), name: .name, data: (if .name == "activewindow" then ((.data | split(",")[0]) + ",") elif .name == "openwindow" then ((.data | split(",")[0:3] | join(",")) + ",") else .data end)}))}' \
     "$tmp/events.jsonl" >"$out/$scenario.json"
   echo "record: $scenario: $(jq '.events | length' "$out/$scenario.json") events"
   jq -r '.events[] | "  \(.t)ms \(.name) \(.data)"' "$out/$scenario.json"

@@ -328,6 +328,41 @@ TestCase {
         compare(ctl.records.length, 1, "the record stays at the bound");
     }
 
+    function test_theLookAtAStillParkedWindowIsBounded() {
+        park();
+        stuckSet = ({a1: true});
+        emit("activewindowv2", "a1");
+        showEvents();
+        settle(46);                     // the controller looked three times (10 ms apart), a1 did not move: it gave up
+        stuckSet = ({});
+        sent = [];
+        settle(120);                    // the verify (60 ms) brings a1 back now; nobody may ask for its focus any more
+        compare(parked(), []);
+        compare(focusRequests().length, 0, "a window the controller gave up on is not focused later");
+    }
+
+    function test_theVerifyIsBoundedByTheControllersStep() {
+        park();
+        stuckSet = ({a1: true});
+        sent = [];
+        ctl.press();
+        settle(400);
+        compare(sent.filter(s => s.indexOf("window.move") >= 0 && s.indexOf("address:0xa1") >= 0).length, 4, "the ending's move and three tries, no more");
+    }
+
+    function test_anOrphanActivatedInTheDispatcherOrderComesBack() {
+        wins[0].parked = true;          // parked with no record
+        emit("activespecial", "special:desktop,DP-1");   // the workspace first
+        special = true;
+        emit("activespecialv2", "-98,special:desktop,DP-1");
+        hfocus = "a1";
+        emit("activewindowv2", "a1");   // then the window: the flow needs the window list for it, with no record on
+        settle(150);
+        compare(parked(), [], "the orphan is back");
+        compare(special, false);
+        compare(hfocus, "a1");
+    }
+
     function test_theVerifyTimerBringsBackAWindowThatDidNotMove() {
         park();
         sent = [];

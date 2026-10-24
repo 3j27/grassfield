@@ -234,7 +234,7 @@ function onTimer(state, ctx, id) {
                 s.activation = {open: false, sealed: true, before: a, after: "", tries: act.tries + 1};
                 r.timers.activation = "restart";
             }
-        } else if (ctx.currentWorkspace > 0) {
+        } else if (ctx.currentWorkspace > 0 && !inRecords(s.records, a)) {
             // A parked window no record owns (the record file was corrupt or could not be written): the user activated it, so it
             // comes to the Space they are on and ends up in front, whatever the record says (macOS: the window you activate is
             // always shown).
@@ -347,6 +347,9 @@ function onCapture(state, ctx) {
     s.verify = {records: [], tries: 0};
     s.ended = [];
     r.timers.verify = "stop";
+    // a new Show Desktop owns whatever it parks: an activation still being looked at (a window that was moving back) is over
+    s.activation = {open: false, sealed: false, before: "", after: "", tries: 0};
+    r.timers.activation = "stop";
     const records = SD.captureAll(ctx.windows, ctx.shown, ctx.focused, ctx.stages);
     if (records.length === 0 && stragglers.length === 0) {
         r.focusDesktop = true;

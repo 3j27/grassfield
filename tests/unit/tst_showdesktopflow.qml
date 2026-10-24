@@ -554,6 +554,39 @@ TestCase {
         compare(special, false);
     }
 
+    // a window still moving back when the user presses again belongs to the new Show Desktop: the look at the activation is over
+    function test_aStillParkedWindowIsNotPulledOutOfANewShowDesktop() {
+        park();
+        stuck = ({a1: true});
+        realActivation("a1");
+        settle();                       // the ending ran, a1 is still parked, the look at the activation is pending
+        press();                        // the user presses again
+        advance(interval.refresh + 10);
+        compare(parkedAddresses(), ["a1", "b2"], "the new Show Desktop has both");
+        sent = [];
+        stuck = ({});
+        advance(1500);
+        compare(sent.filter(s => s.indexOf("window.move") >= 0 && s.indexOf("workspace = \"1\"") >= 0).length, 0, "nothing moves a record's window back");
+        compare(focusRequests().length, 0);
+        compare(parkedAddresses(), ["a1", "b2"]);
+        compare(st.records.length > 0, true);
+    }
+
+    function test_theOrphanBranchNeverTakesAWindowARecordLists() {
+        park();                         // a record lists a1 and b2, both parked
+        sent = [];
+        const c = ctx();
+        let res = Flow.onEvent(st, c, "activewindowv2", "a1");
+        res = Flow.onEvent(res.state, c, "activespecial", "special:desktop,DP-1");   // this ends it...
+        const back = Flow.onEvent(res.state, c, "activewindowv2", "a1");
+        // ...and a record lists a1 again when the look comes (a new Show Desktop took it)
+        const state = back.state;
+        state.ended = [];
+        state.records = [{screen: "DP-1", workspace: 1, focus: "", windows: [{address: "a1", x: 0, y: 0}]}];
+        const t = Flow.onTimer(state, c, "activation");
+        compare(t.dispatches.length, 0, "a window a record lists is not an orphan");
+    }
+
     function test_aWindowThatIsNeitherParkedNorOursIsLeftAlone() {
         sent = [];
         realActivation("c9");           // minimized, on a Space, not parked: an activation of an ordinary window
