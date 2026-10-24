@@ -28,7 +28,7 @@ since 2dfd992, so they hold).
      global menus stop working.
 
   The plan closes them as follows: the wallpaper helper moves to `apps/runmode.h` in M6 (W2); the bridge predicate and
-  `testFault` are fixed in M7 (W4, an optional slice; if skipped they stay listed as open in the security spec).
+  `testFault` are fixed in M7 (W4; mandatory by integrator decision 2026-10-24: both are real-session defects).
 
 ## Decision
 One predicate, read only by `qs.lib` `Mode` (QML) and `apps/runmode.h` (C++):
@@ -77,6 +77,6 @@ mode" that disables Quick Settings toggles, power actions or global menus. The r
   `tst_devgate.qml`, `dev_gate.sh`, `audio_dev_guard.sh` (new case "leaked dev in a real session acts"),
   `settings_system_guard.sh` and a wallpaper-tool test (localhost URL refused when `SESSION=1`).
 - Slices (plan §2): M1 (qs.lib, Mode, vectors), M2 (gate flip, security), M3 (services), M4 (platform, menubar),
-  M5a/M5b (desktop, widgets, notifications, search, overview), M6 (C++ runmode.h), M7 (bridge and testFault, optional),
+  M5a/M5b (desktop, widgets, notifications, search, overview), M6 (C++ runmode.h), M7 (bridge and testFault),
   M8 (enforcement).
 - Unverified: that `hl.env` sets Hyprland's own environ (needed for M7).
