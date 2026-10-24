@@ -120,8 +120,12 @@ TestCase {
         seg.enabled = false;
         seg0.Accessible.pressAction();
         compare(tc.picks, [], "a disabled SegmentedControl never picks on an accessibility press");
+        seg0.Accessible.toggleAction();
+        compare(tc.picks, [], "nor on a toggle action");
         seg.enabled = true;
         seg.visible = false;
+        seg0.Accessible.toggleAction();
+        compare(tc.picks, [], "a hidden one ignores toggle too");
         seg0.Accessible.pressAction();
         compare(tc.picks, [], "a hidden one neither");
         seg.visible = true;
@@ -197,6 +201,63 @@ TestCase {
         tryCompare(combo, "open", false);
         combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
         combo.value = "x";
+    }
+
+    // The list stays inside the window: a long label no longer opens it at a negative x.
+    function test_comboListStaysInsideTheWindow() {
+        combo.model = [{id: "a", text: "A fairly long label that makes the list wider than the button"}, {id: "b", text: "Short"}];
+        combo.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        tryCompare(combo, "open", true);
+        const at = combo.popup.contentItem.mapToItem(null, 0, 0);
+        verify(at.x >= Tokens.spacingSm, "left edge " + at.x);
+        verify(at.x + combo.popup.width <= tc.width - Tokens.spacingSm + 0.5, "right edge " + (at.x + combo.popup.width));
+        verify(at.y >= Tokens.spacingSm);
+        combo.popup.close();
+        tryCompare(combo, "open", false);
+        combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
+    }
+
+    // 40 rows do not fit: the list is capped to the window and scrolls (macOS), the keyboard cursor stays in view.
+    function test_comboListOf40RowsScrollsInsideTheWindow() {
+        const rows = [];
+        for (let i = 0; i < 40; i++)
+            rows.push({id: "r" + i, text: "Row " + i});
+        combo.model = rows;
+        combo.value = "r0";
+        combo.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        tryCompare(combo, "open", true);
+        const scroller = combo.popup.contentItem;
+        verify(combo.list.height > tc.height, "the 40 rows need more than the window: " + combo.list.height);
+        verify(combo.popup.height <= tc.height - 2 * Tokens.spacingSm, "popup " + combo.popup.height + " fits the window");
+        compare(scroller.contentHeight, combo.list.height);
+        verify(scroller.interactive);
+        const at = scroller.mapToItem(null, 0, 0);
+        verify(at.y >= 0 && at.y + scroller.height <= tc.height, "inside the window vertically");
+        keyClick(Qt.Key_End);
+        verify(scroller.contentY > 0, "End scrolls to the last row");
+        verify(scroller.contentY <= scroller.contentHeight - scroller.height + 0.5);
+        keyClick(Qt.Key_Home);
+        compare(scroller.contentY, 0);
+        combo.popup.close();
+        tryCompare(combo, "open", false);
+        combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
+        combo.value = "x";
+    }
+
+    // A keyboard pick gives the focus back with a visible ring; a pointer pick does not show one.
+    function test_comboRingSurvivesAKeyboardPick() {
+        combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
+        combo.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Space);
+        tryCompare(combo, "open", true);
+        keyClick(Qt.Key_Down);
+        keyClick(Qt.Key_Return);
+        tryCompare(combo, "open", false);
+        verify(combo.activeFocus);
+        verify(combo.visualFocus, "the ring is kept after a keyboard pick");
+        compare(tc.picks[tc.picks.length - 1], "y");
     }
 
     function test_progressBar() {

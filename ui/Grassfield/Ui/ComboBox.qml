@@ -39,11 +39,15 @@ T.ComboBox {
     Accessible.onPressAction: if (root.visible && root.enabled)
         root.popup.open()
 
+    onPressedChanged: if (pressed)
+        root.openedByKey = false
+
     onModelChanged: root.currentIndex = Qt.binding(() => root.valueIndex)
 
     // The template steps the selection with the arrows; here every opening key shows the list instead.
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+            root.openedByKey = true;
             if (root.enabled)
                 root.popup.open();
             event.accepted = true;
@@ -91,40 +95,93 @@ T.ComboBox {
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
     }
 
+    // How the last opening was started: a key (the focus returns to the button with a visible ring) or the pointer.
+    property bool openedByKey: false
+
     popup: T.Popup {
         id: popup
 
-        y: root.height + Tokens.spacingXs
-        x: root.width - width
+        // The room the list may take: the window minus a margin on every side. A taller list scrolls (macOS: a pop-up taller
+        // than the screen scrolls, it never leaves it).
+        property real maxHeight: 1e6
+
         width: menu.width
-        height: menu.height
+        height: Math.min(menu.height, popup.maxHeight)
         padding: 0
         closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
+
+        // Below the button and right-aligned with it, above it when that does not fit, always inside the window.
+        function place(): void {
+            const win = root.Window.contentItem;
+            if (!win)
+                return;
+            const margin = Tokens.spacingSm;
+            popup.maxHeight = Math.max(Tokens.menuItemHeight, win.height - 2 * margin);
+            const at = root.mapToItem(win, 0, 0);
+            const w = menu.width;
+            const h = Math.min(menu.height, popup.maxHeight);
+            const left = Math.max(margin, Math.min(win.width - w - margin, at.x + root.width - w));
+            const below = at.y + root.height + Tokens.spacingXs;
+            const above = at.y - Tokens.spacingXs - h;
+            const top = below + h > win.height - margin && above >= margin ? above : Math.max(margin, Math.min(win.height - h - margin, below));
+            popup.x = left - at.x;
+            popup.y = top - at.y;
+        }
+
         onAboutToShow: {
             const items = [];
             const m = root.model;
             for (let i = 0; m && i < m.length; i++)
                 items.push({id: m[i].id, text: m[i].text, checked: i === root.valueIndex});
             menu.model = items;
+            menu.measure();
             menu.currentIndex = Math.max(0, root.valueIndex);
+            popup.place();
+            scroller.contentY = 0;
+            scroller.reveal();
         }
         onOpened: menu.forceActiveFocus()
+        // The focus goes back to the button with the reason the list was opened with: a key keeps the ring, the pointer shows none.
+        onClosed: {
+            root.focus = false;
+            root.forceActiveFocus(root.openedByKey ? Qt.TabFocusReason : Qt.MouseFocusReason);
+        }
 
         background: Item {}
 
-        // The menu sits in a plain Item: a Popup resizes its content item, which would replace the menu's own size bindings
-        // (its rows would overflow a 10 px strip). The Popup takes its size from the menu instead.
-        contentItem: Item {
+        // The menu sits in a Flickable (plain Item content): a Popup resizes its content item, which would replace the menu's
+        // own size bindings. The Popup takes its size from the menu, up to maxHeight; beyond that the list scrolls.
+        contentItem: Flickable {
+            id: scroller
+
             implicitWidth: menu.width
-            implicitHeight: menu.height
+            implicitHeight: Math.min(menu.height, popup.maxHeight)
+            contentWidth: menu.width
+            contentHeight: menu.height
+            interactive: contentHeight > height
+            clip: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+
+            // Keeps the row under the keyboard cursor in view.
+            function reveal(): void {
+                const top = Tokens.menuPadding + menu.currentIndex * Tokens.menuItemHeight;
+                const bottom = top + Tokens.menuItemHeight + Tokens.menuPadding;
+                if (top < scroller.contentY)
+                    scroller.contentY = Math.max(0, top - Tokens.menuPadding);
+                else if (bottom > scroller.contentY + scroller.height)
+                    scroller.contentY = Math.min(scroller.contentHeight - scroller.height, bottom - scroller.height);
+            }
 
             PopupMenu {
                 id: menu
                 accessibleName: root.accessibleName
                 onCloseRequested: popup.close()
+                onCurrentIndexChanged: scroller.reveal()
+                onWidthChanged: if (popup.visible) popup.place()
+                onHeightChanged: if (popup.visible) popup.place()
                 onActivated: item => {
                     popup.close();
-                    root.forceActiveFocus();
                     root.picked(item.id);
                     // Back to what the host holds: it moves `value` if it accepts the choice.
                     root.currentIndex = Qt.binding(() => root.valueIndex);

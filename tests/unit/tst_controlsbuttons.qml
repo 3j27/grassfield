@@ -294,6 +294,19 @@ TestCase {
             c.visible = true;
         }
         tc.toggles = 0;
+        toggleTool.checked = false;
+        toggleTool.visible = false;
+        toggleTool.Accessible.toggleAction();
+        toggleTool.Accessible.pressAction();
+        verify(!toggleTool.checked, "a hidden checkable ToolButton ignores toggle and press");
+        toggleTool.visible = true;
+        toggleTool.enabled = false;
+        toggleTool.Accessible.toggleAction();
+        verify(!toggleTool.checked, "a disabled one too");
+        toggleTool.enabled = true;
+        toggleTool.Accessible.toggleAction();
+        verify(toggleTool.checked, "a shown, enabled one toggles");
+        toggleTool.checked = false;
         toggle.visible = false;
         toggle.Accessible.toggleAction();
         toggle.Accessible.pressAction();
