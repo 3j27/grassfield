@@ -791,6 +791,14 @@
 <context>
     <name>AuthDialogModel</name>
     <message>
+        <source>This request arrived at %1, while the screen was locked. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
         <source>Incorrect password. Try again.</source>
         <translation>Mot de passe incorrect. Réessayez.</translation>
     </message>
@@ -2636,8 +2644,24 @@
         <translation>Corbeille</translation>
     </message>
     <message>
+        <source>“%1” was not opened: it is an app launcher, and Files never starts apps from a folder. Open apps from the Dock, Apps or Search.</source>
+        <translation>«&#xa0;%1&#xa0;» n’a pas été ouvert&#xa0;: c’est un lanceur d’app, et Fichiers ne démarre jamais d’app depuis un dossier. Ouvrez les apps depuis le Dock, Apps ou la recherche.</translation>
+    </message>
+    <message>
+        <source>“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.</source>
+        <translation>«&#xa0;%1&#xa0;» n’a pas été ouvert&#xa0;: c’est un programme ou un script, et Fichiers n’exécute jamais de programme depuis un dossier. Pour l’exécuter volontairement, utilisez un terminal.</translation>
+    </message>
+    <message>
+        <source>%1 items were not opened: Files never runs programs, scripts or app launchers from a folder.</source>
+        <translation>%1 éléments n’ont pas été ouverts&#xa0;: Fichiers n’exécute jamais de programme, de script ni de lanceur d’app depuis un dossier.</translation>
+    </message>
+    <message>
         <source>Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH).</source>
         <translation>L’ouverture de fichiers est désactivée dans cette session (GRASSFIELD_FILES_NO_LAUNCH).</translation>
+    </message>
+    <message>
+        <source>The web link was not opened: no default web browser is set.</source>
+        <translation>Le lien web n’a pas été ouvert&#xa0;: aucun navigateur web par défaut n’est défini.</translation>
     </message>
     <message>
         <source>The application is no longer installed.</source>

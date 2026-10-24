@@ -113,6 +113,18 @@ TestCase {
     }
 
     // ADR-0018: launcher lines (an application's own badge, progress and attention hint).
+    // GF-016: org.freedesktop.ScreenSaver idle inhibitors held by applications, one boolean for the idle module.
+    function test_screensaverLines() {
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":true,\"count\":2}"), {type: "screensaver", inhibited: true, count: 2});
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":false,\"count\":0}"), {type: "screensaver", inhibited: false, count: 0});
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":\"true\",\"count\":1}"), null);
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":1,\"count\":1}"), null);
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":true}"), null);
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":true,\"count\":-1}"), null);
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":true,\"count\":1.5}"), null);
+        compare(Bridge.parseBridgeLine("{\"type\":\"screensaver\",\"inhibited\":true,\"count\":1025}"), null);
+    }
+
     function test_launcherLines() {
         compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"firefox\",\"count\":5,\"progress\":0.5,\"urgent\":true}"),
                 {type: "launcher", app: "firefox", count: 5, progress: 0.5, urgent: true});

@@ -557,26 +557,31 @@ Singleton {
             toplevel.fullscreen = !toplevel.fullscreen;
     }
 
-    // Hyprland-independent entry points for key bindings (SUPER+M, SUPER+H).
+    // Hyprland-independent entry points for key bindings (SUPER+M, SUPER+H). None acts while the session is locked
+    // (GF-116: windows behind the lock are neither moved nor focused).
     IpcHandler {
         target: "windows"
 
         function minimize(): void {
-            root.minimize(root.focusedToplevel);
+            if (!SessionState.refuses("windows minimize"))
+                root.minimize(root.focusedToplevel);
         }
 
         // Super+Ctrl+arrows / Super+Ctrl+R (macOS Globe+Ctrl): the focused window to a half, or back to its size.
         function tile(place: string): void {
-            root.tile(root.focusedToplevel, place);
+            if (!SessionState.refuses("windows tile"))
+                root.tile(root.focusedToplevel, place);
         }
 
         function hide(): void {
-            if (root.focusedAppId !== "")
+            if (root.focusedAppId !== "" && !SessionState.refuses("windows hide"))
                 root.hideApp(root.focusedAppId);
         }
 
         // SUPER+`: next window of the focused app (macOS Cmd+`).
         function cycleApp(): void {
+            if (SessionState.refuses("windows cycleApp"))
+                return;
             const pool = root.toplevelsFor(root.focusedAppId).filter(t => !root.isMinimized(t));
             if (pool.length > 1)
                 root.activate(root.nextAfter(pool, root.focusedToplevel));

@@ -78,8 +78,13 @@ Scope {
     property var restoreAfter: null
 
     function show(): void {
-        if (open)
+        // Nothing opens over the lock screen (GF-116): CTRL+UP, a screen corner, the swipe and IPC alike.
+        if (open || SessionState.refuses("overview"))
             return;
+        if (locked) {
+            console.info("grassfield: overview refused: the session is locked");
+            return;
+        }
         FocusReturn.cancelFallback();
         previous = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
         selected = "";

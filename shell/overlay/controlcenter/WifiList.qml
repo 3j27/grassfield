@@ -157,6 +157,9 @@ Column {
                 anchors.rightMargin: Tokens.spacingSm
                 verticalAlignment: TextInput.AlignVCenter
                 echoMode: TextInput.Password
+                // A secret (GF-118, as the lock and polkit fields, shell/security/PasswordField.qml): no prediction, no
+                // learning by the input method, no capitalisation.
+                inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase | Qt.ImhHiddenText
                 clip: true
                 color: Appearance.colors.text
                 font.family: Appearance.fontFamily
