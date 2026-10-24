@@ -91,7 +91,10 @@ vouches for it (the cache root canonical, its ancestors root's or the user's and
 every directory from it down, the plugin and its stamp: no symlinks, the user's, not writable by group or others; the
 stamp is the ABI; the check is bounded to 5 s), else nothing: degraded mode (gate C2) and one translated notice from the shell
 naming the Hyprland version and the recovery (`--status`). A config reload keeps the build of the first parse (runtime
-note). `grassfield-compositor-rebuild` (run as the user; it refuses root) builds the shipped sources with CMake and the
+note). The stamp's second line, `source <pkgver-pkgrel>`, is the Grassfield version of the build: a build is loaded only
+when it is the installed sources' VERSION (a cached build from older sources is stale even for the right Hyprland and is
+rebuilt; `--status` says `reason=stale-build`), and the package depends on exactly its own `grassfield-desktop`
+version: the shell and the plugin of one release speak one protocol (ADR-0007, ADR-0009). `grassfield-compositor-rebuild` (run as the user; it refuses root) builds the shipped sources with CMake and the
 compiler in a private temporary directory (nice, at most 4 compilers, 15 min bound per step) and installs the result in
 the user's cache (0700 directories, symlinks refused, the build's own stamp written last); log out and back in to use it.
 With the opt-in setting `windows.rebuildExtension` (Settings > Desktop & Dock, off by default) the shell runs that build

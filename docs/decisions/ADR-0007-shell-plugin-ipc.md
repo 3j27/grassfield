@@ -155,13 +155,23 @@ request socket has no such limit (a `hyprctl` reply is written whole).
   when it is complete and not older than the one shown, retries a failed or timed-out fetch (2 s) three times (200, 400,
   800 ms) and then shows no state (the strip hides rather than show a stale state as current).
 - Exception to the first Consequence below (decided by the integrator under owner delegation D-5, review of
-  6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`. The shell and the plugin are
-  split packages of one PKGBUILD, built from one tree at one version, so a release always pairs them. The ABI stamp (C2)
-  checks the plugin against the running Hyprland, not against the shell: a mixed pair needs a partial upgrade of the split
-  packages (unsupported on Arch), and then degrades without broken JSON: a shell from before this amendment finds no
-  monitors in the notice and shows no strip; a shell from after it with an older plugin gets `unknown request` from
-  `hyprctl grassfield-stages` and, after its retries, shows no strip. `stages-available` is advertised only when
-  `hyprctl grassfield-stages` is registered.
+  6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`, because the session never
+  runs a shell and a plugin of different Grassfield versions together (re-review of c3cb01b; the ABI stamp alone did not
+  ensure it, it names the Hyprland build only):
+  - the packages: `grassfield-compositor` depends on exactly `grassfield-desktop=$pkgver-$pkgrel` (pacman upgrades the
+    pair together and refuses a partial upgrade of either; the desktop does not depend on the plugin and runs without it,
+    C2). `scripts/dev/check-version.sh` fails without that pin;
+  - the builds: every stamp has a second line, `source <pkgver-pkgrel>`, the Grassfield version the plugin was built from
+    (the PKGBUILD writes it for the packaged build, `grassfield-compositor-rebuild` for the user's). The session loader
+    (`config/hypr/grassfield/compositor.lua`) and the rebuild's `--vetted` load a build only when its stamp names the
+    running Hyprland's ABI and the installed sources' VERSION (`/usr/src/grassfield-compositor/VERSION`, same package):
+    a build in the user's cache made from older sources is stale even for the right Hyprland, `--status` says
+    `state=mismatch` / `reason=stale-build`, the shell shows its one degraded notice and, with the opt-in setting,
+    rebuilds it (`--session`); otherwise nothing is loaded (C2). Tests: `tests/shell/compositor_rebuild.sh`.
+  A mixed pair is then only possible against the package manager (a forced install) or with a plugin loaded by hand, and
+  degrades without broken JSON: a shell from before this amendment finds no monitors in the notice and shows no strip; a
+  shell from after it with an older plugin gets `unknown request` from `hyprctl grassfield-stages` and shows no strip.
+  `stages-available` is advertised only when `hyprctl grassfield-stages` is registered.
 
 ## Consequences
 - Breaking payload changes bump `gfc/N` and need a new ADR.
