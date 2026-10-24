@@ -344,6 +344,20 @@ Window {
 
     // Layout ---------------------------------------------------------------------------------
 
+    // File > Eject (Ctrl+E): the volume the sidebar points at (Sidebar.ejectRow).
+    readonly property bool canEject: sidebar.ejectRow >= 0
+
+    function ejectVolume(): bool {
+        return sidebar.eject();
+    }
+
+    Shortcut {
+        sequence: "Ctrl+E"
+        enabled: win.canEject
+        onActivated: win.ejectVolume()
+        onActivatedAmbiguously: activated()
+    }
+
     Sidebar {
         id: sidebar
         width: Tokens.filesSidebarWidth

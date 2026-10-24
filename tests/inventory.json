@@ -70,6 +70,7 @@
  {"path": "tests/unit/tst_filescustomize.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesgallery.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesglobalmenu.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_filessidebar.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesnav.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filestags.qml", "layer": "headless"},
  {"path": "tests/unit/tst_focusreturn.qml", "layer": "headless"},

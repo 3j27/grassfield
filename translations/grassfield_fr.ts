@@ -2966,6 +2966,10 @@
         <translation>Fermer l’onglet</translation>
     </message>
     <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
+    </message>
+    <message>
         <source>Get Info</source>
         <translation>Obtenir des informations</translation>
     </message>
@@ -4856,6 +4860,10 @@
     <message>
         <source>Eject %1</source>
         <translation>Éjecter %1</translation>
+    </message>
+    <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
     </message>
     <message>
         <source>Remove from Sidebar</source>
