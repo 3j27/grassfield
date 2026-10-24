@@ -225,7 +225,14 @@ vs_capture() {
   # Park again immediately before the capture (a window mapping under the pointer or a focus change during the settle
   # can move the software cursor: files.fr differed by 84 px between two runs) and wait a few frames.
   [[ -n ${VS_NOPARK:-} ]] || { vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null; vs_sleep 0.2; }
-  "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null
+  # A capture that fails must not leave the previous run's PNG to be compared as if it were new (shot.sh keeps the old file
+  # when grim fails): delete both copies first and fail when the new one is not there.
+  rm -f "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
+  "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null || true
+  if [[ ! -s $VS_DEV/shots/visual-$name.png ]]; then
+    echo "visual: capture $name failed (no screenshot of $VS_OUTPUT)" >&2
+    return 1
+  fi
   cp "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
   # VS_MASK="x1,y1,x2,y2 ...": black out machine-dependent text (free disk space, ...).
   local r
@@ -263,11 +270,24 @@ vs_notify() {
   DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Software Update" -t 0 "Updates available" "3 updates are ready to install."
 }
 
-# vs_px_diff A B: number of pixels that differ between two captures (fuzz 2 %, absorbs antialiasing).
+# vs_px_diff A B: number of pixels that differ between two captures (fuzz 2 %, absorbs antialiasing). When the comparison
+# cannot be made (a file missing or empty, sizes that differ, compare failing) it prints ERR, not a number, and says why on
+# stderr: every caller compares the result with test -ge / -lt, which then fails (status 2), so a broken capture is a FAIL and
+# never a "no difference".
 vs_px_diff() {
-  local n
-  n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
-  awk -v n="${n%% *}" 'BEGIN { printf "%d\n", n + 0 }'
+  local out rc=0
+  if [[ ! -s ${1:-} || ! -s ${2:-} ]]; then
+    echo "vs_px_diff: missing or empty capture: '${1:-}' '${2:-}'" >&2
+    echo ERR
+    return 0
+  fi
+  out=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1) || rc=$?
+  if (( rc > 1 )) || [[ ! ${out%% *} =~ ^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$ ]]; then
+    echo "vs_px_diff: compare failed (exit $rc): $out" >&2
+    echo ERR
+    return 0
+  fi
+  awk -v n="${out%% *}" 'BEGIN { printf "%d\n", n + 0 }'
 }
 
 # vs_windows_over X,Y...: "class:title" of the mapped, not hidden windows on GF-REF that cover one of the output-pixel
