@@ -91,34 +91,51 @@ TestCase {
     // ---- the state fetch (StagesLink runs one `hyprctl grassfield-stages` at a time; a fake fetcher here) ----
 
     // A fake StagesLink: applies StagesState's fetch steps and counts the fetches started; `retryMs` is the last backoff
-    // asked (0 none), `state` what the strip would show.
+    // asked (0 none), `staleMs` when the time bound wants a look (0 none), `state` what the strip would show, `now` a
+    // fake clock in ms (advance with wait(), which also fires the time bound when it falls due, as StagesLink's timer).
     function link(active) {
         return {
             fetch: StagesState.newFetch(),
             state: null,
             started: 0,
             retryMs: 0,
+            staleMs: 0,
+            staleAt: -1,
+            now: 1000,
             active: active === undefined ? true : active,
+            ctx: function () {
+                return {active: this.active, shown: this.state, now: this.now};
+            },
             apply: function (out) {
                 this.fetch = out.fetch;
                 if (out.state !== undefined)
                     this.state = out.state;
                 this.retryMs = out.retryMs;
+                this.staleMs = out.staleMs;
+                this.staleAt = out.staleMs > 0 ? this.now + out.staleMs : -1;
                 if (out.start)
                     this.started += 1;
             },
+            wait: function (ms) {
+                const until = this.now + ms;
+                if (this.staleAt >= 0 && this.staleAt <= until) {
+                    this.now = this.staleAt;
+                    this.apply(StagesState.onTick(this.fetch, this.ctx()));
+                }
+                this.now = until;
+            },
             notice: function (gen, on) {
                 const text = JSON.stringify({v: "gfc/1", type: "stages", gen: gen, on: on !== false});
-                this.apply(StagesState.onNotice(this.fetch, StagesState.parseNotice(text), this.active));
+                this.apply(StagesState.onNotice(this.fetch, StagesState.parseNotice(text), this.ctx()));
             },
             reply: function (text) {
-                this.apply(StagesState.onReply(this.fetch, text, this.state, this.active));
+                this.apply(StagesState.onReply(this.fetch, text, this.ctx()));
             },
             timeout: function () {
-                this.apply(StagesState.onTimeout(this.fetch, this.active));
+                this.apply(StagesState.onTimeout(this.fetch, this.ctx()));
             },
             retry: function () {
-                this.apply(StagesState.onRetry(this.fetch, this.active));
+                this.apply(StagesState.onRetry(this.fetch, this.ctx()));
             }
         };
     }
@@ -214,6 +231,74 @@ TestCase {
         compare(l.fetch.tries, 0);
         l.retry();
         compare(l.started, 2, "a retry due while a fetch runs starts nothing");
+    }
+
+    // Re-review of c3cb01b (stale-sim.log: 50 notices with every fetch failing kept the gen-1 state): each notice restarts
+    // the retries, never the clock; 3 s after the first unanswered notice nothing is shown.
+    function test_failingFetchesUnderAStreamOfNoticesGiveUpTheStateAfterThreeSeconds() {
+        const l = link();
+        l.notice(1);
+        l.reply(event({gen: 1}));
+        compare(l.staleMs, 0, "an answered notice leaves no clock running");
+        let gen = 2;
+        for (let i = 0; i < 2; i++) {
+            l.notice(gen++);
+            l.reply('{"v":"gfc/1","type":"error"}');
+            l.wait(200);
+            l.retry();
+            l.reply("");
+            l.wait(800);
+        }
+        compare(l.state.gen, 1, "under 3 s the shown state stays (2 s after the first unanswered notice)");
+        compare(l.staleAt, 4000, "the bound is 3 s after the first unanswered notice (t=1000), not after the latest");
+        l.notice(gen++);
+        l.reply("");
+        l.wait(1000);
+        compare(l.state, null, "3 s after the first unanswered notice the stale state is given up");
+        for (let i = 0; i < 50; i++) {
+            l.notice(gen++);
+            l.reply("");
+            l.wait(1000);
+        }
+        compare(l.state, null, "and stays given up while every fetch fails");
+        l.notice(gen);
+        l.reply(event({gen: gen}));
+        compare(l.state.gen, gen, "the first successful fetch shows the state again");
+        compare(l.staleMs, 0);
+    }
+
+    function test_aFetchThatNeverAnswersHidesTheStateAtThreeSecondsNotAtTheNextStep() {
+        const l = link();
+        l.notice(1);
+        l.reply(event({gen: 1}));
+        l.notice(2);
+        compare(l.staleMs, 3000, "the time bound is armed with the notice");
+        l.wait(2000);
+        compare(l.state.gen, 1);
+        l.timeout();
+        compare(l.staleMs, 1000);
+        l.wait(1000);
+        compare(l.state, null, "the bound fires at 3 s, while the retry waits");
+    }
+
+    function test_notices_answeredByFetchesInTimeNeverGoStale() {
+        // Notices faster than the fetches: every fetch succeeds but another notice came during it; the clock follows the
+        // oldest notice not yet answered, so a steady flow of answers never hides the strip.
+        const l = link();
+        let gen = 1;
+        l.notice(gen++);
+        for (let i = 0; i < 40; i++) {
+            l.wait(150);
+            l.notice(gen++);
+            l.wait(100);
+            l.reply(event({gen: gen - 2}));
+            verify(l.state !== null, "cycle " + i);
+            verify(l.staleMs > 0 && l.staleMs <= 3000);
+        }
+        l.wait(100);
+        l.reply(event({gen: gen - 1}));
+        compare(l.state.gen, gen - 1);
+        compare(l.staleMs, 0, "all answered: no clock");
     }
 
     function test_nothingIsFetchedOrShownWhileStagesIsNotActive() {

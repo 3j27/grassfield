@@ -123,70 +123,110 @@ function parse(data) {
 }
 
 // ---- the fetch of the state (StagesLink drives it: one `hyprctl grassfield-stages` at a time) ----
-// fetch: {running, again, tries}. Each function returns {fetch, start, retryMs, state}: `start` a fetch now; `retryMs` > 0:
-// start one after that many ms; `state`: the state to show (undefined: unchanged; null: none, the strip hides, rather than
-// a stale one shown as current).
+// fetch: {running, again, tries, pendingSince, againSince}. Each step takes ctx = {active, shown, now}: Stages may run
+// (available, enabled, flag on; nothing is fetched or shown otherwise), the state shown now (or null) and the time in ms.
+// It returns {fetch, start, retryMs, staleMs, state}: `start` a fetch now; `retryMs` > 0: start one after that many ms;
+// `staleMs` > 0: call onTick after that many ms; `state`: the state to show (undefined: unchanged; null: none, the strip
+// hides, rather than a stale one shown as current).
+// Staleness is bounded by time: a notice that no successful fetch has answered for more than staleAfterMs means no state,
+// however many notices keep coming (each one restarts the retries, never the clock).
 
 const maxTries = 3;              // retries after a failed fetch before the state is given up as unknown
 const retryBaseMs = 200;         // backoff: 200, 400, 800 ms
 const fetchDeadlineMs = 2000;    // a fetch not answered by then failed (StagesLink stops it)
+const staleAfterMs = 3000;       // a notice unanswered that long: the shown state is given up
 
+// pendingSince: when the oldest notice not answered by a successful fetch came (-1: none); againSince: the same for the
+// notices that came while the running fetch was under way (they are not answered by it).
 function newFetch() {
-    return {running: false, again: false, tries: 0};
+    return {running: false, again: false, tries: 0, pendingSince: -1, againSince: -1};
 }
 
-// A notice. `active`: Stages may run (available, enabled, flag on); nothing is fetched or shown otherwise.
-function onNotice(fetch, notice, active) {
-    const out = {fetch: Object.assign({}, fetch), start: false, retryMs: 0, state: undefined};
-    if (!notice || !active)
+function step(fetch, extra) {
+    return {fetch: Object.assign({}, fetch, extra || {}), start: false, retryMs: 0, staleMs: 0, state: undefined};
+}
+
+// The time bound on what is shown: none once the oldest unanswered notice is staleAfterMs old, else when to look again.
+function bounded(out, ctx) {
+    const visible = out.state !== undefined ? out.state : ctx.shown;
+    if (!ctx.active || out.fetch.pendingSince < 0 || !visible)
+        return out;
+    const left = out.fetch.pendingSince + staleAfterMs - ctx.now;
+    if (left <= 0)
+        out.state = null;
+    else
+        out.staleMs = left;
+    return out;
+}
+
+// A notice (parseNotice; null is ignored).
+function onNotice(fetch, notice, ctx) {
+    const out = step(fetch);
+    if (!notice || !ctx.active)
         return out;
     if (!notice.on) {
+        // Stages is off: that is the whole state, it answers every notice before it.
         out.state = offState(notice);
+        out.fetch.pendingSince = -1;
+        out.fetch.againSince = -1;
         return out;
     }
-    if (fetch.running)
+    if (out.fetch.pendingSince < 0)
+        out.fetch.pendingSince = ctx.now;
+    if (fetch.running) {
         out.fetch.again = true;
-    else {
+        if (out.fetch.againSince < 0)
+            out.fetch.againSince = ctx.now;
+    } else {
         out.fetch.running = true;
         out.fetch.tries = 0;
         out.start = true;
     }
-    return out;
+    return bounded(out, ctx);
 }
 
-// The fetch ended with `text` (the reply; "" or anything unparsable is a failure). `shown`: the state shown now, or null.
-function onReply(fetch, text, shown, active) {
-    const out = {fetch: Object.assign({}, fetch, {running: false}), start: false, retryMs: 0, state: undefined};
+// The fetch ended with `text` (the reply; "" or anything unparsable is a failure).
+function onReply(fetch, text, ctx) {
+    const out = step(fetch, {running: false});
     const parsed = parse(text);
-    if (parsed && parsed.complete) {
-        out.fetch.tries = 0;
-        if (active && !(shown && shown.gen >= 0 && parsed.gen >= 0 && shown.gen > parsed.gen))
-            out.state = parsed;
-        if (out.fetch.again && active) {
-            out.fetch.again = false;
-            out.fetch.running = true;
-            out.start = true;
-        }
+    if (!parsed || !parsed.complete)
+        return failed(out, ctx);
+    if (!ctx.active) {
+        out.fetch = newFetch();
         return out;
     }
-    return failed(out, active);
+    out.fetch.tries = 0;
+    const shown = ctx.shown;
+    if (!(shown && shown.gen >= 0 && parsed.gen >= 0 && shown.gen > parsed.gen))
+        out.state = parsed;
+    // The notices that came during this fetch are not answered by it: one more fetch, and their clock goes on.
+    out.fetch.pendingSince = out.fetch.again ? out.fetch.againSince : -1;
+    out.fetch.againSince = -1;
+    if (out.fetch.again) {
+        out.fetch.again = false;
+        out.fetch.running = true;
+        out.start = true;
+    }
+    return bounded(out, ctx);
 }
 
 // The fetch did not end in time (StagesLink stops it): a failure.
-function onTimeout(fetch, active) {
-    return failed({fetch: Object.assign({}, fetch, {running: false}), start: false, retryMs: 0, state: undefined}, active);
+function onTimeout(fetch, ctx) {
+    return failed(step(fetch, {running: false}), ctx);
 }
 
-function failed(out, active) {
-    if (!active) {
+function failed(out, ctx) {
+    if (!ctx.active) {
         out.fetch = newFetch();
         return out;
     }
     if (out.fetch.tries < maxTries) {
+        // The retry fetches the latest state anyway: the notices that came meanwhile need no fetch of their own.
         out.fetch.tries += 1;
         out.fetch.again = false;
+        out.fetch.againSince = -1;
         out.retryMs = retryBaseMs * Math.pow(2, out.fetch.tries - 1);
-        return out;
+        return bounded(out, ctx);
     }
     out.fetch = newFetch();
     out.state = null;
@@ -194,13 +234,18 @@ function failed(out, active) {
 }
 
 // A retry is due: start the fetch.
-function onRetry(fetch, active) {
-    const out = {fetch: Object.assign({}, fetch), start: false, retryMs: 0, state: undefined};
-    if (!active || fetch.running)
-        return out;
+function onRetry(fetch, ctx) {
+    const out = step(fetch);
+    if (!ctx.active || fetch.running)
+        return bounded(out, ctx);
     out.fetch.running = true;
     out.start = true;
-    return out;
+    return bounded(out, ctx);
+}
+
+// The time bound came (staleMs of an earlier step).
+function onTick(fetch, ctx) {
+    return bounded(step(fetch), ctx);
 }
 
 // The stages of a monitor other than the active one, most recent first (the order of the strip, slot 0 at the top).

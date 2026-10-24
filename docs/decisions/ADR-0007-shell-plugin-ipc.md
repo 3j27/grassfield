@@ -153,7 +153,8 @@ request socket has no such limit (a `hyprctl` reply is written whole).
   (StagesLink, the one consumer; it hands each state to Compositor for the menu bar) reads the event as a notice only,
   fetches only while Stages is active, one fetch at a time (notices during a fetch ask one more), applies a state only
   when it is complete and not older than the one shown, retries a failed or timed-out fetch (2 s) three times (200, 400,
-  800 ms) and then shows no state (the strip hides rather than show a stale state as current).
+  800 ms) and then shows no state (the strip hides rather than show a stale state as current); a notice no successful
+  fetch has answered within 3 s also means no state, however many notices keep coming.
 - Exception to the first Consequence below (decided by the integrator under owner delegation D-5, review of
   6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`, because the session never
   runs a shell and a plugin of different Grassfield versions together (re-review of c3cb01b; the ABI stamp alone did not
