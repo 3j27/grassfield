@@ -809,7 +809,10 @@ Singleton {
         id: quarantine
         // The fresh file is created only when the damaged one was really moved aside (quarantine-history.sh).
         command: ["sh", Quickshell.shellPath("notifications/quarantine-history.sh"), root.historyPath, String(Date.now())]
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
         onExited: exitCode => {
+            // qmllint enable signal-handler-parameters
             if (exitCode !== 0) {
                 root.historyWritable = false;
                 console.warn("notifications: the damaged history file could not be moved aside; it is left as it is and not rewritten");
