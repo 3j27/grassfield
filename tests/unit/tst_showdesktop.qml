@@ -178,4 +178,96 @@ TestCase {
         compare(hostile.focus, "");
         compare(hostile.windows[0].x, 0);
     }
+
+    // ---- crash recovery (ShowDesktop.recoverStep): the logic Compositor.recoverDesktop applies ------------------------------
+
+    readonly property var recordOne: ({screen: "DP-1", workspace: 2, focus: "", windows: [{address: "a1", x: 0, y: 0}, {address: "b2", x: 9, y: 0}]})
+
+    function test_recoveryWaitsForTheWindowList() {
+        const step = SD.recoverStep([recordOne], [], false, 0, 10);
+        compare(step.retry, true);
+        compare(step.clear, false, "nothing is decided before the list has loaded");
+        compare(step.moves.length, 0);
+    }
+
+    function test_recoveryGivesUpOnAListThatNeverLoads() {
+        const step = SD.recoverStep([recordOne], [], false, 9, 10);
+        compare(step.retry, false);
+        compare(step.clear, true, "no window list at all: no window to bring back");
+    }
+
+    function test_recoverySendsTheParkedOnesBackAndRetriesUntilTheyAreBack() {
+        const parked = [parkedWin("0xa1", 0, 0), parkedWin("0xb2", 0, 0)];
+        let step = SD.recoverStep([recordOne], parked, true, 0, 10);
+        compare(step.moves, [{address: "a1", workspace: 2}, {address: "b2", workspace: 2}]);
+        compare(step.retry, true);
+        compare(step.clear, false, "the record stays while a window is still parked");
+        // one came back, one is closed (absent): the next step has only what is still parked
+        step = SD.recoverStep([recordOne], [parkedWin("0xb2", 0, 0)], true, 1, 10);
+        compare(step.moves.length, 1);
+        compare(step.retry, true);
+        // all back or closed: the record goes
+        step = SD.recoverStep([recordOne], [win("0xa1", 2, 0, 0)], true, 2, 10);
+        compare(step.moves.length, 0);
+        compare(step.clear, true);
+        compare(step.retry, false);
+    }
+
+    function test_recoveryIsBoundedAndTheRecordStaysAtTheBound() {
+        const parked = [parkedWin("0xa1", 0, 0)];
+        const step = SD.recoverStep([recordOne], parked, true, 9, 10);
+        compare(step.moves.length, 1, "one last push");
+        compare(step.retry, false, "no unbounded loop");
+        compare(step.clear, false, "a window that is still parked never has no record");
+        let tries = 0;
+        let s = SD.recoverStep([recordOne], parked, true, tries, 10);
+        while (s.retry && tries < 100)
+            s = SD.recoverStep([recordOne], parked, true, ++tries, 10);
+        compare(tries, 9, "exactly the bound");
+    }
+
+    function test_recoverySkipsAWindowTheUserMovedByHand() {
+        const step = SD.recoverStep([recordOne], [parkedWin("0xa1", 0, 0), win("0xb2", 5, 0, 0)], true, 0, 10);
+        compare(step.moves.map(m => m.address), ["a1"]);
+    }
+
+    function test_stragglersKeepTheirOwnRecord() {
+        const records = SD.stragglerRecords([recordOne], ["0xb2"]);
+        compare(records.length, 1);
+        compare(records[0].workspace, 2);
+        compare(records[0].screen, "DP-1");
+        compare(records[0].focus, "");
+        compare(records[0].windows.map(w => w.address), ["b2"]);
+        compare(SD.stragglerRecords([recordOne], []), []);
+        compare(SD.stragglerRecords([recordOne], undefined), []);
+        compare(SD.stragglerRecords(undefined, ["a1"]), []);
+    }
+
+    // ---- the parking workspace shown (hide by state, never by toggling blindly) ----------------------------------------------
+
+    function test_theParkingWorkspaceShownIsTrackedPerDisplay() {
+        let shown = SD.parkingShownAfter({}, "activespecial", "special:desktop,DP-1");
+        verify(SD.parkingVisible(shown));
+        shown = SD.parkingShownAfter(shown, "activespecialv2", "-97,special:desktop,DP-2");
+        compare(Object.keys(shown).sort(), ["DP-1", "DP-2"]);
+        shown = SD.parkingShownAfter(shown, "activespecial", ",DP-1");
+        verify(SD.parkingVisible(shown), "DP-2 still shows it");
+        shown = SD.parkingShownAfter(shown, "activespecialv2", ",,DP-2");
+        verify(!SD.parkingVisible(shown));
+        // another special workspace replacing it, an unrelated event, nothing at all
+        shown = SD.parkingShownAfter({"DP-1": true}, "activespecial", "special:hidden,DP-1");
+        verify(!SD.parkingVisible(shown));
+        verify(SD.parkingVisible(SD.parkingShownAfter({"DP-1": true}, "workspace", "2")));
+        verify(!SD.parkingVisible(undefined));
+        verify(!SD.parkingVisible({}));
+    }
+
+    function test_stragglersAreMergedIntoANewRecordWithoutLosingThem() {
+        // an earlier restore left b2 parked; a new press captured a1: both are in the records of the new Show Desktop
+        const fresh = SD.captureAll([win("0xa1", 2, 0, 0)], [{name: "DP-1", workspace: 2}], "", false);
+        const merged = fresh.concat(SD.stragglerRecords([recordOne], ["0xb2"]));
+        compare(merged.length, 2);
+        compare(SD.toRestore(merged[1], [parkedWin("0xb2", 0, 0)]), ["b2"]);
+        compare(SD.parse(SD.serialize(merged)).length, 2);
+    }
 }

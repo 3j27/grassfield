@@ -318,13 +318,21 @@ Singleton {
             // switch on either display ends it too, but a workspace event is also what a focus move to the other display
             // raises: those events only schedule a look at what each display shows (desktopCheck). An ending never asks for
             // focus: the user's new Space or window has it.
+            if (event.name.startsWith("activespecial"))
+                root.parkingShown = ShowDesktop.parkingShownAfter(root.parkingShown, event.name, event.data);
             if (root.desktopRecords.length > 0) {
                 if (ShowDesktop.endsOn(event.name, event.data, root.desktopRecords)) {
                     console.info("grassfield: Show Desktop ends: " + event.name);
-                    if (event.name.startsWith("activespecial"))
-                        desktopActivation.restart();
-                    else
+                    if (event.name.startsWith("activespecial")) {
+                        // An app activated a parked window: the workspace is hidden FIRST (no frame with the parked windows
+                        // over the screen), the windows go back, and the activated window keeps the focus a moment later.
+                        const active = Hyprland.activeToplevel;
+                        root.desktopActivatedAddress = active ? active.address : "";
                         root.endShowDesktop(false);
+                        desktopActivation.restart();
+                    } else {
+                        root.endShowDesktop(false);
+                    }
                 } else if (ShowDesktop.checksSpaces(event.name))
                     desktopCheck.restart();
             }
@@ -513,6 +521,11 @@ Singleton {
     // Does nothing with Stages on (a stage cannot be rebuilt window by window, docs/specs/stages.md ST8/ST9), and minimized
     // or hidden windows are left alone.
     property var desktopRecords: []
+    // The parking workspace shown per display ({monitor: true}, from the activespecial events), the window an app activated and
+    // the windows the last ending sent back.
+    property var parkingShown: ({})
+    property string desktopActivatedAddress: ""
+    property var desktopEndedAddresses: []
     // A press waits for the window positions to be read (see showDesktop).
     property bool desktopPending: false
     readonly property string desktopStateDir: {
@@ -561,6 +574,12 @@ Singleton {
             return false;
         root.desktopRecords = [];
         persistDesktopRecords();
+        // Every ending leaves the parking workspace hidden: if it is shown (an app activated a parked window) it is hidden first,
+        // by state, never by toggling a workspace that is already hidden.
+        if (ShowDesktop.parkingVisible(root.parkingShown)) {
+            Hyprland.dispatch(ShowDesktop.hideParkingRequest());
+            root.parkingShown = ({});
+        }
         const windows = toplevelData();
         const focus = refocus ? ShowDesktop.focusTarget(records, shownSpaces()) : "";
         let back = [];
@@ -569,6 +588,7 @@ Singleton {
             back = back.concat(mine);
             mine.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
         }
+        root.desktopEndedAddresses = back;
         if (focus !== "" && back.indexOf(focus) >= 0)
             dispatchRequest(Minimized.focusWindowRequest(focus));
         // Nothing may stay hidden: a window still on the parking workspace a moment later is sent back again.
@@ -578,25 +598,22 @@ Singleton {
         return true;
     }
 
-    // An app activated a parked window and Hyprland showed the parking workspace over the screen: every window goes back, the
-    // workspace is hidden again (empty, it would stay shown) and the window that was activated keeps the focus, as in
-    // activate() (all three requests go through the same dispatch channel, in this order).
-    function endForActivation(): void {
-        const active = Hyprland.activeToplevel;
-        const records = root.desktopRecords;
-        const activated = active && records.some(r => r.windows.some(w => ShowDesktop.sameAddress(w.address, active.address))) ? active.address : "";
-        if (!endShowDesktop(false))
-            return;
-        Hyprland.dispatch(ShowDesktop.hideParkingRequest());
-        if (activated !== "")
-            dispatchRequest(Minimized.focusWindowRequest(activated));
-    }
-
-    // The window that was activated is only known once Hyprland has moved the focus to it (a moment after the workspace event).
+    // The window an app activated keeps the focus: asked for a moment after the ending (the windows went back first), for the
+    // window that was active when the parking workspace was shown, or the one that is now, if it is one of those that went back.
     Timer {
         id: desktopActivation
         interval: Tokens.showDesktopCheckMs
-        onTriggered: root.endForActivation()
+        onTriggered: {
+            const active = Hyprland.activeToplevel;
+            const candidates = [root.desktopActivatedAddress, active ? active.address : ""];
+            root.desktopActivatedAddress = "";
+            for (const a of candidates) {
+                if (a !== "" && root.desktopEndedAddresses.some(x => ShowDesktop.sameAddress(x, a))) {
+                    root.dispatchRequest(Minimized.focusWindowRequest(a));
+                    break;
+                }
+            }
+        }
     }
 
     // A display plugged or unplugged: the Spaces the displays show are compared again (a removed display ends Show Desktop).
@@ -633,8 +650,14 @@ Singleton {
                 again += stuck.length;
                 stuck.forEach(a => root.dispatchRequest(root.moveRequest(a, String(record.workspace))));
             }
-            if (again > 0 && ++tries < 3)
+            if (again > 0 && ++tries < 3) {
                 restart();
+            } else if (again > 0 && root.desktopRecords.length === 0) {
+                // Still parked after the last try: they get a record again (Show Desktop is on for them), never none.
+                console.warn("grassfield: Show Desktop: " + again + " window(s) did not come back; kept for the next press");
+                root.desktopRecords = ShowDesktop.stragglerRecords(records, parked);
+                root.persistDesktopRecords();
+            }
         }
     }
 
@@ -655,17 +678,24 @@ Singleton {
 
     function captureDesktop(): void {
         root.desktopPending = false;
-        // A verify of the previous ending must not send this press's parked windows back (three quick presses).
+        // A verify of the previous ending must not send this press's parked windows back (three quick presses): it is finished
+        // now instead. What is still parked after this last push goes into the new record (never parked with no record).
+        let stragglers = [];
+        if (desktopVerify.records.length > 0) {
+            const parkedNow = toplevelData().filter(w => w.parked).map(w => w.address);
+            stragglers = ShowDesktop.stragglerRecords(desktopVerify.records, parkedNow);
+            stragglers.forEach(r => r.windows.forEach(w => dispatchRequest(moveRequest(w.address, String(r.workspace)))));
+        }
         desktopVerify.stop();
         desktopVerify.records = [];
         desktopVerify.tries = 0;
         const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
         const records = ShowDesktop.captureAll(toplevelData(), shownSpaces(), focused ? focused.address : "", Settings.windowsStages);
-        if (records.length === 0) {
+        if (records.length === 0 && stragglers.length === 0) {
             DesktopState.focusRequested();
             return;
         }
-        root.desktopRecords = records;
+        root.desktopRecords = records.concat(stragglers);
         persistDesktopRecords();
         records.forEach(r => r.windows.forEach(w => dispatchRequest(moveRequest(w.address, ShowDesktop.PARKING))));
         DesktopState.focusRequested();
@@ -687,30 +717,25 @@ Singleton {
 
     property int recoverTries: 0
 
-    // The record stays (in memory and on disk) until every window it lists is back or known to be closed: nothing is decided
-    // before the window list has loaded, and a window that is still parked after a step is sent back again, a bounded number
-    // of times (Tokens.showDesktopRecoverTries). No focus request: the user did not ask for anything.
+    // The record stays (in memory and on disk) until every window it lists is back or known to be closed (ShowDesktop.recoverStep):
+    // nothing is decided before the window list has loaded, a window still parked after a step is sent back again, a bounded
+    // number of times (Tokens.showDesktopRecoverTries), and at the bound the record stays. No focus request: the user did not
+    // ask for anything.
     function recoverDesktop(): void {
         if (root.desktopRecords.length === 0)
             return;
         const loaded = Hyprland.toplevels && Hyprland.toplevels.values.length > 0;
-        if (!loaded && ++root.recoverTries < Tokens.showDesktopRecoverTries) {
+        const step = ShowDesktop.recoverStep(root.desktopRecords, toplevelData(), loaded, root.recoverTries, Tokens.showDesktopRecoverTries);
+        step.moves.forEach(m => dispatchRequest(moveRequest(m.address, String(m.workspace))));
+        root.recoverTries++;
+        if (step.retry) {
             desktopRecover.restart();
-            return;
+        } else if (step.clear) {
+            root.desktopRecords = [];
+            persistDesktopRecords();
+        } else {
+            console.warn("grassfield: Show Desktop: windows left over from an earlier run did not come back; the record stays");
         }
-        const windows = toplevelData();
-        let stuck = 0;
-        for (const record of root.desktopRecords) {
-            const mine = ShowDesktop.toRestore(record, windows);
-            stuck += mine.length;
-            mine.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
-        }
-        if (stuck > 0 && ++root.recoverTries < Tokens.showDesktopRecoverTries) {
-            desktopRecover.restart();
-            return;
-        }
-        root.desktopRecords = [];
-        persistDesktopRecords();
     }
 
     Process {

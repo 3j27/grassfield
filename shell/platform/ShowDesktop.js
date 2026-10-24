@@ -193,3 +193,66 @@ function parse(text) {
     const list = Array.isArray(data.records) ? data.records.slice(0, 16) : (data.record ? [data.record] : []);
     return list.map(parseRecord).filter(r => r !== null);
 }
+
+// One step of the crash recovery (a shell that starts with a record on disk): `windows` is the toplevel data, `loaded` whether
+// the window list has arrived at all, `tries` the steps taken so far, `maxTries` the bound. Returns {moves, retry, clear}:
+//  - nothing is decided before the list has loaded; if it never loads (bound) there are no windows to bring back: clear;
+//  - the parked windows of the record are sent back ({address, workspace}); no parked window left: clear;
+//  - parked windows left: retry while below the bound, and at the bound the record STAYS (on disk too): a window that is still
+//    parked never has no record, the next press of Show Desktop or the next start sends it back again.
+function recoverStep(records, windows, loaded, tries, maxTries) {
+    const last = tries + 1 >= maxTries;
+    if (!loaded)
+        return last ? {moves: [], retry: false, clear: true} : {moves: [], retry: true, clear: false};
+    const moves = [];
+    for (const r of Array.isArray(records) ? records : []) {
+        for (const a of toRestore(r, windows))
+            moves.push({address: a, workspace: r.workspace});
+    }
+    if (moves.length === 0)
+        return {moves: moves, retry: false, clear: true};
+    return {moves: moves, retry: !last, clear: false};
+}
+
+// The windows of `records` that are still parked (`parked`: addresses now on the parking workspace) as records of their own
+// (same display and Space, no focus): what the next ending must send back when an earlier restore did not finish.
+function stragglerRecords(records, parked) {
+    const set = {};
+    for (const p of Array.isArray(parked) ? parked : [])
+        set[address(p)] = true;
+    const out = [];
+    for (const r of Array.isArray(records) ? records : []) {
+        const windows = r.windows.filter(w => set[w.address] === true);
+        if (windows.length > 0)
+            out.push({screen: r.screen, workspace: r.workspace, focus: "", windows: windows});
+    }
+    return out;
+}
+
+// The parking workspace shown per display, from the events "activespecial" (data "name,monitor"; the name is empty when the
+// special workspace is hidden again) and "activespecialv2" ("id,name,monitor"). `shown`: {monitor: true}. Hiding it is decided
+// by this state and never by toggling blindly: a toggle on a workspace that is already hidden would open it.
+function parkingShownAfter(shown, eventName, data) {
+    const out = Object.assign({}, shown || {});
+    const parts = (typeof data === "string" ? data : "").split(",");
+    let name = "";
+    let monitor = "";
+    if (eventName === "activespecial") {
+        name = parts[0];
+        monitor = parts.slice(1).join(",");
+    } else if (eventName === "activespecialv2") {
+        name = parts[1];
+        monitor = parts.slice(2).join(",");
+    } else {
+        return out;
+    }
+    if (name === PARKING)
+        out[monitor] = true;
+    else
+        delete out[monitor];
+    return out;
+}
+
+function parkingVisible(shown) {
+    return Object.keys(shown || {}).some(k => shown[k] === true);
+}

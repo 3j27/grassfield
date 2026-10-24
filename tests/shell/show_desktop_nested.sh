@@ -15,7 +15,10 @@
 #     next + release: every window back, the focus is the window of the other app (C), on its Space;
 #   6 three presses in a row (0.45 s, 0.25 s): the verify of the second ending must not send the third's windows back;
 #   7 an app activating a parked window (a `focus` dispatch on it, as focus_on_activate does for a client): everything comes
-#     back, no special workspace stays shown over a screen, the activated window has the focus.
+#     back, no special workspace stays shown over a screen, the activated window has the focus;
+#   R crash recovery: show, then the shell is restarted (scripts/dev/shell-run.sh) with the windows parked: within the bound
+#     (Tokens showDesktopRecoverMs + tries, 25 s here) every window is back on its Space, nothing was focused by the recovery
+#     (the focus is what it was), nothing stays shown over a screen and the record file is gone.
 # Steps 3 to 5 first check that the windows really were parked.
 # Part 2, TWO displays (macOS: Show Desktop clears every display). A second headless output GF-SD2 is created (and removed at
 # the end): P on the first display, Q on GF-SD2 (focused). Checks:
@@ -23,8 +26,6 @@
 #   7 the pointer and the focus move to the other display: Show Desktop stays on (nothing comes back during 2 s);
 #   8 a Space switch on GF-SD2: both windows back on their own Spaces, GF-SD2 keeps the new Space, nothing left parked;
 #   9 show, the second press: both back, the focus is the window of the focused display (Q).
-# 10 (manual) crash recovery: with Show Desktop on, restart the shell (scripts/dev/shell-run.sh): the windows listed in the
-#   record file come back to their Space within about two seconds, and nothing is focused by it.
 # The test closes every window it opened and removes GF-SD2, also when it fails or is interrupted (EXIT trap), and at the start
 # it closes windows of an earlier run (app ids gf-sd-*). Only this tree's nested instance (scripts/dev/pidfile.sh); hyprctl is
 # read-only except through scripts/nestctl; clients get the nested socket only.
@@ -191,6 +192,30 @@ all_home "7"
 no_special() { [[ $(hq monitors | jq '[.[] | select(.specialWorkspace.name != "")] | length') == 0 ]]; }
 wait_for no_special && pass "7: the parking workspace is not shown over a screen" || fail "7: a special workspace is still shown"
 focus_is "7: the window that was activated (A) has the focus" "$a"
+
+# R crash recovery: the shell dies with the windows parked; the one that starts finds the record and sends them back
+focus_space "$S1"
+show_desktop
+on_space "R: A was parked first" "$a" special:desktop
+on_space "R: C was parked first" "$c" special:desktop
+wait_for has_record && pass "R: the record is on disk before the restart" || fail "R: no record in $state"
+focus_before=$(active_pid)
+"$root/scripts/dev/shell-run.sh" >/dev/null 2>&1
+shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
+[[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null || { echo "show_desktop: the shell did not restart"; exit 2; }
+recovered() { [[ $(parked_count) == 0 ]]; }
+for n in $(seq 1 125); do recovered && break; sleep 0.2; done
+recovered && pass "R: every window is back after the restart" || fail "R: $(parked_count) window(s) still parked 25 s after the restart"
+on_space "R: A back on Space $S1" "$a" "$S1"
+on_space "R: B back on Space $S1" "$b" "$S1"
+on_space "R: C back on Space $S1" "$c" "$S1"
+on_space "R: D still on Space $S2" "$d" "$S2"
+on_space "R: E back on Space $S1" "$e" "$S1"
+sleep 2
+[[ $(active_pid) == "$focus_before" ]] && pass "R: the recovery focused nothing (the focus is still $focus_before)" || fail "R: the focus moved from $focus_before to $(active_pid)"
+wait_for no_special && pass "R: no special workspace is shown over a screen" || fail "R: a special workspace is shown"
+gone_record() { [[ ! -s $state ]] || ! grep -q '"windows"' "$state"; }
+wait_for gone_record && pass "R: the record is removed" || fail "R: the record is still in $state"
 
 # ---- part 2: two displays ----------------------------------------------------------------------------------------------
 close_test_windows
