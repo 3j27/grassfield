@@ -60,4 +60,65 @@ TestCase {
         compare(FR.restoreTarget(null, {address: "0xb"}), null);
         compare(FR.restoreTarget({address: "", workspaceId: 1}, null), null);
     }
+
+    // ---- The frontmost changed while the surface was open (macOS: the key window is the frontmost one now) ----
+
+    readonly property var opened: ({address: "a1", workspaceId: 3, gen: 4})
+
+    function now(over) {
+        return Object.assign({gen: 4, focusedWorkspaceId: 3, placement: {workspaceId: 3, parked: false}}, over || {});
+    }
+
+    function replay(events, remembered) {
+        let gen = 0;
+        for (const e of events)
+            if (FR.changesFront(e[0], e[1], remembered))
+                gen++;
+        return gen;
+    }
+
+    function test_unchangedRestoresTheRememberedWindow() {
+        compare(FR.restoreTarget(opened, null, now()), {kind: "remembered", address: "a1", workspace: 3});
+    }
+
+    function test_aStagesSwapMeanwhileRestoresNothing() {
+        // Center open, the user clicks a strip tile: Hyprland has no active window under the layer, a stages event arrives.
+        compare(replay([["activewindowv2", ""], ["stages", "{}"], ["activewindowv2", ""]], "a1"), 1);
+        compare(FR.restoreTarget(opened, null, now({gen: 5})), null);
+    }
+
+    function test_aLayerClearingTheActiveWindowIsNotAChange() {
+        compare(replay([["activewindowv2", ""], ["activewindowv2", "a1"], ["activewindowv2", "0xA1"]], "a1"), 0);
+    }
+
+    function test_anotherActiveWindowIsAChange() {
+        compare(replay([["activewindowv2", "b2"]], "a1"), 1);
+        compare(replay([["activewindowv2", "0xB2"]], "0xa1"), 1);
+    }
+
+    function test_eachTopologyEventIsAChange() {
+        for (const name of ["openwindow", "closewindow", "movewindowv2", "workspacev2", "focusedmonv2", "activespecialv2", "stages"])
+            compare(replay([[name, "x"]], "a1"), 1, name);
+        for (const name of ["windowtitlev2", "openlayer", "closelayer", "fullscreen", ""])
+            compare(replay([[name, "x"]], "a1"), 0, name);
+    }
+
+    function test_aDesktopSwitchMeansTheWindowIsNotOnTheFocusedDesktop() {
+        compare(FR.restoreTarget(opened, null, now({focusedWorkspaceId: 4})), null);
+    }
+
+    function test_aWindowThatClosedMinimizedOrWentToASpecialWorkspaceIsNotPulledBack() {
+        compare(FR.restoreTarget(opened, null, now({placement: null})), null, "closed");
+        compare(FR.restoreTarget(opened, null, now({placement: {workspaceId: 3, parked: true}})), null, "minimized or hidden");
+        compare(FR.restoreTarget(opened, null, now({placement: {workspaceId: -98, parked: false}})), null, "special:minimized, special:desktop");
+        compare(FR.restoreTarget(opened, null, now({placement: {workspaceId: 0, parked: false}})), null, "no workspace");
+    }
+
+    function test_aWindowMovedToAnotherDesktopIsNotPulledBack() {
+        compare(FR.restoreTarget(opened, null, now({placement: {workspaceId: 5, parked: false}, focusedWorkspaceId: 5})), null);
+    }
+
+    function test_aWindowWithoutAKnownDesktopAtOpenStillRestoresOnTheFocusedOne() {
+        compare(FR.restoreTarget({address: "a1", workspaceId: 0, gen: 4}, null, now()), {kind: "remembered", address: "a1"});
+    }
 }

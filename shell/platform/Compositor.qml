@@ -1023,6 +1023,21 @@ Singleton {
         };
     }
 
+    // Where a window is now, for FocusReturn: {workspaceId, parked} (parked: minimized, hidden or unmapped), or null when it
+    // does not exist.
+    function placementOf(address: string): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const top = all.find(t => t.address === address);
+        if (!top)
+            return null;
+        const data = top.lastIpcObject;
+        const name = top.workspace ? top.workspace.name : "";
+        return {
+            workspaceId: top.workspace ? top.workspace.id : 0,
+            parked: name === hiddenWorkspace || name === minimizedWorkspace || minimizedAddresses().indexOf(address) >= 0 || !!(data && (data.mapped === false || data.hidden === true))
+        };
+    }
+
     // Addresses of the windows that exist now.
     function windowAddresses(): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
