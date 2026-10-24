@@ -18,6 +18,9 @@ function clean(text) {
     if (typeof text !== "string")
         return "";
     const v = text.trim();
+    // "unknown" (and its like) is what a build without a version id reports: it is not a version, it is no information.
+    if (/^(unknown|none|null|undefined|dev|0)$/i.test(v))
+        return "";
     return v.length > 0 && v.length <= valueMax && /^[A-Za-z0-9._+~-]+$/.test(v) ? v : "";
 }
 

@@ -26,6 +26,14 @@ TestCase {
         compare(UpdateNotice.fromReply('{"type":"capabilities","version":"' + "9".repeat(80) + '"}'), "");
     }
 
+    function test_aPluginReportingUnknownIsUnknownNotADifference() {
+        compare(UpdateNotice.fromReply('{"type":"capabilities","version":"unknown"}'), "");
+        compare(UpdateNotice.fromReply('{"type":"capabilities","version":"Unknown"}'), "");
+        compare(UpdateNotice.fromFile("unknown\n"), "");
+        verify(!UpdateNotice.pending("1.0.1", "1.0.1", "unknown"));
+        verify(!UpdateNotice.pending("unknown", "1.0.0", "1.0.0"));
+    }
+
     function test_spellingOfTheSameVersionIsNotADifference() {
         verify(UpdateNotice.same("1.0.0-rc1", "1.0.0rc1"));
         verify(UpdateNotice.same("1.0.0RC1", "1.0.0-rc1"));
