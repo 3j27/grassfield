@@ -179,6 +179,7 @@ def nocomments(text):
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     return "\n".join(re.sub(r"(^|\s)//.*$", r"\1", l) for l in text.split("\n"))
 allowed_dates = {
+    "shell/security/lock/LockView.qml": ["SystemClock {\n        id: clock\n        precision: SystemClock.Minutes\n    }"],
     "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = active ? new Date() : null;"],
     "shell/security/polkit/AuthDialogModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
 }
@@ -194,9 +195,14 @@ for base, _, files in os.walk(f"{root}/shell/security"):
             i = text.find(snippet)
             if i >= 0:
                 spans.append((i, i + len(snippet)))
-        for m in re.finditer(r"\bDate\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
+        for m in re.finditer(r"\bDate\b|\bSystemClock\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
             if not any(a <= m.start() < b for a, b in spans):
                 clock_hits.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} {m.group(0)}")
+# The lock screen's SystemClock (review of eee45cc) only feeds the two displayed texts.
+lockview = nocomments(read("shell/security/lock/LockView.qml"))
+clock_uses = re.findall(r"\bclock\s*\.\s*\w+", lockview)
+if not (len(clock_uses) == 2 and lockview.count("FixedTime.date(clock.date)") == 2):
+    clock_hits.append("LockView.qml clock uses " + ", ".join(clock_uses))
 expect("no wall clock in shell/security (" + ", ".join(clock_hits) + ")", not clock_hits)
 lock = code(read("shell/security/lock/Lock.qml"))
 expect("lock ownership check: the grace window after a confirmed lock is a single-shot Timer",
@@ -280,6 +286,8 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/idle/SleepInhibitor.qml#            if (inhibitor.running && !inhibitor.progressed) {#            if (false) {' \
   'shell/security/idle/SleepInhibitor.qml#"sh", "-c", "echo held; exec cat"#"cat"' \
   'shell/security/idle/IdleModel.js#var PROGRESS_BUDGET_MS = 10000;#var PROGRESS_BUDGET_MS = 3600000;' \
+  'shell/security/lock/LockView.qml#            text: Qt.formatTime(FixedTime.date(clock.date), #            visible: clock.minutes >= 0; text: Qt.formatTime(FixedTime.date(clock.date), ' \
+  'shell/security/idle/IdleModel.js#var FAST_RETRY_MS = 5000;#var FAST_RETRY_MS = 5000; var WALL = SystemClock;' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
   'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 3600000' \

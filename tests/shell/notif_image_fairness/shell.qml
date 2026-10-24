@@ -14,6 +14,7 @@ import qs.notifications
 //     sender's older one.
 //  C. A copy an open Notification Center row shows is protected like a banner's: three other senders' images later,
 //     the row still shows its image.
+//  D. The sender map stays bounded (600 names pass) without reusing a number or dropping a sender that has a copy.
 // Prints "notif-image-fairness: PASS" or the failures.
 ShellRoot {
     id: root
@@ -152,6 +153,18 @@ ShellRoot {
                 state("c1") === "ok" && state("d1") === "gone" && state("d2") === "ok" && state("d3") === "ok");
             check("C: the row still shows its image", Notifications.iconSource(path("c1"), "") !== "");
             Notifications.closeCenter();
+            // D: the sender map stays bounded; a sender whose copy is on disk keeps its number; numbers are never reused.
+            const center = Notifications.senderIds["center"]; // c1 is still on disk
+            let last = 0;
+            let monotonic = true;
+            for (let i = 0; i < 600; i++) {
+                const id = Notifications.senderIdOf("Passing sender " + i);
+                monotonic = monotonic && id > last;
+                last = id;
+            }
+            check("D: at most " + Notifications.maxSenderIds + " sender names kept (" + Object.keys(Notifications.senderIds).length + ")", Object.keys(Notifications.senderIds).length <= Notifications.maxSenderIds);
+            check("D: new senders always get new numbers", monotonic);
+            check("D: a sender with a copy on disk keeps its number (" + center + ", " + Notifications.senderIds["center"] + ")", center !== undefined && Notifications.senderIds["center"] === center);
             finish();
         }
     }

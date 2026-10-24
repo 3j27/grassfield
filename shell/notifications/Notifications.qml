@@ -752,9 +752,13 @@ Singleton {
     property real copyBudgetBytes: 64 * 1024 * 1024
     readonly property real copyShareBytes: Math.floor(copyBudgetBytes / 2)
     // Sender (NotificationPrefs.keyOf(appName)) -> small number, part of each copy's file name ("<n>.<sender>.img") so the
-    // helper can count a sender's copies. 0: no name. A sender that changes its name each time counts as several.
+    // helper can count a sender's copies. 0: no name. A sender that changes its name each time counts as several. At most
+    // maxSenderIds names are kept (review of eee45cc: the map grew without bound): past that, only the senders whose copies
+    // are on disk or queued stay. Numbers are never reused (senderCount only grows), so a dropped sender's leftover files
+    // never count for another one.
     property var senderIds: ({})
     property int senderCount: 0
+    readonly property int maxSenderIds: 256
     // POSIX sh; the directory, the size cap, the copy window, the byte budget, one sender's share, the numbers of the copies
     // to keep (comma list: those a banner on screen or an open Notification Center row shows, the batch's own included),
     // then "<n> <sender> <path>" triples as arguments (never interpolated). One line per triple: "ok" when
@@ -799,10 +803,28 @@ Singleton {
         if (key === "")
             return 0;
         if (senderIds[key] === undefined) {
+            if (Object.keys(senderIds).length >= maxSenderIds)
+                pruneSenderIds();
             senderCount++;
             senderIds[key] = senderCount;
         }
         return senderIds[key];
+    }
+
+    function pruneSenderIds(): void {
+        const used = {};
+        for (const path in localCopies) {
+            if (localCopies[path].state === "ok")
+                used[localCopies[path].sid] = true;
+        }
+        for (const q of copyQueue.concat(copyBatch))
+            used[q.sid] = true;
+        const next = {};
+        for (const key in senderIds) {
+            if (used[senderIds[key]])
+                next[key] = senderIds[key];
+        }
+        senderIds = next;
     }
 
     // The app name of the notification that shows `path` (a history row after a restart), else "".
