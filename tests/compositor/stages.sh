@@ -40,7 +40,11 @@
 # the pointer over an unrelated tiled window, the stage's back window or empty desktop, the stage's window now in front gets
 # them when the remembered one closed under the layer, a real click beside the layer or just after it wins, and the Stages
 # event names the front window and app while Hyprland has no active window (8i); a focus-matched window rule is rechecked
-# when the plugin clears the active window (8c).
+# when the plugin clears the active window (8c). A keyboard device that appears while an Exclusive layer holds the keyboard
+# after a swap (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) changes nothing: the layer
+# gets every key of the new device and of the next one, no window gets one, and after the layer the swapped-in front window
+# gets every key (8j; integrator decision 2026-10-24: stages.sh 8c, 8f, 8g, 8h, 8i(e) lost every key in the three runs
+# whose nested session had no keyboard device of its own, see "keyboard devices" at the start of the run).
 # Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Never hangs:
 # every wait is bounded, a FAIL while the nested Hyprland does not answer stops the run, and the run is bounded (check 15
 # min, perf its seconds + 15 min).
@@ -374,6 +378,11 @@ check() { # <label> <status> [detail]
 
 say "stages $mode: run $run, nested pid $hypr_pid ($(nestctl -j version | jq -r .tag)), output $out ${mon_w}x${mon_h} at $mon_x,$mon_y"
 say "plugin features: $(features)"
+# Keyboard devices of the nested session that are not this run's virtual keyboards (the backend keyboard aquamarine gets
+# from the parent seat; none when the parent seat had no keyboard at start). Without one, every key of this run comes from
+# a keyboard device that appears for its burst and goes (2026-10-24: the three runs that lost keys in 8c to 8i(e) had none).
+own_kbds=$(nestctl -j devices 2>/dev/null | jq -r '[.keyboards[]? | select(.name | test("virtual") | not)] | length')
+say "keyboard devices: ${own_kbds:-?} of the session's own (besides the virtual keyboards of this run)"
 
 # New windows open on the output under the pointer, centred.
 pointer abs $((mon_w / 2)) $((mon_h - 160)) sleep 50
@@ -1062,6 +1071,45 @@ check "8i(d) the remembered front window closed under the layer: its stage's win
 kill "$pid_h1" 2>/dev/null
 sleep 0.8
 pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100
+
+# 8j. a keyboard device appears while an Exclusive layer holds the keyboard after a swap (integrator decision 2026-10-24,
+# macOS: a modal system prompt always gets the keyboard; wlr-layer-shell: an Exclusive Top or Overlay surface gets every
+# key). c3 holds the keyboard, the layer takes it, b's stage is activated (c3 goes to the strip). Then a new keyboard
+# device (tests/tools/vkbd) appears and types j k, and while it is still there another one (keys.sh) types l m: the layer
+# gets the four keys, no window one. When the layer is gone the swapped-in front window (b3) gets every key, c3 nothing.
+vkbd() { timeout 20 "$root/tests/tools/vkbd/vkbd.sh" "$@" >>"$log" 2>&1; }
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
+sleep 0.5
+sb=$(stage_of "$addr_b3")
+start_exclusive
+ex_rc=$?
+keys x3
+sleep 0.4
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+a0=$(st_count '"active":'"$sb"',')
+stages "{\"op\":\"activate\",\"stage\":$sb}"
+wait_st '"active":'"$sb"',' "$a0" 2000
+sw_rc=$?
+sleep 0.6
+vkbd sleep 400 tap j tap k sleep 2600 &
+vkbd_pid=$!
+sleep 1.4
+keys lm
+sleep 0.4
+ex1=$(layer_got "$exlog" key jklm)
+capb_mid=$(cap_since "$cap_b" "$capb0"); capc_mid=$(cap_since "$cap_c" "$capc0")
+wait "$vkbd_pid" 2>/dev/null
+((ex_rc == 0 && sw_rc == 0 && ex1 >= 4)) && [[ -z $capb_mid && -z $capc_mid ]]
+check "8j a keyboard device appears under the Exclusive layer after a swap: the layer gets every key of it and of the next one, no window one" $? \
+  "layer got $ex1 of the 4 keys (j k from the new device, l m from the next); b3 got '$capb_mid', c3 got '$capc_mid'"
+stop_exclusive
+sleep 1
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+keys n8
+sleep 0.4
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+[[ $capb_new == *n8* && -z $capc_new ]] && in_active "$addr_b3"
+check "8j after the layer: the swapped-in front window (b3) gets every key, c3 nothing" $? "b3 got '$capb_new', c3 got '$capc_new'"
 
 # 8d. a menu (xdg_popup with a grab) of the active stage's window keeps its keys; when that window goes to the strip its
 # menu closes at once, as a click outside it would, and every key goes to the new stage (R13 counter-review of 17208af:
