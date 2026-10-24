@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.platform
 import qs.services
 import qs.notifications
 import "HotCornerActions.js" as Actions
@@ -73,6 +74,9 @@ Scope {
                     corner: modelData
                     action: root.actionFor(modelData)
                     blocked: action === "notifications" && Notifications.centerOpen
+                    // Every full-attention shell surface reports to FocusReturn (Apps, Overview, Search, menus, the
+                    // switcher, the Notification Center); FocusReturn.locked follows the session lock.
+                    covered: FocusReturn.locked || Object.keys(FocusReturn.holders).length > 0
                     onFire: root.run(action, perScreen.modelData.name)
                 }
             }
