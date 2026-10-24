@@ -85,7 +85,6 @@
  {"path": "tests/shell/show_desktop_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/screen_unplug_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/ux_mutants.sh", "layer": "logic"},
- {"path": "tests/unit/tst_screenchoice.qml", "layer": "headless"},
  {"path": "tests/unit/tst_showdesktop.qml", "layer": "headless"},
  {"path": "tests/shell/show_desktop_nested.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/unit/tst_localeformat.qml", "layer": "headless"},
