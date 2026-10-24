@@ -1,7 +1,10 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Networking
+import Grassfield.Ui
+import "Airplane.js" as Airplane
 import "../overlay/controlcenter/Model.js" as Model
 
 // Connectivity summary for the menu bar (NetworkManager through Quickshell.Networking).
@@ -144,28 +147,95 @@ Singleton {
     // opened through the session's uaccess ACL). NetworkManager and BlueZ follow the block. When rfkill is not usable
     // (no /dev/rfkill, not writable, no rfkill tool) the state is derived from the services' power switches and
     // switching them is the fallback; `airplaneNote` then says why (shown once per use, and logged).
+    // Airplane Mode is its own state (macOS): `airplaneState` {on, restore} is set by setAirplane, persisted in
+    // $stateDir/airplane.json and read back at start. On remembers the radios that were on, off restores exactly those; Wi-Fi
+    // off alone is not Airplane Mode (Airplane.js).
+    property var airplaneState: Airplane.end()
     readonly property bool rfkillMode: Rfkill.known
-    readonly property bool airplane: rfkillMode ? Rfkill.airplane : Model.airplaneOn(wifiDevice !== null, wifiEnabled, BluetoothState.available, BluetoothState.enabled)
+    readonly property var radiosNow: rfkillMode ? Airplane.radiosFromRfkill(Rfkill.devices) : Airplane.radiosFromServices(wifiDevice !== null ? wifiEnabled : null, BluetoothState.available ? BluetoothState.enabled : null)
+    readonly property bool airplane: Airplane.reconcile(airplaneState, radiosNow).on
     readonly property bool airplaneAvailable: rfkillMode || wifiDevice !== null || BluetoothState.available
+    readonly property string airplaneFile: stateDir + "/airplane.json"
+    readonly property string stateDir: {
+        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
+        if (dev)
+            return dev;
+        const xdg = Quickshell.env("XDG_STATE_HOME");
+        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
+    }
+
+    // Written 0600 in a 0700 directory (the repo convention for state files).
+    function saveAirplane(state: var): void {
+        airplaneState = state;
+        airplaneWriter.command = ["sh", Quickshell.shellPath("services/write-private.sh"), stateDir, airplaneFile, Airplane.serialize(state)];
+        airplaneWriter.running = true;
+    }
+
+    // A persisted "on" that no longer matches the radios is erased, not just hidden: it is checked at start (after the radios were
+    // read) and whenever a radio changes, except for a moment after Airplane Mode was just switched on or at start (the
+    // radios have not followed yet), and again when that moment ends (a failed block leaves nothing behind).
+    property bool airplaneSettling: true
+    function settleAirplane(): void {
+        if (!airplaneSettling && Airplane.shouldClear(airplaneState, radiosNow))
+            saveAirplane(Airplane.end());
+    }
+    onRadiosNowChanged: settleAirplane()
+
+    Timer {
+        id: airplaneSettle
+        running: true
+        interval: Tokens.quicksettingsAirplaneSettleMs
+        onTriggered: {
+            root.airplaneSettling = false;
+            root.settleAirplane();
+        }
+    }
+
+    FileView {
+        id: airplaneReader
+        path: root.airplaneFile
+        printErrors: false
+        onLoaded: {
+            root.airplaneState = Airplane.parse(text());
+            root.settleAirplane();
+        }
+    }
+
+    Process {
+        id: airplaneWriter
+    }
     // Why the soft block is not used, "" while it is (or while the probe has not finished).
     readonly property string airplaneNote: Rfkill.probed && !Rfkill.usable ? qsTr("Airplane Mode: %1; using the Wi-Fi and Bluetooth switches").arg(Rfkill.reasonText) : ""
     signal airplaneFallback(string why)
 
     function setAirplane(on: bool): void {
+        if (guarded("airplane mode " + (on ? "on" : "off") + (rfkillMode ? " (rfkill)" : "")))
+            return;
+        // Turning it on remembers the radios that are on now; turning it off brings back exactly those.
+        const radios = radiosNow;
+        const restore = on ? [] : Airplane.typesToRestore(airplaneState, radios);
+        saveAirplane(on ? Airplane.begin(radios) : Airplane.end());
+        airplaneSettling = true;
+        airplaneSettle.restart();
         if (rfkillMode) {
-            if (!guarded("airplane mode (rfkill " + (on ? "block" : "unblock") + ")"))
-                Rfkill.setBlocked(on);
+            Rfkill.setBlocked(on, restore);
             return;
         }
         if (airplaneNote !== "") {
             console.info("airplane mode: " + airplaneNote);
             airplaneFallback(airplaneNote);
         }
-        const t = Model.airplaneTargets(wifiDevice !== null, BluetoothState.available, on);
-        if (t.wifi !== null)
-            toggleWifi(t.wifi);
-        if (t.bluetooth !== null)
-            BluetoothState.setEnabled(t.bluetooth);
+        if (on) {
+            if ("wlan" in radios)
+                toggleWifi(false);
+            if ("bluetooth" in radios)
+                BluetoothState.setEnabled(false);
+        } else {
+            if (restore.indexOf("wlan") >= 0)
+                toggleWifi(true);
+            if (restore.indexOf("bluetooth") >= 0)
+                BluetoothState.setEnabled(true);
+        }
     }
 
     function connectWithPassword(row: var, psk: string): void {

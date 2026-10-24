@@ -11,6 +11,10 @@ default:
 # All offline checks (L0).
 check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-tidy check-secrets
 
+# Every offline check except clang-tidy, for a tree that leaves compositor/ unchanged (`just check` runs them all). One
+# recipe on purpose: `just check-schema check-shell` would pass check-shell to check-schema as a file argument.
+check-quick: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-secrets
+
 # clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
 check-tidy:
     scripts/dev/tidy.sh
@@ -75,6 +79,15 @@ check-secrets:
 # Syntax-check shell scripts.
 check-scripts:
     for f in scripts/dev/*.sh scripts/gates/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
+
+# Run any gate command and keep a dated report (commit, build id, exit code, log path) in .dev/gate-runs/ (GF-036), e.g.
+# `just gate check just check`, `just gate nested-overview tests/compositor/overview.sh`. Exits with the command's code.
+gate name *cmd:
+    scripts/dev/gate-run.sh {{name}} -- {{cmd}}
+
+# Copy the gate reports of .dev/gate-runs/ into docs/testing/runs/ (the repository keeps them); review, then commit.
+gate-archive:
+    scripts/dev/gate-run.sh --archive
 
 # Omarchy private paths, commands and units Grassfield relies on (docs/compat.md); --require fails without Omarchy.
 check-omarchy *args:

@@ -6,12 +6,13 @@
 --   monitors the user's monitors.lua loaded (or does not exist)
 --   input    "omarchy" (default.hypr.input: layout from /etc/vconsole.conf, compose:caps, repeat rate, numlock) or
 --            "fallback" (the same defaults reproduced below because that module could not be loaded)
+--   input_applied  Grassfield's pointer defaults went in before the user's input.lua (else session.lua applies them)
 --   problems list of one-line descriptions of every step that failed (logged, and one notification at start)
 --
 -- Capability check, not a version check: /usr/share/omarchy/version is a stale upstream file (docs/compat.md). What
 -- matters is whether the modules named below exist; scripts/dev/omarchy-compat.sh checks the same list.
 
-local M = { ok = false, reason = nil, monitors = true, input = "none", problems = {} }
+local M = { ok = false, reason = nil, monitors = true, input = "none", input_applied = false, problems = {} }
 
 local omarchy_path = os.getenv("OMARCHY_PATH") or "/usr/share/omarchy"
 local home = os.getenv("HOME") or ""
@@ -47,8 +48,8 @@ if not ok then
 end
 M.ok = true
 
--- The system keyboard defaults, as the Omarchy session gets them. Grassfield's own input.lua is applied afterwards
--- (core.lua) and only sets pointer-related keys, so layout, options, repeat and numlock stay as set here.
+-- The system keyboard defaults, as the Omarchy session gets them. Grassfield's own input.lua follows (below, before the
+-- user's input.lua) and only sets pointer-related keys, so layout, options, repeat and numlock stay as set here.
 local input_ok, input_err = pcall(require, "default.hypr.input")
 if input_ok then
   M.input = "omarchy"
@@ -81,6 +82,12 @@ else
     },
   })
 end
+
+-- GF-066: Grassfield's pointer defaults and the Mouse & Trackpad choices saved by Settings go BEFORE the user's own
+-- input.lua, so the user's file wins (macOS: these settings belong to the user). Applied here, not in core.lua.
+local gi_ok, gi_err = pcall(require, "grassfield.input")
+M.input_applied = gi_ok
+if not gi_ok then problem("pointer defaults: " .. tostring(gi_err)) end
 
 -- The user's own files (Omarchy templates; they may call `o.*`). A failure in one does not drop the others.
 if exists(home .. "/.config/hypr/monitors.lua") then

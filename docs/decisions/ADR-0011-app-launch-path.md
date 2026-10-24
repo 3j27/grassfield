@@ -1,5 +1,5 @@
 # ADR-0011: One app launch path, isolated in dev sessions
-Status: Proposed (applied provisionally) · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (applied provisionally)) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 The Dock, Apps, Search, the menu bar's app menus, the Dock menu and the desktop each started applications

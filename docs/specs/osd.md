@@ -46,7 +46,7 @@ media-key bindings (the session config binds keys to the IPC targets below), sli
 IPC targets (Quickshell IPC, `qs -p <shell> ipc call ...`): `osd display <volume|brightness|keyboard> <0..1> <muted>` and `osd hide` (tests; the
 function is not called `show` because `qs ipc` reserves that word), `volume up|down|mute`, `brightness up|down`, `keyboard up|down` (backlight; bind the keyboard-backlight keys of the session config to it).
 Tokens: `osd.*` (width, height, iconSize, barHeight, gap, hideDelay). Services: `qs.services.Brightness` (device, level, available).
-Window: layer-shell Overlay, namespace `grassfield-osd`, first screen only.
+Window: layer-shell Overlay, namespace `grassfield-osd`, the active display only (`Compositor.activeScreenName`: the focused output, the first as a last resort; macOS).
 
 ## Dependencies (verified versions)
 Quickshell 0.3.1 (`Quickshell.Services.Pipewire`, `Quickshell.Io`), `wpctl` and `brightnessctl` in `/usr/bin` (verified present),
@@ -65,7 +65,7 @@ Idle cost: one 1.5 s file read while a backlight exists. The pill exposes `Acces
 "Brightness N%" (translated through `qsTr`). Reduce Motion shortens the fades.
 
 ## Known limitations
-- Top-right pill only, first screen only (not the screen of the focused window).
+- Top-right pill only, on the active display (the focused output, not the first one); every screen-less surface (Notification Center, Search, Apps, switcher, centred popups, banners, OSD) opens by that one rule.
 - Brightness is not changed in the dev session, so only the display path is verified there.
 - No microphone OSD (the keyboard backlight HUD is requirement 8, the input source HUD 9: it shows names as the compositor reports them, not flags or abbreviations, and a real layout switch cannot be made in the nested session, which has one layout); no segmented/centered style. The keyboard HUD is not verified on hardware (the dev machine has no `kbd_backlight` LED): the logic is tested with a faked device, the look is the volume pill's.
 - Volume cannot exceed 100 % (`-l 1`).

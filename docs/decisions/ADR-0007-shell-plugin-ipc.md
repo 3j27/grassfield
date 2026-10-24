@@ -1,5 +1,5 @@
 # ADR-0007: Shell ↔ plugin IPC (`gfc/1`)
-Status: Proposed (S2 evidence recorded; applied provisionally) · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (S2 evidence recorded; applied provisionally)) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 grassfield-shell (Quickshell) must drive `grassfield-compositor` (minimize with target rectangles,

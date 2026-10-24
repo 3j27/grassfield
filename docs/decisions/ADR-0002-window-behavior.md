@@ -1,5 +1,5 @@
 # ADR-0002: Window behavior
-Status: Proposed (applied provisionally) · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (applied provisionally)) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 macOS windows are floating, have titlebars with close/minimize/zoom on the left, minimize into the Dock,

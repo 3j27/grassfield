@@ -1,5 +1,5 @@
 # ADR-0004: Notifications storage and privacy
-Status: Proposed · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 grassfield-shell is the only `org.freedesktop.Notifications` server in the Grassfield session (D2, §5.2),

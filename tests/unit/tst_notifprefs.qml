@@ -60,6 +60,37 @@ TestCase {
         verify(NotificationPrefs.bodyShown("unlocked", false));
     }
 
+    function test_hiddenPreviewShowsTheAppNameAndAGenericLine() {
+        const hidden = NotificationPrefs.display(false, "Re: salary", "<b>secret</b>", "Mail", "Notification");
+        compare(hidden.title, "Mail");
+        compare(hidden.body, "Notification");
+        const nameless = NotificationPrefs.display(false, "Re: salary", "x", "", "Notification");
+        compare(nameless.title, "Notification");
+        const shown = NotificationPrefs.display(true, "Re: salary", "text", "Mail", "Notification");
+        compare(shown.title, "Re: salary");
+        compare(shown.body, "text");
+    }
+
+    function test_hiddenPreviewShowsNoImageAndNoSenderActions() {
+        compare(NotificationPrefs.imageShown(false, "file:///photo.png"), "");
+        compare(NotificationPrefs.imageShown(true, "file:///photo.png"), "file:///photo.png");
+        compare(NotificationPrefs.actionsShown(false, "[{\"id\":\"reply\",\"text\":\"Reply to Anna\"}]"), "[]");
+        compare(NotificationPrefs.actionsShown(true, "[{\"id\":\"a\"}]"), "[{\"id\":\"a\"}]");
+    }
+
+    function test_hiddenPreviewKeepsOnlyAPlainThemeAppIcon() {
+        compare(NotificationPrefs.appIconShown(true, "/home/u/photo.jpg"), "/home/u/photo.jpg");
+        compare(NotificationPrefs.appIconShown(false, "/home/u/photo.jpg"), "");
+        compare(NotificationPrefs.appIconShown(false, "file:///tmp/p.png"), "");
+        compare(NotificationPrefs.appIconShown(false, "image://x/y"), "");
+        compare(NotificationPrefs.appIconShown(false, "../secret"), "");
+        compare(NotificationPrefs.appIconShown(false, "a..b"), "");
+        compare(NotificationPrefs.appIconShown(false, "org.mozilla.firefox"), "org.mozilla.firefox");
+        compare(NotificationPrefs.appIconShown(false, "mail-unread"), "mail-unread");
+        compare(NotificationPrefs.appIconShown(false, ""), "");
+        compare(NotificationPrefs.appIconShown(false, undefined), "");
+    }
+
     function test_appsToList() {
         compare(NotificationPrefs.appsToList(["Zed", "mail", "Alpha"], list), ["Alpha", "Mail", "Signal", "Zed"]);
         compare(NotificationPrefs.appsToList(undefined, []), []);

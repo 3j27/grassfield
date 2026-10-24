@@ -129,3 +129,29 @@ function appsToList(seen, list) {
         seen.forEach(add);
     return out.sort((a, b) => a.localeCompare(b));
 }
+
+// What a notification shows: with previews hidden the app name is the title (`generic` when the sender has no name) and
+// `generic` is the only line of text, never the sender's title or body (macOS); otherwise title and body as sent.
+function display(shown, summary, body, appName, generic) {
+    if (shown)
+        return {title: summary, body: body};
+    return {title: typeof appName === "string" && appName !== "" ? appName : generic, body: generic};
+}
+
+// The sender's picture (contact photo, attachment): with previews hidden only the app icon shows, so no image.
+function imageShown(shown, image) {
+    return shown ? image : "";
+}
+
+// The app icon: with previews hidden only a plain theme name stays (no path, URL or `..`: `notify-send -i /path/photo.jpg` is a
+// picture of the sender's choosing, so the icon falls back to the generic one); shown as sent otherwise.
+function appIconShown(shown, appIcon) {
+    if (shown || typeof appIcon !== "string")
+        return shown ? appIcon : "";
+    return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(appIcon) && appIcon.indexOf("..") < 0 ? appIcon : "";
+}
+
+// The sender's action buttons: shown once the content may be shown (macOS), none while previews are hidden.
+function actionsShown(shown, actionsJson) {
+    return shown ? actionsJson : "[]";
+}

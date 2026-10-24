@@ -773,7 +773,7 @@ ListView {
             height: rowLoader.height
             activeFocusOnTab: true
             Accessible.role: Accessible.ListItem
-            Accessible.name: item.summary !== "" ? item.summary : Notifications.groupLabel(item.appName)
+            Accessible.name: Notifications.summaryFor(item.summary, item.appName) !== "" ? Notifications.summaryFor(item.summary, item.appName) : Notifications.groupLabel(item.appName)
             Accessible.description: item.appName
             Accessible.focusable: true
             Accessible.onPressAction: row.open()
@@ -840,7 +840,7 @@ ListView {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: qsTr("Close")
-                Accessible.description: item.summary
+                Accessible.description: Notifications.summaryFor(item.summary, item.appName)
                 Accessible.focusable: true
                 Accessible.onPressAction: item.clearCard(false, true)
                 Keys.onPressed: event => {
@@ -1011,14 +1011,14 @@ ListView {
                             width: parent.width
                             Component.onCompleted: item.contentCtl = rowContent
                             onControlsChanged: list.queueResolve()
-                            summary: item.summary
+                            summary: Notifications.summaryFor(item.summary, item.appName)
                             appName: item.appName
                             urgency: item.urgency
-                            actionsJson: item.actionsJson
+                            actionsJson: Notifications.actionsFor(item.actionsJson, item.appName)
                             live: row.live
                             body: Notifications.bodyFor(item.bodyHtml, item.appName)
                             timeText: Notifications.timeFor(item.time)
-                            iconSource: Notifications.iconSource(item.image, item.appIcon)
+                            iconSource: Notifications.iconSource(Notifications.imageFor(item.image, item.appName), Notifications.appIconFor(item.appIcon, item.appName))
                             onActionTriggered: actionId => {
                                 if (item.actable(rowContent))
                                     Notifications.invokeAction(item.key, actionId);
