@@ -277,6 +277,7 @@
  {"path": "compositor/tests/ClientChromeTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/FrameLogTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/QuietTest.cpp", "layer": "logic"},
+ {"path": "compositor/tests/NoticesTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/MinimizeTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/OverviewFocusTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/OverviewTest.cpp", "layer": "logic"},
