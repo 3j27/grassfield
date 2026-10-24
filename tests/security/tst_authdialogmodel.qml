@@ -183,6 +183,8 @@ TestCase {
         verify(notice.indexOf("while the screen was locked") !== -1, notice);
         verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
         verify(model.heldNotice(Date.now(), false).indexOf("just as the screen was unlocked") !== -1);
+        // AuthAgent passes the arrival time as a Date (display only; shell/security reads no Date.now).
+        compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), true), notice);
     }
 
     // Review of d8e654c: a request arriving within heldAfterUnlockMs after an unlock is held like one that arrived while locked.

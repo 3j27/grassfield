@@ -159,7 +159,7 @@ expect("polkit sheet: a request arriving while locked, or just after an unlock, 
 model = code(read("shell/security/polkit/AuthDialogModel.qml"))
 bodies = {n: code(function(model, n) or "") for n in ("noteUnlock", "noteShown", "heldClickAccepted", "arrivesHeld")}
 expect("polkit holds: timed by Timers, never by the wall clock",
-       len(re.findall(r"\bDate\b", agent)) == 1 and re.search(r"requestStartedAt\s*=\s*active\s*\?\s*Date\.now\(\)\s*:\s*0", agent) is not None
+       len(re.findall(r"\bDate\b", agent)) == 1 and re.search(r"requestStartedAt\s*=\s*active\s*\?\s*new Date\(\)\s*:\s*null", agent) is not None
        and not any(re.search(r"\bDate\b", b) for b in bodies.values())
        and re.search(r"property Timer unlockHold:\s*Timer\s*\{\s*interval:\s*root\.heldAfterUnlockMs\s*\}", model) is not None
        and re.search(r"property Timer clickGuard:\s*Timer\s*\{\s*interval:\s*root\.heldGuardMs\s*\}", model) is not None
@@ -170,6 +170,46 @@ expect("polkit holds: timed by Timers, never by the wall clock",
 expect("polkit sheet: a request open when the lock engages is held", re.search(r"else if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true", agent) is not None)
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
+
+# Review of 2dfd992: no wall clock in shell/security. Every delay is a Qt Timer (monotonic); the only Date left is the
+# arrival time the held polkit sheet prints. Any other `Date` (Date.now, new Date, Date.parse), getTime, valueOf or
+# performance.now in the code (comments excluded) fails.
+import os
+def nocomments(text):
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return "\n".join(re.sub(r"(^|\s)//.*$", r"\1", l) for l in text.split("\n"))
+allowed_dates = {
+    "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = active ? new Date() : null;"],
+    "shell/security/polkit/AuthDialogModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
+}
+clock_hits = []
+for base, _, files in os.walk(f"{root}/shell/security"):
+    for name in sorted(files):
+        if not name.endswith((".qml", ".js")):
+            continue
+        rel = os.path.relpath(os.path.join(base, name), root)
+        text = nocomments(read(rel))
+        spans = []
+        for snippet in allowed_dates.get(rel, []):
+            i = text.find(snippet)
+            if i >= 0:
+                spans.append((i, i + len(snippet)))
+        for m in re.finditer(r"\bDate\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
+            if not any(a <= m.start() < b for a, b in spans):
+                clock_hits.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} {m.group(0)}")
+expect("no wall clock in shell/security (" + ", ".join(clock_hits) + ")", not clock_hits)
+lock = code(read("shell/security/lock/Lock.qml"))
+expect("lock ownership check: the grace window after a confirmed lock is a single-shot Timer",
+       re.search(r"Timer\s*\{\s*id:\s*secureGrace\s+interval:\s*ownershipProbe\.verifyGraceMs\s*\}", lock) is not None
+       and re.search(r"onSecureStateChanged:\s*\{\s*if\s*\(secure\)\s*\{[^}]*?secureGrace\.restart\(\);", lock) is not None
+       and re.search(r"if\s*\(!holding\s*\|\|\s*!hyprland\s*\|\|\s*secureGrace\.running\)\s*return;", code(function(lock, "verify") or "")) is not None
+       and re.search(r"if\s*\(!holding\s*\|\|\s*secureGrace\.running\)\s*\{", code(function(lock, "checkOwnership") or "")) is not None)
+sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
+expect("sleep inhibitor: a child's run of FAST_EXIT_MS is timed by its health Timer",
+       all(re.search(r"root\." + c + r"Failures\s*=\s*IdleModel\.failuresAfterRun\(root\." + c + r"Failures,\s*ranLong\);", sleep) is not None
+           and re.search(r"if\s*\(" + c + r"\.running\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep) is not None
+           and re.search(r"onStarted:\s*\{\s*ranLong\s*=\s*false;\s*" + c + r"Healthy\.restart\(\);", sleep) is not None
+           for c in ("inhibitor", "watcher")))
 
 for o in oks:
     print("OK " + o)
@@ -198,6 +238,7 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
+cp -a "$root/shell/security" "$mut/shell/" # the wall-clock scan reads every file of shell/security
 python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1 && pass "mutation: the unchanged copy passes" || bad "mutation: the unchanged copy fails"
 for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
@@ -211,7 +252,15 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteUnlock();#root.unlockedAt = Date.now();' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteShown();#root.shownAt = Date.now();' \
   'shell/security/polkit/AuthDialogModel.qml#return locked || unlockHold.running;#return locked || Date.now() - priv.unlockedAt < heldAfterUnlockMs;' \
-  'shell/security/polkit/AuthDialogModel.qml#return priv.shown && !clickGuard.running;#return !clickGuard.running;'; do
+  'shell/security/polkit/AuthDialogModel.qml#return priv.shown && !clickGuard.running;#return !clickGuard.running;' \
+  'shell/security/polkit/AuthAgent.qml#active ? new Date() : null#active ? Date.now() : 0' \
+  'shell/security/lock/Lock.qml#secureGrace.restart();#root.securedAt = Date.now();' \
+  'shell/security/lock/Lock.qml#if (!holding || secureGrace.running) {#if (!holding || Date.now() - root.securedAt < 500) {' \
+  'shell/security/lock/Lock.qml#if (!holding || !hyprland || secureGrace.running)#if (!holding || !hyprland)' \
+  'shell/security/idle/SleepInhibitor.qml#IdleModel.failuresAfterRun(root.inhibitorFailures, ranLong)#IdleModel.failuresAfterRun(root.inhibitorFailures, true)' \
+  'shell/security/idle/SleepInhibitor.qml#watcher.ranLong = true;#watcher.ranLong = watcher.ranLong;' \
+  'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
+  'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'

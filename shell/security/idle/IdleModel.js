@@ -44,13 +44,14 @@ var MAX_FAST_FAILURES = 5;
 var FAST_RETRY_MS = 5000;
 var SLOW_RETRY_MS = 60000;
 
-// Consecutive fast failures after a child exited having run `ranMs` (not a number: counted as a failure).
-function failuresAfterExit(failures, ranMs) {
+// Consecutive fast failures after a child exited: `ranLong` is true only when it ran at least FAST_EXIT_MS (SleepInhibitor
+// times that with a Timer, a monotonic clock: review of 2dfd992, a wall-clock step forward made an early exit look long
+// and hid the failure). Anything else (false, unknown, a child that never started) counts as a failure.
+function failuresAfterRun(failures, ranLong) {
     var n = Number(failures);
     if (!isFinite(n) || n < 0)
         n = 0;
-    var ran = Number(ranMs);
-    return isFinite(ran) && ran >= FAST_EXIT_MS ? 0 : n + 1;
+    return ranLong === true ? 0 : n + 1;
 }
 
 // Delay before the next restart of a child after `failures` consecutive fast failures.

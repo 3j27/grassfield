@@ -82,8 +82,9 @@ QtObject {
     }
 
     // What the held sheet says, with the time the request arrived (the message names the program for pkexec).
-    function heldNotice(arrivedAtMs: real, whileLocked: bool): string {
-        const at = Qt.formatTime(new Date(arrivedAtMs), Qt.locale().timeFormat(Locale.ShortFormat));
+    // `arrivedAt`: a Date (or milliseconds), only formatted.
+    function heldNotice(arrivedAt: var, whileLocked: bool): string {
+        const at = Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat));
         return whileLocked ? qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at)
                            : qsTr("This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.").arg(at);
     }
