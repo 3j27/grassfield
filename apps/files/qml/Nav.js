@@ -151,11 +151,3 @@ function commonPrefix(segments, target) {
         n++;
     return n;
 }
-
-// A file name as shown in a label (GF-105, like Finder): line breaks become a return symbol, and the bidirectional
-// override, embedding and isolate controls (U+202A-U+202E, U+2066-U+2069) are written out as "<U+202E>" so a name
-// cannot reorder the text around it ("evil\u202Efdp.exe" does not read "evilexe.pdf"). The marks LRM and RLM stay.
-function displayName(name) {
-    return String(name).replace(/[\r\n]+/g, "\u23CE").replace(/[\u202A-\u202E\u2066-\u2069]/g,
-        c => "<U+" + c.charCodeAt(0).toString(16).toUpperCase() + ">");
-}

@@ -150,7 +150,7 @@ FocusScope {
             width: pager.width
             height: pager.height
             Accessible.role: Accessible.Graphic
-            Accessible.name: page.name
+            Accessible.name: DisplayName.text(page.name)
 
             Component.onCompleted: if (page.canPreview) root.model.requestPreview(page.index, true)
             onCanPreviewChanged: if (page.canPreview) root.model.requestPreview(page.index, true)
@@ -205,7 +205,7 @@ FocusScope {
                     anchors.fill: parent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    text: Nav.displayName(page.name)
+                    text: DisplayName.text(page.name)
                     elide: Text.ElideMiddle
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
@@ -304,7 +304,7 @@ FocusScope {
             height: strip.height
             opacity: cell.hidden ? Tokens.filesHiddenOpacity : 1
             Accessible.role: Accessible.ListItem
-            Accessible.name: cell.name
+            Accessible.name: DisplayName.text(cell.name)
             Accessible.selectable: true
             Accessible.selected: cell.selected
             Accessible.onPressAction: root.tab.activate(cell.index, root.model)
@@ -432,7 +432,7 @@ FocusScope {
                 Text {
                     textFormat: Text.PlainText
                     width: parent.width
-                    text: root.info ? Nav.displayName(root.info.name) : ""
+                    text: root.info ? DisplayName.text(root.info.name) : ""
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily

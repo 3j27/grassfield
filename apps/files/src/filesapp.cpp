@@ -643,7 +643,7 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     if (newName == url.fileName())
         return;
     if (!FileLogic::isValidFileName(newName)) {
-        emit operationFailed(tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(newName));
+        emit operationFailed(tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(FileLogic::displayName(newName)));
         return;
     }
     const QUrl destination = childUrl(url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash), newName);
@@ -651,7 +651,7 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     const QUrl parent = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
     if ((localExists(destination) && QFileInfo(destination.toLocalFile()).canonicalFilePath() != QFileInfo(url.toLocalFile()).canonicalFilePath())
         || nameTaken(parent, newName, url.fileName())) {
-        emit operationFailed(tr("The name “%1” is already taken. Please choose a different name.").arg(newName));
+        emit operationFailed(tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(newName)));
         return;
     }
     // KIO::moveAs (a CopyJob) rather than KIO::rename: FileUndoManager records CopyJob operations only.
@@ -701,7 +701,7 @@ void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
                     f->expect(destination, false);
             }
         });
-        track(job, tr("Duplicating “%1”…").arg(url.fileName()));
+        track(job, tr("Duplicating “%1”…").arg(FileLogic::displayName(url.fileName())));
     }
 }
 
@@ -723,7 +723,7 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
     for (const QUrl &u : urls) {
         const QUrl clean = u.adjusted(QUrl::StripTrailingSlash);
         if (clean == dest || clean.isParentOf(dest)) {
-            emit operationFailed(tr("“%1” can’t be moved or copied into itself.").arg(clean.fileName()));
+            emit operationFailed(tr("“%1” can’t be moved or copied into itself.").arg(FileLogic::displayName(clean.fileName())));
             return;
         }
         // Dropping an item on the folder it is already in does nothing.
@@ -810,7 +810,7 @@ QString FilesApp::tagsReason(const QUrl &url, TagStore::Support support) const
     case TagStore::Support::Supported:
         break;
     case TagStore::Support::Missing:
-        return tr("“%1” is no longer there.").arg(url.fileName());
+        return tr("“%1” is no longer there.").arg(FileLogic::displayName(url.fileName()));
     case TagStore::Support::Link:
         return tr("Links can’t carry tags.");
     case TagStore::Support::NotRegular:
@@ -887,7 +887,7 @@ void FilesApp::toggleColorTag(const QList<QUrl> &urls, int index)
         QByteArray stored;
         QString error;
         if (!TagStore::readRawChecked(url.toLocalFile(), &stored, &error)) {
-            emit operationFailed(tr("The tags of “%1” couldn’t be read: %2").arg(url.fileName(), error));
+            emit operationFailed(tr("The tags of “%1” couldn’t be read: %2").arg(FileLogic::displayName(url.fileName()), error));
             return;
         }
         all = all && TagLogic::ownsTag(stored, key);
@@ -950,7 +950,7 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
         emit tagsChanged(changed);
     }
     if (failed.size() == 1)
-        emit operationFailed(tr("The tags of “%1” couldn’t be changed: %2").arg(failed.first(), reason));
+        emit operationFailed(tr("The tags of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(failed.first()), reason));
     else if (failed.size() > 1)
         emit operationFailed(tr("The tags of %1 items couldn’t be changed: %2").arg(failed.size()).arg(reason));
 }
@@ -1033,7 +1033,7 @@ QVariantMap FilesApp::changeFolderStyles(const QList<QUrl> &urls, const FolderSt
     out[QStringLiteral("ok")] = failed.isEmpty();
     out[QStringLiteral("fellBack")] = fellBack;
     if (failed.size() == 1)
-        out[QStringLiteral("error")] = tr("The look of “%1” couldn’t be changed: %2").arg(failed.first(), reason);
+        out[QStringLiteral("error")] = tr("The look of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(failed.first()), reason);
     else if (failed.size() > 1)
         out[QStringLiteral("error")] = tr("The look of %1 folders couldn’t be changed: %2").arg(failed.size()).arg(reason);
     return out;

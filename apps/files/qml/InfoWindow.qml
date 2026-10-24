@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import "TagColors.js" as TagColors
-import "Nav.js" as Nav
 
 // Get Info: kind, size (folders are measured with KIO::directorySize), location, dates and the
 // owner, group and permissions (read only in v1).
@@ -39,7 +38,7 @@ Window {
     }
     readonly property string customizeReason: root.info.isDir ? root.app.folderStyleUnavailable([root.info.url]) : "x"
 
-    title: qsTr("%1 Info").arg(Nav.displayName(root.info.name))
+    title: qsTr("%1 Info").arg(DisplayName.text(root.info.name))
     width: Tokens.filesInfoWindowWidth
     height: Tokens.filesInfoWindowHeight
     minimumWidth: Tokens.filesInfoWindowWidth
@@ -123,7 +122,7 @@ Window {
                     Text {
                         textFormat: Text.PlainText
                         width: parent.width
-                        text: Nav.displayName(root.info.name)
+                        text: DisplayName.text(root.info.name)
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily

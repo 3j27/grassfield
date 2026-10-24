@@ -39,7 +39,7 @@ Window {
         return parts.join("  ·  ");
     }
 
-    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "⏎") : qsTr("Preview")
+    title: content.info.name ? DisplayName.text(content.info.name) : qsTr("Preview")
     width: Tokens.previewWindowWidth
     height: Tokens.previewWindowHeight
     minimumWidth: Tokens.previewWindowMinWidth
@@ -491,7 +491,7 @@ Window {
             Repeater {
                 model: {
                     const i = content.info;
-                    const rows = [[qsTr("Name"), i.name ?? ""], [qsTr("Kind"), i.type ?? ""]];
+                    const rows = [[qsTr("Name"), DisplayName.text(i.name)], [qsTr("Kind"), i.type ?? ""]];
                     if (i.width !== undefined && i.height !== undefined)
                         rows.push([qsTr("Dimensions"), qsTr("%1 × %2 pixels").arg(i.width).arg(i.height)]);
                     rows.push([qsTr("Size"), i.size ?? ""], [qsTr("Modified"), i.modified ?? ""], [qsTr("Where"), i.folder ?? ""]);
@@ -528,7 +528,7 @@ Window {
                         }
                         elide: Text.ElideMiddle
                         textFormat: Text.PlainText
-                        text: infoRow.modelData[1].replace(/[\r\n]+/g, "⏎")
+                        text: DisplayName.text(infoRow.modelData[1])
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
@@ -602,7 +602,7 @@ Window {
                     width: fileList.width
                     height: fileList.compact ? Tokens.previewSidebarItemHeight : row.cellHeight + labelText.implicitHeight + 3 * Tokens.spacingSm
                     Accessible.role: Accessible.ListItem
-                    Accessible.name: row.modelData.name
+                    Accessible.name: DisplayName.text(row.modelData.name)
                     Accessible.selected: row.selected
 
                     // Selection (macOS Preview): a ring in the accent colour around the thumbnail, never a solid plate over
@@ -694,7 +694,7 @@ Window {
                         textFormat: Text.PlainText
                         maximumLineCount: 1
                         // A file name may contain line breaks: keep one line, shown as the return symbol.
-                        text: row.modelData.name.replace(/[\r\n]+/g, "⏎")
+                        text: DisplayName.text(row.modelData.name)
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: fileList.compact ? Tokens.typographyMenuSize : Tokens.typographyCaptionSize

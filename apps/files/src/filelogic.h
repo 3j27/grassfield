@@ -50,6 +50,10 @@ struct Segment {
 // other schemes start at "<scheme>:/".
 QList<Segment> pathSegments(const QUrl &url, const QString &homePath, const QString &rootLabel, const QString &trashLabel);
 
+// A file name as shown in a message or a label: line breaks become a return symbol and the bidirectional override,
+// embedding and isolate controls are written out ("<U+202E>"). The twin of ui/Grassfield/Ui/DisplayName.js (GF-105).
+QString displayName(const QString &name);
+
 // Names that differ only by Unicode normalization (NFC "e acute" and NFD "e" + combining acute) are the same name to a
 // person: macOS compares them equal (GF-105). The file system keeps them apart, so Files checks collisions with this.
 bool sameName(const QString &a, const QString &b);

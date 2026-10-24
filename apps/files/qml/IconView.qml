@@ -175,7 +175,7 @@ FocusScope {
             height: grid.cellHeight
             opacity: cell.hidden ? Tokens.filesHiddenOpacity : 1
             Accessible.role: Accessible.ListItem
-            Accessible.name: cell.name
+            Accessible.name: DisplayName.text(cell.name)
             Accessible.selectable: true
             Accessible.selected: cell.selected
             Accessible.onPressAction: root.tab.activate(cell.index, root.model)
@@ -240,7 +240,7 @@ FocusScope {
                 anchors.topMargin: Tokens.spacingXs + Tokens.spacingXs / 2
                 width: cell.width - 2 * Tokens.spacingXs - cell.dotsRoom
                 horizontalAlignment: Text.AlignHCenter
-                text: Nav.displayName(cell.name)
+                text: DisplayName.text(cell.name)
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 maximumLineCount: Tokens.filesIconLabelLines
                 elide: Text.ElideRight

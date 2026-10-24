@@ -135,16 +135,6 @@ TestCase {
         compare(Nav.effectiveView("bogus", true), "icons");
     }
 
-    // GF-105: names with bidi overrides, line breaks, quotes and backslashes are shown safely.
-    function test_displayNameNeutralisesBidiOverrides() {
-        compare(Nav.displayName("evil‮fdp.exe"), "evil<U+202E>fdp.exe");
-        compare(Nav.displayName("a⁦b⁩c"), "a<U+2066>b<U+2069>c");
-        compare(Nav.displayName("two\nlines"), "two⏎lines");
-        compare(Nav.displayName("say \"hi\" \\ there"), "say \"hi\" \\ there");
-        compare(Nav.displayName("marks‎kept"), "marks‎kept");
-        compare(Nav.displayName("Résumé"), "Résumé");
-    }
-
     // The gallery always shows an item: the current one, else the first.
     function test_galleryInitialRow() {
         compare(Nav.galleryInitialRow(-1, 5), 0);

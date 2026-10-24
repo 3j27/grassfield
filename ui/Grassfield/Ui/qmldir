@@ -13,6 +13,7 @@ Button 1.0 Button.qml
 LinkText 1.0 LinkText.qml
 TextCursor 1.0 TextCursor.qml
 JsonSafety 1.0 JsonSafety.js
+DisplayName 1.0 DisplayName.js
 SwatchRow 1.0 SwatchRow.qml
 TintedIcon 1.0 TintedIcon.qml
 IconEffect 1.0 IconEffect.qml

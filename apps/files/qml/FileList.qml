@@ -212,7 +212,7 @@ FocusScope {
             height: Tokens.filesListRowHeight
             opacity: row.hidden ? Tokens.filesHiddenOpacity : 1
             Accessible.role: Accessible.Row
-            Accessible.name: row.name
+            Accessible.name: DisplayName.text(row.name)
             Accessible.description: [row.modifiedText, row.sizeText, row.kind].join(", ")
             Accessible.selectable: true
             Accessible.selected: row.selected
@@ -250,7 +250,7 @@ FocusScope {
                 anchors.leftMargin: Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.nameWidth - icon.x - icon.width - 2 * Tokens.spacingSm - (rowDots.visible ? rowDots.width + Tokens.spacingSm : 0)
-                text: Nav.displayName(row.name)
+                text: DisplayName.text(row.name)
                 elide: Text.ElideMiddle
                 color: row.foreground
                 font.family: Appearance.fontFamily

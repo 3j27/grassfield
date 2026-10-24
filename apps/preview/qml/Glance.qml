@@ -103,7 +103,7 @@ Window {
         }
     }
 
-    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "\u23CE") : qsTr("Glance")
+    title: content.info.name ? DisplayName.text(content.info.name) : qsTr("Glance")
     // Initial size: Qt's first screen (the primary output); fitToScreen corrects it after the mapping.
     width: win.sizeFor(Screen.width, Screen.height).width
     height: win.sizeFor(Screen.width, Screen.height).height
@@ -229,7 +229,7 @@ Window {
             }
             elide: Text.ElideMiddle
             textFormat: Text.PlainText
-            text: (content.info.name ?? "").replace(/[\r\n]+/g, "⏎")
+            text: DisplayName.text(content.info.name)
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize

@@ -253,6 +253,16 @@ TEST(UnicodeNames, FilterIgnoresCaseAndAccentsInBothForms)
     EXPECT_TRUE(nameMatchesFilter(QStringLiteral("a\"b\\c"), QStringLiteral("\"b\\")));
 }
 
+TEST(UnicodeNames, DisplayNameWritesOutBidiControlsAndBreaks)
+{
+    EXPECT_EQ(displayName(QString::fromUtf8("evil\xe2\x80\xaa" "fdp.exe")), QStringLiteral("evil<U+202A>fdp.exe"));
+    EXPECT_EQ(displayName(QString(QChar(0x202E))), QStringLiteral("<U+202E>"));
+    EXPECT_EQ(displayName(QString(QChar(0x2066)) + QChar(0x2069)), QStringLiteral("<U+2066><U+2069>"));
+    EXPECT_EQ(displayName(QStringLiteral("two\r\nlines")), QString(QStringLiteral("two") + QChar(0x23CE) + QStringLiteral("lines")));
+    EXPECT_EQ(displayName(QString(QChar(0x200E)) + QStringLiteral("kept")), QString(QChar(0x200E)) + QStringLiteral("kept"));
+    EXPECT_EQ(displayName(QStringLiteral("say \"hi\" \\ there")), QStringLiteral("say \"hi\" \\ there"));
+}
+
 TEST(NetworkPlace, HidesTheAppleDevicesEntry)
 {
     // kio-extras remoteview entries in remote:/ (afc-network.desktop links to afc:/).

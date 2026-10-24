@@ -235,7 +235,7 @@ FocusScope {
                 height: root.iconSize
                 opacity: root.progress
                 Accessible.role: Accessible.Button
-                Accessible.name: isOpen ? root.openText : entry ? entry.name : ""
+                Accessible.name: isOpen ? root.openText : entry ? DisplayName.text(entry.name) : ""
                 Accessible.onPressAction: root.open(isOpen ? -1 : index)
 
                 StackIcon {
@@ -266,7 +266,7 @@ FocusScope {
                 Tooltip {
                     shown: root.fan && root.progress > 0
                     delay: 0
-                    text: slot.isOpen ? root.openText : (slot.entry ? slot.entry.name : "")
+                    text: slot.isOpen ? root.openText : (slot.entry ? DisplayName.text(slot.entry.name) : "")
                     x: slot.labelRight ? slot.width + Tokens.spacingSm : -width - Tokens.spacingSm
                     y: (slot.height - height) / 2
                     width: Math.min(implicitWidth, root.labelMax)
@@ -376,7 +376,7 @@ FocusScope {
                         width: Tokens.dockStackCellWidth
                         height: Tokens.dockStackCellHeight
                         Accessible.role: Accessible.Button
-                        Accessible.name: modelData.name
+                        Accessible.name: DisplayName.text(modelData.name)
                         Accessible.onPressAction: root.open(index)
 
                         Rectangle {
@@ -402,7 +402,7 @@ FocusScope {
                             x: Tokens.spacingXs
                             y: Tokens.spacingSm + root.iconSize + Tokens.spacingXs
                             width: parent.width - 2 * Tokens.spacingXs
-                            text: cell.modelData.name
+                            text: DisplayName.text(cell.modelData.name)
                             elide: Text.ElideMiddle
                             maximumLineCount: 2
                             wrapMode: Text.WrapAnywhere
@@ -450,7 +450,7 @@ FocusScope {
                 width: ListView.view.width
                 height: Tokens.menuItemHeight
                 Accessible.role: Accessible.MenuItem
-                Accessible.name: modelData.name
+                Accessible.name: DisplayName.text(modelData.name)
                 Accessible.onPressAction: root.open(index)
 
                 Rectangle {
@@ -473,7 +473,7 @@ FocusScope {
                     x: Tokens.menuItemPadding + Tokens.menuItemHeight
                     width: parent.width - x - Tokens.menuItemPadding
                     anchors.verticalCenter: parent.verticalCenter
-                    text: row.modelData.name
+                    text: DisplayName.text(row.modelData.name)
                     elide: Text.ElideMiddle
                     color: row.current ? Appearance.colors.accentText : Appearance.colors.text
                     font.family: Appearance.fontFamily
