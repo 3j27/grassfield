@@ -191,6 +191,41 @@ function imageRef(image) {
     return refused;
 }
 
+// Largest local image file a notification may show (review of 8b2a710: only regular files, bounded).
+const MAX_IMAGE_FILE_BYTES = 16 * 1024 * 1024;
+
+// The local path a "file" image reference (imageRef) or an app icon path loads: "/abs" as given, Quickshell's
+// image://icon//abs -> "/abs", a file: URL decoded. "" for anything else or a malformed escape. The shell shows such a
+// file only after `stat` said it is a regular file of at most MAX_IMAGE_FILE_BYTES (Notifications.fileOk): a FIFO, a
+// device or a socket would block the one image loader for good (and the process with it).
+function localPathOf(source) {
+    if (typeof source !== "string" || source === "")
+        return "";
+    if (source.startsWith("/"))
+        return source.startsWith("//") ? "" : source;
+    if (source.toLowerCase().startsWith("image://icon//"))
+        return source.slice(13);
+    const m = /^file:(?:\/\/(?:localhost)?)?(\/[^/].*)$/i.exec(source);
+    if (!m)
+        return "";
+    try {
+        const path = decodeURIComponent(m[1]);
+        return /[\u0000-\u001f\u007f]/.test(path) ? "" : path;
+    } catch (e) {
+        return "";
+    }
+}
+
+// The answer of the check helper (one line per path, "ok" or "no", in order) -> {path: "ok"|"no"}; a missing or odd line
+// is "no" (fail closed: the file is not shown).
+function parseFileChecks(paths, output) {
+    const lines = String(output || "").split("\n");
+    const out = {};
+    for (let i = 0; i < paths.length; i++)
+        out[paths[i]] = lines[i] === "ok" ? "ok" : "no";
+    return out;
+}
+
 // The URL scheme of a refused image, for a log line that never repeats the reference itself ("" when there is none).
 function imageScheme(image) {
     const m = /^([A-Za-z][A-Za-z0-9+.-]{0,15}):/.exec(typeof image === "string" ? image : "");

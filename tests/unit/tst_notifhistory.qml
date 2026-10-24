@@ -197,6 +197,31 @@ TestCase {
         compare(History.imageRef(42).kind, "none");
     }
 
+    // Review of 8b2a710: the path a local image loads, so that it can be checked (regular file, bounded) before it is shown.
+    function test_localPathOf() {
+        compare(History.localPathOf("/tmp/a.png"), "/tmp/a.png");
+        compare(History.localPathOf("image://icon//usr/share/icons/x.png"), "/usr/share/icons/x.png");
+        compare(History.localPathOf("file:///home/u/My%20Pictures/a.png"), "/home/u/My Pictures/a.png");
+        compare(History.localPathOf("file://localhost/tmp/a.png"), "/tmp/a.png");
+        compare(History.localPathOf("file:/tmp/a.png"), "/tmp/a.png");
+        compare(History.localPathOf("file:///tmp/a%0Ab.png"), "", "a decoded control character");
+        compare(History.localPathOf("file:///tmp/%E0%A4%A"), "", "a malformed escape");
+        compare(History.localPathOf("file://evil.example/a.png"), "");
+        compare(History.localPathOf("//host/a.png"), "");
+        compare(History.localPathOf("https://example.org/a.png"), "");
+        compare(History.localPathOf("image://icon/firefox"), "");
+        compare(History.localPathOf(""), "");
+        compare(History.localPathOf(undefined), "");
+    }
+
+    function test_parseFileChecks() {
+        compare(History.parseFileChecks(["/a", "/b", "/c"], "ok\nno\nok\n"), {"/a": "ok", "/b": "no", "/c": "ok"});
+        compare(History.parseFileChecks(["/a", "/b"], "ok\n"), {"/a": "ok", "/b": "no"}, "a missing line is no (a check that timed out)");
+        compare(History.parseFileChecks(["/a"], "OK\n"), {"/a": "no"});
+        compare(History.parseFileChecks(["/a"], undefined), {"/a": "no"});
+        verify(History.MAX_IMAGE_FILE_BYTES > 0 && History.MAX_IMAGE_FILE_BYTES <= 64 * 1024 * 1024);
+    }
+
     function test_imageScheme() {
         compare(History.imageScheme("https://tracker.example/p.png"), "https");
         compare(History.imageScheme("DATA:image/png;base64,AA"), "data");

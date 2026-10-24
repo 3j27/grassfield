@@ -165,7 +165,13 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px,
   and only when they are a local file, the image data the app sent or a theme icon name (`History.imageRef`, GF-114): an
   http(s), data, ftp or other URL is dropped at arrival (log line with the scheme only) and the app icon is shown instead;
-  `tests/unit/tst_notifhistory.qml`, nested DT-07 `tests/security/notif_remote_image.sh`.
+  `tests/unit/tst_notifhistory.qml`, nested DT-07 `tests/security/notif_remote_image.sh`. A local file (image or app icon
+  path) is shown only after `stat` (a helper process, `timeout 5`, the path as an argument, never opened) said it is a
+  regular file of at most 16 MiB (`Notifications.fileOk`, results cached by path, at most 512): a FIFO, a device, a socket,
+  a directory or a bigger file would block the one image loader (a FIFO did, for good: review of 8b2a710). Until then the
+  app icon or the bell shows. `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a
+  directory, a missing file; mutation `-e` instead of `-f` fails it). Residual: a file swapped for a FIFO after its check
+  (by a process of the same user) still blocks the loader.
 - DND: `notifications.dnd` in grassfield.json; Quick Settings "Do Not Disturb" tile; moon icon in the menu bar (click turns it off).
   Critical notifications still show; history is kept. `notifications.previews = never` hides bodies (banners and Center).
 - History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`

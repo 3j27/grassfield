@@ -153,17 +153,20 @@ Singleton {
     // and theme names are ever loaded (History.imageRef, GF-114): never a URL.
     function iconSource(image: string, appIcon: string): string {
         const ref = History.imageRef(image);
-        if (ref.kind === "file" || ref.kind === "attached")
+        if (ref.kind === "attached")
+            return ref.source;
+        // A local file only once it is known to be a regular file of a bounded size (fileOk).
+        if (ref.kind === "file" && fileOk(History.localPathOf(ref.source)))
             return ref.source;
         // Quickshell reports a themed app_icon name as image://icon/<name>.
         if (ref.kind === "themed" && Quickshell.hasThemeIcon(ref.name))
             return ref.source;
-        // No usable image (none, refused, or a name the theme lacks): the app icon.
+        // No usable image (none, refused, not checked yet, or a name the theme lacks): the app icon.
         const icon = appIcon;
         if (!icon)
             return "";
         if (icon.startsWith("/") || icon.startsWith("file:")) {
-            if (History.imageRef(icon).kind !== "file")
+            if (History.imageRef(icon).kind !== "file" || !fileOk(History.localPathOf(icon)))
                 return "";
             return icon.startsWith("/") ? "file://" + icon : icon;
         }
@@ -685,13 +688,81 @@ Singleton {
         return (n.actions || []).map(a => ({id: a.identifier, text: a.text}));
     }
 
+    // Local image files a notification may show, by path: "ok" (stat says a regular file of at most
+    // History.MAX_IMAGE_FILE_BYTES, symlinks followed) or "no"; absent while unchecked. A file is never handed to an Image
+    // before it is "ok" (review of 8b2a710: a FIFO, a device or a socket blocks the one image loader for good, and the
+    // process cannot exit). Reassigned on every answer so bindings that called iconSource() re-evaluate. Bounded.
+    property var fileChecks: ({})
+    property var fileQueue: []
+    property var fileBatch: []
+    readonly property int maxFileChecks: 512
+    // POSIX sh, run with the paths as arguments (never interpolated): `test -f` is true only for a regular file (symlinks
+    // followed), `stat` never opens it. One "ok" or "no" line per path, in order.
+    readonly property string fileCheckScript: "cap=$1; shift; for p do if [ -f \"$p\" ] && s=$(stat -L -c %s -- \"$p\" 2>/dev/null) && [ \"$s\" -le \"$cap\" ] 2>/dev/null; then echo ok; else echo no; fi; done"
+
+    function fileOk(path: string): bool {
+        if (path === "")
+            return false;
+        const state = fileChecks[path];
+        if (state === undefined)
+            Qt.callLater(root.requestFileCheck, path);
+        return state === "ok";
+    }
+
+    function requestFileCheck(path: string): void {
+        if (path === "" || fileChecks[path] !== undefined || fileQueue.indexOf(path) >= 0 || fileBatch.indexOf(path) >= 0)
+            return;
+        fileQueue = fileQueue.concat([path]);
+        runFileChecks();
+    }
+
+    function runFileChecks(): void {
+        if (fileCheck.running || fileQueue.length === 0)
+            return;
+        fileBatch = fileQueue.slice(0, 32);
+        fileQueue = fileQueue.slice(32);
+        // Bounded: a stat stuck on a dead network mount ends after 5 s and its paths count as "no".
+        fileCheck.command = ["timeout", "5", "sh", "-c", fileCheckScript, "gf-image-check", String(History.MAX_IMAGE_FILE_BYTES)].concat(fileBatch);
+        fileCheck.running = true;
+    }
+
+    function fileChecksDone(output: string): void {
+        const results = History.parseFileChecks(fileBatch, output);
+        const next = Object.keys(fileChecks).length + fileBatch.length > maxFileChecks ? {} : Object.assign({}, fileChecks);
+        for (const p in results) {
+            next[p] = results[p];
+            if (results[p] !== "ok")
+                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes; not shown");
+        }
+        fileBatch = [];
+        fileChecks = next;
+        Qt.callLater(runFileChecks);
+    }
+
+    Process {
+        id: fileCheck
+        stdout: StdioCollector {
+            onStreamFinished: root.fileChecksDone(text)
+        }
+    }
+
     // The notification's image hint as kept: "" when it is not a local file, image data the app sent or a theme name
     // (History.imageRef, GF-114: a URL is never fetched). Logged with its scheme only, never the reference.
     function keptImage(image: string): string {
-        if (History.imageRef(image).kind !== "refused")
+        const ref = History.imageRef(image);
+        if (ref.kind === "file")
+            requestFileCheck(History.localPathOf(ref.source)); // shown once checked (fileOk)
+        if (ref.kind !== "refused")
             return image;
         console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");
         return "";
+    }
+
+    // An app icon path is checked like an image file before it is shown (fileOk); names pass unchanged.
+    function checkedAppIcon(icon: string): string {
+        if (icon.startsWith("/") || icon.startsWith("file:"))
+            requestFileCheck(History.localPathOf(icon));
+        return icon;
     }
 
     function makeEntry(n: var, key: string): var {
@@ -699,7 +770,7 @@ Singleton {
             key: key,
             nid: n.id,
             appName: n.appName,
-            appIcon: n.appIcon,
+            appIcon: checkedAppIcon(n.appIcon),
             image: keptImage(n.image),
             summary: n.summary,
             body: n.body,
