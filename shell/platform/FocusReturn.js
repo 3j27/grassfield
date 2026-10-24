@@ -62,14 +62,58 @@ function checkOutcome(goal, before, active, focusedWorkspace, elapsedMs, boundMs
     return "retry";
 }
 
-// The target a surface's close asks for: the window active when the surface opened, or null (nothing is requested: no
-// window then, or another window was focused since by someone else, say a menu item that raised a window).
-// `previous` is {address, workspaceId} or null, `active` the window active now.
-function restoreTarget(previous, active) {
+// Address as Hyprland writes it in events: lower case, no 0x.
+function normalizeAddress(a) {
+    return String(a || "").replace(/^0x/i, "").toLowerCase();
+}
+
+// Whether a raw event changes what is frontmost while a surface is open: a window opened, closed or moved, a Desktop, a
+// special workspace or a display focused, a Stages event (a swap, a window sent to the strip), or another window active.
+// `remembered` is the address of the window remembered at open. An `activewindowv2` with an empty payload is not a change:
+// Hyprland clears the active window whenever a layer takes the keyboard.
+function changesFront(name, data, remembered) {
+    switch (name) {
+    case "openwindow":
+    case "closewindow":
+    case "movewindowv2":
+    case "workspacev2":
+    case "focusedmonv2":
+    case "activespecialv2":
+    case "stages":
+        return true;
+    case "activewindowv2": {
+        const now = normalizeAddress(data);
+        return now !== "" && now !== normalizeAddress(remembered);
+    }
+    }
+    return false;
+}
+
+// The target a surface's close asks for (macOS: the key window is whatever is frontmost NOW; the remembered window only
+// when nothing changed meanwhile): the window active when the surface opened, or null (nothing is requested and Hyprland
+// focuses what it chooses: no window then, another window focused since, the frontmost changed while the surface was
+// open, or the window is no longer on a visible normal Desktop).
+// `previous` is {address, workspaceId, gen} or null, `active` the window active now, `now` {gen, focusedWorkspaceId,
+// placement}: placement {workspaceId, parked} of the remembered window now (null: it is gone). Without `now` only the
+// active window is compared.
+function restoreTarget(previous, active, now) {
     if (!previous || !previous.address)
         return null;
     if (active && active.address && active.address !== previous.address)
         return null;
+    if (now) {
+        if (now.gen !== previous.gen)
+            return null;
+        const place = now.placement;
+        // Gone, minimized or hidden, on a special workspace (id <= 0: minimized, desktop, hidden, a capture window's), on
+        // another Desktop than before, or on a Desktop that is not the focused one.
+        if (!place || place.parked || !(place.workspaceId > 0))
+            return null;
+        if (previous.workspaceId > 0 && place.workspaceId !== previous.workspaceId)
+            return null;
+        if (now.focusedWorkspaceId !== place.workspaceId)
+            return null;
+    }
     const out = {kind: "remembered", address: previous.address};
     if (previous.workspaceId > 0)
         out.workspace = Math.floor(previous.workspaceId);

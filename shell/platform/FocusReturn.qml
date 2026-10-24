@@ -1,9 +1,11 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Grassfield.Ui
 import qs.services
 import "FocusReturn.js" as FR
+import "StagesFront.js" as StagesFront
 
 // Gives the keyboard back when a full-attention surface closes (macOS: Spotlight, Launchpad, a menu or the app switcher
 // closing returns key focus to the window that was key before). Every Exclusive shell surface reports `opened(name)` and
@@ -12,7 +14,7 @@ import "FocusReturn.js" as FR
 //    layer and focuses, FR41-FR43);
 //  - without it (C2): the shell focuses after the surfaces' hold time and checks the result, retrying until it holds, the
 //    bound runs out, the user acted (another window or Desktop became active) or another Exclusive surface opened.
-// Nothing is requested while the session lock is up, when no window was active, or when another window is active at the
+// Nothing is restored when the frontmost changed meanwhile (FR.restoreTarget). Nothing is requested while the session lock is up, when no window was active, or when another window is active at the
 // time of the decision (someone chose it: a menu item that raised a window). The Overview is a holder too (`closed(name,
 // false)`: it sends its own request) so that a hand-over between surfaces never fights over the focus.
 Singleton {
@@ -24,6 +26,10 @@ Singleton {
     property var holders: ({})
     // {address, workspaceId} of the window active when the first surface opened (null: none, or the desktop had the keyboard).
     property var previous: null
+    // Counts the events that change what is frontmost while a surface is open (FR.changesFront). `previous` keeps the value
+    // at open: a close restores the remembered window only when it is unchanged (macOS: the key window is the frontmost one
+    // now, so a Stages swap, a Desktop switch or a new window while the surface was open is not undone).
+    property int generation: 0
     property bool restoreWanted: false
 
     function anyOpen(): bool {
@@ -40,7 +46,7 @@ Singleton {
         surfaceOpened(name);
         cancelFallback();
         if (!anyOpen())
-            previous = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
+            previous = DesktopState.holdsKeyboard ? null : stamp(Compositor.activeWindow());
         const next = Object.assign({}, holders);
         next[name] = true;
         holders = next;
@@ -61,6 +67,26 @@ Singleton {
         Qt.callLater(decide);
     }
 
+    function stamp(active: var): var {
+        return active ? {
+            address: active.address,
+            workspaceId: active.workspaceId,
+            gen: generation
+        } : null;
+    }
+
+    Connections {
+        target: Hyprland
+
+        function onRawEvent(event: HyprlandEvent): void {
+            if (!root.anyOpen())
+                return;
+            const name = event.name === "grassfield" ? (StagesFront.parse(event.data) ? "stages" : "") : event.name;
+            if (FR.changesFront(name, event.data, root.previous ? root.previous.address : ""))
+                root.generation++;
+        }
+    }
+
     // A choice of focus made by the caller (a menu item raising a window): the close that follows requests nothing.
     function skip(): void {
         restoreWanted = false;
@@ -79,7 +105,12 @@ Singleton {
         restoreWanted = false;
         if (!wanted || locked)
             return;
-        const target = FR.restoreTarget(prev, Compositor.activeWindow());
+        const now = {
+            gen: generation,
+            focusedWorkspaceId: Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1,
+            placement: prev ? Compositor.placementOf(prev.address) : null
+        };
+        const target = FR.restoreTarget(prev, Compositor.activeWindow(), now);
         if (target)
             request(target);
     }

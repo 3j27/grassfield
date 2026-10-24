@@ -171,7 +171,9 @@ if (( minimize_rounds || stages_mode )); then
   events_pid=$!
 fi
 moves_to_minimized() { grep -cE '^movewindowv2>>[0-9a-f]+,[^,]*,special:minimized$' "$events" 2>/dev/null; }
-st_last() { grep -a 'grassfield>>{"v":"gfc/1","type":"stages"' "$events" | tail -n 1 | sed 's/^grassfield>>//'; }
+# The Stages state: the `stages` event is only a change notice (Hyprland cuts socket2 events at 1024 bytes; ADR-0007
+# amendment 2026-10-24), the state comes from the request socket.
+st_last() { nestctl grassfield-stages 2>/dev/null; }
 addr_of_pid() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j clients 2>/dev/null | jq -r --argjson p "$1" '[.[] | select(.pid == $p)][0].address // ""'; }
 dock_shot=""
 

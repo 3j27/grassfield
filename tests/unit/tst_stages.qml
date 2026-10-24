@@ -66,6 +66,175 @@ TestCase {
         compare(s.monitors["GF-REF"].stages[2].windows[0].address, "c3");
     }
 
+    // ADR-0007 amendment 2026-10-24: the event is a change notice (Hyprland cuts socket2 events at 1024 bytes); the state
+    // with its monitors comes from `hyprctl grassfield-stages`.
+    function test_aNoticeIsNotAState() {
+        const text = JSON.stringify({v: "gfc/1", type: "stages", gen: 42, on: true});
+        const n = StagesState.parseNotice(text);
+        verify(n.on);
+        compare(n.gen, 42);
+        compare(n.reason, "");
+        compare(n.monitors, undefined, "a notice never carries monitors");
+        verify(!StagesState.parse(text).complete, "a notice read as a reply is not a state");
+        const s = StagesState.parse(event({gen: 43}));
+        verify(s.complete);
+        compare(s.gen, 43);
+        compare(StagesState.parse(event()).gen, -1, "no generation");
+        compare(StagesState.parseNotice(JSON.stringify({v: "gfc/1", type: "stages", gen: -5, on: false})).gen, -1);
+        compare(StagesState.parseNotice(JSON.stringify({v: "gfc/1", type: "stages", gen: 3, on: false, reason: "interrupted"})).reason, "interrupted");
+        compare(StagesState.parseNotice(JSON.stringify({v: "gfc/1", type: "stages", gen: 3, on: false, reason: "made-up"})).reason, "");
+        compare(StagesState.parseNotice(JSON.stringify({v: "gfc/1", type: "minimize", gen: 3, on: true})), null);
+        compare(StagesState.parseNotice(JSON.stringify({v: "gfc/2", type: "stages", gen: 3, on: true})), null);
+        compare(StagesState.parseNotice("not json"), null);
+    }
+
+    // ---- the state fetch (StagesLink runs one `hyprctl grassfield-stages` at a time; a fake fetcher here) ----
+
+    // A fake StagesLink: applies StagesState's fetch steps and counts the fetches started; `retryMs` is the last backoff
+    // asked (0 none), `state` what the strip would show.
+    function link(active) {
+        return {
+            fetch: StagesState.newFetch(),
+            state: null,
+            started: 0,
+            retryMs: 0,
+            active: active === undefined ? true : active,
+            apply: function (out) {
+                this.fetch = out.fetch;
+                if (out.state !== undefined)
+                    this.state = out.state;
+                this.retryMs = out.retryMs;
+                if (out.start)
+                    this.started += 1;
+            },
+            notice: function (gen, on) {
+                const text = JSON.stringify({v: "gfc/1", type: "stages", gen: gen, on: on !== false});
+                this.apply(StagesState.onNotice(this.fetch, StagesState.parseNotice(text), this.active));
+            },
+            reply: function (text) {
+                this.apply(StagesState.onReply(this.fetch, text, this.state, this.active));
+            },
+            timeout: function () {
+                this.apply(StagesState.onTimeout(this.fetch, this.active));
+            },
+            retry: function () {
+                this.apply(StagesState.onRetry(this.fetch, this.active));
+            }
+        };
+    }
+
+    function test_aNoticeFetchesTheStateOnce() {
+        const l = link();
+        l.notice(1);
+        compare(l.started, 1);
+        compare(l.state, null, "nothing is shown before the reply");
+        l.reply(event({gen: 1}));
+        compare(l.state.gen, 1);
+        compare(l.state.monitors["GF-REF"].stages.length, 3);
+        verify(!l.fetch.running);
+        compare(l.started, 1);
+    }
+
+    function test_noticesDuringAFetchCoalesceIntoOneMoreFetch() {
+        const l = link();
+        l.notice(1);
+        l.notice(2);
+        l.notice(3);
+        compare(l.started, 1, "one fetch at a time");
+        l.reply(event({gen: 1}));
+        compare(l.state.gen, 1);
+        compare(l.started, 2, "the notices that came meanwhile ask one more fetch, not three");
+        l.reply(event({gen: 3}));
+        compare(l.state.gen, 3);
+        compare(l.started, 2);
+        verify(!l.fetch.running);
+    }
+
+    function test_anOutOfOrderReplyNeverReplacesANewerState() {
+        const l = link();
+        l.notice(5);
+        l.reply(event({gen: 5}));
+        l.notice(6);
+        l.reply(event({gen: 4}));
+        compare(l.state.gen, 5, "an older reply is dropped");
+        l.notice(7, false);
+        compare(l.state.on, false, "an off notice is shown at once, nothing to fetch");
+        compare(l.state.gen, 7);
+        compare(l.started, 2);
+        l.notice(8);
+        l.reply(event({gen: 6}));
+        compare(l.state.on, false, "a reply older than the off notice does not turn Stages back on");
+        compare(l.state.gen, 7);
+    }
+
+    function test_aFailedFetchIsRetriedWithBackoffThenTheStateIsUnknown() {
+        const l = link();
+        l.notice(1);
+        l.reply(event({gen: 1}));
+        l.notice(2);
+        l.reply("");
+        compare(l.retryMs, 200, "an empty reply (hyprctl failed) is retried");
+        compare(l.state.gen, 1, "the shown state stays while retrying");
+        l.retry();
+        l.reply("unknown request");
+        compare(l.retryMs, 400, "the plugin went away between the notice and the fetch");
+        l.retry();
+        l.timeout();
+        compare(l.retryMs, 800, "a fetch that never answered");
+        l.retry();
+        l.reply(JSON.stringify({v: "gfc/1", type: "stages", gen: 2, on: true}));
+        compare(l.retryMs, 0, "three retries at most");
+        compare(l.state, null, "then the state is unknown: the strip hides rather than show a stale state as current");
+        compare(l.started, 5);
+        verify(!l.fetch.running);
+        compare(l.fetch.tries, 0);
+        l.notice(3);
+        compare(l.started, 6, "the next notice starts over");
+    }
+
+    function test_aRetryThatSucceedsShowsTheStateAndClearsTheFailures() {
+        const l = link();
+        l.notice(1);
+        l.timeout();
+        compare(l.retryMs, 200);
+        l.retry();
+        l.reply(event({gen: 1}));
+        compare(l.state.gen, 1);
+        compare(l.fetch.tries, 0);
+        compare(l.retryMs, 0);
+    }
+
+    function test_aNewNoticeDuringTheBackoffFetchesAtOnce() {
+        const l = link();
+        l.notice(1);
+        l.reply("");
+        compare(l.retryMs, 200);
+        l.notice(2);
+        compare(l.started, 2);
+        compare(l.fetch.tries, 0);
+        l.retry();
+        compare(l.started, 2, "a retry due while a fetch runs starts nothing");
+    }
+
+    function test_nothingIsFetchedOrShownWhileStagesIsNotActive() {
+        const l = link(false);
+        l.notice(1);
+        l.notice(2, false);
+        compare(l.started, 0);
+        compare(l.state, null);
+        const m = link();
+        m.notice(1);
+        m.active = false;
+        m.reply(event({gen: 1}));
+        compare(m.state, null, "a reply that ends after Stages stopped is dropped");
+        m.active = true;
+        m.notice(2);
+        m.active = false;
+        m.timeout();
+        compare(m.retryMs, 0, "no retry once Stages stopped");
+        verify(!m.fetch.running);
+    }
+
     function test_foreignOrMalformedEventsAreIgnored() {
         compare(StagesState.parse("not json"), null);
         compare(StagesState.parse(JSON.stringify({v: "gfc/2", type: "stages", on: true, monitors: []})), null);

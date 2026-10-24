@@ -1,6 +1,6 @@
 .pragma library
 
-// The front app of the Stages event (gfc/1 `stages`, docs/specs/stages.md "Event contract" 4), for the menu bar only.
+// The front app of the Stages state (gfc/1 `stages`, docs/specs/stages.md "Shell contract" 4), for the menu bar only.
 // While an Exclusive layer holds the keyboard after a Stages swap Hyprland has no active window; the bar then names the
 // front app of the shown Desktop (macOS: the frontmost app stays named behind a system modal). Pure, no compositor access.
 
@@ -23,8 +23,10 @@ function cleanAddress(address) {
     return m ? m[1].toLowerCase() : "";
 }
 
-// Parses a `grassfield` raw event payload: {on, fronts: [{monitor, address, app}]} for a stages event, null for anything
-// else (other types, foreign or malformed payloads). A monitor without a valid `front` contributes none.
+// gfc1-reply: grassfield-stages
+// Parses the Stages state (the reply of `hyprctl grassfield-stages`, handed over by StagesLink: the `stages` event is
+// only a change notice): {on, fronts: [{monitor, address, app}]}, null for anything else (other types, foreign or
+// malformed payloads). A monitor without a valid `front` contributes none.
 function parse(data) {
     let msg = null;
     try {

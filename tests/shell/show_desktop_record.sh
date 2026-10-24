@@ -21,7 +21,7 @@ trap 'rm -rf "$tmp"' EXIT
 if [[ ${1:-} == --write ]]; then out=$root/tests/unit/fixtures/showdesktop; else out=$tmp; fi
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
-dev_nested_target "$dev" || { echo "record: no verified nested instance (scripts/dev/nested-up.sh)"; exit 2; }
+dev_nested_target "$dev" || { echo "SKIP show_desktop_record: no nested session of this tree (scripts/dev/nested-up.sh, as a bare command)"; exit 0; }
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
 [[ $sig != "$main" && $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "record: refusing the main session"; exit 2; }

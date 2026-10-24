@@ -1,9 +1,16 @@
+#include "core/Appmenu.hpp"
+#include "core/Overview.hpp"
+#include "core/OverviewFocus.hpp"
 #include "core/Protocol.hpp"
+#include "core/Stages.hpp"
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using namespace gf::gfc;
 
@@ -162,4 +169,58 @@ TEST(Protocol, NamesAreStable) {
 TEST(Protocol, LuaDispatchRequestIsWhatTheShellSends) {
     // Hyprland wraps it as `return hl.dispatch(hl.plugin.grassfield.hello())`.
     EXPECT_EQ(luaDispatchRequest(kLuaHello), "hl.plugin.grassfield.hello()");
+}
+
+// Hyprland 0.56.2 cuts a socket2 event's data at 1024 bytes (CEventManager::formatEvent, read from the binary; 22 stages
+// events were cut in the integrator's nested run of 2026-10-24). Every event builder, at its worst case: every feature,
+// the longest ids and names a client can give, and for Stages 64 windows on 4 monitors (the full state goes through the
+// request socket, `hyprctl grassfield-stages`, which has no such limit).
+TEST(Protocol, EveryEventStaysUnderHyprlandsSocket2Limit) {
+    const std::string maxAddress = "ffffffffffffffff";
+    const auto        under      = [](const std::string& json) { return json.size() < kMaxEventBytes; };
+
+    const auto all = features(true, true, true, true, true, true, true, true, true, true, true, true, true, true, true);
+    EXPECT_TRUE(under(capabilitiesJson(all))) << capabilitiesJson(all).size();
+    EXPECT_TRUE(under(minimizeRequestJson(maxAddress)));
+    EXPECT_TRUE(under(minimizedJson(maxAddress)));
+    EXPECT_TRUE(under(restoredJson(maxAddress)));
+
+    // appmenu: the service and the path are client text, validated to at most 255 bytes of [A-Za-z0-9_.:/-] (no escaping).
+    const std::string service = ":1." + std::string(gf::appmenu::kMaxNameLength - 3, '2');
+    const std::string path    = "/" + std::string(254, 'a');
+    ASSERT_TRUE(gf::appmenu::isValidBusName(service));
+    ASSERT_TRUE(gf::appmenu::isValidObjectPath(path));
+    const auto appmenu = appmenuJson(maxAddress, service, path, std::numeric_limits<int>::max());
+    EXPECT_TRUE(under(appmenu)) << appmenu.size();
+
+    EXPECT_TRUE(under(gf::overview::eventJson(gf::overview::Phase::Closing, std::numeric_limits<size_t>::max(), gf::overview::Reason::Interrupted)));
+
+    const gf::overviewfocus::Event focus{.outcome   = gf::overviewfocus::Outcome::Unavailable,
+                                         .target    = gf::overviewfocus::Target::Remembered,
+                                         .id        = std::numeric_limits<uint32_t>::max(),
+                                         .window    = std::numeric_limits<uint64_t>::max(),
+                                         .workspace = std::numeric_limits<int64_t>::min(),
+                                         .reason    = "refused-by-hyprland"}; // the longest reason
+    EXPECT_TRUE(under(gf::overviewfocus::eventJson(focus)));
+    EXPECT_EQ(gf::overviewfocus::eventJson(focus).size(), 192U) << "the worst case the ADR-0007 amendment 2026-10-24 states";
+
+    EXPECT_TRUE(under(gf::stages::noticeJson(std::numeric_limits<uint64_t>::max(), false, gf::stages::Reason::Interrupted)));
+
+    // The full Stages state with 64 windows on 4 monitors is far over the limit: it must never be an event.
+    std::vector<gf::stages::EventMonitor> monitors(4);
+    uint64_t                              id = 0x100000000000;
+    for (size_t m = 0; m < monitors.size(); ++m) {
+        monitors[m].monitor   = "MONITOR-" + std::to_string(m);
+        monitors[m].workspace = static_cast<gf::stages::WorkspaceId>(m + 1);
+        monitors[m].active    = 1;
+        monitors[m].front     = gf::stages::EventFront{.id = id, .app = std::string(gf::stages::kMaxAppBytes, 'a')};
+        for (int st = 0; st < 4; ++st) {
+            gf::stages::EventStage stage{.id = static_cast<gf::stages::StageId>(st + 1), .slot = st - 1, .windows = {}};
+            for (int w = 0; w < 4; ++w)
+                stage.windows.push_back(gf::stages::EventWindow{.id = id++, .thumb = gf::stages::Box{1920.05, 1080.05, 188.05, 160.05}});
+            monitors[m].stages.push_back(stage);
+        }
+    }
+    const auto state = gf::stages::stateJson(std::numeric_limits<uint64_t>::max(), true, monitors);
+    EXPECT_GT(state.size(), kMaxEventBytes) << "64 windows on 4 monitors: only the request socket can carry it";
 }

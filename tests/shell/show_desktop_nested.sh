@@ -39,7 +39,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
-dev_nested_target "$dev" || { echo "show_desktop: no verified nested instance (scripts/dev/nested-up.sh)"; exit 2; }
+dev_nested_target "$dev" || { echo "SKIP show_desktop_nested: no nested session of this tree (scripts/dev/nested-up.sh, as a bare command)"; exit 0; }
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
 [[ $sig != "$main" && $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "show_desktop: refusing the main session"; exit 2; }

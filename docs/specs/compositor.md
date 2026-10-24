@@ -354,7 +354,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   configured; swaps animate over the `durationMs`/`curve` of the latest `op:on`; Hyprland's window, focus, workspace,
   layer and monitor events keep the model in step (applied through one coalesced `doLater` per event loop pass, also for
   activate / merge / move requests: a dispatch causes at most one focus change).
-- **FR36** Stages events: `{"v":"gfc/1","type":"stages","on":bool,"monitors":[…]}` (FR24 channel `stages`, one key), with
+- **FR36** Stages notice and state (ADR-0007 amendment 2026-10-24: Hyprland cuts socket2 events at 1024 bytes): the event
+  is a change notice, `{"v":"gfc/1","type":"stages","gen":N,"on":bool}` (FR24 channel `stages`, one key; at most 100
+  bytes), and the state of that generation, `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[…]}`, is the reply
+  of `hyprctl grassfield-stages` (registered with the plugin, removed at unload; `stages-available` needs it). Both carry
   `reason` as in FR34 plus `interrupted` (a strip surface went away or the monitors changed: that monitor's windows are
   shown normally at once) and `unavailable` (unload). Since 0.6.4-stages each monitor also names the front window of the
   shown Desktop's active stage and its app (`"front":{"address","app"}`, additive; app sanitized to valid UTF-8, at most
@@ -695,7 +698,8 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | plugin (no verb) | feature `desktop-focus` (+ `desktop-focus-v2`): click-to-focus for the layer surface `grassfield-desktop-icons` on pointer presses | FR30; contract `docs/specs/desktop.md` "Compositor focus policy" |
 | shell → plugin | `hl.plugin.grassfield.config("stagesEnabled", "true"\|"false")` | FR33 |
 | shell → plugin | `hl.plugin.grassfield.stages("<json>")` | `{"op":"on"\|"off"\|"activate"\|"move"\|"merge",…}` (FR34; contract `docs/specs/stages.md`) |
-| plugin → shell | socket2 event `grassfield` (Stages state) | `{"v":"gfc/1","type":"stages","on":bool,"monitors":[…]}` (+ `"reason"`; FR36) |
+| plugin → shell | socket2 event `grassfield` (Stages change notice) | `{"v":"gfc/1","type":"stages","gen":N,"on":bool}` (+ `"reason"`; FR36) |
+| shell → plugin | `hyprctl grassfield-stages` (request socket; StagesLink, on each notice with `on:true`) | the state: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[…]}` (+ `"reason"`; FR36) |
 | shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`), after the shell's `setcursor <theme> <size>` was answered `ok` | the pointer is drawn again at that size, same shape, same place (FR39-FR40); no event |
 | shell → plugin | `hl.plugin.grassfield.overview_focus("<json>")` (feature `overview-focus`) when the Overview starts closing | `{"target":"window"\|"workspace"\|"remembered"\|"none",…}` (FR41; contract `docs/specs/overview.md` "Close focus") |
 | plugin → shell | socket2 event `grassfield` (overview focus outcome) | `{"v":"gfc/1","type":"overview-focus","outcome":"…","target":"…","id":N}` (+ `"address"`, `"workspace"`, `"reason"`; FR42) |

@@ -11,11 +11,17 @@
 //     300 ms later.
 // Driven over Quickshell IPC, target "ovf": open(), holder() (the output whose chrome holds the keyboard, "" for none),
 // release(order, gapMs, unmapMs) with order "holder-first" | "holder-last" | "together" (gapMs between the two commits,
-// unmapMs after the last one, -1: stay mapped), polkit(output), polkitRelease(), status().
+// unmapMs after the last one, -1: stay mapped), polkit(output), polkitRelease(), status(); close(request, order, gapMs,
+// unmapMs) and closeWithPolkit(request, output, order, gapMs, polkitMs): the Overview's own sequence from one place, as
+// the shell does it (the overview_focus request dispatched, the release 30 ms later, the dialog released polkitMs after
+// the request), so that every delay is timed from the request: a `qs ipc` call takes 80 to 200 ms to arrive on a loaded
+// host, and a release sent as a second call made the remaining chrome's hold end past the plugin's 1000-ms bound
+// (overview_focus.sh case 10 had 19 ms of slack in the passing run of 2026-10-23, and failed by 28 ms on 2026-10-24).
 // Input (validated): GF_OF_OUTPUT_A, GF_OF_OUTPUT_B (output names). Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 
@@ -59,6 +65,31 @@ ShellRoot {
         log("chrome " + out + " keyboard " + (on ? "exclusive" : "none"));
     }
 
+    // The close sequence (close / closeWithPolkit): what the release does once the request is out.
+    property string pendingOrder: ""
+    property int pendingGapMs: 0
+    property int pendingUnmapMs: -1
+    property string pendingPolkitOut: ""
+    // When the close sequence's request went out (Date.now()), 0 before the first one: the timing lines the test reads to
+    // tell a late fixture (a loaded host delays its timers) from a plugin fault.
+    property real requestAt: 0
+
+    function timing(what: string): void {
+        if (requestAt > 0)
+            log("timing: " + what + " at +" + Math.round(Date.now() - requestAt) + " ms after the request");
+    }
+
+    // The request as the shell sends it (the same Lua call as overview_focus.sh's request()); false when it could break out
+    // of the Lua long string or is not one line of at most 1 KiB.
+    function dispatchRequest(request: string): bool {
+        if (typeof request !== "string" || request.length === 0 || request.length > 1024 || request.indexOf("]]") >= 0 || /[\r\n]/.test(request))
+            return false;
+        Hyprland.dispatch("function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview_focus then p.overview_focus([[" + request + "]]) end end");
+        requestAt = Date.now();
+        log("request dispatched");
+        return true;
+    }
+
     function released(): void {
         if (unmapAfterMs < 0)
             return;
@@ -72,6 +103,7 @@ ShellRoot {
         id: secondTimer
         onTriggered: {
             root.setExclusive(root.secondOut, false);
+            root.timing("second chrome released");
             root.released();
         }
     }
@@ -83,6 +115,28 @@ ShellRoot {
             root.shownB = false;
             root.log("chromes unmapped");
         }
+    }
+
+    // The release of a close sequence, 30 ms after its request (the request reaches Hyprland first, as when the shell sends
+    // it before releasing its chromes).
+    Timer {
+        id: closeTimer
+        interval: 30
+        onTriggered: {
+            if (root.pendingPolkitOut !== "") {
+                root.polkitOut = root.pendingPolkitOut;
+                root.polkitHeld = true;
+                root.polkitShown = true;
+                root.log("polkit shown on " + root.polkitOut);
+            }
+            ipc.release(root.pendingOrder, root.pendingGapMs, root.pendingUnmapMs);
+        }
+    }
+
+    // The dialog's end in closeWithPolkit, timed from the request.
+    Timer {
+        id: polkitEnd
+        onTriggered: ipc.polkitRelease()
     }
 
     Timer {
@@ -207,6 +261,8 @@ ShellRoot {
     }
 
     IpcHandler {
+        id: ipc
+
         target: "ovf"
 
         function open(): string {
@@ -244,6 +300,30 @@ ShellRoot {
             return "ok";
         }
 
+        function close(request: string, order: string, gapMs: int, unmapMs: int): string {
+            if (!root.dispatchRequest(request))
+                return "invalid request";
+            root.pendingOrder = order;
+            root.pendingGapMs = gapMs;
+            root.pendingUnmapMs = unmapMs;
+            root.pendingPolkitOut = "";
+            closeTimer.restart();
+            return "ok";
+        }
+
+        function closeWithPolkit(request: string, output: string, order: string, gapMs: int, polkitMs: int): string {
+            if (!/^[A-Za-z0-9._-]{1,32}$/.test(output) || !root.dispatchRequest(request))
+                return "invalid request";
+            root.pendingOrder = order;
+            root.pendingGapMs = gapMs;
+            root.pendingUnmapMs = -1;
+            root.pendingPolkitOut = output;
+            closeTimer.restart();
+            polkitEnd.interval = Math.max(closeTimer.interval + 1, polkitMs);
+            polkitEnd.restart();
+            return "ok";
+        }
+
         function polkit(output: string): string {
             root.polkitOut = /^[A-Za-z0-9._-]{1,32}$/.test(output) ? output : "";
             root.polkitHeld = true;
@@ -254,6 +334,7 @@ ShellRoot {
         function polkitRelease(): string {
             root.polkitHeld = false;
             root.log("polkit released");
+            root.timing("polkit released");
             polkitHide.restart();
             return "ok";
         }

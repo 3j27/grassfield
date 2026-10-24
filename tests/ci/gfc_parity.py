@@ -8,19 +8,23 @@ Three views of the protocol are extracted as sets and compared:
 
   docs   the fenced block "gfc1" in docs/decisions/ADR-0007-shell-plugin-ipc.md (the machine-checkable table):
            event <type>: <field> ...        every field of the event (nested ones flattened; "v" and "type" are implicit)
+           reply <command>: <field> ...     every field of the reply of `hyprctl <command>` (a state too big for an event)
            enum <type>.<field>: <value> ... the closed values of a field (state, reason, outcome, target)
            feature <name> ...               advertised in the capabilities event
            verb <name> ...                  hl.plugin.grassfield.<verb>
   code   compositor/src: the event types and fields come from the JSON builders (the `"type":"x"` literals, the
-         appendHeader / windowEventJson calls of core/Protocol.cpp and the fields named in the builder's function body),
+         appendHeader / windowEventJson calls of core/Protocol.cpp and the fields named in the builder's function body;
+         a builder under a `// gfc1-reply: <command>` comment builds that reply, not an event),
          enum values from the reasonName / phaseName / outcomeName / targetName switches (and the reason literals of
          overview focus), features and verbs from the kFeature* / kLua* constants of core/Protocol.hpp.
-  shell  shell/ and apps/: the event types a consumer tests (`msg.type === "x"`), the fields it reads in that function,
+  shell  shell/ and apps/: the event types a consumer tests (`msg.type === "x"`), the fields it reads in that function
+         (a reply when the function sits under a `// gfc1-reply: <command>` comment, else the event of that type),
          the reasons and states it lists (overview/V2.js), `Capabilities.has("feature")` and the verb allowlist
          (platform/Minimized.js pluginVerbs).
 
 Failures: code but not docs, docs but not code, and anything the shell reads that the plugin never sends (a type, a
-field, an enum value, a feature, a verb). The plugin sending something the shell ignores is allowed (overview-focus).
+field, a reply or its field, an enum value, a feature, a verb): a shell function that reads a reply's field out of the
+event fails, since the event never carries it. The plugin sending something the shell ignores is allowed (overview-focus).
 Limits: the extraction is textual. A new builder that does not use the patterns above is invisible and shows up as
 "documented but not in code"; teach `code_model` the new pattern rather than loosening the comparison.
 """
@@ -52,10 +56,26 @@ def load(root):
     return files
 
 
-# ---- model: {"events": {type: set(fields)}, "enums": {"type.field": set}, "features": set, "verbs": set} ----
+# ---- model: {"events": {type: set(fields)}, "replies": {command: set(fields)}, "enums": {"type.field": set},
+#              "features": set, "verbs": set} ----
 
 def empty():
-    return {"events": {}, "enums": {}, "features": set(), "verbs": set()}
+    return {"events": {}, "replies": {}, "enums": {}, "features": set(), "verbs": set()}
+
+
+REPLY_MARK = re.compile(r"//\s*gfc1-reply:\s*([a-z][a-z-]*)\s*$")
+
+
+def reply_mark(lines):
+    """The command of a `// gfc1-reply: <command>` line in the comment block that ends `lines`, else None."""
+    for line in reversed(lines):
+        s = line.strip()
+        if not s.startswith("//"):
+            return None
+        m = REPLY_MARK.match(s)
+        if m:
+            return m.group(1)
+    return None
 
 
 def docs_model(adr_text):
@@ -69,11 +89,14 @@ def docs_model(adr_text):
         if not line:
             continue
         ev = re.fullmatch(r"event ([a-z][a-z-]*):((?: [A-Za-z_]+)*)", line)
+        rp = re.fullmatch(r"reply ([a-z][a-z-]*):((?: [A-Za-z_]+)+)", line)
         en = re.fullmatch(r"enum ([a-z][a-z-]*\.[a-z]+):((?: [a-z][a-z-]*)+)", line)
         ft = re.fullmatch(r"feature((?: [a-z][a-z0-9-]*)+)", line)
         vb = re.fullmatch(r"verb((?: [a-z][a-z_]*)+)", line)
         if ev:
             m["events"][ev.group(1)] = set(ev.group(2).split())
+        elif rp:
+            m["replies"][rp.group(1)] = set(rp.group(2).split())
         elif en:
             m["enums"][en.group(1)] = set(en.group(2).split())
         elif ft:
@@ -87,6 +110,11 @@ def docs_model(adr_text):
 
 def function_bodies(text):
     """[(name, body)] for lines like `    std::string name(args) {` up to the closing brace at the same indent."""
+    return [(n, b) for n, b, _ in marked_bodies(text)]
+
+
+def marked_bodies(text):
+    """[(name, body, reply command or None)]: function_bodies plus the gfc1-reply mark of the comment above each."""
     lines = text.splitlines()
     out = []
     for i, line in enumerate(lines):
@@ -97,7 +125,7 @@ def function_bodies(text):
         j = i + 1
         while j < len(lines) and lines[j].rstrip() != close:
             j += 1
-        out.append((m.group(2), "\n".join(lines[i:j + 1])))
+        out.append((m.group(2), "\n".join(lines[i:j + 1]), reply_mark(lines[:i])))
     return out
 
 
@@ -116,9 +144,14 @@ def code_model(files):
     for path, text in sorted(files.items()):
         if not (path.startswith("compositor/src/") and path.endswith(".cpp")):
             continue
-        bodies = function_bodies(text)
+        marked = marked_bodies(text)
+        bodies = [(n, b) for n, b, _ in marked]
         by_name = {n: b for n, b in bodies}
         types = set(re.findall(r'"type":"([a-z][a-z-]*)"', text))
+        for n, body, reply in marked:
+            if reply:
+                m["replies"].setdefault(reply, set()).update(json_fields(body))
+        bodies = [(n, b) for n, b, reply in marked if not reply]
         if path.endswith("core/Protocol.cpp"):
             # appendHeader(out, "x") in a builder; windowEventJson("x", ...) shares the body of windowEventJson
             for n, body in bodies:
@@ -151,6 +184,7 @@ def code_model(files):
             if re.search(r"\b(?:finish|post)\(of::Outcome::", line):
                 vals |= set(re.findall(r'"([a-z][a-z]*(?:-[a-z]+)*)"', line))
             vals |= set(re.findall(r'\.why = "([a-z][a-z-]*)"', line))
+            vals |= set(re.findall(r'\bapplyFallback\(\w+,\s*"([a-z][a-z-]*)"', line))
         if vals and "overview-focus" in m["events"]:
             m["enums"].setdefault("overview-focus.reason", set()).update(vals)
     return m
@@ -160,6 +194,12 @@ def enclosing_function(text, pos):
     start = text.rfind("\nfunction ", 0, pos) + 1
     end = text.find("\n}", pos)
     return text[start:end if end >= 0 else len(text)]
+
+
+def enclosing_reply(text, pos):
+    """The gfc1-reply command marked above the function around `pos`, else None."""
+    start = text.rfind("\nfunction ", 0, pos) + 1
+    return reply_mark(text[:start].splitlines()) if start > 0 else None
 
 
 def shell_model(files):
@@ -172,7 +212,11 @@ def shell_model(files):
             t = found.group(1)
             body = enclosing_function(text, found.start())
             reads = {f for _, f in re.findall(r"\b(m\.front|msg|doc|m)\.([A-Za-z_]\w*)", body)}
-            m["events"].setdefault(t, set()).update(reads - IMPLICIT)
+            reply = enclosing_reply(text, found.start())
+            if reply:
+                m["replies"].setdefault(reply, set()).update(reads - IMPLICIT)
+            else:
+                m["events"].setdefault(t, set()).update(reads - IMPLICIT)
         for f in re.findall(r'\bCapabilities\.has\("([a-z][a-z0-9-]*)"\)', text):
             m["features"].add(f)
     v2 = files.get("shell/overview/V2.js", "")
@@ -201,6 +245,9 @@ def compare(docs, code, shell, adr_problems=()):
     sets("event types", set(docs["events"]), set(code["events"]))
     for t in sorted(set(docs["events"]) & set(code["events"])):
         sets("fields of %s" % t, docs["events"][t], code["events"][t])
+    sets("replies", set(docs["replies"]), set(code["replies"]))
+    for r in sorted(set(docs["replies"]) & set(code["replies"])):
+        sets("fields of reply %s" % r, docs["replies"][r], code["replies"][r])
     sets("enums", set(docs["enums"]), set(code["enums"]))
     for k in sorted(set(docs["enums"]) & set(code["enums"])):
         sets("values of %s" % k, docs["enums"][k], code["enums"][k])
@@ -213,6 +260,12 @@ def compare(docs, code, shell, adr_problems=()):
             continue
         for f in sorted(shell["events"][t] - code["events"][t]):
             errs.append("shell reads %s.%s that the plugin never sends" % (t, f))
+    for r in sorted(shell["replies"]):
+        if r not in code["replies"]:
+            errs.append("shell reads reply %s that the plugin never gives" % r)
+            continue
+        for f in sorted(shell["replies"][r] - code["replies"][r]):
+            errs.append("shell reads reply %s field %s that the plugin never gives" % (r, f))
     for k in sorted(shell["enums"]):
         for v in sorted(shell["enums"][k] - code["enums"].get(k, set())):
             errs.append("shell lists %s value %s that the plugin never sends" % (k, v))
@@ -286,11 +339,40 @@ FIX_OV_CPP = '''
         return out;
     }
 '''
+FIX_STAGES_CPP = '''
+    std::string noticeJson(uint64_t generation, bool on) {
+        out += std::format(R"(","type":"stages","gen":{},"on":)", generation);
+        return out;
+    }
+
+    // gfc1-reply: grassfield-stages
+    // The state.
+    std::string stateJson(uint64_t generation, bool on) {
+        out += std::format(R"(","type":"stages","gen":{},"on":)", generation);
+        out += R"(,"monitors":[)";
+        return out;
+    }
+'''
+FIX_STAGES_JS = '''
+function parseNotice(data) {
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "stages") return null;
+    return {on: msg.on, gen: msg.gen};
+}
+
+// gfc1-reply: grassfield-stages
+// The state fetched with hyprctl.
+function parse(data) {
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "stages") return null;
+    return {on: msg.on, gen: msg.gen, monitors: msg.monitors};
+}
+'''
 FIX_ADR = '''# ADR
 ```gfc1
 event capabilities: features
 event minimized: address
 event overview: state windows reason
+event stages: gen on
+reply grassfield-stages: gen on monitors
 enum overview.reason: invalid
 enum overview.state: open
 feature decorations stages-available
@@ -313,6 +395,8 @@ def fixtures():
         "shell/overview/V2.js": FIX_SHELL_JS + 'var states = ["open"];\nvar reasons = ["invalid"];\n',
         "shell/platform/Minimized.js": 'var pluginVerbs = ["hello", "cursor_refresh"];\n',
         "shell/x/Use.qml": 'if (Capabilities.has("stages-available")) {}\n',
+        "compositor/src/core/Stages.cpp": FIX_STAGES_CPP,
+        "shell/platform/StagesState.js": FIX_STAGES_JS,
         ADR: FIX_ADR,
     }
 
@@ -370,6 +454,24 @@ def selftest():
     verb["shell/platform/Minimized.js"] = 'var pluginVerbs = ["hello", "tile"];\n'
     expect("shell verb", run_fixture(verb), "shell may call verb tile")
 
+    # a shell parser that reads the reply's monitors out of the event (the reply mark gone)
+    unmarked = dict(base)
+    unmarked["shell/platform/StagesState.js"] = FIX_STAGES_JS.replace("// gfc1-reply: grassfield-stages\n", "")
+    expect("reply field read from the event", run_fixture(unmarked), "shell reads stages.monitors that the plugin never sends")
+
+    # the state built as an event (the code's reply mark gone), and a reply field the docs lack
+    code_unmarked = dict(base)
+    code_unmarked["compositor/src/core/Stages.cpp"] = FIX_STAGES_CPP.replace("// gfc1-reply: grassfield-stages\n", "")
+    errs = run_fixture(code_unmarked)
+    expect("state as an event", errs, "fields of stages: in code but not documented: monitors")
+    expect("reply gone from the code", errs, "replies: documented but not in code: grassfield-stages")
+    reply_field = dict(base)
+    reply_field[ADR] = FIX_ADR.replace("reply grassfield-stages: gen on monitors", "reply grassfield-stages: gen on")
+    expect("undocumented reply field", run_fixture(reply_field), "fields of reply grassfield-stages: in code but not documented: monitors")
+    shell_reply = dict(base)
+    shell_reply["shell/platform/StagesState.js"] = FIX_STAGES_JS.replace("monitors: msg.monitors", "screens: msg.screens")
+    expect("shell reply field never given", run_fixture(shell_reply), "shell reads reply grassfield-stages field screens")
+
     # a docs block that cannot be read
     expect("no block", run_fixture({**base, ADR: "# no table\n"}), "no ```gfc1 block")
     expect("bad line", run_fixture({**base, ADR: FIX_ADR.replace("verb hello", "verbs hello")}), "unreadable line")
@@ -393,9 +495,9 @@ def main(argv):
         for e in errs:
             print("  " + e)
         return 1
-    print("gfc/1 parity: %d events, %d enums, %d features, %d verbs; shell reads %d types, %d features"
-          % (len(code["events"]), len(code["enums"]), len(code["features"]), len(code["verbs"]),
-             len(shell["events"]), len(shell["features"])))
+    print("gfc/1 parity: %d events, %d replies, %d enums, %d features, %d verbs; shell reads %d types, %d replies, %d features"
+          % (len(code["events"]), len(code["replies"]), len(code["enums"]), len(code["features"]), len(code["verbs"]),
+             len(shell["events"]), len(shell["replies"]), len(shell["features"])))
     return 0
 
 

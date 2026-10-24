@@ -255,7 +255,7 @@ Scope {
             }
             // The desktop holds the keyboard: Hyprland still reports the last window as active, the bar shows the desktop (Finder).
             // With Stages on and no active window (an Exclusive layer holds the keyboard after a swap) the front app of the
-            // Stages event is named (display only, AppMenus.context disables the window commands).
+            // Stages state is named (display only, AppMenus.context disables the window commands).
             readonly property string shownAppId: DesktopState.holdsKeyboard ? "" : Compositor.focusedAppId !== "" ? Compositor.focusedAppId : (Popups.active && lastAppId !== "" && lastAppAlive ? lastAppId : Compositor.stagesFrontAppId)
             readonly property string appName: {
                 if (shownAppId === "")

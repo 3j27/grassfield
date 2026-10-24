@@ -42,6 +42,7 @@ namespace gf {
         SP<SHyprCtlCommand>                hyprctlCommand;
         SP<SHyprCtlCommand>                hyprctlFramesCommand; // `hyprctl grassfield-frames` (FrameProbe, feature frame-times)
         SP<SHyprCtlCommand>                hyprctlFramesStartCommand; // `hyprctl grassfield-frames-start` (records for 60 s)
+        SP<SHyprCtlCommand>                hyprctlStagesCommand; // `hyprctl grassfield-stages` (the Stages state; stages-available needs it)
         bool                               luaHelloRegistered    = false;
         bool                               luaMinimizeRegistered = false;
         bool                               luaRestoreRegistered  = false;

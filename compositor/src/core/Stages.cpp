@@ -629,10 +629,26 @@ namespace gf::stages {
         return out;
     }
 
-    std::string eventJson(bool on, std::span<const EventMonitor> monitors, Reason reason) {
+    std::string noticeJson(uint64_t generation, bool on, Reason reason) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
-        out += R"(","type":"stages","on":)";
+        out += std::format(R"(","type":"stages","gen":{},"on":)", generation);
+        out += on ? "true" : "false";
+        if (reason != Reason::None) {
+            out += R"(,"reason":")";
+            out += reasonName(reason);
+            out += '"';
+        }
+        out += '}';
+        return out;
+    }
+
+    // gfc1-reply: grassfield-stages
+    // The state, the reply of `hyprctl grassfield-stages` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
+    std::string stateJson(uint64_t generation, bool on, std::span<const EventMonitor> monitors, Reason reason) {
+        std::string out{R"({"v":")"};
+        out += gf::gfc::jsonEscape(gf::gfc::kVersion);
+        out += std::format(R"(","type":"stages","gen":{},"on":)", generation);
         out += on ? "true" : "false";
         if (reason != Reason::None) {
             out += R"(,"reason":")";
