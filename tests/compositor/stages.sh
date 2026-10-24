@@ -177,7 +177,9 @@ stamp_events() {
   local l
   while IFS= read -r l; do
     printf '%s %s\n' "${EPOCHREALTIME/./}" "$l"
-    if [[ $l == 'grassfield>>{"v":"gfc/1","type":"stages"'* ]]; then
+    if [[ $l == 'grassfield>>{"v":"gfc/1","type":"stages"'*'"on":false'* ]]; then
+      printf '%s grassfield-state>>%s\n' "${EPOCHREALTIME/./}" "${l#grassfield>>}" # Stages off: nothing to fetch (as the shell)
+    elif [[ $l == 'grassfield>>{"v":"gfc/1","type":"stages"'* ]]; then
       printf '%s grassfield-state>>%s\n' "${EPOCHREALTIME/./}" "$(timeout 5 "$root/scripts/nestctl" grassfield-stages 2>/dev/null | tr -d '\n')"
     fi
   done
@@ -1423,10 +1425,14 @@ fix2_pid=""
 n_before=$(nestctl grassfield-stages | jq '[.monitors[].stages[].windows[]] | length' 2>/dev/null)
 ev0=$(event_lines)
 want_other=0
-if [[ -n $other_out ]]; then
-  read -r ox oy < <(nestctl -j monitors | jq -r --arg o "$other_out" '.[] | select(.name == $o) | "\(.x) \(.y)"')
-  strip2_json=$(jq -nc --argjson x "$ox" --argjson y "$oy" '{x: $x, y: ($y + 60), w: 220, h: 860}')
-  tiles2_json=$(jq -nc --argjson x "$ox" --argjson y "$oy" '[range(0; 4) as $i | {x: ($x + 16), y: ($y + 100 + $i * 190), w: 188, h: 160}]')
+read -r ox oy oh < <(nestctl -j monitors | jq -r --arg o "$other_out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.height)"')
+# The other output may be small (the nested window's size on the parent): as many tiles as fit, none under 300 px.
+sh2=$(( $(num "$oh") - 80 < 860 ? $(num "$oh") - 80 : 860 ))
+nt2=$(( sh2 >= 240 ? (sh2 - 200) / 190 + 1 : 0 ))
+((nt2 > 4)) && nt2=4
+if [[ -n $other_out ]] && ((nt2 >= 1)); then
+  strip2_json=$(jq -nc --argjson x "$ox" --argjson y "$oy" --argjson h "$sh2" '{x: $x, y: ($y + 60), w: 220, h: $h}')
+  tiles2_json=$(jq -nc --argjson x "$ox" --argjson y "$oy" --argjson n "$nt2" '[range(0; $n) as $i | {x: ($x + 16), y: ($y + 100 + $i * 190), w: 188, h: 160}]')
   GF_STAGES_OUTPUT=$other_out GF_STAGES_STRIP=$strip2_json GF_STAGES_TILES=$tiles2_json WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
     DBUS_SESSION_BUS_ADDRESS=$fixture_bus setsid "$root/scripts/dev/isolated.sh" --name stages-fixture2 qs -p "$root/tests/compositor/stages-fixture" --no-color \
     >"$run/fixture2.log" 2>&1 </dev/null &
