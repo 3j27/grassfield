@@ -1796,10 +1796,6 @@
         <translation>Mode Avion</translation>
     </message>
     <message>
-        <source>Wi-Fi and Bluetooth off</source>
-        <translation>Wi-Fi et Bluetooth désactivés</translation>
-    </message>
-    <message>
         <source>Quick Settings</source>
         <translation>Réglages rapides</translation>
     </message>

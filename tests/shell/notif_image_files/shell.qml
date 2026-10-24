@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.notifications
+import qs.services
 
 // Reviews of 8b2a710 (major 2) and beebaff (major), on the REAL Notifications singleton (scripts/dev/test.sh:
 // `qs -p tests/shell/notif_image_files`, a dev session without the D-Bus server; see the dev-session marker file).
@@ -17,7 +18,9 @@ import qs.notifications
 //    refused by the copy step;
 //  - a checked file later swapped for a FIFO: the shown copy stays a regular file of the shell; the next intake's copy
 //    is refused;
-//  - after all of it, a normal image still loads (the one image loader never stalled).
+//  - after all of it, a normal image still loads (the one image loader never stalled);
+//  - previews hidden for a sender (Quick Settings merge): its image and an app icon path are dropped, the private copy
+//    included; only a plain theme name stays (Notifications.imageFor/appIconFor, as Banner and NotificationList call them).
 // Prints "notif-image-files: PASS" or the failures.
 ShellRoot {
     id: root
@@ -141,6 +144,7 @@ ShellRoot {
         }
         check("a plain theme name still reaches the theme", Notifications.checkedAppIcon("dialog-information") === "dialog-information");
         nameShown.source = Notifications.iconSource("", rel + "/evil");
+        Settings.setNotificationsAppPreview("Private Sender", "never");
     }
 
     function finish(): void {
@@ -219,6 +223,12 @@ ShellRoot {
                     root.check("still no copy for " + name, Notifications.localCopies[d + "/" + name] === undefined);
                     root.check("still nothing shown for " + name, Notifications.iconSource(d + "/" + name, "") === "");
                 }
+                const p = root.paths;
+                const shownFor = app => Notifications.iconSource(Notifications.imageFor(p.regular, app), Notifications.appIconFor(p.regular, app));
+                root.check("previews shown: the private copy (" + shownFor("Open Sender") + ")", shownFor("Open Sender").endsWith(".img"));
+                root.check("previews hidden: neither the image nor the app icon path, not even as a copy (" + shownFor("Private Sender") + ")", shownFor("Private Sender") === "");
+                root.check("previews hidden: a plain theme name stays", Notifications.appIconFor("dialog-information", "Private Sender") === "dialog-information");
+                root.check("previews hidden: a traversal name is dropped", Notifications.appIconFor("../../.." + d + "/evil", "Private Sender") === "");
                 root.finish();
             }
         }

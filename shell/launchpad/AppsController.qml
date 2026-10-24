@@ -111,13 +111,7 @@ Scope {
         openStartMs = Date.now();
         if (Popups.active)
             Popups.close();
-        const name = Compositor.focusedScreenName;
-        let found = "";
-        for (const s of Quickshell.screens) {
-            if (s.name === name)
-                found = name;
-        }
-        screenName = found !== "" ? found : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        screenName = Compositor.activeScreenName;
         query = "";
         category = "all";
         chipFocus = "all";

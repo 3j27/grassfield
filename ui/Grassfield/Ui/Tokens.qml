@@ -555,6 +555,8 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule
     readonly property int quicksettingsNoteHeight: 26
+    // ms after Airplane Mode is switched on, or at start, before a persisted on that no radio backs is erased
+    readonly property int quicksettingsAirplaneSettleMs: 3000
     // ms: a burst of rfkill events re-reads the list once
     readonly property int quicksettingsRfkillDebounce: 150
 

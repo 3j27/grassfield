@@ -1,5 +1,7 @@
 pragma Singleton
 import QtQuick
+import qs.platform
+import "../platform/ScreenChoice.js" as ScreenChoice
 import Quickshell
 
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
@@ -83,9 +85,10 @@ Singleton {
         kind = popupKind;
     }
 
-    // Opens on the screen of the current popup, or the first screen (IPC and keyboard use).
-    function openCentered(popupKind: string, payload: var): void {
-        const name = screenName !== "" ? screenName : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+    // Opens on the screen of the current popup, or the active display (IPC and keyboard use).
+    // `screen` (optional): the display of the panel that asked for it (a confirm opens where its asker is).
+    function openCentered(popupKind: string, payload: var, screen: string): void {
+        const name = ScreenChoice.centered(active, screenName, Compositor.activeScreenName, screen);
         open(popupKind, name, 0, 0, "center", payload);
     }
 
@@ -97,8 +100,8 @@ Singleton {
             open(popupKind, screen, x, y, alignment, payload);
     }
 
-    function confirm(title: string, message: string, confirmLabel: string, action: string, args: var, destructive: bool): void {
-        openCentered("confirm", {title: title, message: message, confirmLabel: confirmLabel, action: action, args: args, destructive: destructive});
+    function confirm(title: string, message: string, confirmLabel: string, action: string, args: var, destructive: bool, screen: string): void {
+        openCentered("confirm", {title: title, message: message, confirmLabel: confirmLabel, action: action, args: args, destructive: destructive}, screen);
     }
 
     function notice(title: string, message: string): void {

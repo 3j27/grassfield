@@ -22,6 +22,9 @@ Singleton {
     // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): a backlight at 50 percent, no keyboard backlight.
     readonly property bool available: VisualFixtures.active || (device !== "" && max > 0)
     readonly property real level: VisualFixtures.active ? 0.5 : (available ? Math.max(0, Math.min(1, value / max)) : 0)
+    // The real backlight, whatever the fixtures say (the IPC level hook reads these, never `available` or `level`).
+    readonly property bool deviceAvailable: device !== "" && max > 0
+    readonly property real deviceLevel: deviceAvailable ? Math.max(0, Math.min(1, value / max)) : 0
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
 
     signal commandFinished

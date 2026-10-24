@@ -129,3 +129,40 @@ function appsToList(seen, list) {
         seen.forEach(add);
     return out.sort((a, b) => a.localeCompare(b));
 }
+
+// What a notification shows: with previews hidden the app name is the title (`generic` when the sender has no name) and
+// `generic` is the only line of text, never the sender's title or body (macOS); otherwise title and body as sent.
+function display(shown, summary, body, appName, generic) {
+    if (shown)
+        return {title: summary, body: body};
+    return {title: typeof appName === "string" && appName !== "" ? appName : generic, body: generic};
+}
+
+// The sender's picture (contact photo, attachment): with previews hidden only the app icon shows, so no image.
+function imageShown(shown, image) {
+    return shown ? image : "";
+}
+
+// The one test of a notification app icon NAME, used everywhere such a name reaches the icon theme (the shell's
+// History.safeIconName calls it: intake, history load, iconSource; and appIconShown below): 1-128 letters, digits, ".",
+// "_", "-", starting with a letter or digit, no "..". So no "/", "\", ":", NUL, control characters or spaces: Qt also
+// searches its fallback directory /usr/share/pixmaps, where "../../../dir/evil" named any file (review of 6e24d36).
+// Returns the name, else "".
+function safeIconName(name) {
+    const s = typeof name === "string" ? name : "";
+    return /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(s) && s.indexOf("..") < 0 ? s : "";
+}
+
+// The app icon: with previews hidden only a plain theme name stays (safeIconName: no path, URL or `..`;
+// `notify-send -i /path/photo.jpg` is a picture of the sender's choosing, so the icon falls back to the generic one);
+// shown as sent otherwise (the shell still applies safeIconName to a name, and shows a path only as its private copy).
+function appIconShown(shown, appIcon) {
+    if (shown)
+        return appIcon;
+    return safeIconName(appIcon);
+}
+
+// The sender's action buttons: shown once the content may be shown (macOS), none while previews are hidden.
+function actionsShown(shown, actionsJson) {
+    return shown ? actionsJson : "[]";
+}

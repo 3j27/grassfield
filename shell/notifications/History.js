@@ -1,4 +1,7 @@
 .pragma library
+// Unversioned on purpose (as apps/settings/qml/Store.js): a versioned .import resolves the installed Grassfield.Ui, not
+// the tree's own (QML_IMPORT_PATH), and a function added since is missing there.
+.import Grassfield.Ui as Ui
 
 // Notification history model (pure, unit-tested): ADR-0004 limits, persistence format, grouping.
 //
@@ -192,13 +195,17 @@ function imageRef(image) {
 }
 
 // A plain icon-theme name (review of 6e24d36; macOS model: a notification shows its app's icon, never a file the sender
-// names): 1 to 128 of letters, digits, ".", "_", "-", not starting with "." and without "..", so no "/", "\", ":", NUL or
-// control character. Qt resolves a name through the theme AND its fallback directories (/usr/share/pixmaps): a name like
+// names). Qt resolves a name through the theme AND its fallback directories (/usr/share/pixmaps): a name like
 // "../../../dir/evil" reached any file, a FIFO included, which stalled the one image loader. "" for anything else: the
-// generic notification icon is shown. Aligned with the polkit sheet's AuthDialogModel.safeIconName.
+// generic notification icon is shown. The rule itself is NotificationPrefs.safeIconName (Grassfield.Ui), the one test
+// shared with the previews-hidden icon rule (NotificationPrefs.appIconShown). Without it (a Grassfield.Ui that lacks the
+// function), no name: the generic icon, never an unchecked name and never a throw at intake.
 function safeIconName(name) {
-    const s = typeof name === "string" ? name : "";
-    return /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$/.test(s) && s.indexOf("..") < 0 ? s : "";
+    try {
+        return Ui.NotificationPrefs.safeIconName(name);
+    } catch (e) {
+        return "";
+    }
 }
 
 // An app_icon as kept (intake, history load): a path or file: URL that localPathOf accepts (shown only as a private
