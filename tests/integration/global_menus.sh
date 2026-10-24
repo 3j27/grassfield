@@ -194,9 +194,11 @@ click_row() { # <regex>
 
 log_has() { grep -q -- "$2" "$1" 2>/dev/null; }
 
-shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shell.log; the polkit agent line is environmental)
+# shellcheck source=env_lines.sh
+. "$root/tests/integration/env_lines.sh" # ENV_LINES and filter_env_lines: the dev-only lines that are not issues (GF-035)
+shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shell.log), minus the environmental lines
   (($# > 0)) || set -- "$dev/shell.log"
-  grep -h -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$@" | grep -v -E "grassfield-polkit: not registered|quickshell.service.polkit" || true
+  grep -h -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$@" | filter_env_lines || true
 }
 
 start_session() { # [nested-up options]
@@ -369,7 +371,7 @@ check "$gtk_app window mapped" wait_for 20 has_window "$gtk_pid"
 gtk_addr=$(address_of "$gtk_pid")
 check "menu bar keeps T0 menus for $gtk_app (no bridge titles, Window present)" wait_for 10 menus_are "$gtk_addr" '.menus == [] and ([.bar[].kind] | index("window")) != null and ([.bar[].kind] | index("bridge")) == null'
 say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
-say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-gtk4 "$output")"
+say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-t0-foot "$output")"
 
 cleanup_apps
 issues=$(shell_qml_issues "$run/shell-a-before-restart.log" "$dev/shell.log")

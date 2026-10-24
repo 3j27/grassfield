@@ -4,8 +4,14 @@ Facts taken from local files (installed headers, `pacman -Qi`, `/usr/share/licen
 repository), as of 2026-10-18. No legal conclusion is stated. Items marked **needs legal review** are open
 questions for counsel; details and evidence are in `docs/legal/licenses-audit.md`.
 
-Grassfield's own licence is decided: MIT for Grassfield's own code (ADR-0005, accepted by the owner 2026-10-18; root
-`LICENSE`). The package metadata says `license=(MIT)`. The asset and trade-dress questions below stay open for counsel.
+Grassfield's own code is MIT (root `LICENSE`, ADR-0005 accepted by the owner 2026-10-18). Package licence fields
+(`packaging/arch/PKGBUILD`, checked by `scripts/dev/check-licenses.sh`):
+
+| Package | `license=` | Why |
+|---|---|---|
+| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`); the Unicode-derived grapheme tables (section 5a) |
+| `grassfield-compositor` | `MIT`, `LGPL-2.1-or-later`, `BSD-3-Clause` | own code; server code generated from the KDE appmenu protocol XML; Hyprland headers compiled in |
+| `grassfield-icons` | `MIT`, `GPL-3.0-only` | own glyphs; the third-party icon pack (risk accepted by the owner, decision D-9, 2026-10-23) |
 
 Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 
@@ -15,7 +21,8 @@ Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 | `hyprland-BSD-3-Clause.txt` | grassfield-compositor | Hyprland BSD-3-Clause text, copied from `/usr/share/licenses/hyprland/LICENSE` |
 | `appmenu-LGPL-2.1-or-later.txt` | grassfield-compositor | notice of the KDE appmenu protocol and the LGPL-2.1-or-later text |
 | `BRANDING.md` | grassfield-desktop | `branding/LICENSES.md`, provenance of icons and wallpaper |
-| `omarchy-MIT.txt` | grassfield-desktop | MIT notice for Omarchy-derived QML |
+| `omarchy-MIT.txt` | grassfield-desktop | Omarchy's LICENSE, verbatim (v4.0.4: "Copyright (c) David Heinemeier Hansson"), for Omarchy-derived QML |
+| `unicode-license-v3.txt` | grassfield-desktop | Unicode License v3 notice for the derived grapheme tables (section 5a) |
 
 ## 1. Built against, linked or generated from (grassfield-compositor)
 
@@ -85,7 +92,8 @@ Grassfield source headers name `omacom/omarchy`, branch quattro; both are record
 These three files are security modules; their headers say "Copyright (c) David Heinemeier Hansson, MIT License", as
 upstream's LICENSE at tag v4.0.4 (basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5, the installed version;
 identical at v4.0.6). The installed omarchy package carries no licence file; the text below is upstream's LICENSE,
-verbatim (also shipped as `omarchy-MIT.txt`).
+verbatim (also shipped as `omarchy-MIT.txt`; `scripts/dev/check-licenses.sh` compares the text from the copyright line on with
+SHA-256 `717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2`, the hash of that LICENSE).
 
 ```
 Copyright (c) David Heinemeier Hansson
@@ -126,12 +134,12 @@ no Apple font is used, shipped or required.
 ## 5. Icons and wallpaper
 
 Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 40 SVG icons are Grassfield's own
-(CC-BY-SA-4.0 proposed, ADR-0005); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
+(CC-BY-SA-4.0, owner decision D-9, 2026-10-23); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Authorship by an AI assistant and the licence choice: **needs legal review**.
 
 Cursors (ADR-0014): the `grassfield-cursors` theme (hyprcursor SVG theme plus XCursor fallback, installed under
 `/usr/share/icons/grassfield-cursors`) is generated at package build time from Grassfield's own templates in
-`branding/cursors/` (CC-BY-SA-4.0 proposed, listed in `BRANDING.md`). No file of Adwaita, Yaru or capitaine is
+`branding/cursors/` (CC-BY-SA-4.0, listed in `BRANDING.md`). No file of Adwaita, Yaru or capitaine is
 used; only cursor names (a vocabulary shared by CSS and X11) were read from installed themes. The build uses
 `hyprcursor-util` (BSD-3-Clause), `rsvg-convert` (librsvg, LGPL-2.1-or-later) and Python as build tools; the XCursor
 writer is Grassfield's own stdlib script. The runtime regeneration for the pointer colours (Settings > Accessibility >
@@ -204,8 +212,9 @@ links it to check the rule.
 The data is under the Unicode License v3 as shipped with ICU, "Copyright © 2016-2025 Unicode, Inc."
 (`/usr/share/licenses/icu/LICENSE`); the licence asks that the copyright and permission notice accompany copies of the
 Data Files or appear in associated documentation.
-**Needs legal review:** whether tables generated from ICU's character properties count as a copy of the Data Files,
-and whether the full notice must ship as a separate licence file in the grassfield-desktop package.
+The notice ships as `unicode-license-v3.txt` in the grassfield-desktop package (`license=` lists `Unicode-3.0`).
+**Needs legal review:** whether tables generated from ICU's character properties count as a copy of the Data Files
+(the notice is shipped in any case).
 
 ## 6. Test and build only (not shipped)
 

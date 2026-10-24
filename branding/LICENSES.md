@@ -1,7 +1,7 @@
 # Branding assets — provenance and licenses
 
 Every file in `branding/` is listed here (master-prompt §14). No Apple asset is used, traced or redistributed.
-License of Grassfield-made assets: CC-BY-SA-4.0 (proposed in ADR-0005, pending owner/legal review).
+License of Grassfield-made assets: CC-BY-SA-4.0 (owner decision D-9, 2026-10-23; source code stays MIT).
 
 | Path | Author | Provenance | License |
 |---|---|---|---|
@@ -14,7 +14,7 @@ License of Grassfield-made assets: CC-BY-SA-4.0 (proposed in ADR-0005, pending o
 | `icons/theme/index.theme` | Grassfield project (2026-10-20) | Header and own-directory sections of the `grassfield-icons` theme (ADR-0017): `Inherits=breeze,Adwaita,hicolor`; the installed index.theme is generated from it by `packaging/arch/icons-compose.py`; contains no icon | MIT (configuration file, like the repository) |
 | `icons/theme/scalable/apps` (empty) and `icons/theme/scalable/devices` (6 SVG) | Grassfield project | Layer 0 (apps) and layer 3 (generic phone, tablet, media player glyphs) of the composed `grassfield-icons` theme | MIT |
 | composed `grassfield-icons` (build output, not stored here) | Third party | MacTahoe icon theme, `https://github.com/vinceliuice/MacTahoe-icon-theme` at `839848b9a8a38a92a6936e30c4abe35cc6f2546d` (Vince Liuice, GPL-3.0-only: COPYING present, no "or later" notice); Pebble icon theme, `https://github.com/a-shewale/Pebble-Icon-Theme` at `185da58c2f4caf3c2a038aa0869fd2772acc0933` (`Pebble/` only). Pebble: no licence file at the pin, README states GPL-3.0; owner accepted the risk 2026-10-23. Apple logo files removed per `packaging/arch/icons-apple-logos.txt` | GPL-3.0 (package `grassfield-icons`, `license=(MIT GPL-3.0-only)`) |
-| `icons/apps/org.grassfield.Files.svg`, `org.grassfield.Settings.svg`, `org.grassfield.Preview.svg` | Grassfield project (drawn by Claude, 2026-10-20) | Original app icons on a 128 px grid: a green folder (Files), a graphite tile with three slider rails (Settings), a picture card with a sun and hills (Preview); hand-written SVG paths and gradients, no tracing, nothing derived from macOS, WhiteSur or any installed theme; installed in `hicolor/scalable/apps` by the app CMake files | CC-BY-SA-4.0 (proposed) |
+| `icons/apps/org.grassfield.Files.svg`, `org.grassfield.Settings.svg`, `org.grassfield.Preview.svg` | Grassfield project (drawn by Claude, 2026-10-20) | Original app icons on a 128 px grid: a green folder (Files), a graphite tile with three slider rails (Settings), a picture card with a sun and hills (Preview); hand-written SVG paths and gradients, no tracing, nothing derived from macOS, WhiteSur or any installed theme; installed in `hicolor/scalable/apps` by the app CMake files | CC-BY-SA-4.0 |
 
 Cursor themes built from `cursors/` (`grassfield-cursors`, default black fill and white outline) are generated artefacts; they carry the licence of the sources (CC-BY-SA-4.0).
 

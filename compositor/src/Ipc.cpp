@@ -542,7 +542,8 @@ namespace gf::ipc {
         std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
-            if (!guarded("hyprctl grassfield", [&] { out = currentCapabilities(); }))
+            // The reply (not the event) also names the plugin version, so About, pacman -Qi, the plugin and the bridge compare (GF-013).
+            if (!guarded("hyprctl grassfield", [&] { out = currentCapabilities(); out.insert(out.size() - 1, std::string{R"(,"version":")"} + kPluginVersion + '"'); }))
                 out = R"({"v":"gfc/1","type":"error"})";
             return out;
         }

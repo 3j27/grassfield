@@ -22,10 +22,15 @@
 class CGrassfieldTitlebar;
 class IHyprWindowDecoration;
 
+#ifndef GRASSFIELD_VERSION
+#define GRASSFIELD_VERSION "unknown" // only a build without the VERSION file's definition
+#endif
+
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.13.0-audit";
+    // From the VERSION file (cmake/GrassfieldVersion.cmake, build-direct.sh); "unknown" only when built without it.
+    inline constexpr const char* kPluginVersion = GRASSFIELD_VERSION;
 
     struct SPluginState {
         HANDLE                             handle = nullptr;

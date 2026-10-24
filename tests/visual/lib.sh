@@ -90,9 +90,13 @@ vs_wait_output() {
 vs_canonical_workspaces() {
   local lang=$1 n i ws
   for n in 1 2 3 4; do
-    sleep 2
-    ws=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .activeWorkspace.id' 2>/dev/null || true)
-    [[ $ws == 2 ]] && return 0
+    # Right after the start GF-REF may still show Space 1 for a few seconds before the assignment settles (seen
+    # 2026-10-24: Space 1 at 2 s, Space 2 a few seconds later): poll up to 10 s before calling it the wrong state.
+    for i in $(seq 1 20); do
+      sleep 0.5
+      ws=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .activeWorkspace.id' 2>/dev/null || true)
+      [[ $ws == 2 ]] && return 0
+    done
     # The usual race: GF-REF came first and holds Space 1 while the nested window's output holds 2. Swapping the two
     # outputs' Spaces gives the reference state at once; a restart only re-runs the race.
     if [[ $ws == 1 ]]; then

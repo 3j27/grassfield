@@ -7,4 +7,6 @@ PointerTheme 1.0 PointerTheme.qml
 singleton FocusReturn 1.0 FocusReturn.qml
 KeyboardRelease 1.0 KeyboardRelease.qml
 UpdateNotice 1.0 UpdateNotice.qml
+singleton Usable 1.0 Usable.qml
+UsableProbe 1.0 UsableProbe.qml
 singleton InputSource 1.0 InputSource.qml
