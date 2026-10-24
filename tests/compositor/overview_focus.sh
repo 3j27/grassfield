@@ -238,6 +238,18 @@ start_fixture() {
   grep -q "\[ovf-fixture\] outputs $OUT_A found $OUT_B found" "$fixlog"
 }
 fix_count() { grep -c "\[ovf-fixture\] $1" "$fixlog" 2>/dev/null; } # <pattern>
+# When the fixture's close sequence did <what>, in ms after its request (its last timing line for it), waiting up to 2 s;
+# -1 when it never logged it. Over 950 ms the plugin's 1000-ms bound had passed before the fixture acted: a loaded host
+# delayed the fixture's own timers, and the case says nothing about the plugin (not judged, never a pass).
+fix_timing() { # <what>
+  local i t=""
+  for i in $(seq 1 40); do
+    t=$(grep -a "\[ovf-fixture\] timing: $1 at" "$fixlog" 2>/dev/null | tail -n 1 | sed 's/.* at +\([0-9]*\) ms.*/\1/')
+    [[ -n $t ]] && break
+    sleep 0.05
+  done
+  echo "${t:--1}"
+}
 # Both chromes Exclusive; prints the output whose chrome holds the keyboard ("" when none did within 3 s).
 open_chromes() {
   local h="" i
@@ -473,11 +485,19 @@ read -r p_out p_x p_y < <(center_of "$press_win")
 # stays Exclusive 800 ms more (released 830 ms after the request, inside the plugin's 1000-ms bound whatever `qs ipc`
 # takes to arrive; the press lands while it is still up).
 fx close "{\"target\":\"window\",\"address\":\"$target_win\",\"id\":$id}" holder-first 800 -1 >/dev/null
+n_t2=$(grep -ac "timing: second chrome released" "$fixlog")
 pointer "$p_out" abs "$p_x" "$p_y" sleep 60 click
 sleep 1.1
 say "  holder $holder, press on $press_win ($p_out $p_x,$p_y), named target $target_win"
-type_to "case 10" "$press_cap" "pwin"
-[[ $mode == check ]] && outcome_is "case 10" "$id" focused "$press_win"
+t2=-1
+(($(grep -ac "timing: second chrome released" "$fixlog") > n_t2)) && t2=$(fix_timing "second chrome released")
+if ((t2 > 950)); then
+  say "  NOT JUDGED case 10: the fixture released the second chrome $t2 ms after the request (planned 830; the bound is 1000 ms)"
+else
+  say "  the fixture released the second chrome $t2 ms after the request (planned 830)"
+  type_to "case 10" "$press_cap" "pwin"
+  [[ $mode == check ]] && outcome_is "case 10" "$id" focused "$press_win"
+fi
 
 say "case 11: a polkit-like dialog appears during the close and stays past the bound"
 park
@@ -502,16 +522,23 @@ holder=$(open_chromes)
 id=$((id + 1))
 # The request, the dialog, the chromes' release and the dialog's end from the fixture, timed from the request (the dialog
 # released 500 ms after it, inside the plugin's 1000-ms bound whatever `qs ipc` takes to arrive).
+n_tp=$(grep -ac "timing: polkit released" "$fixlog")
 fx closeWithPolkit "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}" "$OUT_B" holder-first 60 500 >/dev/null
 sleep 0.15
 early=$(outcome_of "$id") # the chromes are released, the dialog is still up: nothing may be focused yet
 sleep 1
+tp=-1
+(($(grep -ac "timing: polkit released" "$fixlog") > n_tp)) && tp=$(fix_timing "polkit released")
 if [[ $mode == check ]]; then
   [[ -z $early ]]; check "case 12: no outcome while the dialog is up" $? "${early:-none}"
-  say "  the dialog was released 500 ms after the request by the fixture (the bound is 1000 ms)"
 fi
-type_to "case 12" "$cap_a" "pshort"
-[[ $mode == check ]] && outcome_is "case 12" "$id" focused "$addr_a"
+if ((tp > 950)); then
+  say "  NOT JUDGED case 12: the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
+else
+  say "  the fixture released the dialog $tp ms after the request (planned 500; the bound is 1000 ms)"
+  type_to "case 12" "$cap_a" "pshort"
+  [[ $mode == check ]] && outcome_is "case 12" "$id" focused "$addr_a"
+fi
 
 if [[ $mode == check ]]; then
   say "case 13: invalid payloads and a flood"
@@ -586,7 +613,7 @@ focus_events=$(tail -n +"$((ev_lock + 1))" "$events" | grep -acE "^[0-9]+ active
 # plugin's 1000-ms bound to lock, and the outcome is then a timeout that says nothing about the lock path (not judged,
 # never a pass: the safety checks above still count).
 if [[ $mode == check ]]; then
-  if ((t_lock - t_req > 900)); then
+  if [[ $(outcome_of "$id" | jq -r '.outcome' 2>/dev/null) != refused ]] && ((t_lock - t_req > 900)); then
     say "  NOT JUDGED case 15 outcome: the lock was confirmed $((t_lock - t_req)) ms after the request (the plugin's bound is 1000 ms): $(outcome_of "$id")"
   else
     outcome_is "case 15" "$id" refused

@@ -70,6 +70,14 @@ ShellRoot {
     property int pendingGapMs: 0
     property int pendingUnmapMs: -1
     property string pendingPolkitOut: ""
+    // When the close sequence's request went out (Date.now()), 0 before the first one: the timing lines the test reads to
+    // tell a late fixture (a loaded host delays its timers) from a plugin fault.
+    property real requestAt: 0
+
+    function timing(what: string): void {
+        if (requestAt > 0)
+            log("timing: " + what + " at +" + Math.round(Date.now() - requestAt) + " ms after the request");
+    }
 
     // The request as the shell sends it (the same Lua call as overview_focus.sh's request()); false when it could break out
     // of the Lua long string or is not one line of at most 1 KiB.
@@ -77,6 +85,7 @@ ShellRoot {
         if (typeof request !== "string" || request.length === 0 || request.length > 1024 || request.indexOf("]]") >= 0 || /[\r\n]/.test(request))
             return false;
         Hyprland.dispatch("function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview_focus then p.overview_focus([[" + request + "]]) end end");
+        requestAt = Date.now();
         log("request dispatched");
         return true;
     }
@@ -94,6 +103,7 @@ ShellRoot {
         id: secondTimer
         onTriggered: {
             root.setExclusive(root.secondOut, false);
+            root.timing("second chrome released");
             root.released();
         }
     }
@@ -324,6 +334,7 @@ ShellRoot {
         function polkitRelease(): string {
             root.polkitHeld = false;
             root.log("polkit released");
+            root.timing("polkit released");
             polkitHide.restart();
             return "ok";
         }
