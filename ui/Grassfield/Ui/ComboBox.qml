@@ -12,6 +12,8 @@ T.ComboBox {
     property string value: ""
     property string accessibleName: ""
     readonly property bool open: root.popup.visible
+    // The list (a PopupMenu) of the open pop-up.
+    readonly property Item list: menu
     readonly property int valueIndex: {
         const m = root.model;
         for (let i = 0; m && i < m.length; i++) {
@@ -109,16 +111,23 @@ T.ComboBox {
 
         background: Item {}
 
-        contentItem: PopupMenu {
-            id: menu
-            accessibleName: root.accessibleName
-            onCloseRequested: popup.close()
-            onActivated: item => {
-                popup.close();
-                root.forceActiveFocus();
-                root.picked(item.id);
-                // Back to what the host holds: it moves `value` if it accepts the choice.
-                root.currentIndex = Qt.binding(() => root.valueIndex);
+        // The menu sits in a plain Item: a Popup resizes its content item, which would replace the menu's own size bindings
+        // (its rows would overflow a 10 px strip). The Popup takes its size from the menu instead.
+        contentItem: Item {
+            implicitWidth: menu.width
+            implicitHeight: menu.height
+
+            PopupMenu {
+                id: menu
+                accessibleName: root.accessibleName
+                onCloseRequested: popup.close()
+                onActivated: item => {
+                    popup.close();
+                    root.forceActiveFocus();
+                    root.picked(item.id);
+                    // Back to what the host holds: it moves `value` if it accepts the choice.
+                    root.currentIndex = Qt.binding(() => root.valueIndex);
+                }
             }
         }
     }

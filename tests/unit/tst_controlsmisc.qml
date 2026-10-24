@@ -139,13 +139,34 @@ TestCase {
         combo.forceActiveFocus();
         keyClick(Qt.Key_Return);
         tryCompare(combo, "open", true);
-        const menu = combo.popup.contentItem as PopupMenu;
+        const menu = combo.list as PopupMenu;
         menu.activated({id: "y", text: "Why"});
         compare(tc.picks, ["y"]);
         compare(combo.displayText, "Ex", "shows the host's value until it changes");
         combo.value = "y";
         compare(combo.displayText, "Why");
         tryCompare(combo, "open", false);
+    }
+
+    // The open list keeps the size its rows need (a Popup that resizes its content collapsed it to a 10 px strip).
+    function test_comboListKeepsItsSizeAndShowsAllRows() {
+        combo.model = [{id: "a", text: "Always"}, {id: "b", text: "On Desktop Only"}, {id: "c", text: "In Full Screen Only, a longer label"}, {id: "d", text: "Never"}];
+        combo.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        tryCompare(combo, "open", true);
+        const menu = combo.list;
+        const rows = 4 * Tokens.menuItemHeight;
+        verify(menu.height >= rows, "menu height " + menu.height + " holds " + rows + " of rows");
+        compare(menu.height, combo.popup.height);
+        compare(menu.width, combo.popup.width);
+        verify(menu.width >= Tokens.menuMinWidth);
+        // The last row lies inside the menu.
+        const last = menu.mapToItem(menu, 0, menu.height - Tokens.menuPadding - 1);
+        verify(last.y < menu.height);
+        combo.popup.close();
+        tryCompare(combo, "open", false);
+        combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
+        combo.value = "x";
     }
 
     function test_progressBar() {
