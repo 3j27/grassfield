@@ -13,16 +13,31 @@
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 
-# The body of a package_<name>() function of a PKGBUILD (up to the closing brace in column 0).
-pkg_body() { sed -n "/^package_$2() {/,/^}/p" "$1"; }
+# The final depends of a package function, one entry per line, as makepkg sees it: the PKGBUILD sourced (its variables,
+# its global depends), then the function's depends= / depends+= statements evaluated in order (bash prints each array
+# assignment of a function on one line). Nothing else of the function runs.
+pkg_final_depends() { # <PKGBUILD> <package name>
+  (
+    cd "$(dirname "$1")" || exit 1
+    # shellcheck disable=SC1090
+    source "./$(basename "$1")" >/dev/null 2>&1
+    declare -F "package_$2" >/dev/null || exit 0
+    while IFS= read -r line; do
+      eval "$line"
+    done < <(declare -f "package_$2" | sed -n 's/^[[:space:]]*\(depends+\{0,1\}=(.*)\);\{0,1\}$/\1/p')
+    printf '%s\n' "${depends[@]}"
+  )
+}
+# "<pkgver>-<pkgrel>" of a PKGBUILD.
+pkg_full_version() { (cd "$(dirname "$1")" && source "./$(basename "$1")" >/dev/null 2>&1 && printf '%s-%s' "$pkgver" "$pkgrel"); }
 # The version pin between the split packages, when the PKGBUILD defines the compositor package: prints the problems.
 pkg_pin_problems() { # <PKGBUILD>
-  local body
+  local want
   grep -q '^package_grassfield-compositor() {' "$1" || return 0
-  body=$(pkg_body "$1" grassfield-compositor)
-  grep -qE '^[[:space:]]*depends=\(.*"grassfield-desktop=\$pkgver-\$pkgrel"' <<<"$body" \
-    || echo "PKGBUILD: grassfield-compositor must depend on \"grassfield-desktop=\$pkgver-\$pkgrel\" (one release: the shell and the plugin speak one protocol)"
-  if grep -q '^package_grassfield-desktop() {' "$1" && pkg_body "$1" grassfield-desktop | grep -qE '^[[:space:]]*depends=\(.*grassfield-compositor'; then
+  want="grassfield-desktop=$(pkg_full_version "$1")"
+  pkg_final_depends "$1" grassfield-compositor | grep -qxF -- "$want" \
+    || echo "PKGBUILD: grassfield-compositor must depend on \"grassfield-desktop=\$pkgver-\$pkgrel\" ($want) in its final depends (one release: the shell and the plugin speak one protocol)"
+  if pkg_final_depends "$1" grassfield-desktop | grep -q '^grassfield-compositor'; then
     echo "PKGBUILD: grassfield-desktop must not depend on grassfield-compositor (the desktop runs without the plugin)"
   fi
 }
@@ -84,7 +99,13 @@ selftest() {
   check_tree "$d/a" >/dev/null || { echo "FAIL: the exact pin was rejected"; fails=1; }
   printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland grassfield-compositor)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-$pkgrel")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
   check_tree "$d/a" >/dev/null && { echo "FAIL: a desktop that needs the plugin was accepted"; fails=1; }
-  ((fails == 0)) && echo "check-version selftest: PASS (8 cases)"
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-$pkgrel")\n  depends=(hyprland)\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null && { echo "FAIL: a pin overridden by a later depends= was accepted"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland)\n  depends+=("grassfield-desktop=$pkgver-$pkgrel")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null || { echo "FAIL: a pin added with depends+= was rejected"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-2")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null && { echo "FAIL: a pin to another pkgrel was accepted"; fails=1; }
+  ((fails == 0)) && echo "check-version selftest: PASS (11 cases)"
   return "$fails"
 }
 
