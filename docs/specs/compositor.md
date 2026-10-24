@@ -384,7 +384,13 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   is locked) the plugin requests none and changes none of Hyprland's lists: a strip window is cleared from Hyprland's
   active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
   monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
-  keyboard, checked again then. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
+  keyboard, checked again then. `resetWindowFocus` also forgets Hyprland's focus surface, which `rawSurfaceFocus` cannot
+  set again while the seat's keyboard is on that layer (it returns at once; read from the binary), and Hyprland gives a
+  new keyboard device only its focus surface (`CInputManager::setupKeyboard`, nothing when it is empty): so while that
+  Exclusive layer stays mapped and Exclusive, before every key the plugin gives the keys back to it when the seat's
+  keyboard is on no Exclusive layer (`keepKeysOnLayer`; stages.sh 8c, 8f, 8g, 8h failed on 2026-10-24, timing
+  dependent: whether the nested session's transient keyboard device was replaced in between). Decision logic pure:
+  `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
   R13 counter-review #4 of 0.6.3-stages (ST10 clicks, ST23, ST24): Hyprland reports `FOCUS_REASON_CLICK` for every
   refocus at the cursor (`CInputManager::refocus`, also when a layer unmaps with no active window), so a `CLICK` focus
   is a user choice only when a press caused it: the plugin records pointer button presses (its first button listener),

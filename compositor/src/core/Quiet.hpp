@@ -22,4 +22,18 @@ namespace gf::quiet {
     // A key path is running on this thread (Hyprland's: the compositor is single-threaded).
     bool inKeyPath() noexcept;
 
+    // A key listener's body inside a CKeyPath scope (gf::keyPath, Plugin.hpp). It runs once and all it does stands; the
+    // event and its cancel flag are the listener's own and never touched here. An exception it throws stays here (false):
+    // nothing may escape into Hyprland, and nothing is logged from a key path.
+    template <typename Fn>
+    bool runKeyPath(Fn&& fn) noexcept {
+        const CKeyPath scope;
+        try {
+            fn();
+            return true;
+        } catch (...) { // NOLINT(bugprone-empty-catch): a key path logs nothing; it must not throw into Hyprland
+            return false;
+        }
+    }
+
 } // namespace gf::quiet

@@ -111,6 +111,7 @@ namespace {
         st::Curve                        curve;
         bool                             animating = false;
         uint64_t                         lockStayLogged = 0; // the strip window logged as staying active under the lock
+        PHLLSREF                         layerKeys; // the Exclusive layer that held the keyboard when the active window was cleared
         Time::steady_tp                  start;
         double                           animMs = 0;
         std::vector<CHyprSignalListener> listeners;
@@ -512,6 +513,8 @@ namespace {
         const auto holder      = keyboardHolder();
         const auto holderOwner = holder ? gf::surfaces::ownerOf(holder) : gf::surfaces::SOwner{};
         fs->resetWindowFocus();
+        if (holderOwner.layer && !holderOwner.window && !holderOwner.popup)
+            S().layerKeys = holderOwner.layer; // its keys are kept on it (keepKeysOnLayer)
         if (holder && holderOwner.layer && !holderOwner.window && fs->surface() != holder)
             // The same surface again, no window. Hyprland 0.56.2 returns from rawSurfaceFocus at once when the seat's
             // keyboard is already on that surface (read from the binary: the comparison at the function's start): then
@@ -1194,8 +1197,39 @@ namespace {
     // (keepActiveOffStrip); a menu (popup grab) of a strip window closes, as a click outside it would, so that its keys are
     // not lost; if the keyboard is still on a blocked window it goes to the front window of that workspace's active stage,
     // or nowhere.
+    // Before a key, while the Exclusive layer that held the keyboard when the plugin cleared Hyprland's active window
+    // (clearActiveWindow) is still mapped and Exclusive: the key goes to it. resetWindowFocus forgets Hyprland's focus
+    // surface, and rawSurfaceFocus cannot set it again while the seat's keyboard is still on that layer (it returns at once
+    // when the seat's keyboard is on the surface it is given; read from the binary). Hyprland gives a new keyboard device
+    // only its focus surface (CInputManager::setupKeyboard, read from the binary: nothing when it is empty), so once the
+    // nested session's transient keyboard device was replaced the keys reached nobody, the password field of a dialog
+    // included (stages.sh 8c, 8f, 8g, 8h on 2026-10-24; whether a device was replaced in between decided, hence a pass on
+    // dbc4638). Here the seat's keyboard is on no Exclusive layer, so rawSurfaceFocus sets both again. Another Exclusive
+    // layer holding the keys keeps them; nothing while the session is locked (the lock screen holds them).
+    void keepKeysOnLayer() {
+        auto&      s  = S();
+        const auto ls = s.layerKeys.lock();
+        if (!ls)
+            return;
+        if (!ls->m_mapped || gf::surfaces::interactivity(ls) != 1) {
+            s.layerKeys.reset(); // gone, or it released the keyboard: Hyprland's own focus path decides again
+            return;
+        }
+        const auto fs      = Desktop::focusState();
+        const auto surface = ls->resource();
+        if (!fs || !surface || sessionLocked())
+            return;
+        if (const auto seat = gf::surfaces::keyboardFocus()) {
+            const auto owner = gf::surfaces::ownerOf(seat);
+            if (owner.layer && gf::surfaces::interactivity(owner.layer) == 1)
+                return; // an Exclusive layer (this one or another, or a popup of it) has the keys
+        }
+        fs->rawSurfaceFocus(surface);
+    }
+
     void beforeKey() {
         auto& s = S();
+        keepKeysOnLayer(); // before the Stages check: the layer may outlive Stages being on
         if (!s.on)
             return;
         if (s.pendingSpace) { // the layer may have released the keyboard before the deferred focus ran
@@ -1524,6 +1558,7 @@ namespace gf::stager {
             g_pEventLoopManager->removeDoLater(*s.pointerLater); // likewise
         s.pointerLater.reset();
         s.refocusSpace.reset();
+        s.layerKeys.reset();
         s.focusLater.reset();
         s.drop.reset();
         cancelPendingFocus();
