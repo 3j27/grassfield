@@ -1,0 +1,39 @@
+{
+"comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
+"modes": [
+ {"name": "nothing set", "env": {}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev session", "env": {"GRASSFIELD_DEV": "1"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},
+ {"name": "dev session, empty session", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": ""}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},
+ {"name": "dev session, session 0", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "0"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},
+ {"name": "packaged session", "env": {"GRASSFIELD_SESSION": "1"}, "dev": false, "session": true, "fixtures": false, "ownBus": true, "updateNotices": true},
+ {"name": "dev leaked into a packaged session", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1"}, "dev": false, "session": true, "fixtures": false, "ownBus": true, "updateNotices": true},
+ {"name": "dev leaked, fixtures and private bus asked for", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_VISUAL_FIXTURES": "1", "GRASSFIELD_PRIVATE_BUS": "1"}, "dev": false, "session": true, "fixtures": false, "ownBus": true, "updateNotices": true},
+ {"name": "dev with fixtures", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_VISUAL_FIXTURES": "1"}, "dev": true, "session": false, "fixtures": true, "ownBus": false, "updateNotices": false},
+ {"name": "fixtures without dev", "env": {"GRASSFIELD_VISUAL_FIXTURES": "1"}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev with fixtures 0", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_VISUAL_FIXTURES": "0"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},
+ {"name": "dev on a private bus", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_PRIVATE_BUS": "1"}, "dev": true, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev, private bus 0", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_PRIVATE_BUS": "0"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},
+ {"name": "dev 0", "env": {"GRASSFIELD_DEV": "0"}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev true", "env": {"GRASSFIELD_DEV": "true"}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev yes", "env": {"GRASSFIELD_DEV": "yes"}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev empty", "env": {"GRASSFIELD_DEV": ""}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev leading space", "env": {"GRASSFIELD_DEV": " 1"}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev trailing space", "env": {"GRASSFIELD_DEV": "1 "}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "dev 01", "env": {"GRASSFIELD_DEV": "01"}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
+ {"name": "session true is not a packaged session", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "true"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false}
+],
+"dirs": [
+ {"name": "defaults", "env": {"HOME": "/home/u"}, "configDir": "/home/u/.config/grassfield", "stateDir": "/home/u/.local/state/grassfield"},
+ {"name": "xdg", "env": {"HOME": "/home/u", "XDG_CONFIG_HOME": "/x/c", "XDG_STATE_HOME": "/x/s"}, "configDir": "/x/c/grassfield", "stateDir": "/x/s/grassfield"},
+ {"name": "empty xdg is unset", "env": {"HOME": "/home/u", "XDG_CONFIG_HOME": "", "XDG_STATE_HOME": ""}, "configDir": "/home/u/.config/grassfield", "stateDir": "/home/u/.local/state/grassfield"},
+ {"name": "grassfield homes win", "env": {"HOME": "/home/u", "XDG_CONFIG_HOME": "/x/c", "XDG_STATE_HOME": "/x/s", "GRASSFIELD_CONFIG_HOME": "/g/c", "GRASSFIELD_STATE_HOME": "/g/s"}, "configDir": "/g/c", "stateDir": "/g/s"},
+ {"name": "empty grassfield homes are unset", "env": {"HOME": "/home/u", "XDG_CONFIG_HOME": "/x/c", "GRASSFIELD_CONFIG_HOME": "", "GRASSFIELD_STATE_HOME": ""}, "configDir": "/x/c/grassfield", "stateDir": "/home/u/.local/state/grassfield"},
+ {"name": "grassfield homes are honoured in a packaged session", "env": {"HOME": "/home/u", "GRASSFIELD_SESSION": "1", "GRASSFIELD_CONFIG_HOME": "/g/c", "GRASSFIELD_STATE_HOME": "/g/s"}, "configDir": "/g/c", "stateDir": "/g/s"}
+],
+"plumbing": [
+ {"name": "dev: value honoured", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": "12:00"},
+ {"name": "dev: unset is empty", "env": {"GRASSFIELD_DEV": "1"}, "variable": "GRASSFIELD_FIXED_TIME", "value": ""},
+ {"name": "no dev: inert", "env": {"GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": ""},
+ {"name": "leaked dev in a packaged session: inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_OPEN_POLICY": "allow"}, "variable": "GRASSFIELD_OPEN_POLICY", "value": ""}
+]
+}

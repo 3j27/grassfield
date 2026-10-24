@@ -1,0 +1,64 @@
+import QtQuick
+import QtTest
+import "../../shell/lib/RunMode.js" as RunMode
+
+// ADR-0019 (GF-089): the one run-mode rule, held to tests/fixtures/run-mode-vectors.json (the C++ side, apps/runmode.h,
+// is held to the same file from slice M6). The runtime check of the singleton (Quickshell.env) is
+// tests/shell/run_mode_import/shell.qml.
+TestCase {
+    name: "RunMode"
+
+    function vectors() {
+        const request = new XMLHttpRequest();
+        request.open("GET", Qt.resolvedUrl("../fixtures/run-mode-vectors.json"), false);
+        request.send();
+        return JSON.parse(request.responseText);
+    }
+
+    function test_modeVectors() {
+        const modes = vectors().modes;
+        verify(modes.length >= 15, "vectors read: " + modes.length);
+        for (const v of modes) {
+            const e = v.env;
+            compare(RunMode.dev(e.GRASSFIELD_DEV, e.GRASSFIELD_SESSION), v.dev, v.name + " (dev)");
+            compare(RunMode.session(e.GRASSFIELD_SESSION), v.session, v.name + " (session)");
+            compare(RunMode.fixtures(e.GRASSFIELD_DEV, e.GRASSFIELD_SESSION, e.GRASSFIELD_VISUAL_FIXTURES), v.fixtures, v.name + " (fixtures)");
+            compare(RunMode.ownBus(e.GRASSFIELD_DEV, e.GRASSFIELD_SESSION, e.GRASSFIELD_PRIVATE_BUS), v.ownBus, v.name + " (ownBus)");
+            compare(RunMode.updateNotices(e.GRASSFIELD_SESSION), v.updateNotices, v.name + " (updateNotices)");
+        }
+    }
+
+    function test_dirVectors() {
+        const dirs = vectors().dirs;
+        verify(dirs.length >= 5, "vectors read: " + dirs.length);
+        for (const v of dirs) {
+            const e = v.env;
+            compare(RunMode.configDir(e.GRASSFIELD_CONFIG_HOME, e.XDG_CONFIG_HOME, e.HOME), v.configDir, v.name + " (configDir)");
+            compare(RunMode.stateDir(e.GRASSFIELD_STATE_HOME, e.XDG_STATE_HOME, e.HOME), v.stateDir, v.name + " (stateDir)");
+        }
+    }
+
+    function test_plumbingVectors() {
+        const rows = vectors().plumbing;
+        verify(rows.length >= 4, "vectors read: " + rows.length);
+        for (const v of rows) {
+            const e = v.env;
+            compare(RunMode.devPlumbing(e.GRASSFIELD_DEV, e.GRASSFIELD_SESSION, e[v.variable]), v.value, v.name);
+        }
+    }
+
+    // Only exact strings open a gate, whatever else the caller passes.
+    function test_closedWithoutExactDev() {
+        const values = [undefined, null, "", "0", "true", "yes", " 1", "1 ", "01", 1, true];
+        for (let i = 0; i < values.length; i++) {
+            verify(!RunMode.dev(values[i], undefined), JSON.stringify(values[i]));
+            verify(!RunMode.fixtures(values[i], undefined, "1"), JSON.stringify(values[i]) + " (fixtures)");
+        }
+    }
+
+    function test_privateBusNeedsTheExactString() {
+        const values = [undefined, null, "", "0", "true", 1, true];
+        for (let i = 0; i < values.length; i++)
+            verify(!RunMode.ownBus("1", undefined, values[i]), JSON.stringify(values[i]));
+    }
+}
