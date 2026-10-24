@@ -163,6 +163,18 @@ TestCase {
         compare(model.identityName, "root eve");
     }
 
+    // Review of 1d2c856: a held request takes the keyboard only through a click, and only heldGuardMs after it appeared.
+    function test_heldGuard() {
+        compare(model.heldGuardMs, 500);
+        verify(!model.heldClickAccepted(0));
+        verify(!model.heldClickAccepted(499));
+        verify(model.heldClickAccepted(500));
+        verify(model.heldClickAccepted(5000));
+        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime());
+        verify(notice.indexOf("while the screen was locked") !== -1, notice);
+        verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
+    }
+
     function test_newFlowResetsState() {
         flow.isResponseRequired = true;
         model.submit("pw");

@@ -330,6 +330,20 @@ TestCase {
         dialog.appIconSource = "";
     }
 
+    // Review of 1d2c856: a request held behind the lock says so (with its time) once it appears; none otherwise.
+    function test_11_heldNotice() {
+        const notice = findNamed(dialog, "polkitHeldNotice");
+        verify(notice !== null);
+        compare(dialog.heldNotice, "");
+        verify(!notice.visible, "no notice for a request that did not wait behind the lock");
+        dialog.heldNotice = dialogModel.heldNotice(new Date(2026, 9, 24, 14, 5).getTime());
+        waitForRendering(dialog);
+        verify(notice.visible);
+        compare(notice.textFormat, Text.PlainText);
+        verify(notice.text.indexOf("while the screen was locked") !== -1, notice.text);
+        dialog.heldNotice = "";
+    }
+
     // R12 review: a 5000-character multi-line message cannot push the action ID and the buttons out
     // of the sheet, nor draw its own "Action:" line or buttons (control and bidi characters removed).
     function test_5_longMultiLineMessageStaysBounded() {

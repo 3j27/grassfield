@@ -791,6 +791,10 @@
 <context>
     <name>AuthDialogModel</name>
     <message>
+        <source>This request arrived at %1, while the screen was locked. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
         <source>Incorrect password. Try again.</source>
         <translation>Mot de passe incorrect. Réessayez.</translation>
     </message>

@@ -145,7 +145,14 @@ expect("screen corners call the IPC actions (overview toggle, apps toggle) or No
 agent = code(read("shell/security/polkit/AuthAgent.qml"))
 expect("polkit sheet: shown only while active and unlocked", re.search(r"property bool shown:\s*dialogModel\.active\s*&&\s*!SessionState\.locked", agent) is not None)
 expect("polkit sheet: mapped only when shown", re.search(r"\bvisible:\s*shown\b", agent) is not None)
-expect("polkit sheet: takes the keyboard only when shown", re.search(r"keyboardFocus:\s*win\.shown\s*\?\s*WlrKeyboardFocus\.Exclusive", agent) is not None)
+expect("polkit sheet: takes the keyboard only when shown and not held", re.search(r"keyboardFocus:\s*win\.takesKeys\s*\?\s*WlrKeyboardFocus\.Exclusive", agent) is not None
+       and re.search(r"property bool takesKeys:\s*shown\s*&&\s*\(!root\.heldByLock\s*\|\|\s*root\.userFocused\)", agent) is not None)
+# Review of 1d2c856: a request held behind the lock takes the keyboard only after a click past the guard, never at once.
+expect("polkit sheet: a held request takes the keyboard only after a click past the guard",
+       re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?heldClickAccepted\(Date\.now\(\)\s*-\s*root\.shownAt\).*?root\.userFocused\s*=\s*true", agent, re.S) is not None)
+expect("polkit sheet: a request arriving or open while locked is held", re.search(r"heldByLock\s*=\s*active\s*&&\s*SessionState\.locked", agent) is not None
+       and re.search(r"SessionState\.locked\s*&&\s*dialogModel\.active.*?heldByLock\s*=\s*true", agent, re.S) is not None)
+expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
 
 for o in oks:
@@ -175,17 +182,19 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   cp "$root/$f" "$mut/$f"
 done
 python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1 && pass "mutation: the unchanged copy passes" || bad "mutation: the unchanged copy fails"
-for case_ in 'shell/dock/Dock.qml|SessionState.refuses("dock keyboard")|false' \
-  'shell/desktop/DesktopWidgets.qml|SessionState.refuses("widget menu")|false' \
-  'shell/desktop/IconsView.qml|root.closeMenu("outside");|root.closeAbout("outside");' \
-  'shell/platform/Compositor.qml|SessionState.refuses("windows cycleApp")|false' \
-  'shell/services/Popups.qml|SessionState.refuses("popup " + popupKind)|false' \
-  'shell/security/polkit/AuthAgent.qml|dialogModel.active \&\& !SessionState.locked|dialogModel.active'; do
-  IFS='|' read -r file from to <<<"$case_"
+for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
+  'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
+  'shell/desktop/IconsView.qml#root.closeMenu("outside");#root.closeAbout("outside");' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows cycleApp")#false' \
+  'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
+  'shell/security/polkit/AuthAgent.qml#shown && (!root.heldByLock || root.userFocused)#shown' \
+  'shell/security/polkit/AuthAgent.qml#if (shown && !root.heldByLock)#if (shown)'; do
+  IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2].replace("\\&", "&"), sys.argv[3]
+p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
 s = open(p).read()
 assert a in s, a
 open(p, "w").write(s.replace(a, b, 1))

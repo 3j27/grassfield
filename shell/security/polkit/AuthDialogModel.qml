@@ -43,6 +43,22 @@ QtObject {
     readonly property bool submitted: priv.submitted
     readonly property bool canSubmit: responseRequired && !priv.submitted
 
+    // A request held behind the lock (review of 1d2c856, macOS model: the authorization sheet appears once the user is
+    // back, and nothing typed before the user turns to it reaches it). After the unlock the sheet is shown WITHOUT the
+    // keyboard: keys typed right after the unlock (the end of the lock password, a Return) cannot land in its field. It
+    // takes the keyboard only after a click on the sheet, and a click counts only heldGuardMs after the sheet appeared.
+    readonly property int heldGuardMs: 500
+
+    function heldClickAccepted(sinceShownMs: real): bool {
+        return sinceShownMs >= heldGuardMs;
+    }
+
+    // What the held sheet says, with the time the request arrived (the message names the program for pkexec).
+    function heldNotice(arrivedAtMs: real): string {
+        const at = Qt.formatTime(new Date(arrivedAtMs), Qt.locale().timeFormat(Locale.ShortFormat));
+        return qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at);
+    }
+
     // The dialog must empty its password field (after every attempt and outcome).
     signal clearRequested
     // A wrong password: shake.
