@@ -186,7 +186,7 @@ QString displayName(const QString &name)
             continue;
         }
         inBreak = false;
-        if ((u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069))
+        if ((u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069) || u == 0x2028 || u == 0x2029)
             out += QStringLiteral("<U+%1>").arg(u, 4, 16, QLatin1Char('0')).toUpper();
         else
             out += c;
@@ -204,6 +204,23 @@ QString equivalentName(const QStringList &names, const QString &name)
     for (const QString &n : names) {
         if (n != name && sameName(n, name))
             return n;
+    }
+    return {};
+}
+
+QString trashInfoOriginalPath(const QByteArray &trashinfo)
+{
+    bool inGroup = false;
+    for (const QByteArray &raw : trashinfo.split('\n')) {
+        const QByteArray line = raw.trimmed();
+        if (line.startsWith('[')) {
+            inGroup = line == "[Trash Info]";
+            continue;
+        }
+        if (inGroup && line.startsWith("Path=")) {
+            const QString path = QUrl::fromPercentEncoding(line.mid(5));
+            return path.startsWith(QLatin1Char('/')) ? path : QString();
+        }
     }
     return {};
 }

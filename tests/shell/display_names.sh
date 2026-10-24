@@ -16,6 +16,14 @@ files=(apps/files/qml/*.qml apps/preview/qml/*.qml shell/desktop/DesktopIcon.qml
 name_expr='(row|cell|entry|page|info|previewInfo|modelData|i|slot\.entry)\.name\b|segment\.modelData\.label|nameAt\(|fileName\(\)'
 hits=$(grep -nE "(text|title|name): .*($name_expr)|\.arg\(.*($name_expr)" "${files[@]}" | grep -v "DisplayName.text" | grep -v "raw-name-ok" \
   | grep -vE "Accessible\.name: (qsTr|root\.title|win\.title)|tagName|appName|\.id\b|bar\.label\(" || true)
+# Set B: anywhere in the shell (Dock, overlays, desktop) a base name or file name reaches a text, title, label or accessible name only
+# through the helper; the Dock's tile label (a folder's name, an app's, a window's) too.
+filesB=(shell/dock/*.qml shell/overlay/*.qml shell/desktop/*.qml)
+hitsB=$(grep -nE "(text|title|name|label): .*(baseName\(|fileName)|\.arg\(.*(baseName\(|fileName)" "${filesB[@]}" | grep -v "DisplayName.text" | grep -v "raw-name-ok" || true)
+hitsB+=$(grep -nE "property string label:" shell/dock/Dock.qml | grep -v "DisplayName.text" || true)
+desc="no Dock, overlay or desktop view shows a raw base name${hitsB:+ (found: $(tr '\n' ' ' <<<"$hitsB"))}"
+check test -z "$hitsB"
+
 desc="no QML view shows a raw file name${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
 check test -z "$hits"
 

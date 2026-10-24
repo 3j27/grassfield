@@ -55,7 +55,7 @@ FocusScope {
     activeFocusOnTab: true
     focus: true
     Accessible.role: Accessible.PopupMenu
-    Accessible.name: qsTr("%1 stack").arg(info.name ? info.name : Stacks.baseName(folderPath))
+    Accessible.name: qsTr("%1 stack").arg(DisplayName.text(info.name ? info.name : Stacks.baseName(folderPath)))
 
     width: {
         if (fan) {
@@ -306,7 +306,7 @@ FocusScope {
             width: parent.width - 2 * x
             height: Tokens.menuItemHeight
             Accessible.role: Accessible.Button
-            Accessible.name: qsTr("Back to %1").arg(root.nested && root.trail.length > 1 ? Stacks.baseName(root.trail[root.trail.length - 2]) : (root.info.name ? root.info.name : ""))
+            Accessible.name: qsTr("Back to %1").arg(root.nested && root.trail.length > 1 ? DisplayName.text(Stacks.baseName(root.trail[root.trail.length - 2])) : DisplayName.text(root.info.name))
             Accessible.onPressAction: root.back()
 
             Rectangle {
@@ -329,7 +329,7 @@ FocusScope {
                 x: backGlyph.x + Tokens.menuIconSize + Tokens.spacingSm
                 width: parent.width - x - Tokens.menuItemPadding
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.nested ? Stacks.baseName(root.folderPath) : ""
+                text: root.nested ? DisplayName.text(Stacks.baseName(root.folderPath)) : ""
                 elide: Text.ElideMiddle
                 color: Appearance.colors.text
                 font.family: Appearance.fontFamily
