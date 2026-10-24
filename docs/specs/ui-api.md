@@ -47,4 +47,7 @@ add IconTile
 add IconShapePrewarm
 add AutoAppearance
 add NotificationPrefs
+add WindowActions
+add WindowControls
+add UnifiedToolbar
 ```

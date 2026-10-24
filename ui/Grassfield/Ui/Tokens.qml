@@ -107,6 +107,8 @@ QtObject {
     readonly property int typographyBodySize: Math.round(13 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyCaptionSize: Math.round(11 * Appearance.textScale)
+    // estimate: a pressed light darkens by this much
+    readonly property real typographyPressedOpacity: 0.2
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyTitleSize: Math.round(15 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
@@ -1482,6 +1484,49 @@ QtObject {
     readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width)
     readonly property int wallpaperAboutWidth: 360
+
+    // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
+    readonly property int windowLightDiameter: 14
+    // ADR-0015 / f1-reference-gaps.md:103: gap between two light edges (pitch 23); plugin kButtonSpacing
+    readonly property int windowLightGap: 9
+    // ADR-0015 / f1-reference-gaps.md:107: unified toolbar row, 52 pt, holds the lights and the toolbar items
+    readonly property int windowUnifiedHeight: 52
+    // ADR-0015 / f1-reference-gaps.md:106: centre of the first light in a unified toolbar window, from the window's top-left corner (x and y)
+    readonly property real windowUnifiedLightCentre: 25.75
+    // ADR-0015: titlebar-only style, the plugin's kTitlebarHeight (32); also overview.windowTitlebarHeight
+    readonly property int windowTitlebarHeight: 32
+    // ADR-0015: titlebar style, left edge to the first light's edge (plugin kButtonInsetLeft); the centre is then at (16, 16)
+    readonly property int windowTitlebarLightInset: 9
+    // plugin kButtonHitSlop = diameter / 6: extra hit radius around a light, the gaps between lights stay drag area
+    readonly property real windowLightHitSlop: 2.3333
+    // plugin kTitlePadding: least gap between the lights and the title
+    readonly property int windowTitleGap: 8
+    // plugin kGlyphRatio, measured on the 2x reference: glyph box side over light diameter
+    readonly property real windowGlyphRatio: 0.55
+    // plugin kGlyphStroke, measured: stroke width over light diameter
+    readonly property real windowGlyphStroke: 0.12
+    // plugin kGlyphColor alpha: the glyph darkens the light under it by this much
+    readonly property real windowGlyphOpacity: 0.5
+    // plugin kCloseColor: own value, not copied
+    readonly property string windowCloseColor: "#E5534B"
+    // plugin kMinimizeColor: own value, not copied
+    readonly property string windowMinimizeColor: "#D9A93B"
+    // plugin kZoomColor: own value, not copied
+    readonly property string windowZoomColor: "#4FA64F"
+    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance
+    readonly property string windowInactiveLightDark: "#5A5A5E"
+    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance
+    readonly property string windowInactiveLightLight: "#D1D1D3"
+    // estimate: hairline around a light (darkening, drawn in the glyph colour), keeps the grey light visible on a same-grey toolbar
+    readonly property real windowLightBorderOpacity: 0.18
+    // estimate: a pressed light darkens by this much
+    readonly property real windowPressedOpacity: 0.2
+    // ADR-0015 / f1-reference-gaps.md:109: toolbar window title, about 15 pt bold
+    readonly property int windowTitleSize: Math.round(15 * Appearance.textScale)
+    // estimate: gap between toolbar items and groups
+    readonly property int windowItemsGap: 8
+    // estimate: space between the toolbar's trailing edge and its last item
+    readonly property int windowItemsInset: 14
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120

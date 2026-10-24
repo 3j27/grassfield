@@ -18,7 +18,9 @@ keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52), plugin 0.
 remediation (2026-10-23): restore on the window's own display at its frame (FR15, owner decision D-1), a dialog that opens
 during the Overview close gets the keys (overview.md "Close focus", GF-038), the chrome follows the appearance (feature
 `appearance`, FR53, UX-06), the tiling preview is the blurred material (FR48, D-8), `CLater` cancels on destruction
-(ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit.
+(ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit. The unified toolbar's
+plugin work item (ADR-0015 P1-P7, feature `client-chrome`) and the presented-frame times of gate P3 (FR54, feature
+`frame-times`): plugin 0.14.0.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -59,7 +61,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `__hyprland_api_get_client_hash()`, logs the mismatch and shows one notification.
 - **FR2** Every mapped floating window (not full screen, `decorate` rule not false, not X11
   override-redirect) gets a titlebar decoration 32 px (logical) tall above its content; tiled and
-  full-screen windows get none (zero extents).
+  full-screen windows get none (zero extents). A full-screen window's titlebar is revealed by the pointer at the top
+  edge of its monitor (P6 below, macOS): it is the pointer's way out of full screen.
 - **FR3** The titlebar background uses the window's corner radius and rounding power on its top corners,
   is square at the bottom, and the bar and the content join square (macOS: one shape, no curve where they meet);
   the window border and shadow wrap titlebar + content. Hyprland 0.56.2 rounds the surface's four corners with one
@@ -109,17 +112,44 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
-  registered; `appearance` (FR53) with `config`; `stages` only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance"]`
+  registered; `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
+  registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered; `stages`
+  only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the capabilities JSON plus one field, `"version"` (the product version of the plugin, from the VERSION file; GF-013), as its last member. The `capabilities` event is unchanged (no `version`): its wire format is fixed by the unit tests.
+- **FR54** Presented-frame times (ADR-0006 gate P3): every output's presented frames (Hyprland's
+  `CMonitor::m_events.presented`, the presentation feedback) go into a ring of 1024 CLOCK_MONOTONIC microsecond stamps per
+  output (`core/FrameLog.*`, `FrameProbe.*`; a stamp not newer than the last is refused). `hyprctl grassfield-frames`
+  (exact, read-only, no argument) returns `{"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name",
+  "refreshHz","total","presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t","what"}]}` (at most 16 outputs,
+  names escaped and cut at 64 bytes). Nothing is recorded unless a measurement asked for it (review of part B,
+  2026-10-24: frame times on the lock screen give the typing rhythm away, each key redrawing the password dots):
+  `hyprctl grassfield-frames-start` (exact, no argument) records for the next 60 s (`frames::kMaxRecordingMs`; a new one
+  extends it) and answers `{"v":"gfc/1","type":"frames-recording","recording":true,"ms":60000}`; while the session is
+  locked nothing is recorded, the start is refused (`"recording":false`), what was recorded is dropped and
+  `grassfield-frames` answers no monitor. `frame-times` is advertised when both commands registered. One push per presented
+  frame on the compositor thread, nothing else. For attribution
+  (review 2026-10-24: whose cost were the Overview's missed frames?) each output also keeps the CPU span of every frame
+  Hyprland rendered (render.preChecks to RENDER_POST, the plugin's draws included, the GPU's time not; 1024 per output),
+  and the Overview marks its phases (`overview-opening`, `overview-open`, `overview-closing`, `overview-closed`; the last
+  64, names cut at 32 bytes). `tests/visual/presented-frames.sh` measures real shell animations with it (Overview
+  open/close, Launchpad open, Dock magnification) through `tests/visual/frame-stats.py`, each over its animation's own
+  window (ADR-0006 amendment 2026-10-24, D-5, macOS model: a static screen owes no frames): from the first frame after the
+  request to it + the animation's token duration + one refresh period, or to the Overview's end mark when later
+  (`tests/visual/animation-windows.py`); the tail after it is reported, never judged. `tests/visual/frame-attribution.py`
+  classes each interval over 1.2 periods, in the animation and in the tail: `compositor` (its frame took more than 0.8
+  period of CPU), `client` (the render began more than 0.5 period after the previous presentation: nothing new to draw
+  until then), `other`.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
   their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
 - **FR13** Input consistency: the plugin never cancels a pointer button event, so Hyprland's held-button
   state always matches the device and the click after any titlebar gesture reaches the window under the
-  pointer. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  pointer. One exception, P6 (the revealed titlebar of a full-screen window): a press on it and the release of that press
+  are cancelled together; Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it
+  was. Such a press is taken only when no device holds that button already (the bus event names no device). Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
   press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
   a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
   The release of a press that went to a client is never consumed, even over a titlebar.
@@ -189,6 +219,13 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   and the shell receives a clear event for each announced window; with no client object the global is simply
   destroyed. If pinning fails the objects are destroyed (their clients get a protocol error at their next
   request on them; logged as an error).
+- **FR55** Key paths log nothing (review of part B, 2026-10-24: a line per key while the session was locked gave a
+  password's length and rhythm away in hyprland.log). Every listener of `input.keyboard.key` runs through `gf::keyPath`,
+  which opens `core/Quiet.*`'s scope: `gf::log` and `gf::logRequest` write nothing while it is open and do not count what
+  they drop (the request budget's "held back" count would count keys). `QuietTest.*` checks the scope and fails on a key
+  listener of the plugin's sources without it, or on a hook of Hyprland's key handler. What the key paths start and
+  log later logs once per state change, never per event: the Overview's keyboard hand-over once per request, Stages'
+  "strip window stays active under the lock" once per window and lock.
 - **FR24** No request can flood socket2 (R11). Hyprland disconnects a socket2 subscriber whose event queue
   overflows (`Socket2 fd N overflowed event queue, removing`); Quickshell then gets no Hyprland event until it
   restarts. Every plugin → shell event goes through a throttle (`core/EventThrottle.*`, glue `gf::ipc::postEvent`)
@@ -347,7 +384,59 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   is locked) the plugin requests none and changes none of Hyprland's lists: a strip window is cleared from Hyprland's
   active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
   monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
-  keyboard, checked again then. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
+  keyboard, checked again then. `resetWindowFocus` also forgets Hyprland's focus surface, which `rawSurfaceFocus` cannot
+  set again while the seat's keyboard is on that layer (it returns at once; read from the binary).
+  Keyboard focus before every key (integrator decision 2026-10-24, by the macOS model: a modal system prompt always gets
+  the keyboard and there is always a key window; wlr-layer-shell: an Exclusive Top or Overlay surface gets every key).
+  Hyprland 0.56.2 drops a keyboard focus change while the session has no keyboard device (`CSeatManager::
+  setKeyboardFocus`: "BUG THIS: setKeyboardFocus without a valid keyboard set") and gives a keyboard device that appears
+  only its own focus surface (`CInputManager::setupKeyboard`), both read from the binary; in a session whose keyboards
+  come and go (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) every key was lost after
+  a swap under a dialog and after it (stages.sh 8c, 8f, 8g, 8h, 8i(e): the three nested runs whose session had no
+  keyboard device of its own failed, the thirteen with one passed). So before every key, Stages on or off
+  (`keepKeyboardFocus`, core `keyFocusAction`): the frontmost mapped Exclusive layer (Hyprland's list; the highest
+  layer, the latest among equals) on Top or Overlay gets the keyboard when the seat's keyboard is not on it or one of its
+  popups; with no Exclusive layer, Hyprland's active window (mapped, shown, taking input, not a strip window) gets it back
+  when the seat's keyboard is on nothing. The layer rule also runs from the event loop after Hyprland changed the
+  keyboard focus, a layer surface mapped, or a keyboard device appeared (its layout set): Hyprland 0.56.2 gives a surface
+  that takes the keyboard on demand the keyboard when it maps, even over an Exclusive dialog, and a key that arrives right
+  after `wl_keyboard.enter` can be lost by the client, so the keyboard goes back before the next key (stages.sh 8j: with
+  the check before keys only, the first key after such a banner mapped was lost). Through Hyprland's own
+  `rawSurfaceFocus`; Hyprland's focus event for the plugin's own move is not taken as a new cause. A session whose only
+  keyboard device goes and comes back (the nested session when the parent seat had no keyboard: every `keys.sh` burst is
+  a new device; a Bluetooth keyboard reconnecting on a desktop): clients re-create their `wl_keyboard` each time, and a
+  Quickshell (Qt) client then ignores the keys of the new one (nested 2026-10-24, with the plugin unloaded: a Quickshell
+  layer surface and a Quickshell window got the first burst only, foot every burst; after a keyboard leave/enter cycle the
+  Quickshell window got the next one). So when a device replaces the previous one while no other keyboard is left, the
+  surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again as soon as its client's re-created
+  `wl_keyboard` exists (every `wl_seat` the client bound, through libwayland's list of its resources, checked every 10
+  ms for at most 500 ms after the device appeared; Qt 6.11 activates a window only after a `wl_display.sync` round trip,
+  so a key sent in the same batch as the enter is dropped: an announce made in the key path lost the first key of every
+  burst, the integrator's keyboard-less run of 2026-10-24); else, as a fallback, before the device's first key, and
+  that key can then be lost (a key stops a pending announce; the fallback is skipped when the timer already announced
+  that device); to that same surface
+  (`reannounceKeyboardFocus`, core `reannounceFocus`; not under an input method's grab or with the keyboard on nothing;
+  unlocked, not under a seat grab; Hyprland's focus state untouched). While locked, or when the lock state is unknown
+  (integrator decision 2026-10-24: a lock screen gone deaf after a desktop's only keyboard reconnected at resume is a
+  lock-out; "failures stay locked" never allows a deaf password field): only when the surface that holds the keyboard is
+  a session-lock surface (`CSessionLockManager::isSurfaceSessionLock`), to that same surface, and only when a seat grab, if
+  any, accepts it; the surface that has the keyboard never changes and nothing else is given it
+  (`tests/security/lock_keyboard_replaced.sh`). NOT VERIFIED in a session without a keyboard of its own (a nested session
+  that came up with no WAYLAND-1 output, so no backend input until the parent presents its window): the announce made
+  once the new `wl_keyboard` exists has run only in sessions with a keyboard (no regression there); in the one
+  keyboard-less run so far (2f3d408, key-path announce) the first key of every burst was lost. When the fallback runs,
+  the first key of the burst can be lost: on the lock screen that is a password without its first character, one wrong
+  password attempt. Owner check (L2, real session): with only an external keyboard, lock, unplug and replug the keyboard,
+  then type the password; it must unlock at the first attempt. The focus rules above never act while the session is locked or
+  its state is unknown (a missing lock manager counts as locked: failures stay locked), never under an input method's
+  keyboard grab, never against a seat grab that rejects the surface (checked first: Hyprland would log a refusal per
+  key); a Bottom or Background Exclusive layer keeps Hyprland's normal focus, and no window gets the keyboard while an
+  Exclusive layer is mapped. Only while the plugin is loaded (the key listener goes with it); nothing allocated, nothing
+  logged per key (the common case returns after two reads). On unload, Hyprland's focus surface is set again to the
+  Exclusive layer that holds the seat's keyboard after the plugin cleared it (the seat leaves it for an instant), so a new
+  keyboard device keeps the keys there without the plugin. stages.sh 8j: a keyboard device that appears under the layer
+  after a swap. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`, `keyFocusAction`,
+  `replacesFrontmost`.
   R13 counter-review #4 of 0.6.3-stages (ST10 clicks, ST23, ST24): Hyprland reports `FOCUS_REASON_CLICK` for every
   refocus at the cursor (`CInputManager::refocus`, also when a layer unmaps with no active window), so a `CLICK` focus
   is a user choice only when a press caused it: the plugin records pointer button presses (its first button listener),
@@ -508,10 +597,17 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   every other path are untouched; no event or button is ever cancelled. Unmaps need nothing: `CLayerSurface::onUnmap`
   already calls `simulateMouseMovement` (read from the binary; measured: a click without motion after the menu closed
   reaches the window under the pointer, with and without the plugin). Decision logic pure (`core/LayerPointer.*`:
-  `isGrassfieldNamespace`, `CRefreshState`).
+  `isGrassfieldNamespace`, `CRefreshState`). Only a keyboard that MOVES to a Grassfield layer counts, and what a refresh
+  itself causes is never a new reason: Hyprland sets the keyboard focus again on the on-demand layer under the cursor (the
+  desktop icons) on every refresh, and counting that looped for ever (stages.sh on 2026-10-23: 10 million refreshes after a
+  press on the desktop, the nested compositor stopped answering IPC, its log grew to 3.3 GB). A backstop bounds the
+  event loop's refreshes to 20 a second: over it the refresh stays owed and its attempt runs again from an event-loop timer
+  when the second is over (`attemptAt` → `Defer`; logged at the 1st, 10th, ... deferral). It is never dropped (a dropped
+  refresh left the next press at the stale position, reviewer 2026-10-23), and a press is never deferred (the user's,
+  it cannot loop). `beginRefresh`/`endRefresh` wrap Hyprland's code in a scope guard.
 - **FR52** `layer-pointer` (no verb; the shell needs no change) is advertised when its two listeners registered, after
-  `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners and the scheduled event-loop callback
-  (`deferredFocus::CLater`) before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log
+  `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners, the scheduled event-loop callback
+  (`deferredFocus::CLater`) and the budget timer before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log
   line at the 1st, 10th, 100th, ... refresh (request log budget, FR24).
 - **FR53** The chrome follows the appearance (audit UX-06; feature `appearance`, advertised with `config`): the shell pushes
   `hl.plugin.grassfield.config("appearance", "dark" | "light")` (the appearance it shows, `Appearance.dark`) after each
@@ -1226,6 +1322,37 @@ client's recent input, as other compositors do) and exposing the result, e.g. a 
 the window, the source (xdg-activation, X11, foreign toplevel) and the validity; the plugin decision would then be a small pure
 rule (valid and recent: focus; else `urgent` only) with graceful degradation (no event: Hyprland's behaviour).
 
+## Plugin work item: client chrome (ADR-0015)
+Grassfield apps draw their own lights and toolbar (grassfield-ui `WindowControls` / `UnifiedToolbar`) and tag their window
+with an xdg-toplevel tag (`browser`, `settings`, `viewer`, `info`; apps/windowchrome.h). The plugin steps aside for those
+windows. Full text and rationale: docs/decisions/ADR-0015-unified-toolbar.md, "Implementation: app side ... and the plugin
+work item". P1-P7 are implemented (`core/ClientChrome.*`, `ClientChrome.*`, `Titlebar.cpp`, `core/Stages.*`, `Theme.hpp`;
+plugin 0.14.0); the app side, S1-S3 and H1 were done before. Unit tests: `tests/ClientChromeTest.cpp`. A window tagged after
+it mapped (a rule change) loses its strip on `window.updateRules`; its bridges P4 and P5 check the tag when they run.
+
+| Id | Change | Test |
+|---|---|---|
+| P1 | `isClientChrome(window)`: the window's Hyprland tags hold `grassfield-client-chrome` (a dynamic tag prints with `*`); `Titlebar::shouldShow()` is false for it; re-evaluated on `window.updateRules`; never `decorate = false` | GTest on the predicate; `client_chrome.sh` assertion 3 |
+| P2 | gfc/1 feature `client-chrome` (additive, ADR-0007), advertised only when P1 is registered | `Protocol.*` GTest |
+| P3 | Stages band (`core/Stages.cpp:486-489`, `Stages.hpp:49`) uses P1: band 0 for a tagged window | `StagesTest`, `stages.sh` |
+| P4 | `requestMove` for tagged windows: a zoomed window restores its remembered box under the pointer at the same grab ratio, then moves (FR8 for the app-drawn row). Done: the press is recorded before Hyprland handles it (the window is still zoomed then); the move request that answers it (same window, button held, within 3 s) leaves the zoom if Hyprland's own handler did not, places the floating size by `titlebar::unzoomedDragBox`, then ends the move Hyprland started and begins one from there (`CLayoutManager::endDragTarget` / `setTargetGeom` / `beginDragTarget`) | `ClientChromeZoomedDrag.*` GTest; `client_chrome.sh` assertion 10 |
+| P5 | minimize bridge for tagged windows: `stateChanged` with `requestsMinimize` runs the FR6 path (`minimize-request`, `special:minimized`) | `client_chrome.sh` assertion 5 |
+| P6 | the plugin titlebar's green button with Alt held: true full screen (`FSMODE_FULLSCREEN`), glyph = full-screen arrows while Alt is held over the group (REQ-ADR0002-6, plugin part). The way back (review 2026-10-23: no pointer way out of full screen): the pointer within 2 px of the monitor's top edge reveals the window's titlebar, square, over its content, below the shell's menu bar (`grassfield-menubar` layer height on that monitor, at most 64 px; 0 without it); it stays while the pointer is within 8 px below it or a press on it is held, and goes with the full screen. Its zoom light (arrows) leaves full screen, close closes, minimize is grey and inert (macOS). Hyprland 0.56.2 draws no decoration on a full-screen window and places decoration input above the window, outside the monitor, so the revealed bar is drawn at `RENDER_POST_WINDOWS` (under the overlay layers) and its presses are taken on the bus: a press inside it and the release of that press are cancelled together. `CInputManager::onMouseButton` returns right after the bus when an event is cancelled, before it records the button as held or released (read from the binary: the `cancelled` test follows `emitInternal`, the held-button list is touched after it), so the pair leaves Hyprland's held-button state unchanged; a release still owed when the same button is pressed elsewhere was lost and is forgotten (never cancel a release Hyprland expects). The bus event names no device and Hyprland's held buttons are per button, so a press is taken only when no device holds that button already (another device's release of the same button can then never be mistaken for the bar's). What Hyprland holds is known only once the plugin has seen it hold nothing (`core CHeldButtons`): until then no press is taken (a button held when the plugin loaded would otherwise delay its device's release behind a bar press). While the session is locked no light acts, an armed one included, and nothing is logged. Each press over the revealed bar logs one INFO line, with no position: taken (and which light), or left to Hyprland and why; each release of an armed light whether it acted. Never revealed while the session is locked, while the client confines or locks the pointer (`CInputManager::isConstrained`: a game that scrolls at the screen's edge must not meet a working close light), during a move or resize (`CDragStateController::mode`) or a drag and drop, or under a special workspace shown on the monitor; never taking a press under a layer popup or an Overlay layer (review of part B, 2026-10-24). The cheap test (the pointer at the top edge) runs first on every motion. Logic pure (`core/ClientChrome.*`: `nextRevealed`, `lightAvailableInFullscreen`, `CRevealPresses`). Not covered: direct scanout of a full-screen window (no composition, so no bar) and the menu bar's own slide (the bar sits at the menu bar's height even while the menu bar is away) | `ClientChromeZoomLight.*`, `ClientChromeFullscreenTitlebar.*` GTests; `zoom_restore.sh` cases 6 and 7 (7: a click where the light would be, coming from below, stays the window's; top edge then the light leaves full screen); `fullscreen_reveal.sh` (a mouse-reporting foot gets neither the press nor the release of a click on the bar; minimize inert; an Overlay layer over the lights keeps its press; nothing while locked; the way out) |
+| P7 | the light constants come from `window.*` of `ui/tokens/tokens.json` (generated, or a GTest comparing `Theme.hpp` with it) | GTest |
+| S1 (done) | `config/hypr/grassfield/windows.lua`: `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })` | `tests/shell/client_chrome_rules.sh`; `just check-config`; `client_chrome.sh` assertion 2 |
+| S2 (done) | `gf-no-maximize-event` matches every class but the S1 list, `gf-no-maximize-event-untagged` every window without an xdg tag: only an S1 window (a client-chrome one) is exempt (Q4: its zoom is honoured; another toolkit's tagged window is not, review 2026-10-23) | `client_chrome_rules.sh`; `client_chrome.sh` assertion 6 |
+| S3 (done) | windows of role `info`: `match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12` (titlebar style, Q5) | `client_chrome_rules.sh`; `getprop rounding` |
+| H1 (done) | shell: `shell/overview/OverviewWindow.qml` band 0 for tagged windows when `client-chrome` is advertised (`ClientChrome.js`); P3 must use the same tag | `tests/unit/tst_clientchrome.qml` + nested Overview shot |
+
+Degraded behaviour: without the plugin the app's lights and toolbar are drawn all the same (close, drag, zoom through
+xdg-toplevel requests; minimize has no effect, spike step 6). With an older plugin that lacks P1 the strip is drawn above the
+app's toolbar (plugin and apps ship from one release). `tests/compositor/client_chrome.sh [--no-plugin]` is the nested
+scenario: its header lists which assertion needs which item; assertions 3 (no strip, P1), 5 (minimize bridge, P5), 10
+(zoomed drag, P4) and 11 (feature, P2) need this plugin, 9 (unload and reload) is run by hand. P6 is case 6 of
+`tests/compositor/zoom_restore.sh` (Alt held with `scripts/dev/keys.sh`). P3 also gives the tiling and restore frames no
+band above such a window (`Tiling.cpp`, `Minimize.cpp` restore). P7: `ui/tools/gen-tokens.py` writes the `window` group into
+`ThemeTokens.hpp`; the colours come from it and `Theme.hpp` checks the metrics against it at compile time.
+
 ## Work item GF-116: no restore and no window focus while the session is locked (open, compositor-engineer)
 
 Found by GF-AUDIT-001 SEC-13 / DT-12 and re-read for wave 3 (security-engineer, 2026-10-24; this item is the plugin part,
@@ -1266,6 +1393,23 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
   handling, so with `follow_mouse = 1` (not Grassfield's setting, 2) it could also move the keyboard to a window under the
   pointer, as a real one-pixel motion would.
 - Stages (prototype behind a flag): limits and risks in `docs/specs/stages.md` "Known limitations and risks".
+- Keyboard-less nested session, open item (8i(e2)): after the layer goes, Hyprland neither refocused the window under the
+  pointer nor focused the window clicked just after (u): no focus change was logged for the click, and the keys went to the
+  window the deferred focus had chosen (h2). Next: an A/B run of stages.sh 8i(e2) with the plugin unloaded the next time
+  a session comes up without its own keyboard, to tell Hyprland's pointer path with transient pointer devices from the
+  plugin's focus rules.
+- Keyboards that come and go, without the plugin (degraded mode): when the session's only keyboard device goes away and
+  another appears (a desktop's Bluetooth keyboard reconnecting; in the nested session every `wtype` burst when the parent
+  seat had no keyboard at start), the seat loses its keyboard capability in between and clients re-create their
+  `wl_keyboard`; a Quickshell (Qt) client then ignores the keys of the new one until it gets a new `wl_keyboard.leave` and
+  `enter`. So every Quickshell surface (the lock screen, the polkit dialog, Search, a Quickshell window) is deaf after
+  such a reconnect until the keyboard focus changes. The plugin announces the focus again (above); without it the limit
+  stays. Repro (nested, plugin unloaded, `devices` listing no keyboard of the session's own): map a Quickshell layer
+  surface with Exclusive keyboard interactivity that logs its keys (`tests/compositor/stages-fixture`, role exclusive), run
+  `wtype ab`, `wtype cd`, `wtype ef` one after another: it logs a and b only; foot in its place gets all six. A focus
+  cycle while the new device exists (another window focused, then this one) makes it take the next burst. Not
+  reproducible through `scripts/nestctl`: Hyprland 0.56.2 keeps a disabled keyboard (`enabled = false`) in the seat's
+  capabilities. Upstream: Quickshell (an issue text is in the integrator's report of 2026-10-24; filing is the owner's call).
 - Overview close focus (`overview-focus`): the shell sends it on every close (`Overview.closeAnd`) and keeps its own
   checked focus path without the capability. Keys typed before the last chrome released still reach that chrome (lost,
   as in the drop table of `docs/specs/overview.md`). The bound is fixed (1 s): a dialog open longer during the close ends the

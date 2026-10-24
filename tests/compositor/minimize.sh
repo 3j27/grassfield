@@ -454,15 +454,25 @@ else
   else
     check "2b: restore from the other display" 1 "no Dock rectangle for A: no tile is clicked"
   fi
-  # Back to the state of step 1 for the next steps: A on its Desktop, that Desktop shown, the Dock where it was.
+  # Back to the state of step 1 for the next steps: A on its Desktop, that Desktop shown on $out, the Dock where it was.
+  # $out is focused first: a Desktop focused while the other display has the focus is shown there (it moves with it).
+  nestctl dispatch "hl.dsp.focus({ monitor = \"$out\" })" >>"$log" 2>&1
   nestctl dispatch "hl.dsp.window.move({ workspace = \"$ws0\", follow = false, window = \"address:$addr\" })" >>"$log" 2>&1
   nestctl dispatch "hl.dsp.focus({ workspace = \"$ws0\" })" >>"$log" 2>&1
   sleep 0.4
   [[ $dock_out != "$second" ]] && dock_to "$dock_out"
   nestctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >>"$log" 2>&1
   sleep 0.4
+  # Step 3 clicks A's minimize button where step 1 found it, on $out: the Desktop's move may have taken A to the other
+  # display (integrator's run on 9e56154: A at (-830,302) on WAYLAND-1, 0 requests in step 3). Put it back at its box.
+  if [[ $(client_monitor "$a_pid") != "$out" ]] || ! read -r _ x y _ _ _ < <(client "$a_pid") || [[ $x != "$x0" || $y != "$y0" ]]; then
+    nestctl dispatch "hl.dsp.window.move({ x = $((mon_x + x0)), y = $((mon_y + y0)), window = \"address:$addr\" })" >>"$log" 2>&1 # layout coordinates
+    sleep 0.6
+  fi
   read -r _ x y w h ws < <(client "$a_pid")
   say "  2b: back for step 3: A ${w}x${h} at ($x,$y) on $ws of $(client_monitor "$a_pid"); the Dock on $dock_out"
+  [[ $(client_monitor "$a_pid") == "$out" && $x == "$x0" && $y == "$y0" ]]
+  check "2b: A back on $out at its box for step 3" $? "A at ($x,$y) on $(client_monitor "$a_pid"), expected ($x0,$y0) on $out"
 fi
 
 # 3 rapid repetition

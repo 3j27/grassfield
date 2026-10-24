@@ -2,6 +2,7 @@
 
 #include "previewlogic.h"
 #include "appscope.h"
+#include "chromecaps.h"
 #include "autoappearance.h"
 
 #include <QCoreApplication>
@@ -73,10 +74,23 @@ PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool
         m_watcher.addPath(dir);
     if (QFileInfo::exists(file))
         m_watcher.addPath(file);
-    const auto reread = [this] {
+    // The shell's capabilities file (chromecaps.h, ADR-0015 Q4b) is watched the same way: it may not exist yet, so its directory too.
+    const auto watchCapabilities = [this] {
+        const QString caps = grassfield::apps::capabilitiesFile();
+        if (caps.isEmpty())
+            return;
+        const QString capsDir = QFileInfo(caps).absolutePath();
+        if (QFileInfo(capsDir).isDir() && !m_watcher.directories().contains(capsDir))
+            m_watcher.addPath(capsDir);
+        if (QFileInfo::exists(caps) && !m_watcher.files().contains(caps))
+            m_watcher.addPath(caps);
+    };
+    watchCapabilities();
+    const auto reread = [this, watchCapabilities] {
         const QString f = configFile();
         if (QFileInfo::exists(f) && !m_watcher.files().contains(f))
             m_watcher.addPath(f);
+        watchCapabilities();
         readAppearance();
     };
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
@@ -152,6 +166,7 @@ void PreviewApp::readAppearance()
     bool dark = true;
     bool reduce = false;
     QString accent = QStringLiteral("multicolor");
+    QString doubleClick = QStringLiteral("zoom");
     QFile f(configFile());
     if (f.open(QIODevice::ReadOnly) && f.size() < 1024 * 1024) {
         const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
@@ -159,13 +174,20 @@ void PreviewApp::readAppearance()
         m_autoAppearance = setting == QLatin1String("auto");
         dark = grassfield::apps::isDarkAppearance(setting, QTime::currentTime());
         reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
+        // Same rule as the compositor plugin: anything but "minimize" and "none" is the default, "zoom".
+        const QString d = root.value(QStringLiteral("windows")).toObject().value(QStringLiteral("titlebarDoubleClick")).toString();
+        if (d == QLatin1String("minimize") || d == QLatin1String("none"))
+            doubleClick = d;
         // Accent colour: same names as ui/Grassfield/Ui/Accent.js; anything else reads as the default.
         const QString a = root.value(QStringLiteral("accent")).toObject().value(QStringLiteral("color")).toString();
         if (QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                         QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(a))
             accent = a;
     }
-    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor) {
+    const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
+    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize) {
+        m_canMinimize = canMinimize;
+        m_titlebarDoubleClick = doubleClick;
         m_accentColor = accent;
         m_dark = dark;
         m_reduceMotion = reduce;

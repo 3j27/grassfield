@@ -4,7 +4,25 @@
 hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true })
 
 -- Don't let apps maximize themselves into a tiled state; Zoom is a Grassfield action.
-hl.window_rule({ name = "gf-no-maximize-event", match = { class = ".*" }, suppress_event = "maximize" })
+-- Only a client-chrome window (ADR-0015, apps/windowchrome.h; the gf-client-chrome match below) is exempt: its zoom light
+-- sends the request. Hyprland toggles the maximized mode on any maximize request, so the app sends exactly one per press
+-- and never draws from Qt's maximized state. Every other window, tagged by its toolkit or not, keeps the suppression. Two
+-- rules make the negation of that match (any other class, or no xdg tag) without reading the tag itself: the tag is a
+-- dynamic effect, the suppression a static one read at map.
+hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^org\\.grassfield\\.(Files|Settings|Preview)$" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = ".*", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
+
+-- Client chrome (ADR-0015): Grassfield apps that draw their own lights and toolbar are tagged
+-- `grassfield-client-chrome`; the compositor plugin draws no titlebar on them (plugin work item P1, docs/specs/compositor.md)
+-- and Overview and Stages leave no band above them. The tag is set at map (the xdg tag comes with the first commit). The
+-- class list is the apps that set a tag; KIO and widget dialogs set none and keep the plugin titlebar. The plugin and the
+-- shell read the same tag name: keep it in step with shell/overview/ClientChrome.js. Never `decorate = false`: it also
+-- drops Hyprland's border and shadow.
+hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })
+
+-- Get Info and Customize Folder draw the titlebar-only style (role "info"): radius 12 like every titlebar window; the
+-- main windows keep the toolbar radius 26 (ADR-0015 Q5).
+hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12 })
 
 -- Corner radius (docs/testing/f1-reference-gaps.md, "Window chrome"): Grassfield's own windows keep the default 26
 -- (looknfeel.lua, the macOS toolbar-window radius); every other window, matched by a negated class regex (also a window

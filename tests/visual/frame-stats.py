@@ -2,9 +2,11 @@
 
 Usage: python3 -I frame-stats.py FRAMES EVENTS HZ [WINDOW_MS] [TOLERANCE]
   FRAMES  lines "epoch_us interval_us" (framepulse: one per frame callback of a surface that redraws every frame)
-  EVENTS  lines "<label> <epoch_ns>" (the moment an open or a close was requested)
+  EVENTS  lines "<label> <epoch_ns>" (the moment an open or a close was requested), or "<label> <epoch_ns> <window_ms> ..."
+          with the event's own window (tests/visual/animation-windows.py: from the animation's first frame to its end)
   HZ      refresh rate of the output
-Prints, per label and for all, the frames in [event, event + WINDOW_MS] (default 700 ms: the 350 ms animation and its settle):
+Prints, per label and for all, the frames in [event, event + WINDOW_MS] (default 700 ms: the 350 ms animation and its settle;
+an event's own window wins):
 count, median, 95th percentile and worst interval, and the share of frames whose interval is within TOLERANCE x the refresh
 period (default 1.2: 20 ms at 60 Hz; a dropped frame shows as two periods). Exit status 1 when the share is below 95 %
 (gate P3: at least 95 % of frames on time) in any phase, 2 on unusable input.
@@ -25,12 +27,16 @@ def read_frames(text):
 
 
 def read_events(text):
+    """(label, us) per line, or (label, us, window_us) when the line names its own window (a third column, in ms)."""
     out = []
     for line in text.splitlines():
         parts = line.split()
-        if len(parts) == 2:
+        if len(parts) >= 2:
             try:
-                out.append((parts[0], int(parts[1]) // 1000))
+                event = (parts[0], int(parts[1]) // 1000)
+                if len(parts) >= 3:
+                    event += (int(float(parts[2]) * 1000),)
+                out.append(event)
             except ValueError:
                 continue
     return out
@@ -47,10 +53,12 @@ def percentile(values, p):
 def phase(frames, events, label, window_us):
     """Intervals of the frames that arrived in a window after an event of `label` (all labels when None)."""
     out = []
-    for name, at in events:
+    for event in events:
+        name, at = event[0], event[1]
         if label is not None and name != label:
             continue
-        out.extend(i for t, i in frames if at <= t <= at + window_us)
+        window = event[2] if len(event) > 2 else window_us
+        out.extend(i for t, i in frames if at <= t <= at + window)
     return out
 
 

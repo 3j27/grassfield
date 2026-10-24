@@ -1553,10 +1553,6 @@
         <translation>Fichiers</translation>
     </message>
     <message>
-        <source>Toolbar</source>
-        <translation>Barre d’outils</translation>
-    </message>
-    <message>
         <source>Back</source>
         <translation>Précédent</translation>
     </message>
@@ -5186,6 +5182,13 @@
     </message>
 </context>
 <context>
+    <name>UnifiedToolbar</name>
+    <message>
+        <source>Toolbar</source>
+        <translation>Barre d’outils</translation>
+    </message>
+</context>
+<context>
     <name>Viewer</name>
     <message>
         <source>Preview</source>
@@ -5946,6 +5949,37 @@
     <message>
         <source>Signal %1 %</source>
         <translation>Signal %1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>WindowControls</name>
+    <message>
+        <source>Window controls</source>
+        <translation>Commandes de la fenêtre</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Closes the window</source>
+        <translation>Ferme la fenêtre</translation>
+    </message>
+    <message>
+        <source>Minimize</source>
+        <translation>Réduire</translation>
+    </message>
+    <message>
+        <source>Minimizes the window to the Dock</source>
+        <translation>Réduit la fenêtre dans le Dock</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
+        <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
     </message>
 </context>
 <context>
