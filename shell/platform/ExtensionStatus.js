@@ -29,15 +29,20 @@ function parse(text) {
     return out;
 }
 
-// The degraded notice: "mismatch" when no build is made for the installed Hyprland (the rebuild is the recovery), else
+// The degraded notice: "stale" when the user's build is made for this Hyprland but from an older Grassfield (after a
+// Grassfield update: the extension is being updated, Hyprland is not the cause; macOS: an update finishes at the next
+// login), "mismatch" when no build is made for the installed Hyprland (the rebuild is the recovery for both), else
 // "absent" (the plain notice: the check is unavailable, or a build matches and was not loaded).
 function notice(status) {
-    return status && status.state === "mismatch" ? "mismatch" : "absent";
+    if (!status || status.state !== "mismatch")
+        return "absent";
+    return status.reason === "stale-build" ? "stale" : "mismatch";
 }
 
-// The shell starts `--session` once per shell run: on a mismatch, with the opt-in setting on.
+// The shell starts `--session` once per shell run: on a mismatch or a stale build, with the opt-in setting on.
 function rebuilds(status, settingOn, tried) {
-    return settingOn === true && tried !== true && notice(status) === "mismatch";
+    const kind = notice(status);
+    return settingOn === true && tried !== true && (kind === "mismatch" || kind === "stale");
 }
 
 // The outcome of `--session`: "loaded" (built if needed and loaded into the running Hyprland), "built" (log out and back

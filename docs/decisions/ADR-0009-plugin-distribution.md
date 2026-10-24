@@ -86,7 +86,11 @@ loaded only when it is the installed sources' VERSION (`/usr/src/grassfield-comp
 for the packaged build, `--vetted` for the user's (`--status`: `state=mismatch`, `reason=stale-build`; the rebuild and
 the shell's opt-in `--session` build it again). A config reload keeps the build of the first parse as before: the loader
 asks `--vetted <abi> --loaded`, every check but the source version, which a package update in the session may have moved
-on (the running shell is still the one of that login).
+on (the running shell is still the one of that login). The shell's notice for `reason=stale-build` does not name the
+Hyprland version (it is not the cause): it reuses GF-083's model (macOS: an update finishes at the next login), "Updating
+the compositor extension" when the opt-in rebuild runs (it comes back once done, or after the next login), else "Log out
+to finish updating" with the rebuild command; the rebuild's outcome is "Compositor extension updated" or "Log out to
+finish updating" (`ExtensionStatus.notice` "stale", tests/unit/tst_extensionstatus.qml).
 
 User rebuild (option 3): `grassfield-compositor-rebuild` refuses to run as root. It builds the shipped sources with CMake
 and the compiler, in a private temporary directory, with a clean environment, at low priority, with at most 4 compilers and

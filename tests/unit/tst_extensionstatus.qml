@@ -14,6 +14,18 @@ TestCase {
         compare(ExtensionStatus.version(s), "v0.56.3");
     }
 
+    // Re-review of c3cb01b: a build in the user's cache made from an older Grassfield is stale, not a Hyprland mismatch:
+    // its notice speaks of finishing an update (GF-083 wording), and the opt-in rebuild still runs.
+    function test_aStaleBuildIsAnUpdateToFinishNotAHyprlandMismatch() {
+        const s = ExtensionStatus.parse("state=mismatch\nversion=v0.56.2\nabi=abc_aq_0.15\nreason=stale-build\n");
+        compare(ExtensionStatus.notice(s), "stale");
+        verify(ExtensionStatus.rebuilds(s, true, false));
+        verify(!ExtensionStatus.rebuilds(s, false, false));
+        verify(!ExtensionStatus.rebuilds(s, true, true));
+        compare(ExtensionStatus.notice(ExtensionStatus.parse("state=mismatch\nreason=other\n")), "mismatch");
+        compare(ExtensionStatus.notice(ExtensionStatus.parse("state=match\nreason=stale-build\n")), "absent");
+    }
+
     function test_aMatchingBuildThatIsNotLoadedGetsThePlainNotice() {
         compare(ExtensionStatus.notice(ExtensionStatus.parse("state=match\nversion=v0.56.2\npath=/usr/lib/grassfield/grassfield-compositor.so\n")), "absent");
     }
