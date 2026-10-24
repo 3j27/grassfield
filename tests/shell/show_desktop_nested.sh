@@ -152,9 +152,12 @@ focus_is "4: the new window keeps the focus" "$e"
 # 5 activation (switcher next + release)
 focus_space "$S1"
 show_desktop
-ipc switcher next 7000001
+# The switcher orders its requests by hold id and ignores one it has already seen: a fresh id (the clock) per run, so that a
+# second run against the same shell is not taken for a stale hold.
+hold=$(date +%s)
+ipc switcher next "$hold"
 sleep 0.5
-ipc switcher release 7000001
+ipc switcher release "$hold"
 all_home "5"
 # The front app is gf-sd-main (E); the switcher's next app is gf-sd-other, whose only window is C: C must have the focus.
 focus_is "5: the switcher's choice (C, the other app) has the focus, not the old window E" "$c"
