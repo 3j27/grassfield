@@ -459,7 +459,12 @@ type_to "case 8" "$cap_a" "fgone"
 [[ $mode == check ]] && outcome_is "case 8" "$id" fallback "$addr_a"
 
 say "case 9: remembered D, D minimized during the close (fallback A, D never gets a key)"
-park
+# The pointer on an empty spot of D's output, not parked over B: Hyprland may show special:minimized for the moved window
+# and the shell hides it at once (Compositor.qml, activespecialv2), and Hyprland's refocus on that hide gives the keyboard to
+# the window under the pointer. When the hide landed after the plugin's outcome, the keys went to B (2 of 4 runs on
+# 2026-10-24, log: fallback A, the shell's request, then "Set keyboard focus ... B"): Hyprland's own rule after the
+# outcome, not what this case checks.
+pointer "$OUT_A" abs 1900 120 sleep 80
 focus_window "$addr_d"
 holder=$(open_chromes)
 id=$((id + 1))
