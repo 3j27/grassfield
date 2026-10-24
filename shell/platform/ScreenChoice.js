@@ -13,3 +13,9 @@ function pick(requested, focused, names) {
         return focused;
     return names.length > 0 ? names[0] : "";
 }
+
+// Where a centred popup (confirm, notice) opens: on the output of the popup that is open right now (a menu on display B
+// asks "Restart?" on B), else on the active display. A popup that was closed leaves no screen behind.
+function centered(popupOpen, popupScreen, activeScreen) {
+    return popupOpen && popupScreen !== "" ? popupScreen : activeScreen;
+}

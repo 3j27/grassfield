@@ -22,6 +22,13 @@ TestCase {
         compare(ScreenChoice.pick("", "", names), "WAYLAND-1");
     }
 
+    function test_centredPopupUsesTheOpenPopupsScreenOnly() {
+        compare(ScreenChoice.centered(true, "B", "A"), "B");
+        // closed: the old screen is stale, the active display wins
+        compare(ScreenChoice.centered(false, "B", "A"), "A");
+        compare(ScreenChoice.centered(true, "", "A"), "A");
+    }
+
     function test_noOutputs() {
         compare(ScreenChoice.pick("", "GF-REF", []), "");
     }
