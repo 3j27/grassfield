@@ -188,7 +188,9 @@ read -r mon_x mon_y mon_w mon_h < <(query monitors | jq -r --arg o "$out" '.[] |
 [[ -n ${mon_w:-} ]] || { echo "minimize: output $out not found" >&2; exit 2; }
 
 # ---- Stages mode: the flag, the strip stand-in, op on, and window O (opened first, moved into a strip stage later) ----
-st_last() { grep -a 'grassfield>>{"v":"gfc/1","type":"stages"' "$events" | tail -n 1 | sed 's/^[0-9]* grassfield>>//'; }
+# The Stages state: the `stages` event is only a change notice (Hyprland cuts socket2 events at 1024 bytes; ADR-0007
+# amendment 2026-10-24), the state comes from the request socket.
+st_last() { nestctl grassfield-stages 2>/dev/null; }
 o_pid="" o_addr="" cap_o=""
 if ((stages_mode)); then
   strip_json=$(jq -nc --argjson x "$mon_x" --argjson y "$mon_y" '{x: $x, y: ($y + 60), w: 220, h: 860}')

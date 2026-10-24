@@ -308,7 +308,10 @@ window, so it is not counted as evidence either way).
    - `op:on` again while on updates the strips, timing and `hidden` flags (no regrouping). Send it on every geometry
      change of the strip (output added or moved, Dock or menu bar size) and for the hover reveal (`hidden:false`).
    - `{"op":"off","durationMs":350}` ends Stages (animated back). Turning the flag off also ends it (at once).
-4. **Events** `grassfield>>{"v":"gfc/1","type":"stages","on":bool,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,"front":{"address":"<hex, no 0x>","app":"<class>"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"<hex, no 0x>"}]},{"id":7,"slot":0,"windows":[{"address":"…","x":…,"y":…,"w":…,"h":…}]}]}]}`
+4. **Events** (ADR-0007 amendment 2026-10-24: Hyprland cuts socket2 events at 1024 bytes, and this state grows with every
+   window): the event is a change notice, `grassfield>>{"v":"gfc/1","type":"stages","gen":N,"on":bool}` plus `"reason"`, and
+   the state below, with the same `gen`, is the reply of `hyprctl grassfield-stages` (`shell/platform/StagesLink.qml` fetches
+   it on each notice with `on:true`; a notice with `on:false` needs no fetch). State: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,"front":{"address":"<hex, no 0x>","app":"<class>"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"<hex, no 0x>"}]},{"id":7,"slot":0,"windows":[{"address":"…","x":…,"y":…,"w":…,"h":…}]}]}]}`
    plus `"reason":"invalid|disabled|no-strip|unknown|unavailable|interrupted"`. Coalesced (latest wins): treat as a
    state. Per monitor with a strip: the workspace shown there, the active stage id, the stages in recency order (active
    first, `slot` = tile index, −1 for the active stage and for stages beyond the tiles), each stage's windows back to

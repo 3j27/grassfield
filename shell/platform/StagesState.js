@@ -1,7 +1,9 @@
 .pragma library
 
-// The gfc/1 `stages` event as a state (docs/specs/stages.md "Shell contract" 4), validated: pure, no compositor access, unit
-// tested in tests/unit/tst_stages.qml. The plugin coalesces the event (latest wins), so each one replaces the previous state.
+// The gfc/1 `stages` state (docs/specs/stages.md "Shell contract" 4), validated: pure, no compositor access, unit tested in
+// tests/unit/tst_stages.qml. The event is a change notice ({gen, on, reason}: Hyprland cuts socket2 events at 1024 bytes);
+// the state with its monitors is the reply of `hyprctl grassfield-stages` (ADR-0007 amendment 2026-10-24). An older plugin
+// sent the whole state in the event: `complete` tells which one was parsed.
 
 const reasons = ["invalid", "disabled", "no-strip", "unknown", "unavailable", "interrupted"];
 const maxStages = 64;
@@ -65,8 +67,10 @@ function cleanMonitor(m) {
     };
 }
 
-// {on, reason, monitors: {<name>: monitor}} for a stages event, null for anything else (other types, foreign protocol
-// versions, malformed text). `reason` is "" or one of the contract's reasons (anything else is dropped).
+// {on, reason, gen, complete, monitors: {<name>: monitor}} for a stages notice or state, null for anything else (other
+// types, foreign protocol versions, malformed text). `reason` is "" or one of the contract's reasons (anything else is
+// dropped); `gen` the plugin's generation (-1 when absent: an older plugin); `complete` whether the text carried the
+// monitors (a state), false for a notice.
 function parse(data) {
     let msg = null;
     try {
@@ -83,7 +87,13 @@ function parse(data) {
         if (m)
             monitors[m.monitor] = m;
     }
-    return {on: msg.on, reason: typeof msg.reason === "string" && reasons.indexOf(msg.reason) >= 0 ? msg.reason : "", monitors: monitors};
+    return {
+        on: msg.on,
+        reason: typeof msg.reason === "string" && reasons.indexOf(msg.reason) >= 0 ? msg.reason : "",
+        gen: Number.isSafeInteger(msg.gen) && msg.gen >= 0 ? msg.gen : -1,
+        complete: Array.isArray(msg.monitors),
+        monitors: monitors
+    };
 }
 
 // The stages of a monitor other than the active one, most recent first (the order of the strip, slot 0 at the top).

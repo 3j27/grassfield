@@ -23,8 +23,11 @@ Singleton {
     readonly property bool flagOn: Capabilities.has("stages")
     readonly property bool active: available && enabled && flagOn
 
-    // Last state event (StagesState.parse) or null; cleared when Stages ends.
+    // Last state (StagesState.parse of `hyprctl grassfield-stages`, or of an older plugin's full event) or null; cleared
+    // when Stages ends.
     property var state: null
+    // A notice came while the state was being fetched: fetch again when that one ends (the latest state wins).
+    property bool fetchAgain: false
     readonly property bool on: state !== null && state.on
     // Last refusal or end reason of an event ("" none): invalid | disabled | no-strip | unknown | unavailable | interrupted.
     property string reason: ""
@@ -40,6 +43,24 @@ Singleton {
 
     // Sends an operation through Compositor.stages (the plugin validates every field); false (nothing sent) when Stages is not
     // active or the request is not one of its operations.
+    // The state of the latest notice (the event carries none: Hyprland cuts socket2 events at 1024 bytes).
+    function fetchState(): void {
+        if (stateFetch.running)
+            root.fetchAgain = true;
+        else
+            stateFetch.running = true;
+    }
+
+    function applyFetched(text: string): void {
+        const parsed = StagesState.parse(text);
+        // Only a complete state, never an older generation than the one shown, and only while Stages may run.
+        if (!parsed || !parsed.complete || !root.active)
+            return;
+        if (root.state && parsed.gen >= 0 && root.state.gen > parsed.gen)
+            return;
+        root.state = parsed;
+    }
+
     function send(request: var): bool {
         if (!root.active)
             return false;
@@ -89,10 +110,28 @@ Singleton {
             const parsed = StagesState.parse(event.data);
             if (!parsed)
                 return;
-            root.state = parsed;
             root.reason = parsed.reason;
+            if (parsed.complete || !parsed.on)
+                root.state = parsed; // an older plugin's full event, or Stages off (no monitors to fetch)
+            else
+                root.fetchState();
             if (parsed.reason === "no-strip" || parsed.reason === "interrupted")
                 root.resendNeeded(parsed.reason);
+        }
+    }
+
+    Process {
+        id: stateFetch
+
+        command: ["hyprctl", "grassfield-stages"]
+        stdout: StdioCollector {
+            onStreamFinished: root.applyFetched(text)
+        }
+        onRunningChanged: {
+            if (!running && root.fetchAgain) {
+                root.fetchAgain = false;
+                running = true;
+            }
         }
     }
 

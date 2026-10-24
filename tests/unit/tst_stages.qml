@@ -66,6 +66,22 @@ TestCase {
         compare(s.monitors["GF-REF"].stages[2].windows[0].address, "c3");
     }
 
+    // ADR-0007 amendment 2026-10-24: the event is a change notice (Hyprland cuts socket2 events at 1024 bytes); the state
+    // with its monitors comes from `hyprctl grassfield-stages`.
+    function test_aNoticeIsNotAState() {
+        const n = StagesState.parse(JSON.stringify({v: "gfc/1", type: "stages", gen: 42, on: true}));
+        verify(n.on);
+        verify(!n.complete);
+        compare(n.gen, 42);
+        compare(Object.keys(n.monitors).length, 0);
+        const s = StagesState.parse(event({gen: 43}));
+        verify(s.complete);
+        compare(s.gen, 43);
+        compare(StagesState.parse(event()).gen, -1, "an older plugin sends no generation");
+        compare(StagesState.parse(JSON.stringify({v: "gfc/1", type: "stages", gen: -5, on: false})).gen, -1);
+        compare(StagesState.parse(JSON.stringify({v: "gfc/1", type: "stages", gen: 3, on: false, reason: "interrupted"})).reason, "interrupted");
+    }
+
     function test_foreignOrMalformedEventsAreIgnored() {
         compare(StagesState.parse("not json"), null);
         compare(StagesState.parse(JSON.stringify({v: "gfc/2", type: "stages", on: true, monitors: []})), null);
