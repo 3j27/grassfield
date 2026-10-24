@@ -5,16 +5,18 @@
 # Usage: tests/compositor/client_chrome.sh [--no-plugin]
 # NESTED only: needs scripts/dev/nested-up.sh (add --no-plugin there for the second form) and the Settings app built with
 # apps/settings/build-direct.sh. Pointer input goes through scripts/dev/pointer.sh; hyprctl only through scripts/nestctl
-# (read-only here: `clients -j`, `monitors -j`, `grassfield -j`; the restore of step 5 and two focus dispatches), captures with grim. Clients start through scripts/dev/isolated.sh with the nested
-# socket only.
+# (read-only here: `clients -j`, `monitors -j`, `grassfield -j`; the window moves of step 3, the restore of step 5 and two
+# focus dispatches), captures with grim. Clients start through scripts/dev/isolated.sh with the nested socket only.
 #
 # Assertions, and what each depends on (PLUGIN = the plugin work item of ADR-0015 / docs/specs/compositor.md, in this tree
 # since P1-P7; SESSION = the session rules S1-S3 in config/hypr/grassfield/windows.lua; APP = true with the app side):
 #   1  APP      the Settings window carries xdg tag "settings"; the foot window carries none
 #   2  SESSION  the Settings window has the Hyprland tag grassfield-client-chrome (the rule on the xdg tag)
-#   3  PLUGIN   no plugin strip above the Settings window, one above foot: measured on a capture (the pixel 16 px above
-#               the middle of each surface against the strip's colour, ui/tokens/tokens.json titlebar.background*). The
-#               decoration object itself stays attached to every window (hyprctl decorations lists it): P1 hides it
+#   3  PLUGIN   no plugin strip above the Settings window, one above foot: measured on a capture (the row 16 px above
+#               each surface, at 20-80 % of its width, against the strip's colour, ui/tokens/tokens.json
+#               titlebar.background*). Both windows open centred, foot under Settings: for the capture foot goes to the
+#               upper left and Settings to the lower right, apart (checked), then Settings goes back. The decoration
+#               object itself stays attached to every window (hyprctl decorations lists it): P1 hides it
 #   4  APP      the close light (25.75, 25.75 from the surface's top-left) closes the window, with and without the plugin
 #   5  PLUGIN   the minimize light puts the window on special:minimized (the bridge: requestsMinimize -> minimize-request);
 #               skipped with --no-plugin (the light is greyed there, ADR-0015 Q4)
@@ -136,13 +138,34 @@ htags=$(client org.grassfield.Settings '.tags | join(",")')
 [[ $htags == *grassfield-client-chrome* ]]
 check "hyprland tag (SESSION)" $? "tags '$htags'"
 if ((plugin)); then
+  # Both windows opened centred under the pointer, foot under Settings (integrator run 2026-10-24: foot's strip was hidden,
+  # "above foot: 0"). Apart for the capture: foot upper left, Settings lower right, each strip row clear of the other window.
+  read -r sx0 sy0 sw0 sh0 _ < <(geom org.grassfield.Settings)
+  read -r _ _ fw0 fh0 _ < <(geom foot)
+  s_addr=$(client org.grassfield.Settings .address)
+  f_addr=$(client foot .address)
+  ctl dispatch "hl.dsp.window.move({ x = $((mon_x + 40)), y = $((mon_y + 80)), window = 'address:$f_addr' })" >>"$log" 2>&1
+  ctl dispatch "hl.dsp.window.move({ x = $((mon_x + mon_w - sw0 - 40)), y = $((mon_y + mon_h - sh0 - 40)), window = 'address:$s_addr' })" >>"$log" 2>&1
+  sleep 0.8
+  read -r gx gy gw gh _ < <(geom org.grassfield.Settings)
+  read -r fx fy fw fh _ < <(geom foot)
+  # Apart: the boxes, each with the 16 px row above it, share no pixel.
+  apart=1
+  if ((fx < gx + gw && gx < fx + fw && fy - 16 < gy + gh && gy - 16 < fy + fh)); then apart=0; fi
+  ((apart))
+  check "the two windows apart for the strip capture" $? "foot ${fw}x${fh} at ($fx,$fy), Settings ${gw}x${gh} at ($gx,$gy) (foot ${fw0}x${fh0} before)"
   WAYLAND_DISPLAY=$sock timeout 10 grim -o "$out" "$work/strip.png" 2>>"$log"
-  read -r gx gy gw _ _ < <(geom org.grassfield.Settings)
-  read -r fx fy fw _ _ < <(geom foot)
   s_strip=$(strip_above "$work/strip.png" "$gx" "$gy" "$gw")
   f_strip=$(strip_above "$work/strip.png" "$fx" "$fy" "$fw")
   [[ $s_strip == 0 && $f_strip == 1 ]]
   check "no strip on the app window, strip on foot (PLUGIN P1)" $? "strip colour above Settings: $s_strip (want 0), above foot: $f_strip (want 1); capture $work/strip.png"
+  # Settings back where it opened: the drags of step 7 need room on every side.
+  ctl dispatch "hl.dsp.window.move({ x = $((mon_x + sx0)), y = $((mon_y + sy0)), window = 'address:$s_addr' })" >>"$log" 2>&1
+  sleep 0.6
+  read -r gx gy _ _ _ < <(geom org.grassfield.Settings)
+  ddx=$((gx - sx0)); ddy=$((gy - sy0))
+  [[ ${ddx#-} -le 2 && ${ddy#-} -le 2 ]]
+  check "Settings back at its place for step 7" $? "at ($gx,$gy), want ($sx0,$sy0) within 2 px"
 else
   skip "strip" "no plugin loaded"
 fi
