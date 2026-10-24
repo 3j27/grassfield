@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Templates as T
 
-// Horizontal slider with a pill track and a pill knob. value is within [from, to].
-Item {
+// Horizontal slider with a pill track and a pill knob, on a QtQuick.Templates Control: the host owns the value. value is
+// within [from, to]; moved(value) reports a user change.
+T.Control {
     id: root
 
     property real from: 0
@@ -30,18 +32,24 @@ Item {
 
     implicitWidth: Tokens.controlSliderDefaultWidth
     implicitHeight: Tokens.controlSliderHeight
-    activeFocusOnTab: true
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.Slider
     Accessible.name: root.accessibleName
     Accessible.focusable: true
-    Accessible.onIncreaseAction: root.nudge(1)
-    Accessible.onDecreaseAction: root.nudge(-1)
+    Accessible.onIncreaseAction: if (root.visible && root.enabled)
+        root.nudge(1)
+    Accessible.onDecreaseAction: if (root.visible && root.enabled)
+        root.nudge(-1)
 
     function clampValue(v: real): real {
         return Math.max(from, Math.min(to, v));
     }
 
     function commit(v: real): void {
+        // A hidden or disabled slider reports nothing, whoever asks.
+        if (!root.visible || !root.enabled)
+            return;
         const next = clampValue(v);
         if (next === shown)
             return;
@@ -59,6 +67,10 @@ Item {
     }
 
     Keys.onPressed: event => {
+        if (!root.visible || !root.enabled) {
+            event.accepted = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Down || event.key === Qt.Key_Home || event.key === Qt.Key_End;
+            return;
+        }
         if (event.key === Qt.Key_Left || (verticalKeys && event.key === Qt.Key_Down)) {
             nudge(-1);
             event.accepted = true;
@@ -73,6 +85,8 @@ Item {
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     Rectangle {
         id: track
@@ -98,8 +112,13 @@ Item {
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
         color: Appearance.colors.knob
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 1
-        border.color: root.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+        border.width: 1
+        border.color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+
+        FocusRing {
+            shapeRadius: parent.radius
+            visible: root.visualFocus
+        }
     }
 
     MouseArea {

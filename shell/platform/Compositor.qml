@@ -295,15 +295,112 @@ Singleton {
     onReduceMotionChanged: pushMotion()
 
     function pushMotion(): void {
+        console.info("grassfield-shell: push motion (reduced: " + root.reduceMotion + ")");
         dispatchRequest(Minimized.motionCall(root.reduceMotion));
+    }
+
+    // Blur follows the transparency (GF-125): the compositor holds one blur size and pass count for all surfaces, so the
+    // shell sends the pair of the current transparency (Appearance.compositorBlur*). Sent at start, on every change
+    // (debounced: a slider drag is one request per settle) and after a config reload, which restores the config's own
+    // 18 / 3 (right at the default transparency).
+    readonly property int blurSize: Appearance.compositorBlurSize
+    readonly property int blurPasses: Appearance.compositorBlurPasses
+    // A change of the value is a new request: it is tried again even after an error answer (once per change, never in a loop;
+    // a config reload does not retry a refused request).
+    onBlurSizeChanged: {
+        root.blurRejected = false;
+        blurDebounce.restart();
+    }
+    onBlurPassesChanged: {
+        root.blurRejected = false;
+        blurDebounce.restart();
+    }
+
+    // Hyprland answered a push with an error (a Hyprland that does not know the keys): nothing more is sent. The answer comes
+    // on the request socket, one connection per push (Hyprland.dispatch does not return it).
+    property bool blurRejected: false
+    property int blurPushes: 0
+
+    function pushBlur(): void {
+        const call = Minimized.blurCall(root.blurSize, root.blurPasses);
+        const path = Hyprland.requestSocketPath || "";
+        if (root.blurRejected || call === "" || path === "")
+            return;
+        root.blurPushes++;
+        console.info("grassfield-shell: push blur size " + root.blurSize + " passes " + root.blurPasses);
+        blurSocket.createObject(root, {"path": path, "line": "dispatch " + call});
+    }
+
+    // One connection per push: it sends the dispatch and collects the whole answer (it may arrive in pieces) until Hyprland
+    // closes the connection; then it is judged once and the socket is destroyed (later: a Socket cannot be destroyed from its
+    // own error signal, that signal can fire inside createObject).
+    Component {
+        id: blurSocket
+
+        Socket {
+            id: sock
+            property string line: ""
+            property string reply: ""
+            property bool judged: false
+
+            function finish(): void {
+                if (sock.judged)
+                    return;
+                sock.judged = true;
+                sock.answerTimeout.stop();
+                if (Minimized.blurAnswer(sock.reply) === "rejected" && !root.blurRejected) {
+                    root.blurRejected = true;
+                    console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
+                }
+                sock.connected = false;
+                Qt.callLater(() => sock.destroy());
+            }
+
+            parser: SplitParser {
+                // No separator: Hyprland's answer has no newline, take what arrives and add it up.
+                splitMarker: ""
+                onRead: data => sock.reply += data
+            }
+            onConnectedChanged: {
+                if (connected) {
+                    write(sock.line);
+                    flush();
+                    sock.answerTimeout.start();
+                } else {
+                    sock.finish();
+                }
+            }
+
+            // A request nobody answers is judged (as unanswered) after this long.
+            readonly property Timer answerTimeout: Timer {
+                interval: Tokens.materialBlurAnswerMs
+                onTriggered: sock.finish()
+            }
+
+            Component.onCompleted: {
+                sock.error.connect(() => sock.finish());
+                sock.connected = true;
+            }
+        }
+    }
+
+    Timer {
+        id: blurDebounce
+        interval: Tokens.motionFast
+        onTriggered: root.pushBlur()
     }
 
     Connections {
         target: Hyprland
 
         function onRawEvent(event: HyprlandEvent): void {
-            if (event.name === "configreloaded" && root.reduceMotion)
+            if (event.name !== "configreloaded")
+                return;
+            if (root.reduceMotion)
                 root.pushMotion();
+            // A reload restores the config's blur. Neither push emits an event (captured on Hyprland 0.56.2), so a reload is
+            // always a real one: no echo, no loop (tests/compositor/blur_events.sh).
+            root.pushBlur();
         }
     }
 
@@ -364,6 +461,8 @@ Singleton {
         // Always, whatever the value: Hyprland outlives the shell, so a restarted shell (or one that finds the setting off
         // after a config reset) must not leave the compositor on the reduced animations of the previous run.
         pushMotion();
+        // The same for the blur: the compositor keeps the values of the previous run.
+        pushBlur();
     }
 
     function isMinimized(toplevel: var): bool {

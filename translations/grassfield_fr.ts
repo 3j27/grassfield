@@ -3018,6 +3018,10 @@
         <translation>Fermer l’onglet</translation>
     </message>
     <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
+    </message>
+    <message>
         <source>Get Info</source>
         <translation>Obtenir des informations</translation>
     </message>
@@ -4839,6 +4843,17 @@
     </message>
 </context>
 <context>
+    <name>SearchField</name>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Clear search</source>
+        <translation>Effacer la recherche</translation>
+    </message>
+</context>
+<context>
     <name>SearchPanel</name>
     <message>
         <source>Search</source>
@@ -4897,6 +4912,10 @@
     <message>
         <source>Eject %1</source>
         <translation>Éjecter %1</translation>
+    </message>
+    <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
     </message>
     <message>
         <source>Remove from Sidebar</source>

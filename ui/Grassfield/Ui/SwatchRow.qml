@@ -46,7 +46,13 @@ FocusScope {
 
     Keys.onPressed: event => {
         const n = root.model.length;
-        if (n === 0 || !root.enabled)
+        // A hidden or disabled row picks nothing; the activation keys and the arrows it still holds the focus for are swallowed
+        // (Tab, Backtab and Escape are not).
+        if (!root.visible || !root.enabled) {
+            event.accepted = ActivationKeys.activation(event.key) || ActivationKeys.navigation(event.key);
+            return;
+        }
+        if (n === 0)
             return;
         if (event.key === Qt.Key_Left) {
             root.currentIndex = root.currentIndex <= 0 ? n - 1 : root.currentIndex - 1;
@@ -54,11 +60,13 @@ FocusScope {
         } else if (event.key === Qt.Key_Right) {
             root.currentIndex = (root.currentIndex + 1) % n;
             event.accepted = true;
-        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) && root.currentIndex >= 0) {
+        } else if (ActivationKeys.activation(event.key) && root.currentIndex >= 0) {
             root.chosen(root.currentIndex);
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     Row {
         id: row

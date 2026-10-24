@@ -1,10 +1,10 @@
 # grassfield-ui spec · shell-engineer · M1 (spike S1)
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
-No reference material exists yet (F1 pending). Every measurement is an estimate and carries a `source` note in `ui/tokens/tokens.json`.
+The reference analysis is `docs/testing/f1-reference-gaps.md` (our own measurements from private macOS 26 captures; owner sign-off F1 pending). Every token in `ui/tokens/tokens.json` carries a `source` note that points at that analysis, a spec section, an ADR or a test; `gen-tokens.py` fails when one does not (GF-095): a source must cite something that exists, in one of the forms `docs/**.md § <section>` (a heading of that file; the F1 analysis may list several), `master-prompt § <n.n>`, `ADR-nnnn section <n>`, a `docs/` or `tests/` path, or be a declared estimate with its reason (`estimate: a pressed light darkens by this much`); `tests/ci/token_sources.py` renames one pointer of each kind and expects the lint to fail. Where the note says "estimate", no reference value exists yet.
 
 ## Purpose and non-goals
-Design system shared by the shell and (later) native apps: tokens, frosted material, appearance state and the M1 component set (Icon, PopupMenu/MenuItem/MenuSeparator, Slider, Toggle, Button, Tooltip). Non-goals: Qt Quick Controls style (M4), any Quickshell or Hyprland import, business logic.
+Design system shared by the shell and (later) native apps: tokens, frosted material, appearance state and the M1 component set (Icon, PopupMenu/MenuItem/MenuSeparator, Slider, Toggle, Button, Tooltip). Non-goals: any Quickshell or Hyprland import, business logic.
 
 ## Functional requirements
 1. `ui/tokens/tokens.json` is the single source of truth; `ui/tools/gen-tokens.py` generates `Tokens.qml`; `--check` exits 1 when stale.
@@ -125,6 +125,46 @@ Setting `accent.color` (schema enum, defaults, `Store.js`, shell store). The req
 ## Acceptance criteria
 - A1 `gen-tokens.py --check` exit 0 (L0). A2 `tests/unit/tst_tokens.qml`, `tst_popupmenu.qml`, `tst_menunav.qml` pass (L0). A5 `tests/shell/settings_roundtrip` (real FileView) passes (L1). A3 `qmllint.sh` 0 warnings (L0). A4 nested screenshot shows blur at transparency 1 and an opaque surface at 0 (L2, manual scenario).
 
+## Controls on QtQuick.Templates (GF-085, owner decision D-4 "Qt Quick style for the apps")
+Every Grassfield control is built on `QtQuick.Templates` (keyboard, focus, hover, input method and accessibility come from Qt), drawn with tokens only. All are in `Grassfield.Ui`:
+| Control | Template | Notes |
+|---|---|---|
+| `Button` | Button | primary / destructive / capsule / push; `activate()` guard (hidden or disabled never acts; Return, Enter, Space; AT press) |
+| `ToolButton` | ToolButton | `iconName`, any child glyph (centred), `text`; `radio` = one choice of a group (autoExclusive, role RadioButton) else a toggle (CheckBox); `capsule`; `accessibleName`; never takes the focus (not by a click, not by Tab: macOS toolbar buttons are outside the Tab chain without Full Keyboard Access), so Space still goes to the view |
+| `CheckBox`, `RadioButton`, `Switch` | same | 14 px box / disc; the control toggles itself; Return does not toggle |
+| `Toggle`, `Slider` | Control | host-driven values (`checked` / `value` are inputs, `toggled(bool)` / `moved(real)` report): the 29 / 12 existing call sites and Quick Settings rely on it, so they keep their API on a Control base |
+| `TextField`, `SearchField` | TextField | 22 px, I-beam, accent selection; SearchField: search glyph, clear button, Escape clears first |
+| `SpinBox` | SpinBox | field plus up/down stepper, Page keys step by ten |
+| `SegmentedControl` | Control + AbstractButton | model `[{id,text}]`, `value` owned by the host, `picked(id)`, arrows step |
+| `ComboBox` | ComboBox | pop-up button, list = `PopupMenu` in a Popup inside a Flickable; `value`, `picked(id)` (the former settings Picker); the list stays inside the window (right-aligned with the button, above it when it does not fit) and scrolls when taller than the window, the keyboard cursor kept in view; a keyboard pick returns the focus with the ring |
+| `ProgressBar` | ProgressBar | determinate, indeterminate sweep (still with Reduce Motion) |
+| `ScrollBar` | ScrollBar | attached (`ScrollBar.vertical`) or standalone (`flickable: view`) |
+| `Sheet` | Pane (panel) | modal over its window, Return confirms, Esc cancels, field optional |
+
+Menus: `PopupMenu` / `MenuItem` stay the one menu implementation (submenus, swatch rows, pointer relay and layer-shell PopupWindow hosting, which a `Templates.Menu` popup cannot do); no `T.Menu` wrapper is added. Dialogs: `Sheet` (apps) and the shell's `Dialog` (alerts).
+
+Shared rules: one keyboard focus ring, `FocusRing` (`control.focusOutline` 3 px outside the shape, never inside), shown for keyboard focus only (`visualFocus`, never after a click; text fields show it on `activeFocus`); every activation path of a hidden or disabled control, assistive technology press and toggle included, does nothing, and the keys that activate come from one list (`ActivationKeys`: Space, Return, Enter, Select; see Focus and input below); disabled = `material.disabledOpacity`; hover and press = the hover colour at `material.hoverOpacity` / `control.pressedOpacity`; Increase Contrast adds the 1 px border (`material.borderOpacity` carries the stronger value); animations use `Appearance.duration()` (Reduce Motion caps them) and the indeterminate sweep stops; every visible string is `qsTr()`; roles and names are set explicitly (`Accessible.name` from `accessibleName`, else the text).
+
+Focus and input of a hidden or disabled control (decisions of the controls review, macOS model):
+- **Focus rule.** A control that becomes hidden or disabled while it has the focus resigns it: `FocusGuard` (inside every control but Button) gives the focus to the next control that can take it, never to the enclosing scope. A `SpinBox` or `TextField` is the AppKit text field that resigns first responder: ending the edit commits it, exactly as on Tab or a click elsewhere (a spin box hidden mid-edit commits once, at the hide). Tab, Backtab and Escape are never swallowed, by any control in any state, so the keyboard is never trapped and Escape always reaches the dialog around it. `Button` is the exception by contract: a hidden or disabled Button keeps the focus and swallows only its activation keys (Space, Return, Enter, Select), so that Escape reaches the polkit dialog (R12); the other controls that still hold the focus (code can give it) swallow their activation keys, and a text field or spin box swallows every key but those three, on press and on release.
+- **Accepted assistive-technology limit.** `SetCurrentValue` (a slider, spin box or scroll bar value) and `SetTextContents` (`setText(Value)`) can still write to a disabled or hidden control. Qt writes the property directly and QML cannot tell that write from the host's own binding update, so refusing it would break or stale bound values; it comes from the user's own assistive-technology client and crosses no privilege boundary, and the models validate their own submits (the polkit model guards its submit). What QML can refuse is refused: typing, `InsertText`, delete and replace (the text of a hidden or disabled field is read-only), keys, and the press, toggle, increase and decrease actions. Fully closing the two writes would need a C++ accessible-interface override, outside this QML-only module.
+
+Moved into `ui/` (the app copies are deleted; a module type shadows a same-named file of the app directory, so no stale copy can win): Files and Preview `ToolButton` (callers draw their glyph as a child: `ViewGlyph`, `Glyph`, `ThemeIcon`; the Preview `label` became `accessibleName`, plus `capsule: true`), Files `Sheet` and `ScrollBar`, Settings `Segmented` (now `SegmentedControl`) and `Picker` (now `ComboBox`; `Picker.qml` stays as a one-line alias because `WallpaperPage.qml` belongs to the wallpaper work). Tokens moved with them (`control.sheetWidth`, `control.scrollbar*`) and new ones were added (`control.toolButtonSize`, `checkSize`, `fieldHeight`, `stepperWidth`, `progressHeight`, `pressedOpacity`).
+
+Qt Quick Controls style: `ui/Grassfield` is a style module named `Grassfield` (`QT_QUICK_CONTROLS_STYLE=Grassfield`, an import path containing `ui/`): the stock Button, ToolButton, CheckBox, RadioButton, Switch, TextField, SpinBox, ComboBox, ProgressBar and ScrollBar resolve to the controls above (one-line files); every other stock control falls back (`QT_QUICK_CONTROLS_FALLBACK_STYLE=Basic`, which does not look like Grassfield: Slider, Dialog, Menu...). Test `tests/shell/controls_style.sh`. The style is never set for the session (no config or package exports `QT_QUICK_CONTROLS_STYLE`): only Grassfield's own apps select it in their `main`, and only when the module is installed (Preview, whose QtPdf views are stock Controls, does so, with Basic as the fallback style). The package installs the module next to `Grassfield.Ui` (`/usr/lib/qt6/qml/Grassfield/`). Files and Settings import `Grassfield.Ui` explicitly and do not import Qt Quick Controls.
+
+Tests: `tst_controlsbuttons.qml`, `tst_controlstext.qml`, `tst_controlsmisc.qml` (pointer, keys, state, role and name, ring, Increase Contrast, Reduce Motion), plus the existing `tst_buttonkeys.qml` / `tst_a11ypress.qml` for the Button guard.
+
+Left: `Slider` and `Toggle` are host-driven, not stock-shaped, so the style does not map them; a `Menu` / `Dialog` style needs the PopupMenu hosting question above; the polkit dialog (security) keeps using the shared `Button`, now on a Template (reviewer pass needed for `shell/security`, which was not edited).
+
+## Material blur follows transparency (GF-125)
+Hyprland holds one blur size and one pass count for every surface (the `ext-background-effect-v1` region and the layer rules carry no strength), so the shell asks the compositor for the pair of the current effective transparency; it never fakes a blur. Mapping (`Appearance.blurSize(t)`, `blurPasses(t)`, tokens `material.blurSize{Min,Max}`, `blurPasses{Light,Full}`, `blurPassesFrom`):
+- size = round(12 + 24 t) px (36 at t = 1); at the default 0.25 it is 18 with 3 passes (2 passes below transparency 0.15). The defaults are exactly what `config/hypr/grassfield/looknfeel.lua` ships (a test pins it), so a config reload at the default restores a right value.
+- Reduce Transparency = t 0: no surface requests blur; the minimum is kept.
+- Sent by `qs.platform` `Compositor` (`Minimized.blurCall`: Lua `hl.config({decoration={blur={size,passes}}})`) over the request socket, one connection per push, so that the answer is read: `ok`, or `error: ...: unknown config key '...'` (`Minimized.blurAnswer`); an error answer stops the pushes and the config's own 18 / 3 stays. At start, on every change (debounced by `motion.fast`) and after `configreloaded`. Captured on Hyprland 0.56.2 (`tests/compositor/blur_events.sh`, nested): a push emits no socket2 event, a config reload emits exactly one `configreloaded`, and the push that follows it emits none, so a reload is always a real one (no echo, no loop); Reduce Motion left on for 30 s causes one motion push and no blur push; an unknown key is answered with the error above and emits no event (there is no `notify` event to wait for). No polling, no plugin needed.
+- Cost: more transparency = a wider blur = more GPU; the pass count drops by one for nearly opaque materials.
+- Verification: offline `tst_tokens` (mapping, monotonic, default = config) and `tst_minimized` (request builder, `blurAnswer` on the captured answers); nested, bare: `tests/compositor/blur_events.sh` (stages A to D above; PASS on 0.56.2).
+
 ## Interfaces / contracts (versions)
 Module `Grassfield.Ui` 1.0 (semver). Tokens JSON `version: 1`.
 
@@ -141,8 +181,8 @@ Compositor without ext-background-effect: surfaces stay tinted but unblurred (fa
 Each Material with a shadow adds two offscreen layers and a MultiEffect mask; not measured (gate P* not run). Shell RSS after the M1 scenarios: see the S2 report. Legibility gate A2 not measured. Strings live in surfaces via `qsTr()`.
 
 ## Known limitations
-- All values are estimates, not measured from the reference.
-- Blur strength cannot grow with the slider: it is compositor-defined; only the tint changes.
+- Values whose `source` says "estimate" are not measured from the reference (F1 sign-off pending); the measured ones name their gap number in `f1-reference-gaps.md`.
+- The blur pair is applied to the whole compositor (see "Material blur"): not per surface.
 - Light appearance is untested visually. Inter is not installed yet (Noto Sans is used).
 - The shadow cut-out mask shows a faint dark artifact at one corner in the light appearance (visible in `cc-light`); not fixed.
 - Submenus declare no blur region of their own.

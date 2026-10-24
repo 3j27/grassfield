@@ -20,6 +20,29 @@ FocusScope {
     // Space kept free at the top for the window lights (the toolbar drawn over it, ADR-0015).
     property real topInset: 0
 
+    // Eject (macOS File > Eject, Cmd+E here Ctrl+E, and Eject in the sidebar item's context menu): the volume of the row the
+    // keyboard is on while the sidebar has the focus, else the one whose folder is shown; -1 when that is not an ejectable,
+    // idle volume. The toolbar buttons are out of the Tab chain, so this is the keyboard path to the eject button.
+    property int ejectRow: -1
+
+    function updateEject(): void {
+        const row = list.activeFocus ? root.keyRow : root.currentRow;
+        const item = row >= 0 ? list.itemAtIndex(row) as PlaceRow : null;
+        root.ejectRow = item && item.ejectable && !item.busy ? row : -1;
+    }
+
+    // Unmounts (and ejects) the volume of ejectRow; false when there is none.
+    function eject(): bool {
+        if (root.ejectRow < 0)
+            return false;
+        root.places.eject(root.ejectRow);
+        return true;
+    }
+
+    Component.onCompleted: Qt.callLater(root.updateEject)
+    onCurrentRowChanged: Qt.callLater(root.updateEject)
+    onKeyRowChanged: Qt.callLater(root.updateEject)
+
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Sidebar")
 
@@ -68,6 +91,18 @@ FocusScope {
 
     Connections {
         target: root.places
+        function onModelReset(): void {
+            Qt.callLater(root.updateEject);
+        }
+        function onDataChanged(): void {
+            Qt.callLater(root.updateEject);
+        }
+        function onRowsInserted(): void {
+            Qt.callLater(root.updateEject);
+        }
+        function onRowsRemoved(): void {
+            Qt.callLater(root.updateEject);
+        }
         function onMounted(url: url): void {
             if (root.tab)
                 root.tab.navigate(url, true);
@@ -102,7 +137,13 @@ FocusScope {
         Accessible.role: Accessible.List
         Accessible.name: qsTr("Sidebar")
 
-        onActiveFocusChanged: if (activeFocus && root.keyRow < 0) root.keyRow = Math.max(0, root.currentRow)
+        onCountChanged: Qt.callLater(root.updateEject)
+
+        onActiveFocusChanged: {
+            if (activeFocus && root.keyRow < 0)
+                root.keyRow = Math.max(0, root.currentRow);
+            Qt.callLater(root.updateEject);
+        }
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Down) {
@@ -244,9 +285,16 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             width: Tokens.filesSidebarItemHeight
             height: Tokens.filesSidebarItemHeight
-            themeIconName: "media-eject-symbolic"
             accessibleName: qsTr("Eject %1").arg(entry.name)
             onClicked: root.places.eject(entry.index)
+
+            ThemeIcon {
+                anchors.centerIn: parent
+                name: "media-eject-symbolic"
+                size: Tokens.filesToolbarIconSize
+                tint: true
+                color: Appearance.colors.text
+            }
         }
 
         DropArea {
@@ -279,6 +327,13 @@ FocusScope {
                     if (entry.isTag) {
                         const p = mouse.mapToItem(null, event.x, event.y);
                         root.openTagMenu(entry.tag, p.x, p.y);
+                    } else if (entry.ejectable && !entry.busy) {
+                        // A removable volume: Eject (the same action as the button on the row).
+                        const p = mouse.mapToItem(null, event.x, event.y);
+                        root.tab.win.menuLayer.open([{id: "eject", text: qsTr("Eject")}], p.x, p.y, id => {
+                            if (id === "eject")
+                                root.places.eject(entry.index);
+                        }, list, false);
                     }
                     return;
                 }

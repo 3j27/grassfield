@@ -250,11 +250,16 @@ Window {
             visible: win.fileCount > 1
 
             ToolButton {
-                glyph: "chevronLeft"
-                label: qsTr("Previous")
+                capsule: true
+                accessibleName: qsTr("Previous")
                 enabled: win.current > 0
                 activeFocusOnTab: false
                 onClicked: win.go(-1)
+
+                Glyph {
+                    anchors.centerIn: parent
+                    kind: "chevronLeft"
+                }
             }
             Text {
                 id: counter
@@ -269,11 +274,16 @@ Window {
                 Accessible.name: text
             }
             ToolButton {
-                glyph: "chevronRight"
-                label: qsTr("Next")
+                capsule: true
+                accessibleName: qsTr("Next")
                 enabled: win.current < win.fileCount - 1
                 activeFocusOnTab: false
                 onClicked: win.go(1)
+
+                Glyph {
+                    anchors.centerIn: parent
+                    kind: "chevronRight"
+                }
             }
         }
 

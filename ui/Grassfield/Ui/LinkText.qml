@@ -23,14 +23,20 @@ Item {
     Accessible.name: root.text
     Accessible.description: root.target
     Accessible.focusable: true
-    Accessible.onPressAction: root.activated()
+    // A hidden or disabled link never activates, by key or by assistive technology; a key it still holds the focus for is
+    // swallowed (and FocusGuard hands the focus on).
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.activated()
 
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
-            root.activated();
+        if (ActivationKeys.activation(event.key)) {
+            if (root.visible && root.enabled)
+                root.activated();
             event.accepted = true;
         }
     }
+
+    FocusGuard {}
 
     TextMetrics {
         id: metrics

@@ -123,7 +123,6 @@ Dialog {
             primary: true
             destructive: true
             enabled: root.selectedPid > 1
-            opacity: enabled ? 1 : Tokens.materialDisabledOpacity
             onClicked: root.ask()
         }
     ]

@@ -45,12 +45,12 @@ TestCase {
         checkGuard(make(Qt.resolvedUrl("../../ui/Grassfield/Ui/MenuItem.qml"), {text: "Open"}), "MenuItem");
     }
 
-    function test_filesToolButton() {
-        checkGuard(make(Qt.resolvedUrl("../../apps/files/qml/ToolButton.qml"), {}), "Files ToolButton");
+    function test_toolButton() {
+        checkGuard(make(Qt.resolvedUrl("../../ui/Grassfield/Ui/ToolButton.qml"), {}), "ToolButton");
     }
 
-    function test_previewToolButton() {
-        checkGuard(make(Qt.resolvedUrl("../../apps/preview/qml/ToolButton.qml"), {}), "Preview ToolButton");
+    function test_toolButtonCheckable() {
+        checkGuard(make(Qt.resolvedUrl("../../ui/Grassfield/Ui/ToolButton.qml"), {checkable: true, radio: true}), "radio ToolButton");
     }
 
     function test_appsChip() {
