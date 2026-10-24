@@ -10,7 +10,9 @@
 #   xdgact.json:     the same plus a window X (tests/tools/xdgact) that, while parked, activates itself with an xdg_activation_v1
 #                    token (SIGUSR1): a real client request.
 # Each file: {scenario, focusBefore, window, windows: [{address, workspace, x, y, class}], events: [{t, name, data}]} where t is
-# ms since the trigger and the events are those between the trigger and 3 s later (including what the running shell caused).
+# ms since the trigger and the events are those between the trigger and 3 s later (including what the running shell caused). The
+# window title of "activewindow" events is dropped (a terminal's title carries the user, the host and the working directory: no
+# personal data goes into a fixture); the window list has class and address only.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
@@ -62,7 +64,7 @@ record() { # <scenario> <trigger: dispatcher|xdgact>
   sleep 0.8
   local focus_before windows
   focus_before=$(hq activewindow | jq -r '.address')
-  windows=$(hq clients | jq -c '[.[] | select(.class | startswith("gf-sd-")) | {address, workspace: .workspace.id, x: .at[0], y: .at[1], class, pid}]')
+  windows=$(hq clients | jq -c '[.[] | select(.class | startswith("gf-sd-")) | {address, workspace: .workspace.id, x: .at[0], y: .at[1], class}]')
   ipc windows showDesktop
   sleep 1.5
   if [[ $trigger == xdgact && $(hq activewindow | jq -r '.class') == gf-sd-act ]]; then echo "record: the window that activates itself is the focused one: nothing to record"; exit 2; fi
@@ -81,7 +83,7 @@ record() { # <scenario> <trigger: dispatcher|xdgact>
   jq -s --arg scenario "$scenario" --arg fb "$focus_before" --arg w "$window" --argjson windows "$windows" '
     (map(select(.ready | not))) as $ev
     | ($ev | if length > 0 then .[0].t else 0 end) as $t0
-    | {scenario: $scenario, focusBefore: $fb, window: $w, windows: $windows, events: ($ev | map({t: (.t - $t0), name: .name, data: .data}))}' \
+    | {scenario: $scenario, focusBefore: $fb, window: $w, windows: $windows, events: ($ev | map({t: (.t - $t0), name: .name, data: (if .name == "activewindow" then ((.data | split(",")[0]) + ",") else .data end)}))}' \
     "$tmp/events.jsonl" >"$out/$scenario.json"
   echo "record: $scenario: $(jq '.events | length' "$out/$scenario.json") events"
   jq -r '.events[] | "  \(.t)ms \(.name) \(.data)"' "$out/$scenario.json"

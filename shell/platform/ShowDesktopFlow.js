@@ -8,10 +8,14 @@
 // does) is here, so tests/unit/tst_showdesktopflow.qml replays event sequences, recorded from Hyprland in both orders an
 // activation can come in, and kills a mutation of any rule.
 //
-// State: {records, parking, hideAt, ended, verify, activation, focusSeen, recoverTries, pending}.
-// Context (what the shell reads when it calls): {now (ms), windows (toplevel data: {address, workspace, parked, x, y,
-// minimized, hidden}), shown ([{name, workspace}]), focused (address), stages, loaded (the window list has arrived),
-// lookbackMs, echoMs, maxVerify, maxRecover}.
+// No clock anywhere: what is "right before" is counted in events, what is "an echo" is matched to the event it echoes, and the
+// waits are timers of the caller.
+//
+// State: {records, parking, twin, ended, verify, activation, focusSeen, seq, recoverTries, pending}.
+// Context (what the shell reads when it calls): {windows (toplevel data: {address, workspace, parked, x, y, minimized, hidden};
+// only given to onEvent when needsWindows says so), shown ([{name, workspace}]), currentWorkspace (the Space of the focused
+// display), focused (address), stages, loaded (the window list has arrived), lookbackEvents, maxVerify, maxRecover,
+// maxActivationTries}.
 // Result: {state, dispatches: [Lua strings, in order], timers: {activation|check|verify|recover: "restart"|"stop"}, persist
 // (write state.records), focusDesktop (hand the keyboard to the desktop icons), refresh (read the window list, then call
 // capture), ended (an ending ran), logs: [{level, text}]}.
@@ -20,11 +24,12 @@ function initial() {
     return {
         records: [],
         parking: {},
-        hideAt: -1e12,
+        twin: {},
         ended: [],
         verify: {records: [], tries: 0},
-        activation: {open: false, sealed: false, before: "", after: ""},
-        focusSeen: {address: "", at: -1e12},
+        activation: {open: false, sealed: false, before: "", after: "", tries: 0},
+        focusSeen: {address: "", seq: -1e9},
+        seq: 0,
         recoverTries: 0,
         pending: false
     };
@@ -59,7 +64,6 @@ function hideByState(s, ctx, r) {
         return;
     send(r, SD.hideParkingRequest());
     s.parking = {};
-    s.hideAt = ctx.now;
 }
 
 // Ends Show Desktop (if on): the records are gone before anything is dispatched, so nothing can end it twice. The workspace is
@@ -94,23 +98,57 @@ function showsParking(name, data) {
     return SD.parkingVisible(SD.parkingShownAfter({}, name, data));
 }
 
+// The events that move the focus or a workspace: only these are counted for "right before".
+const COUNTED = ["activewindowv2", "activespecial", "activespecialv2", "workspace", "workspacev2", "focusedmon", "focusedmonv2", "openwindow", "closewindow", "movewindowv2", "urgent"];
+
+function otherForm(name) {
+    return name === "activespecial" ? "activespecialv2" : "activespecial";
+}
+
+// The display an activespecial / activespecialv2 event is about.
+function monitorOf(name, data) {
+    const parts = (typeof data === "string" ? data : "").split(",");
+    return (name === "activespecial" ? parts.slice(1) : parts.slice(2)).join(",");
+}
+
+// A window an activation may name: one this flow sent back, or one that is parked now (an app or the Dock activating a parked
+// window; when no record owns it, it still comes back). Never any other window.
+function eligible(s, ctx, a) {
+    if (a === "")
+        return false;
+    if (s.ended.some(x => SD.sameAddress(x, a)))
+        return true;
+    return (ctx.windows || []).some(w => SD.sameAddress(w.address, a) && w.parked === true);
+}
+
+// Whether onEvent needs the window list for this event (the shell builds it only then: every Hyprland event goes through here).
+function needsWindows(state, name, data) {
+    if (state.records.length > 0 || state.verify.records.length > 0 || state.activation.open)
+        return true;
+    return (name === "activespecial" || name === "activespecialv2") && showsParking(name, data);
+}
+
 // A Hyprland event (name, data as in socket2).
 function onEvent(state, ctx, name, data) {
     const r = begin(state);
     const s = r.state;
+    if (COUNTED.indexOf(name) >= 0)
+        s.seq++;
+    if (name === "movewindowv2") {
+        // a window was moved: our own dispatches are being applied, what follows is their consequence
+        if (s.activation.open)
+            s.activation.sealed = true;
+        return r;
+    }
     if (name === "activewindowv2") {
         const a = SD.address(data);
-        if (a !== "") {
-            // The window an app activates is named by an activewindowv2 either right BEFORE the workspace event (a real
-            // activation, xdg-activation or focus_on_activate: Hyprland focuses the window, which shows its special workspace)
-            // or right AFTER it (the focus dispatcher: the workspace first). Never a window outside the records. What follows
-            // the hide of the workspace (sealed) is a consequence of the ending itself (Hyprland gives the focus to the first
-            // window that comes back), not an activation.
-            if (inRecords(s.records, a))
-                s.focusSeen = {address: a, at: ctx.now};
-            if (s.activation.open && !s.activation.sealed && s.activation.after === "" && s.ended.some(x => x === a))
-                s.activation.after = a;
-        }
+        // The window an app activates is named by an activewindowv2 either right BEFORE the workspace event (a real
+        // activation, xdg-activation or focus_on_activate: Hyprland focuses the window, which shows its special workspace)
+        // or right AFTER it (the focus dispatcher: the workspace first). What follows the hide of the workspace (sealed) is a
+        // consequence of the ending itself (Hyprland gives the focus to the first window that comes back), not an activation.
+        s.focusSeen = {address: a, seq: s.seq};
+        if (s.activation.open && !s.activation.sealed && s.activation.after === "" && eligible(s, ctx, a))
+            s.activation.after = a;
         return r;
     }
     if (name === "closewindow") {
@@ -127,20 +165,31 @@ function onEvent(state, ctx, name, data) {
     }
     if (name === "activespecial" || name === "activespecialv2") {
         const shows = showsParking(name, data);
-        if (shows && ctx.now - s.hideAt < ctx.echoMs)
-            return r;   // the echo of our own hide (both event forms are posted for one change)
+        const monitor = monitorOf(name, data);
+        if (shows) {
+            // Hyprland posts both forms for one change: the second form of a show we handled is its echo, matched to the event
+            // (never to a time).
+            if (s.twin[monitor] === name) {
+                delete s.twin[monitor];
+                return r;
+            }
+            s.twin[monitor] = otherForm(name);
+        } else {
+            delete s.twin[monitor];
+        }
         s.parking = SD.parkingShownAfter(s.parking, name, data);
         if (!shows && s.activation.open)
             s.activation.sealed = true;   // the workspace is hidden again: the events that follow are not the activation's
         if (shows) {
             const seen = s.focusSeen;
-            s.activation = {open: true, sealed: false, before: ctx.now - seen.at <= ctx.lookbackMs ? seen.address : "", after: ""};
+            const before = s.seq - seen.seq <= ctx.lookbackEvents ? seen.address : "";   // the timer decides whether it may be focused
+            s.activation = {open: true, sealed: false, before: before, after: "", tries: 0};
             r.timers.activation = "restart";
             if (s.records.length > 0) {
                 log(r, "info", "Show Desktop ends: " + name);
                 ending(s, ctx, r, false);
             } else {
-                hideByState(s, ctx, r);   // an earlier ending ran first: the workspace is still hidden by state
+                hideByState(s, ctx, r);   // no record (an earlier ending ran first, or it was lost): the workspace is still hidden
             }
         }
         return r;
@@ -170,10 +219,28 @@ function onTimer(state, ctx, id) {
     const s = r.state;
     if (id === "activation") {
         const act = s.activation;
-        s.activation = {open: false, sealed: false, before: "", after: ""};
+        s.activation = {open: false, sealed: false, before: "", after: "", tries: 0};
         const a = act.after !== "" ? act.after : act.before;
-        if (a !== "" && s.ended.some(x => SD.sameAddress(x, a)))
+        const w = a === "" ? null : ctx.windows.find(x => SD.sameAddress(x.address, a));
+        if (!w)
+            return r;   // nobody named, or it closed
+        const mine = s.ended.some(x => SD.sameAddress(x, a));
+        if (w.parked !== true) {
+            if (mine)
+                send(r, Minimized.focusWindowRequest(a));   // it went back with the others and keeps the focus
+        } else if (mine) {
+            // never ask for the focus of a window that is still parked: Hyprland would show the workspace again. Look again.
+            if (act.tries < ctx.maxActivationTries) {
+                s.activation = {open: false, sealed: true, before: a, after: "", tries: act.tries + 1};
+                r.timers.activation = "restart";
+            }
+        } else if (ctx.currentWorkspace > 0) {
+            // A parked window no record owns (the record file was corrupt or could not be written): the user activated it, so it
+            // comes to the Space they are on and ends up in front, whatever the record says (macOS: the window you activate is
+            // always shown).
+            send(r, Minimized.moveRequest(a, String(ctx.currentWorkspace)));
             send(r, Minimized.focusWindowRequest(a));
+        }
     } else if (id === "check") {
         if (s.records.length > 0 && SD.spaceChanged(s.records, ctx.shown)) {
             log(r, "info", "Show Desktop ends: a display shows another Space or went away");

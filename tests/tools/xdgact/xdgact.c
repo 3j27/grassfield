@@ -183,19 +183,29 @@ int main(int argc, char** argv) {
             continue;
         }
         struct pollfd pfd = {.fd = wl_display_get_fd(display), .events = POLLIN};
-        while (wl_display_prepare_read(display) != 0)
-            wl_display_dispatch_pending(display);
-        wl_display_flush(display);
+        while (wl_display_prepare_read(display) != 0) {
+            if (wl_display_dispatch_pending(display) < 0)
+                goto done;
+        }
+        if (wl_display_flush(display) < 0 && errno != EAGAIN) {
+            wl_display_cancel_read(display);
+            break;   // the compositor is gone
+        }
         int n = poll(&pfd, 1, 50);
+        if (n > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+            wl_display_cancel_read(display);
+            break;   // the compositor hung up: end, do not spin
+        }
         if (n > 0 && (pfd.revents & POLLIN)) {
-            wl_display_read_events(display);
-            wl_display_dispatch_pending(display);
+            if (wl_display_read_events(display) < 0 || wl_display_dispatch_pending(display) < 0)
+                break;
         } else {
             wl_display_cancel_read(display);
         }
         if (n < 0 && errno != EINTR)
             break;
     }
+done:
     wl_display_disconnect(display);
     return 0;
 }

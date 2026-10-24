@@ -21,6 +21,7 @@ TestCase {
     property int clock: 0
     property var wins: []
     property var deadlines: ({})
+    property var hyprlandShows: ({})
 
     function load(name) {
         const xhr = new XMLHttpRequest();
@@ -31,16 +32,16 @@ TestCase {
 
     function ctx(focused) {
         return {
-            now: clock,
             windows: wins.map(w => ({address: w.address, workspace: w.parked ? -98 : w.workspace, parked: w.parked, x: w.x, y: w.y, minimized: false, hidden: false})),
             shown: [{name: "GF-REF", workspace: wins.length > 0 ? wins[0].workspace : 1}],
             focused: focused || "",
             stages: false,
             loaded: true,
-            lookbackMs: checkMs,
-            echoMs: verifyMs,
+            currentWorkspace: wins.length > 0 ? wins[0].workspace : 0,
+            lookbackEvents: 2,
             maxVerify: 3,
-            maxRecover: 10
+            maxRecover: 10,
+            maxActivationTries: 3
         };
     }
 
@@ -74,6 +75,7 @@ TestCase {
     // Show Desktop is on (the windows of the fixture parked), then the recorded events arrive.
     function replay(fx) {
         out = [];
+        hyprlandShows = ({});
         st = Flow.initial();
         clock = 10000;
         deadlines = ({});
@@ -92,9 +94,17 @@ TestCase {
                 if (w)
                     w.parked = e.data.split(",")[2] === SD.PARKING;
             }
+            // what Hyprland says about the parking workspace (the recorded events are its truth, our hide included)
+            if (e.name.startsWith("activespecial"))
+                hyprlandShows = SD.parkingShownAfter(hyprlandShows, e.name, e.data);
             run(Flow.onEvent(st, ctx(""), e.name, e.data));
         }
         fireDue(t0 + 2000);
+    }
+
+    // special:desktop is never left shown over a screen: the recorded events end with it hidden
+    function cleanup() {
+        verify(!SD.parkingVisible(hyprlandShows), "special:desktop is left shown over the screen");
     }
 
     function focusRequests() { return out.filter(d => d.indexOf("hl.dsp.focus") >= 0); }

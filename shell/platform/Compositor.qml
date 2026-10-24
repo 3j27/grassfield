@@ -9,8 +9,8 @@ import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
-import "ShowDesktopFlow.js" as ShowDesktopFlow
 import "ScreenChoice.js" as ScreenChoice
+import "showdesktop"
 import "StagesFront.js" as StagesFront
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
@@ -315,8 +315,6 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "configreloaded" && root.reduceMotion)
                 root.pushMotion();
-            // The Show Desktop flow (ShowDesktopFlow.js) decides what every event means; this only forwards it.
-            root.desktopStep(ShowDesktopFlow.onEvent(root.desktopFlow, root.desktopContext(), event.name, event.data));
         }
     }
 
@@ -502,9 +500,9 @@ Singleton {
     // Does nothing with Stages on (a stage cannot be rebuilt window by window, docs/specs/stages.md ST8/ST9), and minimized
     // or hidden windows are left alone.
     //
-    // All the decisions are in ShowDesktopFlow.js (a pure reducer, tests/unit/tst_showdesktopflow.qml). This file reads the
-    // context, hands events, timers and presses to it, and runs what comes back: dispatches in order, timers, the record file.
-    property var desktopFlow: ShowDesktopFlow.initial()
+    // All the decisions are in ShowDesktopFlow.js (a pure reducer) run by ShowDesktopController.qml, which listens to the
+    // Hyprland events itself (tests/unit/tst_showdesktopflow.qml, tst_showdesktopreplay.qml, tst_showdesktopglue.qml). This file
+    // only tells it how to read the window list and the Spaces, where to send the requests and where the record file is.
     readonly property string desktopStateDir: {
         const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
         if (dev)
@@ -536,58 +534,36 @@ Singleton {
         return all.filter(m => m.activeWorkspace).map(m => ({name: m.name, workspace: m.activeWorkspace.id}));
     }
 
-    // What the flow reads at every call.
-    function desktopContext(): var {
-        const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
-        return {
-            now: Date.now(),
-            windows: toplevelData(),
-            shown: shownSpaces(),
-            focused: focused ? focused.address : "",
-            stages: Settings.windowsStages,
-            loaded: !!Hyprland.toplevels && Hyprland.toplevels.values.length > 0,
-            lookbackMs: Tokens.showDesktopCheckMs,
-            echoMs: Tokens.showDesktopVerifyMs,
-            maxVerify: 3,
-            maxRecover: Tokens.showDesktopRecoverTries
-        };
-    }
+    ShowDesktopController {
+        id: showDesktopFlow
 
-    // Runs a result of the flow: the new state, then its dispatches in the order given (the hide is always first), the record
-    // file, the timers.
-    function desktopStep(res: var): var {
-        root.desktopFlow = res.state;
-        for (const l of res.logs) {
-            if (l.level === "warn")
-                console.warn(l.text);
-            else
-                console.info(l.text);
+        eventSource: Hyprland
+        readWindows: () => root.toplevelData()
+        readShown: () => root.shownSpaces()
+        readFocused: () => {
+            const focused = root.focusedToplevel ? root.hyprlandToplevel(root.focusedToplevel) : null;
+            return focused ? focused.address : "";
         }
-        for (const request of res.dispatches)
-            dispatchRequest(request);
-        if (res.persist && desktopFile.path !== "")
-            desktopFile.setText(ShowDesktop.serialize(res.state.records));
-        const timers = {activation: desktopActivation, check: desktopCheck, verify: desktopVerify, recover: desktopRecover};
-        for (const id of Object.keys(res.timers)) {
-            if (res.timers[id] === "stop")
-                timers[id].stop();
-            else
-                timers[id].restart();
+        readCurrentWorkspace: () => Hyprland.focusedMonitor && Hyprland.focusedMonitor.activeWorkspace ? Hyprland.focusedMonitor.activeWorkspace.id : 0
+        readLoaded: () => !!Hyprland.toplevels && Hyprland.toplevels.values.length > 0
+        stages: Settings.windowsStages
+        dispatch: request => root.dispatchRequest(request)
+        refreshWindows: () => Hyprland.refreshToplevels()
+        onPersistRequested: text => {
+            if (desktopFile.path !== "")
+                desktopFile.setText(text);
         }
-        if (res.focusDesktop)
-            DesktopState.focusRequested();
-        return res;
+        onFocusDesktopRequested: DesktopState.focusRequested()
     }
 
     // Ends Show Desktop for an activation by the shell itself (activate(), unminimize()): true when it was on.
     function endShowDesktop(): bool {
-        return root.desktopStep(ShowDesktopFlow.onActivate(root.desktopFlow, root.desktopContext())).ended;
+        return showDesktopFlow.endForActivation();
     }
 
-    Timer {
-        id: desktopActivation
-        interval: Tokens.showDesktopCheckMs
-        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "activation"))
+    // Super+F3.
+    function showDesktop(): void {
+        showDesktopFlow.press();
     }
 
     // A display plugged or unplugged: the Spaces the displays show are compared again (a removed display ends Show Desktop).
@@ -595,44 +571,8 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            root.desktopStep(ShowDesktopFlow.onScreensChanged(root.desktopFlow, root.desktopContext()));
+            showDesktopFlow.screensChanged();
         }
-    }
-
-    Timer {
-        id: desktopCheck
-        interval: Tokens.showDesktopCheckMs
-        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "check"))
-    }
-
-    Timer {
-        id: desktopVerify
-        interval: Tokens.showDesktopVerifyMs
-        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "verify"))
-    }
-
-    // Super+F3. The window positions come from Hyprland's window data, which is read again first (the model may be stale):
-    // the press waits for the answer, at most Tokens.showDesktopRefreshMs.
-    function showDesktop(): void {
-        const res = root.desktopStep(ShowDesktopFlow.onPress(root.desktopFlow, root.desktopContext()));
-        if (res.refresh) {
-            Hyprland.refreshToplevels();
-            desktopRefresh.restart();
-        }
-    }
-
-    Timer {
-        id: desktopRefresh
-        interval: Tokens.showDesktopRefreshMs
-        onTriggered: root.desktopStep(ShowDesktopFlow.onCapture(root.desktopFlow, root.desktopContext()))
-    }
-
-    // The windows still parked by a Show Desktop of a previous run (the shell restarted or crashed): back at start, once
-    // the window list is known (ShowDesktopFlow.recover: the record stays while a window is still parked, bounded retries).
-    Timer {
-        id: desktopRecover
-        interval: Tokens.showDesktopRecoverMs
-        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "recover"))
     }
 
     Process {
@@ -649,7 +589,7 @@ Singleton {
         id: desktopFile
         printErrors: false
         atomicWrites: true
-        onLoaded: root.desktopStep(ShowDesktopFlow.onLoaded(root.desktopFlow, root.desktopContext(), ShowDesktop.parse(desktopFile.text())))
+        onLoaded: showDesktopFlow.recordsLoaded(desktopFile.text())
     }
 
     // "Hide Others": hides every visible window of other apps.

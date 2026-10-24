@@ -29,6 +29,8 @@ TestCase {
     property int desktopFocus: 0
     property var stuck: ({})
     property bool loadedList: true
+    property var shownNow: [{name: "DP-1", workspace: 1}]
+    property int currentWs: 1
 
     function win(address, workspace, x, extra) {
         return Object.assign({address: address, workspace: workspace, parked: false, x: x, y: 0, minimized: false, hidden: false}, extra || {});
@@ -50,22 +52,30 @@ TestCase {
         desktopFocus = 0;
         stuck = ({});
         loadedList = true;
+        shownNow = [{name: "DP-1", workspace: 1}];
+        currentWs = 1;
+    }
+
+    // the parking workspace is never left shown over a screen: every test ends with it hidden (the reviewers' cleanup check)
+    function cleanup() {
+        advance(3000);
+        verify(!special, "special:desktop is left shown over the screen");
     }
 
     // ---- the model ----------------------------------------------------------------------------------------------------------
 
     function ctx() {
         return {
-            now: clock,
             windows: wins.map(w => ({address: w.address, workspace: w.parked ? -98 : w.workspace, parked: w.parked, x: w.x, y: w.y, minimized: w.minimized, hidden: w.hidden})),
-            shown: [{name: "DP-1", workspace: 1}],
+            shown: shownNow,
+            currentWorkspace: currentWs,
             focused: hfocus,
             stages: false,
             loaded: loadedList,
-            lookbackMs: 120,
-            echoMs: 500,
+            lookbackEvents: 2,
             maxVerify: 3,
-            maxRecover: 10
+            maxRecover: 10,
+            maxActivationTries: 3
         };
     }
 
@@ -272,13 +282,12 @@ TestCase {
         park();
         sent = [];
         post("activewindowv2", "a1");   // a record window...
-        post("activewindowv2", "c9");   // ...then a window that is not in the records
+        post("activewindowv2", "c9");   // ...then a window that is not parked and not ours: the last one named is the one
         settle();
         special = true;
         showEvents();
         advance(300);
-        compare(focusRequests().length, 1);
-        verify(focusRequests()[0].indexOf("0xa1") >= 0, "the last record window named, never the outside one: " + JSON.stringify(focusRequests()));
+        compare(focusRequests().length, 0, "a window that is neither parked nor sent back is never focused, and the older one is not taken instead");
     }
 
     function test_anOutsideWindowNamedAfterTheWorkspaceEventNeverTakesTheFocus() {
@@ -347,13 +356,282 @@ TestCase {
         compare(st.records.length, 1, "and no empty or extra record");
     }
 
+    // an ending handled first (its moves still queued), then a real activation: the activated window ends up in front
+    function test_anEndingHandledFirstThenARealActivationFocusesTheActivatedWindow() {
+        park();
+        sent = [];
+        post("openwindow", "d4,1,foot,x");
+        realActivation("b2");
+        advance(300);
+        compare(special, false);
+        compare(parkedAddresses(), []);
+        compare(focusRequests().length, 1);
+        verify(focusRequests()[0].indexOf("0xb2") >= 0, JSON.stringify(focusRequests()));
+        compare(hfocus, "b2");
+    }
+
+    function test_aSecondActivationRightAfterTheFirstIsHandledToo() {
+        park();
+        realActivation("a1");
+        advance(40);            // well inside any echo window: it is a new activation, not an echo
+        park();
+        realActivation("b2");
+        advance(400);
+        compare(special, false, "the second activation is not swallowed");
+        compare(parkedAddresses(), []);
+        compare(st.records.length, 0);
+    }
+
+    function test_aShowOfTheOtherFormIsOnlyTheEchoOfTheOneJustHandled() {
+        park();
+        sent = [];
+        const first = Flow.onEvent(st, ctx(), "activespecial", "special:desktop,DP-1");
+        compare(first.dispatches[0], SD.hideParkingRequest());
+        const twin = Flow.onEvent(first.state, ctx(), "activespecialv2", "-98,special:desktop,DP-1");
+        compare(twin.dispatches.length, 0, "the echo is matched to the event, not to a time");
+        compare(twin.state.parking, {}, "and it does not mark the workspace shown");
+        // the hide came back: a new show is a new activation, however soon
+        let r = Flow.onEvent(twin.state, ctx(), "activespecial", ",DP-1");
+        r = Flow.onEvent(r.state, ctx(), "activespecialv2", ",,DP-1");
+        const again = Flow.onEvent(r.state, ctx(), "activespecial", "special:desktop,DP-1");
+        compare(again.state.activation.open, true, "a new activation");
+        compare(again.dispatches[0], SD.hideParkingRequest(), "hidden again, not swallowed");
+    }
+
+    function test_twoEndingsBeforeTheHideEventNeverToggleTwice() {
+        park();
+        const first = Flow.onEvent(st, ctx(), "activespecial", "special:desktop,DP-1");
+        compare(first.dispatches.filter(d => d.indexOf("toggle_special") >= 0).length, 1);
+        // the records are back (a new Show Desktop), another ending comes before Hyprland's hide event: it must not toggle again
+        const again = first.state;
+        again.records = [{screen: "DP-1", workspace: 1, focus: "", windows: [{address: "a1", x: 0, y: 0}]}];
+        const second = Flow.onEvent(again, ctx(), "openwindow", "d4,1,foot,x");
+        compare(second.ended, true);
+        compare(second.dispatches.filter(d => d.indexOf("toggle_special") >= 0).length, 0, "the workspace is known hidden: no toggle that would open it");
+    }
+
+    function test_aShowOfTheOtherFormAfterAHideIsANewActivation() {
+        park();
+        // only one form of each event arrives (a Hyprland that posts just the v1 events, then a v2-only show)
+        let r = Flow.onEvent(st, ctx(), "activespecial", "special:desktop,DP-1");
+        r = Flow.onEvent(r.state, ctx(), "activespecial", ",DP-1");
+        r.state.records = [{screen: "DP-1", workspace: 1, focus: "", windows: [{address: "a1", x: 0, y: 0}]}];
+        r.state.parking = ({});
+        const show = Flow.onEvent(r.state, ctx(), "activespecialv2", "-98,special:desktop,DP-1");
+        compare(show.dispatches[0], SD.hideParkingRequest(), "the hide cleared what was waiting for an echo: this is a new show, handled and hidden");
+    }
+
+    function test_theFirstWindowNamedAfterTheWorkspaceEventWins() {
+        park();
+        sent = [];
+        special = true;
+        showEvents();
+        hfocus = "a1";
+        post("activewindowv2", "a1");
+        post("activewindowv2", "b2");   // a second one before the hide: the first stays
+        advance(300);
+        verify(focusRequests()[0].indexOf("0xa1") >= 0, JSON.stringify(focusRequests()));
+    }
+
+    // ---- a parked window no record owns (a corrupt or unwritable record file) ---------------------------------------------------------
+
+    function test_aParkedWindowWithNoRecordComesBackWhenAnAppActivatesIt() {
+        wins[0].parked = true;          // parked by an earlier run whose record was lost
+        sent = [];
+        realActivation("a1");
+        advance(400);
+        compare(special, false, "the workspace is hidden again");
+        compare(wins[0].parked, false, "and the window is back on a Space");
+        compare(wins[0].workspace, 1, "the Space the user is on");
+        verify(sent[0].indexOf("toggle_special") >= 0, "hide first");
+        const moveAt = sent.findIndex(x => x.indexOf("window.move") >= 0);
+        const focusAt = sent.findIndex(x => x.indexOf("hl.dsp.focus") >= 0);
+        verify(moveAt > 0 && focusAt > moveAt, "the move comes before the focus request: " + JSON.stringify(sent));
+        compare(focusRequests().length, 1);
+        verify(focusRequests()[0].indexOf("0xa1") >= 0);
+        compare(hfocus, "a1", "in front");
+    }
+
+    function test_aParkedWindowWithNoRecordComesBackToTheCurrentSpace() {
+        wins[0].parked = true;
+        shownNow = [{name: "DP-1", workspace: 4}];
+        currentWs = 4;
+        sent = [];
+        dispatcherActivation("a1");
+        advance(400);
+        compare(special, false);
+        compare(wins[0].workspace, 4, "the Space shown now, not the one it came from");
+        compare(wins[0].parked, false);
+        compare(hfocus, "a1");
+    }
+
+    function test_anOrphanComesBackToTheSpaceOfTheFocusedDisplay() {
+        twoDisplays();
+        wins[0].parked = true;
+        currentWs = 2;                  // the focused display shows Space 2
+        realActivation("a1");
+        advance(400);
+        compare(wins[0].workspace, 2, "the Space of the focused display, not the first display's");
+        compare(hfocus, "a1");
+    }
+
+    function test_anEndingThatMovedTheWindowsBackBeforeTheHideDoesNotMakeTheHideConsequenceTheActivation() {
+        park();
+        sent = [];
+        post("openwindow", "d4,1,foot,x");   // an ending: its moves are applied before Hyprland shows the workspace
+        settle();
+        plast = "a1";                        // after the hide, Hyprland focuses the regular workspace's last window (a1, back on its Space)
+        realActivation("b2");
+        advance(300);
+        compare(focusRequests().length, 1);
+        verify(focusRequests()[0].indexOf("0xb2") >= 0, "b2 was activated, a1 only took the focus when the workspace hid: " + JSON.stringify(focusRequests()));
+    }
+
+    function test_aWindowThatIsStillParkedIsLookedAtAFewTimesThenLeft() {
+        park();
+        stuck = ({a1: true});
+        realActivation("a1");
+        settle();
+        let cur = st;
+        const asked = [];
+        for (let i = 0; i < 6; i++) {
+            const res = Flow.onTimer(cur, ctx(), "activation");
+            asked.push(res.timers.activation === "restart");
+            compare(res.dispatches.filter(d => d.indexOf("hl.dsp.focus") >= 0).length, 0, "never a focus request for a window that is parked");
+            cur = res.state;
+        }
+        compare(asked, [true, true, true, false, false, false], "three more looks, then it is left");
+    }
+
+    function test_aCorruptRecordFileLeavesNothingUnreachable() {
+        wins[0].parked = true;
+        wins[1].parked = true;
+        // the file is damaged, or from a future version, or empty: nothing is recovered and the windows stay parked
+        for (const text of ["{broken", "", "{\"version\": 99, \"records\": []}", "[]"]) {
+            const loaded = Flow.onLoaded(st, ctx(), SD.parse(text));
+            compare(loaded.state.records.length, 0, "nothing trusted: " + text);
+            compare(loaded.timers.recover, undefined);
+        }
+        // the user activates one of them (the Dock, an app): it comes back and ends up in front
+        realActivation("b2");
+        advance(400);
+        compare(special, false);
+        compare(wins[1].parked, false);
+        compare(hfocus, "b2");
+        // and the other one the same way
+        advance(600);
+        dispatcherActivation("a1");
+        advance(400);
+        compare(wins[0].parked, false);
+        compare(hfocus, "a1");
+        compare(special, false);
+    }
+
+    function test_aRecordFileThatCouldNotBeWrittenIsLostAtTheRestartButNotTheWindows() {
+        park();
+        // the shell restarts: the flow starts empty, the windows are still parked, no file to read
+        st = Flow.initial();
+        deadlines = ({});
+        compare(parkedAddresses(), ["a1", "b2"]);
+        realActivation("a1");
+        advance(400);
+        compare(wins[0].parked, false);
+        compare(hfocus, "a1");
+        compare(special, false);
+    }
+
+    function test_aWindowThatIsNeitherParkedNorOursIsLeftAlone() {
+        sent = [];
+        realActivation("c9");           // minimized, on a Space, not parked: an activation of an ordinary window
+        advance(400);
+        compare(focusRequests().length, 0);
+        compare(sent.filter(s => s.indexOf("window.move") >= 0).length, 0);
+    }
+
+    function test_theFocusIsNeverAskedForAWindowThatIsStillParked() {
+        park();
+        stuck = ({a1: true});           // the move back does not happen
+        sent = [];
+        realActivation("a1");
+        advance(2000);
+        compare(focusRequests().length, 0, "it would show the parking workspace again");
+        compare(special, false);
+    }
+
+    // ---- several Spaces ------------------------------------------------------------------------------------------------------------------
+
+    function twoDisplays() {
+        wins.push(win("d4", 2, 0));
+        shownNow = [{name: "DP-1", workspace: 1}, {name: "DP-2", workspace: 2}];
+    }
+
+    function moveTargets(address) {
+        return sent.filter(s => s.indexOf("window.move") >= 0 && s.indexOf("address:0x" + address) >= 0 && s.indexOf(SD.PARKING) < 0).map(s => /workspace = "([^"]+)"/.exec(s)[1]);
+    }
+
+    function test_everyWindowGoesBackToItsOwnSpace() {
+        twoDisplays();
+        park();
+        compare(st.records.length, 2);
+        sent = [];
+        press();
+        advance(300);
+        compare(moveTargets("a1"), ["1"]);
+        compare(moveTargets("d4"), ["2"]);
+    }
+
+    function test_aSpaceSwitchDoesNotDragTheWindowsAlong() {
+        twoDisplays();
+        park();
+        sent = [];
+        shownNow = [{name: "DP-1", workspace: 5}, {name: "DP-2", workspace: 2}];   // the user switched Space on the first display
+        const t = Flow.onTimer(st, ctx(), "check");
+        compare(t.ended, true);
+        t.dispatches.forEach(d => sent.push(d));
+        compare(moveTargets("a1"), ["1"], "back to the Space it was on, not the one shown now");
+        compare(moveTargets("d4"), ["2"]);
+    }
+
+    function test_theVerifyAndTheStragglersUseTheOwnSpaceOfTheWindow() {
+        twoDisplays();
+        park();
+        stuck = ({d4: true});
+        press();
+        advance(100);
+        sent = [];
+        shownNow = [{name: "DP-1", workspace: 5}, {name: "DP-2", workspace: 6}];
+        advance(2000);
+        compare(moveTargets("d4"), ["2", "2", "2"], "each verify try sends it to its own Space");
+    }
+
+    function test_theGrassfieldEventBetweenTheFocusAndTheWorkspaceIsNotCounted() {
+        park();
+        sent = [];
+        // recorded: urgent, activewindow, activewindowv2 <X>, grassfield (a plugin event), activespecial
+        post("urgent", "a1");
+        post("activewindow", "gf-sd-act,gf-sd-act");
+        post("activewindowv2", "a1");
+        post("grassfield", "{\"v\":\"gfc/1\"}");
+        for (let i = 0; i < 5; i++) {
+            post("windowtitlev2", "a1,title " + i);   // noise is not counted: only events that move the focus or a workspace
+            post("activelayout", "kbd,us");
+        }
+        special = true;
+        showEvents();
+        advance(300);
+        compare(focusRequests().length, 1);
+        verify(focusRequests()[0].indexOf("0xa1") >= 0);
+    }
+
     function test_theWindowBeforeTheLookbackIsNotTheActivatedOne() {
         park();
         sent = [];
-        // a window of the record had the focus long before the workspace event: no evidence of an activation
+        // a window of the record had the focus, then other things happened: no evidence of an activation
         post("activewindowv2", "a1");
+        post("workspacev2", "1,1");
+        post("workspacev2", "1,1");
+        post("workspacev2", "1,1");
         settle();
-        advance(2000);
         special = true; hfocus = "";
         showEvents();
         advance(300);
@@ -599,6 +877,16 @@ TestCase {
         compare(disk.length, 0, "the file is emptied");
         compare(focusRequests().length, 0, "nothing is focused by the recovery");
         compare(toggles(), 0);
+    }
+
+    function test_theRecoverySendsEachWindowToTheSpaceOfItsRecord() {
+        currentWs = 3;                  // the user is elsewhere when the shell starts
+        shownNow = [{name: "DP-1", workspace: 3}];
+        start([diskRecord]);
+        advance(interval.recover * 2 + 10);
+        compare(wins[0].workspace, 1, "its own Space, not the one shown now");
+        compare(wins[1].workspace, 1);
+        compare(parkedAddresses(), []);
     }
 
     function test_theRecoveryWaitsForTheWindowList() {
