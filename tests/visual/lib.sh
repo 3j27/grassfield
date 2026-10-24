@@ -237,7 +237,14 @@ vs_capture() {
   # Park again immediately before the capture (a window mapping under the pointer or a focus change during the settle
   # can move the software cursor: files.fr differed by 84 px between two runs) and wait a few frames.
   [[ -n ${VS_NOPARK:-} ]] || { vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null; vs_sleep 0.2; }
-  "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null
+  # A capture that fails must not leave the previous run's PNG to be compared as if it were new (shot.sh keeps the old file
+  # when grim fails): delete both copies first and fail when the new one is not there.
+  rm -f "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
+  "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null || true
+  if [[ ! -s $VS_DEV/shots/visual-$name.png ]]; then
+    echo "visual: capture $name failed (no screenshot of $VS_OUTPUT)" >&2
+    return 1
+  fi
   cp "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
   # VS_MASK="x1,y1,x2,y2 ...": black out machine-dependent text (free disk space, ...).
   local r
@@ -273,6 +280,44 @@ vs_notify() {
   DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 0 "Design review" "Starts in 10 minutes in Room 4."
   DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 0 "Anna Martin" "Are we still on for lunch tomorrow?"
   DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Software Update" -t 0 "Updates available" "3 updates are ready to install."
+}
+
+# vs_px_diff A B: number of pixels that differ between two captures (fuzz 2 %, absorbs antialiasing). When the comparison
+# cannot be made (a file missing or empty, sizes that differ, compare failing) it prints ERR, not a number, and says why on
+# stderr: every caller compares the result with test -ge / -lt, which then fails (status 2), so a broken capture is a FAIL and
+# never a "no difference".
+vs_px_diff() {
+  local out rc=0
+  if [[ ! -s ${1:-} || ! -s ${2:-} ]]; then
+    echo "vs_px_diff: missing or empty capture: '${1:-}' '${2:-}'" >&2
+    echo ERR
+    return 0
+  fi
+  # (compare may pad a smaller image or fail, depending on the ImageMagick build: sizes must be equal)
+  if [[ $(magick identify -format '%wx%h' "$1" 2>/dev/null) != "$(magick identify -format '%wx%h' "$2" 2>/dev/null)" ]]; then
+    echo "vs_px_diff: captures differ in size or cannot be read: '$1' '$2'" >&2
+    echo ERR
+    return 0
+  fi
+  out=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1) || rc=$?
+  if (( rc > 1 )) || [[ ! ${out%% *} =~ ^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$ ]]; then
+    echo "vs_px_diff: compare failed (exit $rc): $out" >&2
+    echo ERR
+    return 0
+  fi
+  awk -v n="${out%% *}" 'BEGIN { printf "%d\n", n + 0 }'
+}
+
+# vs_windows_over X,Y...: "class:title" of the mapped, not hidden windows on GF-REF that cover one of the output-pixel
+# points (a click there would land on the window, not on the desktop). Read-only (nestctl clients/monitors).
+vs_windows_over() {
+  local mon pts
+  mon=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -c --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | {id, x, y}')
+  pts=$(printf '%s\n' "$@" | jq -R 'split(",") | map(tonumber)' | jq -cs .)
+  "$VS_ROOT/scripts/nestctl" clients -j | jq -r --argjson m "$mon" --argjson p "$pts" '
+    .[] | select(.mapped and (.hidden | not) and .monitor == $m.id and ((.workspace.name // "") | startswith("special") | not))
+    | . as $w | select($p | any(. as $pt | ($pt[0] + $m.x) >= $w.at[0] and ($pt[0] + $m.x) < ($w.at[0] + $w.size[0]) and ($pt[1] + $m.y) >= $w.at[1] and ($pt[1] + $m.y) < ($w.at[1] + $w.size[1])))
+    | "\(.class):\(.title)"'
 }
 
 # Number of client windows in the nested compositor (read-only query).

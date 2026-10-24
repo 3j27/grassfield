@@ -178,6 +178,8 @@ need_notif() {
 }
 
 # State checks for CAP_CHECK (no waiting, no failing: true or false).
+# drag_up: the Dock reports a live drag of a removable tile, past the removal distance, not interrupted (GF-061).
+drag_up() { vs_ipc dock dragstate "$VS_OUTPUT" 2>/dev/null | jq -e '.dragging and .out and .removable and (.interrupted | not)' >/dev/null 2>&1; }
 banners_up() { [[ $(notif_state banners) == 2 ]]; }
 center_open() { [[ $(notif_state center) == true ]]; }
 is_locked() { [[ $(vs_ipc lock status 2>/dev/null || true) == locked ]]; }
@@ -262,20 +264,21 @@ dock_surface() {
   vs_sleep 1.5
   VS_NOPARK=1 cap dock 0.8
   # Drag: the pinned foot tile pressed and dragged up and HELD (the holding pointer process has no timer: it is stopped after the
-  # set, then the tile is put back on its slot and released, an unchanged order). A press that the busy shell never turned into
-  # a drag shows no "Remove" label (checked by pixels in the label's place, which is empty in "dock"), a drag that ended shows
-  # the same through the consistency check of the set: both redo the whole drag, up to three times, then the run fails.
-  local pointer_pid try ok=""
+  # set, then the tile is put back on its slot and released, an unchanged order). The drag state is read from the Dock itself
+  # (`dock dragstate`, fixtures IPC; GF-061), not from the pixels of the "Remove" label: the set is taken only while the Dock
+  # reports a live, removable, uninterrupted drag past the removal distance (CAP_CHECK drag_up, before EVERY capture of the
+  # set), and the drag is redone, up to three times, when it never reaches that state (a busy shell, a press that did not
+  # become a drag) or ends during the set.
+  local pointer_pid try ok="" i
   for try in 1 2 3; do
     "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs $DOCK_X_FOOT $DOCK_Y sleep 400 abs $((DOCK_X_FOOT + 2)) $DOCK_Y sleep 400 abs $DOCK_X_FOOT $DOCK_Y sleep 600 down sleep 300 drag $DOCK_X_FOOT 900 \
       sleep 600000 >/dev/null &
     pointer_pid=$!
-    vs_sleep 4
-    if VS_NOPARK=1 CAP_TRIES=1 CAP_SOFT=1 SNAP_BUDGET=45 cap dockdrag 0.3; then
-      magick "$dir/dock.png" -crop 120x50+870+830 +repage "$dir/label-ref.png"
-      magick "$dir/dockdrag.png" -crop 120x50+870+830 +repage "$dir/label-now.png"
-      if differs_q "$dir/label-ref.png" "$dir/label-now.png" 150; then ok=1; fi
-      rm -f "$dir/label-ref.png" "$dir/label-now.png"
+    for i in $(seq 1 60); do drag_up && break; sleep 0.25; done
+    if drag_up; then
+      if VS_NOPARK=1 CAP_TRIES=1 CAP_SOFT=1 CAP_CHECK=drag_up SNAP_BUDGET=45 cap dockdrag 0.3 && drag_up; then ok=1; fi
+    else
+      echo "contrast: dockdrag: no drag state after 15 s: $(vs_ipc dock dragstate "$VS_OUTPUT" 2>&1 || true)" >&2
     fi
     kill "$pointer_pid" 2>/dev/null || true
     wait "$pointer_pid" 2>/dev/null || true
