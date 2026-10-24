@@ -81,11 +81,12 @@ try "ending hides after the windows moved" shell/platform/Compositor.qml "      
         }
         root.desktopEndedAddresses = back;"
 try "activation ends only after the timer" shell/platform/Compositor.qml "        onTriggered: {
-            const active = Hyprland.activeToplevel;
-            const candidates" "        onTriggered: {
+            root.activationWatch = false;" "        onTriggered: {
             root.endShowDesktop(false);
-            const active = Hyprland.activeToplevel;
-            const candidates"
+            root.activationWatch = false;"
+try "activation reads the stale activeToplevel" shell/platform/Compositor.qml "            const a = root.activatedAddress;" "            const a = Hyprland.activeToplevel ? Hyprland.activeToplevel.address : \"\";"
+try "activation takes every later activewindowv2" shell/platform/Compositor.qml "                root.activatedAddress = event.data;
+                root.activationWatch = false;" "                root.activatedAddress = event.data;"
 try "the parking state is not tracked" shell/platform/Compositor.qml "root.parkingShown = ShowDesktop.parkingShownAfter(root.parkingShown, event.name, event.data);" "root.parkingShown = root.parkingShown;"
 try "verify dropped from the ending" shell/platform/Compositor.qml "        desktopVerify.restart();
         return true;" "        return true;"

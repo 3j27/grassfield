@@ -43,10 +43,13 @@ desc="every ending hides the parking workspace by STATE and BEFORE the windows m
 check bash -c 'body=$(awk "/function endShowDesktop/,/^    }/" "$1"); h=$(grep -n "parkingVisible(root.parkingShown)" <<<"$body" | head -1 | cut -d: -f1); d=$(grep -n "hideParkingRequest()" <<<"$body" | head -1 | cut -d: -f1); m=$(grep -n "ShowDesktop.toRestore(" <<<"$body" | head -1 | cut -d: -f1); [ -n "$h" ] && [ -n "$d" ] && [ -n "$m" ] && [ "$h" -lt "$d" ] && [ "$d" -lt "$m" ] && ! grep -q "hideParkingRequest" <(awk "/id: desktopActivation/,/^    }/" "$1")' _ "$f"
 
 desc="the parking workspace state is tracked from every activespecial event, also when Show Desktop is off"
-check bash -c 'awk "/function onRawEvent/,/^        }/" "$1" | head -12 | grep -q "ShowDesktop.parkingShownAfter(root.parkingShown"' _ "$f"
+check bash -c 'awk "/function onRawEvent/,/^        }/" "$1" | head -16 | grep -q "ShowDesktop.parkingShownAfter(root.parkingShown"' _ "$f"
 
 desc="the activation ends Show Desktop at once (no timer before the ending) and the timer only asks for the focus"
 check bash -c 'awk "/function onRawEvent/,/^        }/" "$1" | grep -q "root.endShowDesktop(false);" && ! awk "/id: desktopActivation/,/^    }/" "$1" | grep -q "endShowDesktop"' _ "$f"
+
+desc="the window an app activated is the one the FIRST activewindowv2 after the workspace event names (later ones are caused by the ending, and the toplevel property is stale)"
+check bash -c 'grep -q "root.activatedAddress = event.data" "$1" && grep -q "root.activationWatch = true;" "$1" && b=$(awk "/id: desktopActivation/,/^    }/" "$1") && grep -q "root.activatedAddress" <<<"$b" && ! grep -q "activeToplevel" <<<"$b" && c=$(awk "/function onRawEvent/,/^        }/" "$1") && [ $(grep -c "root.activationWatch = false;" <<<"$c") = 1 ]' _ "$f"
 
 desc="the crash recovery applies ShowDesktop.recoverStep: its moves, its retry (bounded by the step, not by a loop here) and its clear"
 check bash -c 'b=$(awk "/function recoverDesktop/,/^    }/" "$1"); grep -q "ShowDesktop.recoverStep(root.desktopRecords, toplevelData(), loaded, root.recoverTries, Tokens.showDesktopRecoverTries)" <<<"$b" && grep -q "step.moves.forEach" <<<"$b" && grep -q "root.recoverTries++" <<<"$b" && grep -q "if (step.retry)" <<<"$b" && grep -q "else if (step.clear)" <<<"$b" && grep -q "const loaded = Hyprland.toplevels" <<<"$b"' _ "$f"

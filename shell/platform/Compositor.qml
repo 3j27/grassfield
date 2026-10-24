@@ -318,6 +318,10 @@ Singleton {
             // switch on either display ends it too, but a workspace event is also what a focus move to the other display
             // raises: those events only schedule a look at what each display shows (desktopCheck). An ending never asks for
             // focus: the user's new Space or window has it.
+            if (event.name === "activewindowv2" && root.activationWatch) {
+                root.activatedAddress = event.data;
+                root.activationWatch = false;
+            }
             if (event.name.startsWith("activespecial"))
                 root.parkingShown = ShowDesktop.parkingShownAfter(root.parkingShown, event.name, event.data);
             if (root.desktopRecords.length > 0) {
@@ -326,8 +330,10 @@ Singleton {
                     if (event.name.startsWith("activespecial")) {
                         // An app activated a parked window: the workspace is hidden FIRST (no frame with the parked windows
                         // over the screen), the windows go back, and the activated window keeps the focus a moment later.
-                        const active = Hyprland.activeToplevel;
-                        root.desktopActivatedAddress = active ? active.address : "";
+                        // The window is named by the first activewindowv2 after the workspace event: it comes before anything the
+                        // ending itself causes (the hide gives the focus to another window, which is not the activated one).
+                        root.activatedAddress = "";
+                        root.activationWatch = true;
                         root.endShowDesktop(false);
                         desktopActivation.restart();
                     } else {
@@ -524,7 +530,8 @@ Singleton {
     // The parking workspace shown per display ({monitor: true}, from the activespecial events), the window an app activated and
     // the windows the last ending sent back.
     property var parkingShown: ({})
-    property string desktopActivatedAddress: ""
+    property bool activationWatch: false
+    property string activatedAddress: ""
     property var desktopEndedAddresses: []
     // A press waits for the window positions to be read (see showDesktop).
     property bool desktopPending: false
@@ -599,20 +606,16 @@ Singleton {
     }
 
     // The window an app activated keeps the focus: asked for a moment after the ending (the windows went back first), for the
-    // window that was active when the parking workspace was shown, or the one that is now, if it is one of those that went back.
+    // window the first activewindowv2 after the workspace event named, if it is one of those that went back.
     Timer {
         id: desktopActivation
         interval: Tokens.showDesktopCheckMs
         onTriggered: {
-            const active = Hyprland.activeToplevel;
-            const candidates = [root.desktopActivatedAddress, active ? active.address : ""];
-            root.desktopActivatedAddress = "";
-            for (const a of candidates) {
-                if (a !== "" && root.desktopEndedAddresses.some(x => ShowDesktop.sameAddress(x, a))) {
-                    root.dispatchRequest(Minimized.focusWindowRequest(a));
-                    break;
-                }
-            }
+            root.activationWatch = false;
+            const a = root.activatedAddress;
+            root.activatedAddress = "";
+            if (a !== "" && root.desktopEndedAddresses.some(x => ShowDesktop.sameAddress(x, a)))
+                root.dispatchRequest(Minimized.focusWindowRequest(a));
         }
     }
 

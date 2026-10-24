@@ -212,7 +212,12 @@ on_space "R: C back on Space $S1" "$c" "$S1"
 on_space "R: D still on Space $S2" "$d" "$S2"
 on_space "R: E back on Space $S1" "$e" "$S1"
 sleep 2
-[[ $(active_pid) == "$focus_before" ]] && pass "R: the recovery focused nothing (the focus is still $focus_before)" || fail "R: the focus moved from $focus_before to $(active_pid)"
+# While parked, the keyboard is the desktop's (a shell surface, not a window): the recovery must not give any window the focus.
+ap=$(active_pid)
+case " $a $b $c $d $e " in
+  *" $ap "*) fail "R: the recovery focused the window $ap (the focus was $focus_before)" ;;
+  *) pass "R: the recovery focused no window (the focus was $focus_before, is $ap)" ;;
+esac
 wait_for no_special && pass "R: no special workspace is shown over a screen" || fail "R: a special workspace is shown"
 gone_record() { [[ ! -s $state ]] || ! grep -q '"windows"' "$state"; }
 wait_for gone_record && pass "R: the record is removed" || fail "R: the record is still in $state"
