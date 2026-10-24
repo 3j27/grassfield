@@ -30,6 +30,8 @@ def selftest():
     assert problems("ADR-0016 section 5: video") == []
     assert problems("tests/visual/test_contrast_tokens.py: A2") == []
     assert problems("estimate"), "a bare estimate is not a source"
+    assert problems("estimate: pressed"), "an estimate with no reason is not a source"
+    assert problems("estimate: a pressed light darkens by this much") == [], "a declared estimate with its reason is accepted"
     assert problems(""), "an empty source is not a source"
     assert problems("[ref: docs/testing/f1-reference-gaps.md § Motion and easing; docs/specs/ui.md]"), "a section that is not a heading"
     assert problems("[ref: docs/testing/f1-reference-gaps.md § Menu bar and Nonsense]"), "a part that is not a heading"

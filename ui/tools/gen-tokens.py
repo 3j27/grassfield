@@ -213,8 +213,11 @@ def source_problems(source, headings):
             problems.append("cites '%s \u00a7 %s', which is not a heading of that file" % (path, section))
     if re.search(r"master-prompt|f1-reference-gaps", source):
         cited = True
-    if not cited:
-        problems.append("has no pointer (f1-reference-gaps section, spec, ADR or test)")
+    # A declared estimate: no reference covers the value, and the source says what it is and why ("estimate: a pressed light
+    # darkens by this much": a role, not a bare word). A bare "estimate" is still not a source.
+    declared_estimate = re.match(r"estimate: \S+(?:\s+\S+){3,}", source) is not None
+    if not cited and not declared_estimate:
+        problems.append("has no pointer (f1-reference-gaps section, spec, ADR or test) and is not a declared estimate with a reason")
     return problems
 
 
