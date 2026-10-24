@@ -891,9 +891,14 @@ Singleton {
         return kept;
     }
 
+    // A batch is under way from its start to its answer. Process.running only turns true once the process has started,
+    // so a second call in between started another batch over it and the first batch's paths stayed "pending".
+    property bool copierBusy: false
+
     function runCopies(): void {
-        if (!copyDirReady || copier.running || copyQueue.length === 0)
+        if (!copyDirReady || copierBusy || copyQueue.length === 0)
             return;
+        copierBusy = true;
         copyBatch = copyQueue.slice(0, 16);
         copyQueue = copyQueue.slice(16);
         const args = [];
@@ -908,6 +913,7 @@ Singleton {
     // when the copy then failed). An evicted copy's path keeps a "gone" entry (not shown, not re-made on use; a new
     // notification naming it copies it again).
     function copiesDone(output: string): void {
+        copierBusy = false;
         const lines = String(output || "").split("\n");
         const next = Object.keys(localCopies).length > 4 * copyWindow ? {} : Object.assign({}, localCopies);
         for (let i = 0; i < copyBatch.length; i++) {
