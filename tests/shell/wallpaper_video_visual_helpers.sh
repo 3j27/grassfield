@@ -13,6 +13,10 @@ expect() { # name expected-rc command...
   if [[ $rc == "$want" ]]; then echo "PASS: $name"; else echo "FAIL: $name (rc=$rc, wanted $want)"; fail=1; fi
 }
 expect "differs: 3 pixels" 0 num_gt0 3
+expect "differs: magick prints a decimal with a fuzz (15124.1)" 0 num_gt0 15124.1
+expect "differs: 0.0 is not a difference" 1 num_gt0 0.0
+expect "identical: 0.0" 0 num_eq0 0.0
+expect "identical: a decimal above zero" 1 num_eq0 0.5
 expect "differs: 0 pixels" 1 num_gt0 0
 expect "differs: a failed compare is not a pass" 1 num_gt0 "compare:"
 expect "differs: an empty value is not a pass" 1 num_gt0 ""
@@ -21,5 +25,5 @@ expect "identical: 0 pixels" 0 num_eq0 0
 expect "identical: 5 pixels" 1 num_eq0 5
 expect "identical: a failed compare is not a pass" 1 num_eq0 "compare:"
 expect "identical: an empty value is not a pass" 1 num_eq0 ""
-grep -q 'num_gt0 "$(frames_differ)"' "$script" && grep -q 'num_eq0 "$(frames_differ)"' "$script" && echo "PASS: the script uses them" || { echo "FAIL: the script does not use them"; fail=1; }
+grep -q 'num_gt0 "$moved"' "$script" && grep -q 'num_eq0 "$frozen"' "$script" && echo "PASS: the script uses them" || { echo "FAIL: the script does not use them"; fail=1; }
 exit "$fail"

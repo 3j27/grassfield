@@ -121,14 +121,13 @@ Singleton {
         writeNow();
     }
 
-    // A video is no longer the wallpaper of any output: it may play again the next time it is chosen.
-    function releaseVideo(): void {
-        if (videoBlockedPaths.length === 0)
+    // The block exists for the AUTOMATIC restart only (the shell starting again with the video that crashed it). A fresh choice of the
+    // user is consent to try again (macOS model): the feed calls this when the wallpaper of an output changes after the shell started
+    // (away from the video, or to it).
+    function unblockVideo(path: string): void {
+        if (!isVideoBlocked(path))
             return;
-        const keep = videoBlockedPaths.filter(p => Object.keys(outputs).some(name => outputs[name].source === "video" && outputs[name].path === p));
-        if (keep.length === videoBlockedPaths.length)
-            return;
-        videoBlockedPaths = keep;
+        videoBlockedPaths = videoBlockedPaths.filter(p => p !== path);
         writeNow();
     }
 

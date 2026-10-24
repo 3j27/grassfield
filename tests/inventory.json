@@ -152,6 +152,7 @@
  {"path": "tests/shell/wallpaper_online_start_fail.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_video.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_video_player.sh", "layer": "headless"},
+ {"path": "tests/shell/wallpaper_video_feed.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_video_visual_helpers.sh", "layer": "data"},
  {"path": "tests/shell/wallpaper_tool_signals.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_video_heavy.sh", "layer": "headless", "runner": "bare"},

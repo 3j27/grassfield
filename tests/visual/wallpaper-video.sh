@@ -79,8 +79,10 @@ cpu_of() { # seconds: CPU percent of one core of the shell
 }
 # Numeric comparisons of the pixel counts: a value that is not a number (a capture or a crop that failed makes magick print
 # "compare: ..." instead) is a failure for both, never a pass.
-num_gt0() { [[ $1 =~ ^[0-9]+$ ]] && (($1 > 0)); }
-num_eq0() { [[ $1 =~ ^[0-9]+$ ]] && (($1 == 0)); }
+# magick prints "15124.1 (0.021)" with a fuzz: a decimal is a number (the first version of this check accepted integers only and
+# turned every real difference into a failure).
+num_gt0() { [[ $1 =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v v="$1" 'BEGIN {exit !(v > 0)}'; }
+num_eq0() { [[ $1 =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v v="$1" 'BEGIN {exit !(v == 0)}'; }
 # Two captures a moment apart, compared over the middle of the screen (the pointer and the menu bar are outside it) with a small
 # colour fuzz: 0 when they are identical (a frozen frame), else the number of differing pixels.
 frames_differ() {
@@ -107,7 +109,9 @@ check "the transcoded file has no audio" test -z "$(ffprobe -v error -select_str
 check "the cache folder is private (0700)" test "$(stat -c %a "$cache")" = 700
 check "policy is play and a frame is decoding" await 20 "fields policy playing" "play|true"
 sleep 2
-check "the video advances (two captures differ)" num_gt0 "$(frames_differ)"
+moved=$(frames_differ)
+echo "pixels that differ between the two captures: $moved"
+check "the video advances (two captures differ: $moved)" num_gt0 "$moved"
 check "no QML error in the shell log" test "$(grep -cE 'ERROR|TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
 
 # Paused = no decode: battery power without "play on battery".
@@ -115,7 +119,9 @@ vs_ipc wallpaper videoBattery 1 >/dev/null
 check "battery: policy pause (reason battery)" await 10 "fields policy reason" "pause|battery"
 check "battery: the player is paused" await 10 "field playing" false
 sleep 4
-check "battery: the frame is frozen (two captures identical)" num_eq0 "$(frames_differ)"
+frozen=$(frames_differ)
+echo "pixels that differ between the two captures while paused: $frozen"
+check "battery: the frame is frozen (two captures identical: $frozen)" num_eq0 "$frozen"
 paused_cpu=$(cpu_of 10)
 echo "shell CPU while paused: $paused_cpu % of one core over 10 s"
 check "battery: a paused video costs under 3 % of one core" awk -v p="$paused_cpu" 'BEGIN {exit !(p < 3.0)}'
