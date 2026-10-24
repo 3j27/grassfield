@@ -700,6 +700,10 @@ namespace gf::stages {
         return facts.keyArriving && facts.seatFocusNone && facts.activeWindow && !facts.grabRejectsWindow ? KeyFocusAction::ToWindow : KeyFocusAction::None;
     }
 
+    bool reannounceFocus(const ReannounceFacts& facts) {
+        return facts.replaced && !facts.locked && !facts.inputMethodGrab && !facts.seatGrab && facts.focus;
+    }
+
     bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel) {
         return !bestLevel || level >= *bestLevel;
     }

@@ -402,7 +402,15 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   that takes the keyboard on demand the keyboard when it maps, even over an Exclusive dialog, and a key that arrives right
   after `wl_keyboard.enter` can be lost by the client, so the keyboard goes back before the next key (stages.sh 8j: with
   the check before keys only, the first key after such a banner mapped was lost). Through Hyprland's own
-  `rawSurfaceFocus`; Hyprland's focus event for the plugin's own move is not taken as a new cause. Never while the session is locked or
+  `rawSurfaceFocus`; Hyprland's focus event for the plugin's own move is not taken as a new cause. A session whose only
+  keyboard device goes and comes back (the nested session when the parent seat had no keyboard: every `keys.sh` burst is
+  a new device; a Bluetooth keyboard reconnecting on a desktop): clients re-create their `wl_keyboard` each time, and a
+  Quickshell (Qt) client then ignores the keys of the new one (nested 2026-10-24, with the plugin unloaded: a Quickshell
+  layer surface and a Quickshell window got the first burst only, foot every burst; after a keyboard leave/enter cycle the
+  Quickshell window got the next one). So before the first key of a device that replaced the previous one while no other
+  keyboard was left, the surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again (`reannounceKeyboardFocus`,
+  core `reannounceFocus`; not while locked, under an input method's grab or a seat grab, or with the keyboard on nothing;
+  Hyprland's focus state untouched). Never while the session is locked or
   its state is unknown (a missing lock manager counts as locked: failures stay locked), never under an input method's
   keyboard grab, never against a seat grab that rejects the surface (checked first: Hyprland would log a refusal per
   key); a Bottom or Background Exclusive layer keeps Hyprland's normal focus, and no window gets the keyboard while an

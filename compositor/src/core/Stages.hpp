@@ -352,6 +352,23 @@ namespace gf::stages {
     // window focus then).
     KeyFocusAction keyFocusAction(const KeyFocusFacts& facts);
 
+    // A keyboard device that replaced the one of the previous key (that one went away: a keyboard plugged in again, a
+    // Bluetooth keyboard reconnecting; in the nested session every keys.sh burst). When the seat lost its keyboard
+    // capability in between, clients destroyed and re-created their wl_keyboard, and a Quickshell (Qt) client then ignores
+    // the keys of the new one until it gets a new wl_keyboard.leave and enter (nested 2026-10-24, plugin unloaded: a
+    // Quickshell layer surface and a Quickshell window got the first burst only, foot every burst; after a focus cycle the
+    // Quickshell window got the next burst). So before the first key of such a device the surface that holds the keyboard
+    // is announced again (leave, then enter), unless the session is locked, an input method grabs the keyboard, a seat grab
+    // is set (a menu), or the keyboard is on nothing.
+    struct ReannounceFacts {
+        bool replaced        = false; // the previous key's keyboard device went away; the one typing now is the only one
+        bool locked          = true;  // the session is locked, or that is not known
+        bool inputMethodGrab = false;
+        bool seatGrab        = false;
+        bool focus           = false; // the seat's keyboard is on a surface
+    };
+    bool reannounceFocus(const ReannounceFacts& facts);
+
     // Walking Hyprland's Exclusive-layer list in order: a layer on `level` replaces the frontmost found so far (on
     // `bestLevel`, if any) unless its level is lower (the latest to become Exclusive wins among equals).
     bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel);

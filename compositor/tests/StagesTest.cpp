@@ -826,6 +826,29 @@ TEST(StagesKeyFocus, FromTheEventLoopOnlyTheLayerIsKept) {
     EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None) << "the overview's no-key-window and a deferred focus may still decide";
 }
 
+TEST(StagesKeyFocus, ANewKeyboardDeviceAnnouncesTheFocusAgainOnlyWhenNothingElseDecides) {
+    using gf::stages::ReannounceFacts;
+    using gf::stages::reannounceFocus;
+    const ReannounceFacts base{.replaced = true, .locked = false, .inputMethodGrab = false, .seatGrab = false, .focus = true};
+    EXPECT_TRUE(reannounceFocus(base));
+    auto f     = base;
+    f.replaced = false;
+    EXPECT_FALSE(reannounceFocus(f)) << "the same device as the previous key";
+    f        = base;
+    f.locked = true;
+    EXPECT_FALSE(reannounceFocus(f)) << "locked";
+    EXPECT_FALSE(reannounceFocus(ReannounceFacts{.replaced = true, .focus = true})) << "the lock state not known: locked";
+    f                 = base;
+    f.inputMethodGrab = true;
+    EXPECT_FALSE(reannounceFocus(f)) << "an input method grabs the keyboard";
+    f          = base;
+    f.seatGrab = true;
+    EXPECT_FALSE(reannounceFocus(f)) << "a menu's grab";
+    f       = base;
+    f.focus = false;
+    EXPECT_FALSE(reannounceFocus(f)) << "the keyboard on nothing";
+}
+
 TEST(StagesKeyFocus, NoLayerAndNoWindowLeaveTheKeyboardOnNothing) {
     auto w         = windowLeftWithoutKeys();
     w.activeWindow = false; // no active window, or one that may not take the keyboard (hidden, a strip window, input blocked)
