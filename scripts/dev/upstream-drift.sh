@@ -89,8 +89,15 @@ for d in shell ui apps bridges compositor config packaging scripts; do
   [[ -d $repo/$d ]] && scan_dirs+=("$d")
 done
 if ((${#scan_dirs[@]} > 0)); then
-  forks=$(cd "$repo" && grep -rliI --exclude-dir=.git --exclude-dir=.dev --exclude-dir=docs --exclude-dir=tests --exclude-dir=licenses \
-    --exclude=upstream-drift.sh -e "adapted from omarchy" -- "${scan_dirs[@]}")
+  # In a checkout only the files git tracks count: an untracked build tree (makepkg's packaging/arch/pkg holds copies of
+  # the shell) is not the source. A `git archive` export (release-check) has no .git and no such tree: plain grep there.
+  if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    forks=$(git -C "$repo" grep -liI -e "adapted from omarchy" -- "${scan_dirs[@]}" ':(exclude,glob)**/.dev/**' \
+      ':(exclude,glob)**/docs/**' ':(exclude,glob)**/tests/**' ':(exclude,glob)**/licenses/**' ':(exclude,glob)**/upstream-drift.sh')
+  else
+    forks=$(cd "$repo" && grep -rliI --exclude-dir=.git --exclude-dir=.dev --exclude-dir=docs --exclude-dir=tests --exclude-dir=licenses \
+      --exclude=upstream-drift.sh -e "adapted from omarchy" -- "${scan_dirs[@]}")
+  fi
   rc=$?
   ((rc <= 1)) || bad "the scan for files adapted from Omarchy failed (grep exit $rc)"
   while IFS= read -r f; do
