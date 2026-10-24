@@ -215,6 +215,90 @@ Hyprland lists `LOCK` on every monitor and nothing typed reaches the probe windo
 `locked`. No code change was needed for this item; if the step ever shows an unlock, the shell must refuse IPC kill
 while locked (not possible in Quickshell 0.3.1) or the unit must restart it before input arrives.
 
+## Nothing opens over the lock (GF-116, DT-08, DT-12)
+macOS model: while the screen is locked only the lock screen exists; Spotlight, Mission Control, Launchpad, Control
+Center, Notification Center, menus and the Dock do not open, and nothing waits behind the lock to appear at the unlock
+except an authorization request. Hyprland already keeps rendering and the keyboard on the ext-session-lock surfaces; the
+shell no longer relies on that alone:
+- One predicate, `SessionState.refuses(surface)` (`shell/services/SessionState.qml`): true while `SessionState.locked`
+  (bound in `shell.qml` to `Lock.locked`, i.e. locking, locked or authenticating; unknown states count as locked), with one
+  log line `grassfield: <surface> refused: the session is locked`. Each entry point asks it first: `Popups.open` (every
+  popup kind: Control Center, menu-bar menus, tray, Dock menus and stacks, About, Force Quit, confirm and notice sheets;
+  `toggle`, `openCentered`, `confirm` and `notice` go through `open`), `Search.show`, `AppsController.show`,
+  `Overview.show` (also its own `locked`), `Notifications.toggleCenter` / `openWidgetGallery`, `Dock.enterKeyboardMode`,
+  the desktop's context menu and attribution card (`IconsView.openMenu` / `openAbout`), the widget menu (an Overlay
+  layer with the keyboard, `DesktopWidgets` `onMenuRequested`; review of 1d2c856), and the window commands of IPC target
+  `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
+  (`Switcher.step`). Bindings, IPC calls, screen corners and gestures all end in these entry points, so all are refused.
+- When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
+  the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
+  lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
+- Polkit: a request that arrives while locked waits (macOS shows the authorization sheet after the unlock): the sheet is
+  neither mapped nor given the keyboard until `SessionState.locked` is false; text typed into an open sheet is dropped when
+  the lock hides it. Nothing is answered meanwhile (polkit keeps the request pending; Cancel/Esc work once shown).
+  A held request (it arrived, or was open, while locked, or arrived within 1 s after an unlock,
+  `AuthDialogModel.heldAfterUnlockMs`, review of d8e654c) appears WITHOUT the keyboard (review of 1d2c856: keys typed right
+  after the unlock, the end of the lock password or a Return, landed in its field): it says
+  "This request arrived at <time>, while the screen was locked. Click the sheet to answer it.", its field is empty, and
+  it takes the keyboard only after a click on the sheet that comes at least 500 ms (`AuthDialogModel.heldGuardMs`) after
+  it appeared (the click goes on to what it hit: the field, Cancel, Allow). Both delays are timed by Timers in the model
+  (`noteUnlock`, `noteShown`; a monotonic clock), never by `Date.now()` (review of 6e24d36: a wall-clock step would stretch
+  or end a hold); a click before the sheet was ever noted as shown does not count. polkit gives no program name to the agent
+  (only the message, which names the program for pkexec). Tests: `tst_authdialogmodel` `test_heldGuard`,
+  `test_heldJustAfterUnlock` (real timers), `tst_authdialog` `test_11_heldNotice`, `tests/security/lock_surfaces.sh`
+  (wiring, no `Date` in the hold functions, eight polkit mutations). Seen on screen: NOT VERIFIED (L5).
+- Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
+  volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
+  previews follow "Show previews").
+- Plugin restore path (DT-12): `hl.plugin.grassfield.restore` still un-minimizes behind the lock and asks for a focus
+  Hyprland refuses; the fix is a plugin work item, `docs/specs/compositor.md` "Work item GF-116".
+- Fail mode: if the shell's `SessionState` wiring were missing, surfaces would open under the lock surface (Hyprland still
+  shows only the lock and keeps the keyboard there); no path of this change can unlock or hide the lock.
+Tests: `tests/security/lock_surfaces/shell.qml` (headless, the real Search, Apps, Notifications, Overview and Popups:
+control open while unlocked, all close at the lock, 17 popup kinds and every entry point refused while locked, open again
+after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (static: wiring, first-decision refusals,
+close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
+`tests/security/lock_privacy.sh` step `privacy` tries every surface over the lock and checks the captures (DT-08).
+
+## Files never runs what it opens (GF-070, SEC-12, DT-10)
+macOS model (Gatekeeper): double-clicking a downloaded app, script or launcher does not run it; macOS says it was not
+opened, and only a deliberate "Open Anyway" in System Settings runs it. Grassfield Files decides itself, before KIO
+(`KIO::OpenUrlJob::setRunExecutables(false)` documents executables but not every `.desktop` case; KIO's source is not on
+the host): `apps/files/src/launchguard.{h,cpp}` `LaunchGuard::verdict(inspect(url))` for every item `FilesApp::open`
+gets (Return, double-click, File > Open, the context menu), before the scripted-test switch:
+- A desktop entry (named `*.desktop` / `*.kdelnk` / `.directory`, or of type `application/x-desktop`) is never handed to
+  KIO, with or without the permission bit, wherever it is (review of a5646b8: KIO downloads a `Type=Link` target and runs
+  the handler of the type the server announces, or the application in `X-KDE-LastOpenedWith`; the reviewer ran an
+  attacker-chosen handler on a downloaded `.msi`). A web link (exactly one `Type=Link` and one http(s) `URL` with a host,
+  like a `.webloc`) opens ITS ADDRESS in the user's default web browser (`x-scheme-handler/http(s)` preferred
+  application, `ApplicationLauncherJob` with the URL), nothing else; with no default browser it is refused. Any other
+  entry is refused, "app launcher": `Type=Application`, `Service`, a missing or unknown Type, an unreadable file, a link to
+  a file or another scheme, and an ambiguous entry (a repeated `Type` or `URL`, also across repeated groups, or `URL` with
+  `URL[$e]`: KConfig keeps the last value; or longer than the 64 KiB read).
+- Refused, "program or script": an executable regular file whose type is a program or script (shared-mime-info:
+  `application/x-executable` and its sub-classes, scripts included; `x-pie-executable`; `x-sharedlib`), or that starts
+  with `#!` or the ELF magic; and, even without the permission bit, types whose handler runs them (by type and by name):
+  Windows programs and scripts (`.exe`, `.com`, `.scr`, `.cpl`, `.msi`, `.lnk`, `.bat`, `.cmd`, `.ps1`, `.vbs`, `.vbe`,
+  `.wsf`, `.hta`), registry files (`.reg`), Java archives and Web Start files (`.jar`, `.jnlp`), AppImages.
+- Remote items (a share, sftp, the Trash): desktop entries and the names above are refused (KIO downloads a remote file
+  and runs the handler of its type); everything else goes to KIO as before.
+- Opened as before: folders, documents (also with the permission bit: every file of a FAT/NTFS volume has it), scripts
+  without the permission bit (text, in their editor, as KIO and macOS do).
+- The user sees one banner: "“t.desktop” was not opened: it is an app launcher, and Files never starts apps from a folder.
+  Open apps from the Dock, Apps or Search." (programs: "… To run it on purpose, use a terminal."); the journal gets
+  `grassfield-files: open refused (<kind>)`. No "Open Anyway" in Files, on purpose: Grassfield has no signed-app notion to
+  base it on, apps start from the Dock, Apps and Search, and a program the user trusts runs from a terminal. "Open With"
+  is unchanged: it opens the item WITH the chosen app (a launcher in a text editor), it never runs the item.
+- The desktop already never runs `.desktop` files (`DesktopFiles.qml`, DT-11). The shell's `gio open` / `xdg-open` paths
+  (Search results, Dock stacks) hand files to their MIME handler; not changed here.
+Tests: `tests/unit/files/tst_launchguard.cpp` (verdicts; DT-10 on real files: `t.desktop` executable and not,
+`Invoice.pdf.desktop`, web links to the browser only (the review's `.msi` link with `X-KDE-LastOpenedWith` included),
+repeated keys, an oversized entry, `.directory`, file links, an unreadable entry, scripts with and without the bit, a
+copied `/usr/bin/true` and a symlink to it, `.exe`, `.jar`, AppImage without +x, `.ps1`, `.vbs`, `.reg`, `.jnlp`, a
+folder; remote items by name), nested `tests/apps/files_dt10.sh` (bare: pass 1 with the launch switch
+on, four "open refused" and nothing reaching the launch path; pass 2 without it, the marker the launchers would create
+never appears).
+
 ## Upstream base (GF-031)
 Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0` (installed
 4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`, byte-identical to `/usr/share/omarchy/shell/plugins/lock/Service.qml`):
@@ -231,6 +315,19 @@ Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff229
   client's lock whenever another Quickshell instance of the user runs (the nested dev session always has one).
 - Idle and polkit: v4.0.5/4.0.6 changes are `Commons.Color` renames (Qt 6.12) and screensaver handling Grassfield does
   not use; nothing to port.
+- Pinned (GF-031 drift check): `docs/upstream/omarchy.lock` holds the sha256 of every upstream file a fork derives from
+  (`plugins/lock/Service.qml` → `Lock.qml`, `plugins/services/idle/Service.qml` → `Idle.qml`,
+  `plugins/polkit/PolkitAgent.qml` → `AuthAgent.qml`, `bin/omarchy-system-sleep-lock` → `IdleModel.js` budget and the
+  `omarchy-shell` stand-in, `bin/omarchy-hyprland-session-locked` → the stranded-lock signal), the installed package
+  (4.0.4-1) and the reviewed upstream revisions. `scripts/dev/upstream-drift.sh` (`just check-upstream`, part of
+  `just check`) fails when the installed Omarchy changed or removed one of them, naming the forks to review; without
+  Omarchy it says SKIP. It also fails, Omarchy or not, when a pinned fork is gone or no longer names its upstream file, and
+  when a source file says "adapted from Omarchy" without being pinned, and on any read error (an unreadable fork or file of
+  the scanned tree, a file that cannot be hashed). No environment variable changes what it checks (`just check` runs it
+  bare); the fixture paths of its test are options (`--omarchy`, `--lock`, `--root`, `--package`; review of 395715e). After
+  the review (port or reject, recorded in this section): `scripts/dev/upstream-drift.sh --update` re-pins. Test: `tests/security/upstream_drift.sh` (fixture trees:
+  unchanged, edited, removed, no Omarchy, `--update`, malformed lock, lost attribution, unpinned fork; the real lock
+  against the installed Omarchy).
 
 ## Screen-share protection (SEC-01 / GF-028)
 `config/hypr/grassfield/privacy.lua`, required by `core.lua` (real and nested session): reads Omarchy's own
@@ -264,13 +361,23 @@ VERIFIED until run).
   `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
   dies meanwhile cannot leave the screen dark. Off in the nested dev session unless `idle devDisplayOff <s>` sets it
   (`lock_privacy.sh display-off`). NOT VERIFIED on hardware (L2†).
-- `org.freedesktop.ScreenSaver` inhibitors: **not implemented**, and not implementable inside the security modules'
-  building blocks: Quickshell 0.3.1 cannot own a D-Bus name or serve methods (only its Notifications, StatusNotifier
-  and MPRIS services do). Wayland-native players (mpv, Firefox, Chromium on Wayland) use the idle-inhibit protocol,
-  which `IdleMonitor { respectInhibitors: true }` honours (DT-16). Proposed (owner/integrator decision, cross-module):
-  the menu bridge (Qt D-Bus, already a session-bus service) implements `org.freedesktop.ScreenSaver.Inhibit/UnInhibit`
-  (cookies tracked per sender, dropped when the sender leaves the bus) and reports "inhibited" to the shell, which then
-  holds a Quickshell `IdleInhibitor`; an ADR is needed.
+- `org.freedesktop.ScreenSaver` inhibitors (GF-016 residual, done 2026-10-24; ADR-0008 and ADR-0010 amendments):
+  Quickshell 0.3.1 cannot own a D-Bus name or serve methods (verified in its qmltypes: no D-Bus server type, only the
+  DBusMenu client, the StatusNotifier, MPRIS and Notifications services and the Wayland `IdleInhibitor`), so the menu
+  bridge serves `Inhibit`/`UnInhibit` (only those; `Lock`, `SetActive`… answer NotSupported), keeps cookies per sender
+  (released by their owner or when it leaves the bus; 16 per sender, 64 senders) and sends the shell one boolean
+  (`docs/specs/menu-bridge.md` MB16). `Idle.busInhibited` (from `MenuBridge.screenSaverInhibited`) then disarms the idle
+  dim and idle lock only (`IdleModel.idleArmed`), as a macOS power assertion does while a video plays; a manual lock, the
+  lid, the lock before sleep and the display power-off on the lock screen are unaffected. Fail closed: no bridge, a dead
+  bridge, a hung bridge (the line is repeated every 20 s; 60 s without one drops "inhibited", `tests/shell/menubridge_heartbeat`),
+  a client that left before the bridge watched it (watch, then `NameHasOwner`) or anything but an explicit `true` leaves
+  idle locking on. Wayland-native players (mpv, Firefox, Chromium on
+  Wayland) keep using the idle-inhibit protocol that `IdleMonitor { respectInhibitors: true }` honours (DT-16). Tests:
+  `tests/unit/menu-bridge/tst_screensaver.cpp`, `tests/security/tst_idlemodel.qml` `test_idleArmed`,
+  `tests/unit/tst_menubridge.qml` `test_screensaverLines`; `tests/integration/screensaver_inhibit.sh` (bare, private bus)
+  NOT VERIFIED here (needs Unix sockets). Nested check (bare): with the nested session up, `gdbus call --address $(cat
+  .dev/bus.address) …` cannot hold a cookie (it disconnects at once); use the integration test, then `qs ipc -p shell
+  call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
@@ -544,6 +651,11 @@ Decisions:
   `accentText` dots (the lock passes its dark palette's `accent`/`accentText`; the polkit field uses the same defaults).
   Before: white dots on the white focus-ring band, 1.7–2.1:1. Seen in nested (`.dev/shots/lock-selection.png`, letters typed
   and Ctrl+A, never submitted).
+- Password fields (GF-118): the lock and the polkit sheet share `PasswordField.qml`; the Wi-Fi password field of Quick
+  Settings (`WifiList.qml`) is the only other one. Each sets `inputMethodHints` `ImhSensitiveData | ImhNoPredictiveText |
+  ImhNoAutoUppercase` (and `ImhHiddenText` while masked), as macOS secure fields do: an input method (fcitx5 autostarts
+  on Omarchy) neither predicts, autocorrects nor learns the text. `tests/security/password_hints.sh` finds every QML
+  field whose `echoMode` can be `TextInput.Password` and fails when its own block lacks the first two hints.
 - Untrusted strings (PAM messages, polkit message/action ID/prompt/identities, user name) use `Text.PlainText`.
   Polkit strings are also flattened to one line by `AuthDialogModel.plainLine` (C0/C1 controls and line separators →
   space, bidi overrides/isolates/marks removed, length capped: message 400, others 200) and capped in rendered lines
@@ -556,8 +668,9 @@ Decisions:
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
 puts the program in `message`, which is shown, and the action's icon is shown (see "Polkit details"). Caps Lock is
-inferred from typed letters (no lock-key state in Quickshell). D-Bus `org.freedesktop.ScreenSaver` inhibitors are not
-handled (see D-4: not possible with the security modules' building blocks; proposal there). Display power-off on the
+inferred from typed letters (no lock-key state in Quickshell). D-Bus `org.freedesktop.ScreenSaver` inhibitors are served
+by the menu bridge and hold the idle lock only (see D-4); the GTK/KDE portal `Inhibit` reaches them only when its backend
+forwards to that interface (not verified). Display power-off on the
 lock screen is done (30 s), not yet seen on hardware (L2†). When grassfield-shell has failed for good, the fail-safe
 restarts it before sleep; a shell that cannot start at all leaves the machine to sleep unlocked (no second locker, by
 the security rules; see "Lock coverage").

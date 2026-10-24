@@ -124,6 +124,9 @@ Scope {
     }
 
     function show(text: string): void {
+        // Nothing opens over the lock screen (GF-116): SUPER+SPACE, the menu bar item and IPC alike.
+        if (SessionState.refuses("search"))
+            return;
         openStartMs = Date.now();
         if (Popups.active)
             Popups.close();
@@ -542,6 +545,18 @@ Scope {
             root.rebuildApps();
             if (root.open)
                 root.compute();
+        }
+    }
+
+    // The session locks: Search closes (and drops what was typed).
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (SessionState.locked && root.open) {
+                root.hide();
+                root.setQuery("");
+            }
         }
     }
 

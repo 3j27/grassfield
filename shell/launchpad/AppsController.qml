@@ -115,7 +115,8 @@ Scope {
     }
 
     function show(): void {
-        if (open)
+        // Nothing opens over the lock screen (GF-116): XF86LaunchA, the Dock, a screen corner, the pinch and IPC alike.
+        if (open || SessionState.refuses("apps"))
             return;
         openStartMs = Date.now();
         if (Popups.active)
@@ -331,6 +332,16 @@ Scope {
         // Before the first hidden-list run the Apps service emits listChanged by itself.
         if (Apps.hiddenReady)
             rebuildApps();
+    }
+
+    // The session locks: Apps closes.
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (SessionState.locked && root.open)
+                root.hide();
+        }
     }
 
     AppsWindow {

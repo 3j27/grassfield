@@ -14,6 +14,8 @@ FocusScope {
     required property AuthDialogModel model
     // Image URL of the action's icon (AuthAgent resolves model.iconName in the icon theme), or "".
     property url appIconSource: ""
+    // Set by AuthAgent for a request that arrived while the session was locked (AuthDialogModel.heldNotice), else "".
+    property string heldNotice: ""
 
     readonly property real cornerRadius: Tokens.radiusDialog
     readonly property Item surface: material
@@ -104,6 +106,22 @@ FocusScope {
             wrapMode: Text.Wrap
             maximumLineCount: root.messageLines
             elide: Text.ElideRight
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
+        Text {
+            objectName: "polkitHeldNotice"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.heldNotice
+            visible: root.heldNotice !== ""
+            horizontalAlignment: Text.AlignHCenter
+            color: Appearance.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
+            font.weight: Tokens.typographyMenuBoldWeight
+            wrapMode: Text.Wrap
             Accessible.role: Accessible.StaticText
             Accessible.name: text
         }

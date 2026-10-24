@@ -53,7 +53,9 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    rename), Rename (`KIO::moveAs`, inline, F2, base name preselected), Duplicate ("name copy.ext", `KIO::copyAs`),
    drop (`KIO::move`/`copy`), undo/redo (`KIO::FileUndoManager`, Ctrl+Z / Ctrl+Shift+Z). Errors show in a banner.
    Pasting copies into the same folder makes duplicates instead of a conflict.
-7. F7 Opening: folders navigate; files open with `KIO::OpenUrlJob` (MIME associations, executables never run);
+7. F7 Opening: folders navigate; files open with `KIO::OpenUrlJob` (MIME associations, executables never run: app
+   launchers, scripts and programs are refused by Files itself before KIO, `src/launchguard.h`, GF-070, see
+   `docs/specs/security.md` "Files never runs what it opens");
    Open With lists `KApplicationTrader::queryByMimeType` apps and launches with `ApplicationLauncherJob`.
 8. F8 Context menus (Grassfield `PopupMenu`): item menu (Open, Open With, Open in New Tab, Move to Trash, Get Info,
    Rename, Duplicate, Glance, Copy, Cut, Show in Enclosing Folder while searching), Trash item menu

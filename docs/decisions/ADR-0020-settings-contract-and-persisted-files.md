@@ -1,0 +1,100 @@
+# ADR-0020: Settings contract and persisted files (schema as the single source; config vs state; one writer)
+Status: Proposed (integrator, under owner delegation D-5); accepted when its first slice merges (C1) · Date: 2026-10-24 ·
+Decider: integrator
+
+## Context
+Plan: docs/audits/final-1.0/refactor-plan.md §4 (GF-084), §5 (GF-092). Lines re-checked on main 370a45f.
+The contract exists in 7 copies:
+1. `config/schema/grassfield.schema.json` (540 lines, one `default` keyword);
+2. `config/defaults/grassfield.json`;
+3. `shell/store/SettingsStore.qml` (adapter defaults :123-243, :541-558; views :35-87; `resetMissingPointerKeys`
+   :479-520; `version` declared at :543 and never checked);
+4. `apps/settings/qml/Store.js` (`DEFAULTS` :13-67, `RULES` :72-133, `validate` :136-178, version refusal :234-237, :262-265);
+5. `Tokens.dockSizeMin/Max` (`ui/Grassfield/Ui/Tokens.qml:246,248`, used at `SettingsStore.qml:92`);
+6. Files (`apps/files/src/filesapp.cpp:168-208`);
+7. Preview (`apps/preview/src/previewapp.cpp:150-170`). Files and Preview re-type enums and patterns and ignore `version`.
+
+Divergences found: an out-of-range number is clamped by the shell (`SettingsStore.qml:37`) but replaced by the default by
+Settings (`Store.js:212-219`), so `material.transparency: 9` shows 1.0 in the shell and 0.25 in Settings; a missing
+`version` is accepted by the shell and refused by Settings (`apps/settings/qml/ConfigStore.qml:36`).
+
+Two unlocked writers: the shell (merge-write after an async `sh -c cat` re-read, `SettingsStore.qml:385-431`, `:561-567`)
+and Settings (synchronous read-modify-write, `ConfigStore.qml:44-84`).
+
+Persisted files today (GF-092). Several state-like files live in `~/.config` and have no `version`:
+
+| File | Directory now | Writer / reader | `version` | Target |
+|---|---|---|---|---|
+| `grassfield.json` | config | shell and Settings / all | 1 | stays (GF-084) |
+| `folder-styles.json` | config | Files / Files, shell | 1 | stays (user data) |
+| `mouse-trackpad.lua` | config | Settings (`MousePage.qml:16`) / Hyprland | n/a (Lua) | stays |
+| Files QSettings | config | Files / Files, Preview | n/a | stays |
+| `wallpaper-state.json` | config (`WallpaperState.qml:43`, `backend.cpp:105`) | shell / Settings | none | state, v1 |
+| `pointer-theme.json` | config (`shell.qml:151`) | shell (`PointerTheme.qml:254`) / Settings (`PointerThemeStatus.qml:16`) | none | state, v1 |
+| `notification-apps.json` | config (`Notifications.qml:94`) | shell / Settings (`NotificationsPage.qml:16`) | none | state, v1 |
+| `wallpaper-recent.json` | config (`backend.cpp:110`) | Settings (top-level array) | none | state, `{version, recents}` |
+| `recent-items.json` | state | shell | none | add v1 |
+| `wallpaper-online.json` | state | shell | none | add v1 |
+| `wallpaper.json` (carousel) | state | shell | none | add v1 |
+| `airplane.json` | state (`Airplane.js:82`) | shell | none | add v1 |
+| `show-desktop.json` | state (shell UX branch) | shell | check after the merge | add v1 |
+| `notifications.json`, `widgets.json`, `desktop-icons.json`, `search-usage.json` | state | shell | yes | none |
+
+Every existing reader of files versioned in place ignores unknown top-level keys (`RecentItemsLogic.normalize`,
+`Airplane.parse`, `WallpaperConfig.onlineStateOf`, `WallpaperState`'s `.displays`, the Settings status readers), so
+adding `version` is safe for a downgrade.
+
+## Decision
+1. **Schema as the single source.** Every leaf gets a `default`; rules the schema cannot express are `x-grassfield`
+   annotations (`tint`, `folderColor`, `pointerColor`, `wallpaperPath`, `wallpaperOutputs`, `notificationApps`, `pathList`,
+   `settable: false`, `qmlType`). `scripts/dev/gen-settings.py` (stdlib only, the `ui/tools/gen-tokens.py` pattern)
+   writes `config/defaults/grassfield.json`, `ui/Grassfield/Ui/SettingsContract.js` (`VERSION`, `DEFAULTS`, `RULES`,
+   `validate`, `normalize`, `versionStatus`), `shell/store/SettingsData.qml` (the JsonAdapter) and
+   `apps/settingscontract.h`. `just check-schema` runs `--check` and `--selftest`, so stale output fails `check-quick`.
+2. **Normalisation, identical everywhere.** Numbers are clamped; integers are rounded then clamped; any other invalid
+   value takes its default.
+3. **Version policy.** Missing `version` is read as 1 and written on the next write. `1` reads normally. An integer above
+   1 makes the file read-only: valid keys apply best-effort, nothing is written, in-memory changes last for the session;
+   Settings shows one banner and disables its controls. A non-integer is malformed and refused, as today.
+4. **The shell is the single writer** of `grassfield.json` (`settings apply(entries)` IPC: validate with the generated
+   rules, merge, write atomically; hand edits are merged before each write). The Settings app goes through it and writes
+   directly, with the same rules, only when no shell instance answers (2 s timeout).
+5. **Two classes.** config (`~/.config/grassfield`): preferences and user-authored data. state
+   (`$XDG_STATE_HOME/grassfield`): status, recents, history. Every JSON file has a top-level integer `version`
+   (`Persisted.js`: `versionOf()` returns legacy | current | newer | invalid). Newer-version policy: config and
+   user-visible state are read-only; regenerable status files may be overwritten. The inventory is
+   `docs/specs/persisted-files.md`, checked against the code by `tests/ci/persisted_formats.py` (every persisted file name
+   is in the table; no state-class name is joined to a config directory). It covers every file in the table above,
+   including `show-desktop.json` and `airplane.json`.
+6. **Migration.** Read the legacy location only when the new file does not exist; write the new file atomically (0600 in
+   a 0700 directory, `services/write-private.sh` or QSaveFile); read it back to verify; never delete a legacy file during
+   1.0.x (deletion later, and only when the new file exists). Status files carry no migration (the shell regenerates them);
+   `notification-apps.json` is written once after the history loads; `wallpaper-recent.json` is copied forward once from
+   the legacy array. Downgrade: older builds keep using the legacy paths, which are stale but intact; `grassfield.json`
+   stays at v1 in place.
+
+## macOS reference
+cfprefsd owns preference writes; apps never write the plist themselves and fall back only when it is absent. The Dock
+clamps an out-of-range `defaults write com.apple.dock tilesize`. System Settings shows "Some settings are managed" for
+managed preferences. Preferences live in `~/Library/Preferences`, status and caches elsewhere.
+
+## Alternatives rejected
+- Keep hand-synchronised copies with a parity test: seven copies already diverge.
+- Replace out-of-range values by defaults (the Settings app's behaviour): loses user intent; the macOS model clamps.
+- A resident settings daemon: a new service for one file (CLAUDE.md: no new service without need).
+- Delete legacy files at migration: breaks downgrade.
+- Refuse a newer file entirely: the user loses all valid keys for no reason.
+
+## Consequences
+- Tests: generator `--selftest` (leaf without default, stale output); `tst_settingscontract.qml` with
+  `tests/fixtures/settings-vectors.json`; `tst_appearancesettings.cpp` with the same vectors;
+  `tests/shell/settings_version/` (v2 never written, valid keys apply; missing version accepted and written as 1);
+  `tests/shell/settings_ipc/` (apply valid, invalid, blocked; concurrent hand edit kept);
+  `tests/shell/settings_one_writer.sh`; `tst_persisted.qml`; `tests/shell/state_migration.sh` (fake HOME; 0600/0700;
+  legacy byte-identical; second run does not re-read legacy); downgrade cases for P6a/P6b/P6c; existing
+  `tst_settingsstore`, `settings_roundtrip`, `settings_external_write`, `check-schema`.
+- The only on-disk change to `grassfield.json` is `"version": 1` appearing on the next write of a hand-written file.
+- New IPC surface (C6) needs a security review and a new `app` class in `ipc_inventory`; no new privilege (any user process
+  can already write the file, and the rules are stricter).
+- Slices (plan §4, §5): C1 to C7 (GF-084); P1 to P7 (GF-092). Dependencies: C5 and C7 need M6 (ADR-0019); C3 needs the
+  Stages merge; P2 to P4 need `Mode.stateDir` (M3, M4, M5*).

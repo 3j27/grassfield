@@ -162,7 +162,40 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   loaded machine: median 32-38 ms from 60 to 200 same-app entries (bare gdbus 16-17 ms); before: 44-54 ms at 200. With the Center
   open (history 200, `notifications toggleCenter`): median 35-37 ms against 28-33 ms closed (60 / 40 sends, 2026-10-17).
 - Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
-  images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px.
+  images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px,
+  and only when they are a local file, the image data the app sent or a theme icon name (`History.imageRef`, GF-114): an
+  http(s), data, ftp or other URL is dropped at arrival (log line with the scheme only) and the app icon is shown instead;
+  `tests/unit/tst_notifhistory.qml`, nested DT-07 `tests/security/notif_remote_image.sh`. A local file (image or app icon
+  path) is never loaded from where the app named it (reviews of 8b2a710 and beebaff: a FIFO blocked the one image loader
+  for good; a check of the named path was fooled by `?`, `#` and `%XX`, which Qt reads in a URL, and by a file swapped
+  after the check). Only a plain absolute path is accepted (`History.localPathOf`: a path, a file: URL without query or
+  fragment, Quickshell's `image://icon//path`; no `?`, `#`, `%` after decoding, no `.`/`..`/empty segment). A helper process
+  (`Notifications.requestCopy`; the path as an argument) opens it under `timeout 3`, checks that the OPENED descriptor is a
+  regular file of at most 8 MiB (`test -f` and `stat -L` on `/proc/self/fd/3`) and copies it into the shell's private
+  directory `$XDG_RUNTIME_DIR/grassfield-notification-images-<display>` (0700, emptied at start); the Image loads that copy by a URL
+  built from its number with every segment encoded (`History.copySource`), a file nobody else writes. Each intake makes a
+  fresh copy (album art at a reused path changes). The directory holds at most 48 copies and 64 MiB across all senders
+  (`copyWindow`, `copyBudgetBytes`; review of 6e24d36: 60 notifications naming one 8 MiB file filled 384 MiB of the
+  session's tmpfs): the helper evicts the oldest copies first, never one a banner on screen shows, and refuses an image
+  that would not fit even then before evicting anything. An evicted or refused image shows the app icon; an evicted copy is
+  re-made only when a new notification names the file, never because it is shown (copies cannot evict each other in a
+  loop). `tests/shell/notif_image_budget` (budget lowered to 3 MiB: six 1 MiB images, an image larger than the budget, a
+  banner's copy kept, an image the kept copies leave no room for; six mutants fail it).
+  Until the copy exists the app icon or the bell shows; without `XDG_RUNTIME_DIR` no local file is shown.
+  `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a directory, a missing file,
+  the reviewer's bypass forms `x.png?a`, `file://…?a`, `x%2Epng`, `file://…#f`, `image://icon//…?fallback=a` and an app
+  icon path, a file swapped for a FIFO after its copy; a normal image still loads afterwards; mutation allowing `?#%` fails
+  it). An app icon NAME (and a themed image hint) reaches the icon theme only when it is a plain theme name
+  (`NotificationPrefs.safeIconName` in Grassfield.Ui, the one name test: 1–128 of letters, digits, `.`, `_`, `-`, starting
+  with a letter or digit, no `..`): Qt also searches its fallback directory `/usr/share/pixmaps`, where `../../../dir/evil`
+  named any file, a FIFO included (review of 6e24d36). `History.safeIconName` calls it (and refuses every name if it is
+  missing); it applies at intake (`checkedAppIcon`, `History.keptAppIcon`), on history load (`History.parse`) and in
+  `iconSource`; with previews hidden `NotificationPrefs.appIconShown` keeps only a name that passes the same test, so the
+  sender's image and an app icon path (its private copy included) give way to the app's theme icon or the generic one.
+  Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
+  names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
+  (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the
+  mutant without the rule stalls the loader and fails; previews hidden for one sender drop its copy).
 - DND: `notifications.dnd` in grassfield.json; Quick Settings "Do Not Disturb" tile; moon icon in the menu bar (click turns it off).
   Critical notifications still show; history is kept. `notifications.previews = never` hides the title and the body: the app name and a generic "Notification" line show instead (banners and Center).
 - History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`

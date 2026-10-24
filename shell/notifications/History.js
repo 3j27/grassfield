@@ -1,4 +1,7 @@
 .pragma library
+// Unversioned on purpose (as apps/settings/qml/Store.js): a versioned .import resolves the installed Grassfield.Ui, not
+// the tree's own (QML_IMPORT_PATH), and a function added since is missing there.
+.import Grassfield.Ui as Ui
 
 // Notification history model (pure, unit-tested): ADR-0004 limits, persistence format, grouping.
 //
@@ -104,7 +107,7 @@ function parse(text, now, maxAgeMs) {
             key: str(raw.key) !== "" ? str(raw.key) : "restored-" + entries.length,
             nid: -1,
             appName: str(raw.appName),
-            appIcon: str(raw.appIcon),
+            appIcon: keptAppIcon(str(raw.appIcon)),
             summary: str(raw.summary),
             body: str(raw.body),
             time: raw.time,
@@ -176,10 +179,127 @@ function bannerTimeout(urgency, expireMs, defaultMs) {
     return defaultMs;
 }
 
-// An image that is an absolute local file (a plain path, or Quickshell's image://icon//abs/path
-// for an app_icon path): returned as given; "" for anything else (themed names, other URLs).
-function absoluteImage(image) {
-    if (typeof image !== "string")
+// Longest image reference considered (a path or URL; Quickshell's own references are far shorter).
+const MAX_IMAGE_REF = 4096;
+
+// The images a notification may show (GF-AUDIT-001 GF-114, DT-07; macOS model: a notification shows the app's icon or an
+// image the app attached, never a picture fetched from somewhere). Accepted, as given:
+//   "file"     a local file: an absolute path ("/…", not "//…"), a file: URL without a host or with "localhost", and
+//              Quickshell's image://icon//<absolute path> (an app_icon path);
+//   "attached" Quickshell's in-memory copy of the image data the app sent (image://qsimage/…, the image-data hint);
+//   "themed"   a theme icon name (Quickshell's image://icon/<name>): `name` is decoded, the caller asks the theme.
+// "refused" for everything else: http:, https:, ftp:, data: (also an image-path hint's data URI), qrc:, other image
+// providers, relative paths, a file: URL naming another host, a malformed name, an oversized reference, control
+// characters. So a notification can never make the shell fetch anything. "none" for an empty or non-string value.
+// Returns {kind, source (what to load; "" unless file, attached or themed), name (themed only)}.
+function imageRef(image) {
+    if (typeof image !== "string" || image === "")
+        return {kind: "none", source: "", name: ""};
+    const refused = {kind: "refused", source: "", name: ""};
+    if (image.length > MAX_IMAGE_REF || /[\u0000-\u001f\u007f]/.test(image))
+        return refused;
+    if (image.startsWith("/"))
+        return image.startsWith("//") ? refused : {kind: "file", source: image, name: ""};
+    const lower = image.toLowerCase();
+    if (lower.startsWith("image://icon//"))
+        return image.length > 14 && image[14] !== "/" ? {kind: "file", source: image, name: ""} : refused;
+    if (lower.startsWith("image://qsimage/"))
+        return {kind: "attached", source: image, name: ""};
+    if (lower.startsWith("image://icon/")) {
+        const raw = image.slice(13);
+        if (raw === "" || raw.indexOf("?") >= 0 || raw.indexOf("#") >= 0)
+            return refused;
+        let name = "";
+        try {
+            name = decodeURIComponent(raw);
+        } catch (e) {
+            return refused;
+        }
+        return safeIconName(name) !== "" ? {kind: "themed", source: image, name: name} : refused;
+    }
+    // file:/path, file:///path, file://localhost/path (case-insensitive scheme and host); never another host.
+    if (/^file:(?:\/\/(?:localhost)?)?\/[^/]/i.test(image))
+        return {kind: "file", source: image, name: ""};
+    return refused;
+}
+
+// A plain icon-theme name (review of 6e24d36; macOS model: a notification shows its app's icon, never a file the sender
+// names). Qt resolves a name through the theme AND its fallback directories (/usr/share/pixmaps): a name like
+// "../../../dir/evil" reached any file, a FIFO included, which stalled the one image loader. "" for anything else: the
+// generic notification icon is shown. The rule itself is NotificationPrefs.safeIconName (Grassfield.Ui), the one test
+// shared with the previews-hidden icon rule (NotificationPrefs.appIconShown). Without it (a Grassfield.Ui that lacks the
+// function), no name: the generic icon, never an unchecked name and never a throw at intake.
+function safeIconName(name) {
+    try {
+        return Ui.NotificationPrefs.safeIconName(name);
+    } catch (e) {
         return "";
-    return image.startsWith("/") || image.startsWith("image://icon//") ? image : "";
+    }
+}
+
+// An app_icon as kept (intake, history load): a path or file: URL that localPathOf accepts (shown only as a private
+// copy), else a safeIconName, else "".
+function keptAppIcon(icon) {
+    if (typeof icon !== "string" || icon === "")
+        return "";
+    if (icon.startsWith("/") || icon.toLowerCase().startsWith("file:"))
+        return localPathOf(icon) !== "" ? icon : "";
+    return safeIconName(icon);
+}
+
+// Largest local image file a notification may show (review of 8b2a710: only regular files, bounded). Shown files are COPIED
+// into the shell's private directory first (Notifications.requestCopy), so this also bounds that directory.
+const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024;
+
+// A plain absolute path the copy helper may read: "/" then segments, no "//", no "." or ".." segment, no control
+// character, and none of "?", "#", "%" (review of beebaff: in a URL Qt reads them as query, fragment and escapes, so the
+// checked file and the loaded file could differ; the copy design never hands the path to Qt, but such names are refused
+// all the same).
+function plainPath(path) {
+    if (typeof path !== "string" || !path.startsWith("/") || path.length > 4096)
+        return false;
+    if (/[\u0000-\u001f\u007f?#%]/.test(path) || path.indexOf("//") >= 0)
+        return false;
+    const parts = path.split("/").slice(1);
+    return parts.every(seg => seg !== "." && seg !== "..") && parts[parts.length - 1] !== "";
+}
+
+// The local path a "file" image reference (imageRef) or an app icon path names: "/abs" as given, Quickshell's
+// image://icon//abs -> "/abs", a file: URL without query or fragment, decoded. "" unless the result is a plainPath. The
+// shell never loads that path: it shows a private copy made by a helper that opened it and checked the opened descriptor
+// is a regular file of at most MAX_IMAGE_FILE_BYTES (Notifications.requestCopy; a FIFO or a device would block the one
+// image loader for good, and a file swapped after a check would be another file).
+function localPathOf(source) {
+    if (typeof source !== "string" || source === "")
+        return "";
+    let path = "";
+    if (source.startsWith("/")) {
+        path = source;
+    } else if (source.toLowerCase().startsWith("image://icon//")) {
+        path = source.slice(13);
+    } else {
+        const m = /^file:(?:\/\/(?:localhost)?)?(\/[^/?#][^?#]*)$/i.exec(source);
+        if (!m)
+            return "";
+        try {
+            path = decodeURIComponent(m[1]);
+        } catch (e) {
+            return "";
+        }
+    }
+    return plainPath(path) ? path : "";
+}
+
+// The file: URL of private copy number `n` in directory `dir` (an absolute path), every segment percent-encoded: what the
+// Image loads names exactly that file. "" when the directory is not a plain absolute path or `n` is not a positive integer.
+function copySource(dir, n) {
+    if (!plainPath(dir) || !Number.isInteger(n) || n <= 0)
+        return "";
+    return "file://" + (dir + "/" + n + ".img").split("/").map(encodeURIComponent).join("/");
+}
+
+// The URL scheme of a refused image, for a log line that never repeats the reference itself ("" when there is none).
+function imageScheme(image) {
+    const m = /^([A-Za-z][A-Za-z0-9+.-]{0,15}):/.exec(typeof image === "string" ? image : "");
+    return m ? m[1].toLowerCase() : "";
 }
