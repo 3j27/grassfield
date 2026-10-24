@@ -202,7 +202,7 @@ Scope {
 
     function mkApp(r: var): var {
         return {kind: "app", key: "app:" + r.app.id, title: r.app.name, subtitle: r.app.genericName !== "" ? r.app.genericName : qsTr("Application"),
-            iconSource: Quickshell.iconPath(r.app.icon, "application-x-executable"), entry: r.app.entry, appId: r.app.id};
+            iconSource: "", appIcon: r.app.icon, entry: r.app.entry, appId: r.app.id};
     }
 
     function mkCommand(c: var): var {

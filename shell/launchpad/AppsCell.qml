@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Grassfield.Ui
+import qs.services
 
 // One cell of the Apps grid: the application icon, its name under it (one or two lines, elided), a hover
 // highlight and the keyboard focus ring. A click activates.
@@ -56,7 +57,7 @@ Item {
         x: (root.cellW - width) / 2
         y: root.iconTop
         size: Tokens.launcherIconSize
-        source: Quickshell.iconPath(root.info.rec.icon, "application-x-executable")
+        source: ThemeIcons.appIcon(root.info.rec.icon, "application-x-executable")
         asynchronous: true
     }
 

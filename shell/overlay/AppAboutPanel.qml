@@ -28,7 +28,8 @@ Dialog {
     content: [
         TintedIcon {
             size: Tokens.dockIconSize
-            source: Quickshell.iconPath(root.entry ? root.entry.icon : "", "application-x-executable")
+            source: ThemeIcons.appIcon(root.entry ? root.entry.icon : "", "application-x-executable")
+            asynchronous: true
         },
         Line {
             visible: text !== ""

@@ -43,13 +43,22 @@ Singleton {
         const list = [];
         for (const e of DesktopEntries.applications.values) {
             if (root.isListed(e))
-                list.push({name: String(e.name).toLowerCase(), src: Quickshell.iconPath(e.icon, "application-x-executable")});
+                list.push({name: String(e.name).toLowerCase(), src: ThemeIcons.appIcon(e.icon, "application-x-executable")});
         }
         list.sort((a, b) => a.name.localeCompare(b.name));
         root.listedIconSources = list.map(x => x.src);
     }
 
     onListChanged: root.refreshIconSources()
+
+    // A user icon copied (ThemeIcons): the prewarmed sources follow what the Apps panel now shows.
+    readonly property Connections iconChecks: Connections {
+        target: ThemeIcons
+
+        function onCopiesChanged(): void {
+            root.refreshIconSources();
+        }
+    }
 
     function refreshHidden(): void {
         if (scan.running)

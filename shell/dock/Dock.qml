@@ -1645,7 +1645,8 @@ Scope {
                                     height: tile.iconPx
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
-                                    source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
+                                    source: tile.isApp ? ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable") : ""
+                                    asynchronous: true
 
                                     // Held button: darker by Tokens.dockPressDim (an offscreen layer only while pressed).
                                     layer.enabled: tile.pressedDown
@@ -1800,7 +1801,7 @@ Scope {
                                     y: tile.iconPos.y
 
                                     readonly property bool live: Settings.materialProfile === "full"
-                                    readonly property string iconSource: tile.isMinimized ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
+                                    readonly property string iconSource: tile.isMinimized ? ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable") : ""
 
                                     Rectangle {
                                         visible: minimizedTile.live
@@ -1834,6 +1835,7 @@ Scope {
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         source: minimizedTile.iconSource
+                                        asynchronous: true
                                     }
                                 }
 
@@ -1860,6 +1862,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isFolder ? Quickshell.iconPath(Stacks.folderIconName(tile.modelData.path, Quickshell.env("HOME")), "folder") : ""
+                                    asynchronous: true
                                 }
 
                                 // Trash: the icon theme's user-trash / user-trash-full (never hand-drawn), in the user's icon
@@ -1875,6 +1878,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isTrash ? themed : ""
+                                    asynchronous: true
                                 }
 
                                 Rectangle {
@@ -1908,6 +1912,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isAppsTile ? themed : ""
+                                    asynchronous: true
                                 }
 
                                 Rectangle {

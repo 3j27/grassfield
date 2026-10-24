@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick.Effects
 import Grassfield.Ui
+import qs.services
 import "IconsLogic.js" as Logic
 
 // One desktop icon: image (theme icon or capped thumbnail), a label wrapped to two lines, the
@@ -103,7 +104,8 @@ Item {
 
             TintedIcon {
                 size: root.iconSize
-                source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
+                source: ThemeIcons.appIcon(root.iconTheme, "text-x-generic")
+                asynchronous: true
                 // The desktop is drawn over the wallpaper, not over a window material: its icons and labels follow the
                 // dark palette whatever the window appearance (like the labels).
                 darkAppearance: true
@@ -116,7 +118,8 @@ Item {
 
             FolderIcon {
                 size: root.iconSize
-                source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
+                source: ThemeIcons.appIcon(root.iconTheme, "text-x-generic")
+                asynchronous: true
                 folderColor: root.folderColor
                 folderGlyph: root.folderGlyph
                 darkAppearance: true
@@ -128,7 +131,7 @@ Item {
             id: thumb
             anchors.fill: parent
             visible: status === Image.Ready
-            source: root.thumbnail ? "file://" + Logic.uriPath(root.filePath) : ""
+            source: root.thumbnail ? ThemeIcons.fileSource(root.filePath) : ""
             sourceSize.width: Tokens.desktopIconThumbnailMax
             sourceSize.height: Tokens.desktopIconThumbnailMax
             fillMode: Image.PreserveAspectFit

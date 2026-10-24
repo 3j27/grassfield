@@ -330,9 +330,9 @@ TestCase {
     }
 
     function test_copySource() {
-        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12, 0), "file:///run/user/1000/grassfield-notification-images/12.0.img");
-        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12, 7), "file:///run/user/1000/grassfield-notification-images/12.7.img", "the sender number is part of the name");
-        compare(History.copySource("/tmp/my dir", 3, 1), "file:///tmp/my%20dir/3.1.img", "every segment encoded");
+        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12, 0), "file:///run/user/1000/grassfield-notification-images/12.0.png");
+        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12, 7), "file:///run/user/1000/grassfield-notification-images/12.7.png", "the sender number is part of the name");
+        compare(History.copySource("/tmp/my dir", 3, 1), "file:///tmp/my%20dir/3.1.png", "every segment encoded");
         compare(History.copySource("/tmp/a?b", 3, 1), "", "an odd directory name");
         compare(History.copySource("relative", 3, 1), "");
         compare(History.copySource("/tmp", 0, 1), "");

@@ -18,7 +18,7 @@ moc=/usr/lib/qt6/moc
 reg=/usr/lib/qt6/qmltyperegistrar
 metatypes=/usr/lib/qt6/metatypes
 
-qtflags=$(pkg-config --cflags Qt6Core Qt6Qml)
+qtflags=$(pkg-config --cflags Qt6Core Qt6Gui Qt6Qml)
 # shellcheck disable=SC2086
 "$moc" $qtflags --output-json "$here/translator.h" -o "$obj/moc_translator.cpp"
 foreign=()
@@ -39,7 +39,7 @@ QMLDIR
 
 # shellcheck disable=SC2046
 g++ -std=c++17 -O2 -Wall -Wextra -fPIC -shared -I"$here" -I"$obj" \
-  $(pkg-config --cflags Qt6Core Qt6Qml) \
+  $(pkg-config --cflags Qt6Core Qt6Gui Qt6Qml) \
   "$here/translator.cpp" "$obj/moc_translator.cpp" "$obj/registration.cpp" "$obj/plugin.cpp" \
-  $(pkg-config --libs Qt6Core Qt6Qml) -o "$lib"
+  $(pkg-config --libs Qt6Core Qt6Gui Qt6Qml) -o "$lib"
 echo "built $lib"

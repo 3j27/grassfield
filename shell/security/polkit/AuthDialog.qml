@@ -79,7 +79,8 @@ FocusScope {
                 source: root.appIconSource
                 sourceSize: Qt.size(Tokens.polkitIconSize * 2, Tokens.polkitIconSize * 2)
                 fillMode: Image.PreserveAspectFit
-                asynchronous: false
+                // Off the GUI thread (review of 100692f): a file swapped after its check can stall only the loader.
+                asynchronous: true
                 visible: status === Image.Ready
                 Accessible.ignored: true
             }

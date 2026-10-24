@@ -43,10 +43,27 @@ var FAST_EXIT_MS = 2000;
 var MAX_FAST_FAILURES = 5;
 var FAST_RETRY_MS = 5000;
 var SLOW_RETRY_MS = 60000;
+// A child must show progress within PROGRESS_BUDGET_MS of its start (the inhibitor: the line its command prints once
+// systemd-inhibit holds the lock; the watcher: watcherSubscribed). One that runs without it is hung: it is stopped and
+// counted as a failure (review of eee45cc: a hung child counted as healthy, so the user was never told that the screen
+// may not lock before sleep). 35 s: above sd-bus' and GDBus' default method call timeout (25 s), so a slow but healthy
+// logind (systemd-inhibit's Inhibit call, gdbus' GetNameOwner) is waited for rather than killed on every retry (review of
+// 100692f); a hung child still costs only the sleep delay, the lock arms anyway.
+var PROGRESS_BUDGET_MS = 35000;
 
-// Consecutive fast failures after a child exited: `ranLong` is true only when it ran at least FAST_EXIT_MS (SleepInhibitor
-// times that with a Timer, a monotonic clock: review of 2dfd992, a wall-clock step forward made an early exit look long
-// and hid the failure). Anything else (false, unknown, a child that never started) counts as a failure.
+// The PrepareForSleep watcher is subscribed: `gdbus monitor --dest org.freedesktop.login1` prints this line from its
+// name watcher, which GLib starts after it sent the signal subscription (AddMatch); the bus answers one connection's
+// messages in order, so once the owner is known the match is in place. Its first line ("Monitoring signals ...") is
+// printed before subscribing and proves nothing (review of 100692f). From GLib's gdbus-tool source order; not observed
+// at runtime here (no system bus in the sandbox).
+function watcherSubscribed(line) {
+    return typeof line === "string" && line.indexOf("The name org.freedesktop.login1 is owned by ") === 0;
+}
+
+// Consecutive fast failures after a child exited: `ranLong` is true only when it ran at least FAST_EXIT_MS AND showed
+// progress (SleepInhibitor times that with Timers, a monotonic clock: review of 2dfd992, a wall-clock step forward made an
+// early exit look long and hid the failure; review of eee45cc, a hung child looked healthy). Anything else (false, unknown,
+// a child that never started or never progressed) counts as a failure.
 function failuresAfterRun(failures, ranLong) {
     var n = Number(failures);
     if (!isFinite(n) || n < 0)

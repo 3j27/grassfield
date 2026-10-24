@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
+import qs.services
 import "SwitcherModel.js" as Model
 
 // App switcher surface (spec docs/specs/switcher.md): one overlay window per screen, mapped only on the controller's
@@ -196,7 +197,7 @@ Variants {
                     TintedIcon {
                         anchors.centerIn: parent
                         size: Tokens.switcherIconSize
-                        source: Quickshell.iconPath(tile.modelData.icon, "application-x-executable")
+                        source: ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable")
                         asynchronous: true
                     }
 

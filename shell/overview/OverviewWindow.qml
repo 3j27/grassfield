@@ -619,7 +619,8 @@ Variants {
                                         id: tileIcon
                                         required property int index
                                         size: Tokens.overviewTileIconSize
-                                        source: Quickshell.iconPath(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
+                                        source: ThemeIcons.appIcon(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
+                                        asynchronous: true
                                     }
                                 }
                             }
@@ -943,7 +944,8 @@ Variants {
                         TintedIcon {
                             anchors.centerIn: parent
                             size: Math.round(parent.height * Tokens.dockMinimizedBadgeScale * 1.5)
-                            source: Quickshell.iconPath(mini.entry ? mini.entry.icon : mini.modelData.appId, "application-x-executable")
+                            source: ThemeIcons.appIcon(mini.entry ? mini.entry.icon : mini.modelData.appId, "application-x-executable")
+                            asynchronous: true
                         }
                     }
 
@@ -1011,7 +1013,8 @@ Variants {
                     TintedIcon {
                         size: Tokens.overviewLabelIconSize
                         anchors.verticalCenter: parent.verticalCenter
-                        source: Quickshell.iconPath(label.entry ? label.entry.icon : "", "application-x-executable")
+                        source: ThemeIcons.appIcon(label.entry ? label.entry.icon : "", "application-x-executable")
+                        asynchronous: true
                     }
 
                     Text {

@@ -179,6 +179,7 @@ def nocomments(text):
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     return "\n".join(re.sub(r"(^|\s)//.*$", r"\1", l) for l in text.split("\n"))
 allowed_dates = {
+    "shell/security/lock/LockView.qml": ["SystemClock {\n        id: clock\n        precision: SystemClock.Minutes\n    }"],
     "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = active ? new Date() : null;"],
     "shell/security/polkit/AuthDialogModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
 }
@@ -194,9 +195,14 @@ for base, _, files in os.walk(f"{root}/shell/security"):
             i = text.find(snippet)
             if i >= 0:
                 spans.append((i, i + len(snippet)))
-        for m in re.finditer(r"\bDate\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
+        for m in re.finditer(r"\bDate\b|\bSystemClock\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
             if not any(a <= m.start() < b for a, b in spans):
                 clock_hits.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} {m.group(0)}")
+# The lock screen's SystemClock (review of eee45cc) only feeds the two displayed texts.
+lockview = nocomments(read("shell/security/lock/LockView.qml"))
+clock_uses = re.findall(r"\bclock\s*\.\s*\w+", lockview)
+if not (len(clock_uses) == 2 and lockview.count("FixedTime.date(clock.date)") == 2):
+    clock_hits.append("LockView.qml clock uses " + ", ".join(clock_uses))
 expect("no wall clock in shell/security (" + ", ".join(clock_hits) + ")", not clock_hits)
 lock = code(read("shell/security/lock/Lock.qml"))
 expect("lock ownership check: the grace window after a confirmed lock is a single-shot Timer",
@@ -204,12 +210,32 @@ expect("lock ownership check: the grace window after a confirmed lock is a singl
        and re.search(r"onSecureStateChanged:\s*\{\s*if\s*\(secure\)\s*\{[^}]*?secureGrace\.restart\(\);", lock) is not None
        and re.search(r"if\s*\(!holding\s*\|\|\s*!hyprland\s*\|\|\s*secureGrace\.running\)\s*return;", code(function(lock, "verify") or "")) is not None
        and re.search(r"if\s*\(!holding\s*\|\|\s*secureGrace\.running\)\s*\{", code(function(lock, "checkOwnership") or "")) is not None)
+# Review of eee45cc: the window is exactly 500 ms and nothing else touches the Timer (a 1 h or 0 ms grace, or a
+# `secureGrace.repeat = true` after the first lock, passed every offscreen test). Every mention of secureGrace is its id,
+# one restart() and the two `running` reads.
+grace_uses = re.findall(r"\bsecureGrace\b(?:\s*\.\s*\w+(?:\s*\(\s*\))?)?", lock)
+expect("lock ownership check: the grace is 500 ms and only restart() and `running` touch its Timer (" + ", ".join(grace_uses) + ")",
+       re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?^\s*readonly property int verifyGraceMs: 500[ \t]*\n\s*(\}|[A-Za-z_][\w.]*\s*:|readonly\s|property\s|function\s)", lock, re.S | re.M) is not None
+       and len(re.findall(r"\bverifyGraceMs\s*:", lock)) == 1
+       and sorted(re.sub(r"\s+", "", u) for u in grace_uses) == sorted(["secureGrace", "secureGrace.restart()", "secureGrace.running", "secureGrace.running"]))
 sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
-expect("sleep inhibitor: a child's run of FAST_EXIT_MS is timed by its health Timer",
-       all(re.search(r"root\." + c + r"Failures\s*=\s*IdleModel\.failuresAfterRun\(root\." + c + r"Failures,\s*ranLong\);", sleep) is not None
-           and re.search(r"if\s*\(" + c + r"\.running\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep) is not None
-           and re.search(r"onStarted:\s*\{\s*ranLong\s*=\s*false;\s*" + c + r"Healthy\.restart\(\);", sleep) is not None
-           for c in ("inhibitor", "watcher")))
+idle = code(read("shell/security/idle/IdleModel.js"))
+# Reviews of 2dfd992 and eee45cc: a child is healthy only when its health Timer saw it running FAST_EXIT_MS AND it showed
+# progress (the inhibitor's "held", the watcher's first line); one without progress within PROGRESS_BUDGET_MS is stopped
+# and counted as a failure.
+expect("sleep inhibitor: a child is healthy only after FAST_EXIT_MS with progress; a hung one is a failure",
+       re.search(r"^var PROGRESS_BUDGET_MS = 35000;$", idle, re.M) is not None
+       and re.search(r'if\s*\(!watcher\.progressed && IdleModel\.watcherSubscribed\(line\)\)', sleep) is not None
+       and re.search(r'return typeof line === "string" && line\.indexOf\("The name org\.freedesktop\.login1 is owned by "\) === 0;', code(function(idle, "watcherSubscribed") or "")) is not None
+       and re.search(r"return ranLong === true \? 0 : n \+ 1;", code(function(idle, "failuresAfterRun") or "")) is not None
+       and '"systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "sh", "-c", "echo held; exec cat"]' in sleep
+       and re.search(r'if\s*\(line === "held" && !inhibitor\.progressed\)', sleep) is not None
+       and all(re.search(r"root\." + c + r"Failures\s*=\s*IdleModel\.failuresAfterRun\(root\." + c + r"Failures,\s*ranLong\);", sleep) is not None
+               and re.search(r"if\s*\(" + c + r"\.running\s*&&\s*" + c + r"\.progressed\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep) is not None
+               and re.search(c + r"\.progressed\s*=\s*true;\s*" + c + r"Progress\.stop\(\);.*?if\s*\(" + c + r"\.running\s*&&\s*!" + c + r"Healthy\.running\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep, re.S) is not None
+               and re.search(r"onStarted:\s*\{\s*ranLong\s*=\s*false;\s*progressed\s*=\s*false;\s*" + c + r"Healthy\.restart\(\);\s*" + c + r"Progress\.restart\(\);", sleep) is not None
+               and re.search(r"Timer\s*\{\s*id:\s*" + c + r"Progress\s+interval:\s*IdleModel\.PROGRESS_BUDGET_MS\s+onTriggered:\s*\{\s*if\s*\(" + c + r"\.running\s*&&\s*!" + c + r"\.progressed\)\s*\{[^}]*?" + c + r"\.running\s*=\s*false;", sleep) is not None
+               for c in ("inhibitor", "watcher")))
 
 for o in oks:
     print("OK " + o)
@@ -258,9 +284,21 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#if (!holding || secureGrace.running) {#if (!holding || Date.now() - root.securedAt < 500) {' \
   'shell/security/lock/Lock.qml#if (!holding || !hyprland || secureGrace.running)#if (!holding || !hyprland)' \
   'shell/security/idle/SleepInhibitor.qml#IdleModel.failuresAfterRun(root.inhibitorFailures, ranLong)#IdleModel.failuresAfterRun(root.inhibitorFailures, true)' \
-  'shell/security/idle/SleepInhibitor.qml#watcher.ranLong = true;#watcher.ranLong = watcher.ranLong;' \
+  'shell/security/idle/SleepInhibitor.qml#            if (watcher.running && watcher.progressed) {#            if (watcher.running) {' \
+  'shell/security/idle/SleepInhibitor.qml#            if (inhibitor.running && !inhibitor.progressed) {#            if (false) {' \
+  'shell/security/idle/SleepInhibitor.qml#"sh", "-c", "echo held; exec cat"#"cat"' \
+  'shell/security/idle/IdleModel.js#var PROGRESS_BUDGET_MS = 35000;#var PROGRESS_BUDGET_MS = 10000;' \
+  'shell/security/idle/SleepInhibitor.qml#if (!watcher.progressed && IdleModel.watcherSubscribed(line)) {#if (!watcher.progressed) {' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 500\n            * 7200' \
+  'shell/security/lock/LockView.qml#            text: Qt.formatTime(FixedTime.date(clock.date), #            visible: clock.minutes >= 0; text: Qt.formatTime(FixedTime.date(clock.date), ' \
+  'shell/security/idle/IdleModel.js#var FAST_RETRY_MS = 5000;#var FAST_RETRY_MS = 5000; var WALL = SystemClock;' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
-  'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();'; do
+  'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 3600000' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 0' \
+  'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.repeat = true;' \
+  'shell/security/lock/Lock.qml#        interval: ownershipProbe.verifyGraceMs#        interval: ownershipProbe.verifyGraceMs; repeat: true' \
+  'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.interval = 3600000;'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'
@@ -268,7 +306,7 @@ import sys
 p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
 s = open(p).read()
 assert a in s, a
-open(p, "w").write(s.replace(a, b, 1))
+open(p, "w").write(s.replace(a, b.replace("\\n", "\n"), 1))
 PY
   if python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1; then bad "mutation: removing '$from' in $file is not caught"; else pass "mutation: removing '$from' in $file is caught"; fi
   cp "$root/$file" "$mut/$file"

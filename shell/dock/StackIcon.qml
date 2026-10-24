@@ -25,13 +25,15 @@ Item {
         return types.length > 0 ? types[0] : "";
     }
     readonly property bool preview: !root.isDir && Stacks.hasPreview(root.mime)
+    // The system theme's icon of the type (Qt searches only root-owned directories), else ThemeIcons' private copy of a
+    // user icon of the first name, else the generic file icon.
     readonly property string themed: {
-        for (const name of Stacks.iconCandidates(root.mime, root.isDir)) {
-            const found = Quickshell.iconPath(name, true);
-            if (found !== "")
-                return found;
+        const names = Stacks.iconCandidates(root.mime, root.isDir);
+        for (const name of names) {
+            if (Quickshell.hasThemeIcon(name))
+                return Quickshell.iconPath(name);
         }
-        return Quickshell.iconPath("text-x-generic", "");
+        return ThemeIcons.appIcon(names.length > 0 ? names[0] : "", "text-x-generic");
     }
 
     implicitWidth: size
@@ -42,7 +44,7 @@ Item {
     Image {
         anchors.fill: parent
         visible: root.preview
-        source: root.preview ? Stacks.fileUrl(root.path) : ""
+        source: root.preview ? ThemeIcons.fileSource(root.path) : ""
         asynchronous: true
         cache: false
         fillMode: Image.PreserveAspectCrop
@@ -55,5 +57,6 @@ Item {
         visible: !root.preview
         size: root.size
         source: root.preview ? "" : root.themed
+        asynchronous: true
     }
 }

@@ -2,7 +2,6 @@ import QtQuick
 import Grassfield.Ui
 import qs.services
 import qs.overlay.controlcenter
-import "../../widgets/ArtUrl.js" as ArtUrl
 
 // Now Playing module (CC7, 2x2): artwork, title, artist and transport controls of the active MPRIS
 // player. Hidden by the host when Media.available is false.
@@ -28,7 +27,8 @@ Module {
 
         Image {
             anchors.fill: parent
-            source: ArtUrl.safe(Media.artUrl)
+            // Never the player's URL: a PNG the shell made from its file or https resource (ThemeIcons.artSource).
+            source: ThemeIcons.artSource(Media.artShown)
             sourceSize: Qt.size(Tokens.panelCcArtSize * 2, Tokens.panelCcArtSize * 2)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true

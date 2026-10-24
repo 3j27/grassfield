@@ -733,15 +733,17 @@ Singleton {
 
     // Local image files (an image hint or an app icon path) are never loaded from where the app named them (reviews of
     // 8b2a710 and beebaff): a FIFO or a device blocked the one image loader for good; a check of the named path could be
-    // fooled by "?", "#" or "%XX" (Qt reads a URL, not a path) or by a file swapped after the check. Instead a helper
-    // process opens the named plain path (History.localPathOf), checks that the OPENED descriptor is a regular file of at
-    // most History.MAX_IMAGE_FILE_BYTES (`test -f` and `stat -L` on /proc/self/fd/3), and copies it into the shell's
-    // private directory ($XDG_RUNTIME_DIR/grassfield-notification-images, 0700, emptied at start). The Image loads that
-    // copy, by a URL built from its number with every segment encoded (History.copySource): a file nobody else writes.
-    // Opening a FIFO blocks the helper, never the shell: each file has `timeout 3`. Each intake makes a fresh copy (an app
-    // may reuse a path for new content); at most copyWindow copies and copyBudgetBytes bytes are kept, half of it at most
-    // for one sender; the oldest copies not on screen are evicted first, and an image that does not fit falls back to the
-    // app icon.
+    // fooled by "?", "#" or "%XX" (Qt reads a URL, not a path) or by a file swapped after the check; and a verbatim copy
+    // still let Qt decode what the app wrote (review of 423766f: an SVG naming a FIFO stalled the loader). The shell only
+    // ever decodes images it produced itself: a helper process hands the named plain path (History.localPathOf) to
+    // services/image-copy.py, which opens it safely (real path under an allowed root, O_NOFOLLOW|O_NONBLOCK, fstat: a
+    // regular file of at most History.MAX_IMAGE_FILE_BYTES) and re-encodes it with rsvg-convert, fed on stdin (no
+    // reference to another file is followed), into a PNG of at most 256 x 256 pixels in the shell's private directory
+    // ($XDG_RUNTIME_DIR/grassfield-notification-images, 0700, emptied at start). The Image loads that PNG, by a URL built
+    // from its number with every segment encoded (History.copySource). A slow or blocking file stalls the helper, never
+    // the shell: each file has `timeout 12`. Each intake makes a fresh copy (an app may reuse a path for new content); at
+    // most copyWindow copies and copyBudgetBytes bytes are kept, half of it at most for one sender; the oldest copies not
+    // on screen are evicted first, and an image that does not fit falls back to the app icon.
     // Without XDG_RUNTIME_DIR no local file is shown. Path -> {state: "pending"|"ok"|"no"|"gone", n}; reassigned on every
     // change so bindings that called iconSource() re-evaluate.
     // One directory per Wayland display: a nested dev shell never empties the real session's directory.
@@ -761,36 +763,40 @@ Singleton {
     // sender (review of 2dfd992: eight critical banners of one sender held the whole budget). A test may lower the budget.
     property real copyBudgetBytes: 64 * 1024 * 1024
     readonly property real copyShareBytes: Math.floor(copyBudgetBytes / 2)
-    // Sender (NotificationPrefs.keyOf(appName)) -> small number, part of each copy's file name ("<n>.<sender>.img") so the
-    // helper can count a sender's copies. 0: no name. A sender that changes its name each time counts as several.
+    // Sender (NotificationPrefs.keyOf(appName)) -> small number, part of each copy's file name ("<n>.<sender>.png") so the
+    // helper can count a sender's copies. 0: no name. A sender that changes its name each time counts as several. At most
+    // maxSenderIds names are kept (review of eee45cc: the map grew without bound): past that, only the senders whose copies
+    // are on disk or queued stay. Numbers are never reused (senderCount only grows), so a dropped sender's leftover files
+    // never count for another one.
     property var senderIds: ({})
     property int senderCount: 0
+    readonly property int maxSenderIds: 256
     // POSIX sh; the directory, the size cap, the copy window, the byte budget, one sender's share, the numbers of the copies
     // to keep (comma list: those a banner on screen or an open Notification Center row shows, the batch's own included),
-    // then "<n> <sender> <path>" triples as arguments (never interpolated). One line per triple: "ok" when
-    // "<dir>/<n>.<sender>.img" now holds the copy, else "no", followed by the numbers of the copies evicted to make room.
-    // The one-file step runs under `timeout 3` (a FIFO named or swapped in blocks only that step), opens the path once and
-    // decides on the opened descriptor. A file larger than a sender's share is refused. Otherwise, while the sender's
-    // copies with this file would exceed its share, it deletes that sender's oldest copy not kept; then, while the
-    // directory would hold more than the window or the budget, the oldest copy not kept. When even that would not be
-    // enough (the kept copies fill the budget or the sender's share) it refuses the file before evicting anything. It
-    // copies at most the size it checked.
-    readonly property string copyScript: "dir=$1; cap=$2; win=$3; budget=$4; share=$5; keep=\",$6,\"; shift 6; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
-        + "one='src=$1; dst=$2; cap=$3; dir=$4; win=$5; budget=$6; share=$7; keep=$8; sid=$9; [ -f \"$src\" ] || exit 1; exec 3<\"$src\" || exit 1; "
-        + "[ -f /proc/self/fd/3 ] || exit 1; s=$(stat -L -c %s /proc/self/fd/3) || exit 1; "
-        + "[ \"$s\" -le \"$cap\" ] && [ \"$s\" -le \"$share\" ] || exit 1; "
-        + "while :; do count=0; total=0; kc=0; kt=0; own=0; kown=0; oldest=; oldown=; for f in \"$dir\"/*.img; do [ -f \"$f\" ] || continue; t=$(stat -c %s \"$f\") || exit 1; "
-        + "b=${f##*/}; b=${b%.img}; num=${b%%.*}; fs=${b#*.}; count=$((count + 1)); total=$((total + t)); [ \"$fs\" = \"$sid\" ] && own=$((own + t)); "
+    // the converter (services/image-copy.py), then "<n> <sender> <path>" triples as arguments (never interpolated). One
+    // line per triple: "ok" when "<dir>/<n>.<sender>.png" now holds the copy, else "no", followed by the numbers of the
+    // copies evicted to make room. The one-file step runs under `timeout 12` (a FIFO named or swapped in, or a slow
+    // document, stalls only that step): the converter writes the PNG beside its final name first, and its size decides.
+    // A PNG larger than a sender's share is refused. Otherwise, while the sender's copies with this one would exceed its
+    // share, it deletes that sender's oldest copy not kept; then, while the directory would hold more than the window or
+    // the budget, the oldest copy not kept. When even that would not be enough (the kept copies fill the budget or the
+    // sender's share) it refuses the file before evicting anything.
+    readonly property string copyScript: "dir=$1; cap=$2; win=$3; budget=$4; share=$5; keep=\",$6,\"; conv=$7; shift 7; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
+        + "one='src=$1; dst=$2; cap=$3; dir=$4; win=$5; budget=$6; share=$7; keep=$8; sid=$9; conv=${10}; "
+        + "python3 -I \"$conv\" file \"$src\" \"$cap\" \"$dst.tmp\" || exit 1; s=$(stat -c %s \"$dst.tmp\") || exit 1; "
+        + "[ \"$s\" -le \"$share\" ] || exit 1; "
+        + "while :; do count=0; total=0; kc=0; kt=0; own=0; kown=0; oldest=; oldown=; for f in \"$dir\"/*.png; do [ -f \"$f\" ] || continue; t=$(stat -c %s \"$f\") || exit 1; "
+        + "b=${f##*/}; b=${b%.png}; num=${b%%.*}; fs=${b#*.}; count=$((count + 1)); total=$((total + t)); [ \"$fs\" = \"$sid\" ] && own=$((own + t)); "
         + "case $keep in *\",$num,\"*) kc=$((kc + 1)); kt=$((kt + t)); [ \"$fs\" = \"$sid\" ] && kown=$((kown + t)); continue ;; esac; "
         + "if [ -z \"$oldest\" ] || [ \"$num\" -lt \"$oldest\" ]; then oldest=$num; fi; "
         + "if [ \"$fs\" = \"$sid\" ] && { [ -z \"$oldown\" ] || [ \"$num\" -lt \"$oldown\" ]; }; then oldown=$num; fi; done; "
         + "[ \"$kc\" -lt \"$win\" ] && [ $((kt + s)) -le \"$budget\" ] && [ $((kown + s)) -le \"$share\" ] || exit 1; "
         + "if [ $((own + s)) -gt \"$share\" ]; then v=$oldown; elif [ \"$count\" -ge \"$win\" ] || [ $((total + s)) -gt \"$budget\" ]; then v=$oldest; else break; fi; "
-        + "[ -n \"$v\" ] || exit 1; rm -f \"$dir/$v\".*.img || exit 1; printf \" %s\" \"$v\"; done; "
-        + "umask 077; head -c \"$s\" <&3 >\"$dst.tmp\" && mv -f \"$dst.tmp\" \"$dst\" && printf \" ok\"'; "
-        + "while [ $# -ge 3 ]; do n=$1; sid=$2; p=$3; shift 3; rm -f \"$dir/$n.$sid.img.tmp\"; "
-        + "out=$(timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.$sid.img\" \"$cap\" \"$dir\" \"$win\" \"$budget\" \"$share\" \"$keep\" \"$sid\" 2>/dev/null); "
-        + "case $out in *' ok') echo \"ok${out% ok}\" ;; *) rm -f \"$dir/$n.$sid.img.tmp\"; echo \"no$out\" ;; esac; done"
+        + "[ -n \"$v\" ] || exit 1; rm -f \"$dir/$v\".*.png || exit 1; printf \" %s\" \"$v\"; done; "
+        + "mv -f \"$dst.tmp\" \"$dst\" && printf \" ok\"'; "
+        + "while [ $# -ge 3 ]; do n=$1; sid=$2; p=$3; shift 3; rm -f \"$dir/$n.$sid.png.tmp\"; "
+        + "out=$(timeout -k 2 12 sh -c \"$one\" one \"$p\" \"$dir/$n.$sid.png\" \"$cap\" \"$dir\" \"$win\" \"$budget\" \"$share\" \"$keep\" \"$sid\" \"$conv\" 2>/dev/null); "
+        + "case $out in *' ok') echo \"ok${out% ok}\" ;; *) rm -f \"$dir/$n.$sid.png.tmp\"; echo \"no$out\" ;; esac; done"
 
     // The URL of the private copy of `path`, or "" (not copied yet: a copy is requested; refused; or evicted).
     function copySourceOf(path: string): string {
@@ -809,10 +815,28 @@ Singleton {
         if (key === "")
             return 0;
         if (senderIds[key] === undefined) {
+            if (Object.keys(senderIds).length >= maxSenderIds)
+                pruneSenderIds();
             senderCount++;
             senderIds[key] = senderCount;
         }
         return senderIds[key];
+    }
+
+    function pruneSenderIds(): void {
+        const used = {};
+        for (const path in localCopies) {
+            if (localCopies[path].state === "ok")
+                used[localCopies[path].sid] = true;
+        }
+        for (const q of copyQueue.concat(copyBatch))
+            used[q.sid] = true;
+        const next = {};
+        for (const key in senderIds) {
+            if (used[senderIds[key]])
+                next[key] = senderIds[key];
+        }
+        senderIds = next;
     }
 
     // The app name of the notification that shows `path` (a history row after a restart), else "".
@@ -879,16 +903,22 @@ Singleton {
         return kept;
     }
 
+    // A batch is under way from its start to its answer. Process.running only turns true once the process has started,
+    // so a second call in between started another batch over it and the first batch's paths stayed "pending".
+    property bool copierBusy: false
+
     function runCopies(): void {
-        if (!copyDirReady || copier.running || copyQueue.length === 0)
+        if (!copyDirReady || copierBusy || copyQueue.length === 0)
             return;
+        copierBusy = true;
         copyBatch = copyQueue.slice(0, 16);
         copyQueue = copyQueue.slice(16);
         const args = [];
         for (const q of copyBatch)
             args.push(String(q.n), String(q.sid), q.path);
         copier.command = ["sh", "-c", copyScript, "gf-image-copy", copyDir, String(History.MAX_IMAGE_FILE_BYTES), String(copyWindow),
-            String(Math.max(0, Math.floor(copyBudgetBytes))), String(Math.max(0, copyShareBytes)), keptCopyNumbers().join(",")].concat(args);
+            String(Math.max(0, Math.floor(copyBudgetBytes))), String(Math.max(0, copyShareBytes)), keptCopyNumbers().join(","),
+            Quickshell.shellPath("services/image-copy.py")].concat(args);
         copier.running = true;
     }
 
@@ -896,6 +926,7 @@ Singleton {
     // when the copy then failed). An evicted copy's path keeps a "gone" entry (not shown, not re-made on use; a new
     // notification naming it copies it again).
     function copiesDone(output: string): void {
+        copierBusy = false;
         const lines = String(output || "").split("\n");
         const next = Object.keys(localCopies).length > 4 * copyWindow ? {} : Object.assign({}, localCopies);
         for (let i = 0; i < copyBatch.length; i++) {
@@ -905,7 +936,7 @@ Singleton {
                 next[q.path] = {state: "ok", n: q.n, sid: q.sid};
             } else {
                 next[q.path] = {state: "no", n: -1, sid: 0};
-                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes, or does not fit the " + copyBudgetBytes + "-byte budget of copies or its sender's half of it; not shown");
+                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes, not an image rsvg-convert could re-encode, or does not fit the " + copyBudgetBytes + "-byte budget of copies or its sender's half of it; not shown");
             }
             for (const word of words.slice(1)) {
                 const evicted = Number(word);
@@ -950,7 +981,7 @@ Singleton {
         if (ref.kind === "file")
             requestCopy(History.localPathOf(ref.source), true, sender); // shown as a private copy once made (copySourceOf)
         else if (ref.kind === "themed")
-            ThemeIcons.check(ref.name, true); // its files are checked again for each new notification
+            ThemeIcons.check(ref.name, true); // a user icon of that name is copied again for each new notification
         if (ref.kind !== "refused")
             return image;
         console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");

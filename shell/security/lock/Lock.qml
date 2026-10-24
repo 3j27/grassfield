@@ -77,8 +77,12 @@ Singleton {
 
     readonly property string loginName: Quickshell.env("USER")
     property string userName: loginName
-    // Account picture: ~/.face if readable, else the AccountsService icon, else "" (initials).
-    property string avatarSource: ""
+    // Account picture: ~/.face, else the AccountsService icon, else "" (initials). Never loaded where it lies: shown only
+    // as a PNG the shell made from it (ThemeIcons.fileSource, services/image-copy.py; review of 423766f: a ~/.face that is
+    // a FIFO, or an SVG naming one, stalled the image loader). Cosmetic only: until the PNG exists, and when it is refused,
+    // the initials show; nothing here can unlock or keep the lock from engaging.
+    readonly property string facePath: Quickshell.env("HOME") ? Quickshell.env("HOME") + "/.face" : ""
+    readonly property string avatarSource: Machine.avatarSource(facePath, Machine.accountsIconPath(loginName), path => ThemeIcons.fileSource(path), path => ThemeIcons.fileState(path))
 
     readonly property string markerPath: {
         const dir = Quickshell.env("XDG_RUNTIME_DIR");
@@ -641,23 +645,6 @@ Singleton {
         printErrors: false
         onLoaded: readable = true
         onLoadFailed: readable = false
-    }
-
-    // Existence probes for the account picture (no QML image warnings for missing files).
-    FileView {
-        path: Quickshell.env("HOME") + "/.face"
-        printErrors: false
-        onLoaded: root.avatarSource = "file://" + path
-        onLoadFailed: accountsIcon.path = "/var/lib/AccountsService/icons/" + root.loginName
-    }
-
-    FileView {
-        id: accountsIcon
-        printErrors: false
-        onLoaded: {
-            if (root.avatarSource === "")
-                root.avatarSource = "file://" + path;
-        }
     }
 
     FileView {

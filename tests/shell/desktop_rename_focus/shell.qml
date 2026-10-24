@@ -6,7 +6,8 @@ import Quickshell
 // After a rename ends (cancelled or committed) the field must lose focus, be disabled, and can never
 // commit again, so keys typed afterwards are not swallowed by a hidden field. Run by
 // scripts/dev/test.sh: `qs -p tests/shell/desktop_rename_focus` (offscreen); prints
-// "desktop-rename-focus: PASS" or the failures. DesktopIcon.qml and IconsLogic.js are symlinks to shell/desktop.
+// "desktop-rename-focus: PASS" or the failures. DesktopIcon.qml and IconsLogic.js are symlinks to shell/desktop,
+// next to links to the shell modules (DesktopIcon loads its icon through qs.services ThemeIcons).
 ShellRoot {
     id: root
 

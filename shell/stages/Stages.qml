@@ -298,7 +298,8 @@ Scope {
                         TintedIcon {
                             anchors.centerIn: parent
                             size: Tokens.stagesBadgeIconSize
-                            source: Quickshell.iconPath(tile.entry ? tile.entry.icon : "", "application-x-executable")
+                            source: ThemeIcons.appIcon(tile.entry ? tile.entry.icon : "", "application-x-executable")
+                            asynchronous: true
                         }
                     }
 

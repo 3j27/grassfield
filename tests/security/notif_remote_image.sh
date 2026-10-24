@@ -16,6 +16,9 @@ dev_require_host notif_remote_image
 dev_nested_target "$dev" || exit 2
 bus=$(cat "$dev/bus.address" 2>/dev/null || true)
 [[ $bus == unix:path=/tmp/dbus-* ]] || { echo "notif_remote_image: no private bus of the nested shell (.dev/bus.address); run scripts/dev/nested-up.sh" >&2; exit 2; }
+# Testing rule after the review of 423766f (a probe once reached the owner's session bus): only the nested shell's
+# private bus, never the caller's own, and notify-send runs under `env -i` with that address alone.
+[[ $bus != *"/run/user/"* && ( -z ${DBUS_SESSION_BUS_ADDRESS:-} || $bus != "$DBUS_SESSION_BUS_ADDRESS" ) ]] || { echo "notif_remote_image: refusing the caller's own session bus ($bus)" >&2; exit 2; }
 for tool in notify-send python3 curl; do
   command -v "$tool" >/dev/null || { echo "notif_remote_image: $tool is not installed" >&2; exit 2; }
 done
@@ -56,7 +59,7 @@ curl -s -o /dev/null "http://127.0.0.1:$port/control" || true
 grep -qx /control "$work/requests" && pass "control: the listener records requests" || { fail "control: the listener saw nothing"; exit 1; }
 
 before=$(wc -l <"$log")
-notify() { env DBUS_SESSION_BUS_ADDRESS="$bus" notify-send "$@" >/dev/null 2>&1; }
+notify() { env -i PATH="$PATH" DBUS_SESSION_BUS_ADDRESS="$bus" notify-send "$@" >/dev/null 2>&1; }
 notify -a dt07 -h "string:image-path:http://127.0.0.1:$port/hint-http.png" "DT-07 http" "image hint over http"
 notify -a dt07 -h "string:image-path:http://127.0.0.1:$port/hint-icon.png" -i "http://127.0.0.1:$port/app-icon.png" "DT-07 icon" "app icon over http"
 notify -a dt07 -h "string:image-path:https://127.0.0.1:$port/hint-https.png" "DT-07 https" "image hint over https"

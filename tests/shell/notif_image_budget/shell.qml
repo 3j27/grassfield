@@ -6,13 +6,14 @@ import qs.notifications
 
 // Reviews of 6e24d36 (minor 1) and 2dfd992, on the REAL Notifications singleton (scripts/dev/test.sh: `qs -p
 // tests/shell/notif_image_budget`, a dev session without the D-Bus server; see the dev-session marker file).
-// The private copies of notification images have a total byte budget across all senders (64 MiB; lowered to 3 MiB here,
-// so one sender's share is 1.5 MiB; each image below comes from its own sender, tests/shell/notif_image_fairness covers
-// the share):
-//  - six 1 MiB images: the three newest are kept, the three oldest are evicted (oldest first), and the directory never
+// The private copies of notification images (PNGs the shell made, services/image-copy.py) have a total byte budget
+// across all senders (64 MiB; lowered here to 3.5 copies of the test image, `unit` bytes each once re-encoded, so one
+// sender's share is 1.75 copies; each image below comes from its own sender, tests/shell/notif_image_fairness covers the
+// share):
+//  - six such images: the three newest are kept, the three oldest are evicted (oldest first), and the directory never
 //    holds more than the budget;
 //  - an evicted image falls back to the app icon and is not re-made just because it is shown (no eviction loop);
-//  - an image larger than the whole budget is refused (the app icon shows) and evicts nothing;
+//  - an image file over the size cap (History.MAX_IMAGE_FILE_BYTES) is refused (the app icon shows) and evicts nothing;
 //  - a copy a banner on screen shows is never evicted: the next oldest goes instead;
 //  - an image the banners' copies leave no room for is refused before anything is evicted.
 // Prints "notif-image-budget: PASS" or the failures.
@@ -21,7 +22,14 @@ ShellRoot {
 
     property var failures: []
     readonly property string dir: Quickshell.env("GRASSFIELD_TEST_TMP") + "/notif-image-budget"
-    readonly property real mib: 1024 * 1024
+    // Bytes of the PNG the helper makes of the test image (measured at setup), and the lowered budget.
+    property real unit: 0
+    readonly property real budget: Math.floor(3.5 * unit)
+    // A 256 x 256 PNG of noise (the same bytes every time): the PNG the helper makes of it has one size, `unit`.
+    readonly property string noiseScript: "import random, struct, sys, zlib\nw = 256\nr = random.Random(7)\n"
+        + "raw = b''.join(b'\\0' + r.randbytes(w * 4) for _ in range(w))\n"
+        + "c = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))\n"
+        + "open(sys.argv[1], 'wb').write(b'\\x89PNG\\r\\n\\x1a\\n' + c(b'IHDR', struct.pack('>IIBBBBB', w, w, 8, 6, 0, 0, 0)) + c(b'IDAT', zlib.compress(raw)) + c(b'IEND', b''))\n"
     property int phase: 0
     property int waited: 0
     property var sizes: []
@@ -62,28 +70,31 @@ ShellRoot {
         return sizes.reduce((a, b) => a + b, 0);
     }
 
+    // The images (one noise PNG under several names, and one over the size cap), then the size of the PNG the helper makes
+    // of it, printed last.
     Process {
         id: setup
         running: true
-        command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d\"; for i in 1 2 3 4 5 6; do head -c 1048576 /dev/zero >\"$d/a$i.png\"; done; "
-            + "head -c 4194304 /dev/zero >\"$d/huge.png\"; head -c 1048576 /dev/zero >\"$d/c.png\"", "sh", root.dir]
-        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
-        // qmllint disable signal-handler-parameters
-        onExited: code => {
-            // qmllint enable signal-handler-parameters
-            root.check("fixtures created", code === 0);
-            Notifications.copyBudgetBytes = 3 * root.mib;
-            for (const n of ["a1", "a2", "a3", "a4", "a5", "a6"])
-                root.request(n);
-            root.phase = 1;
-            poll.start();
+        command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d\"; python3 -I -c \"$3\" \"$d/noise.png\"; for n in a1 a2 a3 a4 a5 a6 c; do cp \"$d/noise.png\" \"$d/$n.png\"; done; "
+            + "cp \"$d/noise.png\" \"$d/huge.png\"; head -c 9437184 /dev/zero >>\"$d/huge.png\"; python3 -I \"$2\" file \"$d/noise.png\" 8388608 \"$d/unit.png\"; stat -c %s \"$d/unit.png\"",
+            "sh", root.dir, Quickshell.shellPath("services/image-copy.py"), root.noiseScript]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.unit = Number(text.trim().split("\n").pop());
+                root.check("fixtures created (the re-encoded test image: " + root.unit + " bytes)", root.unit > 100000);
+                Notifications.copyBudgetBytes = root.budget;
+                for (const n of ["a1", "a2", "a3", "a4", "a5", "a6"])
+                    root.request(n);
+                root.phase = 1;
+                poll.start();
+            }
         }
     }
 
     // The sizes of the copies in the private directory, one per line.
     Process {
         id: lister
-        command: ["sh", "-c", "for f in \"$1\"/*.img; do [ -f \"$f\" ] && stat -c %s \"$f\"; done; exit 0", "sh", Notifications.copyDir]
+        command: ["sh", "-c", "for f in \"$1\"/*.png; do [ -f \"$f\" ] && stat -c %s \"$f\"; done; exit 0", "sh", Notifications.copyDir]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.sizes = text.split("\n").filter(l => l !== "").map(Number);
@@ -94,11 +105,11 @@ ShellRoot {
 
     function listed(): void {
         if (phase === 1) {
-            check("six 1 MiB images, 3 MiB budget: the three newest are kept, the oldest evicted (" + states(["a1", "a2", "a3", "a4", "a5", "a6"]) + ")",
+            check("six images, a budget of 3.5: the three newest are kept, the oldest evicted (" + states(["a1", "a2", "a3", "a4", "a5", "a6"]) + ")",
                 state("a1") === "gone" && state("a2") === "gone" && state("a3") === "gone" && state("a4") === "ok" && state("a5") === "ok" && state("a6") === "ok");
-            check("the directory holds at most the budget (" + total() + " bytes in " + sizes.length + " copies)", total() <= 3 * mib && sizes.length === 3);
+            check("the directory holds at most the budget (" + total() + " bytes in " + sizes.length + " copies)", total() <= budget && sizes.length === 3);
             check("an evicted image falls back to the app icon", Notifications.iconSource(path("a1"), "") === "");
-            check("a kept image shows its copy", Notifications.iconSource(path("a6"), "").endsWith(".img"));
+            check("a kept image shows its copy", Notifications.iconSource(path("a6"), "").endsWith(".png"));
             // Shown again (as a binding re-evaluation would): no copy is re-made.
             for (const n of ["a1", "a2", "a3"])
                 Notifications.iconSource(path(n), "");
@@ -106,7 +117,7 @@ ShellRoot {
             waited = 0;
             poll.start();
         } else if (phase === 3) {
-            check("an image larger than the budget is refused (" + state("huge") + ")", state("huge") === "no");
+            check("an image file over the size cap is refused (" + state("huge") + ")", state("huge") === "no");
             check("the refused image falls back to the app icon", Notifications.iconSource(path("huge"), "") === "");
             check("it evicted nothing (" + states(["a4", "a5", "a6"]) + ", " + sizes.length + " copies)", state("a4") === "ok" && state("a5") === "ok" && state("a6") === "ok" && sizes.length === 3);
             // a4 (the oldest kept copy) is on a banner; a new notification names a1 again.
@@ -118,8 +129,8 @@ ShellRoot {
         } else if (phase === 4) {
             check("the banner's copy is kept, the next oldest is evicted (" + states(["a1", "a4", "a5", "a6"]) + ")",
                 state("a1") === "ok" && state("a4") === "ok" && state("a5") === "gone" && state("a6") === "ok");
-            check("still within the budget (" + total() + " bytes in " + sizes.length + " copies)", total() <= 3 * mib && sizes.length === 3);
-            // The three copies (3 MiB) are on banners now: a 1 MiB image of another sender cannot fit, nothing is evicted.
+            check("still within the budget (" + total() + " bytes in " + sizes.length + " copies)", total() <= budget && sizes.length === 3);
+            // The three copies are on banners now: a fourth image of another sender cannot fit, nothing is evicted.
             banner("a1");
             banner("a6");
             request("c");

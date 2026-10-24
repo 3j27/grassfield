@@ -252,6 +252,31 @@ TestCase {
         compare(Machine.initials("  "), "");
     }
 
+    // Review of 423766f: the account picture is only ever a PNG the shell made (ThemeIcons), ~/.face first.
+    function test_avatarSource() {
+        const made = {"/home/a/.face": "file:///run/x/1.png", "/var/lib/AccountsService/icons/a": "file:///run/x/2.png"};
+        let states = {};
+        const asked = [];
+        const source = p => {
+            asked.push(p);
+            return states[p] === "ok" ? made[p] : "";
+        };
+        const state = p => states[p] || "";
+        compare(Machine.avatarSource("/home/a/.face", "/var/lib/AccountsService/icons/a", source, state), "", "nothing made yet: the initials");
+        compare(asked, ["/home/a/.face"], "the AccountsService picture is not asked while ~/.face is pending");
+        states = {"/home/a/.face": "ok"};
+        compare(Machine.avatarSource("/home/a/.face", "/var/lib/AccountsService/icons/a", source, state), "file:///run/x/1.png");
+        states = {"/home/a/.face": "no", "/var/lib/AccountsService/icons/a": "ok"};
+        compare(Machine.avatarSource("/home/a/.face", "/var/lib/AccountsService/icons/a", source, state), "file:///run/x/2.png", "~/.face refused: AccountsService");
+        states = {"/home/a/.face": "no", "/var/lib/AccountsService/icons/a": "no"};
+        compare(Machine.avatarSource("/home/a/.face", "/var/lib/AccountsService/icons/a", source, state), "", "both refused: the initials");
+        states = {"/var/lib/AccountsService/icons/a": "ok"};
+        compare(Machine.avatarSource("", "/var/lib/AccountsService/icons/a", source, state), "file:///run/x/2.png", "no HOME");
+        compare(Machine.avatarSource("", "", source, state), "");
+        compare(Machine.accountsIconPath("ada"), "/var/lib/AccountsService/icons/ada");
+        ["", "../root", ".hidden", "a/b", "a\nb", null, undefined, "x".repeat(65)].forEach(u => compare(Machine.accountsIconPath(u), "", "refused: " + u));
+    }
+
     function test_capsLockInference() {
         compare(Machine.capsLockFromKey("A", false), true);
         compare(Machine.capsLockFromKey("a", false), false);

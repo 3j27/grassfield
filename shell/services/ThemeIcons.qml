@@ -3,114 +3,410 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Grassfield.I18n
 import Grassfield.Ui
+import "../widgets/ArtUrl.js" as ArtUrl
 
-// The one way a sender-chosen icon THEME NAME reaches an Image: a notification's app icon or themed image hint
-// (Notifications.iconSource) and the polkit sheet's action icon (AuthAgent). Review of 2dfd992: a valid theme name still
-// resolved to whatever file Qt found for it, and a FIFO there (~/.local/share/icons/<theme>/.../evil.png, ~/.icons, an
-// XDG_DATA_DIRS entry's pixmaps, or a symlink to one, or to /dev/zero) stalled the one image loader for good; Qt does not
-// say which file it will read. So before a name is shown, a helper process checks every file Qt could pick for it:
-// <name>, <name>.png, .svg, .svgz and .xpm anywhere under the icon search paths (XDG_DATA_HOME, each XDG_DATA_DIRS entry:
-// icons/ and pixmaps/; ~/.icons; /usr/share/pixmaps), symlinked directories followed. Each candidate must be a regular
-// file (after resolving symlinks: no FIFO, device, socket, directory, dangling link or loop) of at most maxFileBytes, else
-// the name is refused and the caller shows its generic icon. Only directories the user owns or can write are searched: a
-// root-owned tree can only hold what root put there (and searching all of /usr/share/icons took 0.7 s). Until the verdict
-// (well under a second) the generic icon shows; a helper failure or timeout refuses (when in doubt, no). Defence in depth:
-// whoever can plant a file there runs as the user already, and a file swapped between the check and Qt's read is not
-// caught (the check narrows that window to one check per name, re-run when a new notification names it).
+// The one way an icon or picture the shell does not own reaches an Image: named by a notification, the polkit sheet, a
+// desktop entry, an application, a tray item (StatusNotifierItem) or a file (Notifications, AuthAgent, the Dock, the
+// Launchpad, the desktop, Search, the Switcher, the Overview, Stages, Force Quit, About, the menu bar's tray, media art,
+// the lock screen's account picture). Integrator decisions after the reviews of 5ee6240 and 423766f: Qt never reads a
+// user-writable icon file, and the shell only ever decodes images it produced itself.
+//  - Qt's theme and fallback search paths hold only directories the user can neither write nor replace (Grassfield.I18n,
+//    ui/i18n/iconsearchpaths.h, applied when that module is imported, before any binding; imported here too so no
+//    lookup can come first). A plain theme name is looked up there (Quickshell.hasThemeIcon on the GUI thread reads only
+//    root-owned theme files) and shown by its image://icon URL.
+//  - Everything else is shown as a PNG the shell made: a name found only in the user's icon folders (a user-installed
+//    application, a flatpak user export), an absolute Icon= path, a tray icon from the app's own IconThemePath, a
+//    desktop picture's thumbnail, a stack preview, a media art file, the account picture. services/image-copy.py (python3
+//    -I, a process of its own, never the GUI thread) finds the file (a plain lookup: theme directory x size folder x
+//    apps|status|mimetypes|places|devices x png|svg, hicolor first, then pixmaps; no index.theme), opens it safely
+//    (real path under an allowed root, O_NOFOLLOW|O_NONBLOCK, fstat: a regular file within the size cap) and re-encodes
+//    it with rsvg-convert, fed on stdin (no base URL: no reference to another file is ever followed), into
+//    $XDG_RUNTIME_DIR/grassfield-icons-<display>/<n>.png (0700, emptied at start, maxCopyBytes in all, the least
+//    recently used copies deleted to make room). The Image loads only that PNG, asynchronously. Anything else (refused,
+//    not made yet): the caller's generic icon.
+// Media art named by an https URL (macOS shows the artwork apps provide; Spotify and browsers name https URLs) is fetched
+// by the same helper (curl, https only, 5 MiB, 5 s, no cookies or credentials) and re-encoded like a file; one URL key
+// per address, in the same budget and least-recently-used order. Only the newest asked URL is fetched (older queued ones
+// are forgotten, asked again if still shown), and none while the session is locked: then only art already made shows.
+// The copy directory belongs to the user, like every file of the session: a process of the same user can replace a copy,
+// as it could the shell's own QML. The copies protect against what applications NAME (a path, a theme file, a FIFO, an
+// SVG with references), not against code already running as the user.
+// A copy is made once per run (a new notification naming the icon, or a new media art, makes a new one); until then, and
+// when refused, the fallback shows. A helper that hangs is stopped (TERM, then KILL) and its keys refused.
 Singleton {
     id: root
 
-    readonly property real maxFileBytes: 8 * 1024 * 1024
-    // Name -> "pending" | "ok" | "no"; reassigned on every change so bindings that called source() re-evaluate.
-    property var verdicts: ({})
+    readonly property real maxIconBytes: 8 * 1024 * 1024
+    // A picture's source file (a photo may be big); its copy is at most 256 x 256 pixels like any other.
+    readonly property real maxPictureBytes: 16 * 1024 * 1024
+    // All copies together; past it, the least recently used are deleted to make room.
+    readonly property real maxCopyBytes: 128 * 1024 * 1024
+    // Past this many keys the least recently used quarter is forgotten (and its copies deleted).
+    readonly property int maxKeys: 4096
+    readonly property int batchSize: 24
+    readonly property string helperPath: Quickshell.shellPath("services/image-copy.py")
+    // One directory per Wayland display: a nested dev shell never empties the real session's.
+    readonly property string copyDir: {
+        const runtime = Quickshell.env("XDG_RUNTIME_DIR");
+        const display = String(Quickshell.env("WAYLAND_DISPLAY") || "none").replace(/[^A-Za-z0-9._-]/g, "_");
+        return runtime ? runtime + "/grassfield-icons-" + display : "";
+    }
+    property bool copyDirReady: false
+    // Key ("name:<theme name>", "icon:<path>", "picture:<path>", "tray:<name>|<IconThemePath>") -> {state: "pending" |
+    // "ok" | "no", url, file}; reassigned on every change so bindings that asked re-evaluate.
+    property var copies: ({})
+    // The least-recently-used order: at[key] is the value of `tick` at the key's last use. Mutated in place, never
+    // reassigned: a use (a binding asking) notifies nobody.
+    readonly property var lru: ({tick: 0, at: {}})
     property var queue: []
     property var batch: []
-    // POSIX sh: the size cap, then the names as arguments (never interpolated). One line per name: "ok <name>" or
-    // "no <name>"; a name without a line (the helper failed or timed out) is refused.
-    readonly property string script: "cap=$1; shift; names=; set -f\n"
-        + "for n in \"$@\"; do case $n in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*|*..*) echo \"no $n\" ;; *) names=\"$names $n\" ;; esac; done\n"
-        + "[ -n \"$names\" ] || exit 0\n"
-        + "command -v find >/dev/null && command -v stat >/dev/null || { for n in $names; do echo \"no $n\"; done; exit 0; }\n"
-        + "dh=${XDG_DATA_HOME:-$HOME/.local/share}; set --; ifs=$IFS; IFS=:\n"
-        + "for d in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do [ -n \"$d\" ] && set -- \"$@\" \"$d/icons\" \"$d/pixmaps\"; done\n"
-        + "IFS=$ifs; set -- \"$@\" \"$HOME/.icons\" \"$dh/icons\" \"$dh/pixmaps\" /usr/share/pixmaps\n"
-        + "for b do shift; [ -d \"$b\" ] && set -- \"$@\" \"$b\"; done\n"
-        + "bad=\n"
-        + "if [ $# -gt 0 ]; then\n"
-        + "  set -- \"$@\" \"(\" -type d \"!\" -user \"$(id -u)\" \"!\" -writable -prune \")\" -o \"(\"\n"
-        + "  for n in $names; do set -- \"$@\" -name \"$n\" -o -name \"$n.png\" -o -name \"$n.svg\" -o -name \"$n.svgz\" -o -name \"$n.xpm\" -o; done\n"
-        + "  set -- \"$@\" -false \")\" -exec sh -c 'c=$1; shift; for f do if [ -f \"$f\" ] && s=$(stat -L -c %s -- \"$f\" 2>/dev/null) && [ \"$s\" -le \"$c\" ]; then :; else printf \"%s\\n\" \"${f##*/}\"; fi; done' gf-icon-file \"$cap\" \"{}\" +\n"
-        + "  bad=$(find -L \"$@\" 2>/dev/null; find \"$@\" 2>/dev/null)\n"
-        + "fi\n"
-        + "for n in $names; do v=ok; for e in \"\" .png .svg .svgz .xpm; do case \"\n"
-        + "$bad\n"
-        + "\" in *\"\n"
-        + "$n$e\n"
-        + "\"*) v=no ;; esac; done; echo \"$v $n\"; done\n"
+    // Copies replaced by a newer one or forgotten, deleted by the next helper run.
+    property var dropped: []
+    property int counter: 0
+    property var activeRun: null
+    // Keys asked by bindings during this event-loop turn, requested together by flushAsks (Qt.callLater runs a function
+    // once per turn with the last arguments, so asking per key would request only the last). Mutated in place.
+    readonly property var asks: ({list: []})
 
-    // The image URL for theme icon `name`, or "" (not a plain theme name: NotificationPrefs.safeIconName; not checked yet:
-    // a check is requested; refused; or the theme lacks it, so Qt never paints a checkerboard).
+    // An absolute icon path (Icon=/path, file:///path) as a plain path, or "": no control character, at most 4096 characters.
+    function plainIconPath(icon: string): string {
+        let path = String(icon || "");
+        if (path.toLowerCase().startsWith("file://")) {
+            try {
+                path = decodeURIComponent(path.slice(7));
+            } catch (e) {
+                return "";
+            }
+        }
+        return path.startsWith("/") && path.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(path) ? path : "";
+    }
+
+    // The image URL for theme icon `name`: the system theme's (only root-owned directories are searched), else the copy
+    // of the user's icon of that name (a copy is requested; "" until it exists or when there is none).
     function source(name: string): string {
         const safe = NotificationPrefs.safeIconName(name);
         if (safe === "")
             return "";
-        const verdict = verdicts[safe];
-        if (verdict === undefined) {
-            Qt.callLater(root.check, safe, false);
-            return "";
-        }
-        return verdict === "ok" && Quickshell.hasThemeIcon(safe) ? Quickshell.iconPath(safe) : "";
+        if (Quickshell.hasThemeIcon(safe))
+            return Quickshell.iconPath(safe);
+        return copyOf("name", safe);
     }
 
-    // Asks for a check of `name`; `fresh`: also when it has a verdict (a new notification naming it), which stays in force
-    // until the new one.
+    // The copy of picture file `icon` (an absolute path or file: URL), "" until it exists or when refused.
+    function fileSource(icon: string): string {
+        const path = plainIconPath(icon);
+        return path !== "" ? copyOf("picture", path) : "";
+    }
+
+    // "pending", "ok" or "no" for picture file `icon` (fileSource's), "" when never asked.
+    function fileState(icon: string): string {
+        const entry = copies["picture:" + plainIconPath(icon)];
+        return entry === undefined ? "" : entry.state;
+    }
+
+    // Picture file `icon` may have new content (a player reuses its art file): a new copy is made, the old one shown
+    // until then.
+    function refreshFile(icon: string): void {
+        const path = plainIconPath(icon);
+        if (path !== "")
+            request("picture", path, true);
+    }
+
+    // An icon from a desktop entry, an application or a file (Icon=: a theme name or an absolute path), as
+    // Quickshell.iconPath(icon, fallback) gave it: the system theme's icon or the copy of the user's; until then, and when
+    // there is none or it is refused, the fallback theme icon.
+    function appIcon(icon: string, fallback: string): string {
+        const value = String(icon || "");
+        const path = plainIconPath(value);
+        const own = path !== "" ? copyOf("icon", path) : (value !== "" ? source(value) : "");
+        return own !== "" ? own : (fallback !== "" ? source(fallback) : "");
+    }
+
+    // A tray item's icon (Quickshell's SystemTrayItem.icon). Quickshell would resolve an app's IconThemePath and a
+    // path-like IconName itself, reading whatever file they name (review of 423766f): only its pixmap images
+    // (image://qspixmap/, the IconPixmap pixels the app sent) pass as they are. From image://icon/<name>[?path=<dir>]
+    // only a plain theme name is kept: the system theme's icon, else a copy made by the helper from the app's own folder
+    // (a user-writable directory like any other), then from the user's icon folders. Anything else: "" (no icon).
+    function trayIcon(icon: string): string {
+        const value = String(icon || "");
+        if (value.startsWith("image://qspixmap/"))
+            return value;
+        if (!value.startsWith("image://icon/"))
+            return "";
+        const rest = value.slice(13);
+        const q = rest.indexOf("?");
+        const raw = q < 0 ? rest : rest.slice(0, q);
+        const name = NotificationPrefs.safeIconName(raw);
+        if (name === "" || name !== raw)
+            return "";
+        if (Quickshell.hasThemeIcon(name))
+            return Quickshell.iconPath(name);
+        const query = q < 0 ? "" : rest.slice(q + 1);
+        const dir = query.startsWith("path=") ? query.slice(5).replace(/&fallback=.*$/, "") : "";
+        if (dir !== "" && plainIconPath(dir) === dir)
+            return copyOf("tray", name + "|" + dir);
+        return copyOf("name", name);
+    }
+
+    // Media art (Media.artShown): a local file: URL as fileSource, an https URL fetched and re-encoded (ArtUrl.remoteUrl),
+    // anything else "". While the session is locked nothing is fetched: only art already made shows.
+    function artSource(url: string): string {
+        const path = ArtUrl.localPath(url);
+        if (path !== "")
+            return fileSource(path);
+        const remote = ArtUrl.remoteUrl(url);
+        if (remote === "" || (SessionState.locked && copies["url:" + remote] === undefined))
+            return "";
+        return copyOf("url", remote);
+    }
+
+    // A new notification names `name`: a user icon of that name is copied again (it may have changed); the current copy
+    // shows until then.
     function check(name: string, fresh: bool): void {
         const safe = NotificationPrefs.safeIconName(name);
-        if (safe === "" || queue.indexOf(safe) >= 0 || batch.indexOf(safe) >= 0)
+        if (safe === "" || Quickshell.hasThemeIcon(safe))
             return;
-        if (!fresh && verdicts[safe] !== undefined)
-            return;
-        queue = queue.concat([safe]);
-        if (verdicts[safe] === undefined) {
-            const next = Object.assign({}, verdicts);
-            next[safe] = "pending";
-            verdicts = next;
+        request("name", safe, fresh);
+    }
+
+    function copyOf(kind: string, value: string): string {
+        const key = kind + ":" + value;
+        const entry = copies[key];
+        if (entry === undefined) {
+            asks.list.push([kind, value]);
+            Qt.callLater(root.flushAsks);
+            return "";
         }
+        if (entry.state !== "ok")
+            return "";
+        lru.tick++;
+        lru.at[key] = lru.tick;
+        return entry.url;
+    }
+
+    function flushAsks(): void {
+        const list = asks.list;
+        asks.list = [];
+        requestAll(list, false);
+    }
+
+    function request(kind: string, value: string, fresh: bool): void {
+        requestAll([[kind, value]], fresh);
+    }
+
+    // Queues [kind, value] pairs not queued yet (`fresh`: also when already answered), with one change of `copies`.
+    function requestAll(pairs: var, fresh: bool): void {
+        if (copyDir === "")
+            return;
+        const added = [];
+        let next = null;
+        for (const [kind, value] of pairs) {
+            const key = kind + ":" + value;
+            if (queue.some(q => q.key === key) || batch.some(q => q.key === key) || added.some(q => q.key === key))
+                continue;
+            const entry = (next || copies)[key];
+            if (!fresh && entry !== undefined)
+                continue;
+            counter++;
+            added.push({key: key, kind: kind, value: value, n: counter});
+            // A copy already made stays shown until its replacement is made (or refused): done() drops it then.
+            if (entry === undefined || entry.state !== "ok") {
+                next = next || Object.assign({}, copies);
+                next[key] = {state: "pending", url: "", file: ""};
+            }
+        }
+        if (added.length === 0)
+            return;
+        queue = queue.concat(added);
+        if (next !== null)
+            copies = Object.keys(next).length > maxKeys ? forget(next) : next;
         run();
     }
 
-    function run(): void {
-        if (checker.running || queue.length === 0)
-            return;
-        batch = queue.slice(0, 32);
-        queue = queue.slice(32);
-        checker.command = ["timeout", "-k", "2", "20", "sh", "-c", script, "gf-icon-check", String(maxFileBytes)].concat(batch);
-        checker.running = true;
+    // Past maxKeys keys: the least recently used quarter of the settled keys is forgotten, their copies deleted by the
+    // next run (a key asked again is copied again).
+    function forget(map: var): var {
+        const settled = Object.keys(map).filter(k => map[k].state !== "pending");
+        settled.sort((a, b) => (lru.at[a] || 0) - (lru.at[b] || 0));
+        const files = [];
+        for (const key of settled.slice(0, Math.ceil(maxKeys / 4))) {
+            if (map[key].file)
+                files.push(map[key].file);
+            delete map[key];
+            delete lru.at[key];
+        }
+        dropped = dropped.concat(files);
+        return map;
     }
 
-    function done(output: string): void {
-        const said = {};
-        for (const line of String(output || "").split("\n")) {
-            const m = /^(ok|no) ([A-Za-z0-9._-]+)$/.exec(line);
-            if (m)
-                said[m[2]] = m[1];
+    // The copies the helper may delete to make room, least recently used first.
+    function evictable(): var {
+        const keys = Object.keys(copies).filter(k => copies[k].state === "ok" && copies[k].file);
+        keys.sort((a, b) => (lru.at[a] || 0) - (lru.at[b] || 0));
+        return keys.map(k => copies[k].file);
+    }
+
+    // One helper run at a time, each its own Process with its batch (Process.running turns true only once started, so two
+    // starts in one turn would otherwise both run and the first batch's answer be lost).
+    function run(): void {
+        if (activeRun !== null || !copyDirReady || queue.length === 0)
+            return;
+        // Media art over https: only the newest asked URL is fetched; older queued ones are forgotten (asked again while
+        // shown). While the session is locked, URLs wait in the queue.
+        const urls = queue.filter(q => q.kind === "url");
+        if (urls.length > 1) {
+            const stale = urls.slice(0, -1);
+            queue = queue.filter(q => stale.indexOf(q) < 0);
+            const next = Object.assign({}, copies);
+            for (const q of stale) {
+                if (next[q.key] !== undefined && next[q.key].state === "pending")
+                    delete next[q.key];
+            }
+            copies = next;
         }
-        const next = Object.keys(verdicts).length > 512 ? {} : Object.assign({}, verdicts);
-        for (const name of batch) {
-            next[name] = said[name] === "ok" ? "ok" : "no";
-            if (next[name] !== "ok")
-                console.info("grassfield-icons: theme icon \"" + name + "\" refused: a file Qt could read for it is not a regular file of at most " + maxFileBytes + " bytes (or the check failed)");
+        const ready = SessionState.locked ? queue.filter(q => q.kind !== "url") : queue;
+        if (ready.length === 0)
+            return;
+        batch = ready.slice(0, batchSize);
+        queue = queue.filter(q => batch.indexOf(q) < 0);
+        const args = [];
+        for (const file of dropped)
+            args.push("drop", "0", file);
+        dropped = [];
+        for (const file of evictable())
+            args.push("lru", "0", file);
+        for (const q of batch)
+            args.push(q.kind, String(q.n), q.value);
+        const proc = helperRun.createObject(root, {
+            keys: batch.map(q => q.key),
+            command: ["timeout", "-k", "2", "60", "setpriv", "--pdeathsig", "KILL", "--", "python3", "-I", helperPath, "batch", copyDir,
+                String(maxIconBytes), String(maxPictureBytes), String(maxCopyBytes)].concat(args)
+        });
+        activeRun = proc;
+        watchdog.restart();
+        proc.running = true;
+    }
+
+    // A run's answer; one abandoned by the watchdog is dropped (its keys were already refused).
+    function runFinished(proc: var, output: string): void {
+        if (proc !== activeRun) {
+            proc.destroy();
+            return;
+        }
+        activeRun = null;
+        watchdog.stop();
+        done(proc.keys, output);
+        proc.destroy();
+    }
+
+    // "ok<TAB><key><TAB><copy>" for each copy made, "gone<TAB><file>" for each copy deleted to make room, "later<TAB><key>"
+    // for an item the helper had no time left for (asked again first by the next run); a key with no line is refused.
+    function done(keys: var, output: string): void {
+        const said = {};
+        const gone = {};
+        const later = {};
+        for (const line of String(output || "").split("\n")) {
+            const f = line.split("\t");
+            if (f[0] === "ok" && f.length === 3 && f[2].startsWith(copyDir + "/") && /^[0-9]+\.png$/.test(f[2].slice(copyDir.length + 1)))
+                said[f[1]] = f[2];
+            else if (f[0] === "gone" && f.length === 2)
+                gone[f[1]] = true;
+            else if (f[0] === "later" && f.length === 2)
+                later[f[1]] = true;
+        }
+        const next = Object.assign({}, copies);
+        for (const key in next) {
+            if (next[key].file && gone[next[key].file]) {
+                delete next[key];
+                delete lru.at[key];
+            }
+        }
+        const again = batch.filter(q => later[q.key] && said[q.key] === undefined && next[q.key] !== undefined);
+        for (const key of keys) {
+            if (again.some(q => q.key === key))
+                continue;
+            const file = said[key];
+            if (next[key] !== undefined && next[key].file)
+                dropped = dropped.concat([next[key].file]);
+            if (file !== undefined) {
+                next[key] = {state: "ok", url: "file://" + file.split("/").map(encodeURIComponent).join("/"), file: file.slice(copyDir.length + 1)};
+            } else {
+                next[key] = {state: "no", url: "", file: ""};
+                console.info("grassfield-icons: no usable image for a " + key.slice(0, key.indexOf(":")) + " request (none found, not a regular file within its size cap, or not an image rsvg-convert could re-encode)");
+            }
         }
         batch = [];
-        verdicts = next;
+        queue = again.concat(queue);
+        copies = next;
         Qt.callLater(run);
     }
 
+    Component {
+        id: helperRun
+
+        Process {
+            id: proc
+            property var keys: []
+            stdout: StdioCollector {
+                onStreamFinished: root.runFinished(proc, text)
+            }
+        }
+    }
+
+    // A run that does not answer within its own timeout (60 s, KILL 2 s later; the helper itself stops starting items
+    // after 20 s) is stopped: TERM, then KILL 2 s later (the
+    // helper dies with it: --pdeathsig; rsvg-convert, in timeout's process group, too, and it has its own CPU limit), and
+    // its keys are refused.
+    Timer {
+        id: watchdog
+        interval: 70000
+        onTriggered: {
+            const proc = root.activeRun;
+            if (proc === null)
+                return;
+            root.activeRun = null;
+            proc.signal(15);
+            killer.proc = proc;
+            killer.restart();
+            root.done(proc.keys, "");
+        }
+    }
+
+    Timer {
+        id: killer
+        property var proc: null
+        interval: 2000
+        onTriggered: {
+            if (proc !== null && proc.running)
+                proc.signal(9);
+            proc = null;
+        }
+    }
+
+    // Media art URLs held while the session was locked are fetched once it is unlocked.
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (!SessionState.locked)
+                root.run();
+        }
+    }
+
+    // Empties (and creates, 0700) the private copy directory once at start; copies wait for it.
     Process {
-        id: checker
-        stdout: StdioCollector {
-            onStreamFinished: root.done(text)
+        running: root.copyDir !== ""
+        command: ["sh", "-c", "case $1 in /*/grassfield-icons-*) ;; *) exit 1 ;; esac; rm -rf -- \"$1\" && mkdir -m 700 -- \"$1\"", "gf-icons-prepare", root.copyDir]
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: code => {
+            // qmllint enable signal-handler-parameters
+            root.copyDirReady = code === 0;
+            if (code !== 0)
+                console.warn("grassfield-icons: the private icon directory could not be prepared; user icons are not shown");
+            root.run();
         }
     }
 }

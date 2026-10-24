@@ -15,8 +15,8 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 2. SEC2 Only PAM success (`omarchy-lock-password`) unlocks; errors/timeouts/crashes/graceful exits stay locked.
 3. SEC3 Password cleared from the field and memory after each attempt; field disabled while authenticating.
 4. SEC4 Lock surface on every monitor; input never reaches other clients (ext-session-lock).
-5. SEC5 Lock screen shows clock, date, avatar (`~/.face` or AccountsService icon) and name — no notification
-   content, no thumbnails.
+5. SEC5 Lock screen shows clock, date, avatar (`~/.face` or AccountsService icon, only as a PNG the shell made from it:
+   security-images.md) and name — no notification content, no thumbnails.
 6. SEC6 Polkit agent: exactly one; shows message, action ID and the requesting program as far as polkit tells it
    (see "Polkit details"); Cancel/Esc cancel; never auto-approve.
 7. SEC7 Idle: dim → lock → displays off on the idle lock screen (DPMS); respects Wayland idle inhibitors.
@@ -181,8 +181,18 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   Notification Center), the journal says why, and the child is retried every 60 s instead of every 5 s. A run of 2 s
   resets the count and withdraws the notice. Whether a run lasted 2 s is timed by a Timer (`inhibitorHealthy`,
   `watcherHealthy`: a monotonic clock), never by `Date.now()` (review of 2dfd992: a wall-clock step forward made an early
-  exit look long and hid the failure); a child that never started counts as a failure. Pure logic in `IdleModel.js`
-  (`failuresAfterRun`, `retryDelayMs`, `degraded`), unit-tested in `tst_idlemodel.qml`.
+  exit look long and hid the failure); a child that never started counts as a failure. A run counts only with progress
+  (review of eee45cc: a hung child looked healthy): the inhibitor's command is `sh -c 'echo held; exec cat'`, which
+  systemd-inhibit starts only once it holds the lock, so "held" proves it; the watcher's progress is gdbus' "The name
+  org.freedesktop.login1 is owned by" line (`IdleModel.watcherSubscribed`): GLib prints it from the name watcher it
+  starts after sending the signal subscription, and the bus answers a connection in order, so the match is then in
+  place; gdbus' first line comes before subscribing and proves nothing (review of 100692f; from GLib's source order).
+  A child without progress within 35 s (above the 25 s default D-Bus call timeout of sd-bus and GDBus, so a slow but
+  healthy logind is not killed on every retry; `IdleModel.PROGRESS_BUDGET_MS`,
+  `inhibitorProgress`, `watcherProgress` Timers) is stopped and counted as a failure, so a hung child leads to the
+  degraded notice too. Pure logic in `IdleModel.js` (`failuresAfterRun`, `retryDelayMs`, `degraded`), unit-tested in
+  `tst_idlemodel.qml`; the wiring is checked by `tests/security/lock_surfaces.sh` (with mutants). Real-session
+  behaviour of the progress lines: NOT VERIFIED here (no system bus in the sandbox; L2).
 - No wall clock in `shell/security`: every delay is a Qt Timer. The lock ownership check skips Hyprland answers for
   500 ms after the compositor confirmed the lock (`Lock.qml` `secureGrace`, single-shot Timer; with `Date.now()` a clock
   step back turned the check off for as long as the step, review of 2dfd992); a Timer that is not running means no
@@ -398,9 +408,10 @@ request: the message (polkit's text; for `pkexec` it names the program and its a
 identity, and now the action's `iconName` (from the root-installed `.policy` file) with the lock as a badge, macOS style.
 That icon describes the action, not the program that asked: polkit does not tell the agent which process requested it
 through this API (`AuthDialogModel.iconName`: plain theme names only, by the one rule notification icons use,
-`NotificationPrefs.safeIconName`, review of 2dfd992; `AuthAgent` shows it through `ThemeIcons.source`, only when the
-theme has it and every file Qt could read for the name is a regular file of bounded size, no FIFO or device:
-`tests/security/theme_icon_files.sh`; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
+`NotificationPrefs.safeIconName`, review of 2dfd992; `AuthAgent` shows it through `ThemeIcons.source`: the system
+theme's icon (Qt searches only directories the user cannot change, `ui/i18n/iconsearchpaths.h`) or a PNG the shell made
+from a user icon of that name (see security-images.md, `tests/security/theme_icon_files.sh`); else the lock alone; the Image
+loads asynchronously, review of 100692f). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
 
 ## L5 polkit (owner, real session)
@@ -644,7 +655,8 @@ Decisions:
   owner's real account (faillock is shared with sudo). Real sessions (`GRASSFIELD_SESSION=1`, whatever
   `GRASSFIELD_DEV` says) are unchanged: `pamSuppressed` is false and authentication is normal. Unit-tested both ways (`tst_lockcontroller.qml`), structure
   checked by `tests/security/reload_order`.
-- Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … cat`
+- Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … sh -c
+  'echo held; exec cat'`
   (stdin pipe: the inhibitor dies with the shell) plus `gdbus monitor` on `/org/freedesktop/login1` for
   `PrepareForSleep`. Both run under `setpriv --pdeathsig TERM --` (util-linux), so a shell crash (even SIGKILL) leaves
   no orphan (verified in nested: `kill -9` of the shell → its `gdbus monitor` child is gone). Released once

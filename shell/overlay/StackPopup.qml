@@ -251,6 +251,7 @@ FocusScope {
                     anchors.fill: parent
                     size: root.iconSize
                     source: slot.isOpen ? Quickshell.iconPath("folder", "") : ""
+                    asynchronous: true
                 }
 
                 Rectangle {

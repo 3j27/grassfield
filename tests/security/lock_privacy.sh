@@ -31,6 +31,9 @@ sig=$DEV_NESTED_SIG
 sock=$DEV_NESTED_SOCK
 bus=$(cat "$dev/bus.address" 2>/dev/null || true)
 [[ $bus == unix:path=/tmp/dbus-* ]] || { echo "lock_privacy: no private bus of the nested shell (.dev/bus.address); run scripts/dev/nested-up.sh" >&2; exit 2; }
+# Testing rule after the review of 423766f (a probe once reached the owner's session bus): only the nested shell's
+# private bus, never the caller's own, and notify-send runs under `env -i` with that address alone.
+[[ $bus != *"/run/user/"* && ( -z ${DBUS_SESSION_BUS_ADDRESS:-} || $bus != "$DBUS_SESSION_BUS_ADDRESS" ) ]] || { echo "lock_privacy: refusing the caller's own session bus ($bus)" >&2; exit 2; }
 for tool in grim magick notify-send foot jq; do
   command -v "$tool" >/dev/null || { echo "lock_privacy: $tool is not installed" >&2; exit 2; }
 done
@@ -43,7 +46,7 @@ nested() { env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" "$@"; 
 ipc() { nested qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; status=1; }
-notify() { env DBUS_SESSION_BUS_ADDRESS="$bus" notify-send "$@" >/dev/null 2>&1; }
+notify() { env -i PATH="$PATH" DBUS_SESSION_BUS_ADDRESS="$bus" notify-send "$@" >/dev/null 2>&1; }
 
 compositor_locked() {
   nested hyprctl -j monitors 2>/dev/null | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null
