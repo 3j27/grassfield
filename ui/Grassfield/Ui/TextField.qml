@@ -29,6 +29,12 @@ T.TextField {
     Accessible.role: Accessible.EditableText
     Accessible.name: root.accessibleName !== "" ? root.accessibleName : root.placeholderText
 
+    // A hidden or disabled field never takes input, whoever gives it the focus (the text typed so far stays as it is).
+    Keys.onPressed: event => {
+        if (!root.visible || !root.enabled)
+            event.accepted = true;
+    }
+
     TextCursor {}
     FocusGuard {}
 

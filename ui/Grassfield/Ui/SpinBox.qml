@@ -34,7 +34,18 @@ T.SpinBox {
         }
     }
 
-    FocusGuard {}
+    // A hidden or disabled spin box never takes input, whoever gives it the focus: no key (the field swallows them too, below),
+    // no assistive-technology increase. It keeps the focus while it is hidden in the middle of an edit (moving it away would
+    // commit the typed text): the edit stays as typed and only an explicit action, Return or leaving the field when it is
+    // shown again, commits it. (FocusGuard is not used for that reason.)
+    Accessible.onIncreaseAction: if (root.visible && root.enabled) {
+        root.increase();
+        root.valueModified();
+    }
+    Accessible.onDecreaseAction: if (root.visible && root.enabled) {
+        root.decrease();
+        root.valueModified();
+    }
 
     validator: IntValidator {
         locale: root.locale.name
@@ -57,6 +68,11 @@ T.SpinBox {
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
         Accessible.role: Accessible.EditableText
         Accessible.name: root.accessibleName
+        // Never takes input while hidden or disabled (a key typed into it, Return included, is swallowed).
+        Keys.onPressed: event => {
+            if (!root.visible || !root.enabled)
+                event.accepted = true;
+        }
 
         TextCursor {}
     }
