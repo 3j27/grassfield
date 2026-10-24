@@ -255,6 +255,15 @@ if want logic; then
   python3 -I tests/ci/qmldir_types.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/qmldir_types.py "$rc" PASS
+  # Contract drift (docs vs code vs shell, qmldir vs changelog): the extractors on fixtures; the tree is `just check-contracts`.
+  rc=0
+  python3 -I tests/ci/gfc_parity.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/gfc_parity.py "$rc" PASS
+  rc=0
+  python3 -I tests/ci/ui_api.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/ui_api.py "$rc" PASS
   # The inventory gate on temporary fixtures.
   rc=0
   python3 -I tests/ci/inventory.py --selftest || rc=1
