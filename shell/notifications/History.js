@@ -261,12 +261,13 @@ function localPathOf(source) {
     return plainPath(path) ? path : "";
 }
 
-// The file: URL of private copy number `n` in directory `dir` (an absolute path), every segment percent-encoded: what the
-// Image loads names exactly that file. "" when the directory is not a plain absolute path or `n` is not a positive integer.
-function copySource(dir, n) {
-    if (!plainPath(dir) || !Number.isInteger(n) || n <= 0)
+// The file: URL of private copy number `n` of sender number `sender` ("<n>.<sender>.img") in directory `dir` (an absolute
+// path), every segment percent-encoded: what the Image loads names exactly that file. "" when the directory is not a plain
+// absolute path, `n` is not a positive integer or `sender` not a non-negative one.
+function copySource(dir, n, sender) {
+    if (!plainPath(dir) || !Number.isInteger(n) || n <= 0 || !Number.isInteger(sender) || sender < 0)
         return "";
-    return "file://" + (dir + "/" + n + ".img").split("/").map(encodeURIComponent).join("/");
+    return "file://" + (dir + "/" + n + "." + sender + ".img").split("/").map(encodeURIComponent).join("/");
 }
 
 // The URL scheme of a refused image, for a log line that never repeats the reference itself ("" when there is none).

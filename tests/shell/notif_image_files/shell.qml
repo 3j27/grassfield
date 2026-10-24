@@ -63,7 +63,7 @@ ShellRoot {
             root.check("fixtures created", code === 0);
             const p = root.paths;
             for (const k in p)
-                Notifications.requestCopy(p[k], true);
+                Notifications.requestCopy(p[k], true, "Files Test");
             poll.start();
         }
     }
@@ -75,7 +75,7 @@ ShellRoot {
         onExited: code => {
             // qmllint enable signal-handler-parameters
             root.check("swap: ok.png replaced by a FIFO", code === 0);
-            Notifications.keptImage(root.paths.swap); // a new notification naming the swapped file
+            Notifications.keptImage(root.paths.swap, "Files Test"); // a new notification naming the swapped file
             root.phase = 2;
             root.waited = 0;
             poll.start();
@@ -122,8 +122,8 @@ ShellRoot {
             "image://icon/" + d + "/x.png?fallback=a"];
         for (const f of forms) {
             // As a new notification would: the intake requests a copy of what the reference names, at once.
-            Notifications.keptImage(f);
-            Notifications.checkedAppIcon(f);
+            Notifications.keptImage(f, "Files Test");
+            Notifications.checkedAppIcon(f, "Files Test");
             check("bypass form refused as an image: " + f, Notifications.iconSource(f, "") === "");
             check("bypass form refused as an app icon: " + f, Notifications.iconSource("", f) === "");
         }
@@ -139,10 +139,10 @@ ShellRoot {
         // an Image, so a regression stalls the loader and the "later image still loads" check below fails.
         const rel = "../../.." + d;
         for (const name of [rel + "/evil", rel + "/evil2", "hicolor/../../../.." + d + "/evil"]) {
-            check("a traversal app icon name is dropped at intake: " + name, Notifications.checkedAppIcon(name) === "");
+            check("a traversal app icon name is dropped at intake: " + name, Notifications.checkedAppIcon(name, "Files Test") === "");
             check("a traversal app icon name is never resolved: " + name, Notifications.iconSource("", name) === "");
         }
-        check("a plain theme name still reaches the theme", Notifications.checkedAppIcon("dialog-information") === "dialog-information");
+        check("a plain theme name still reaches the theme", Notifications.checkedAppIcon("dialog-information", "Files Test") === "dialog-information");
         nameShown.source = Notifications.iconSource("", rel + "/evil");
         Settings.setNotificationsAppPreview("Private Sender", "never");
     }
