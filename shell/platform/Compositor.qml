@@ -303,7 +303,14 @@ Singleton {
     onBlurSizeChanged: blurDebounce.restart()
     onBlurPassesChanged: blurDebounce.restart()
 
+    // Hyprland answered a push with a config error (a Hyprland that does not know the keys): nothing more is sent.
+    property bool blurRejected: false
+    property double lastBlurPush: 0
+
     function pushBlur(): void {
+        if (root.blurRejected)
+            return;
+        root.lastBlurPush = Date.now();
         dispatchRequest(Minimized.blurCall(root.blurSize, root.blurPasses));
     }
 
@@ -317,11 +324,18 @@ Singleton {
         target: Hyprland
 
         function onRawEvent(event: HyprlandEvent): void {
+            if (Minimized.blurRejected(event.name, event.data, Date.now() - root.lastBlurPush) && !root.blurRejected) {
+                root.blurRejected = true;
+                console.info("grassfield-shell: Hyprland rejected the blur request (" + event.data + "); the blur stays as configured");
+                return;
+            }
             if (event.name !== "configreloaded")
                 return;
             if (root.reduceMotion)
                 root.pushMotion();
-            root.pushBlur();
+            // A reload right after our own push is Hyprland's echo of it: not answered with another push (no loop).
+            if (Minimized.blurRepushAllowed(Date.now() - root.lastBlurPush))
+                root.pushBlur();
         }
     }
 

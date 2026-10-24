@@ -179,8 +179,9 @@ function motionCall(reduced) {
 }
 
 // Compositor blur size and passes (GF-125, docs/specs/ui.md "Material blur"): one value for every surface, chosen by the
-// shell from the transparency. Core Hyprland config, no plugin needed; pcall keeps a Hyprland without hl.config quiet.
-// "" for anything but integers in range (callers must not dispatch it).
+// shell from the transparency. Core Hyprland config, no plugin needed. pcall only catches a Lua error (no hl.config at all):
+// hl.config does NOT raise for a key Hyprland does not know, it returns normally and Hyprland then reports a config error
+// (a "notify" event), see blurRejected(). "" for anything but integers in range (callers must not dispatch it).
 var blurLimits = {sizeMin: 1, sizeMax: 64, passesMin: 1, passesMax: 6};
 
 function blurCall(size, passes) {
@@ -358,4 +359,22 @@ function minimizeRequestAddress(data) {
     if (!msg || msg.v !== "gfc/1" || msg.type !== "minimize-request" || typeof msg.address !== "string")
         return "";
     return normalizeAddress(msg.address);
+}
+
+// Hyprland answered a blur push with a config error: a "notify" event that names the blur or a config error, within
+// blurErrorWindowMs of the push. The shell then stops pushing (the config's own 18 / 3 stays) instead of repeating a request
+// that fails.
+var blurErrorWindowMs = 2000;
+
+function blurRejected(eventName, eventData, msSincePush) {
+    if (eventName !== "notify" || typeof eventData !== "string")
+        return false;
+    if (typeof msSincePush !== "number" || msSincePush < 0 || msSincePush > blurErrorWindowMs)
+        return false;
+    return /blur|config error|config:/i.test(eventData);
+}
+
+// A config reload that follows our own push closely is Hyprland answering it, not a user reload: not pushed again (no loop).
+function blurRepushAllowed(msSincePush) {
+    return typeof msSincePush !== "number" || msSincePush > blurErrorWindowMs;
 }

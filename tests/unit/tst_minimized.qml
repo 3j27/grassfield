@@ -21,6 +21,17 @@ TestCase {
         compare(Minimized.blurCall(NaN, 3), "");
     }
 
+    function test_blurErrorFromHyprlandIsDetectedAndAReloadAfterOurPushDoesNotLoop() {
+        verify(Minimized.blurRejected("notify", "0,5000,ff0000,Config error in decoration:blur:size: no such option", 300));
+        verify(!Minimized.blurRejected("notify", "0,5000,ff0000,Config error in decoration:blur:size", 5000), "too late: not ours");
+        verify(!Minimized.blurRejected("notify", "volume changed", 300), "an unrelated notification");
+        verify(!Minimized.blurRejected("configreloaded", "", 300));
+        verify(!Minimized.blurRejected("notify", "Config error", -1));
+        verify(!Minimized.blurRepushAllowed(100), "a reload right after our push is its echo");
+        verify(Minimized.blurRepushAllowed(60000), "a later reload: push again");
+        verify(Minimized.blurRepushAllowed(Date.now()), "no push yet (a huge age): allowed");
+    }
+
     function test_windowCallIsBuiltFromValidatedPieces() {
         compare(Minimized.windowCall("minimize", "0x55AB", {x: 2300.4, y: 1010.6, w: 52, h: 52}),
                 "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.minimize then p.minimize(\"0x55ab\", 2300, 1011, 52, 52) end end");
