@@ -27,8 +27,9 @@ field, a reply or its field, an enum value, a feature, a verb): a shell function
 event fails, since the event never carries it. A reply parser (a function under a `// gfc1-reply:` comment) fed from an
 event also fails: a call to it inside a raw-event handler (`onRawEvent`, `rawEvent.connect(...)`), or a call to it or to
 a helper that passes its argument to one (any depth, any file) with the event's payload (`<param>.data`, a local assigned
-from it, or `event.data`) in its arguments (the B1 regression of 6b3a31f: the menu bar parsed the Stages notice as the
-state). Out of reach: a payload kept in a property, signal or object and parsed later, calls through function variables. The plugin sending something the shell ignores is allowed (overview-focus).
+from it (declared, assigned or destructured), or `event.data`) in its arguments (the B1 regression of 6b3a31f: the menu bar
+parsed the Stages notice as the state); `Qt.callLater(helper, payload)` counts as the call. Out of reach: a payload kept
+in a property, signal or object and parsed later, a copy of a copy, other calls through function variables. The plugin sending something the shell ignores is allowed (overview-focus).
 Limits: the extraction is textual. A new builder that does not use the patterns above is invisible and shows up as
 "documented but not in code"; teach `code_model` the new pattern rather than loosening the comparison.
 """
@@ -409,13 +410,22 @@ def event_handlers(text):
 
 
 def event_data_pattern(text, a, b, params):
-    """A regex for the event's payload in a handler: `<param>.data` and the locals assigned from it."""
+    """A regex for the event's payload in a handler: `<param>.data`, `<param>["data"]`, and the locals that hold it:
+    declared from it (`const d = e.data`), assigned it later (`let d; d = e.data`) or destructured from the event
+    (`const {data} = e`, `const {data: d} = e`); one level, no copies of copies."""
     names = [re.escape(p) for p in params if p]
     if not names:
         return None
-    data = r"\b(?:%s)\.data\b" % "|".join(names)
-    local = re.findall(r"\b(?:const|let|var)\s+(\w+)\s*=\s*%s\s*[;\n]" % data, text[a:b])
-    return re.compile(data + "".join(r"|\b%s\b" % re.escape(v) for v in local))
+    param = r"\b(?:%s)" % "|".join(names)
+    data = r"%s(?:\.data\b|\[\s*[\"']data[\"']\s*\])" % param
+    body = text[a:b]
+    local = re.findall(r"(?<![\w.])(\w+)\s*=(?!=)\s*%s(?!\s*[.\[(\w])" % data, body)
+    for fields in re.findall(r"\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*%s\b(?!\s*[.\[(])" % param, body):
+        for field in fields.split(","):
+            m = re.match(r"\s*data\s*(?::\s*(\w+))?", field)
+            if m:
+                local.append(m.group(1) or "data")
+    return re.compile(data + "".join(r"|(?<![\w.])%s\b" % re.escape(v) for v in sorted(set(local))))
 
 
 def reply_feed_errors(files):
@@ -435,13 +445,20 @@ def reply_feed_errors(files):
         handlers = event_handlers(text)
         own = {(module_of(path), name) for name, _, _, _ in functions_in(text)}
         for qual, name, paren in calls_in(text, 0, len(text)):
+            args = call_args(text, paren)
+            if qual == "Qt" and name == "callLater":
+                # Qt.callLater(fn, args...): the call of fn with those arguments, one event-loop turn later
+                deferred = re.match(r"\s*(?:(\w+)\.)?(\w+)\s*(?:,|$)", args)
+                if not deferred:
+                    continue
+                qual, name = deferred.group(1), deferred.group(2)
+                args = args[deferred.end():]
             target = resolve(qual, name)
             if target not in helpers:
                 continue
             # the definition of a helper of this file is not a call
             if target in own and re.search(r"\bfunction\s+%s\s*\($" % re.escape(name), text[max(0, paren - 80):paren + 1]):
                 continue
-            args = call_args(text, paren)
             inside = [h for h in handlers if h[0] <= paren <= h[1]]
             direct = target in parsers and bool(inside)
             payload = any((lambda pat: pat is not None and pat.search(args))(event_data_pattern(text, h[0], h[1], h[2]))
@@ -740,6 +757,18 @@ def selftest():
     local["shell/x/Local.qml"] = ('import "../platform/StagesState.js" as SS\nItem {\n    function take(text) { state = SS.parse(text); }\n'
                                   '    Connections {\n        function onRawEvent(e) {\n            const d = e.data;\n            take(d);\n        }\n    }\n}\n')
     expect("payload through a local variable", run_fixture(local), "feeds the reply parser take")
+    for label, body in (("destructured", "const {data} = e;\n            take(data);"),
+                        ("destructured under another name", "const {name, data: raw} = e;\n            take(raw);"),
+                        ("assigned later", "let d;\n            d = e.data;\n            take(d);"),
+                        ("indexed", "take(e[\"data\"]);")):
+        case = dict(base)
+        case["shell/x/Late.qml"] = ('import "../platform/StagesState.js" as SS\nItem {\n    function take(text) { state = SS.parse(text); }\n'
+                                    '    Connections {\n        function onRawEvent(e) {\n            %s\n        }\n    }\n}\n' % body)
+        expect("payload " + label, run_fixture(case), "feeds the reply parser take")
+    later = dict(base)
+    later["shell/x/Later.qml"] = ('import "../platform/StagesState.js" as SS\nItem {\n    function take(text) { state = SS.parse(text); }\n'
+                                  '    Connections {\n        function onRawEvent(event) {\n            Qt.callLater(root.take, event.data);\n        }\n    }\n}\n')
+    expect("a helper deferred with Qt.callLater", run_fixture(later), "feeds the reply parser root.take")
     named = dict(base)
     named["shell/x/Named.qml"] = ('import "../platform/StagesState.js" as SS\nItem {\n    function handle(e) { state = SS.parse(e.data); }\n'
                                   '    Component.onCompleted: Hyprland.rawEvent.connect(root.handle)\n}\n')
