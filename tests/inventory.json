@@ -148,6 +148,7 @@
  {"path": "tests/security/tst_devgate.qml", "layer": "headless"},
  {"path": "tests/security/lock_privacy.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/security/l2_wrong_password.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/security/lock_keyboard_replaced.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/security/upstream_drift.sh", "layer": "data"},
  {"path": "tests/security/password_hints.sh", "layer": "data"},
  {"path": "tests/security/notif_remote_image.sh", "layer": "nested", "runner": "bare"},

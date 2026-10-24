@@ -44,7 +44,9 @@
 # after a swap (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) changes nothing: the layer
 # gets every key of the new device and of the next one, no window gets one, and after the layer the swapped-in front window
 # gets every key (8j; integrator decision 2026-10-24: stages.sh 8c, 8f, 8g, 8h, 8i(e) lost every key in the three runs
-# whose nested session had no keyboard device of its own, see "keyboard devices" at the start of the run).
+# whose nested session had no keyboard device of its own, see "keyboard devices" at the start of the run). In such a
+# session (only then: SKIP otherwise) the session's only keyboard is replaced between every burst while the layer holds
+# the keyboard after a swap: the layer gets every burst, then the swapped-in front window does (8k).
 # Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Never hangs:
 # every wait is bounded, a FAIL while the nested Hyprland does not answer stops the run, and the run is bounded (check 15
 # min, perf its seconds + 15 min).
@@ -1142,6 +1144,55 @@ sleep 0.4
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 [[ $capb_new == *n8* && -z $capc_new ]] && in_active "$addr_b3"
 check "8j after the layer: the swapped-in front window (b3) gets every key, c3 nothing" $? "b3 got '$capb_new', c3 got '$capc_new'"
+
+# 8k. the session's only keyboard is replaced while an Exclusive layer holds the keyboard after a swap (integrator
+# decision 2026-10-24). Runs only when the nested session has no keyboard device of its own ("keyboard devices: 0" at the
+# start of the run: the parent seat had no keyboard when the session started): every keys.sh burst is then a new
+# keyboard device after the previous one went away, the seat loses its keyboard capability in between and clients
+# re-create their wl_keyboard, and a Quickshell client ignores the keys of the re-created one until it gets a new
+# wl_keyboard.leave and enter (the plugin announces it again). It cannot be produced through scripts/nestctl: Hyprland
+# 0.56.2 keeps a disabled keyboard (device `enabled = false`) in the seat's capabilities (IKeyboard::getCapabilities
+# returns the keyboard capability whatever the device's state; read from the binary). c3 holds the keyboard, the layer
+# takes it and gets a first burst (p), b's stage is activated, two more bursts (g h, then u) must reach the layer and no
+# window; after the layer, two bursts (v8, then w9) must reach b3, c3 nothing.
+if [[ ${own_kbds:-1} == 0 ]]; then
+  nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
+  sleep 0.5
+  sb=$(stage_of "$addr_b3")
+  start_exclusive
+  ex_rc=$?
+  keys p
+  sleep 0.4
+  ex0=$(layer_got "$exlog" key p)
+  capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+  a0=$(st_count '"active":'"$sb"',')
+  stages "{\"op\":\"activate\",\"stage\":$sb}"
+  wait_st '"active":'"$sb"',' "$a0" 2000
+  sw_rc=$?
+  sleep 0.6
+  keys gh
+  sleep 0.6
+  keys u
+  sleep 0.4
+  ex1=$(layer_got "$exlog" key ghu)
+  capb_mid=$(cap_since "$cap_b" "$capb0"); capc_mid=$(cap_since "$cap_c" "$capc0")
+  ((ex_rc == 0 && sw_rc == 0 && ex0 >= 1 && ex1 >= 3)) && [[ -z $capb_mid && -z $capc_mid ]]
+  check "8k the only keyboard replaced under the Exclusive layer after a swap: the layer gets every burst, no window one" $? \
+    "layer got the first burst: $ex0, the next two: $ex1 of 3 keys (g h, u); b3 got '$capb_mid', c3 got '$capc_mid'"
+  stop_exclusive
+  sleep 1
+  capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+  keys v8
+  sleep 0.6
+  keys w9
+  sleep 0.4
+  capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+  [[ $capb_new == *v8* && $capb_new == *w9* && -z $capc_new ]] && in_active "$addr_b3"
+  check "8k after the layer, the only keyboard replaced again: the swapped-in front window (b3) gets every burst, c3 nothing" $? \
+    "b3 got '$capb_new', c3 got '$capc_new'"
+else
+  say "  SKIP 8k: the session has ${own_kbds:-?} keyboard device(s) of its own; 8k needs one with none (the parent seat had no keyboard at start)"
+fi
 
 # 8d. a menu (xdg_popup with a grab) of the active stage's window keeps its keys; when that window goes to the strip its
 # menu closes at once, as a click outside it would, and every key goes to the new stage (R13 counter-review of 17208af:

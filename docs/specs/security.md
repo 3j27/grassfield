@@ -565,6 +565,14 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
   the final relock still releases a lock Hyprland uses). Closing this window needs a compositor-side lock/unlock event
   (e.g. from `grassfield-compositor`) or `allow_session_lock_restore = false` (which breaks crash recovery):
   owner/compositor decision.
+- Keyboards that come and go (2026-10-24): when the session's only keyboard device goes away and another appears (a
+  desktop's Bluetooth keyboard reconnecting at resume, on the lock screen), Quickshell ignores the keys of its re-created
+  `wl_keyboard` until it gets a new `wl_keyboard.leave` and `enter`: the lock's password field (and the polkit dialog) is
+  deaf, the session stays locked (fail closed, but a lock-out). grassfield-compositor announces the focus again before
+  the first key of the new device, to the same session-lock surface only, also while locked (integrator decision
+  2026-10-24; docs/specs/compositor.md "Keyboard focus before every key"); without the plugin the limit stays.
+  `tests/security/lock_keyboard_replaced.sh` (nested, bare) checks it in a session with no keyboard of its own and SKIPs
+  otherwise: the condition depends on the parent seat at nested start and cannot be produced through scripts/nestctl.
 - A foreign locker that takes over a live Grassfield lock and then dies (no release) leaves the session locked behind
   Hyprland's "lockscreen app died" screen (fail closed); Grassfield's own lock object is no longer used, so the session
   can only be unlocked after the shell restarts (its crash recovery takes the dead lock over).
