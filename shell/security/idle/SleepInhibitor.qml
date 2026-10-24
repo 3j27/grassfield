@@ -16,11 +16,14 @@ import "../../services/DevGate.js" as DevGate
 // basecamp/omarchy@237f1b4, see Lock.currentlyLocked()).
 //
 // Quickshell 0.3.1 has no D-Bus or logind API, so both halves are small child processes:
-//   - inhibitor: `systemd-inhibit --mode=delay … cat`; `cat` reads this process's stdin pipe, so
-//     the inhibitor dies with the shell (EOF) and can never outlive it;
+//   - inhibitor: `systemd-inhibit --mode=delay … sh -c 'echo held; exec cat'`; systemd-inhibit runs the command only
+//     once it holds the lock, so "held" is the proof it was taken; `cat` reads this process's stdin pipe, so the
+//     inhibitor dies with the shell (EOF) and can never outlive it;
 //   - watcher: `gdbus monitor` on /org/freedesktop/login1 (signal subscription, no privileges).
 // Both run under `setpriv --pdeathsig TERM` (util-linux): the kernel sends them SIGTERM when the
 // shell dies, even by SIGKILL, so a crash leaves no orphan behind.
+// A child that shows no progress within IdleModel.PROGRESS_BUDGET_MS (no "held", no gdbus line) is hung: it is stopped
+// and counted as a failure like an early exit (review of eee45cc).
 // Neither is ever given up (GF-AUDIT-001 SEC-02/GF-030): after IdleModel.MAX_FAST_FAILURES early exits in a row the
 // user gets a notice (Notifications, "The screen may not lock before sleep") and the child is retried every minute;
 // the notice is withdrawn once it runs again.
@@ -124,20 +127,37 @@ Scope {
     Process {
         id: inhibitor
 
-        // Set by inhibitorHealthy once this run lasted FAST_EXIT_MS; false from each start (and before any).
+        // Set once this run lasted FAST_EXIT_MS and the lock is held; false from each start (and before any).
         property bool ranLong: false
+        // "held" was printed: systemd-inhibit holds the lock.
+        property bool progressed: false
 
-        command: root.dieWithShell.concat(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "cat"])
+        command: root.dieWithShell.concat(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "sh", "-c", "echo held; exec cat"])
         stdinEnabled: true
+        stdout: SplitParser {
+            onRead: line => {
+                if (line === "held" && !inhibitor.progressed) {
+                    inhibitor.progressed = true;
+                    inhibitorProgress.stop();
+                    console.info("grassfield-idle: sleep inhibitor taken");
+                    if (inhibitor.running && !inhibitorHealthy.running) {
+                        inhibitor.ranLong = true;
+                        root.inhibitorFailures = 0;
+                    }
+                }
+            }
+        }
         onStarted: {
             ranLong = false;
+            progressed = false;
             inhibitorHealthy.restart();
-            console.info("grassfield-idle: sleep inhibitor taken");
+            inhibitorProgress.restart();
         }
         onRunningChanged: {
             if (running || root.sleeping || root.dev)
                 return;
             inhibitorHealthy.stop();
+            inhibitorProgress.stop();
             root.inhibitorFailures = IdleModel.failuresAfterRun(root.inhibitorFailures, ranLong);
             ranLong = false;
             inhibitorRestart.interval = IdleModel.retryDelayMs(root.inhibitorFailures);
@@ -147,14 +167,26 @@ Scope {
         }
     }
 
-    // Ran long enough: no longer failing.
+    // Ran long enough with the lock held: no longer failing.
     Timer {
         id: inhibitorHealthy
         interval: IdleModel.FAST_EXIT_MS
         onTriggered: {
-            if (inhibitor.running) {
+            if (inhibitor.running && inhibitor.progressed) {
                 inhibitor.ranLong = true;
                 root.inhibitorFailures = 0;
+            }
+        }
+    }
+
+    // No "held" in time: systemd-inhibit hangs without the lock. Stopped; onRunningChanged counts the failure.
+    Timer {
+        id: inhibitorProgress
+        interval: IdleModel.PROGRESS_BUDGET_MS
+        onTriggered: {
+            if (inhibitor.running && !inhibitor.progressed) {
+                console.warn("grassfield-idle: sleep inhibitor shows no lock after " + interval / 1000 + " s; stopped, counted as a failure");
+                inhibitor.running = false;
             }
         }
     }
@@ -168,22 +200,37 @@ Scope {
     Process {
         id: watcher
 
-        // Set by watcherHealthy once this run lasted FAST_EXIT_MS; false from each start (and before any).
+        // Set once this run lasted FAST_EXIT_MS and gdbus printed a line; false from each start (and before any).
         property bool ranLong: false
+        // gdbus printed its first line: connected to the system bus and subscribed.
+        property bool progressed: false
 
         running: true
         command: root.dieWithShell.concat(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"])
         stdout: SplitParser {
-            onRead: line => root.handleLine(line)
+            onRead: line => {
+                if (!watcher.progressed) {
+                    watcher.progressed = true;
+                    watcherProgress.stop();
+                    if (watcher.running && !watcherHealthy.running) {
+                        watcher.ranLong = true;
+                        root.watcherFailures = 0;
+                    }
+                }
+                root.handleLine(line);
+            }
         }
         onStarted: {
             ranLong = false;
+            progressed = false;
             watcherHealthy.restart();
+            watcherProgress.restart();
         }
         onRunningChanged: {
             if (running)
                 return;
             watcherHealthy.stop();
+            watcherProgress.stop();
             root.watcherFailures = IdleModel.failuresAfterRun(root.watcherFailures, ranLong);
             ranLong = false;
             watcherRestart.interval = IdleModel.retryDelayMs(root.watcherFailures);
@@ -197,9 +244,21 @@ Scope {
         id: watcherHealthy
         interval: IdleModel.FAST_EXIT_MS
         onTriggered: {
-            if (watcher.running) {
+            if (watcher.running && watcher.progressed) {
                 watcher.ranLong = true;
                 root.watcherFailures = 0;
+            }
+        }
+    }
+
+    // No line in time: gdbus hangs before it is subscribed. Stopped; onRunningChanged counts the failure.
+    Timer {
+        id: watcherProgress
+        interval: IdleModel.PROGRESS_BUDGET_MS
+        onTriggered: {
+            if (watcher.running && !watcher.progressed) {
+                console.warn("grassfield-idle: PrepareForSleep watcher shows no subscription after " + interval / 1000 + " s; stopped, counted as a failure");
+                watcher.running = false;
             }
         }
     }

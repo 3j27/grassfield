@@ -213,11 +213,21 @@ expect("lock ownership check: the grace is 500 ms and only restart() and `runnin
        and len(re.findall(r"\bverifyGraceMs\s*:", lock)) == 1
        and sorted(re.sub(r"\s+", "", u) for u in grace_uses) == sorted(["secureGrace", "secureGrace.restart()", "secureGrace.running", "secureGrace.running"]))
 sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
-expect("sleep inhibitor: a child's run of FAST_EXIT_MS is timed by its health Timer",
-       all(re.search(r"root\." + c + r"Failures\s*=\s*IdleModel\.failuresAfterRun\(root\." + c + r"Failures,\s*ranLong\);", sleep) is not None
-           and re.search(r"if\s*\(" + c + r"\.running\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep) is not None
-           and re.search(r"onStarted:\s*\{\s*ranLong\s*=\s*false;\s*" + c + r"Healthy\.restart\(\);", sleep) is not None
-           for c in ("inhibitor", "watcher")))
+idle = code(read("shell/security/idle/IdleModel.js"))
+# Reviews of 2dfd992 and eee45cc: a child is healthy only when its health Timer saw it running FAST_EXIT_MS AND it showed
+# progress (the inhibitor's "held", the watcher's first line); one without progress within PROGRESS_BUDGET_MS is stopped
+# and counted as a failure.
+expect("sleep inhibitor: a child is healthy only after FAST_EXIT_MS with progress; a hung one is a failure",
+       re.search(r"^var PROGRESS_BUDGET_MS = 10000;$", idle, re.M) is not None
+       and re.search(r"return ranLong === true \? 0 : n \+ 1;", code(function(idle, "failuresAfterRun") or "")) is not None
+       and '"systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "sh", "-c", "echo held; exec cat"]' in sleep
+       and re.search(r'if\s*\(line === "held" && !inhibitor\.progressed\)', sleep) is not None
+       and all(re.search(r"root\." + c + r"Failures\s*=\s*IdleModel\.failuresAfterRun\(root\." + c + r"Failures,\s*ranLong\);", sleep) is not None
+               and re.search(r"if\s*\(" + c + r"\.running\s*&&\s*" + c + r"\.progressed\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep) is not None
+               and re.search(c + r"\.progressed\s*=\s*true;\s*" + c + r"Progress\.stop\(\);.*?if\s*\(" + c + r"\.running\s*&&\s*!" + c + r"Healthy\.running\)\s*\{\s*" + c + r"\.ranLong\s*=\s*true;", sleep, re.S) is not None
+               and re.search(r"onStarted:\s*\{\s*ranLong\s*=\s*false;\s*progressed\s*=\s*false;\s*" + c + r"Healthy\.restart\(\);\s*" + c + r"Progress\.restart\(\);", sleep) is not None
+               and re.search(r"Timer\s*\{\s*id:\s*" + c + r"Progress\s+interval:\s*IdleModel\.PROGRESS_BUDGET_MS\s+onTriggered:\s*\{\s*if\s*\(" + c + r"\.running\s*&&\s*!" + c + r"\.progressed\)\s*\{[^}]*?" + c + r"\.running\s*=\s*false;", sleep) is not None
+               for c in ("inhibitor", "watcher")))
 
 for o in oks:
     print("OK " + o)
@@ -266,7 +276,10 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#if (!holding || secureGrace.running) {#if (!holding || Date.now() - root.securedAt < 500) {' \
   'shell/security/lock/Lock.qml#if (!holding || !hyprland || secureGrace.running)#if (!holding || !hyprland)' \
   'shell/security/idle/SleepInhibitor.qml#IdleModel.failuresAfterRun(root.inhibitorFailures, ranLong)#IdleModel.failuresAfterRun(root.inhibitorFailures, true)' \
-  'shell/security/idle/SleepInhibitor.qml#watcher.ranLong = true;#watcher.ranLong = watcher.ranLong;' \
+  'shell/security/idle/SleepInhibitor.qml#            if (watcher.running && watcher.progressed) {#            if (watcher.running) {' \
+  'shell/security/idle/SleepInhibitor.qml#            if (inhibitor.running && !inhibitor.progressed) {#            if (false) {' \
+  'shell/security/idle/SleepInhibitor.qml#"sh", "-c", "echo held; exec cat"#"cat"' \
+  'shell/security/idle/IdleModel.js#var PROGRESS_BUDGET_MS = 10000;#var PROGRESS_BUDGET_MS = 3600000;' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
   'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 3600000' \

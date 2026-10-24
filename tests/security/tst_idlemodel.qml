@@ -53,6 +53,15 @@ TestCase {
         compare(IdleModel.failuresAfterRun(2, 60000), 3, "a duration is not an answer");
     }
 
+    // Review of eee45cc: a child without progress within PROGRESS_BUDGET_MS is a failure; the budget leaves room for a
+    // slow start but is far below the slow retry period.
+    function test_progressBudget() {
+        compare(IdleModel.PROGRESS_BUDGET_MS, 10000);
+        verify(IdleModel.PROGRESS_BUDGET_MS > IdleModel.FAST_EXIT_MS);
+        verify(IdleModel.PROGRESS_BUDGET_MS < IdleModel.SLOW_RETRY_MS);
+        compare(IdleModel.failuresAfterRun(4, false), 5, "a hung child stopped by the budget counts as a failure");
+    }
+
     function test_retryNeverStops() {
         for (let n = 0; n < 50; n++) {
             const delay = IdleModel.retryDelayMs(n);

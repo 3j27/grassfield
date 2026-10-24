@@ -43,10 +43,16 @@ var FAST_EXIT_MS = 2000;
 var MAX_FAST_FAILURES = 5;
 var FAST_RETRY_MS = 5000;
 var SLOW_RETRY_MS = 60000;
+// A child must show progress within PROGRESS_BUDGET_MS of its start (the inhibitor: the line its command prints once
+// systemd-inhibit holds the lock; the watcher: gdbus' first line, printed once it is connected and subscribed). One that
+// runs without it is hung: it is stopped and counted as a failure (review of eee45cc: a hung child counted as healthy,
+// so the user was never told that the screen may not lock before sleep).
+var PROGRESS_BUDGET_MS = 10000;
 
-// Consecutive fast failures after a child exited: `ranLong` is true only when it ran at least FAST_EXIT_MS (SleepInhibitor
-// times that with a Timer, a monotonic clock: review of 2dfd992, a wall-clock step forward made an early exit look long
-// and hid the failure). Anything else (false, unknown, a child that never started) counts as a failure.
+// Consecutive fast failures after a child exited: `ranLong` is true only when it ran at least FAST_EXIT_MS AND showed
+// progress (SleepInhibitor times that with Timers, a monotonic clock: review of 2dfd992, a wall-clock step forward made an
+// early exit look long and hid the failure; review of eee45cc, a hung child looked healthy). Anything else (false, unknown,
+// a child that never started or never progressed) counts as a failure.
 function failuresAfterRun(failures, ranLong) {
     var n = Number(failures);
     if (!isFinite(n) || n < 0)

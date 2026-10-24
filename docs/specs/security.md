@@ -178,8 +178,14 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   Notification Center), the journal says why, and the child is retried every 60 s instead of every 5 s. A run of 2 s
   resets the count and withdraws the notice. Whether a run lasted 2 s is timed by a Timer (`inhibitorHealthy`,
   `watcherHealthy`: a monotonic clock), never by `Date.now()` (review of 2dfd992: a wall-clock step forward made an early
-  exit look long and hid the failure); a child that never started counts as a failure. Pure logic in `IdleModel.js`
-  (`failuresAfterRun`, `retryDelayMs`, `degraded`), unit-tested in `tst_idlemodel.qml`.
+  exit look long and hid the failure); a child that never started counts as a failure. A run counts only with progress
+  (review of eee45cc: a hung child looked healthy): the inhibitor's command is `sh -c 'echo held; exec cat'`, which
+  systemd-inhibit starts only once it holds the lock, so "held" proves it; the watcher's progress is gdbus' first line
+  (printed once it is connected and subscribed). A child without progress within 10 s (`IdleModel.PROGRESS_BUDGET_MS`,
+  `inhibitorProgress`, `watcherProgress` Timers) is stopped and counted as a failure, so a hung child leads to the
+  degraded notice too. Pure logic in `IdleModel.js` (`failuresAfterRun`, `retryDelayMs`, `degraded`), unit-tested in
+  `tst_idlemodel.qml`; the wiring is checked by `tests/security/lock_surfaces.sh` (with mutants). Real-session
+  behaviour of the progress lines: NOT VERIFIED here (no system bus in the sandbox; L2).
 - No wall clock in `shell/security`: every delay is a Qt Timer. The lock ownership check skips Hyprland answers for
   500 ms after the compositor confirmed the lock (`Lock.qml` `secureGrace`, single-shot Timer; with `Date.now()` a clock
   step back turned the check off for as long as the step, review of 2dfd992); a Timer that is not running means no
@@ -629,7 +635,8 @@ Decisions:
   owner's real account (faillock is shared with sudo). Real sessions (`GRASSFIELD_SESSION=1`, whatever
   `GRASSFIELD_DEV` says) are unchanged: `pamSuppressed` is false and authentication is normal. Unit-tested both ways (`tst_lockcontroller.qml`), structure
   checked by `tests/security/reload_order`.
-- Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … cat`
+- Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … sh -c
+  'echo held; exec cat'`
   (stdin pipe: the inhibitor dies with the shell) plus `gdbus monitor` on `/org/freedesktop/login1` for
   `PrepareForSleep`. Both run under `setpriv --pdeathsig TERM --` (util-linux), so a shell crash (even SIGKILL) leaves
   no orphan (verified in nested: `kill -9` of the shell → its `gdbus monitor` child is gone). Released once
