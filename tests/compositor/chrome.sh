@@ -358,8 +358,10 @@ if [[ -x $settings ]]; then
       ((${m[bar_rows]:-1} == 0))
       check "Settings (client chrome): no plugin bar above it" $? "${m[bar_rows]} rows of the plugin bar colour above the surface (expected 0)"
     fi
-    check_corner "Settings (org.grassfield.*)" 7 10 26
+    # The corner on the app's own top edge (its toolbar colour, measured with no plugin bar): the measurement above looks
+    # for the plugin bar, absent by design here, and finds no corner (integrator run 2026-10-24: diagonal inset -1).
     measure_app settings "$sx" "$sy" "$sw"
+    check_corner "Settings (org.grassfield.*)" 7 10 26
     check_app_lights "Settings (its own lights)" "$sx" "$sy"
     check_grey "Settings (active): its own lights coloured" 1
     pointer abs $((sx + 26 + 23 + 12)) $((sy + 26)) sleep 400 # between the minimize and zoom lights
