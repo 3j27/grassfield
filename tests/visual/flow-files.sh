@@ -37,16 +37,22 @@ mkdir -p "$top/Documents" "$top/Pictures" "$busdir" "$iso"/{home,config,cache,st
 printf 'quarterly numbers\n' >"$top/report.txt"
 printf 'meeting notes\n' >"$top/Documents/notes.txt"
 
-env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY="$(vs_nested_wayland)" GRASSFIELD_DEV=1 HOME="$iso/home" \
+env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY="$(vs_nested_wayland)" GRASSFIELD_DEV=1 HOME="$iso/home" \
   XDG_CONFIG_HOME="$iso/config" XDG_CACHE_HOME="$iso/cache" XDG_STATE_HOME="$iso/state" XDG_DATA_HOME="$iso/data" \
   setsid dbus-daemon --session --nofork --print-address=1 >"$busdir/address" 2>"$busdir/log" </dev/null &
 bus_pid=$!
+bus_start=$(dev_start_time "$bus_pid" || echo none)
 app=""
+app_start=none
+# Signal a process group only while the pid still is the process started here (start time, scripts/dev/pidfile.sh) and
+# dev_may_signal allows it (never a compositor, this script or its parents).
+stop_group() { # PID START
+  [[ -n $1 && $(dev_start_time "$1" 2>/dev/null) == "$2" ]] && dev_may_signal "$1" && kill -- "-$1" 2>/dev/null
+  return 0
+}
 files_cleanup() {
-  local pid
-  for pid in $app $bus_pid; do
-    [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null && kill -- "-$pid" 2>/dev/null
-  done
+  stop_group "$app" "$app_start"
+  stop_group "$bus_pid" "$bus_start"
   [[ -n $app ]] && wait "$app" 2>/dev/null
   wait "$bus_pid" 2>/dev/null
   fl_cleanup
@@ -74,10 +80,11 @@ settle() { vs_sleep 1.5; files_ready >/dev/null; } # the type-to-select buffer e
 
 # Open the app on the folder; the window opens on the output under the pointer, so click the empty desktop first.
 vs_pointer abs 960 540 sleep 100 click >/dev/null
-env DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_FILES_NO_LAUNCH=1 QML_IMPORT_PATH="$VS_ROOT/ui" QT_FORCE_STDERR_LOGGING=1 \
+env -u HYPRLAND_INSTANCE_SIGNATURE DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_FILES_NO_LAUNCH=1 QML_IMPORT_PATH="$VS_ROOT/ui" QT_FORCE_STDERR_LOGGING=1 \
   QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY="$(vs_nested_wayland)" \
   setsid "$VS_ROOT/scripts/dev/isolated.sh" --name "$iso_name" -- "$bin" "$top" >"$log" 2>&1 </dev/null &
 app=$!
+app_start=$(dev_start_time "$app" || echo none)
 fl_check_wait "Files opens the folder (title names 'top')" 25 title_is '(^|[^a-z])top'
 vs_sleep 2
 # Focus: the keyboard must be in the Files window before anything is typed (otherwise the desktop icons get the keys).
