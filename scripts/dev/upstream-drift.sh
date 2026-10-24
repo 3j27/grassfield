@@ -91,7 +91,10 @@ done
 if ((${#scan_dirs[@]} > 0)); then
   # In a checkout only the files git tracks count: an untracked build tree (makepkg's packaging/arch/pkg holds copies of
   # the shell) is not the source. A `git archive` export (release-check) has no .git and no such tree: plain grep there.
-  if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # Only when the scanned root is itself a checkout's top level: a --root fixture inside another checkout (the test's
+  # temporary tree under .dev) is plain files.
+  top=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null || true)
+  if [[ -n $top && $(realpath "$top") == "$(realpath "$repo")" ]]; then
     forks=$(git -C "$repo" grep -liI -e "adapted from omarchy" -- "${scan_dirs[@]}" ':(exclude,glob)**/.dev/**' \
       ':(exclude,glob)**/docs/**' ':(exclude,glob)**/tests/**' ':(exclude,glob)**/licenses/**' ':(exclude,glob)**/upstream-drift.sh')
   else
