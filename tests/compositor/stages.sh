@@ -154,6 +154,7 @@ cleanup() {
   [[ -n $exclusive_pid ]] && kill "$exclusive_pid" 2>/dev/null
   [[ -n ${popup_pid:-} ]] && kill "$popup_pid" 2>/dev/null
   [[ -n ${polkit_pid:-} ]] && kill "$polkit_pid" 2>/dev/null
+  [[ -n ${ondemand_pid:-} ]] && kill "$ondemand_pid" 2>/dev/null
   nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
   nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "false")' >/dev/null 2>&1
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
@@ -258,6 +259,22 @@ stop_polkit() {
   [[ -n $polkit_pid ]] || return 0
   reap "$polkit_pid"
   polkit_pid=""
+}
+# A fifth fixture instance (role ondemand): a Top-layer surface with OnDemand keyboard interactivity (a clickable banner);
+# it logs every key it receives.
+odlog=$run/ondemand.log
+ondemand_pid=""
+start_ondemand() {
+  : >"$odlog"
+  GF_STAGES_ROLE=ondemand GF_STAGES_OUTPUT=$out WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
+    setsid "$root/scripts/dev/isolated.sh" --name stages-ondemand qs -p "$root/tests/compositor/stages-fixture" --no-color >"$odlog" 2>&1 </dev/null &
+  ondemand_pid=$!
+  wait_log "$odlog" "ondemand surface shown" 50
+}
+stop_ondemand() {
+  [[ -n $ondemand_pid ]] || return 0
+  reap "$ondemand_pid"
+  ondemand_pid=""
 }
 # A third fixture instance: an app window whose click opens a menu (an xdg_popup with a grab); it logs the menu opening and
 # closing and every key the window and the menu receive.
@@ -1076,7 +1093,11 @@ pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100
 # macOS: a modal system prompt always gets the keyboard; wlr-layer-shell: an Exclusive Top or Overlay surface gets every
 # key). c3 holds the keyboard, the layer takes it, b's stage is activated (c3 goes to the strip). Then a new keyboard
 # device (tests/tools/vkbd) appears and types j k, and while it is still there another one (keys.sh) types l m: the layer
-# gets the four keys, no window one. When the layer is gone the swapped-in front window (b3) gets every key, c3 nothing.
+# gets the four keys, no window one. Then a Top-layer surface that takes the keyboard on demand (a clickable banner, the
+# fixture's role ondemand) maps while the layer is still up: Hyprland 0.56.2 gives it the keyboard when it maps (its log:
+# "Set keyboard focus" to the banner), and with the keyboard moved back only when a key arrived the client lost that key
+# (9169ad4: "layer got 1 of the 2 keys" in 3 runs of 3). The layer gets both keys (o p), the banner none. When the layer
+# is gone the swapped-in front window (b3) gets every key, c3 nothing.
 vkbd() { timeout 20 "$root/tests/tools/vkbd/vkbd.sh" "$@" >>"$log" 2>&1; }
 nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
 sleep 0.5
@@ -1102,6 +1123,17 @@ wait "$vkbd_pid" 2>/dev/null
 ((ex_rc == 0 && sw_rc == 0 && ex1 >= 4)) && [[ -z $capb_mid && -z $capc_mid ]]
 check "8j a keyboard device appears under the Exclusive layer after a swap: the layer gets every key of it and of the next one, no window one" $? \
   "layer got $ex1 of the 4 keys (j k from the new device, l m from the next); b3 got '$capb_mid', c3 got '$capc_mid'"
+start_ondemand
+od_rc=$?
+keys op
+sleep 0.4
+ex2=$(layer_got "$exlog" key op)
+od_keys=$(grep -c "\[stages-fixture\] ondemand key" "$odlog")
+((od_rc == 0 && ex2 >= 2 && od_keys == 0))
+check "8j a surface that takes the keyboard on demand maps over the Exclusive layer: the layer keeps every key, the banner none" $? \
+  "banner shown: $((od_rc == 0)); layer got $ex2 of the 2 keys; banner got $od_keys"
+stop_ondemand
+sleep 0.4
 stop_exclusive
 sleep 1
 capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
