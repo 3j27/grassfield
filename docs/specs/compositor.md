@@ -58,7 +58,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 ## Functional requirements (numbered, testable)
 
 - **FR1** The plugin refuses to hook anything when `__hyprland_api_get_hash()` differs from
-  `__hyprland_api_get_client_hash()`, logs the mismatch and shows one notification.
+  `__hyprland_api_get_client_hash()`, logs the mismatch and shows one notification. The plugin's own notices (this one
+  and the failed start) are in the session's language (GF-067; macOS shows system notices in the user's language): a
+  compiled table, `core/Notices.hpp`, French or English by `LC_ALL`, then `LC_MESSAGES`, then `LANG` (the first set and
+  not empty); `tests/NoticesTest.cpp` fails when a notice has no French text. They are Hyprland notifications, shown
+  before any gfc/1 channel exists, so gfc/1 is unchanged.
 - **FR2** Every mapped floating window (not full screen, `decorate` rule not false, not X11
   override-redirect) gets a titlebar decoration 32 px (logical) tall above its content; tiled and
   full-screen windows get none (zero extents). A full-screen window's titlebar is revealed by the pointer at the top

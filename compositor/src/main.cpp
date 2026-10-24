@@ -18,6 +18,7 @@
 #include "Stages.hpp"
 #include "Tiling.hpp"
 #include "Titlebar.hpp"
+#include "core/Notices.hpp"
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
@@ -31,6 +32,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -225,6 +227,13 @@ namespace {
         if (state().handle)
             HyprlandAPI::addNotification(state().handle, text, color, timeMs);
     }
+
+    // A notice in the session's language (GF-067: core/Notices.hpp, French or English by LC_ALL, LC_MESSAGES, LANG).
+    void notify(gf::notices::Notice notice, const CHyprColor& color, float timeMs = 8000.F) {
+        // NOLINTNEXTLINE(concurrency-mt-unsafe): read once on Hyprland's main thread, nothing in the plugin sets the environment
+        const auto lang = gf::notices::languageFrom(std::getenv("LC_ALL"), std::getenv("LC_MESSAGES"), std::getenv("LANG"));
+        notify(std::string{gf::notices::text(notice, lang)}, color, timeMs);
+    }
 } // namespace
 
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -245,9 +254,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         // The degraded-mode notice (audit GF-033): what is off and how to get it back. The session normally never loads a
         // build stamped for another Hyprland (ADR-0009 "Amendment 2026-10-23", config/hypr/grassfield/compositor.lua);
         // this shows when one is loaded anyway (by hand, or a stamp that lies).
-        notify("[Grassfield] The compositor extension was built for another Hyprland: titlebars, minimize and global menus are off. "
-               "Run grassfield-compositor-rebuild in a terminal, then log out and back in.",
-               CHyprColor{1.F, 0.35F, 0.3F, 1.F}, 30000.F);
+        notify(gf::notices::Notice::AbiMismatch, CHyprColor{1.F, 0.35F, 0.3F, 1.F}, 30000.F);
         info.description += " [inactive: Hyprland version mismatch]";
         return info;
     }
@@ -339,7 +346,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     if (!ok) {
         gf::guarded("PLUGIN_INIT rollback", [] { teardown(); });
-        notify("[Grassfield] Compositor plugin failed to start: titlebars disabled.", CHyprColor{1.F, 0.35F, 0.3F, 1.F});
+        notify(gf::notices::Notice::InitFailed, CHyprColor{1.F, 0.35F, 0.3F, 1.F});
         info.description += " [inactive: init failed]";
     }
 
