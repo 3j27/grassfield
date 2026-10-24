@@ -15,15 +15,21 @@
 #   overview-open-4w, -close-4w     the Overview with four windows (the plugin's live window transforms, docs/specs/overview.md)
 #   overview-open-flat, -close-flat the same with Reduce Transparency on (no blur): what the blur costs, by difference
 # The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
-# Frames come only while something changes on the output: the interval that spans a request (from the last frame before it,
-# often a pause with nothing to draw, to the first frame after it) is left out; every other interval counts. Each
-# scenario's frames are those of the WINDOW_MS after its request.
+# The window measured is the animation itself (ADR-0006 amendment, integrator decision 2026-10-24 under D-5, the macOS
+# model: a static screen owes no frames, so sparse frames once the animation is over are not misses): from the first frame
+# presented after the request (the request's own latency, the qs ipc process and the shell's reaction, is printed, not
+# measured) to that frame + the animation's token duration + one refresh period (tests/visual/animation-windows.py), or to
+# the plugin's end mark of the Overview's phase when later (its windows start moving once the chrome holds the keyboard).
+# Durations: Overview motion.slow (shell/overview/Overview.qml), Launchpad motion.normal (shell/launchpad/AppsWindow.qml),
+# Dock magnification the glide as timed here + motion.fast (the Dock's settle). The interval that spans a request is left
+# out. The tail, from the animation's end to WINDOW_MS after the request, is reported as information (its frames and its
+# longest interval), never a verdict, so a late stall stays visible; frame-attribution.py attributes both.
 #   tests/visual/presented-frames.sh [CYCLES=3] [PROFILE=balanced] [WINDOW_MS=1500]
 # Run as a BARE command with a relative path; needs this tree's plugin loaded in the nested session (just plugin-build; the
 # session started by nested-up loads it). The nested output is paced by Hyprland's own timer: the numbers are an indication
 # of the shell's and the compositor's work per frame; the gate is the owner's L2 run on the real session.
-# Output: .dev/visual/presented-frames/{frames.txt,events.txt,stats.txt,*.json}. Exit 1 when a phase is below 95 %, 2 on an
-# environment error.
+# Output: .dev/visual/presented-frames/{frames.txt,events.txt,events.anim,windows.txt,stats.txt,attribution.txt,*.json}.
+# Exit 1 when a phase is below 95 % in its animation window, 2 on an environment error.
 source "$(dirname "$0")/lib.sh"
 set +e
 
@@ -62,6 +68,9 @@ sleep 1.5
 vs_park
 
 hz=$(nestctl monitors -j | jq -r '[.[] | select(.name == "'"$VS_OUTPUT"'") | .refreshRate][0] // 60')
+# The animations' token durations (ui/tokens/tokens.json motion.*).
+read -r slow_ms normal_ms fast_ms < <(jq -r '"\(.motion.slow.value) \(.motion.normal.value) \(.motion.fast.value)"' "$VS_ROOT/ui/tokens/tokens.json")
+[[ $slow_ms =~ ^[0-9]+$ && $normal_ms =~ ^[0-9]+$ && $fast_ms =~ ^[0-9]+$ ]] || { echo "FAIL no motion tokens in ui/tokens/tokens.json"; exit 2; }
 read -r dx dy dw dh < <(nestctl -j layers | jq -r '[.. | objects | select(.namespace? == "grassfield-dock")][0] | "\(.x) \(.y) \(.w) \(.h)"')
 # The glide: over the icons, first tile to last (output coordinates; the Dock at the bottom, not auto-hidden).
 vs_ipc dock autohide false >/dev/null
@@ -132,8 +141,11 @@ for ((c = 1; c <= cycles; c++)); do
   if [[ -n $gx0 ]]; then
     y=$gy x0=$gx0 x1=$gx1
     vs_pointer abs "$x0" "$y" sleep 300 >/dev/null
-    event dock-magnification
+    # The request's time, with the glide's own duration as timed (third column, read by animation-windows.py).
+    t0=$(mono_ns)
     vs_pointer drag "$x1" "$y" drag "$x0" "$y" drag "$x1" "$y" drag "$x0" "$y" >/dev/null
+    t1=$(mono_ns)
+    echo "dock-magnification $t0 $(((t1 - t0) / 1000000 + fast_ms))" >>"$out/events.txt"
     sleep 0.6
     vs_park
     sleep 0.6
@@ -155,10 +167,13 @@ vs_ipc controlcenter reduceTransparency false >/dev/null
 
 [[ -n $gx0 ]] || echo "NOTE dock-magnification not measured: no Dock tile centres"
 drop_spanning "$out/frames.all" "$out/events.txt" >"$out/frames.txt"
-echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, window $window ms"
-python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.txt" "$hz" "$window" | tee "$out/stats.txt"
+echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, tail to $window ms"
+# Each request's animation window (and its tail).
+python3 -I "$VS_HERE/animation-windows.py" "$out/frames.all" "$out/events.txt" "$out/marks.all" "$hz" \
+  "overview=$slow_ms,launchpad=$normal_ms,dock-magnification=$((1200 + fast_ms))" "$window" "$out/events.anim" | tee "$out/windows.txt"
+python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" | tee "$out/stats.txt"
 rc=${PIPESTATUS[0]}
-# Whose cost each long interval was (compositor render, a client's late frame, other), the render CPU, the plugin's phases.
-python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.txt" "$hz" "$window" \
+# Whose cost each long interval was (compositor render, a client's late frame, other), in the animation and in its tail.
+python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.anim" "$hz" "$window" \
   | tee "$out/attribution.txt"
 exit "$rc"

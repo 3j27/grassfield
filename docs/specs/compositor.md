@@ -128,9 +128,13 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   Hyprland rendered (render.preChecks to RENDER_POST, the plugin's draws included, the GPU's time not; 1024 per output),
   and the Overview marks its phases (`overview-opening`, `overview-open`, `overview-closing`, `overview-closed`; the last
   64, names cut at 32 bytes). `tests/visual/presented-frames.sh` measures real shell animations with it (Overview
-  open/close, Launchpad open, Dock magnification) through `tests/visual/frame-stats.py`, and `tests/visual/
-  frame-attribution.py` classes each interval over 1.2 periods: `compositor` (its frame took more than 0.8 period of CPU),
-  `client` (the render began more than 0.5 period after the previous presentation: nothing new to draw until then), `other`.
+  open/close, Launchpad open, Dock magnification) through `tests/visual/frame-stats.py`, each over its animation's own
+  window (ADR-0006 amendment 2026-10-24, D-5, macOS model: a static screen owes no frames): from the first frame after the
+  request to it + the animation's token duration + one refresh period, or to the Overview's end mark when later
+  (`tests/visual/animation-windows.py`); the tail after it is reported, never judged. `tests/visual/frame-attribution.py`
+  classes each interval over 1.2 periods, in the animation and in the tail: `compositor` (its frame took more than 0.8
+  period of CPU), `client` (the render began more than 0.5 period after the previous presentation: nothing new to draw
+  until then), `other`.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
@@ -139,7 +143,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   state always matches the device and the click after any titlebar gesture reaches the window under the
   pointer. One exception, P6 (the revealed titlebar of a full-screen window): a press on it and the release of that press
   are cancelled together; Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it
-  was. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  was. Such a press is taken only while no button is held anywhere (the bus event names no device). Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
   press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
   a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
   The release of a press that went to a client is never consumed, even over a titlebar.
