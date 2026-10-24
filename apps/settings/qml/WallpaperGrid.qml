@@ -4,7 +4,7 @@ import Grassfield.Ui
 
 // Grid of 16:10 wallpaper tiles (Settings > Wallpaper, ADR-0016). One focus stop: arrows, Home and End move, Return or
 // Space applies (the IconModePicker pattern). model: [{label, kind, color, thumb, selected}] with kind "art" (the
-// Grassfield artwork), "color", "image" (thumb is a file path, "" while it is prepared), "folder" or "add" (a button-like
+// Grassfield artwork), "color", "image" or "video" (thumb is a file path, "" while it is prepared; a video tile has a play badge), "folder" or "add" (a button-like
 // tile). `wrap: true` lets a long label take three lines (the online tile) instead of eliding in the middle. The tiles are radio buttons for assistive technology, named after the picture. Names are untrusted: plain text.
 Item {
     id: root
@@ -118,8 +118,8 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    visible: tile.modelData.kind === "image" && tile.modelData.thumb !== ""
-                    source: tile.modelData.kind === "image" && tile.modelData.thumb !== "" ? "file://" + tile.modelData.thumb : ""
+                    visible: (tile.modelData.kind === "image" || tile.modelData.kind === "video") && tile.modelData.thumb !== ""
+                    source: (tile.modelData.kind === "image" || tile.modelData.kind === "video") && tile.modelData.thumb !== "" ? "file://" + tile.modelData.thumb : ""
                     asynchronous: true
                     cache: false
                     fillMode: Image.PreserveAspectCrop
@@ -128,10 +128,28 @@ Item {
 
                 Icon {
                     anchors.centerIn: parent
-                    visible: tile.modelData.kind === "folder" || tile.modelData.kind === "add" || (tile.modelData.kind === "image" && tile.modelData.thumb === "")
-                    name: tile.modelData.kind === "folder" ? "folder" : tile.modelData.kind === "add" ? "chevron-right" : "wallpaper"
+                    visible: tile.modelData.kind === "folder" || tile.modelData.kind === "add" || ((tile.modelData.kind === "image" || tile.modelData.kind === "video") && tile.modelData.thumb === "")
+                    name: tile.modelData.kind === "folder" ? "folder" : tile.modelData.kind === "add" ? "chevron-right" : tile.modelData.kind === "video" ? "media-play" : "wallpaper"
                     size: Tokens.settingsListIconSize
                     color: Appearance.colors.textSecondary
+                }
+
+                // A video tile with its frame: a play badge in the corner (frosted chip, so that it reads over any frame).
+                Rectangle {
+                    visible: tile.modelData.kind === "video" && tile.modelData.thumb !== ""
+                    x: Tokens.spacingXs
+                    y: face.height - height - Tokens.spacingXs
+                    width: Tokens.settingsListIconSize + Tokens.spacingXs
+                    height: width
+                    radius: width / 2
+                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+
+                    Icon {
+                        anchors.centerIn: parent
+                        name: "media-play"
+                        size: Tokens.settingsListIconSize - Tokens.spacingXs
+                        color: Appearance.colors.text
+                    }
                 }
 
                 // Selected: an accent ring; keyboard focus: the focus ring on the tile.

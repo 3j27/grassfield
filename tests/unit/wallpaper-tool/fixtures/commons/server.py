@@ -91,6 +91,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send(400, "text/plain", b"bad action")
             return
+        if url.path == "/planetary/apod":
+            # Stand-in for api.nasa.gov (NASA APOD): apod-DATE.json, else apod.json; "@BASE@" is this origin.
+            date = query.get("date", [""])[0]
+            name = "apod-%s.json" % date
+            self.json(name if os.path.isfile(os.path.join(self.server.dir, name)) else "apod.json")
+            return
+        if url.path.startswith("/apod/image/"):
+            name = os.path.basename(url.path)
+            if mode == "apod-path-redirect":
+                # A redirect to another page of the same (allowed) host: the path rule must refuse it before any request there.
+                self.send(302, "text/plain", b"", {"Location": "/thumb/picture.jpg"})
+                return
+            raw = self.fixture(name)
+            if raw is None:
+                self.send(404, "text/plain", b"missing picture")
+                return
+            self.send(200, TYPES.get(os.path.splitext(name)[1].lower(), "application/octet-stream"), raw)
+            return
         if url.path.startswith("/thumb/"):
             name = os.path.basename(url.path)
             if mode == "evil-redirect":

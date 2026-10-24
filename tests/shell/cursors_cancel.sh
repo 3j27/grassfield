@@ -7,7 +7,14 @@ set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/cursors-cancel.XXXXXX")
 pids=()
-cleanup() { for p in "${pids[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; done; rm -rf "$tmp"; }
+# A recorded build's group is signalled only while one of its processes still works under $tmp: by the time this runs
+# the builds have exited, and a reused number could name an unrelated process group (never kill by a stale pid).
+cleanup() {
+  for p in "${pids[@]}"; do
+    pgrep -g "$p" -f -- "$tmp" >/dev/null 2>&1 && kill -KILL -- "-$p" 2>/dev/null || true
+  done
+  rm -rf "$tmp"
+}
 trap cleanup EXIT
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
