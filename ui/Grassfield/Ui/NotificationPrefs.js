@@ -144,7 +144,8 @@ function imageShown(shown, image) {
 }
 
 // The one test of a notification app icon NAME, used everywhere such a name reaches the icon theme (the shell's
-// History.safeIconName calls it: intake, history load, iconSource; and appIconShown below): 1-128 letters, digits, ".",
+// History.safeIconName calls it: intake, history load, iconSource; appIconShown below; and the polkit sheet's
+// AuthDialogModel.iconName): 1-128 letters, digits, ".",
 // "_", "-", starting with a letter or digit, no "..". So no "/", "\", ":", NUL, control characters or spaces: Qt also
 // searches its fallback directory /usr/share/pixmaps, where "../../../dir/evil" named any file (review of 6e24d36).
 // Returns the name, else "".

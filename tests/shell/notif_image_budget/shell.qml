@@ -4,15 +4,17 @@ import Quickshell
 import Quickshell.Io
 import qs.notifications
 
-// Review of 6e24d36 (minor 1), on the REAL Notifications singleton (scripts/dev/test.sh: `qs -p
+// Reviews of 6e24d36 (minor 1) and 2dfd992, on the REAL Notifications singleton (scripts/dev/test.sh: `qs -p
 // tests/shell/notif_image_budget`, a dev session without the D-Bus server; see the dev-session marker file).
-// The private copies of notification images have a total byte budget across all senders (64 MiB; lowered to 3 MiB here):
+// The private copies of notification images have a total byte budget across all senders (64 MiB; lowered to 3 MiB here,
+// so one sender's share is 1.5 MiB; each image below comes from its own sender, tests/shell/notif_image_fairness covers
+// the share):
 //  - six 1 MiB images: the three newest are kept, the three oldest are evicted (oldest first), and the directory never
 //    holds more than the budget;
 //  - an evicted image falls back to the app icon and is not re-made just because it is shown (no eviction loop);
 //  - an image larger than the whole budget is refused (the app icon shows) and evicts nothing;
 //  - a copy a banner on screen shows is never evicted: the next oldest goes instead;
-//  - an image that would not fit even after evicting every copy not on a banner is refused before anything is evicted.
+//  - an image the banners' copies leave no room for is refused before anything is evicted.
 // Prints "notif-image-budget: PASS" or the failures.
 ShellRoot {
     id: root
@@ -33,6 +35,15 @@ ShellRoot {
         return dir + "/" + name + ".png";
     }
 
+    // Each image has its own sender (its file name), so only the global budget applies here.
+    function request(name: string): void {
+        Notifications.requestCopy(path(name), true, "Sender " + name);
+    }
+
+    function banner(name: string): void {
+        Notifications.showBanner({key: "budget-" + name, nid: 1, appName: "Sender " + name, appIcon: "", image: path(name), summary: "s", bodyHtml: "", time: Date.now(), urgency: 1, actions: []}, 0);
+    }
+
     function state(name: string): string {
         const e = Notifications.localCopies[path(name)];
         return e === undefined ? "" : e.state;
@@ -42,6 +53,7 @@ ShellRoot {
         return names.map(n => n + "=" + state(n)).join(" ");
     }
 
+    // Nothing queued and no batch running (copyBatch is set while the helper runs).
     function idle(): bool {
         return Notifications.copyQueue.length === 0 && Notifications.copyBatch.length === 0;
     }
@@ -54,7 +66,7 @@ ShellRoot {
         id: setup
         running: true
         command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d\"; for i in 1 2 3 4 5 6; do head -c 1048576 /dev/zero >\"$d/a$i.png\"; done; "
-            + "head -c 4194304 /dev/zero >\"$d/huge.png\"; head -c 2621440 /dev/zero >\"$d/mid.png\"", "sh", root.dir]
+            + "head -c 4194304 /dev/zero >\"$d/huge.png\"; head -c 1048576 /dev/zero >\"$d/c.png\"", "sh", root.dir]
         // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
         // qmllint disable signal-handler-parameters
         onExited: code => {
@@ -62,7 +74,7 @@ ShellRoot {
             root.check("fixtures created", code === 0);
             Notifications.copyBudgetBytes = 3 * root.mib;
             for (const n of ["a1", "a2", "a3", "a4", "a5", "a6"])
-                Notifications.requestCopy(root.path(n), true);
+                root.request(n);
             root.phase = 1;
             poll.start();
         }
@@ -98,8 +110,8 @@ ShellRoot {
             check("the refused image falls back to the app icon", Notifications.iconSource(path("huge"), "") === "");
             check("it evicted nothing (" + states(["a4", "a5", "a6"]) + ", " + sizes.length + " copies)", state("a4") === "ok" && state("a5") === "ok" && state("a6") === "ok" && sizes.length === 3);
             // a4 (the oldest kept copy) is on a banner; a new notification names a1 again.
-            Notifications.showBanner({key: "budget-banner", nid: 1, appName: "Test", appIcon: "", image: path("a4"), summary: "s", bodyHtml: "", time: Date.now(), urgency: 1, actions: []}, 0);
-            Notifications.requestCopy(path("a1"), true);
+            banner("a4");
+            request("a1");
             phase = 4;
             waited = 0;
             poll.start();
@@ -107,13 +119,15 @@ ShellRoot {
             check("the banner's copy is kept, the next oldest is evicted (" + states(["a1", "a4", "a5", "a6"]) + ")",
                 state("a1") === "ok" && state("a4") === "ok" && state("a5") === "gone" && state("a6") === "ok");
             check("still within the budget (" + total() + " bytes in " + sizes.length + " copies)", total() <= 3 * mib && sizes.length === 3);
-            // 2.5 MiB with the banner's 1 MiB kept: cannot fit even after evicting a1 and a6, so neither is evicted.
-            Notifications.requestCopy(path("mid"), true);
+            // The three copies (3 MiB) are on banners now: a 1 MiB image of another sender cannot fit, nothing is evicted.
+            banner("a1");
+            banner("a6");
+            request("c");
             phase = 5;
             waited = 0;
             poll.start();
         } else if (phase === 5) {
-            check("an image the kept copies leave no room for is refused (" + state("mid") + ")", state("mid") === "no");
+            check("an image the banners' copies leave no room for is refused (" + state("c") + ")", state("c") === "no");
             check("and evicts nothing (" + states(["a1", "a4", "a6"]) + ", " + sizes.length + " copies)", state("a1") === "ok" && state("a4") === "ok" && state("a6") === "ok" && sizes.length === 3);
             finish();
         }
@@ -135,8 +149,9 @@ ShellRoot {
         repeat: true
         onTriggered: {
             root.waited += interval;
-            if (root.phase === 1 || root.phase === 4 || root.phase === 5) {
-                if (!root.idle() && root.waited < 20000)
+            if (root.phase === 1 || root.phase === 3 || root.phase === 4 || root.phase === 5) {
+                // The batch starts later in the turn that asked for it: wait a tick before trusting "idle".
+                if ((!root.idle() || root.waited < 300) && root.waited < 20000)
                     return;
                 stop();
                 lister.running = true;
@@ -146,15 +161,10 @@ ShellRoot {
                 stop();
                 root.check("an evicted image is not re-made because it is shown (" + root.states(["a1", "a2", "a3"]) + ")",
                     root.idle() && root.state("a1") === "gone" && root.state("a2") === "gone" && root.state("a3") === "gone");
-                Notifications.requestCopy(root.path("huge"), true);
+                root.request("huge");
                 root.phase = 3;
                 root.waited = 0;
                 poll.start();
-            } else if (root.phase === 3) {
-                if (!root.idle() && root.waited < 20000)
-                    return;
-                stop();
-                lister.running = true;
             }
         }
     }

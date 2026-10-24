@@ -92,8 +92,6 @@ Singleton {
 
     // Hyprland IPC is available for the lock ownership checks (Quickshell.Hyprland, no hyprctl).
     readonly property bool hyprland: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== ""
-    // Date.now() when the compositor last confirmed a lock of this shell (its `locked` event).
-    property double securedAt: 0
     // Consecutive Hyprland answers reporting the session unlocked while holding (see checkOwnership).
     property int unlockedAnswers: 0
     // The lock surface (one per screen) whose window has the keyboard, else null: none of this shell's lock
@@ -189,7 +187,7 @@ Singleton {
     // fresh lock if the session is found unlocked. A lock confirmed less than verifyGraceMs ago
     // needs no answer: the compositor's own `locked` event is the proof.
     function verify(): void {
-        if (!holding || !hyprland || Date.now() - securedAt < ownershipProbe.verifyGraceMs)
+        if (!holding || !hyprland || secureGrace.running)
             return;
         verified = false;
         Hyprland.refreshMonitors();
@@ -215,7 +213,7 @@ Singleton {
     // unlocked twice in a row (Machine.ownershipAction) is re-locked. Answers in the first
     // verifyGraceMs after the lock was confirmed are skipped: they may answer a request sent before.
     function checkOwnership(): void {
-        if (!holding || Date.now() - securedAt < ownershipProbe.verifyGraceMs) {
+        if (!holding || secureGrace.running) {
             unlockedAnswers = 0;
             return;
         }
@@ -405,7 +403,7 @@ Singleton {
         onSecureStateChanged: {
             if (secure) {
                 // A fresh `locked` event: the compositor uses this lock now.
-                root.securedAt = Date.now();
+                secureGrace.restart();
                 root.unlockedAnswers = 0;
                 root.verified = true;
                 retryTimer.stop();
@@ -561,6 +559,15 @@ Singleton {
         repeat: true
         running: root.holding && root.hyprland && !devPause.running
         onTriggered: Hyprland.refreshMonitors()
+    }
+
+    // Runs for ownershipProbe.verifyGraceMs after the compositor confirmed a lock of this shell (its `locked` event,
+    // WlSessionLock.secure): verify() and checkOwnership() skip that window. A single-shot Timer (a monotonic clock), never
+    // the wall clock (review of 2dfd992: with Date.now() a clock step back turned the ownership check off for as long as
+    // the step). Not running (a new instance, a soft reload, a Timer that never ran): no window, the check stays on.
+    Timer {
+        id: secureGrace
+        interval: ownershipProbe.verifyGraceMs
     }
 
     // Dev-only (GRASSFIELD_DEV=1): `lock devPauseOwnershipCheck` stops the periodic check for 10 s so

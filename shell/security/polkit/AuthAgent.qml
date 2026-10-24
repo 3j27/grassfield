@@ -45,7 +45,7 @@ Scope {
             root.heldWhileLocked = active && SessionState.locked;
             root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked);
             root.userFocused = false;
-            root.requestStartedAt = active ? Date.now() : 0;
+            root.requestStartedAt = active ? new Date() : null;
         }
     }
 
@@ -53,11 +53,11 @@ Scope {
     // AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the keyboard until the
     // user clicks it (AuthDialogModel.heldGuardMs after it appeared), so keys typed right after the unlock never reach its
     // field; it says when the request arrived. Both delays are timed by the model's Timers (monotonic, review of 6e24d36);
-    // requestStartedAt is only the time shown in the notice.
+    // requestStartedAt is only the wall-clock time the notice prints (display, never compared).
     property bool heldByLock: false
     property bool heldWhileLocked: false
     property bool userFocused: false
-    property double requestStartedAt: 0
+    property var requestStartedAt: null
 
     Connections {
         target: SessionState
@@ -147,8 +147,9 @@ Scope {
             anchors.centerIn: parent
             sourceComponent: AuthDialog {
                 model: dialogModel
-                // The action's theme icon (sanitized by the model), only when the theme has it (no broken image).
-                appIconSource: dialogModel.iconName !== "" && Quickshell.hasThemeIcon(dialogModel.iconName) ? Quickshell.iconPath(dialogModel.iconName) : ""
+                // The action's theme icon (sanitized by the model), only when the theme has it (no broken image) and every
+                // file Qt could read for it is a regular file of bounded size (ThemeIcons, review of 2dfd992).
+                appIconSource: ThemeIcons.source(dialogModel.iconName)
                 heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhileLocked) : ""
             }
         }
