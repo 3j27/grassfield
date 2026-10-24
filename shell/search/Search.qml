@@ -5,6 +5,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "../platform/ScreenChoice.js" as ScreenChoice
 import "Calc.js" as Calc
 import "Files.js" as Files
 import "Filters.js" as Filters
@@ -111,6 +112,15 @@ Scope {
 
     function focusedScreenName(): string {
         return Compositor.activeScreenName;
+    }
+
+    // The display the Search panel is on went away (unplugged): the panel moves to a live one.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+        }
     }
 
     function show(text: string): void {

@@ -1160,7 +1160,7 @@ Scope {
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.keyboardFocus: root.keyboardMode && win.screen.name === root.keyboardScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: root.keyboardMode && win.screen && win.screen.name === root.keyboardScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-dock"
             // Only the dock itself (or the reveal strip while hidden) takes input.
             // qmllint disable missing-type

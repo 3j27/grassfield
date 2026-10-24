@@ -47,6 +47,57 @@ TestCase {
         verify(ScreenChoice.gone("DP-1", undefined));
     }
 
+    function test_replacementIsComputedFromTheLiveNames() {
+        compare(ScreenChoice.replacement("GF-SD2", "OUT", ["OUT"]), "OUT");
+        compare(ScreenChoice.replacement("GF-SD2", "GF-SD2", ["A", "B"]), "A", "a focus that is gone too falls to the first");
+        compare(ScreenChoice.replacement("GF-SD2", "B", ["A", "B"]), "B", "the focused output wins over the first");
+        compare(ScreenChoice.replacement("A", "B", ["A", "B"]), "A", "a screen that is still there stays");
+        compare(ScreenChoice.replacement("", "B", ["A", "B"]), "", "no screen is no state to move");
+        compare(ScreenChoice.replacement("GF-SD2", "", []), "");
+        compare(ScreenChoice.replacement("GF-SD2", undefined, ["A"]), "A");
+    }
+
+    // A handler of "the outputs changed" can read the OLD value of a binding of the same change (Qt does not promise the order):
+    // the unplug handlers therefore compute the screen from the live names they are given. This reproduces the ordering.
+    QtObject {
+        id: outputs
+        property var names: ["OUT", "GF-SD2"]
+    }
+
+    Component {
+        id: bindingComponent
+        QtObject {
+            property var src
+            // like Compositor.activeScreenName: a binding of the same change
+            readonly property string active: ScreenChoice.pick("", "GF-SD2", src.names)
+        }
+    }
+
+    property string stored: "GF-SD2"
+    property string viaBinding: ""
+    property string viaLive: ""
+    property var lateBinding: null
+
+    Connections {
+        target: outputs
+
+        function onNamesChanged(): void {
+            // the binding object is created later than this handler, as the Compositor singleton is first evaluated after Popups
+            viaBinding = lateBinding ? lateBinding.active : "<not created yet>";
+            viaLive = ScreenChoice.replacement(stored, "GF-SD2", outputs.names);
+        }
+    }
+
+    function test_theHandlerNeverNeedsTheBinding() {
+        lateBinding = bindingComponent.createObject(this, {src: outputs});
+        compare(lateBinding.active, "GF-SD2");
+        outputs.names = ["OUT"];
+        compare(viaLive, "OUT", "computed from the live names: always the live output");
+        compare(lateBinding.active, "OUT", "the binding is right afterwards");
+        // what a handler reading the binding would have seen (viaBinding) depends on the creation order: none of ours reads it
+        console.log("the binding read inside the handler: '" + viaBinding + "'");
+    }
+
     function test_noOutputs() {
         compare(ScreenChoice.pick("", "GF-REF", []), "");
     }

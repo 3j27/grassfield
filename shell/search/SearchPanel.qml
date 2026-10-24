@@ -24,7 +24,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool shown: root.controller.open && root.controller.screenName === modelData.name
+        readonly property bool shown: root.controller.open && root.controller.screenName === (modelData ? modelData.name : "")
         readonly property real maxResults: height * Tokens.searchMaxHeightFraction - Tokens.searchFieldHeight
 
         screen: modelData

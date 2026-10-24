@@ -94,8 +94,7 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            if (ScreenChoice.gone(root.screenName, Quickshell.screens.map(s => s.name)))
-                root.screenName = Compositor.activeScreenName;
+            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
         }
     }
 
