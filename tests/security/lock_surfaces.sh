@@ -204,6 +204,14 @@ expect("lock ownership check: the grace window after a confirmed lock is a singl
        and re.search(r"onSecureStateChanged:\s*\{\s*if\s*\(secure\)\s*\{[^}]*?secureGrace\.restart\(\);", lock) is not None
        and re.search(r"if\s*\(!holding\s*\|\|\s*!hyprland\s*\|\|\s*secureGrace\.running\)\s*return;", code(function(lock, "verify") or "")) is not None
        and re.search(r"if\s*\(!holding\s*\|\|\s*secureGrace\.running\)\s*\{", code(function(lock, "checkOwnership") or "")) is not None)
+# Review of eee45cc: the window is exactly 500 ms and nothing else touches the Timer (a 1 h or 0 ms grace, or a
+# `secureGrace.repeat = true` after the first lock, passed every offscreen test). Every mention of secureGrace is its id,
+# one restart() and the two `running` reads.
+grace_uses = re.findall(r"\bsecureGrace\b(?:\s*\.\s*\w+(?:\s*\(\s*\))?)?", lock)
+expect("lock ownership check: the grace is 500 ms and only restart() and `running` touch its Timer (" + ", ".join(grace_uses) + ")",
+       re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?readonly property int verifyGraceMs:\s*500\s*$", lock, re.S | re.M) is not None
+       and len(re.findall(r"\bverifyGraceMs\s*:", lock)) == 1
+       and sorted(re.sub(r"\s+", "", u) for u in grace_uses) == sorted(["secureGrace", "secureGrace.restart()", "secureGrace.running", "secureGrace.running"]))
 sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
 expect("sleep inhibitor: a child's run of FAST_EXIT_MS is timed by its health Timer",
        all(re.search(r"root\." + c + r"Failures\s*=\s*IdleModel\.failuresAfterRun\(root\." + c + r"Failures,\s*ranLong\);", sleep) is not None
@@ -260,7 +268,12 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/idle/SleepInhibitor.qml#IdleModel.failuresAfterRun(root.inhibitorFailures, ranLong)#IdleModel.failuresAfterRun(root.inhibitorFailures, true)' \
   'shell/security/idle/SleepInhibitor.qml#watcher.ranLong = true;#watcher.ranLong = watcher.ranLong;' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
-  'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();'; do
+  'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 3600000' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 0' \
+  'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.repeat = true;' \
+  'shell/security/lock/Lock.qml#        interval: ownershipProbe.verifyGraceMs#        interval: ownershipProbe.verifyGraceMs; repeat: true' \
+  'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.interval = 3600000;'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'
