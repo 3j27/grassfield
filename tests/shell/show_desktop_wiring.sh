@@ -36,11 +36,11 @@ check bash -c 'grep -q "desktopVerify.restart()" "$1" && grep -q "++tries < 3" "
 desc="a new capture stops the verify of the previous ending (three quick presses)"
 check bash -c 'awk "/function captureDesktop/,/^    }/" "$1" | grep -q "desktopVerify.stop()"' _ "$f"
 
-desc="a focus request only comes from the second press (endShowDesktop) and from the activated window (activate)"
-check bash -c 'n=$(grep -c "focusWindowRequest(" "$1"); a=$(awk "/function endShowDesktop/,/^    }/" "$1" | grep -c "focusWindowRequest("); b=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); [ "$a" = 1 ] && [ "$b" = 1 ] && [ "$n" = 3 ]' _ "$f"
+desc="a focus request only comes from the second press (endShowDesktop) and from the window that was activated (activate, endForActivation)"
+check bash -c 'n=$(grep -c "focusWindowRequest(" "$1"); a=$(awk "/function endShowDesktop/,/^    }/" "$1" | grep -c "focusWindowRequest("); b=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); c=$(awk "/function endForActivation/,/^    }/" "$1" | grep -c "focusWindowRequest("); [ "$a" = 1 ] && [ "$b" = 1 ] && [ "$c" = 1 ] && [ "$n" = 4 ]' _ "$f"
 
-desc="an app activating a parked window ends it (the activation events schedule the look at who has the focus)"
-check bash -c 'grep -q "ShowDesktop.checksActivation(event.name)" "$1" && grep -q "ShowDesktop.parkedHasFocus(" "$1"' _ "$f"
+desc="no activation is read from the focus (a parked window can keep it): only the parking workspace being shown ends it"
+check bash -c '! grep -qE "parkedHasFocus|checksActivation" "$1" shell/platform/ShowDesktop.js' _ "$f"
 
 desc="restoring a minimized window and the second press end it (unminimize and showDesktop call endShowDesktop before the Stages test)"
 check bash -c 'awk "/function unminimize/,/^    }/" "$1" | grep -q "endShowDesktop(false)" && awk "/function showDesktop\\(/,/^    }/" "$1" | head -4 | grep -q "endShowDesktop(true)"' _ "$f"

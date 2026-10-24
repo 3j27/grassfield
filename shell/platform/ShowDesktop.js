@@ -12,6 +12,11 @@ const MAX_WINDOWS = 256;
 // Where the windows wait: a special workspace nobody toggles (never special:hidden: "Hide app" lists that one).
 const PARKING = "special:desktop";
 
+// Hides the parking workspace again (Lua for Hyprland's dispatch; a constant, nothing from outside in it).
+function hideParkingRequest() {
+    return "hl.dsp.workspace.toggle_special(\"" + PARKING.substring("special:".length) + "\")";
+}
+
 function address(value) {
     const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(value));
     return m ? m[1].toLowerCase() : "";
@@ -107,24 +112,16 @@ function endsOn(eventName, data, records) {
         const parts = text.split(",");
         return parts[1] !== PARKING && !parkedWindow(address(parts[0]));
     }
+    // An app activating a parked window (focus_on_activate): Hyprland focuses it and SHOWS the special workspace over the
+    // screen, the parked windows as an overlay: that is the event "activespecial" (data "name,monitor", the name is empty when
+    // it is hidden again) or "activespecialv2" ("id,name,monitor"). Show Desktop is over then (macOS: an app activating a
+    // window ends it). Our own parking never shows the workspace (the moves are silent), and the focus is no evidence: a
+    // window moved to the parking workspace can keep the focus without being shown.
+    if (eventName === "activespecial")
+        return text.split(",")[0] === PARKING;
+    if (eventName === "activespecialv2")
+        return text.split(",")[1] === PARKING;
     return false;
-}
-
-// An app activating a parked window (focus_on_activate): Hyprland focuses it and shows the special workspace over the screen,
-// the parked windows as an overlay. Show Desktop is over then (macOS: an app activating a window ends it). These events are
-// not decisive on their own (parking the focused window moves the focus to a window that is about to be parked too), so they
-// only schedule a look at who has the focus (parkedHasFocus).
-function checksActivation(eventName) {
-    return ["activewindowv2", "activewindow", "urgent", "activespecial", "activespecialv2"].indexOf(eventName) >= 0;
-}
-
-// True when the window that has the focus is one of the parked ones: an activation reached a hidden window.
-// `windows`: the toplevel data ({address, parked}); `focus`: the focused window's address, "" for none.
-function parkedHasFocus(windows, focus) {
-    const f = address(focus);
-    if (f === "")
-        return false;
-    return (Array.isArray(windows) ? windows : []).some(w => w && w.parked === true && address(w.address) === f);
 }
 
 // Events after which the Spaces the displays show may have changed. They cannot be read as "the user switched Space": when

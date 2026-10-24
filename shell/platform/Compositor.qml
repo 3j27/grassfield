@@ -319,13 +319,14 @@ Singleton {
             // raises: those events only schedule a look at what each display shows (desktopCheck). An ending never asks for
             // focus: the user's new Space or window has it.
             if (root.desktopRecords.length > 0) {
-                if (ShowDesktop.endsOn(event.name, event.data, root.desktopRecords))
-                    root.endShowDesktop(false);
-                else if (ShowDesktop.checksSpaces(event.name))
+                if (ShowDesktop.endsOn(event.name, event.data, root.desktopRecords)) {
+                    console.info("grassfield: Show Desktop ends: " + event.name);
+                    if (event.name.startsWith("activespecial"))
+                        desktopActivation.restart();
+                    else
+                        root.endShowDesktop(false);
+                } else if (ShowDesktop.checksSpaces(event.name))
                     desktopCheck.restart();
-                // An app activating a parked window ends it too: looked at once the focus has settled.
-                if (ShowDesktop.checksActivation(event.name))
-                    desktopActivation.restart();
             }
         }
     }
@@ -577,6 +578,27 @@ Singleton {
         return true;
     }
 
+    // An app activated a parked window and Hyprland showed the parking workspace over the screen: every window goes back, the
+    // workspace is hidden again (empty, it would stay shown) and the window that was activated keeps the focus, as in
+    // activate() (all three requests go through the same dispatch channel, in this order).
+    function endForActivation(): void {
+        const active = Hyprland.activeToplevel;
+        const records = root.desktopRecords;
+        const activated = active && records.some(r => r.windows.some(w => ShowDesktop.sameAddress(w.address, active.address))) ? active.address : "";
+        if (!endShowDesktop(false))
+            return;
+        Hyprland.dispatch(ShowDesktop.hideParkingRequest());
+        if (activated !== "")
+            dispatchRequest(Minimized.focusWindowRequest(activated));
+    }
+
+    // The window that was activated is only known once Hyprland has moved the focus to it (a moment after the workspace event).
+    Timer {
+        id: desktopActivation
+        interval: Tokens.showDesktopCheckMs
+        onTriggered: root.endForActivation()
+    }
+
     // A display plugged or unplugged: the Spaces the displays show are compared again (a removed display ends Show Desktop).
     Connections {
         target: Quickshell
@@ -591,21 +613,10 @@ Singleton {
         id: desktopCheck
         interval: Tokens.showDesktopCheckMs
         onTriggered: {
-            if (root.desktopRecords.length > 0 && ShowDesktop.spaceChanged(root.desktopRecords, root.shownSpaces()))
+            if (root.desktopRecords.length > 0 && ShowDesktop.spaceChanged(root.desktopRecords, root.shownSpaces())) {
+                console.info("grassfield: Show Desktop ends: a display shows another Space or went away");
                 root.endShowDesktop(false);
-        }
-    }
-
-    // An app activated a parked window (focus_on_activate shows the special workspace over the screen): Show Desktop is over.
-    Timer {
-        id: desktopActivation
-        interval: Tokens.showDesktopCheckMs
-        onTriggered: {
-            if (root.desktopRecords.length === 0)
-                return;
-            const focused = root.focusedToplevel ? root.hyprlandToplevel(root.focusedToplevel) : null;
-            if (ShowDesktop.parkedHasFocus(root.toplevelData(), focused ? focused.address : ""))
-                root.endShowDesktop(false);
+            }
         }
     }
 

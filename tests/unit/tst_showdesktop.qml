@@ -79,18 +79,21 @@ TestCase {
         compare(recs[0].windows.length, 1);
     }
 
-    // An app activating a parked window: not decided by the event alone, by who has the focus a moment later.
-    function test_activationOfAParkedWindow() {
-        for (const e of ["activewindowv2", "activewindow", "urgent", "activespecial", "activespecialv2"])
-            verify(SD.checksActivation(e), e);
-        for (const e of ["openwindow", "workspace", "movewindow", "configreloaded"])
-            verify(!SD.checksActivation(e), e);
-        const windows = [parkedWin("0xa1", 0, 0), win("0xc3", 2, 0, 0)];
-        verify(SD.parkedHasFocus(windows, "0xa1"), "the focus reached a parked window");
-        verify(SD.parkedHasFocus(windows, "A1"));
-        verify(!SD.parkedHasFocus(windows, "0xc3"), "a visible window has it");
-        verify(!SD.parkedHasFocus(windows, ""), "nothing has it (the state right after parking)");
-        verify(!SD.parkedHasFocus(undefined, "0xa1"));
+    // An app activating a parked window shows the special workspace over the screen: that event ends it, and nothing else about
+    // the parking does (our own moves are silent).
+    function test_theParkingWorkspaceIsHiddenWithAConstantRequest() {
+        compare(SD.hideParkingRequest(), "hl.dsp.workspace.toggle_special(\"desktop\")");
+    }
+
+    function test_theParkingWorkspaceBeingShownEndsIt() {
+        const records = SD.captureAll(all, [{name: "DP-1", workspace: 1}], "", false);
+        verify(SD.endsOn("activespecial", "special:desktop,DP-1", records));
+        verify(SD.endsOn("activespecialv2", "-98,special:desktop,DP-1", records));
+        verify(!SD.endsOn("activespecial", ",DP-1", records), "hidden again (empty name)");
+        verify(!SD.endsOn("activespecial", "special:hidden,DP-1", records), "another special workspace");
+        verify(!SD.endsOn("activespecialv2", "-97,special:minimized,DP-1", records));
+        verify(!SD.endsOn("activewindowv2", "a1", records), "a window keeping the focus after it was parked is not an activation");
+        verify(!SD.endsOn("urgent", "a1", records));
     }
 
     function test_survivorsSkipWindowsThatClosedOrMoved() {

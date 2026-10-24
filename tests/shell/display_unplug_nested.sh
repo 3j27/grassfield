@@ -120,8 +120,9 @@ round() { # <label>
   ipc switcher next "$hold" >/dev/null
   sleep 0.6
   ipc switcher release "$hold" >/dev/null
-  sleep 1
-  if [[ $(active_pid) != "$before" && -n $(active_pid) && $(active_pid) != null ]]; then pass "$label: the switcher works after the removal (focus $before -> $(active_pid))"; else fail "$label: the switcher did nothing (focus stays $before)"; fi
+  focus_moved() { local now; now=$(active_pid); [[ $now != "$before" && -n $now && $now != null ]]; }
+  wait_for focus_moved
+  if focus_moved; then pass "$label: the switcher works after the removal (focus $before -> $(active_pid))"; else fail "$label: the switcher did nothing (focus stays $before)"; fi
 
   # Show Desktop on the remaining display, on and off
   ipc windows showDesktop >/dev/null
