@@ -23,6 +23,7 @@ import json
 import math
 import os
 import re
+import select
 import subprocess
 import sys
 import time
@@ -36,7 +37,7 @@ ADDRESS = re.compile(r"^0x[0-9a-fA-F]+$")
 POLL = 0.25
 TIMED_OUT = 124  # returncode of a helper that did not answer in time
 SETTLE_EMPTY = 2  # consecutive empty window lists before the windows count as gone
-ASK_TIMEOUT = 295  # seconds a "<Action> Anyway" notice waits; it expires by itself a little after
+ASK_TIMEOUT = 295  # seconds a "<Action> Anyway" notice waits before it is closed (GRASSFIELD_SESSION_END_ASK_TIMEOUT, tests)
 
 
 def run(argv, **kw):
@@ -69,7 +70,15 @@ def windows():
     # Anything but a list of objects is not an answer about windows ([1], "x", {}): unknown, never "no windows".
     if not isinstance(data, list) or not all(isinstance(c, dict) for c in data):
         return None
-    return [(c.get("address", ""), c.get("class", "") or "", c.get("title", "") or "") for c in data if isinstance(c, dict)]
+    out = []
+    for c in data:
+        address, cls, title = c.get("address", ""), c.get("class", ""), c.get("title", "")
+        # A window whose address, class or title is not text is not a window we can name or close: the list is unknown
+        # (cancel with a notice), never a crash and never "no windows".
+        if not isinstance(address, str) or not isinstance(cls, (str, type(None))) or not isinstance(title, (str, type(None))):
+            return None
+        out.append((address, cls or "", title or ""))
+    return out
 
 
 def close_windows(open_windows):
@@ -114,6 +123,54 @@ def notify_plain(title, body):
     return r is not None and r.returncode == 0
 
 
+def close_notice(notice_id):
+    """Close a notification by id (org.freedesktop.Notifications.CloseNotification): the "Anyway" button must not outlive the
+    decision. Our notification server never expires critical notices, so this is done explicitly."""
+    if notice_id:
+        run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
+             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.CloseNotification", str(notice_id)])
+
+
+def ask(title, body, anyway, timeout):
+    """Show a critical notice with one "<Action> Anyway" button and wait up to `timeout` seconds. Returns "force" when the user
+    pressed it, "" for dismissed or timed out, None when notify-send is unusable. The notice is closed by id on every way out."""
+    try:
+        proc = subprocess.Popen(["notify-send", "-a", "Grassfield", "-u", "critical", "-t", "0", "-p", "-w", "-A", "force=" + anyway,
+                                 title, body], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    except OSError:
+        return None
+    notice_id = None
+    lines = []
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                break
+            ready, _, _ = select.select([proc.stdout], [], [], min(left, 1.0))
+            if ready:
+                line = proc.stdout.readline()
+                if line == "":
+                    break
+                lines.append(line.strip())
+                if notice_id is None and lines[0].isdigit():
+                    notice_id = int(lines[0])
+            elif proc.poll() is not None:
+                break
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.SubprocessError:
+            pass
+        close_notice(notice_id)
+    if proc.returncode not in (0, None, -9) and not lines:
+        return None
+    answer = [l for l in lines if l and not l.isdigit()]
+    return "force" if "force" in answer else ""
+
+
 def notify_blocked(action, names, unknown=False):
     """Show the notice and wait for "<Action> Anyway". Returns True when the user chose it. Without notify-send the notice
     is still shown (through notify_plain, without the button): nothing is ended then."""
@@ -123,16 +180,11 @@ def notify_blocked(action, names, unknown=False):
         body = "The list of open windows could not be read, so the session was not ended. Your work may still be open."
     else:
         body = "These applications are still open and may be waiting for you to save your work: %s." % ", ".join(names[:5])
-    # The notice expires after ASK_TIMEOUT s (-t, milliseconds), before this process stops waiting: no "Anyway" button is left
-    # behind that does nothing. A helper that timed out anyway has already shown the notice: no second one.
-    r = run(["notify-send", "-a", "Grassfield", "-u", "critical", "-t", str(ASK_TIMEOUT * 1000), "-w", "-A", "force=" + anyway,
-             title, body], timeout=ASK_TIMEOUT + 5)
-    if r is not None and r.returncode == TIMED_OUT:
-        return False
-    if r is None or r.returncode != 0:
+    answer = ask(title, body, anyway, bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_ASK_TIMEOUT"), float(ASK_TIMEOUT), 1.0, 3600.0))
+    if answer is None:
         notify_plain(title, body)
         return False
-    return r.stdout.strip() == "force"
+    return answer == "force"
 
 
 def single_instance():
@@ -172,7 +224,8 @@ def settle(deadline):
                 return True, []
         else:
             empty = 0
-        if time.monotonic() >= deadline:
+        # At the deadline an empty list still needs its confirming second one (SETTLE_EMPTY in a row, every path).
+        if time.monotonic() >= deadline and not (cur is not None and not cur):
             return cur is not None, last
         time.sleep(POLL)
 
@@ -194,12 +247,14 @@ def main(argv):
     if not single_instance():
         return 0
 
+    forced = force  # the user's own "Anyway" (or --force) is final: nothing is looked at or asked again
     if not force:
         first = first_list(time.monotonic() + timeout)
         if first is None:
             print("grassfield-session-end: cannot list windows, nothing is ended", file=sys.stderr)
             if not notify_blocked(action, [], unknown=True):
                 return 3
+            forced = True
         else:
             # Ask the windows that exist now, once. A window that appears later is the application's own "Save changes?"
             # sheet: closing it would answer Cancel for the user, so it is left alone and counted as "still open".
@@ -209,17 +264,20 @@ def main(argv):
                 print("grassfield-session-end: the window list stayed unknown, nothing is ended", file=sys.stderr)
                 if not notify_blocked(action, app_names(current), unknown=True):
                     return 3
+                forced = True
             elif current:
                 if not notify_blocked(action, app_names(current)):
                     return 3
+                forced = True
         # Chromium and friends finish writing; then one more look: a window that appeared during the grace (a late Save
         # sheet) or an answer that cannot be read stops the logout. macOS ends it only when every app has really quit.
         time.sleep(bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_GRACE"), 1.0, 0.0, 30.0))
-        last = windows()
-        if last is None or last:
-            print("grassfield-session-end: windows are open after the grace, nothing is ended", file=sys.stderr)
-            if not notify_blocked(action, app_names(last or []), unknown=last is None):
-                return 3
+        if not forced:
+            last = windows()
+            if last is None or last:
+                print("grassfield-session-end: windows are open after the grace, nothing is ended", file=sys.stderr)
+                if not notify_blocked(action, app_names(last or []), unknown=last is None):
+                    return 3
     else:
         time.sleep(bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_GRACE"), 1.0, 0.0, 30.0))
     end_session(action)

@@ -51,12 +51,16 @@ cat >"$bin/notify-send" <<'SH'
 #!/bin/sh
 echo "notify-send $*" >>"$FAKE_DIR/calls.log"
 [ -z "$FAKE_NOTIFY_FAIL" ] || exit 1
-printf '%s' "${FAKE_NOTIFY_ANSWER:-}"
+case " $* " in *" -p "*) echo 42 ;; esac            # -p prints the notification id first, then the chosen action
+[ -z "$FAKE_NOTIFY_HANG" ] || sleep 30               # nobody answers
+n=$(($(cat "$FAKE_DIR/notify.count" 2>/dev/null || echo 0) + 1)); echo "$n" >"$FAKE_DIR/notify.count"
+if [ -n "$FAKE_NOTIFY_ONCE" ] && [ "$n" -gt 1 ]; then exit 0; fi   # the user answers only the first notice
+printf '%s\n' "${FAKE_NOTIFY_ANSWER:-}"
 SH
 chmod +x "$bin"/*
 
 run() { # run <clients-json> <args...>; env FAKE_* passes through; prints the exit status in $status
-  : >"$tmp/calls.log"; : >"$tmp/hyprctl.log"; rm -rf "$tmp/compositor-down" "$tmp/clients.calls" "$tmp/seq"
+  : >"$tmp/calls.log"; : >"$tmp/hyprctl.log"; rm -rf "$tmp/compositor-down" "$tmp/clients.calls" "$tmp/seq" "$tmp/notify.count"
   printf '%s' "$1" >"$tmp/clients.json"; shift
   if [[ -n ${SEQ:-} ]]; then mkdir -p "$tmp/seq"; i=0; for j in $SEQ; do i=$((i + 1)); printf '%s' "$j" >"$tmp/seq/$i.json"; done; fi
   status=0
@@ -150,9 +154,32 @@ check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*c
 desc="a timeout of nan or inf is refused (the previous value stays): the run ends instead of waiting for ever with the lock held"
 FAKE_REFUSE="0x2" run "$two" logout --timeout nan --timeout inf
 check bash -c '[[ $2 == 3 ]]' _ "$tmp" "$status"
-desc="the 'Anyway' notice expires by itself (-t 295000), so none is left behind when this process stops waiting"
+desc="the 'Anyway' notice is closed by id (CloseNotification 42) when the user dismissed it: no stale button is left"
 FAKE_REFUSE="0x2" run "$two" logout
-check grep -q "^notify-send .* -t 295000 " "$tmp/calls.log"
+check grep -q "^gdbus call .*org.freedesktop.Notifications.CloseNotification 42" "$tmp/calls.log"
+desc="...when the user pressed it..."
+FAKE_REFUSE="0x2" FAKE_NOTIFY_ANSWER=force run "$two" logout
+check grep -q "^gdbus call .*org.freedesktop.Notifications.CloseNotification 42" "$tmp/calls.log"
+desc="...and when nobody answered before the wait ran out (the logout is cancelled, exit 3)"
+FAKE_NOTIFY_HANG=1 GRASSFIELD_SESSION_END_ASK_TIMEOUT=2 FAKE_REFUSE="0x2" run "$two" logout
+check bash -c 'grep -q "CloseNotification 42" "$1/calls.log" && ! grep -q "uwsm stop" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+
+desc="GF-025 review major 2: after the user's own 'Anyway' no last look and no second notice: the session ends on one click, one notice"
+FAKE_REFUSE="0x2" FAKE_NOTIFY_ANSWER=force FAKE_NOTIFY_ONCE=1 run "$two" logout
+check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $(grep -c "^notify-send" "$1/calls.log") == 1 ]] && [[ $2 == 0 ]]' _ "$tmp" "$status"
+desc="...also when the list could not be read at all (unknown, then Anyway)"
+FAKE_NOTIFY_ANSWER=force FAKE_NOTIFY_ONCE=1 FAKE_FAIL_CALLS="1 2 3 4 5 6 7 8 9 10 11 12" run "$two" logout
+check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $(grep -c "^notify-send" "$1/calls.log") == 1 ]] && [[ $2 == 0 ]]' _ "$tmp" "$status"
+desc="GF-025 review minor 3: a timeout of 0 with lists A, [], [] confirms the empty list twice before it ends; A, [], Save does not"
+SESSION_END_TIMEOUT=0 SEQ="$A [] []" run "$A" logout
+check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+SESSION_END_TIMEOUT=0 SEQ="$A [] $SAVE" run "$A" logout
+check bash -c '! grep -q "uwsm stop" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="GF-025 review minor 5: a window with a non-text address, class or title is an unknown list: a notice, no crash, nothing ended"
+for bad in '[{"address":5,"class":"x","title":"y"}]' '[{"address":"0x1","class":["a"],"title":"y"}]' '[{"address":"0x1","class":"x","title":{"a":1}}]'; do
+  SEQ="$bad" run "$bad" logout
+  check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*could not be read" "$1/calls.log" && [[ $2 == 3 ]] && ! grep -q Traceback "$1/out.log"' _ "$tmp" "$status"
+done
 
 desc="an unknown action is refused (exit 2) and ends nothing"
 run '[]' hibernate
