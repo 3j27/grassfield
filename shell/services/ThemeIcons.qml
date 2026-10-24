@@ -223,7 +223,7 @@ Singleton {
             args.push(q.kind, String(q.n), q.value);
         const proc = helperRun.createObject(root, {
             keys: batch.map(q => q.key),
-            command: ["timeout", "-k", "2", "30", "setpriv", "--pdeathsig", "KILL", "--", "python3", "-I", helperPath, "batch", copyDir,
+            command: ["timeout", "-k", "2", "60", "setpriv", "--pdeathsig", "KILL", "--", "python3", "-I", helperPath, "batch", copyDir,
                 String(maxIconBytes), String(maxPictureBytes), String(maxCopyBytes)].concat(args)
         });
         activeRun = proc;
@@ -243,17 +243,20 @@ Singleton {
         proc.destroy();
     }
 
-    // "ok<TAB><key><TAB><copy>" for each copy made, "gone<TAB><file>" for each copy deleted to make room; a key with no
-    // "ok" line is refused.
+    // "ok<TAB><key><TAB><copy>" for each copy made, "gone<TAB><file>" for each copy deleted to make room, "later<TAB><key>"
+    // for an item the helper had no time left for (asked again first by the next run); a key with no line is refused.
     function done(keys: var, output: string): void {
         const said = {};
         const gone = {};
+        const later = {};
         for (const line of String(output || "").split("\n")) {
             const f = line.split("\t");
             if (f[0] === "ok" && f.length === 3 && f[2].startsWith(copyDir + "/") && /^[0-9]+\.png$/.test(f[2].slice(copyDir.length + 1)))
                 said[f[1]] = f[2];
             else if (f[0] === "gone" && f.length === 2)
                 gone[f[1]] = true;
+            else if (f[0] === "later" && f.length === 2)
+                later[f[1]] = true;
         }
         const next = Object.assign({}, copies);
         for (const key in next) {
@@ -262,7 +265,10 @@ Singleton {
                 delete lru.at[key];
             }
         }
+        const again = batch.filter(q => later[q.key] && said[q.key] === undefined && next[q.key] !== undefined);
         for (const key of keys) {
+            if (again.some(q => q.key === key))
+                continue;
             const file = said[key];
             if (next[key] !== undefined && next[key].file)
                 dropped = dropped.concat([next[key].file]);
@@ -274,6 +280,7 @@ Singleton {
             }
         }
         batch = [];
+        queue = again.concat(queue);
         copies = next;
         Qt.callLater(run);
     }
@@ -290,12 +297,13 @@ Singleton {
         }
     }
 
-    // A run that does not answer within its own timeout (30 s, KILL 2 s later) is stopped: TERM, then KILL 2 s later (the
+    // A run that does not answer within its own timeout (60 s, KILL 2 s later; the helper itself stops starting items
+    // after 20 s) is stopped: TERM, then KILL 2 s later (the
     // helper dies with it: --pdeathsig; rsvg-convert, in timeout's process group, too, and it has its own CPU limit), and
     // its keys are refused.
     Timer {
         id: watchdog
-        interval: 40000
+        interval: 70000
         onTriggered: {
             const proc = root.activeRun;
             if (proc === null)

@@ -22,10 +22,13 @@
 #       "picture" (an absolute path), "tray" ("<plain name>|<IconThemePath>": the app's folder, then like "name"),
 #       "drop" (delete copy <value> now), "lru" (copy <value> may be deleted to make room, least recently used first).
 #       One line per item: "ok<TAB><kind>:<value><TAB><out dir>/<n>.png" or "no<TAB><kind>:<value>"; "gone<TAB><file>"
-#       for each copy deleted to make room. The copies stay within <budget> bytes in all.
+#       for each copy deleted to make room. The copies stay within <budget> bytes in all. Past SOFT_SECONDS the items not
+#       started yet are answered "later<TAB><kind>:<value>" (asked again by the next run): a batch of big photos or slow
+#       documents ends well within the caller's timeout instead of being killed with all its items refused. A theme name
+#       re-encodes at most NAME_ATTEMPTS readable candidates.
 #   image-copy.py file <source> <cap> <destination>
 #       Notifications: one file, written to <destination> (created, 0600); exit status 0 when written.
-import base64, os, re, resource, stat, subprocess, sys
+import base64, os, re, resource, stat, subprocess, sys, time
 
 BOX = 256
 MAX_SIDE = 16384
@@ -33,6 +36,8 @@ MAX_PIXELS = 50_000_000
 OUT_CAP = 4 * 1024 * 1024
 RSVG_SECONDS = 8
 RSVG_MEMORY = 1 << 30
+SOFT_SECONDS = 20
+NAME_ATTEMPTS = 3
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 SIZES = ["scalable", "512x512", "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48", "36x36", "32x32",
          "24x24", "22x22", "16x16"]
@@ -255,6 +260,8 @@ def batch(argv):
     args = argv[4:]
     if not os.path.isdir(out) or os.path.islink(out):
         return 1
+    start = time.monotonic()
+    started = 0
     copy_name = re.compile(r"[0-9]+\.png")
     lru = []
     items = []
@@ -277,6 +284,11 @@ def batch(argv):
         if not re.fullmatch(r"[0-9]{1,12}", n) or re.search(r"[\x00-\x1f\x7f]", value):
             continue
         key = kind + ":" + value
+        # At least one item per run, so a run always makes progress.
+        if started and time.monotonic() - start > SOFT_SECONDS:
+            print("later\t%s" % key, flush=True)
+            continue
+        started += 1
         path = None
         try:
             png = None
@@ -286,10 +298,14 @@ def batch(argv):
                     themepath = os.path.realpath(themepath) if themepath else ""
                     if themepath and not under_roots(themepath):
                         themepath = ""
+                    attempts = 0
                     for c in candidates(name, themepath):
                         data = read_source(c, iconcap)
-                        png = normalize(data) if data else None
-                        if png:
+                        if not data:
+                            continue
+                        attempts += 1
+                        png = normalize(data)
+                        if png or attempts >= NAME_ATTEMPTS:
                             break
             elif kind in ("icon", "picture"):
                 data = read_source(value, iconcap if kind == "icon" else piccap)

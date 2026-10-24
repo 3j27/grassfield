@@ -30,11 +30,14 @@
 # Part 3, icons and pictures named by applications, files and players (Launchpad cells, desktop icons and thumbnails,
 # the About panel, a flatpak user export symlink, a user icon symlinked outside the allowed roots, media art file: URLs
 # naming a FIFO or an SVG that names one, the lock screen's account picture; the other sites' calls checked in the source).
-# Part 4, the policy itself: the search paths the shell logs contain no directory the user can change; regular icon files
-# Qt would find and read without the policy (a user hicolor icon, a user-writable pixmaps folder, a user theme named by
-# QS_ICON_THEME) are neither found nor opened (LD_PRELOAD open log, theme_icon_files.d/openlog.c): this part fails when
-# the policy is not applied, offscreen included; the copy helper opens user icon files only with O_NOFOLLOW|O_NONBLOCK; a
-# child process gets the environment unchanged. Plus the helper's cost with a user theme of 99k files.
+# Part 4, the policy itself: the search paths the shell logs (read back from Qt) contain no directory the user can
+# change; a regular icon in a user-writable pixmaps folder (Qt's fallback search path) that Qt finds and reads without
+# the policy (a positive control: the same probe without Grassfield.I18n) is neither found nor opened with it (LD_PRELOAD
+# open log, theme_icon_files.d/openlog.c), so this part fails when the policy is not applied. User THEME folders: Qt's
+# offscreen platform searches none even without the policy (the control shows it), so their own check is reported NOT
+# VERIFIED offscreen; part 2 (Qt with a real session's search paths, then the policy function) and the logged search
+# paths cover them. The copy helper opens user icon files only with O_NOFOLLOW|O_NONBLOCK; a child process gets the
+# environment unchanged. Plus the helper's cost with a user theme of 99k files.
 # Part 5, tray icons (review of 423766f, major 2): the REAL TrayButton with items carrying what Quickshell reports for
 # the review's hostile StatusNotifierItems (an IconThemePath full of FIFOs, an absolute or traversal IconName, a regular
 # file named by path, an SVG naming a FIFO in the app's folder, a regular icon in it, a pixmap, a plain user name); then
@@ -324,12 +327,30 @@ else
   printf '%s' "$png" | base64 -d >"$U/mytheme/48x48/apps/usertheme.png"
   printf '%s' "$png" | base64 -d >"$s/data/pixmaps/evilpix.png"
   mapfile -t e < <(shellenv "$s")
+  user_icon_opens() { # <open log>: opens of files in the scratch's user icon folders
+    grep -E "^OPEN [0-9]+ -?[0-9]+ ($s/home/\.local/share/icons|$s/home/\.icons|$s/home/\.local/share/pixmaps|$s/data/icons|$s/data/pixmaps)(/|$)" "$1" || true
+  }
+  # Positive control: the same probe without Grassfield.I18n (no policy) must find and open the user pixmap.
+  mkdir -p "$tmp/pcfg-control"
+  for entry in "$tmp"/pcfg/*; do [[ $(basename "$entry") == shell.qml ]] || ln -s "$(readlink "$entry")" "$tmp/pcfg-control/$(basename "$entry")"; done
+  grep -v '^import Grassfield.I18n$' "$tmp/pcfg/shell.qml" >"$tmp/pcfg-control/shell.qml"
+  crc=0
+  cout=$(env "${e[@]}" QS_ICON_THEME=mytheme LD_PRELOAD="$tmp/openlog.so" OPENLOG="$tmp/control-opens.log" timeout -k 3 30 qs -p "$tmp/pcfg-control" --no-color 2>&1) || crc=$?
+  control_ok=0
+  grep -q "probe: evilpix has=true" <<<"$cout" && user_icon_opens "$tmp/control-opens.log" | grep -q "/data/pixmaps/evilpix.png$" && control_ok=1
+  ((control_ok)) && pass "policy: control: without the policy Qt finds and opens the user pixmap (the case is real)" \
+    || bad "policy: control: without the policy Qt did not find or open the user pixmap: the case proves nothing (rc $crc $(grep -o 'probe: .*' <<<"$cout" | tr '\n' '|'))"
   rc=0
   out=$(env "${e[@]}" QS_ICON_THEME=mytheme LD_PRELOAD="$tmp/openlog.so" OPENLOG="$tmp/policy-opens.log" timeout -k 3 30 qs -p "$tmp/pcfg" --no-color 2>&1) || rc=$?
-  has_ok=1
-  for name in useronly evilpix usertheme; do grep -q "probe: $name has=false" <<<"$out" || has_ok=0; done
-  [[ $rc == 0 && $has_ok == 1 ]] && pass "policy: Qt finds no icon that lies only in a user-changeable folder (user hicolor, user pixmaps, a user theme named by QS_ICON_THEME)" \
+  [[ $rc == 0 ]] && grep -q "probe: evilpix has=false" <<<"$out" && pass "policy: with it, Qt does not find the icon that lies only in a user-writable pixmaps folder" \
     || bad "policy: lookups: rc $rc $(grep -o 'probe: .*' <<<"$out" | tr '\n' '|')"
+  # User theme folders: meaningful only where Qt searches them without the policy (never offscreen).
+  if grep -q "probe: useronly has=true" <<<"$cout" && grep -q "probe: usertheme has=true" <<<"$cout"; then
+    grep -q "probe: useronly has=false" <<<"$out" && grep -q "probe: usertheme has=false" <<<"$out" && pass "policy: with it, Qt finds no icon of the user's theme folders" \
+      || bad "policy: user theme folders: $(grep -o 'probe: user.*' <<<"$out" | tr '\n' '|')"
+  else
+    echo "SKIP: theme icon files, policy: user theme folders: Qt's offscreen platform searches none even without the policy (control: $(grep -o 'probe: user[a-z]* has=[a-z]*' <<<"$cout" | tr '\n' ' ')): NOT VERIFIED offscreen; part 2 and the logged search paths cover them"
+  fi
   # (Quickshell's provider answers a missing icon with a placeholder image, so the open log below, not the status, is
   # what shows that none of their files was read.)
   grep -q "probe: loaded " <<<"$out" && pass "policy: their image://icon URLs were loaded and the loads finished" || bad "policy: loads did not finish"
@@ -363,7 +384,7 @@ for d in dirs:
 sys.exit(0 if ok else 1)
 PY
   if [[ -s $tmp/policy-opens.log ]]; then
-    user_opens=$(grep -E "^OPEN [0-9]+ -?[0-9]+ ($s/home/\.local/share/icons|$s/home/\.icons|$s/home/\.local/share/pixmaps|$s/data/icons|$s/data/pixmaps)(/|$)" "$tmp/policy-opens.log" || true)
+    user_opens=$(user_icon_opens "$tmp/policy-opens.log")
     [[ -z $user_opens ]] && pass "policy: the shell opened no file in the user's icon folders" || bad "policy: opens in user icon folders: $(head -n 3 <<<"$user_opens" | sed "s|$s|\$S|g")"
   else
     bad "policy: the open log is empty (the shim did not load)"
@@ -404,6 +425,24 @@ PY
   n=$(env -i PATH="$PATH" HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" python3 -I shell/services/image-copy.py batch "$s/out" 8388608 16777216 134217728 "${args[@]}" | grep -c '^no' || true)
   ms=$((($(date +%s%N) - start) / 1000000))
   if [[ $n == 24 ]] && ((ms < 10000)); then pass "cost: 24 names looked up next to a user theme of 99k files in ${ms} ms"; else bad "cost: $n/24 answered in ${ms} ms"; fi
+  # Past its soft time budget (forced to 0 here) the helper still makes the first item, then answers "later" for the rest
+  # (ThemeIcons asks for them again first), so a batch of big photos ends before the run's timeout kills it.
+  printf '%s' "$png" | base64 -d >"$s/t.png"
+  later=$(env -i PATH="$PATH" HOME="$s/home" XDG_RUNTIME_DIR="$s" python3 -I - shell/services/image-copy.py "$s" <<'PY'
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("imagecopy", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+mod.SOFT_SECONDS = 0
+out = os.path.join(sys.argv[2], "later-out")
+os.mkdir(out, 0o700)
+png = os.path.join(sys.argv[2], "t.png")
+mod.batch([out, "8388608", "16777216", "134217728", "picture", "1", png, "picture", "2", png + "x", "picture", "3", png + "y"])
+print("files=" + ",".join(sorted(os.listdir(out))))
+PY
+)
+  [[ $(grep -c '^ok' <<<"$later") == 1 && $(grep -c '^later' <<<"$later") == 2 && $later == *"files=1.png"* ]] && pass "helper: past its soft time budget it makes the first item and answers later for the rest" \
+    || bad "helper: soft time budget: $(tr '\n' '|' <<<"$later" | sed "s|$s|\$S|g")"
 fi
 
 # ---- Part 5: tray icons ----

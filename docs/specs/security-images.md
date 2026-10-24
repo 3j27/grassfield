@@ -53,9 +53,11 @@ followed `<image xlink:href>` to a FIFO and blocked the one image loader thread 
    - Notifications: `…/grassfield-notification-images-<display>/<n>.<sender>.png`, with its window, budget and
      per-sender share (notifications.md).
 
-**Hangs.** A batch runs under `timeout -k 2 30 setpriv --pdeathsig KILL`. A QML watchdog sends TERM, then KILL, and
-refuses the batch's keys. `timeout` signals its whole process group, which includes rsvg-convert. Each notification
-file runs under `timeout -k 2 12`.
+**Hangs.** A batch runs under `timeout -k 2 60 setpriv --pdeathsig KILL`. After 20 s the helper starts no new item: it
+answers `later` for the rest, and ThemeIcons asks for those again first. So a batch of big photos ends in time rather
+than being killed with every item refused. A theme name re-encodes at most 3 readable candidates. A QML watchdog
+(70 s) sends TERM, then KILL, and refuses the batch's keys. `timeout` signals its whole process group, which includes
+rsvg-convert. Each notification file runs under `timeout -k 2 12`.
 
 **The copy directory belongs to the user,** like every file of the session, the shell's own QML included. A process
 running as the user can replace a copy. The design protects against what applications *name*: a path, a theme file, a
@@ -69,8 +71,10 @@ running as the user.
 - **Part 2:** hostile `index.theme` files.
 - **Part 3:** Launchpad, desktop, thumbnails, the About panel, media art `file://` naming a FIFO or an SVG that
   references one, the lock avatar, and flatpak symlinks.
-- **Part 4:** the policy: the logged search paths, and an LD_PRELOAD open log. A user pixmap and a user theme that Qt
-  would find without the policy make this part fail in the mutant.
+- **Part 4:** the policy: the logged search paths (read back from Qt), and an LD_PRELOAD open log. A user-writable
+  pixmaps icon is found and opened by the same probe without Grassfield.I18n (a positive control), and neither found
+  nor opened with it. Offscreen, Qt searches no theme folder even without the policy, so user theme folders are
+  reported NOT VERIFIED there; part 2 covers them.
 - **Part 5:** the tray: the real `TrayButton` with fake items (IconThemePath FIFO, absolute and traversal `IconName`,
   pixmap and plain name). There is also a private-bus StatusNotifierItem run (`env -i`, a private
   `DBUS_SESSION_BUS_ADDRESS` and a guard refusing the session bus). It is skipped where Unix sockets are blocked.
