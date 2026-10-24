@@ -11,6 +11,10 @@ default:
 # All offline checks (L0).
 check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-tidy check-secrets
 
+# Every offline check except clang-tidy, for a tree that leaves compositor/ unchanged (`just check` runs them all). One
+# recipe on purpose: `just check-schema check-shell` would pass check-shell to check-schema as a file argument.
+check-quick: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-secrets
+
 # clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
 check-tidy:
     scripts/dev/tidy.sh
