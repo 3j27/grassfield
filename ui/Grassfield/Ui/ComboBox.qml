@@ -116,24 +116,29 @@ T.ComboBox {
         // The room the list may take: the window minus a margin on every side. A taller list scrolls (macOS: a pop-up taller
         // than the screen scrolls, it never leaves it).
         property real maxHeight: 1e6
+        property real maxWidth: 1e6
 
-        width: menu.width
+        width: Math.min(menu.width, popup.maxWidth)
         height: Math.min(menu.height, popup.maxHeight)
         padding: 0
         closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
 
         // Below the button and right-aligned with it, above it when that does not fit, always inside the window.
-        function place(): void {
-            // The window's content item: the top of the parent chain.
+        // The window's content item: the top of the parent chain.
+        function windowItem(): Item {
             let win = root as Item;
             while (win.parent)
                 win = win.parent;
-            if (!win)
-                return;
+            return win;
+        }
+
+        function place(): void {
+            const win = popup.windowItem();
             const margin = Tokens.spacingSm;
             popup.maxHeight = Math.max(Tokens.menuItemHeight, win.height - 2 * margin);
+            popup.maxWidth = Math.max(Tokens.menuMinWidth, win.width - 2 * margin);
             const at = root.mapToItem(win, 0, 0);
-            const w = menu.width;
+            const w = Math.min(menu.width, popup.maxWidth);
             const h = Math.min(menu.height, popup.maxHeight);
             const left = Math.max(margin, Math.min(win.width - w - margin, at.x + root.width - w));
             const below = at.y + root.height + Tokens.spacingXs;
@@ -143,11 +148,24 @@ T.ComboBox {
             popup.y = top - at.y;
         }
 
+        // The widest label that fits the window: the rest of a longer one is elided (macOS), not cut off by the window edge.
+        TextMetrics {
+            id: metrics
+            elide: Text.ElideRight
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyMenuSize
+            font.weight: Tokens.typographyMenuWeight
+        }
+
         onAboutToShow: {
             const items = [];
             const m = root.model;
-            for (let i = 0; m && i < m.length; i++)
-                items.push({id: m[i].id, text: m[i].text, checked: i === root.valueIndex});
+            const room = popup.windowItem().width - 2 * Tokens.spacingSm;
+            metrics.elideWidth = Math.max(Tokens.menuMinWidth, room) - 2 * Tokens.menuPadding - 2 * Tokens.menuItemPadding - Tokens.menuIconSize - 2 * Tokens.spacingSm;
+            for (let i = 0; m && i < m.length; i++) {
+                metrics.text = m[i].text;
+                items.push({id: m[i].id, text: metrics.elidedText, checked: i === root.valueIndex});
+            }
             menu.model = items;
             menu.measure();
             menu.currentIndex = Math.max(0, root.valueIndex);
@@ -172,7 +190,7 @@ T.ComboBox {
         contentItem: Flickable {
             id: scroller
 
-            implicitWidth: menu.width
+            implicitWidth: Math.min(menu.width, popup.maxWidth)
             implicitHeight: Math.min(menu.height, popup.maxHeight)
             contentWidth: menu.width
             contentHeight: menu.height

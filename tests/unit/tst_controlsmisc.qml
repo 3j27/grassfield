@@ -275,6 +275,24 @@ TestCase {
         combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
     }
 
+    // A label wider than the whole window is elided: the list never leaves the window (it did, by 25 px, in a 600 px window).
+    function test_comboListWiderThanTheWindowIsElidedInsideIt() {
+        const long = "An extremely long label that is by far wider than the window of this test, so that no pop-up could ever show it whole, ending here";
+        combo.model = [{id: "a", text: long}, {id: "b", text: "Short"}];
+        combo.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        tryCompare(combo, "open", true);
+        const at = combo.popup.contentItem.mapToItem(null, 0, 0);
+        verify(at.x >= Tokens.spacingSm - 0.5, "left edge " + at.x);
+        verify(at.x + combo.popup.width <= tc.width - Tokens.spacingSm + 0.5, "right edge " + (at.x + combo.popup.width) + " of " + tc.width);
+        const shown = combo.list.model[0].text;
+        verify(shown.length < long.length && shown.endsWith("\u2026"), "elided: " + shown);
+        compare(combo.list.model[1].text, "Short");
+        combo.popup.close();
+        tryCompare(combo, "open", false);
+        combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
+    }
+
     // 40 rows do not fit: the list is capped to the window and scrolls (macOS), the keyboard cursor stays in view.
     function test_comboListOf40RowsScrollsInsideTheWindow() {
         const rows = [];
