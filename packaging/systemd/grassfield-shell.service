@@ -40,7 +40,7 @@ TimeoutStopSec=5
 # GF-081: Quickshell exits 255 when the compositor goes away first, which is how EVERY session end looks, but ALSO on "Failed
 # to load configuration" and a missing path. So 255 stays a failure (SuccessExitStatus=255 would hide a broken shell from
 # OnFailure=): the logout case is handled on the OnFailure side, where the sleep-lock gate (packaging/systemd/sleep-lock-gate)
-# runs nothing while graphical-session.target is deactivating/inactive or the Wayland socket is gone.
+# runs nothing once the compositor is gone (the session's Wayland socket or Hyprland instance directory no longer exists).
 # GF-040, resource guard. Measured (docs/audits/final-1.0/benchmarks/real-session-samples.md): idle 0.25 to 0.33 % of a
 # core, RSS 530 MB rising about 6 MB/h to 566 MB after 6 h; other real sessions peaked at 600 to 725 MB (gate P2 is 608 MB
 # after 10 min); one historical runaway (0.4.0-1) reached about 118 % CPU and 9.5 GB. The limits are set far above any

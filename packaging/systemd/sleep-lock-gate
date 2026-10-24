@@ -7,21 +7,26 @@
 #           (ActiveState=active, SubState=running), so Grassfield holds its own inhibitor and locks before sleep itself.
 # "activating" is never enough: it includes the auto-restart wait after a crash and the shell's start-up, when no
 # Grassfield inhibitor exists yet (a sleep then would not wait for a lock).
-# Read-only: three `systemctl --user show` queries. Any doubt lets Omarchy's unit run (with Grassfield's omarchy-shell
+# Read-only: two `systemctl --user show` queries and two file tests. Any doubt lets Omarchy's unit run (with Grassfield's omarchy-shell
 # stand-in it only ever asks grassfield-shell to lock).
 [ "${GRASSFIELD_SESSION:-}" = 1 ] || exit 0
 # A session that is ending (GF-081): grassfield-shell exits 255 when the compositor goes away first, which is every logout, and
-# that failure starts this unit through OnFailure=. A logout must never arm the sleep lock, so nothing runs while the graphical
-# session is stopping or stopped (target deactivating/inactive) or its Wayland socket is already gone. A real failure while the
-# session is up still gets here with an active target and a live socket, and runs.
-target=$(systemctl --user show --property=ActiveState --value graphical-session.target 2>/dev/null) || target=
-case $target in deactivating | inactive) exit 1 ;; esac
+# that failure starts this unit through OnFailure=. A logout must never arm the sleep lock, and the only signal that the session
+# is ending is "the compositor is gone": the session's Wayland socket no longer exists, or its Hyprland instance directory is
+# gone. The graphical-session.target state is NOT used: this unit starts before the target is reached, at login, when it still
+# reads inactive, and D-12 must hold from login until the shell takes its own inhibitor. At login the socket is live (runs); after
+# a crash mid-session it is live (runs); at logout the compositor goes first (skipped). Anything that cannot be decided (no
+# WAYLAND_DISPLAY, no runtime directory, a failing test) arms the lock: fail closed.
 if [ -n "${WAYLAND_DISPLAY:-}" ]; then
   case $WAYLAND_DISPLAY in
     /*) sock=$WAYLAND_DISPLAY ;;
-    *) sock=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_DISPLAY ;;
+    *) [ -n "${XDG_RUNTIME_DIR:-}" ] && sock=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY || sock= ;;
   esac
-  [ -S "$sock" ] || exit 1
+  # A path that is definitely absent means the compositor is gone; any other answer, or none, goes on.
+  [ -n "$sock" ] && [ ! -e "$sock" ] && exit 1
+fi
+if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+  [ ! -d "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE" ] && exit 1
 fi
 state=$(systemctl --user show --property=ActiveState --value grassfield-shell.service 2>/dev/null) || exit 0
 sub=$(systemctl --user show --property=SubState --value grassfield-shell.service 2>/dev/null) || exit 0

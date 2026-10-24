@@ -31,7 +31,6 @@ cat >"$tmp/bin/systemctl" <<'SH'
 case "$*" in
   "--user show --property=ActiveState --value grassfield-shell.service") printf '%s\n' "$STUB_STATE" ;;
   "--user show --property=SubState --value grassfield-shell.service") printf '%s\n' "$STUB_SUBSTATE" ;;
-  "--user show --property=ActiveState --value graphical-session.target") [ "$STUB_TARGET" = "<fail>" ] && exit 1; printf '%s\n' "${STUB_TARGET-active}" ;;
   *) echo "unexpected: $*" >&2; exit 9 ;;
 esac
 SH
@@ -45,23 +44,30 @@ gate() { # <GRASSFIELD_SESSION or -> <ActiveState> <SubState> -> prints the gate
   fi
   echo "$rc"
 }
-# GF-081 review M2: a logout never arms the sleep lock; every real failure while the session is up still does.
-tgate() { local rc=0; mkdir -p "$tmp/run"; env -i PATH="$tmp/bin:/usr/bin:/bin" XDG_RUNTIME_DIR="$tmp/run" STUB_STATE="$2" STUB_SUBSTATE="$3" STUB_TARGET="$1" GRASSFIELD_SESSION=1 ${4:+WAYLAND_DISPLAY="$4"} sh packaging/systemd/sleep-lock-gate || rc=$?; echo "$rc"; }
-[[ $(tgate deactivating failed failed) == 1 ]] && pass "gate: session target deactivating (logout), shell failed -> Omarchy's unit skipped" || bad "gate: logout (target deactivating) not skipped"
-[[ $(tgate inactive failed failed) == 1 ]] && pass "gate: session target inactive, shell failed -> skipped" || bad "gate: target inactive not skipped"
-[[ $(tgate active failed failed) == 0 ]] && pass "gate: session up, shell failed (a crash, a config error, exit 255) -> Omarchy's unit runs" || bad "gate: real failure while the session is up did not run"
-[[ $(tgate "<fail>" failed failed) == 0 ]] && pass "gate: target state unreadable -> runs (any doubt arms the lock)" || bad "gate: unreadable target skipped"
-: >"$tmp/run/wayland-live"; rm -f "$tmp/run/wayland-gone"
-sock_py() { python3 -I -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); import time; time.sleep(30)' "$1"; }
-sock_py "$tmp/run/wayland-live" 2>/dev/null & sockpid=$!
-for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -S $tmp/run/wayland-live ]] && break; sleep 0.2; done
-[[ $(tgate active failed failed wayland-gone) == 1 ]] && pass "gate: the Wayland socket is gone (compositor exited first) -> skipped, even before the target changes" || bad "gate: missing Wayland socket not skipped"
-if [[ -S $tmp/run/wayland-live ]]; then
-  [[ $(tgate active failed failed wayland-live) == 0 ]] && pass "gate: the Wayland socket is live -> runs" || bad "gate: live socket skipped"
-else
-  echo "SKIP: gate with a live Wayland socket (Unix sockets cannot be created here)"
-fi
-kill "$sockpid" 2>/dev/null || true; wait "$sockpid" 2>/dev/null || true
+# GF-081 / D-12: the only "session ending" signal is "the compositor is gone" (its Wayland socket or its Hyprland instance
+# directory no longer exists). The session target is never read: at login it still reads inactive. A regular file stands in for
+# the socket (the gate only tests that the path exists). Undecidable input arms the lock.
+cgate() { # <shell ActiveState> <WAYLAND_DISPLAY or -> <HYPRLAND_INSTANCE_SIGNATURE or -> [unset-runtime] -> the gate's exit code
+  local rc=0 e=(PATH="$tmp/bin:/usr/bin:/bin" STUB_STATE="$1" STUB_SUBSTATE="${1/active/running}" GRASSFIELD_SESSION=1)
+  [[ ${4:-} == unset-runtime ]] || e+=(XDG_RUNTIME_DIR="$tmp/run")
+  [[ $2 == - ]] || e+=(WAYLAND_DISPLAY="$2")
+  [[ $3 == - ]] || e+=(HYPRLAND_INSTANCE_SIGNATURE="$3")
+  env -i "${e[@]}" sh packaging/systemd/sleep-lock-gate || rc=$?
+  echo "$rc"
+}
+mkdir -p "$tmp/run/hypr/sig-live"
+: >"$tmp/run/wayland-live"
+rm -rf "$tmp/run/wayland-gone" "$tmp/run/hypr/sig-gone"
+[[ $(cgate inactive wayland-live sig-live) == 0 ]] && pass "gate: LOGIN (shell not up yet, compositor live) -> Omarchy's unit runs: D-12 holds from login" || bad "gate: login did not run"
+[[ $(cgate failed wayland-live sig-live) == 0 ]] && pass "gate: CRASH mid-session (shell failed, compositor live) -> Omarchy's unit runs" || bad "gate: crash did not run"
+[[ $(cgate failed wayland-gone sig-live) == 1 ]] && pass "gate: LOGOUT (the Wayland socket is gone, shell failed 255) -> skipped" || bad "gate: logout (socket gone) not skipped"
+[[ $(cgate failed wayland-live sig-gone) == 1 ]] && pass "gate: LOGOUT (the Hyprland instance directory is gone) -> skipped" || bad "gate: logout (instance gone) not skipped"
+[[ $(cgate failed - -) == 0 ]] && pass "gate: undecidable (no WAYLAND_DISPLAY, no signature) -> runs (fail closed)" || bad "gate: undecidable did not run"
+[[ $(cgate failed wayland-gone - unset-runtime) == 0 ]] && pass "gate: undecidable (relative display, no XDG_RUNTIME_DIR) -> runs" || bad "gate: undecidable (no runtime dir) did not run"
+[[ $(cgate failed "$tmp/run/wayland-live" -) == 0 ]] && pass "gate: absolute WAYLAND_DISPLAY that exists -> runs" || bad "gate: absolute live path did not run"
+[[ $(cgate failed "$tmp/run/wayland-gone" -) == 1 ]] && pass "gate: absolute WAYLAND_DISPLAY that is gone -> skipped" || bad "gate: absolute gone path not skipped"
+[[ $(cgate active wayland-live sig-live) == 1 ]] && pass "gate: shell active/running with the compositor live -> skipped (it holds its own inhibitor)" || bad "gate: running shell not skipped"
+if grep -v '^[[:space:]]*#' packaging/systemd/sleep-lock-gate | grep -q "graphical-session.target"; then bad "gate: reads the session target (it reads inactive at login)"; else pass "gate: never reads graphical-session.target"; fi
 [[ $(gate 1 active running) == 1 ]] && pass "gate: Grassfield session, grassfield-shell active/running -> Omarchy's unit skipped" \
   || bad "gate: Grassfield session, grassfield-shell active/running -> not skipped"
 # N1: after a crash the shell is activating/auto-restart, then activating/start: no Grassfield inhibitor exists then.
