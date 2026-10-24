@@ -48,15 +48,25 @@ QtObject {
     // keyboard: keys typed right after the unlock (the end of the lock password, a Return) cannot land in its field. It
     // takes the keyboard only after a click on the sheet, and a click counts only heldGuardMs after the sheet appeared.
     readonly property int heldGuardMs: 500
+    // A request that arrives this soon after an unlock is held too (review of d8e654c): keys typed right after the unlock
+    // must not land in a sheet that appeared a moment later.
+    readonly property int heldAfterUnlockMs: 1000
 
     function heldClickAccepted(sinceShownMs: real): bool {
         return sinceShownMs >= heldGuardMs;
     }
 
+    // A request is held when it arrives while the session is locked, or within heldAfterUnlockMs of the last unlock
+    // (`sinceUnlockMs` < 0: no unlock yet).
+    function arrivesHeld(locked: bool, sinceUnlockMs: real): bool {
+        return locked || (sinceUnlockMs >= 0 && sinceUnlockMs < heldAfterUnlockMs);
+    }
+
     // What the held sheet says, with the time the request arrived (the message names the program for pkexec).
-    function heldNotice(arrivedAtMs: real): string {
+    function heldNotice(arrivedAtMs: real, whileLocked: bool): string {
         const at = Qt.formatTime(new Date(arrivedAtMs), Qt.locale().timeFormat(Locale.ShortFormat));
-        return qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at);
+        return whileLocked ? qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at)
+                           : qsTr("This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.").arg(at);
     }
 
     // The dialog must empty its password field (after every attempt and outcome).

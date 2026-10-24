@@ -336,7 +336,7 @@ TestCase {
         verify(notice !== null);
         compare(dialog.heldNotice, "");
         verify(!notice.visible, "no notice for a request that did not wait behind the lock");
-        dialog.heldNotice = dialogModel.heldNotice(new Date(2026, 9, 24, 14, 5).getTime());
+        dialog.heldNotice = dialogModel.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), true);
         waitForRendering(dialog);
         verify(notice.visible);
         compare(notice.textFormat, Text.PlainText);

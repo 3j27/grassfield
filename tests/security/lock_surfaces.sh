@@ -150,8 +150,10 @@ expect("polkit sheet: takes the keyboard only when shown and not held", re.searc
 # Review of 1d2c856: a request held behind the lock takes the keyboard only after a click past the guard, never at once.
 expect("polkit sheet: a held request takes the keyboard only after a click past the guard",
        re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?heldClickAccepted\(Date\.now\(\)\s*-\s*root\.shownAt\).*?root\.userFocused\s*=\s*true", agent, re.S) is not None)
-expect("polkit sheet: a request arriving or open while locked is held", re.search(r"heldByLock\s*=\s*active\s*&&\s*SessionState\.locked", agent) is not None
-       and re.search(r"SessionState\.locked\s*&&\s*dialogModel\.active.*?heldByLock\s*=\s*true", agent, re.S) is not None)
+expect("polkit sheet: a request arriving while locked, or just after an unlock, is held",
+       re.search(r"heldByLock\s*=\s*active\s*&&\s*dialogModel\.arrivesHeld\(SessionState\.locked,\s*root\.unlockedAt\s*>\s*0\s*\?\s*Date\.now\(\)\s*-\s*root\.unlockedAt\s*:\s*-1\)", agent) is not None
+       and re.search(r"if\s*\(!SessionState\.locked\)\s*\{\s*root\.unlockedAt\s*=\s*Date\.now\(\)", agent) is not None)
+expect("polkit sheet: a request open when the lock engages is held", re.search(r"else if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true", agent) is not None)
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
 
@@ -189,7 +191,8 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
   'shell/security/polkit/AuthAgent.qml#shown && (!root.heldByLock || root.userFocused)#shown' \
-  'shell/security/polkit/AuthAgent.qml#if (shown && !root.heldByLock)#if (shown)'; do
+  'shell/security/polkit/AuthAgent.qml#if (shown && !root.heldByLock)#if (shown)' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.arrivesHeld(SessionState.locked, root.unlockedAt > 0 ? Date.now() - root.unlockedAt : -1)#SessionState.locked'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'

@@ -170,9 +170,21 @@ TestCase {
         verify(!model.heldClickAccepted(499));
         verify(model.heldClickAccepted(500));
         verify(model.heldClickAccepted(5000));
-        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime());
+        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), true);
         verify(notice.indexOf("while the screen was locked") !== -1, notice);
         verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
+        verify(model.heldNotice(Date.now(), false).indexOf("just as the screen was unlocked") !== -1);
+    }
+
+    // Review of d8e654c: a request arriving within heldAfterUnlockMs after an unlock is held like one that arrived while locked.
+    function test_heldJustAfterUnlock() {
+        compare(model.heldAfterUnlockMs, 1000);
+        verify(model.arrivesHeld(true, -1), "while locked");
+        verify(model.arrivesHeld(true, 5000), "while locked, whatever the last unlock");
+        verify(model.arrivesHeld(false, 0), "the instant of the unlock");
+        verify(model.arrivesHeld(false, 999), "just after the unlock");
+        verify(!model.arrivesHeld(false, 1000), "a second later");
+        verify(!model.arrivesHeld(false, -1), "never locked since the start");
     }
 
     function test_newFlowResetsState() {

@@ -235,8 +235,9 @@ shell no longer relies on that alone:
 - Polkit: a request that arrives while locked waits (macOS shows the authorization sheet after the unlock): the sheet is
   neither mapped nor given the keyboard until `SessionState.locked` is false; text typed into an open sheet is dropped when
   the lock hides it. Nothing is answered meanwhile (polkit keeps the request pending; Cancel/Esc work once shown).
-  A held request (it arrived, or was open, while locked) appears after the unlock WITHOUT the keyboard (review of
-  1d2c856: keys typed right after the unlock, the end of the lock password or a Return, landed in its field): it says
+  A held request (it arrived, or was open, while locked, or arrived within 1 s after an unlock,
+  `AuthDialogModel.heldAfterUnlockMs`, review of d8e654c) appears WITHOUT the keyboard (review of 1d2c856: keys typed right
+  after the unlock, the end of the lock password or a Return, landed in its field): it says
   "This request arrived at <time>, while the screen was locked. Click the sheet to answer it.", its field is empty, and
   it takes the keyboard only after a click on the sheet that comes at least 500 ms (`AuthDialogModel.heldGuardMs`) after
   it appeared (the click goes on to what it hit: the field, Cancel, Allow). polkit gives no program name to the agent
