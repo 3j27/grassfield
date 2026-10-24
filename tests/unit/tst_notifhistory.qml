@@ -26,9 +26,15 @@ TestCase {
         compare(day1.notifications.map(e => e.key), ["a"]);
         const never = JSON.parse(History.serialize(list, now, {keep: false}));
         compare(never.notifications.length, 0);
-        const noBody = JSON.parse(History.serialize(list, now, {bodyKept: app => app !== "Signal"}));
+        const noBody = JSON.parse(History.serialize(list, now, {textKept: app => app !== "Signal"}));
         compare(noBody.notifications[0].body, "");
         compare(noBody.notifications[1].body, "hello");
+        // The title and the action labels are text too: an app whose previews are Never leaves none of it on disk.
+        compare(noBody.notifications[0].summary, "");
+        compare(noBody.notifications[0].appName, "Signal");
+        compare(noBody.notifications[1].summary, "sb");
+        const withActions = JSON.parse(History.serialize([entry("c", "Signal", now - 5, {actions: [{id: "reply", text: "Reply to Alice"}]})], now, {textKept: () => false}));
+        compare(withActions.notifications[0].actions, []);
         compare(JSON.parse(History.serialize(list, now)).notifications[0].body, "secret");
     }
 

@@ -847,7 +847,7 @@ Singleton {
                 file.setText(History.serialize(root.history, Date.now(), {
                     keep: Settings.notificationsHistory !== "never",
                     maxAgeMs: NotificationPrefs.historyMaxAge(Settings.notificationsHistory),
-                    bodyKept: app => NotificationPrefs.effective(Settings.notificationsAppPreviews, app, Settings.notificationsPreviews) !== "never"
+                    textKept: app => NotificationPrefs.effective(Settings.notificationsAppPreviews, app, Settings.notificationsPreviews) !== "never"
                 }));
         }
     }

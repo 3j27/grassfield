@@ -40,20 +40,20 @@ function pushNewest(entries, entry, now) {
 
 // JSON for notifications.json: persistable entries only, actions as labels, no images.
 // `opts` (GF-113, all optional): maxAgeMs, how long entries stay on disk (absent: 7 days); keep: false writes no
-// entry at all; bodyKept(appName) returning false drops the body of that app's entries (previews are Never for it:
-// the text is never shown, so it is not kept at rest either).
+// entry at all; textKept(appName) returning false drops the title, the body and the action labels of that app's entries
+// (previews are Never for it: the text is never shown, so it is not kept at rest either; app name, icon and time stay).
 function serialize(entries, now, opts) {
     const o = opts || {};
-    const bodyKept = typeof o.bodyKept === "function" ? o.bodyKept : () => true;
+    const textKept = typeof o.textKept === "function" ? o.textKept : () => true;
     const stored = (o.keep === false ? [] : prune(entries.filter(shouldPersist), now, o.maxAgeMs)).map(e => ({
         key: e.key,
         appName: e.appName,
         appIcon: e.appIcon,
-        summary: e.summary,
-        body: bodyKept(e.appName) ? e.body : "",
+        summary: textKept(e.appName) ? e.summary : "",
+        body: textKept(e.appName) ? e.body : "",
         time: e.time,
         urgency: e.urgency,
-        actions: (e.actions || []).map(a => a.text)
+        actions: textKept(e.appName) ? (e.actions || []).map(a => a.text) : []
     }));
     return JSON.stringify({version: FORMAT_VERSION, notifications: stored}, null, 1) + "\n";
 }
