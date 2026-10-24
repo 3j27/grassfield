@@ -108,6 +108,21 @@ QtObject {
         return Tokens.materialTintAlphaClamp + (Tokens.materialTintAlphaMin - Tokens.materialTintAlphaClamp) * (x - until) / (1 - until);
     }
 
+    // Compositor blur follows the transparency (GF-125, docs/specs/ui.md "Material blur"): Hyprland carries one blur size and
+    // pass count for every surface (ext-background-effect and layer rules take no per-surface strength), so the shell asks
+    // for the value of the current transparency. Linear from blurSizeMin (0+) to blurSizeMax (1), 18 at the default 0.25.
+    function blurSize(t: real): int {
+        return Math.round(Tokens.materialBlurSizeMin + (Tokens.materialBlurSizeMax - Tokens.materialBlurSizeMin) * clamp01(t));
+    }
+
+    function blurPasses(t: real): int {
+        return clamp01(t) < Tokens.materialBlurPassesFrom ? Tokens.materialBlurPassesLight : Tokens.materialBlurPassesFull;
+    }
+
+    // What the compositor is asked for now (Reduce Transparency: opaque surfaces request no blur; the minimum is kept).
+    readonly property int compositorBlurSize: blurSize(effectiveTransparency)
+    readonly property int compositorBlurPasses: blurPasses(effectiveTransparency)
+
     // Animation duration: Reduce Motion caps every animation at reducedMax (crossfade).
     function duration(ms: real): real {
         return reduceMotion ? Math.min(ms, Tokens.motionReducedMax) : ms;

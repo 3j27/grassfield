@@ -326,6 +326,10 @@ Scope {
         change("hotCorners." + corner, cornerAction(action));
     }
 
+    function setStagesEnabled(value: bool): void {
+        change("windows.stages", value);
+    }
+
     function setDesktopShowIcons(value: bool): void {
         change("desktop.showIcons", value);
     }

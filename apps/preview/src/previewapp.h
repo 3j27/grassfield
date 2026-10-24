@@ -31,6 +31,10 @@ class PreviewApp : public QObject
     Q_PROPERTY(QStringList errors READ errors CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
+    // windows.titlebarDoubleClick of grassfield.json: zoom (default), minimize or none (the toolbar's double-click).
+    Q_PROPERTY(QString titlebarDoubleClick READ titlebarDoubleClick NOTIFY appearanceChanged)
+    // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b, chromecaps.h).
+    Q_PROPERTY(bool canMinimize READ canMinimize NOTIFY appearanceChanged)
     // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
     Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
 
@@ -52,6 +56,8 @@ public:
     QStringList errors() const { return m_errors; }
     bool dark() const { return m_dark; }
     bool reduceMotion() const { return m_reduceMotion; }
+    QString titlebarDoubleClick() const { return m_titlebarDoubleClick; }
+    bool canMinimize() const { return m_canMinimize; }
     QString accentColor() const { return m_accentColor; }
 
     // Path of file `index` for the image provider (render thread): empty when out of range.
@@ -94,6 +100,8 @@ private:
     bool m_autoAppearance = false;
     QTimer m_autoTimer;
     bool m_reduceMotion = false;
+    QString m_titlebarDoubleClick = QStringLiteral("zoom");
+    bool m_canMinimize = true;
     QString m_accentColor = QStringLiteral("multicolor");
     QFileSystemWatcher m_watcher;
 };

@@ -1147,6 +1147,26 @@
         <translation>Zoom arrière</translation>
     </message>
     <message>
+        <source>Bring Stage 1 forward</source>
+        <translation>Mettre le Stage 1 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 2 forward</source>
+        <translation>Mettre le Stage 2 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 3 forward</source>
+        <translation>Mettre le Stage 3 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 4 forward</source>
+        <translation>Mettre le Stage 4 au premier plan</translation>
+    </message>
+    <message>
+        <source>Move the window to a stage of its own</source>
+        <translation>Placer la fenêtre dans un Stage à part</translation>
+    </message>
+    <message>
         <source>Keyboard brightness up</source>
         <translation>Luminosité du clavier +</translation>
     </message>
@@ -1619,10 +1639,6 @@
     <message>
         <source>Files</source>
         <translation>Fichiers</translation>
-    </message>
-    <message>
-        <source>Toolbar</source>
-        <translation>Barre d’outils</translation>
     </message>
     <message>
         <source>Back</source>
@@ -2330,6 +2346,18 @@
     <message>
         <source>Window titlebars, minimize and global menus need it. After an update of Hyprland, Grassfield builds it again in the background.</source>
         <translation>Les barres de titre, la réduction des fenêtres et les menus globaux en dépendent. Après une mise à jour de Hyprland, Grassfield la recompile en arrière-plan.</translation>
+    </message>
+    <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.</source>
+        <translation>Nécessite l’extension de compositeur Grassfield. L’interrupteur Stages est aussi dans les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.</source>
+        <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
     </message>
     <message>
         <source>Screen Corners</source>
@@ -3068,6 +3096,10 @@
     <message>
         <source>Close Tab</source>
         <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
     </message>
     <message>
         <source>Get Info</source>
@@ -4923,6 +4955,17 @@
     </message>
 </context>
 <context>
+    <name>SearchField</name>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Clear search</source>
+        <translation>Effacer la recherche</translation>
+    </message>
+</context>
+<context>
     <name>SearchPanel</name>
     <message>
         <source>Search</source>
@@ -4981,6 +5024,10 @@
     <message>
         <source>Eject %1</source>
         <translation>Éjecter %1</translation>
+    </message>
+    <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
     </message>
     <message>
         <source>Remove from Sidebar</source>
@@ -5096,6 +5143,36 @@
     <message>
         <source>Back to %1</source>
         <translation>Retour à %1</translation>
+    </message>
+</context>
+<context>
+    <name>Stages</name>
+    <message>
+        <source>Stage</source>
+        <translation>Stage</translation>
+    </message>
+    <message>
+        <source>1 window</source>
+        <translation>1 fenêtre</translation>
+    </message>
+    <message>
+        <source>%1 windows</source>
+        <translation>%1 fenêtres</translation>
+    </message>
+</context>
+<context>
+    <name>StagesToggle</name>
+    <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
     </message>
 </context>
 <context>
@@ -5295,6 +5372,13 @@
     <message>
         <source>%1 menu</source>
         <translation>Menu %1</translation>
+    </message>
+</context>
+<context>
+    <name>UnifiedToolbar</name>
+    <message>
+        <source>Toolbar</source>
+        <translation>Barre d’outils</translation>
     </message>
 </context>
 <context>
@@ -6074,6 +6158,37 @@
     <message>
         <source>Signal %1 %</source>
         <translation>Signal %1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>WindowControls</name>
+    <message>
+        <source>Window controls</source>
+        <translation>Commandes de la fenêtre</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Closes the window</source>
+        <translation>Ferme la fenêtre</translation>
+    </message>
+    <message>
+        <source>Minimize</source>
+        <translation>Réduire</translation>
+    </message>
+    <message>
+        <source>Minimizes the window to the Dock</source>
+        <translation>Réduit la fenêtre dans le Dock</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
+        <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
     </message>
 </context>
 <context>

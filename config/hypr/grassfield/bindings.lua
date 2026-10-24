@@ -129,6 +129,11 @@ bind("SUPER + ALT + code:21", "Zoom in", shell("zoom", "zoomIn"), { repeating = 
 bind("SUPER + ALT + code:20", "Zoom out", shell("zoom", "zoomOut"), { repeating = true })
 -- Turn Dock hiding on or off (macOS Option-Command-D).
 bind("SUPER + ALT + D", "Turn Dock hiding on or off", shell("dock", "toggleAutohide"))
+-- Stages (only does anything while Stages is on): bring the n-th recent stage forward, make the focused window a stage of its own.
+for n = 1, 4 do
+  bind("SUPER + ALT + " .. tostring(n), "Bring Stage " .. n .. " forward", shell("stages", "activate " .. tostring(n)))
+end
+bind("SUPER + ALT + S", "Move the window to a stage of its own", shell("stages", "newStage"))
 
 -- Hardware keys: real volume/brightness changes plus the OSD (shell/osd).
 bind("XF86AudioRaiseVolume", "Volume up", shell("volume", "up"), { repeating = true, locked = true })

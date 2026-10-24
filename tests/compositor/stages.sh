@@ -40,8 +40,16 @@
 # the pointer over an unrelated tiled window, the stage's back window or empty desktop, the stage's window now in front gets
 # them when the remembered one closed under the layer, a real click beside the layer or just after it wins, and the Stages
 # event names the front window and app while Hyprland has no active window (8i); a focus-matched window rule is rechecked
-# when the plugin clears the active window (8c).
-# Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
+# when the plugin clears the active window (8c). A keyboard device that appears while an Exclusive layer holds the keyboard
+# after a swap (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) changes nothing: the layer
+# gets every key of the new device and of the next one, no window gets one, and after the layer the swapped-in front window
+# gets every key (8j; integrator decision 2026-10-24: stages.sh 8c, 8f, 8g, 8h, 8i(e) lost every key in the three runs
+# whose nested session had no keyboard device of its own, see "keyboard devices" at the start of the run). In such a
+# session (only then: SKIP otherwise) the session's only keyboard is replaced between every burst while the layer holds
+# the keyboard after a swap: the layer gets every burst, then the swapped-in front window does (8k).
+# Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Never hangs:
+# every wait is bounded, a FAIL while the nested Hyprland does not answer stops the run, and the run is bounded (check 15
+# min, perf its seconds + 15 min).
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -117,7 +125,26 @@ pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log
 # Each keys.sh / pointer.sh run adds a virtual device; clients bind their new wl_keyboard / wl_pointer when the seat
 # capability comes back, so the first event can be lost on a loaded host: a short wait after the device appears.
 keys() { timeout 10 "$root/scripts/dev/keys.sh" -s 150 "$@" >>"$log" 2>&1; }
-shot() { WAYLAND_DISPLAY=$sock grim -l 0 -o "$out" "$run/$1.png" 2>>"$log"; }
+shot() { WAYLAND_DISPLAY=$sock timeout 10 grim -l 0 -o "$out" "$run/$1.png" 2>>"$log"; }
+# Fail fast, never hang (2026-10-23: a compositor that stopped answering left this script waiting for 30 minutes): every
+# wait is bounded, a process is stopped within 5 s, a number handed to jq is checked first, a FAIL while the nested
+# Hyprland does not answer ends the run at once, and the whole run is bounded (check: 15 min, perf: its seconds + 15 min).
+alive() { nestctl -j version >/dev/null 2>&1; }
+reap() { # <pid>: TERM, at most 5 s, then KILL; never waits longer
+  local p=$1 i
+  [[ -n $p ]] || return 0
+  kill "$p" 2>/dev/null
+  for i in $(seq 1 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+  kill -9 "$p" 2>/dev/null
+  wait "$p" 2>/dev/null
+  return 0
+}
+num() { [[ ${1:-} =~ ^-?[0-9]+$ ]] && echo "$1" || echo -1; } # an integer for jq --argjson, -1 when there is none
+bound=$((15 * 60))
+[[ $mode == perf ]] && bound=$((perf_secs + 15 * 60))
+( sleep "$bound" && kill -TERM $$ 2>/dev/null ) &
+watchdog=$!
+trap 'echo "stages: FAIL: over the time bound ($bound s): stopped" >&2; exit 1' TERM
 
 pids=()
 socat_pid=""
@@ -129,10 +156,12 @@ cleanup() {
   [[ -n $exclusive_pid ]] && kill "$exclusive_pid" 2>/dev/null
   [[ -n ${popup_pid:-} ]] && kill "$popup_pid" 2>/dev/null
   [[ -n ${polkit_pid:-} ]] && kill "$polkit_pid" 2>/dev/null
+  [[ -n ${ondemand_pid:-} ]] && kill "$ondemand_pid" 2>/dev/null
   nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
   nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "false")' >/dev/null 2>&1
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
   [[ -n $socat_pid ]] && kill "$socat_pid" 2>/dev/null
+  [[ -n ${watchdog:-} ]] && { pkill -P "$watchdog" 2>/dev/null; kill "$watchdog" 2>/dev/null; } # its sleep too
   if ((plugin_unloaded)); then
     nestctl plugin load "$plugin" >/dev/null 2>&1 # never leave the nested session without the plugin
   fi
@@ -186,8 +215,7 @@ start_fixture() {
 }
 stop_fixture() {
   [[ -n $fixture_pid ]] || return 0
-  kill "$fixture_pid" 2>/dev/null
-  wait "$fixture_pid" 2>/dev/null
+  reap "$fixture_pid"
   fixture_pid=""
 }
 # A second fixture instance: an Overlay surface with Exclusive keyboard interactivity (what the overview chrome or Search
@@ -208,8 +236,7 @@ start_exclusive() {
 }
 stop_exclusive() {
   [[ -n $exclusive_pid ]] || return 0
-  kill "$exclusive_pid" 2>/dev/null
-  wait "$exclusive_pid" 2>/dev/null
+  reap "$exclusive_pid"
   exclusive_pid=""
 }
 # A fourth fixture instance (role polkit): what the shell's authentication dialog is to Hyprland (a full-output Overlay
@@ -232,9 +259,24 @@ start_polkit() {
 }
 stop_polkit() {
   [[ -n $polkit_pid ]] || return 0
-  kill "$polkit_pid" 2>/dev/null
-  wait "$polkit_pid" 2>/dev/null
+  reap "$polkit_pid"
   polkit_pid=""
+}
+# A fifth fixture instance (role ondemand): a Top-layer surface with OnDemand keyboard interactivity (a clickable banner);
+# it logs every key it receives.
+odlog=$run/ondemand.log
+ondemand_pid=""
+start_ondemand() {
+  : >"$odlog"
+  GF_STAGES_ROLE=ondemand GF_STAGES_OUTPUT=$out WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
+    setsid "$root/scripts/dev/isolated.sh" --name stages-ondemand qs -p "$root/tests/compositor/stages-fixture" --no-color >"$odlog" 2>&1 </dev/null &
+  ondemand_pid=$!
+  wait_log "$odlog" "ondemand surface shown" 50
+}
+stop_ondemand() {
+  [[ -n $ondemand_pid ]] || return 0
+  reap "$ondemand_pid"
+  ondemand_pid=""
 }
 # A third fixture instance: an app window whose click opens a menu (an xdg_popup with a grab); it logs the menu opening and
 # closing and every key the window and the menu receive.
@@ -249,8 +291,7 @@ start_popup_app() {
 }
 stop_popup_app() {
   [[ -n $popup_pid ]] || return 0
-  kill "$popup_pid" 2>/dev/null
-  wait "$popup_pid" 2>/dev/null
+  reap "$popup_pid"
   popup_pid=""
 }
 # Waits until a fixture log has a "[stages-fixture] <text>" line (Quickshell writes its log lines with a delay).
@@ -270,11 +311,11 @@ event_lines() { sleep 0.2; grep -ac "" "$events"; } # socat writes with a short 
 events_since() { tail -n +"$(($1 + 1))" "$events"; } # <line count before>
 # How many key lines of a fixture log name one of <characters> (each test types its own letters into a freshly started
 # fixture); polls 1 s for Quickshell's late log lines.
-layer_got() { # <log> <prefix> <characters>
-  local n=0 i
+layer_got() { # <log> <prefix> <characters> [expected count, default: one per character]: the lines for those keys
+  local n=0 i want=${4:-${#3}}
   for i in $(seq 1 20); do
     n=$(grep -cE "\[stages-fixture\] $2 [$3]\$" "$1" 2>/dev/null)
-    ((n >= ${#3})) && break
+    ((n >= want)) && break
     sleep 0.05
   done
   echo "${n:-0}"
@@ -347,11 +388,20 @@ check() { # <label> <status> [detail]
   else
     say "  FAIL $1${3:+ ($3)}"
     fail=1
+    if ! alive; then
+      say "  FAIL the nested Hyprland does not answer (hung or gone): the run stops here ($passed/$total)"
+      exit 1
+    fi
   fi
 }
 
 say "stages $mode: run $run, nested pid $hypr_pid ($(nestctl -j version | jq -r .tag)), output $out ${mon_w}x${mon_h} at $mon_x,$mon_y"
 say "plugin features: $(features)"
+# Keyboard devices of the nested session that are not this run's virtual keyboards (the backend keyboard aquamarine gets
+# from the parent seat; none when the parent seat had no keyboard at start). Without one, every key of this run comes from
+# a keyboard device that appears for its burst and goes (2026-10-24: the three runs that lost keys in 8c to 8i(e) had none).
+own_kbds=$(nestctl -j devices 2>/dev/null | jq -r '[.keyboards[]? | select(.name | test("virtual") | not)] | length')
+say "keyboard devices: ${own_kbds:-?} of the session's own (besides the virtual keyboards of this run)"
 
 # New windows open on the output under the pointer, centred.
 pointer abs $((mon_w / 2)) $((mon_h - 160)) sleep 50
@@ -518,6 +568,7 @@ check "a press on a thumbnail reaches the strip surface (the shell)" $? "press a
 stages "$(on_json 900)" # slower swaps, so that a frame mid-animation can be captured
 sleep 0.3
 read -r px py <<<"$press"
+px=$(num "${px:-}") py=$(num "${py:-}") # no press logged: -1 -1, no tile
 hit=$(jq -r --argjson x "$px" --argjson y "$py" '[to_entries[] | select($x >= .value.x and $x < .value.x + .value.w and $y >= .value.y and $y < .value.y + .value.h) | .key][0] // -1' <<<"$tiles_json")
 target=$(slot_id "$hit")
 old_active=$(active_id)
@@ -635,7 +686,7 @@ for _ in $(seq 1 40); do # Quickshell writes its log lines with a delay
   grep -q "\[stages-fixture\] key" "$exlog" && break
   sleep 0.05
 done
-ex_keys=$(grep -c "\[stages-fixture\] key" "$exlog")
+ex_keys=$(layer_got "$exlog" key x8)
 sb=$(stage_of "$addr_b3")
 a0=$(st_count '"active":'"$sb"',')
 stages "{\"op\":\"activate\",\"stage\":$sb}"
@@ -648,9 +699,9 @@ capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
 keys k8
 sleep 0.4
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
-((ex_rc == 0 && sw_rc == 0 && ex_keys >= 1)) && [[ $(active_id) == "$sb" && $capb_new == *k8* && -z $capc_new ]]
+((ex_rc == 0 && sw_rc == 0 && ex_keys == 2)) && [[ $(active_id) == "$sb" && $capb_new == *k8* && -z $capc_new ]]
 check "8b swap while an Exclusive layer holds the keyboard: kept when the layer closes, the keys go to the new stage (b3)" $? \
-  "layer got $ex_keys key line(s) while open; active $(active_id) (expected $sb); b3 got '$capb_new', c3 got '$capc_new'"
+  "layer got $ex_keys of the 2 keys (x 8) while open; active $(active_id) (expected $sb); b3 got '$capb_new', c3 got '$capc_new'"
 
 # 8c. window actions after a swap under an Exclusive layer never reach the strip window (R13 counter-review of 17208af:
 # Hyprland's active window stayed on the outgoing window, hidden in the strip, and hl.dsp.window.close() closed it), and the
@@ -701,6 +752,7 @@ nestctl dispatch 'hl.dsp.window.close()' >>"$log" 2>&1
 sleep 1
 f_left=$(client_mapped "$addr_f" && echo yes || echo no)
 g_left=$(client_mapped "$addr_g" && echo yes || echo no)
+ex0=$(layer_got "$exlog" key x9)
 ex1=$(layer_got "$exlog" key uc)
 capf_mid=$(cap_since "$cap_f" "$capf0"); capg_mid=$(cap_since "$cap_g" "$capg0")
 focus_ev=$(events_since "$ev0" | grep -acE " activewindowv2>>($(hexof "$addr_g")|$(hexof "$addr_f"))$")
@@ -711,9 +763,9 @@ capf1=$(stat -c %s "$cap_f")
 keys k9
 sleep 0.4
 capf_new=$(cap_since "$cap_f" "$capf1"); capg_new=$(cap_since "$cap_g" "$capg0")
-((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0 && mon_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
+((ex_rc == 0 && sw_rc == 0 && ex0 == 2 && ex1 == 2 && focus_ev == 0 && mon_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
 check "8c swap under an Exclusive layer: Hyprland's active window is never the strip window (g), no window focus while the layer is up, the focused monitor stays, the layer keeps the keys" $? \
-  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1, focusedmon events: $mon_ev; layer got $ex1 of the 2 keys; f got '$capf_mid', g got '$capg_mid'"
+  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1, focusedmon events: $mon_ev; layer got $ex0 of the 2 keys before the swap (x 9), $ex1 of the 2 after it (u c); f got '$capf_mid', g got '$capg_mid'"
 [[ $g_left == yes && $f_left == yes && $capf_new == *k9* && -z $capg_new ]] && in_active "$addr_f"
 check "8c hl.dsp.window.close() under the layer closes no window (the strip window g survives); after the layer the new stage's front window (f) gets the keys" $? \
   "f mapped after close: $f_left, g mapped: $g_left; f got '$capf_new', g got '$capg_new'"
@@ -759,14 +811,15 @@ sw_rc=$?
 sleep 0.6
 keys vq
 sleep 0.4
+ex0=$(layer_got "$exlog" key x1)
 ex1=$(layer_got "$exlog" key vq)
 sp1=$(special_of); mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0"); caps_new=$(cap_since "$cap_s" "$caps0")
 focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
-((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0)) && [[ $sp0 == special:gf-st && $sp1 == special:gf-st && $mon1 == "$mon0" && -z $capb_new && -z $capc_new && -z $caps_new ]] \
+((ex_rc == 0 && sw_rc == 0 && ex0 == 2 && ex1 == 2 && focus_ev == 0)) && [[ $sp0 == special:gf-st && $sp1 == special:gf-st && $mon1 == "$mon0" && -z $capb_new && -z $capc_new && -z $caps_new ]] \
   && in_active "$addr_c3"
 check "8f Exclusive layer + special workspace + activate: the layer keeps every key, the special workspace stays open, no window focus" $? \
-  "special $sp0 -> $sp1; layer got $ex1 of the 2 keys; window or monitor focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
+  "special $sp0 -> $sp1; layer got $ex0 of the 2 keys before the swap (x 1), $ex1 of the 2 after it (v q); window or monitor focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
 stop_exclusive
 sleep 1
 sp2=$(special_of)
@@ -813,13 +866,14 @@ stages "{\"op\":\"activate\",\"stage\":$sc}"
 sleep 1
 keys wr
 sleep 0.4
+ex0=$(layer_got "$exlog" key x2)
 ex1=$(layer_got "$exlog" key wr)
 ws1=$(shown_ws); mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 moves=$(events_since "$ev0" | grep -acE ' (workspace|workspacev2|focusedmon|focusedmonv2)>>| activewindowv2>>[0-9a-f]+$')
-((ex_rc == 0 && ex1 >= 1 && moves == 0)) && [[ $ws9 == 9 && $ws1 == 9 && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
+((ex_rc == 0 && ex0 == 2 && ex1 == 2 && moves == 0)) && [[ $ws9 == 9 && $ws1 == 9 && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
 check "8g a stage of a Desktop not shown activated under an Exclusive layer: no Desktop switch, no window focus, the layer keeps every key" $? \
-  "Desktop $ws_g -> $ws9 -> $ws1; focus or Desktop events under the layer: $moves; focused monitor $mon0 -> $mon1; layer got $ex1 of the 2 keys; b3 got '$capb_new', c3 got '$capc_new'"
+  "Desktop $ws_g -> $ws9 -> $ws1; focus or Desktop events under the layer: $moves; focused monitor $mon0 -> $mon1; layer got $ex0 of the 2 keys before (x 2), $ex1 of the 2 after the activation (w r); b3 got '$capb_new', c3 got '$capc_new'"
 stop_exclusive
 sleep 0.8
 nestctl dispatch "hl.dsp.focus({ workspace = \"$ws_g\" })" >>"$log" 2>&1
@@ -854,13 +908,14 @@ sleep 0.6
 aw=$(active_window)
 keys secret
 sleep 0.4
-pk1=$(layer_got "$pklog" "polkit key" secrt)
+pk0=$(layer_got "$pklog" "polkit key" pw)
+pk1=$(layer_got "$pklog" "polkit key" secrt 6)
 mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
-((pk_rc == 0 && sw_rc == 0 && pk1 >= 5 && focus_ev == 0)) && [[ $aw != "$addr_b3" && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
+((pk_rc == 0 && sw_rc == 0 && pk0 == 2 && pk1 == 6 && focus_ev == 0)) && [[ $aw != "$addr_b3" && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
 check "8h polkit-like dialog: a stage activated under it, every key goes to its password field, none to a window; the active window is never the strip window" $? \
-  "field got $pk1 of the 6 keys; active window '$aw' (b3 $addr_b3); window or monitor focus events under the dialog: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
+  "field got $pk0 of the 2 keys before (p w), $pk1 of the 6 after the activation (s e c r e t); active window '$aw' (b3 $addr_b3); window or monitor focus events under the dialog: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
 keys -k Escape
 wait_log "$pklog" "polkit hidden" 40
 sleep 0.8
@@ -1040,6 +1095,110 @@ kill "$pid_h1" 2>/dev/null
 sleep 0.8
 pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100
 
+# 8j. a keyboard device appears while an Exclusive layer holds the keyboard after a swap (integrator decision 2026-10-24,
+# macOS: a modal system prompt always gets the keyboard; wlr-layer-shell: an Exclusive Top or Overlay surface gets every
+# key). c3 holds the keyboard, the layer takes it, b's stage is activated (c3 goes to the strip). Then a new keyboard
+# device (tests/tools/vkbd) appears and types j k, and while it is still there another one (keys.sh) types l m: the layer
+# gets the four keys, no window one. Then a Top-layer surface that takes the keyboard on demand (a clickable banner, the
+# fixture's role ondemand) maps while the layer is still up: Hyprland 0.56.2 gives it the keyboard when it maps (its log:
+# "Set keyboard focus" to the banner), and with the keyboard moved back only when a key arrived the client lost that key
+# (9169ad4: "layer got 1 of the 2 keys" in 3 runs of 3). The layer gets both keys (o p), the banner none. When the layer
+# is gone the swapped-in front window (b3) gets every key, c3 nothing.
+vkbd() { timeout 20 "$root/tests/tools/vkbd/vkbd.sh" "$@" >>"$log" 2>&1; }
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
+sleep 0.5
+sb=$(stage_of "$addr_b3")
+start_exclusive
+ex_rc=$?
+keys x3
+sleep 0.4
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+a0=$(st_count '"active":'"$sb"',')
+stages "{\"op\":\"activate\",\"stage\":$sb}"
+wait_st '"active":'"$sb"',' "$a0" 2000
+sw_rc=$?
+sleep 0.6
+vkbd sleep 400 tap j tap k sleep 2600 &
+vkbd_pid=$!
+sleep 1.4
+keys lm
+sleep 0.4
+ex0=$(layer_got "$exlog" key x3)
+ex1=$(layer_got "$exlog" key jklm)
+capb_mid=$(cap_since "$cap_b" "$capb0"); capc_mid=$(cap_since "$cap_c" "$capc0")
+wait "$vkbd_pid" 2>/dev/null
+((ex_rc == 0 && sw_rc == 0 && ex0 == 2 && ex1 == 4)) && [[ -z $capb_mid && -z $capc_mid ]]
+check "8j a keyboard device appears under the Exclusive layer after a swap: the layer gets every key of it and of the next one, no window one" $? \
+  "layer got $ex0 of the 2 keys before the swap (x 3), $ex1 of the 4 after it (j k from the new device, l m from the next); b3 got '$capb_mid', c3 got '$capc_mid'"
+start_ondemand
+od_rc=$?
+keys op
+sleep 0.4
+ex2=$(layer_got "$exlog" key op)
+od_keys=$(grep -c "\[stages-fixture\] ondemand key" "$odlog")
+((od_rc == 0 && ex2 == 2 && od_keys == 0))
+check "8j a surface that takes the keyboard on demand maps over the Exclusive layer: the layer keeps every key, the banner none" $? \
+  "banner shown: $((od_rc == 0)); layer got $ex2 of the 2 keys; banner got $od_keys"
+stop_ondemand
+sleep 0.4
+stop_exclusive
+sleep 1
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+keys n8
+sleep 0.4
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+[[ $capb_new == *n8* && -z $capc_new ]] && in_active "$addr_b3"
+check "8j after the layer: the swapped-in front window (b3) gets every key, c3 nothing" $? "b3 got '$capb_new', c3 got '$capc_new'"
+
+# 8k. the session's only keyboard is replaced while an Exclusive layer holds the keyboard after a swap (integrator
+# decision 2026-10-24). Runs only when the nested session has no keyboard device of its own ("keyboard devices: 0" at the
+# start of the run: the parent seat had no keyboard when the session started): every keys.sh burst is then a new
+# keyboard device after the previous one went away, the seat loses its keyboard capability in between and clients
+# re-create their wl_keyboard, and a Quickshell client ignores the keys of the re-created one until it gets a new
+# wl_keyboard.leave and enter (the plugin announces it again). It cannot be produced through scripts/nestctl: Hyprland
+# 0.56.2 keeps a disabled keyboard (device `enabled = false`) in the seat's capabilities (IKeyboard::getCapabilities
+# returns the keyboard capability whatever the device's state; read from the binary). c3 holds the keyboard, the layer
+# takes it and gets a first burst (p), b's stage is activated, two more bursts (g h, then u) must reach the layer and no
+# window; after the layer, two bursts (v8, then w9) must reach b3, c3 nothing.
+if [[ ${own_kbds:-1} == 0 ]]; then
+  nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
+  sleep 0.5
+  sb=$(stage_of "$addr_b3")
+  start_exclusive
+  ex_rc=$?
+  keys p
+  sleep 0.4
+  ex0=$(layer_got "$exlog" key p)
+  capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+  a0=$(st_count '"active":'"$sb"',')
+  stages "{\"op\":\"activate\",\"stage\":$sb}"
+  wait_st '"active":'"$sb"',' "$a0" 2000
+  sw_rc=$?
+  sleep 0.6
+  keys gh
+  sleep 0.6
+  keys u
+  sleep 0.4
+  ex1=$(layer_got "$exlog" key ghu)
+  capb_mid=$(cap_since "$cap_b" "$capb0"); capc_mid=$(cap_since "$cap_c" "$capc0")
+  ((ex_rc == 0 && sw_rc == 0 && ex0 == 1 && ex1 == 3)) && [[ -z $capb_mid && -z $capc_mid ]]
+  check "8k the only keyboard replaced under the Exclusive layer after a swap: the layer gets every burst, no window one" $? \
+    "layer got the first burst: $ex0, the next two: $ex1 of 3 keys (g h, u); b3 got '$capb_mid', c3 got '$capc_mid'"
+  stop_exclusive
+  sleep 1
+  capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+  keys v8
+  sleep 0.6
+  keys w9
+  sleep 0.4
+  capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+  [[ $capb_new == *v8* && $capb_new == *w9* && -z $capc_new ]] && in_active "$addr_b3"
+  check "8k after the layer, the only keyboard replaced again: the swapped-in front window (b3) gets every burst, c3 nothing" $? \
+    "b3 got '$capb_new', c3 got '$capc_new'"
+else
+  say "  SKIP 8k: the session has ${own_kbds:-?} keyboard device(s) of its own; 8k needs one with none (the parent seat had no keyboard at start)"
+fi
+
 # 8d. a menu (xdg_popup with a grab) of the active stage's window keeps its keys; when that window goes to the strip its
 # menu closes at once, as a click outside it would, and every key goes to the new stage (R13 counter-review of 17208af:
 # Hyprland 0.56.2 keeps the keyboard on the toplevel during a popup grab and refused the new window the keyboard; the
@@ -1207,7 +1366,7 @@ sleep 0.8
 keys e0
 sleep 0.3
 next=$(slot_id 0)
-next_front=$(last_st | jq -r --argjson s "$next" '[.monitors[0].stages[] | select(.id == $s)][0].windows[-1].address // ""')
+next_front=$(last_st | jq -r --argjson s "$(num "$next")" '[.monitors[0].stages[] | select(.id == $s)][0].windows[-1].address // ""')
 e_alone=$(last_st | jq -r --arg a "$(hexof "$addr_e")" '.monitors[0] as $m | [$m.stages[] | select(.id == $m.active)][0].windows | map(.address) == [$a]')
 nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr_e\", 0, 0, 0, 0)" >>"$log" 2>&1
 sleep 0.8

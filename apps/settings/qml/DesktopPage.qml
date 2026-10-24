@@ -89,7 +89,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Position on screen")
             subtitle: qsTr("The Dock goes to the edge you choose. With several displays it is on the one where the pointer last reached that edge.")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Position on screen")
                 model: [{id: "left", text: qsTr("Left")}, {id: "bottom", text: qsTr("Bottom")}, {id: "right", text: qsTr("Right")}]
                 value: root.store.value("dock.position")
@@ -100,7 +100,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Minimize animation")
             subtitle: qsTr("With Reduce Motion on, windows fade instead.")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Minimize animation")
                 model: [{id: "funnel", text: qsTr("Funnel")}, {id: "shrink", text: qsTr("Shrink")}]
                 value: root.store.value("dock.minimizeEffect")
@@ -230,7 +230,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Automatically hide and show the menu bar")
             subtitle: qsTr("A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Automatically hide and show the menu bar")
                 model: [{id: "always", text: qsTr("Always")}, {id: "desktop", text: qsTr("On Desktop Only")}, {id: "fullscreen", text: qsTr("In Full Screen Only")}, {id: "never", text: qsTr("Never")}]
                 value: root.store.value("menubar.autoHide")
@@ -278,7 +278,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Double-click a window's title bar to")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Double-click a window's title bar to")
                 model: [{id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("Do Nothing")}]
                 value: root.store.value("windows.titlebarDoubleClick")
@@ -328,12 +328,27 @@ SettingsPage {
     }
 
     SettingsGroup {
+        caption: qsTr("Stages")
+        footnote: qsTr("Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.")
+
+        SettingsRow {
+            title: qsTr("Stages")
+            subtitle: qsTr("Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.")
+            Toggle {
+                accessibleName: qsTr("Stages")
+                checked: root.store.value("windows.stages")
+                onToggled: c => root.store.set("windows.stages", c)
+            }
+        }
+    }
+
+    SettingsGroup {
         caption: qsTr("Screen Corners")
         footnote: qsTr("Move the pointer into a screen corner to run the action.")
 
         SettingsRow {
             title: qsTr("Top left")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Top left corner")
                 model: root.cornerActions
                 value: root.store.value("hotCorners.topLeft")
@@ -343,7 +358,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Top right")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Top right corner")
                 model: root.cornerActions
                 value: root.store.value("hotCorners.topRight")
@@ -353,7 +368,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Bottom left")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Bottom left corner")
                 model: root.cornerActions
                 value: root.store.value("hotCorners.bottomLeft")
@@ -363,7 +378,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Bottom right")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Bottom right corner")
                 model: root.cornerActions
                 value: root.store.value("hotCorners.bottomRight")

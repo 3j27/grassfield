@@ -20,6 +20,9 @@ Window {
     property bool infoOpen: false
     property bool slideshow: false
     property bool slideshowPaused: false
+    // ADR-0015: the window draws its own chrome (the unified toolbar below); the apps' tagger (apps/windowchrome.h) names
+    // its role for the compositor, whose plugin then draws no titlebar on it.
+    property string gfChromeRole: "viewer"
     readonly property int fileCount: win.backend.files.length
     readonly property bool canGoPrevious: win.current > 0
     readonly property bool canGoNext: win.current < win.fileCount - 1
@@ -240,25 +243,36 @@ Window {
 
     // ---- toolbar ---------------------------------------------------------------------------------
 
-    Item {
+    // The unified toolbar of grassfield-ui (ADR-0015): the lights, then the sidebar toggle, the two-line title block and the
+    // tools; its layer for a layout of its own holds them.
+    UnifiedToolbar {
         id: toolbar
         width: parent.width
         height: win.slideshow ? 0 : Tokens.previewToolbarHeight
         visible: !win.slideshow
         z: 2
+        window: win
+        showTitle: false
+        doubleClickAction: win.backend.titlebarDoubleClick
+        canMinimize: win.backend.canMinimize
 
         ToolbarGroup {
             id: sidebarGroup
-            x: Tokens.spacingMd
+            x: toolbar.contentStart
             anchors.verticalCenter: parent.verticalCenter
             visible: win.hasSidebar
 
             ToolButton {
-                glyph: "sidebar"
-                label: qsTr("Thumbnails")
+                capsule: true
+                accessibleName: qsTr("Thumbnails")
                 checkable: true
                 checked: win.showSidebar
                 onClicked: win.sidebarOpen = !win.sidebarOpen
+
+                Glyph {
+                    anchors.centerIn: parent
+                    kind: "sidebar"
+                }
             }
         }
 
@@ -314,21 +328,36 @@ Window {
                 visible: win.fileCount > 1
 
                 ToolButton {
-                    glyph: "chevronLeft"
-                    label: qsTr("Previous")
+                    capsule: true
+                    accessibleName: qsTr("Previous")
                     enabled: win.canGoPrevious
                     onClicked: win.go(-1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "chevronLeft"
+                    }
                 }
                 ToolButton {
-                    glyph: "chevronRight"
-                    label: qsTr("Next")
+                    capsule: true
+                    accessibleName: qsTr("Next")
                     enabled: win.canGoNext
                     onClicked: win.go(1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "chevronRight"
+                    }
                 }
                 ToolButton {
-                    glyph: "play"
-                    label: qsTr("Slideshow")
+                    capsule: true
+                    accessibleName: qsTr("Slideshow")
                     onClicked: win.toggleSlideshow()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "play"
+                    }
                 }
             }
 
@@ -336,19 +365,34 @@ Window {
                 visible: win.view?.canZoom ?? false
 
                 ToolButton {
-                    glyph: "zoomOut"
-                    label: qsTr("Zoom Out")
+                    capsule: true
+                    accessibleName: qsTr("Zoom Out")
                     onClicked: win.view.zoomOut()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "zoomOut"
+                    }
                 }
                 ToolButton {
-                    glyph: "fit"
-                    label: qsTr("Zoom to Fit")
+                    capsule: true
+                    accessibleName: qsTr("Zoom to Fit")
                     onClicked: win.view.fit()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "fit"
+                    }
                 }
                 ToolButton {
-                    glyph: "zoomIn"
-                    label: qsTr("Zoom In")
+                    capsule: true
+                    accessibleName: qsTr("Zoom In")
                     onClicked: win.view.zoomIn()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "zoomIn"
+                    }
                 }
             }
 
@@ -356,24 +400,39 @@ Window {
                 visible: win.view?.canRotate ?? false
 
                 ToolButton {
-                    glyph: "rotateLeft"
-                    label: qsTr("Rotate Left")
+                    capsule: true
+                    accessibleName: qsTr("Rotate Left")
                     onClicked: win.view.rotate(-1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "rotateLeft"
+                    }
                 }
                 ToolButton {
-                    glyph: "rotateRight"
-                    label: qsTr("Rotate Right")
+                    capsule: true
+                    accessibleName: qsTr("Rotate Right")
                     onClicked: win.view.rotate(1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "rotateRight"
+                    }
                 }
             }
 
             ToolbarGroup {
                 ToolButton {
-                    glyph: "info"
-                    label: qsTr("Info")
+                    capsule: true
+                    accessibleName: qsTr("Info")
                     checkable: true
                     checked: win.infoOpen
                     onClicked: win.infoOpen = !win.infoOpen
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "info"
+                    }
                 }
             }
 
@@ -392,9 +451,14 @@ Window {
                 ToolButton {
                     anchors.centerIn: parent
                     visible: !win.searchOpen
-                    glyph: "search"
-                    label: qsTr("Search in document")
+                    capsule: true
+                    accessibleName: qsTr("Search in document")
                     onClicked: win.openSearch()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "search"
+                    }
                 }
 
                 Glyph {

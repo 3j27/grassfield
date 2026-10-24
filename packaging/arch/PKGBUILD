@@ -29,7 +29,7 @@ url="https://grassfield.invalid"
 # the icon pack GPL-3.0-only, ...): THIRD_PARTY.md has the table, scripts/dev/check-licenses.sh checks it.
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf git)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf git wayland)
 options=(!debug)
 # grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
@@ -114,7 +114,7 @@ package_grassfield-desktop() {
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
   # networkmanager (nmcli), bluez-utils (bluetoothctl), wireplumber (wpctl) and wl-clipboard (wl-copy) are run by Settings
   # and the shell (GF-049, ARCH-08): declared, not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
@@ -143,6 +143,8 @@ package_grassfield-desktop() {
   rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"
+  # The Qt Quick Controls style "Grassfield" (module Grassfield, next to Grassfield.Ui): selected by Grassfield's own apps only.
+  install -m644 "$root/ui/Grassfield/qmldir" "$root"/ui/Grassfield/*.qml "$pkgdir/usr/lib/qt6/qml/Grassfield/"
 
   # Grassfield.I18n -> /usr/lib/qt6/qml/Grassfield/I18n; grassfield_<lang>.qm -> /usr/share/grassfield/translations.
   DESTDIR="$pkgdir" cmake --install "$srcdir/i18n-build"

@@ -1,0 +1,150 @@
+#pragma once
+
+// Presented-frame timestamps per monitor (ADR-0006 gate P3: "≥ 95 % frames < 16.7 ms during dock magnification, Mission
+// Control open/close, Launchpad open"; the method needs presentation times, not render-thread times). The plugin records
+// the time of every presented frame of each monitor (Hyprland's CMonitor::m_events.presented, the output's presentation
+// feedback) in a ring; `hyprctl grassfield-frames` returns them; tests/visual/presented-frames.sh turns them into frame
+// pacing over the window of a real shell animation. Pure (no Hyprland include): unit-tested in compositor/tests/FrameLogTest.cpp.
+// For attribution, each monitor also keeps the CPU span of every frame Hyprland rendered (a long interval with a long render
+// is the compositor's cost; a long interval with a late render is a client that committed late), and the plugin marks the
+// phases of its own animations (the Overview's opening, open, closing, closed) on the same clock.
+
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace gf::frames {
+
+    // `hyprctl grassfield-frames` (exact name, no argument): what was recorded.
+    inline constexpr std::string_view kHyprctlCommand = "grassfield-frames";
+    // `hyprctl grassfield-frames-start` (exact name, no argument): record for the next kMaxRecordingMs.
+    inline constexpr std::string_view kHyprctlStartCommand = "grassfield-frames-start";
+
+    // Nothing is recorded unless a measurement asked for it, and never for long (review of part B, 2026-10-24: frame times
+    // on the lock screen give the typing rhythm away, each key redrawing the password dots): a start request records for
+    // this long, a new one extends it. While the session is locked nothing is recorded and what was recorded is dropped.
+    inline constexpr uint64_t kMaxRecordingMs = 60'000;
+
+    class CRecording {
+      public:
+        // A start request at `nowMs`: recording until nowMs + kMaxRecordingMs.
+        void     start(uint64_t nowMs);
+        void     stop();
+        // Recording at `nowMs` (not past the bound; a clock that went backwards stops it).
+        bool     active(uint64_t nowMs) const;
+        uint64_t untilMs() const;
+
+      private:
+        uint64_t m_startMs = 0;
+        uint64_t m_untilMs = 0;
+    };
+
+    // Frames kept per monitor: 1024 is about 17 s at 60 Hz, more than any of the P3 animations plus its margins.
+    inline constexpr size_t kCapacity = 1024;
+
+    // Monitors reported at most (a name longer than kMaxNameBytes is cut).
+    inline constexpr size_t kMaxMonitors  = 16;
+    inline constexpr size_t kMaxNameBytes = 64;
+
+    // A fixed ring of timestamps (microseconds of CLOCK_MONOTONIC, the clock std::chrono::steady_clock reads on Linux and
+    // Python's time.monotonic reads): the oldest is overwritten once full. A timestamp older than the newest is refused
+    // (a clock that went backwards, or a duplicate presentation event): the ring stays in time order.
+    class CRing {
+      public:
+        // False when refused (not after the newest).
+        bool push(uint64_t us);
+
+        // Oldest first.
+        std::vector<uint64_t> snapshot() const;
+
+        size_t size() const {
+            return m_size;
+        }
+
+        // Forgets every timestamp (the session locked).
+        void clear();
+
+        // Every timestamp accepted since the start (the ring holds the last kCapacity of them).
+        uint64_t total() const {
+            return m_total;
+        }
+
+      private:
+        std::vector<uint64_t> m_slots = std::vector<uint64_t>(kCapacity, 0);
+        size_t                m_next  = 0;
+        size_t                m_size  = 0;
+        uint64_t              m_total = 0;
+        uint64_t              m_last  = 0;
+    };
+
+    // One frame Hyprland rendered for a monitor: when it began (render.preChecks) and the CPU time to RENDER_POST (the
+    // frame's whole render, the plugin's draws included; the GPU's own time is not in it).
+    struct RenderSpan {
+        uint64_t beginUs = 0;
+        uint64_t cpuUs   = 0;
+
+        bool     operator==(const RenderSpan&) const = default;
+    };
+
+    // The last kCapacity render spans in time order: a span that does not begin after the newest is refused.
+    class CSpanRing {
+      public:
+        bool                    push(const RenderSpan& span);
+        std::vector<RenderSpan> snapshot() const;
+        void                    clear();
+
+        size_t size() const {
+            return m_size;
+        }
+
+      private:
+        std::vector<RenderSpan> m_slots = std::vector<RenderSpan>(kCapacity);
+        size_t                  m_next  = 0;
+        size_t                  m_size  = 0;
+        uint64_t                m_last  = 0;
+        bool                    m_any   = false;
+    };
+
+    // Phase marks of the plugin's animations ("overview-opening", ...): the last kMaxMarks, in time order (a mark older
+    // than the newest is refused), each name cut at kMaxMarkBytes.
+    inline constexpr size_t kMaxMarks     = 64;
+    inline constexpr size_t kMaxMarkBytes = 32;
+
+    struct Mark {
+        uint64_t    us = 0;
+        std::string what;
+
+        bool        operator==(const Mark&) const = default;
+    };
+
+    class CMarkRing {
+      public:
+        bool              push(uint64_t us, std::string_view what);
+        std::vector<Mark> snapshot() const;
+        void              clear();
+
+      private:
+        std::vector<Mark> m_slots = std::vector<Mark>(kMaxMarks);
+        size_t            m_next  = 0;
+        size_t            m_size  = 0;
+        uint64_t          m_last  = 0;
+    };
+
+    struct MonitorFrames {
+        std::string             name;
+        double                  refreshHz = 0; // the mode's refresh rate (0 when unknown)
+        uint64_t                total     = 0;
+        std::vector<uint64_t>   presentedUs;
+        std::vector<RenderSpan> renders;
+    };
+
+    // {"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name":"GF-REF","refreshHz":60,
+    //  "total":1234,"presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t":us,"what":"overview-opening"}]}.
+    // Names are JSON-escaped and cut at kMaxNameBytes (on a UTF-8 boundary); at most kMaxMonitors monitors; a refresh rate
+    // that is not finite and positive is written as 0.
+    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks = {});
+
+} // namespace gf::frames

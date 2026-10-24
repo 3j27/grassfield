@@ -18,6 +18,8 @@ ROOTS = ("shell", "ui", "apps")
 # `Name {` at the start of a line, or after `property: ` (delegate: Name {, contentItem: Name {).
 USE = re.compile(r"^\s*(?:[a-z][A-Za-z0-9_.]*\s*:\s*)?([A-Z][A-Za-z0-9_]*)\s*\{", re.M)
 LISTED = re.compile(r"^\s*(?:singleton\s+)?([A-Z][A-Za-z0-9_]*)\s+\d+(?:\.\d+)?\s+\S+\.qml\s*$", re.M)
+# `internal Name File.qml`: a type the module's own files may use, not exported (no version).
+INTERNAL = re.compile(r"^\s*internal\s+([A-Z][A-Za-z0-9_]*)\s+\S+\.qml\s*$", re.M)
 
 
 def strip_comments(text):
@@ -27,7 +29,7 @@ def strip_comments(text):
 
 def misses(qmldir_text, files):
     """files: {basename without .qml: source}. Returns sorted (file, type) pairs used but not listed."""
-    listed = set(LISTED.findall(qmldir_text))
+    listed = set(LISTED.findall(qmldir_text)) | set(INTERNAL.findall(qmldir_text))
     siblings = set(files)
     out = set()
     for name, source in files.items():
@@ -68,6 +70,9 @@ def selftest():
         return 1
     if misses(qmldir + "StackPile 1.0 StackPile.qml\n", files):
         print("qmldir-types selftest: FAIL (a listed type is reported)")
+        return 1
+    if misses(qmldir + "internal StackPile StackPile.qml\n", files):
+        print("qmldir-types selftest: FAIL (an internal type is reported)")
         return 1
     print("qmldir-types selftest: ok")
     return 0

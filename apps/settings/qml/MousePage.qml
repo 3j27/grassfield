@@ -93,7 +93,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Secondary click")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Secondary click")
                 model: [{id: "two_finger", text: qsTr("Two fingers")}, {id: "corner", text: qsTr("Bottom right corner")}]
                 value: root.settings.secondary_click

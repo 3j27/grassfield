@@ -1,5 +1,6 @@
 #include "Stages.hpp"
 
+#include "ClientChrome.hpp"
 #include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Overview.hpp"
@@ -29,7 +30,9 @@
 #include <hyprland/src/managers/XWaylandManager.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/protocols/InputMethodV2.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
+#include <hyprland/src/protocols/core/Seat.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/transformer/Transformer.hpp>
@@ -109,6 +112,8 @@ namespace {
         double                           durationMs = 0; // of swaps (from op on)
         st::Curve                        curve;
         bool                             animating = false;
+        uint64_t                         lockStayLogged = 0; // the strip window logged as staying active under the lock
+        bool                             keysOnLayer = false; // the active window was cleared while an Exclusive layer held the keyboard (unload: restoreFocusSurface)
         Time::steady_tp                  start;
         double                           animMs = 0;
         std::vector<CHyprSignalListener> listeners;
@@ -123,6 +128,15 @@ namespace {
         st::PressRecord                  press;        // the latest press (pointer button, touch, tablet): which CLICK focus is it
         gf::deferredFocus::CLater        pressEnd;     // ends a press record from the event loop (code of this library)
         std::optional<uint64_t>          pointerLater; // doLater sequence of a pending pointer refresh (code of this library)
+        std::optional<uint64_t>          keyFocusLater; // doLater sequence of a pending keyboard focus check (likewise)
+        bool                             movingKeyFocus = false; // keepKeyboardFocus is moving the keyboard (its own focus event is not a cause)
+        WP<IKeyboard>                    keyDevice;              // Hyprland's keyboard device at the previous key
+        bool                             hadKeyDevice = false;
+        SP<CEventLoopTimer>              announceTimer;          // waits for the re-created wl_keyboard (removed in stop())
+        WP<IKeyboard>                    announceDevice;         // the device that replaced the session's only keyboard
+        WP<IKeyboard>                    announcedDevice;        // the device the timer already announced
+        std::vector<WP<CWLKeyboardResource>> announceKnown;      // the focused client's wl_keyboards when it appeared
+        int                              announceTries = 0;
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
         bool                             warnedNoBuffer = false;
         // A window a titlebar drag dropped on the strip (dropOnStrip): drawn from where it was dropped, then put back at its
@@ -497,11 +511,26 @@ namespace {
     // match on focus (Desktop::Rule::RULE_PROP_FOCUS, e.g. an opacity while focused) and the idle inhibitors (an
     // `idle_inhibit focus` window no longer inhibits). No focus request, no monitor, workspace or special workspace change:
     // nothing of Hyprland's focus path runs.
+    //
+    // The layer surface that holds the keyboard (an Exclusive layer: a dialog, the lock-like overlay) stays Hyprland's focus
+    // surface. resetWindowFocus forgets the focus surface with the window, and Hyprland gives the seat's keyboard back to
+    // its focus surface when a keyboard device appears (a virtual keyboard per burst of keys, a keyboard plugged in): with
+    // nothing there every key went nowhere, the dialog's password field included (stages.sh 8c, 8f, 8g, 8h on 2026-10-23,
+    // "layer got 0 of the 2 keys" after a swap under the layer, with only transient keyboard devices in the session).
     void clearActiveWindow(const PHLWINDOW& old) {
         const auto fs = Desktop::focusState();
         if (!fs)
             return;
+        const auto holder      = keyboardHolder();
+        const auto holderOwner = holder ? gf::surfaces::ownerOf(holder) : gf::surfaces::SOwner{};
         fs->resetWindowFocus();
+        if (holderOwner.layer && !holderOwner.window)
+            S().keysOnLayer = true; // Hyprland's focus surface is set again on unload (restoreFocusSurface)
+        if (holder && holderOwner.layer && !holderOwner.window && fs->surface() != holder)
+            // The same surface again, no window. Hyprland 0.56.2 returns from rawSurfaceFocus at once when the seat's
+            // keyboard is already on that surface (read from the binary: the comparison at the function's start): then
+            // nothing is set again and only the seat keeps the holder; otherwise the holder is the focus surface again.
+            fs->rawSurfaceFocus(holder);
         if (old && old->m_isMapped && old->m_workspace) {
             if (old->m_ruleApplicator)
                 old->m_ruleApplicator->propertiesChanged(Desktop::Rule::RULE_PROP_FOCUS);
@@ -704,8 +733,14 @@ namespace {
         for (int attempt = 0; attempt < 2; ++attempt) {
             switch (st::activeWindowAction(state)) {
                 case st::ActiveWindowAction::None:
-                    if (state.locked)
-                        gf::logRequest(Log::DEBUG, "stages: strip window {:x} stays Hyprland's active window under the session lock ({})", addressOf(active), when);
+                    // Once per window and lock, never per event: this runs before every key and pointer event while it
+                    // lasts (review of part B, 2026-10-24; a key path logs nothing at all, core/Quiet.hpp).
+                    if (state.locked && S().lockStayLogged != addressOf(active)) {
+                        S().lockStayLogged = addressOf(active);
+                        gf::logRequest(Log::DEBUG, "stages: strip window {:x} stays Hyprland's active window under the session lock", addressOf(active));
+                    }
+                    if (!state.locked)
+                        S().lockStayLogged = 0;
                     return;
                 case st::ActiveWindowAction::FocusFront: {
                     forgetPending();
@@ -858,10 +893,12 @@ namespace {
                 for (size_t k = 0; k < order.size(); ++k) {
                     std::vector<PHLWINDOW> ws;
                     std::vector<st::Box>   surfaces;
+                    std::vector<double>    bands; // the titlebar band above each thumbnail; none for client chrome (ADR-0015 P3)
                     for (const auto id : order[k].windows) {
                         if (const auto w = windowByAddress(id)) {
                             ws.push_back(w);
                             surfaces.push_back(tf::surfaceBox(w));
+                            bands.push_back(gf::chrome::bandOf(w));
                         }
                     }
                     if (!strip || k == 0) { // the active stage, or a workspace whose monitor has no strip: shown normally
@@ -869,7 +906,7 @@ namespace {
                             targets.push_back(STarget{.w = w, .inStrip = false, .to = std::nullopt, .thumb = std::nullopt});
                         continue;
                     }
-                    const auto drawn = st::stripTargets(k - 1, strip->tiles, strip->hidden, fs, monitorBox(mon), surfaces);
+                    const auto drawn = st::stripTargets(k - 1, strip->tiles, strip->hidden, fs, monitorBox(mon), surfaces, bands);
                     for (size_t i = 0; i < ws.size() && i < drawn.size(); ++i)
                         targets.push_back(STarget{.w = ws[i], .inStrip = true, .to = drawn[i].to, .thumb = drawn[i].thumb});
                 }
@@ -1164,6 +1201,258 @@ namespace {
 
     // ---- input guards (Hyprland delivers to its current focus without checking input blocks) ----
 
+    // The frontmost mapped layer surface with Exclusive keyboard interactivity in Hyprland's list (core replacesFrontmost:
+    // the highest layer, the latest among equals), or null. No allocation: the list is only read.
+    PHLLS frontmostExclusiveLayer() {
+        PHLLS best;
+        if (!g_pInputManager)
+            return best;
+        for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
+            const auto ls = ref.lock();
+            if (ls && ls->m_mapped && ls->resource() && gf::surfaces::interactivity(ls) == 1 &&
+                st::replacesFrontmost(ls->m_layer, best ? std::optional<uint32_t>{best->m_layer} : std::nullopt))
+                best = ls;
+        }
+        return best;
+    }
+
+    bool onExclusiveLayer(const SP<CWLSurfaceResource>& surface) {
+        const auto owner = surface ? gf::surfaces::ownerOf(surface) : gf::surfaces::SOwner{};
+        return owner.layer && gf::surfaces::interactivity(owner.layer) == 1;
+    }
+
+    bool inputMethodGrabsKeyboard() {
+        const auto im = g_pInputManager ? g_pInputManager->m_relay.m_inputMethod.lock() : nullptr;
+        return im && im->hasGrab();
+    }
+
+    // Hyprland's active window may take the keyboard: mapped, not hidden, on a workspace shown, takes input (no input
+    // block, Stages' included), not a strip window.
+    bool activeWindowTakesKeys(const PHLWINDOW& w) {
+        return w && w->m_isMapped && !w->isHidden() && w->m_workspace && w->m_workspace->isVisible() && w->acceptsInput() && !inStrip(w);
+    }
+
+    // Before every key, before Hyprland delivers it, and from the event loop after Hyprland changed the keyboard focus, a
+    // layer surface mapped or unmapped, or a keyboard device appeared (`keyArriving` false; core keyFocusAction: why, and
+    // every condition). The frontmost Exclusive Top or Overlay layer gets the keyboard when the seat's keyboard is elsewhere
+    // (on nothing, a window, another surface: a surface that takes the keyboard on demand mapped over the dialog); with no
+    // Exclusive layer and a key arriving, Hyprland's active window gets it back when the seat's keyboard is on nothing.
+    // Through Hyprland's own CFocusState::rawSurfaceFocus (its focus surface and the seat's keyboard agree afterwards; the
+    // seat grab is checked here first, so Hyprland never logs a refusal per key). The event-loop check moves the keyboard
+    // before the next key: a key that arrives right after wl_keyboard.enter can be lost by the client (stages.sh 8j: the
+    // first key after a banner mapped over the dialog was lost with the check before keys only). Runs while the plugin is
+    // loaded only (the listeners go on unload); before a key it allocates nothing and logs nothing (a key path,
+    // core/Quiet.hpp): the common case (no Exclusive layer, the seat's keyboard on a surface) returns after two reads.
+    bool keepKeyboardFocus(bool keyArriving) {
+        const bool exclusive = g_pInputManager && !g_pInputManager->m_exclusiveLSes.empty();
+        if (!exclusive)
+            S().keysOnLayer = false; // no Exclusive layer left: Hyprland refocused, nothing to set again on unload
+        const auto seat = gf::surfaces::keyboardFocus();
+        if (!exclusive && seat)
+            return false;
+        const auto fs = Desktop::focusState();
+        if (!fs || !g_pSeatManager)
+            return false;
+        const auto            grab   = g_pSeatManager->m_seatGrab;
+        const auto            target = exclusive ? frontmostExclusiveLayer() : nullptr;
+        const auto            layer  = target ? target->resource() : nullptr;
+        const auto            window = exclusive ? nullptr : fs->window();
+        SP<CWLSurfaceResource> windowSurface;
+        if (activeWindowTakesKeys(window)) {
+            windowSurface = fs->surface();
+            if (!windowSurface || gf::surfaces::ownerOf(windowSurface).window != window)
+                windowSurface = mainSurfaceOf(window);
+        }
+        const st::KeyFocusFacts facts{.locked            = sessionLocked(),
+                                      .inputMethodGrab   = inputMethodGrabsKeyboard(),
+                                      .exclusive         = exclusive,
+                                      .frontmostLevel    = target ? target->m_layer : 0,
+                                      .seatOnFrontmost   = layer && seat && gf::surfaces::ownerOf(seat).layer == target,
+                                      .grabRejectsLayer  = grab && layer && !grab->accepts(layer),
+                                      .seatFocusNone     = !seat,
+                                      .activeWindow      = windowSurface != nullptr,
+                                      .grabRejectsWindow = grab && windowSurface && !grab->accepts(windowSurface),
+                                      .keyArriving       = keyArriving};
+        const auto action = st::keyFocusAction(facts);
+        if (action == st::KeyFocusAction::None)
+            return false;
+        auto&      s = S();
+        const bool wasMoving = std::exchange(s.movingKeyFocus, true); // Hyprland's focus event for this move is not a new cause
+        try {
+            if (action == st::KeyFocusAction::ToLayer && layer)
+                fs->rawSurfaceFocus(layer);
+            else if (action == st::KeyFocusAction::ToWindow && windowSurface)
+                fs->rawSurfaceFocus(windowSurface, window);
+        } catch (...) {
+            s.movingKeyFocus = wasMoving;
+            throw; // to the guard of the caller (gf::keyPath or gf::guarded): nothing escapes into Hyprland
+        }
+        s.movingKeyFocus = wasMoving;
+        return true;
+    }
+
+    // The previous key's keyboard device went away and the one typing now is the session's only keyboard device: the seat
+    // had no keyboard in between, so clients re-created their wl_keyboard (core ReannounceFacts). With another keyboard
+    // left (a laptop's own while an external one reconnects) the seat kept its keyboard and nothing is announced. Read
+    // only; the device is remembered for the next key (a weak reference: nothing allocated).
+    bool keyDeviceReplaced() {
+        auto&      s        = S();
+        const auto keyboard = g_pSeatManager ? g_pSeatManager->m_keyboard.lock() : nullptr;
+        const bool alone    = g_pInputManager && g_pInputManager->m_keyboards.size() == 1;
+        const bool replaced = s.hadKeyDevice && s.keyDevice.expired() && keyboard && alone;
+        if (keyboard) {
+            s.keyDevice    = keyboard;
+            s.hadKeyDevice = true;
+        }
+        return replaced;
+    }
+
+    // Before the first key of a keyboard device that replaced the previous one: the surface that holds the keyboard gets
+    // wl_keyboard.leave and enter again, to that same surface (core reannounceFocus: why, and when not; while locked only a
+    // session-lock surface, CSessionLockManager::isSurfaceSessionLock). Hyprland's focus state is not touched; nothing is
+    // allocated or logged.
+    void reannounceKeyboardFocus() {
+        const auto seat = gf::surfaces::keyboardFocus();
+        const auto grab = g_pSeatManager ? g_pSeatManager->m_seatGrab : nullptr;
+        const st::ReannounceFacts facts{.replaced         = true,
+                                        .locked           = sessionLocked(),
+                                        .inputMethodGrab  = inputMethodGrabsKeyboard(),
+                                        .seatGrab         = grab != nullptr,
+                                        .grabAcceptsFocus = grab && seat && grab->accepts(seat),
+                                        .focus            = seat != nullptr,
+                                        .focusIsLock      = g_pSessionLockManager && seat && g_pSessionLockManager->isSurfaceSessionLock(seat)};
+        if (!g_pSeatManager || !st::reannounceFocus(facts))
+            return;
+        auto&      s         = S();
+        const bool wasMoving = std::exchange(s.movingKeyFocus, true);
+        try {
+            g_pSeatManager->setKeyboardFocus(nullptr);
+            g_pSeatManager->setKeyboardFocus(seat);
+        } catch (...) {
+            s.movingKeyFocus = wasMoving;
+            throw; // to the key path's guard: nothing escapes into Hyprland
+        }
+        s.movingKeyFocus = wasMoving;
+    }
+
+    // The wl_keyboard objects of the client that holds the keyboard (CWLSeatResource::m_keyboards), live ones only.
+    // Every wl_seat the client bound (a client may bind it more than once; CSeatManager::seatResourceForClient returns the
+    // first only): its live wl_keyboard objects, through libwayland's own list of the client's resources.
+    std::vector<WP<CWLKeyboardResource>> focusClientKeyboards() {
+        std::vector<WP<CWLKeyboardResource>> out;
+        const auto                           seat   = gf::surfaces::keyboardFocus();
+        wl_client*                           client = seat ? seat->client() : nullptr;
+        if (!client)
+            return out;
+        wl_client_for_each_resource(
+            client,
+            [](wl_resource* resource, void* data) -> wl_iterator_result {
+                const char* cls = resource ? wl_resource_get_class(resource) : nullptr;
+                if (cls && std::string_view{cls} == wl_seat_interface.name) {
+                    if (const auto seatResource = CWLSeatResource::fromResource(resource)) {
+                        for (const auto& k : seatResource->m_keyboards) {
+                            if (!k.expired())
+                                static_cast<std::vector<WP<CWLKeyboardResource>>*>(data)->push_back(k);
+                        }
+                    }
+                }
+                return WL_ITERATOR_CONTINUE;
+            },
+            &out);
+        return out;
+    }
+
+    void stopAnnounce() {
+        auto& s = S();
+        s.announceDevice.reset();
+        s.announceKnown.clear();
+        if (s.announceTimer)
+            s.announceTimer->updateTimeout(std::nullopt);
+    }
+
+    // A keyboard device appeared as the session's only one (core ReannounceFacts): when the seat had no keyboard in
+    // between, the client that holds the keyboard re-creates its wl_keyboard once it sees the capability again, a moment
+    // later. The announce is made as soon as that new wl_keyboard exists, before the first key (a key that arrives right
+    // after wl_keyboard.enter is lost by a Quickshell client: stages.sh 8j and 8k lost the first key of each burst with the
+    // announce made in the key path). Checked every 10 ms for at most 500 ms; after that the key path announces it (that
+    // key may be lost, the next ones arrive). Allocates when a device appears, never per key.
+    constexpr int kAnnounceTries = 50;
+
+    void announceTick() {
+        auto&      s      = S();
+        const auto device = s.announceDevice.lock();
+        if (!device) {
+            stopAnnounce();
+            return;
+        }
+        const auto now      = focusClientKeyboards();
+        const bool reCreated = std::ranges::any_of(now, [&s](const WP<CWLKeyboardResource>& k) {
+            return std::ranges::none_of(s.announceKnown, [&k](const WP<CWLKeyboardResource>& known) { return known.lock() == k.lock(); });
+        });
+        if (reCreated) {
+            s.keyDevice       = device; // its first key is not announced again
+            s.hadKeyDevice    = true;
+            s.announcedDevice = device;
+            stopAnnounce();
+            reannounceKeyboardFocus();
+            return;
+        }
+        if (++s.announceTries >= kAnnounceTries) {
+            stopAnnounce();
+            return;
+        }
+        s.announceTimer->updateTimeout(std::chrono::milliseconds(10));
+    }
+
+    void armAnnounce(const SP<IKeyboard>& keyboard) {
+        auto&      s     = S();
+        const bool alone = g_pInputManager && g_pInputManager->m_keyboards.size() == 1;
+        if (!keyboard || !alone || !g_pEventLoopManager || s.keyDevice.lock() == keyboard)
+            return;
+        s.announceDevice = keyboard;
+        s.announceKnown  = focusClientKeyboards();
+        s.announceTries  = 0;
+        if (!s.announceTimer) {
+            s.announceTimer = makeShared<CEventLoopTimer>(
+                std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("stages keyboard announce", [] { announceTick(); }); }, nullptr);
+            g_pEventLoopManager->addTimer(s.announceTimer);
+        }
+        s.announceTimer->updateTimeout(std::chrono::milliseconds(10));
+    }
+
+    // The same check from the event loop, after Hyprland's own handling of the event that may have moved the keyboard (a
+    // focus change, a layer surface mapped or unmapped, a keyboard device that appeared). Coalesced; never for the plugin's
+    // own move.
+    void scheduleKeyFocusCheck() {
+        auto& s = S();
+        if (s.movingKeyFocus || s.keyFocusLater || !g_pEventLoopManager)
+            return;
+        s.keyFocusLater = g_pEventLoopManager->doLater([] {
+            gf::guarded("stages keyboard focus check", [] {
+                S().keyFocusLater.reset();
+                keepKeyboardFocus(false);
+            });
+        });
+    }
+
+    // Unload (review of part B, m3): Hyprland's focus surface may still be empty after clearActiveWindow while the seat's
+    // keyboard is on an Exclusive layer; without the plugin, a new keyboard device would then get nothing. It is set again
+    // to that layer (the seat's keyboard leaves it for an instant: rawSurfaceFocus does nothing while the seat is on it).
+    // Never while the session is locked or under a seat grab that rejects it.
+    void restoreFocusSurface() {
+        auto& s = S();
+        if (!s.keysOnLayer)
+            return;
+        s.keysOnLayer      = false;
+        const auto fs      = Desktop::focusState();
+        const auto seat    = gf::surfaces::keyboardFocus();
+        const auto grab    = g_pSeatManager ? g_pSeatManager->m_seatGrab : nullptr;
+        if (!fs || !g_pSeatManager || !seat || fs->surface() || sessionLocked() || !onExclusiveLayer(seat) || (grab && !grab->accepts(seat)))
+            return;
+        g_pSeatManager->setKeyboardFocus(nullptr);
+        fs->rawSurfaceFocus(seat);
+    }
+
     // Before Hyprland delivers a key (and runs its key bindings, which act on its active window): neither the keyboard nor
     // Hyprland's active window may be on a window Stages blocks (a strip window Hyprland focused itself, e.g. a restore
     // while a sync is pending; the active window left behind while the session lock refused every focus). A pending sync
@@ -1171,8 +1460,17 @@ namespace {
     // (keepActiveOffStrip); a menu (popup grab) of a strip window closes, as a click outside it would, so that its keys are
     // not lost; if the keyboard is still on a blocked window it goes to the front window of that workspace's active stage,
     // or nowhere.
+    // The keyboard focus itself is checked first (keepKeyboardFocus), whether Stages is on or not.
     void beforeKey() {
         auto& s = S();
+        // A key arrived: a pending announce stops here (a late one could land between this key's press and release); the
+        // key path announces instead, unless the timer already did for this device.
+        const auto keyboard = g_pSeatManager ? g_pSeatManager->m_keyboard.lock() : nullptr;
+        if (s.announceDevice.lock())
+            stopAnnounce();
+        const bool replaced = keyDeviceReplaced();
+        if (!keepKeyboardFocus(true) && replaced && (!keyboard || s.announcedDevice.lock() != keyboard))
+            reannounceKeyboardFocus(); // a fresh enter, unless the keyboard was just moved (that was one); may lose this key
         if (!s.on)
             return;
         if (s.pendingSpace) { // the layer may have released the keyboard before the deferred focus ran
@@ -1410,7 +1708,9 @@ namespace gf::stager {
         auto& l         = S().listeners;
         // Input guards, observed and never cancelled (FR13): they move a stale focus off a blocked window before Hyprland
         // delivers the event. Pointer buttons are guarded from the plugin's first button listener (main.cpp).
-        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("stages key guard", [] { beforeKey(); }); }));
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) {
+            gf::keyPath("stages key guard", [](const IKeyboard::SKeyEvent& /*e*/, Event::SCallbackInfo& /*info*/) { beforeKey(); }, e, info);
+        }));
         l.push_back(ev.input.mouse.axis.listen(
             [](IPointer::SAxisEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("stages scroll guard", [] { beforePointer(st::PointerEvent::Axis); }); }));
         // Presses other than pointer buttons (beforePointerButton): Hyprland refocuses at the touch point / tool on a touch
@@ -1477,8 +1777,19 @@ namespace gf::stager {
                     schedulePressEnd();
             });
         }));
+        // The keyboard focus check (keepKeyboardFocus) also runs from the event loop after these: a layer surface mapped or
+        // unmapped, a keyboard device that appeared (its layout set), and every keyboard focus change below.
+        l.push_back(ev.layer.opened.listen([](const PHLLS& /*ls*/) { gf::guarded("stages layer.opened", [] { scheduleKeyFocusCheck(); }); }));
+        // A keyboard device that appears sets its layout (CInputManager::setupKeyboard -> applyConfigToKeyboard).
+        l.push_back(ev.input.keyboard.layout.listen([](const SP<IKeyboard>& keyboard, const std::string& /*layout*/) {
+            gf::guarded("stages keyboard.layout", [&] {
+                scheduleKeyFocusCheck();
+                armAnnounce(keyboard);
+            });
+        }));
         l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& /*surface*/) {
             gf::guarded("stages keyboard.focus", [] {
+                scheduleKeyFocusCheck();
                 schedulePendingFocus();
                 if (S().press.scope == st::PressScope::UntilFocus)
                     schedulePressEnd();
@@ -1500,7 +1811,17 @@ namespace gf::stager {
         if (s.pointerLater && g_pEventLoopManager)
             g_pEventLoopManager->removeDoLater(*s.pointerLater); // likewise
         s.pointerLater.reset();
+        if (s.keyFocusLater && g_pEventLoopManager)
+            g_pEventLoopManager->removeDoLater(*s.keyFocusLater); // likewise
+        s.keyFocusLater.reset();
+        if (s.announceTimer && g_pEventLoopManager)
+            g_pEventLoopManager->removeTimer(s.announceTimer); // its callback is code of this library
+        s.announceTimer.reset();
+        s.announceDevice.reset();
+        s.announcedDevice.reset();
+        s.announceKnown.clear();
         s.refocusSpace.reset();
+        restoreFocusSurface();
         s.focusLater.reset();
         s.drop.reset();
         cancelPendingFocus();

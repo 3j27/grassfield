@@ -17,7 +17,7 @@ UI = pathlib.Path(__file__).resolve().parent.parent
 SRC = UI / "tokens" / "tokens.json"
 DST = UI / "Grassfield" / "Ui" / "Tokens.qml"
 PLUGIN_DST = UI.parent / "compositor" / "src" / "core" / "ThemeTokens.hpp"
-PLUGIN_GROUPS = ("titlebar",)
+PLUGIN_GROUPS = ("titlebar", "window")  # window: the lights the apps draw (ADR-0015 P7, one token source)
 
 
 def is_leaf(node):
@@ -131,8 +131,151 @@ def generate_plugin(data):
     return "\n".join(out) + "\n"
 
 
+# Provenance (audit GF-095): every token says where its value comes from, with a pointer a reviewer can follow: the F1
+# reference analysis, a spec, an ADR, a test, the master prompt or an audit. A bare "estimate" is not a source.
+REPO = UI.parent
+F1 = REPO / "docs" / "testing" / "f1-reference-gaps.md"
+PATH_CITE = re.compile(r"(?<![\w./-])(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
+ADR_CITE = re.compile(r"ADR-(\d{4})")
+# A section pointer has one form: `<file> \u00a7 <section>` (docs/**.md or master-prompt), ended by ";" or "]".
+SECTION_START = re.compile(r"(?<![\w./-])(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 (?=\S)")  # anchored path, one plain space, then text
+
+
+def section_cites(source):
+    """(file, section text) of every `<file> \u00a7 <section>` of a source. A section ends at ";", "[", "]" or where the next pointer starts."""
+    starts = list(SECTION_START.finditer(source))
+    cites = []
+    for i, m in enumerate(starts):
+        end = len(source)
+        for stop in (";", "[", "]"):
+            at = source.find(stop, m.end())
+            if at >= 0:
+                end = min(end, at)
+        if i + 1 < len(starts):
+            end = min(end, starts[i + 1].start())
+        cites.append((m.group(1), source[m.end():end]))
+    return cites
+# `ADR-0016 section 5`: the number of a numbered heading of that ADR.
+ADR_SECTION_CITE = re.compile(r"ADR-(\d{4}) section (\d+(?:\.\d+)?)")
+
+
+def headings_of(path):
+    """Heading names (## and ###) of a markdown file, lower-case, the parenthetical tail dropped, and their numbers ('5.5')."""
+    names, numbers = [], set()
+    for line in path.read_text().splitlines():
+        m = re.match(r"#{1,4} (.+)", line)
+        if not m:
+            continue
+        text = m.group(1).strip()
+        number = re.match(r"(\d+(?:\.\d+)?)\.?(?:\s|$)", text)
+        if number:
+            numbers.add(number.group(1))
+        names.append(re.sub(r"\s*\(.*$", "", text).strip().lower())
+    return names, numbers
+
+
+def f1_headings():
+    return headings_of(F1)[0]
+
+
+def section_resolves(text, headings):
+    """'Window chrome, Dock and Menus and popovers' must be made of real headings (longest first), joined by ', ' or ' and '."""
+    rest = re.sub(r"\s*\(.*?\)", "", text).strip().lower()
+    by_length = sorted(headings, key=len, reverse=True)
+    while rest:
+        for name in by_length:
+            if not rest.startswith(name):
+                continue
+            tail = rest[len(name):]
+            if tail == "":
+                rest = ""
+                break
+            separator = re.match(r"^(?:,\s*| and )", tail)
+            if separator:  # a name is followed by a separator or nothing: not by more letters ("Menu barDock")
+                rest = tail[separator.end():]
+                break
+        else:
+            return False
+    return True
+
+
+def source_problems(source, headings):
+    """Why a token source is not a followable pointer (empty list: it is)."""
+    problems = []
+    cited = False
+    for path in PATH_CITE.findall(source):
+        cited = True
+        if not (REPO / path).exists():
+            problems.append("cites %s, which does not exist" % path)
+    for number in ADR_CITE.findall(source):
+        cited = True
+        if not list((REPO / "docs" / "decisions").glob("ADR-%s*" % number)):
+            problems.append("cites ADR-%s, which does not exist" % number)
+    for number, section in ADR_SECTION_CITE.findall(source):
+        files = list((REPO / "docs" / "decisions").glob("ADR-%s*" % number))
+        if files and section not in headings_of(files[0])[1]:
+            problems.append("cites section %s of ADR-%s, which has no such numbered heading" % (section, number))
+    for path, section in section_cites(source):
+        cited = True
+        while section.count(")") > section.count("("):  # the ")" that closes a sentence around the pointer
+            section = section[:section.rindex(")")]
+        section = section.strip()
+        target = REPO / ("docs/master-prompt.md" if path == "master-prompt" else path)
+        if not target.exists():
+            continue  # reported above as a missing path
+        names, numbers = headings_of(target)
+        if path.endswith("f1-reference-gaps.md"):
+            ok = section_resolves(section, names)
+        elif path == "master-prompt":
+            # `5.5`, then end or a separator: not `5.5.9`, not `5.5x`.
+            lead = re.match(r"(\d+(?:\.\d+)?)(?:$|[\s:;,)\]])", section)
+            ok = bool(lead) and lead.group(1) in numbers
+        else:
+            ok = section.lower() in names  # the whole heading, not a prefix of it
+        if not ok:
+            problems.append("cites '%s \u00a7 %s', which is not a heading of that file" % (path, section))
+    # Any section sign must belong to a well-formed `<file> \u00a7 <section>` pointer (one plain space each side of the sign, a
+    # full docs path or master-prompt): `ui.md \u00a7Nope`, `master-prompt \u00a79.9` and a no-break space do not slip through
+    # because the source also holds another valid pointer. `master-prompt section 9.9` is the wrong form for the master prompt.
+    well_formed = {m.end() - 2 for m in SECTION_START.finditer(source)}
+    for at, ch in enumerate(source):
+        if ch == "\u00a7" and at not in well_formed:
+            problems.append("has a section sign that is not part of a `<docs path or master-prompt> \u00a7 <section>` pointer (near '%s')" % source[max(0, at - 24):at + 24].replace("\u00a0", "<nbsp>"))
+    if re.search(r"master-prompt\s+(?:section|sec\b)", source):
+        problems.append("cites the master prompt as `section`: write `master-prompt \u00a7 <n.n>`")
+    # A declared estimate: no reference covers the value, and the source says what it is and why ("estimate: a pressed light
+    # darkens by this much": a role, not a bare word). A bare "estimate" is still not a source.
+    declared_estimate = re.match(r"estimate: \S+(?:\s+\S+){3,}", source) is not None
+    if not cited and not declared_estimate:
+        problems.append("has no pointer (f1-reference-gaps section, spec, ADR or test) and is not a declared estimate with a reason")
+    return problems
+
+
+def provenance_errors(data):
+    headings = f1_headings()
+    errors = []
+
+    def walk(node, path):
+        if is_leaf(node):
+            # No group is exempt, the plugin groups included (their sources are copied into the generated header).
+            for problem in source_problems(str(node.get("source", "")), headings):
+                errors.append(".".join(path) + " " + problem)
+            return
+        if isinstance(node, dict):
+            for key, child in node.items():
+                if not key.startswith("_") and isinstance(child, dict):
+                    walk(child, path + [key])
+
+    walk(data, [])
+    return errors
+
+
 def main():
     data = json.loads(SRC.read_text())
+    unsourced = provenance_errors(data)
+    if unsourced:
+        print("gen-tokens: token sources that are not followable pointers:\n  " + "\n  ".join(unsourced), file=sys.stderr)
+        return 1
     outputs = ((DST, generate(data), "ui/Grassfield/Ui/Tokens.qml"), (PLUGIN_DST, generate_plugin(data), "compositor/src/core/ThemeTokens.hpp"))
     if "--check" in sys.argv[1:]:
         stale = [label for path, text, label in outputs if not path.exists() or path.read_text() != text]

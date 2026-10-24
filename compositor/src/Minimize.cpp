@@ -1,5 +1,6 @@
 #include "Minimize.hpp"
 
+#include "ClientChrome.hpp"
 #include "GenieDraw.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
@@ -667,7 +668,8 @@ namespace {
     };
 
     // core planRestore over the enabled displays (each showing a Desktop); the focused display without a plan.
-    SRestoreTarget restoreTarget(const std::optional<mz::SavedPlace>& saved) {
+    // `band`: the titlebar above the window's surface (none for a window that draws its own chrome, ADR-0015).
+    SRestoreTarget restoreTarget(const std::optional<mz::SavedPlace>& saved, double band) {
         const auto                    focusMon = Desktop::focusState() ? Desktop::focusState()->monitor() : nullptr;
         std::vector<PHLMONITOR>       mons;
         std::vector<mz::MonitorPlace> places;
@@ -682,7 +684,7 @@ namespace {
                 places.push_back(mz::MonitorPlace{.name = m->m_name, .box = toBox(m->logicalBox()), .usable = toBox(m->logicalBoxMinusReserved())});
             }
         }
-        const auto     plan = mz::planRestore(saved, places, focused, gf::theme::kTitlebarHeight);
+        const auto     plan = mz::planRestore(saved, places, focused, band);
         SRestoreTarget out;
         out.monitor = plan.monitor && *plan.monitor < mons.size() ? mons[*plan.monitor] : focusMon;
         out.frame   = plan.frame;
@@ -886,7 +888,7 @@ namespace gf::minimizer {
         // D-1 (macOS): back on the display it was minimized from, on the Desktop that display shows now, at its frame; never
         // on the display of the Dock that was clicked (that click focused it).
         const auto saved = takePlace(w);
-        const auto place = restoreTarget(saved);
+        const auto place = restoreTarget(saved, gf::chrome::bandOf(w));
         const auto ws    = place.monitor ? place.monitor->m_activeWorkspace : nullptr;
         if (!ws) {
             gf::log(Log::WARN, "restore: no active workspace");

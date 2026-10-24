@@ -12,7 +12,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Appearance")
             subtitle: qsTr("Light or dark windows, menus and panels. Auto is light by day and dark at night.")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Appearance")
                 model: [{id: "light", text: qsTr("Light")}, {id: "dark", text: qsTr("Dark")}, {id: "auto", text: qsTr("Auto")}]
                 value: root.store.value("appearance")
@@ -195,7 +195,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Material profile")
             subtitle: qsTr("Full uses live previews, Balanced refreshes them less often, Reduced uses still images.")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Material profile")
                 model: [{id: "full", text: qsTr("Full")}, {id: "balanced", text: qsTr("Balanced")}, {id: "reduced", text: qsTr("Reduced")}]
                 value: root.store.value("material.profile")

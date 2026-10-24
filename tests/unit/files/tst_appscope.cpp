@@ -1,5 +1,6 @@
 // Unit tests for apps/appscope.h (gtest). Built and run by scripts/dev/test.sh.
 #include "appscope.h"
+#include "chromecaps.h"
 
 #include <gtest/gtest.h>
 
@@ -25,4 +26,35 @@ TEST(AppScope, DevSessionIsNeverScoped)
     qunsetenv("GRASSFIELD_SESSION");
     qunsetenv("GRASSFIELD_DEV");
     EXPECT_FALSE(grassfield::apps::scopedLaunch());
+}
+
+// ADR-0015 Q4(b): the minimize light is greyed only when the shell says the plugin is absent or has no minimize feature.
+TEST(ChromeCaps, MinimizeIsAvailableWithThePlugin)
+{
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable(R"({"v":1,"pluginPresent":true,"features":["decorations","minimize"]})"));
+}
+
+TEST(ChromeCaps, NoPluginOrNoMinimizeFeatureGreysTheLight)
+{
+    EXPECT_FALSE(grassfield::apps::minimizeAvailable(R"({"v":1,"pluginPresent":false,"features":[]})"));
+    EXPECT_FALSE(grassfield::apps::minimizeAvailable(R"({"v":1,"pluginPresent":true,"features":["decorations"]})"));
+}
+
+TEST(ChromeCaps, UnknownStateKeepsTheLightEnabled)
+{
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable(""));
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable("not json"));
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable("[]"));
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable(R"({"v":2,"pluginPresent":false})"));
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable(R"({"v":1,"pluginPresent":"no"})"));
+    EXPECT_TRUE(grassfield::apps::minimizeAvailable(R"({"v":1,"pluginPresent":true})"));
+}
+
+TEST(ChromeCaps, FileLocationFollowsTheDevStateHomeThenTheRuntimeDir)
+{
+    qputenv("GRASSFIELD_STATE_HOME", "/s");
+    EXPECT_EQ(grassfield::apps::capabilitiesFile(), QStringLiteral("/s/capabilities.json"));
+    qunsetenv("GRASSFIELD_STATE_HOME");
+    qputenv("XDG_RUNTIME_DIR", "/run/user/1");
+    EXPECT_EQ(grassfield::apps::capabilitiesFile(), QStringLiteral("/run/user/1/grassfield-capabilities.json"));
 }

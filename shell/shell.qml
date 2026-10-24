@@ -18,6 +18,7 @@ import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
 import qs.services
+import qs.stages
 import qs.switcher
 import "platform/ExtensionStatus.js" as ExtensionStatus
 
@@ -299,6 +300,7 @@ ShellRoot {
         onAppsRequested: appsSurface.toggle()
     }
     Overlay {}
+    Stages {}
     Banners {}
     NotificationCenter {}
     OsdWindow {}

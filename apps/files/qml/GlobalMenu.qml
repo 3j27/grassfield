@@ -117,6 +117,12 @@ Platform.MenuBar {
             shortcut: "Ctrl+W"
             onTriggered: bar.win.closeTab(bar.win.currentIndex)
         }
+        Platform.MenuItem {
+            text: qsTr("Eject")
+            shortcut: "Ctrl+E"
+            enabled: bar.win.canEject === true
+            onTriggered: bar.win.ejectVolume()
+        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Get Info")

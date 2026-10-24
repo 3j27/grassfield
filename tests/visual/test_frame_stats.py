@@ -47,6 +47,7 @@ def write(lines):
 # Parsing: comments and junk are ignored.
 check("read_frames ignores comments and junk", fs.read_frames("# frames 2\n100 16666\nx y\n200 16667\n") == [(100, 16666), (200, 16667)])
 check("read_events turns ns into us", fs.read_events("open 5000000\nclose abc\nclose 9000\n") == [("open", 5000), ("close", 9)])
+check("read_events keeps an event's own window (ms to us)", fs.read_events("open 5000000 366.7 900\n") == [("open", 5000, 366700)])
 
 period = 1e6 / 60
 smooth = stream(1_000_000, 200, round(period))
@@ -63,6 +64,13 @@ many = stream(1_000_000, 200, round(period), spikes={3, 8, 13, 18})
 s = fs.stats(fs.phase(many, [("open", 1_000_000)], "open", 700000), period, 1.2)
 check("four dropped frames are below 95 %", s is not None and s["share"] < 0.95)
 check("the worst interval is the dropped one", s is not None and abs(s["max_ms"] - 2 * period / 1000) < 0.1)
+
+# An event's own window (the animation, D-5 2026-10-24): frames after it are not counted, however late.
+late = stream(1_000_000, 22, round(period)) + [(1_000_000 + 22 * round(period) + 90_000, 90_000)]
+s = fs.stats(fs.phase(late, [("open", 1_000_000, 22 * round(period))], "open", 700000), period, 1.2)
+check("a stall after the event's own window is not counted", s is not None and s["share"] == 1.0)
+s = fs.stats(fs.phase(late, [("open", 1_000_000)], "open", 700000), period, 1.2)
+check("the same stall inside the default window is", s is not None and s["share"] < 1.0)
 
 # Empty input.
 check("no frame in the window gives no statistics", fs.stats([], period, 1.2) is None)

@@ -107,6 +107,10 @@ Singleton {
         store.setHotCorner(corner, action);
     }
 
+    function setStagesEnabled(value: bool): void {
+        store.setStagesEnabled(value);
+    }
+
     function setDesktopShowIcons(value: bool): void {
         store.setDesktopShowIcons(value);
     }

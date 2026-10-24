@@ -17,6 +17,8 @@ TestCase {
     QtObject {
         id: fakeApp
         property var colorTagNames: ({})
+        property string titlebarDoubleClick: "zoom"
+        property bool canMinimize: true
         property int folderStyleRevision: 0
         property var applied: null
         property var resets: []

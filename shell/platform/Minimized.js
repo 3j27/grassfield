@@ -181,6 +181,21 @@ function motionCall(reduced) {
     return "function() " + calls.join("; ") + " end";
 }
 
+// Compositor blur size and passes (GF-125, docs/specs/ui.md "Material blur"): one value for every surface, chosen by the
+// shell from the transparency. Core Hyprland config, no plugin needed. Captured from Hyprland 0.56.2 (nested,
+// tests/compositor/blur_events.sh): the request socket answers a dispatch with "ok", or with "error: ...: unknown config key
+// '...'" when hl.config does not know a key (also when the call is wrapped in pcall); Hyprland emits NO socket2 event for a
+// push, and exactly one "configreloaded" for a config reload (the push that follows it emits none). blurAnswer() reads that
+// answer. "" for anything but integers in range (callers must not dispatch it).
+var blurLimits = {sizeMin: 1, sizeMax: 64, passesMin: 1, passesMax: 6};
+
+function blurCall(size, passes) {
+    const ok = (v, lo, hi) => typeof v === "number" && isFinite(v) && Math.floor(v) === v && v >= lo && v <= hi;
+    if (!ok(size, blurLimits.sizeMin, blurLimits.sizeMax) || !ok(passes, blurLimits.passesMin, blurLimits.passesMax))
+        return "";
+    return "function() hl.config({ decoration = { blur = { size = " + size + ", passes = " + passes + " } } }) end";
+}
+
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
@@ -349,4 +364,15 @@ function minimizeRequestAddress(data) {
     if (!msg || msg.v !== "gfc/1" || msg.type !== "minimize-request" || typeof msg.address !== "string")
         return "";
     return normalizeAddress(msg.address);
+}
+
+// The answer of the request socket to the blur push: "ok", "rejected" (an error answer: the shell stops pushing, the config's
+// own 18 / 3 stays) or "unknown" (nothing readable).
+function blurAnswer(reply) {
+    if (typeof reply !== "string")
+        return "unknown";
+    const text = reply.trim();
+    if (text === "ok")
+        return "ok";
+    return /^error\b/i.test(text) ? "rejected" : "unknown";
 }

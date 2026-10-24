@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QFileSystemWatcher>
+
+#include "chromecaps.h"
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -16,6 +18,8 @@ class Backend : public QObject
     Q_PROPERTY(QString qtVersion READ qtVersion CONSTANT)
     Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
     Q_PROPERTY(QString bindingsFile READ bindingsFile CONSTANT)
+    // The shell's capabilities file (apps/chromecaps.h, ADR-0015 Q4b), read from QML through readText() and watch().
+    Q_PROPERTY(QString capabilitiesFile READ capabilitiesFile CONSTANT)
     // GRASSFIELD_DEV=1: the system sections show state but never act on the owner's machine (systemguard.h).
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
     // Wallpaper (ADR-0016): the helper, its cache, the folder of the Pictures section and the files the shell and this app
@@ -35,6 +39,7 @@ public:
     QString qtVersion() const;
     QString appVersion() const;
     QString bindingsFile() const { return m_bindingsFile; }
+    QString capabilitiesFile() const { return grassfield::apps::capabilitiesFile(); }
     bool devSession() const { return m_dev; }
     QString wallpaperTool() const { return m_wallpaperTool; }
     QString wallpaperCache() const { return m_wallpaperCache; }

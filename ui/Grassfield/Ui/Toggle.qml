@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Templates as T
 
-// On/off switch. checked is set from outside; toggled() reports a user request to flip it.
-Item {
+// On/off switch on a QtQuick.Templates Control: the host owns the value. checked is set from outside; toggled() reports a user
+// request to flip it (Space, Return, Enter, a click, an accessibility toggle). Switch is the self-toggling stock sibling.
+T.Control {
     id: root
 
     property bool checked: false
@@ -11,17 +13,26 @@ Item {
 
     implicitWidth: Tokens.controlToggleWidth
     implicitHeight: Tokens.controlToggleHeight
-    activeFocusOnTab: true
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.accessibleName
     Accessible.checkable: true
     Accessible.checked: root.checked
     Accessible.focusable: true
-    Accessible.onToggleAction: root.toggled(!root.checked)
-    Accessible.onPressAction: root.toggled(!root.checked)
+    // A hidden or disabled Toggle ignores every activation path, assistive technology included.
+    Accessible.onToggleAction: if (root.visible && root.enabled)
+        root.toggled(!root.checked)
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.toggled(!root.checked)
 
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        if (!root.visible || !root.enabled) {
+            if (ActivationKeys.activation(event.key))
+                event.accepted = true;
+            return;
+        }
+        if (ActivationKeys.activation(event.key)) {
             root.toggled(!root.checked);
             event.accepted = true;
         }
@@ -31,14 +42,19 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
 
         Behavior on color {
             ColorAnimation {
                 duration: Appearance.duration(Tokens.motionFast)
             }
         }
+    }
+
+    FocusGuard {}
+
+    FocusRing {
+        shapeRadius: root.height / 2
+        visible: root.visualFocus
     }
 
     Rectangle {

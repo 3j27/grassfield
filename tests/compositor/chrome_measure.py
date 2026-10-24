@@ -11,8 +11,13 @@ the palette of the appearance measured (ui/tokens/tokens.json "titlebar"; the da
 Prints key=value lines:
   <light>_cx <light>_cy   centre of the light (close, minimize, zoom), coverage-weighted, output px (pixel edges)
   <light>_d               diameter from the light's covered area
+  <light>_ref             the colour the light is measured against: "colour" (its own) or "grey" (an inactive light: at
+                          least 100 inactive-grey pixels around its centre; a light-grey light on a light bar barely
+                          projects onto its own colour, so its centre and diameter come from the grey)
   <light>_glyph           dark pixels inside the light (its glyph)
   <light>_grey            pixels of the inactive grey (titlebarPalette(appearance).inactiveLight) around the light's centre
+  <light>_grey_core       the same inside a 5 px radius only: a coloured light's anti-aliased ring over a light bar can
+                          pass for the grey (the green edge on a light bar), its core cannot
   junction_left/_right    (with radius=) pixels of the content's top corner squares that the rounding cuts away (outside
                           the corner curve) and that differ from the content next to them: the curve between bar and
                           content; 0 when the bar and the content join square
@@ -73,7 +78,7 @@ def close_to(c, ref, tol):
 
 
 def coverage(c, light):
-    """How much of the light covers this pixel: projection of the colour between the bar and the light."""
+    """How much of the light covers this pixel: projection of the colour between the bar and the light (or the grey)."""
     d = [l - b for l, b in zip(light, BAR)]
     n = sum(v * v for v in d)
     t = sum((p - b) * v for p, b, v in zip(c, BAR, d)) / n
@@ -86,22 +91,27 @@ def luminance(c):
 
 def measure_light(img, name, cx, cy):
     light = LIGHTS[name]
+    grey = sum(1 for y in range(int(cy) - 7, int(cy) + 7) for x in range(int(cx) - 7, int(cx) + 7)
+               if close_to(img.at(x, y), INACTIVE, 12))
+    grey_core = sum(1 for y in range(int(cy) - 6, int(cy) + 6) for x in range(int(cx) - 6, int(cx) + 6)
+                    if (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= 25 and close_to(img.at(x, y), INACTIVE, 12))
+    # A coloured light is measured against its colour (as always); a grey (inactive) one against the grey.
+    ref_name, ref = ("grey", INACTIVE) if grey >= 100 else ("colour", light)
     area = sx = sy = 0.0
     for y in range(int(cy) - 11, int(cy) + 11):
         for x in range(int(cx) - 11, int(cx) + 11):
             c = img.at(x, y)
             if c is None:
                 continue
-            a = coverage(c, light)
+            a = coverage(c, ref)
             if a < 0.05:
                 continue
             area += a
             sx += a * (x + 0.5)
             sy += a * (y + 0.5)
-    grey = sum(1 for y in range(int(cy) - 7, int(cy) + 7) for x in range(int(cx) - 7, int(cx) + 7)
-               if close_to(img.at(x, y), INACTIVE, 12))
     if area <= 0:
-        return {f"{name}_cx": -1, f"{name}_cy": -1, f"{name}_d": 0, f"{name}_glyph": 0, f"{name}_grey": grey}
+        return {f"{name}_cx": -1, f"{name}_cy": -1, f"{name}_d": 0, f"{name}_ref": ref_name, f"{name}_glyph": 0,
+                f"{name}_grey": grey, f"{name}_grey_core": grey_core}
     mx, my = sx / area, sy / area
     d = 2 * (area / 3.141592653589793) ** 0.5
     glyph = 0
@@ -114,8 +124,8 @@ def measure_light(img, name, cx, cy):
             # Darker than the light but not the inactive grey (a grey light is darker than the yellow and green ones).
             if luminance(c) < 0.75 * luminance(light) and coverage(c, light) > 0.2 and not close_to(c, INACTIVE, 12):
                 glyph += 1
-    return {f"{name}_cx": round(mx, 2), f"{name}_cy": round(my, 2), f"{name}_d": round(d, 2), f"{name}_glyph": glyph,
-            f"{name}_grey": grey}
+    return {f"{name}_cx": round(mx, 2), f"{name}_cy": round(my, 2), f"{name}_d": round(d, 2), f"{name}_ref": ref_name,
+            f"{name}_glyph": glyph, f"{name}_grey": grey, f"{name}_grey_core": grey_core}
 
 
 def junction(img, x0, y0, step_x, radius, reference):

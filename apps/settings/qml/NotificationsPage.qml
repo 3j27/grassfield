@@ -76,7 +76,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Show previews")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Show previews")
                 model: [{id: "always", text: qsTr("Always")}, {id: "unlocked", text: qsTr("When Unlocked")}, {id: "never", text: qsTr("Never")}]
                 value: root.store.value("notifications.previews")
@@ -90,7 +90,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Keep history")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Keep history")
                 model: [{id: "week", text: qsTr("1 Week")}, {id: "day", text: qsTr("1 Day")}, {id: "never", text: qsTr("Never")}]
                 value: root.store.value("notifications.history")
@@ -116,14 +116,14 @@ SettingsPage {
                 Row {
                     spacing: Tokens.spacingSm
 
-                    Picker {
+                    ComboBox {
                         accessibleName: qsTr("Alert style for %1").arg(appRow.modelData)
                         model: root.styleChoices
                         value: NotificationPrefs.styleFor(root.styles, appRow.modelData)
                         onPicked: id => root.store.set("notifications.appStyles", NotificationPrefs.withStyle(root.styles, appRow.modelData, id))
                     }
 
-                    Picker {
+                    ComboBox {
                         accessibleName: qsTr("Show previews for %1").arg(appRow.modelData)
                         model: root.choices
                         value: NotificationPrefs.valueFor(root.overrides, appRow.modelData)
