@@ -762,6 +762,13 @@ Scope {
 
             required property ShellScreen modelData
 
+            // Gate P5: the first frame of this Dock counts toward "grassfield-shell: usable" (platform/Usable.qml).
+            UsableProbe {
+                kind: "dock"
+                screenName: win.modelData.name
+                active: win.visible
+            }
+
             // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
             // it (Geometry.metrics). The setting itself is never changed.
             readonly property int iconSize: Geometry.fitSize(root.sizeNow, root.items.filter(it => it.kind !== "separator").length, root.items.filter(it => it.kind === "separator").length, separatorWidth, Tokens.dockSpacing, Tokens.dockPadding, mainTotal - 2 * Tokens.dockFitMargin, Tokens.dockFitMin)
