@@ -29,9 +29,14 @@ desc="the log hash in the report is the log's sha256"
 check bash -c '[ "$(sed -n "s/^- log sha256: //p" "$1")" = "$(sha256sum "$2" | cut -d" " -f1)" ]' _ "$report" "$tmp/runs/20261023T120000Z-demo-pass.log"
 
 rc=0
-GATE_STAMP=20261023T120100Z bash "$gr" demo-fail -- "$tmp/gate.sh" 3 >/dev/null 2>&1 || rc=$?
-desc="a failing command: its exit code is kept (3) and the report says FAIL with exit code 3"
-check bash -c '[ "$1" = 3 ] && grep -qx -- "- result: FAIL" "$2" && grep -qx -- "- exit code: 3" "$2"' _ "$rc" "$tmp/runs/20261023T120100Z-demo-fail.md"
+GATE_STAMP=20261023T120100Z bash "$gr" demo-fail -- "$tmp/gate.sh" 2 >/dev/null 2>&1 || rc=$?
+desc="a failing command: its exit code is kept (2) and the report says FAIL with exit code 2"
+check bash -c '[ "$1" = 2 ] && grep -qx -- "- result: FAIL" "$2" && grep -qx -- "- exit code: 2" "$2"' _ "$rc" "$tmp/runs/20261023T120100Z-demo-fail.md"
+
+rc=0
+GATE_STAMP=20261023T120130Z bash "$gr" demo-unjudged -- "$tmp/gate.sh" 3 >/dev/null 2>&1 || rc=$?
+desc="exit 3 (cases not judged, e.g. overview_focus.sh): kept, reported NOT JUDGED, never PASS"
+check bash -c '[ "$1" = 3 ] && grep -qx -- "- result: NOT JUDGED" "$2" && grep -q -- "^- verdict: NOT JUDGED (exit 3" "$2" && ! grep -q -- "PASS" <(grep -- "^- result\|^- verdict" "$2")' _ "$rc" "$tmp/runs/20261023T120130Z-demo-unjudged.md"
 
 rc=0
 bash "$gr" "Bad Name" -- true >/dev/null 2>&1 || rc=$?
@@ -53,7 +58,7 @@ check test "$rc" = 2
 
 bash "$gr" --archive 2>/dev/null
 desc="--archive copies every report and its log into the archive directory"
-check test "$(ls "$tmp/archive"/*.md | wc -l)" = 3 -a -f "$tmp/archive/20261023T120000Z-demo-pass.log"
+check test "$(ls "$tmp/archive"/*.md | wc -l)" = 4 -a -f "$tmp/archive/20261023T120000Z-demo-pass.log"
 
 # A log over 256 KiB is archived as its tail with a note.
 head -c 400000 /dev/zero | tr '\0' 'x' | fold -w 80 >"$tmp/big.log"

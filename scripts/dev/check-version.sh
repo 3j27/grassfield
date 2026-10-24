@@ -4,11 +4,43 @@
 #   - every CMakeLists.txt includes cmake/GrassfieldVersion.cmake (project version, GRASSFIELD_VERSION definition)
 #   - no C++ source or build script carries a literal version of its own (kBridgeVersion, *_VERSION "x.y.z", ...)
 #   - packaging/arch/PKGBUILD derives pkgver from VERSION (the evaluated pkgver equals VERSION without the hyphen)
+#   - the split packages are one release: grassfield-compositor depends on exactly grassfield-desktop=$pkgver-$pkgrel (the
+#     shell and the plugin speak one protocol, ADR-0007), and grassfield-desktop does not depend on the compositor (the
+#     desktop runs without the plugin, gate C2)
 #   - the shell's About reads VERSION (shell/services/SystemInfo.qml)
 #   - CHANGELOG.md has a section for this version as its newest
 # `scripts/dev/check-version.sh --selftest` runs the checks against temporary trees. Exit 0 ok, 1 inconsistent.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+
+# The final depends of a package function, one entry per line, as makepkg sees it: the PKGBUILD sourced (its variables,
+# its global depends), then the function's depends= / depends+= statements evaluated in order (bash prints each array
+# assignment of a function on one line). Nothing else of the function runs.
+pkg_final_depends() { # <PKGBUILD> <package name>
+  (
+    cd "$(dirname "$1")" || exit 1
+    # shellcheck disable=SC1090
+    source "./$(basename "$1")" >/dev/null 2>&1
+    declare -F "package_$2" >/dev/null || exit 0
+    while IFS= read -r line; do
+      eval "$line"
+    done < <(declare -f "package_$2" | sed -n 's/^[[:space:]]*\(depends+\{0,1\}=(.*)\);\{0,1\}$/\1/p')
+    printf '%s\n' "${depends[@]}"
+  )
+}
+# "<pkgver>-<pkgrel>" of a PKGBUILD.
+pkg_full_version() { (cd "$(dirname "$1")" && source "./$(basename "$1")" >/dev/null 2>&1 && printf '%s-%s' "$pkgver" "$pkgrel"); }
+# The version pin between the split packages, when the PKGBUILD defines the compositor package: prints the problems.
+pkg_pin_problems() { # <PKGBUILD>
+  local want
+  grep -q '^package_grassfield-compositor() {' "$1" || return 0
+  want="grassfield-desktop=$(pkg_full_version "$1")"
+  pkg_final_depends "$1" grassfield-compositor | grep -qxF -- "$want" \
+    || echo "PKGBUILD: grassfield-compositor must depend on \"grassfield-desktop=\$pkgver-\$pkgrel\" ($want) in its final depends (one release: the shell and the plugin speak one protocol)"
+  if pkg_final_depends "$1" grassfield-desktop | grep -q '^grassfield-compositor'; then
+    echo "PKGBUILD: grassfield-desktop must not depend on grassfield-compositor (the desktop runs without the plugin)"
+  fi
+}
 
 check_tree() { # <tree root>: prints problems, returns 1 when there are any
   local t=$1 v n=0 f
@@ -26,6 +58,8 @@ check_tree() { # <tree root>: prints problems, returns 1 when there are any
     got=$(cd "$t/packaging/arch" && bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "$pkgver"')
     want=${v//-/}
     [[ $got == "$want" ]] || { echo "PKGBUILD: pkgver is '$got', VERSION says '$v' (expected '$want')"; n=$((n + 1)); }
+    pin=$(pkg_pin_problems "$t/packaging/arch/PKGBUILD")
+    [[ -z $pin ]] || { echo "$pin"; n=$((n + 1)); }
   else
     echo "packaging/arch/PKGBUILD: missing"; n=$((n + 1))
   fi
@@ -58,7 +92,20 @@ selftest() {
   printf '#define GRASSFIELD_Z_VERSION "0.1.0"\n' >"$d/a/apps/z/main.cpp"
   printf '# Changelog\n\n## 1.2.3-rc1\n' >"$d/a/CHANGELOG.md"
   check_tree "$d/a" >/dev/null && { echo "FAIL: a literal version in a source was accepted"; fails=1; }
-  ((fails == 0)) && echo "check-version selftest: PASS (5 cases)"
+  rm -rf "$d/a/apps"
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland)\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null && { echo "FAIL: a compositor package without the desktop pin was accepted"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-$pkgrel")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null || { echo "FAIL: the exact pin was rejected"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland grassfield-compositor)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-$pkgrel")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null && { echo "FAIL: a desktop that needs the plugin was accepted"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-$pkgrel")\n  depends=(hyprland)\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null && { echo "FAIL: a pin overridden by a later depends= was accepted"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland)\n  depends+=("grassfield-desktop=$pkgver-$pkgrel")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null || { echo "FAIL: a pin added with depends+= was rejected"; fails=1; }
+  printf '_v=$(tr -d "[:space:]" <../../VERSION)\npkgver=${_v//-/}\npkgrel=1\npackage_grassfield-desktop() {\n  depends=(hyprland)\n}\npackage_grassfield-compositor() {\n  depends=(hyprland "grassfield-desktop=$pkgver-2")\n}\n' >"$d/a/packaging/arch/PKGBUILD"
+  check_tree "$d/a" >/dev/null && { echo "FAIL: a pin to another pkgrel was accepted"; fails=1; }
+  ((fails == 0)) && echo "check-version selftest: PASS (11 cases)"
   return "$fails"
 }
 

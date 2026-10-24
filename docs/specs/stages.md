@@ -314,9 +314,12 @@ window, so it is not counted as evidence either way).
    one consumer, reads the event as a notice only and fetches the state on each notice with `on:true` while Stages is
    active; a notice with `on:false` needs no fetch. One fetch at a time, notices during it ask one more; a state older than
    the one shown is dropped; a failed or timed-out (2 s) fetch is retried three times, 200, 400 and 800 ms later, then no
-   state is shown and the strip hides rather than show a stale state as current. Pure logic `StagesState.js`, tests
-   `tests/unit/tst_stages.qml`). State: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,"front":{"address":"<hex, no 0x>","app":"<class>"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"<hex, no 0x>"}]},{"id":7,"slot":0,"windows":[{"address":"…","x":…,"y":…,"w":…,"h":…}]}]}]}`
-   plus `"reason":"invalid|disabled|no-strip|unknown|unavailable|interrupted"`. Coalesced (latest wins): treat as a
+   state is shown and the strip hides rather than show a stale state as current; and whatever the retries, a notice that
+   no successful fetch has answered within 3 s also means no state (a stream of notices restarts the retries, never that
+   clock), unless a fetch is under way: its answer or its 2-s deadline decides (slow fetches never make the strip
+   flicker; at worst 5 s). Pure logic `StagesState.js`, tests `tests/unit/tst_stages.qml`). State: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,"front":{"address":"<hex, no 0x>","app":"<class>"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"<hex, no 0x>"}]},{"id":7,"slot":0,"windows":[{"address":"…","x":…,"y":…,"w":…,"h":…}]}]}]}`
+   plus `"reason":"invalid|disabled|no-strip|unknown|unavailable|interrupted"`. Notices are coalesced (latest wins) and
+   carry no state: each says "fetch the state" (or, with `on:false`, that Stages is off); the fetched reply is the
    state. Per monitor with a strip: the workspace shown there, the active stage id, the stages in recency order (active
    first, `slot` = tile index, −1 for the active stage and for stages beyond the tiles), each stage's windows back to
    front, and for windows in a tile the rect where their **surface box** is drawn (their 32 px titlebar band is drawn

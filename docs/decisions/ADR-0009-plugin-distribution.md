@@ -44,7 +44,8 @@ Owner rule for the audit decisions: "rassure-toi que cela fonctionne comme sur m
 behind the user's back; an incompatible extension is disabled with a clear notice until it is updated. Option 1 is the
 default path, option 3 the opt-in recovery; option 2 stays rejected.
 
-What ships (`grassfield-compositor`, `depends=(hyprland)` only, no version constraint):
+What ships (`grassfield-compositor`; no constraint on the hyprland version; since the re-review of c3cb01b it depends on
+exactly `grassfield-desktop=$pkgver-$pkgrel`, see "Grassfield version of a build" below):
 - `/usr/lib/grassfield/grassfield-compositor.so` and its stamp `grassfield-compositor.abi`: the ABI string it was built
   for, computed with Hyprland's own formula (`PluginAPI.hpp` `__hyprland_api_get_client_hash`: commit, then the
   aquamarine, hyprutils, hyprgraphics, hyprcursor and hyprlang minors) by its own CMake build from the `version.h` it was
@@ -63,7 +64,7 @@ is the ABI of the Hyprland that runs (the installed `version.h`, its commit chec
    the one checker, also used when it builds: the cache root (`XDG_CACHE_HOME`, else `$HOME/.cache`) is an absolute,
    canonical path (`realpath` gives it back unchanged) whose every ancestor is root's or the user's and not writable by
    group or others unless sticky; every directory from it down, the plugin and its stamp are no symlinks (lstat), owned
-   by the user and not writable by group or others; and the stamp is the ABI. The check runs on Hyprland's main thread
+   by the user and not writable by group or others; and the stamp is the ABI and the installed sources' version (below). The check runs on Hyprland's main thread
    during the parse, so it is bounded (`timeout` 5 s, then a kill), and only an answer with exit status 0 counts;
 3. none: nothing is loaded. The session runs in degraded mode (gate C2) and the shell shows one translated notice: it asks
    `grassfield-compositor-rebuild --status` and, on a mismatch, names the Hyprland version and the recovery.
@@ -76,6 +77,20 @@ loader itself fails, the packaged build is loaded: it compares Hyprland's hash i
 own notice. `Hyprland --verify-config` (`just check`) runs the same config with the caller's environment, a running
 instance's signature included: the loader recognises verify mode (`/proc/self/cmdline`) and writes no runtime note, and
 `check-config` runs it with a scratch runtime directory and fails if a note appears there.
+
+Grassfield version of a build (re-review of c3cb01b, 2026-10-24; ADR-0007's gfc/1 exception rests on it): the ABI names
+the Hyprland build only, so a build in the user's cache made from older Grassfield sources had the right ABI after a
+Grassfield upgrade and was loaded next to the newer shell. Every stamp now has a second line, `source <pkgver-pkgrel>`
+(the PKGBUILD writes it for the packaged build; the rebuild for the user's, from the sources' VERSION), and a build is
+loaded only when it is the installed sources' VERSION (`/usr/src/grassfield-compositor/VERSION`): the loader compares it
+for the packaged build, `--vetted` for the user's (`--status`: `state=mismatch`, `reason=stale-build`; the rebuild and
+the shell's opt-in `--session` build it again). A config reload keeps the build of the first parse as before: the loader
+asks `--vetted <abi> --loaded`, every check but the source version, which a package update in the session may have moved
+on (the running shell is still the one of that login). The shell's notice for `reason=stale-build` does not name the
+Hyprland version (it is not the cause): it reuses GF-083's model (macOS: an update finishes at the next login), "Updating
+the compositor extension" when the opt-in rebuild runs (it comes back once done, or after the next login), else "Log out
+to finish updating" with the rebuild command; the rebuild's outcome is "Compositor extension updated" or "Log out to
+finish updating" (`ExtensionStatus.notice` "stale", tests/unit/tst_extensionstatus.qml).
 
 User rebuild (option 3): `grassfield-compositor-rebuild` refuses to run as root. It builds the shipped sources with CMake
 and the compiler, in a private temporary directory, with a clean environment, at low priority, with at most 4 compilers and

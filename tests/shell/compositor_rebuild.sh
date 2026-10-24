@@ -5,7 +5,8 @@
 #     packaging/arch/grassfield-compositor-rebuild (bash) and config/hypr/grassfield/compositor.lua (Lua), as Hyprland's
 #     PluginAPI.hpp computes it (the formula is checked in the installed header when present);
 #   - the session's choice (offline part of the C2 mismatch test, plan 1.8): the packaged build, the user's build only as
-#     --vetted vouches for it, on a mismatch NO build (degraded mode); a config reload keeps the build of the first parse
+#     --vetted vouches for it, on a mismatch NO build (degraded mode); a build of another Grassfield version (its stamp's
+#     `source` line) is a mismatch too, even for the right Hyprland; a config reload keeps the build of the first parse
 #     (runtime note), even when a package update replaced its files; Hyprland updated under the session;
 #   - the vetting (one checker, used by the loader through --vetted and by the script itself): every directory from the
 #     cache root down, the plugin and its stamp are no symlinks and not writable by group or others (a foreign owner
@@ -80,9 +81,13 @@ fi
 cat >"$tmp/choose.lua" <<'EOF'
 -- arg: <version.h> <packaged stamp | - (no packaged build) | EMPTY> <ABIs --vetted vouches for, comma-separated | ->
 --      <instance signature | -> <runtime note content | -> [packaged file missing: gone]
+-- env: GF_PKG_SOURCE the packaged stamp's source line (default 1.0.0-1; "none": no second line), GF_SRC_VERSION the
+-- installed sources' VERSION (default 1.0.0-1; "none": no file), GF_SHOW_CALLS=1 prints the --vetted calls too.
 package.path = os.getenv("GF_ROOT") .. "/config/hypr/?.lua;" .. package.path
 local c = require("grassfield.compositor")
 local f = io.open(arg[1]); local vh = f:read("a"); f:close()
+local pkg_source = os.getenv("GF_PKG_SOURCE") or "1.0.0-1"
+local src_version = os.getenv("GF_SRC_VERSION") or "1.0.0-1"
 local vars = { HOME = "/home/u", XDG_RUNTIME_DIR = "/run/user/1000" }
 if arg[4] ~= "-" then vars.HYPRLAND_INSTANCE_SIGNATURE = arg[4] end
 local getenv = function(n) return vars[n] end
@@ -91,7 +96,15 @@ for a in (arg[3] ~= "-" and arg[3] or ""):gmatch("[^,]+") do vouched[a] = true e
 local note = c.note_path(getenv)
 local calls = {}
 local env = {
-  read = function(p) if p == c.version_h then return vh end return nil end,
+  read = function(p)
+    if p == c.version_h then return vh end
+    if p == "/usr/lib/grassfield/grassfield-compositor.abi" and arg[2] ~= "-" then
+      local first = arg[2] == "EMPTY" and "" or arg[2]
+      return pkg_source == "none" and (first .. "\n") or (first .. "\nsource " .. pkg_source .. "\n")
+    end
+    if p == c.source_version and src_version ~= "none" then return src_version .. "\n" end
+    return nil
+  end,
   line = function(p)
     if p == note and arg[5] ~= "-" then return arg[5] end
     if p == "/usr/lib/grassfield/grassfield-compositor.abi" and arg[2] ~= "-" then return arg[2] == "EMPTY" and "" or arg[2] end
@@ -99,15 +112,15 @@ local env = {
   end,
   exists = function(p) return p == c.packaged and arg[2] ~= "-" and arg[6] ~= "gone" end,
   getenv = getenv,
-  vetted = function(abi)
-    calls[#calls + 1] = abi or "installed"
+  vetted = function(abi, loaded)
+    calls[#calls + 1] = (abi or "installed") .. (loaded and "+loaded" or "")
     local a = abi or c.abi(vh)
     if vouched[a] then return c.user_build(a, getenv) end
     return nil
   end,
 }
 local path, why = c.choose(env)
-print(why .. " " .. tostring(path))
+print(why .. " " .. tostring(path) .. (os.getenv("GF_SHOW_CALLS") == "1" and (" [" .. table.concat(calls, ",") .. "]") or ""))
 EOF
 choose() { GF_ROOT=$root lua "$tmp/choose.lua" "$tmp/version.h" "$@"; }
 sig=0123456789abcdef0123456789abcdef01234567_1792717195_16028387
@@ -122,6 +135,13 @@ expect "choice: a user build --vetted does not vouch for is not loaded" "$(choos
 expect "choice: no extension installed" "$(choose - - "$sig" -)" "none nil"
 expect "choice: a packaged build with an empty stamp is not loaded blind" "$(choose EMPTY - "$sig" -)" "no-match nil"
 expect "choice: no signature: the installed headers decide" "$(choose "$other" "$want" - -)" "user $userpath"
+# The packaged build of another Grassfield version than the installed sources (review of c3cb01b): never loaded.
+expect "choice: a packaged build of another Grassfield version is not loaded" \
+  "$(GF_PKG_SOURCE=0.9.0-1 choose "$want" - "$sig" -)" "no-match nil"
+expect "choice: a packaged stamp without its source line is not loaded" "$(GF_PKG_SOURCE=none choose "$want" - "$sig" -)" "no-match nil"
+expect "choice: no installed sources version: the packaged build is not loaded" "$(GF_SRC_VERSION=none choose "$want" - "$sig" -)" "no-match nil"
+expect "choice: a packaged build of another version gives way to the user's build --vetted vouches for" \
+  "$(GF_PKG_SOURCE=0.9.0-1 choose "$want" "$want" "$sig" -)" "user $userpath"
 # A config reload: the build of the first parse stays, as the runtime note names it.
 expect "reload: the packaged build stays" "$(choose "$want" - "$sig" "$packaged")" "kept $packaged"
 expect "reload: the packaged build stays after a package update replaced it in the same transaction" \
@@ -129,6 +149,8 @@ expect "reload: the packaged build stays after a package update replaced it in t
 expect "reload: the packaged file is gone: not kept" "$(choose "$want" - "$old_sig" "$packaged" gone)" "updated nil"
 expect "reload: the user's build of the running commit stays while --vetted vouches for it" \
   "$(choose "$want" "$other" "$old_sig" "$olduser")" "kept $olduser"
+expect "reload: the kept user build is vetted as the loaded one (--loaded: its source version may have moved on)" \
+  "$(GF_SHOW_CALLS=1 choose "$want" "$other" "$old_sig" "$olduser")" "kept $olduser [$other+loaded]"
 expect "reload: a user build --vetted no longer vouches for is dropped (nothing until the next login)" \
   "$(choose "$want" - "$old_sig" "$olduser")" "updated nil"
 expect "reload: a user build of another commit is not kept" "$(choose "$other" "$other,$want" "$sig" "$olduser")" "user $userpath"
@@ -161,6 +183,11 @@ expect "lua: a --vetted check that hangs is cut off and vouches for nothing" \
 ((SECONDS - started <= 4)) && pass "lua: the hanging check was cut off within its bound" || bad "lua: the hanging check took $((SECONDS - started)) s"
 expect "lua: a --vetted check that fails vouches for nothing" "$(luamod "c.rebuild = '$tmp/failing-vetted'; print(c.vetted())")" "nil"
 expect "lua: a --vetted check that succeeds is read" "$(luamod "c.rebuild = '$tmp/ok-vetted'; print(c.vetted(), c.vetted('A_1'))")" "/ok/--vetted	/ok/--vetted A_1"
+expect "lua: the loaded build is vetted with --loaded, only with an ABI" \
+  "$(luamod "c.rebuild = '$tmp/ok-vetted'; print(c.vetted('A_1', true), c.vetted(nil, true))")" "/ok/--vetted A_1 --loaded	/ok/--vetted"
+expect "lua: the stamp's source line and the installed version" \
+  "$(luamod "local t = {['/a/p.abi'] = 'X\nsource 1.0.0rc1-1\n', [c.source_version] = '1.0.0rc1-1\n'}; local r = function(p) return t[p] end; print(c.stamp_source('/a/p.so', r), c.installed_source(r), c.stamp_source('/b/p.so', r))")" \
+  "1.0.0rc1-1	1.0.0rc1-1	nil"
 expect "lua: no timeout tool, no check" "$(luamod "c.rebuild = '$tmp/ok-vetted'; c.timeout = '$tmp/none'; print(c.vetted())")" "nil"
 # Verify mode (just check runs Hyprland --verify-config with the session config): the loader writes no runtime note.
 expect "lua: verify mode is read from the command line" \
@@ -330,6 +357,27 @@ cat "$tmp/good.abi" >"$dest/grassfield-compositor.abi"
 run "$script" --vetted; rc=$?
 expect "vetting: every case undone -> vouched for again" "$rc $(cat "$tmp/out")" "0 $so"
 
+# A build in the cache made from older sources, for the right Hyprland (a Grassfield upgrade without a Hyprland update;
+# review of c3cb01b, MAJOR 1): never used; the user's rebuild (or the shell's --session) builds it again.
+echo "0.6.0-1" >"$src/VERSION"
+vetted_refuses "a build from another Grassfield version" "built from Grassfield 0.5.0-1, the installed version is 0.6.0-1"
+run "$script" --status
+expect "stale build: --status gives the reason" "$(grep -c '^reason=stale-build$' "$tmp/out")" 1
+run "$script" --vetted "$want" --loaded; rc=$?
+expect "stale build: --loaded (the build a running session keeps on a reload) still vouches for it" "$rc $(cat "$tmp/out")" "0 $so"
+run "$script" --vetted "$want" --bogus; rc=$?
+expect "--vetted: an unknown option is refused" "$rc [$(cat "$tmp/out")]" "1 []"
+run "$script" --check; rc=$?
+expect "stale build: --check exit 1" "$rc" 1
+run "$script"; rc=$?
+expect "stale build: built again" "$rc $(grep -c 'nothing to build' "$tmp/err")" "0 0"
+expect "stale build: the new stamp names the installed version" "$(sed -n 2p "$dest/grassfield-compositor.abi")" "source 0.6.0-1"
+run "$script" --vetted; rc=$?
+expect "stale build: rebuilt -> vouched for" "$rc $(cat "$tmp/out")" "0 $so"
+mv "$src/VERSION" "$tmp/VERSION.saved"
+vetted_refuses "installed sources without a VERSION" "have no VERSION"
+mv "$tmp/VERSION.saved" "$src/VERSION"
+
 # Above the cache root: every ancestor root's or the user's, not writable by group or others unless sticky (/tmp). A
 # foreign owner cannot be made without root; the mode cases go through the same check.
 mkdir -p "$tmp/anc"
@@ -375,6 +423,65 @@ run GF_TEST_FAKE_BUILD=stale "$script"; rc=$?
 expect "build: its own stamp is another ABI -> refused" "$rc $(grep -c "built for 'stale'" "$tmp/err")" "1 1"
 [[ ! -e $so ]] && pass "build: a stale result installs nothing" || bad "build: a stale result installs nothing"
 
+# The sources replaced during the build (a system upgrade while the opt-in background build runs; re-review of
+# b60bc3a..85aaab9, the reviewer's fake-cmake repro): the real build path with a fake cmake that "compiles" from the
+# sources' VERSION, writes the build's stamp, and installs newer sources meanwhile. The result is refused, never stamped
+# with the new version; an empty VERSION is refused before anything is built.
+cp "$tools/cmake" "$tmp/cmake-stub"
+cat >"$tools/cmake" <<EOF
+#!/bin/sh
+# fake cmake (shell builtins only: the rebuild runs it with PATH=<tools> alone)
+if [ "\$1" = "--build" ]; then
+  out=\${2%/work}
+  read -r src <"\$out/.fake-src"
+  read -r ver <"\$src/VERSION"
+  printf 'plugin compiled from %s\n' "\$ver" >"\$out/grassfield-compositor.so"
+  printf '%s\n' "$want" >"\$out/grassfield-compositor.abi"
+  printf '0.9.0-1\n' >"\$src/VERSION"
+  exit 0
+fi
+src="" out=""
+while [ \$# -gt 0 ]; do
+  case \$1 in
+    -S) src=\$2; shift ;;
+    -DGRASSFIELD_OUTPUT_DIR=*) out=\${1#*=} ;;
+  esac
+  shift
+done
+printf '%s\n' "\$src" >"\$out/.fake-src"
+printf 'configured\n' >>"$tmp/fake-cmake.log"
+EOF
+chmod +x "$tools/cmake"
+echo "0.8.0-1" >"$src/VERSION"
+rm -rf "$cache" "$tmp/fake-cmake.log"
+run GF_TEST_FAKE_BUILD= "$script"; rc=$?
+expect "sources replaced during the build -> the result is refused" "$rc $(grep -c 'the installed sources changed during the build (from 0.8.0-1 to 0.9.0-1)' "$tmp/err")" "1 1"
+[[ ! -e $so && ! -e $dest/grassfield-compositor.abi ]] && pass "sources replaced during the build: nothing installed, no stamp" \
+  || bad "sources replaced during the build: nothing installed, no stamp ($(cat "$dest/grassfield-compositor.abi" 2>/dev/null))"
+echo "0.8.0-1" >"$src/VERSION"
+rm -rf "$cache"
+mv "$src/VERSION" "$tmp/VERSION.away"
+run GF_TEST_FAKE_BUILD= "$script"; rc=$?
+expect "no VERSION: refused before building" "$rc $(grep -c 'the sources have no VERSION' "$tmp/err") $(grep -c configured "$tmp/fake-cmake.log" 2>/dev/null || echo 0)" "1 1 1"
+mv "$tmp/VERSION.away" "$src/VERSION"
+rm -rf "$cache"
+# The same fake build with sources that stay put: installed, stamped with the version it was built from.
+cat >"$tools/cmake" <<EOF
+#!/bin/sh
+if [ "\$1" = "--build" ]; then
+  out=\${2%/work}
+  printf 'plugin\n' >"\$out/grassfield-compositor.so"
+  printf '%s\n' "$want" >"\$out/grassfield-compositor.abi"
+  exit 0
+fi
+exit 0
+EOF
+chmod +x "$tools/cmake"
+run GF_TEST_FAKE_BUILD= "$script"; rc=$?
+expect "real build path, sources unchanged: installed and stamped with their version" "$rc $(sed -n 2p "$dest/grassfield-compositor.abi" 2>/dev/null)" "0 source 0.8.0-1"
+cp "$tmp/cmake-stub" "$tools/cmake"
+rm -rf "$cache"
+
 # --session (the shell, opt-in setting): build when needed, load into the running Hyprland on an exact "ok".
 rm -rf "$cache" "$tmp/hyprctl.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
@@ -384,6 +491,12 @@ rm -f "$tmp/hyprctl.log" "$cache/grassfield/compositor/build.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
 expect "--session: a build that matches already is loaded, not rebuilt" \
   "$rc $(head -n 1 "$tmp/out") $([[ -e $cache/grassfield/compositor/build.log ]] && echo rebuilt || echo kept)" "0 result=loaded kept"
+echo "0.7.0-1" >"$src/VERSION"
+rm -f "$tmp/hyprctl.log" "$cache/grassfield/compositor/build.log"
+run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
+expect "--session: a build from older Grassfield sources is rebuilt and loaded" \
+  "$rc $(head -n 1 "$tmp/out") $([[ -e $cache/grassfield/compositor/build.log ]] && echo rebuilt || echo kept) $(sed -n 2p "$dest/grassfield-compositor.abi")" \
+  "0 result=loaded rebuilt source 0.7.0-1"
 rm -rf "$cache" "$tmp/hyprctl.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$old_sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
 expect "--session: another Hyprland runs: built, not loaded" "$rc $(head -n 1 "$tmp/out") $([[ -e $tmp/hyprctl.log ]] && echo called || echo untouched)" "0 result=built untouched"
@@ -402,13 +515,22 @@ run "$script" --session; rc=$?
 expect "--session: missing toolchain" "$rc $(tr '\n' ' ' <"$tmp/out")" "1 result=failed reason=cannot-build "
 printf '#!/bin/sh\nexit 0\n' >"$tools/hyprwayland-scanner" && chmod +x "$tools/hyprwayland-scanner"
 
-# The packaged build matches: --check and --status say so; a symlink in its place is not a packaged build.
-echo "$want" >"$lib/grassfield-compositor.abi"
+# The packaged build matches: --check and --status say so; a symlink in its place is not a packaged build; a packaged
+# stamp of another Grassfield version, or without its source line, does not match.
+printf '%s\nsource %s\n' "$want" "$(head -n 1 "$src/VERSION")" >"$lib/grassfield-compositor.abi"
 rm -rf "$cache"
 run "$script" --check; rc=$?
 expect "packaged build matches: --check exit 0" "$rc $(tail -n 1 "$tmp/out")" "0 match: $lib/grassfield-compositor.so"
 run "$script" --status
 expect "packaged build matches: --status" "$(head -n 1 "$tmp/out") $(grep '^path=' "$tmp/out")" "state=match path=$lib/grassfield-compositor.so"
+cp "$lib/grassfield-compositor.abi" "$tmp/pkg.abi"
+printf '%s\nsource 0.1.0-1\n' "$want" >"$lib/grassfield-compositor.abi"
+run "$script" --status
+expect "a packaged build of another Grassfield version does not match" "$(head -n 1 "$tmp/out")" "state=mismatch"
+echo "$want" >"$lib/grassfield-compositor.abi"
+run "$script" --status
+expect "a packaged stamp without its source line does not match" "$(head -n 1 "$tmp/out")" "state=mismatch"
+cp "$tmp/pkg.abi" "$lib/grassfield-compositor.abi"
 mv "$lib/grassfield-compositor.so" "$tmp/pkg.so" && ln -s "$tmp/pkg.so" "$lib/grassfield-compositor.so"
 run "$script" --status
 expect "a symlink in the packaged place is not a build" "$(head -n 1 "$tmp/out")" "state=mismatch"

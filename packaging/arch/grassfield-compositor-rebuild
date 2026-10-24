@@ -13,13 +13,20 @@
 # session loads it (config/hypr/grassfield/compositor.lua) only after --vetted has checked the cache root (an absolute,
 # canonical path whose ancestors are root's or the user's and not writable by group or others unless sticky), every
 # directory from it down and both files: not symlinks, owned by the user, not writable by group or others.
+# A stamp has two lines: the ABI, then `source <id>`, the Grassfield version the plugin was built from (the first line of
+# the installed sources' VERSION, a pacman version: the packaged stamp gets it from the PKGBUILD). A build is used only
+# when both are the installed ones: a build in the cache made from older sources is stale even for the right Hyprland
+# (the shell and the plugin of one release speak one protocol, ADR-0007), and is rebuilt like a mismatch.
 #
 # Usage: grassfield-compositor-rebuild [--check | --status | --vetted [ABI] | --session | --print-abi [VERSION_H]]
 #   (none)            build now when no build matches the installed Hyprland, then log out and back in
 #   --check           which build matches the installed Hyprland, for a person: exit 0 when one does, 1 when none does
 #   --status          the same for the shell, key=value lines: state=match|mismatch|unknown, version=, abi=, reason=
-#   --vetted [ABI]    for the session loader: the path of the user's build for ABI (default: the installed Hyprland's)
-#                     when every check passes (exit 0), else nothing on stdout and the reason on stderr (exit 1)
+#   --vetted [ABI] [--loaded]
+#                     for the session loader: the path of the user's build for ABI (default: the installed Hyprland's)
+#                     when every check passes (exit 0), else nothing on stdout and the reason on stderr (exit 1).
+#                     --loaded: the build a running session loaded at its first parse (a config reload keeps it until
+#                     the next login): every check but the source version, which a package update may have moved on
 #   --session         for the shell (opt-in setting): build when no build matches, then load the result into the running
 #                     Hyprland when its ABI is the running one; key=value lines: result=loaded|built|failed, reason=
 #   --print-abi [F]   the ABI string of a Hyprland version.h (default: the installed one)
@@ -70,8 +77,19 @@ plain_file() { [[ -f $1 && ! -L $1 ]]; }
 # The first line of a plain file ("" otherwise).
 first_line() { plain_file "$1" && head -n 1 "$1" || true; }
 stamp_of() { first_line "${1%.so}.abi"; }
+# The Grassfield version a build was made from: the second line of its stamp, `source <id>` ("" otherwise).
+stamp_source_of() { plain_file "${1%.so}.abi" && sed -n '2s/^source //p' "${1%.so}.abi" || true; }
 user_build() { printf '%s/%s/grassfield-compositor.so' "$cache_base" "$1"; }
-source_id() { head -n 1 "$src_dir/VERSION" 2>/dev/null || echo unknown; }
+# The installed Grassfield version (the sources' VERSION, written by the PKGBUILD), "" when unknown: then no build is
+# known to belong to the installed shell.
+source_id() { local v; v=$(head -n 1 "$src_dir/VERSION" 2>/dev/null | tr -cd 'A-Za-z0-9._+:~-'); printf '%s' "$v"; }
+# The build was made from the installed sources (prints why not).
+same_source() { # <so>
+  local want got
+  want=$(source_id) got=$(stamp_source_of "$1")
+  [[ -n $want ]] || { echo "the installed sources have no VERSION ($src_dir/VERSION)"; return 1; }
+  [[ $got == "$want" ]] || { echo "it was built from Grassfield ${got:-of an unknown version}, the installed version is $want (rebuild it)"; return 1; }
+}
 
 # An entry of the user's build path, looked at itself (lstat: a symlink is never followed): of the type asked (d or f),
 # owned by the user, not writable by group or others. Prints why when it is not.
@@ -125,21 +143,34 @@ private_dirs() { # <dir under cache_base, or cache_base>
 }
 
 # The user's build for <abi> when every check passes: the directories from the cache root down, the plugin and its stamp
-# (private entries), and the stamp is <abi>. Prints the path; otherwise exit 1 with the reason on stderr.
-vetted_user_build() { # <abi>
+# (private entries), the stamp is <abi> and, unless <loaded> is "loaded", the build was made from the installed sources.
+# Prints the path; otherwise exit 1 with the reason on stderr.
+vetted_user_build() { # <abi> [loaded]
   local dir=$cache_base/$1 so why
   so=$dir/grassfield-compositor.so
   why=$(private_dirs "$dir") || { say "your build is not used: $why"; return 1; }
   why=$(private_entry "$so" f) || { say "your build is not used: $why"; return 1; }
   why=$(private_entry "$dir/grassfield-compositor.abi" f) || { say "your build is not used: $why"; return 1; }
   [[ $(stamp_of "$so") == "$1" ]] || { say "your build is not used: its stamp is not $1"; return 1; }
+  if [[ ${2:-} != loaded ]]; then
+    why=$(same_source "$so") || { say "your build is not used: $why"; return 1; }
+  fi
   printf '%s' "$so"
 }
 
-# The build that matches <abi>: the packaged one (a plain file whose stamp is <abi>), else the user's vetted one.
+# The build that matches <abi>: the packaged one (a plain file whose stamp is <abi> and the installed sources' version),
+# else the user's vetted one.
 matching_build() { # <abi>
-  if plain_file "$packaged" && [[ $(stamp_of "$packaged") == "$1" ]]; then printf '%s' "$packaged"; return 0; fi
+  if plain_file "$packaged" && [[ $(stamp_of "$packaged") == "$1" ]] && same_source "$packaged" >/dev/null; then
+    printf '%s' "$packaged"
+    return 0
+  fi
   vetted_user_build "$1" 2>/dev/null
+}
+
+# A user build for <abi> that would be used but for its source version (the --status reason).
+stale_user_build() { # <abi>
+  vetted_user_build "$1" loaded >/dev/null 2>&1 && ! same_source "$(user_build "$1")" >/dev/null
 }
 
 # A directory of ours below the cache root: created 0700 when missing, then checked like the loader checks it.
@@ -177,9 +208,12 @@ build_into() { # <dir> <log>
 
 # Builds for <abi> and installs the result as the user's build: the plugin first, its stamp (the build's own) last, each
 # through a new file renamed into place (a session that has the previous build mapped keeps it); then checks it as the
-# session will. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build failed.
+# session will. The Grassfield version is read once, before the build: the stamp names the sources the build started
+# from, and a result whose sources were replaced meanwhile (a system upgrade during the build) is refused, never stamped
+# with the new version. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build
+# failed or its sources changed.
 build_and_install() { # <abi>
-  local abi=$1 dest work so stamp tmp log why
+  local abi=$1 dest work so stamp tmp log why src
   why=$(cache_root_ok) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
   mkdir -p "$cache_root" 2>/dev/null
   why=$(cache_root_ok) && why=$(private_entry "$cache_root" d) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
@@ -198,7 +232,11 @@ build_and_install() { # <abi>
   trap "rm -rf '$work'" EXIT
   [[ -z $(missing_tools) ]] || { say "cannot build: missing $(missing_tools) (install them: pacman -S --needed cmake gcc make pkgconf)"; return 2; }
   [[ -r $src_dir/CMakeLists.txt ]] || { say "cannot build: no sources in $src_dir"; return 2; }
+  src=$(source_id)
+  [[ -n $src ]] || { say "cannot build: the sources have no VERSION ($src_dir/VERSION)"; return 2; }
   build_into "$work" "$log" || { say "the build failed (log: $log)"; return 3; }
+  why=$(source_id)
+  [[ $why == "$src" ]] || { say "refusing the build's result: the installed sources changed during the build (from $src to ${why:-none}): run it again"; return 3; }
   so=$work/grassfield-compositor.so
   plain_file "$so" || { say "refusing the build's result: not a regular file ($so)"; return 3; }
   stamp=$(first_line "$work/grassfield-compositor.abi")
@@ -206,7 +244,7 @@ build_and_install() { # <abi>
   tmp=$(mktemp "$dest/.plugin.XXXXXX") || return 2
   cat "$so" >"$tmp" && chmod 0700 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.so" || { rm -f "$tmp"; return 2; }
   tmp=$(mktemp "$dest/.stamp.XXXXXX") || return 2
-  printf '%s\nsource %s\n' "$stamp" "$(source_id)" >"$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 2; }
+  printf '%s\nsource %s\n' "$stamp" "$src" >"$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 2; }
   vetted_user_build "$abi"
 }
 
@@ -228,6 +266,7 @@ case ${1:-} in
     mode=vetted
     # An ABI names a directory: letters, digits, dots, dashes and underscores, never "." or "..".
     if [[ -n ${2:-} && ( ! $2 =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ) ]]; then say "not an ABI: $2"; exit 1; fi
+    if [[ -n ${3:-} && $3 != --loaded ]]; then say "unknown option: $3"; exit 1; fi
     ;;
   --session) mode=session ;;
   --print-abi)
@@ -253,7 +292,7 @@ case $mode in
   vetted)
     abi=${2:-$installed}
     [[ -n $abi ]] || { say "Hyprland's version.h is missing ($version_h)"; exit 1; }
-    path=$(vetted_user_build "$abi") || exit 1
+    path=$(vetted_user_build "$abi" "$([[ ${3:-} == --loaded ]] && echo loaded)") || exit 1
     printf '%s\n' "$path"
     exit 0
     ;;
@@ -262,6 +301,7 @@ case $mode in
     if [[ ! -f $packaged && ! -L $packaged ]]; then printf 'state=unknown\nreason=not-installed\nversion=%s\n' "$version"; exit 0; fi
     if path=$(matching_build "$installed"); then printf 'state=match\nversion=%s\nabi=%s\npath=%s\n' "$version" "$installed" "$path"; exit 0; fi
     printf 'state=mismatch\nversion=%s\nabi=%s\n' "$version" "$installed"
+    stale_user_build "$installed" && printf 'reason=stale-build\n'
     exit 0
     ;;
   check)

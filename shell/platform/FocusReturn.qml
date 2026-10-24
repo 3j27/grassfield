@@ -5,7 +5,7 @@ import Quickshell.Hyprland
 import Grassfield.Ui
 import qs.services
 import "FocusReturn.js" as FR
-import "StagesFront.js" as StagesFront
+import "StagesState.js" as StagesState
 
 // Gives the keyboard back when a full-attention surface closes (macOS: Spotlight, Launchpad, a menu or the app switcher
 // closing returns key focus to the window that was key before). Every Exclusive shell surface reports `opened(name)` and
@@ -81,7 +81,7 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (!root.anyOpen())
                 return;
-            const name = event.name === "grassfield" ? (StagesFront.parse(event.data) ? "stages" : "") : event.name;
+            const name = event.name === "grassfield" ? (StagesState.parseNotice(event.data) ? "stages" : "") : event.name;
             if (FR.changesFront(name, event.data, root.previous ? root.previous.address : ""))
                 root.generation++;
         }

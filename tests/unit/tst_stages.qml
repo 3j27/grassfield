@@ -91,34 +91,51 @@ TestCase {
     // ---- the state fetch (StagesLink runs one `hyprctl grassfield-stages` at a time; a fake fetcher here) ----
 
     // A fake StagesLink: applies StagesState's fetch steps and counts the fetches started; `retryMs` is the last backoff
-    // asked (0 none), `state` what the strip would show.
+    // asked (0 none), `staleMs` when the time bound wants a look (0 none), `state` what the strip would show, `now` a
+    // fake clock in ms (advance with wait(), which also fires the time bound when it falls due, as StagesLink's timer).
     function link(active) {
         return {
             fetch: StagesState.newFetch(),
             state: null,
             started: 0,
             retryMs: 0,
+            staleMs: 0,
+            staleAt: -1,
+            now: 1000,
             active: active === undefined ? true : active,
+            ctx: function () {
+                return {active: this.active, shown: this.state, now: this.now};
+            },
             apply: function (out) {
                 this.fetch = out.fetch;
                 if (out.state !== undefined)
                     this.state = out.state;
                 this.retryMs = out.retryMs;
+                this.staleMs = out.staleMs;
+                this.staleAt = out.staleMs > 0 ? this.now + out.staleMs : -1;
                 if (out.start)
                     this.started += 1;
             },
+            wait: function (ms) {
+                const until = this.now + ms;
+                if (this.staleAt >= 0 && this.staleAt <= until) {
+                    this.now = this.staleAt;
+                    this.apply(StagesState.onTick(this.fetch, this.ctx()));
+                }
+                this.now = until;
+            },
             notice: function (gen, on) {
                 const text = JSON.stringify({v: "gfc/1", type: "stages", gen: gen, on: on !== false});
-                this.apply(StagesState.onNotice(this.fetch, StagesState.parseNotice(text), this.active));
+                this.apply(StagesState.onNotice(this.fetch, StagesState.parseNotice(text), this.ctx()));
             },
             reply: function (text) {
-                this.apply(StagesState.onReply(this.fetch, text, this.state, this.active));
+                this.apply(StagesState.onReply(this.fetch, text, this.ctx()));
             },
             timeout: function () {
-                this.apply(StagesState.onTimeout(this.fetch, this.active));
+                this.apply(StagesState.onTimeout(this.fetch, this.ctx()));
             },
             retry: function () {
-                this.apply(StagesState.onRetry(this.fetch, this.active));
+                this.apply(StagesState.onRetry(this.fetch, this.ctx()));
             }
         };
     }
@@ -214,6 +231,173 @@ TestCase {
         compare(l.fetch.tries, 0);
         l.retry();
         compare(l.started, 2, "a retry due while a fetch runs starts nothing");
+    }
+
+    // Re-review of c3cb01b (stale-sim.log: 50 notices with every fetch failing kept the gen-1 state): each notice restarts
+    // the retries, never the clock; 3 s after the first unanswered notice nothing is shown.
+    function test_failingFetchesUnderAStreamOfNoticesGiveUpTheStateAfterThreeSeconds() {
+        const l = link();
+        l.notice(1);
+        l.reply(event({gen: 1}));
+        compare(l.staleMs, 0, "an answered notice leaves no clock running");
+        let gen = 2;
+        for (let i = 0; i < 2; i++) {
+            l.notice(gen++);
+            l.reply('{"v":"gfc/1","type":"error"}');
+            l.wait(200);
+            l.retry();
+            l.reply("");
+            l.wait(800);
+        }
+        compare(l.state.gen, 1, "under 3 s the shown state stays (2 s after the first unanswered notice)");
+        compare(l.staleAt, 4000, "the bound is 3 s after the first unanswered notice (t=1000), not after the latest");
+        l.notice(gen++);
+        l.reply("");
+        l.wait(1000);
+        compare(l.state, null, "3 s after the first unanswered notice the stale state is given up");
+        for (let i = 0; i < 50; i++) {
+            l.notice(gen++);
+            l.reply("");
+            l.wait(1000);
+        }
+        compare(l.state, null, "and stays given up while every fetch fails");
+        l.notice(gen);
+        l.reply(event({gen: gen}));
+        compare(l.state.gen, gen, "the first successful fetch shows the state again");
+        compare(l.staleMs, 0);
+    }
+
+    function test_aFetchThatNeverAnswersHidesTheStateAtThreeSecondsNotAtTheNextStep() {
+        const l = link();
+        l.notice(1);
+        l.reply(event({gen: 1}));
+        l.notice(2);
+        compare(l.staleMs, 3000, "the time bound is armed with the notice");
+        l.wait(2000);
+        compare(l.state.gen, 1);
+        l.timeout();
+        compare(l.staleMs, 1000);
+        l.wait(1000);
+        compare(l.state, null, "the bound fires at 3 s, while the retry waits");
+    }
+
+    function test_notices_answeredByFetchesInTimeNeverGoStale() {
+        // Notices faster than the fetches: every fetch succeeds but another notice came during it; the clock follows the
+        // oldest notice not yet answered, so a steady flow of answers never hides the strip.
+        const l = link();
+        let gen = 1;
+        l.notice(gen++);
+        for (let i = 0; i < 40; i++) {
+            l.wait(150);
+            l.notice(gen++);
+            l.wait(100);
+            l.reply(event({gen: gen - 2}));
+            verify(l.state !== null, "cycle " + i);
+            verify(l.staleMs > 0 && l.staleMs <= 3000);
+        }
+        l.wait(100);
+        l.reply(event({gen: gen - 1}));
+        compare(l.state.gen, gen - 1);
+        compare(l.staleMs, 0, "all answered: no clock");
+    }
+
+    // An event-driven model of StagesLink on a virtual clock (the re-review's stale-sim2): notices every `noticeEvery` ms,
+    // each fetch answering after fetchMs(n) ms (2000 or more: never, the 2-s deadline ends it) with a state or, when
+    // ok(n) is false, a failure; the retry, deadline and time-bound timers. Returns {hides, fetches, final}.
+    function simulate(fetchMs, ok, noticeEvery, until) {
+        let now = 0, seq = 0, gen = 1, fetches = 0, awaiting = null, f = StagesState.newFetch(), state = null;
+        let retryT = null, staleT = null, deadT = null;
+        const q = [], hides = [];
+        const at = (t, k, d) => q.push({t: t, k: k, d: d, s: seq++});
+        const ctx = () => ({active: true, shown: state, now: now});
+        const step = o => {
+            f = o.fetch;
+            if (o.state !== undefined) {
+                if (o.state === null && state !== null)
+                    hides.push(now);
+                state = o.state;
+            }
+            if (o.retryMs > 0) {
+                retryT = {t: now + o.retryMs};
+                at(retryT.t, "retry", retryT);
+            }
+            if (o.staleMs > 0) {
+                staleT = {t: now + o.staleMs};
+                at(staleT.t, "stale", staleT);
+            } else {
+                staleT = null;
+            }
+            if (o.start) {
+                fetches++;
+                const id = {};
+                awaiting = id;
+                deadT = {t: now + StagesState.fetchDeadlineMs};
+                at(deadT.t, "dead", {id: id, ref: deadT});
+                if (fetchMs(fetches) < StagesState.fetchDeadlineMs)
+                    at(now + fetchMs(fetches), "reply", {id: id, g: gen, n: fetches});
+            }
+        };
+        const notice = g => StagesState.parseNotice(JSON.stringify({v: "gfc/1", type: "stages", gen: g, on: true}));
+        step(StagesState.onNotice(f, notice(gen), ctx()));
+        for (let t = noticeEvery; t < until; t += noticeEvery)
+            at(t, "notice");
+        while (q.length) {
+            q.sort((a, b) => a.t - b.t || a.s - b.s);
+            const e = q.shift();
+            if (e.t > until)
+                break;
+            now = e.t;
+            if (e.k === "notice") {
+                gen++;
+                step(StagesState.onNotice(f, notice(gen), ctx()));
+            } else if (e.k === "reply") {
+                if (awaiting !== e.d.id)
+                    continue;
+                awaiting = null;
+                deadT = null;
+                step(StagesState.onReply(f, ok(e.d.n) ? event({gen: e.d.g}) : "", ctx()));
+            } else if (e.k === "dead") {
+                if (deadT !== e.d.ref || awaiting !== e.d.id)
+                    continue;
+                awaiting = null;
+                step(StagesState.onTimeout(f, ctx()));
+            } else if (e.k === "retry") {
+                if (retryT !== e.d)
+                    continue;
+                retryT = null;
+                step(StagesState.onRetry(f, ctx()));
+            } else if (e.k === "stale") {
+                if (staleT !== e.d)
+                    continue;
+                staleT = null;
+                step(StagesState.onTick(f, ctx()));
+            }
+        }
+        return {hides: hides, fetches: fetches, final: state};
+    }
+
+    // Re-review of b60bc3a..85aaab9 (stale-sim2: 7 hides in 20 s with 1.6-s fetches): slow fetches that succeed under a
+    // steady flow of notices never hide the strip; failing or hung fetches still do, within 3 s plus one fetch deadline.
+    function test_slowFetchesUnderSteadyNoticesNeverMakeTheStripFlicker() {
+        for (const ms of [900, 1400, 1600, 1900]) {
+            const r = simulate(() => ms, () => true, 300, 20000);
+            compare(r.hides.length, 0, ms + " ms fetches, a notice every 300 ms: hidden at " + r.hides);
+            verify(r.final !== null && r.final.gen > 50, ms + " ms fetches keep the state current");
+        }
+        const sparse = simulate(() => 1900, () => true, 2500, 20000);
+        compare(sparse.hides.length, 0);
+    }
+
+    function test_failingOrHungFetchesStillHideTheStateInBoundedTime() {
+        const failing = simulate(() => 5, () => false, 1000, 20000);
+        compare(failing.final, null);
+        const firstOk = simulate(() => 5, n => n === 1, 1000, 20000);
+        compare(firstOk.hides.length, 1, "shown after the first fetch, hidden once the others fail");
+        verify(firstOk.hides[0] <= 1000 + StagesState.staleAfterMs + StagesState.fetchDeadlineMs);
+        compare(firstOk.final, null);
+        const hung = simulate(n => n === 1 ? 50 : 99999, () => true, 1000, 20000);
+        compare(hung.hides.length, 1, "fetches that never answer hide the state");
+        verify(hung.hides[0] <= 1000 + StagesState.staleAfterMs + StagesState.fetchDeadlineMs, "hidden at " + hung.hides[0]);
     }
 
     function test_nothingIsFetchedOrShownWhileStagesIsNotActive() {

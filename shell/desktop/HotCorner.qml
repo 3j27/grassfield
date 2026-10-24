@@ -23,6 +23,8 @@ PanelWindow {
     property string action: "none"
     // True while the surface the action opens is open (no firing then).
     property bool blocked: false
+    // A full-attention shell surface or the session lock is up: a hover exit then is a cover, not the pointer leaving.
+    property bool covered: false
 
     signal fire
 
@@ -48,6 +50,7 @@ PanelWindow {
         id: dwell
         hovering: hover.hovered
         blocked: win.blocked
+        covered: win.covered
         onTriggered: win.fire()
     }
 

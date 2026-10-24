@@ -4,8 +4,11 @@
 --
 -- A plugin only hooks into the Hyprland build it was compiled for: Hyprland compares its own hash with the plugin's (the
 -- commit and the Hypr library minors, PluginAPI.hpp __hyprland_api_get_client_hash). Each build has a stamp next to it
--- (<name>.abi, first line: that ABI string, written by the build itself). At the first parse of a Hyprland instance the
--- session loads the first build whose stamp is the ABI of the Hyprland that runs:
+-- (<name>.abi, first line: that ABI string, written by the build itself; second line: `source <id>`, the Grassfield
+-- version it was built from). The shell and the plugin of one release speak one protocol (ADR-0007), so a build is used
+-- only when its source is the installed Grassfield version (the first line of /usr/src/grassfield-compositor/VERSION,
+-- the same package as the packaged build, which needs the desktop of exactly its version). At the first parse of a
+-- Hyprland instance the session loads the first build whose stamp is the ABI of the Hyprland that runs and that version:
 --   1. the packaged one (/usr/lib/grassfield/grassfield-compositor.so, root's);
 --   2. the one the user built with grassfield-compositor-rebuild ($XDG_CACHE_HOME/grassfield/compositor/<abi>/), only as
 --      `grassfield-compositor-rebuild --vetted` vouches for it: Lua cannot look at owners, modes or symlinks, the script
@@ -19,6 +22,7 @@ local M = {}
 
 M.packaged = "/usr/lib/grassfield/grassfield-compositor.so"
 M.version_h = "/usr/include/hyprland/src/version.h"
+M.source_version = "/usr/src/grassfield-compositor/VERSION"
 M.rebuild = "/usr/lib/grassfield/grassfield-compositor-rebuild"
 
 local function read(path)
@@ -110,6 +114,22 @@ function M.stamp(path, line)
   return (line or first_line)((path:gsub("%.so$", ".abi")))
 end
 
+-- The Grassfield version a build was made from: its stamp's second line, `source <id>`, or nil.
+function M.stamp_source(path, read_text)
+  local text = (read_text or read)((path:gsub("%.so$", ".abi")))
+  if type(text) ~= "string" then return nil end
+  return text:match("^[^\n]*\nsource ([^\n]+)")
+end
+
+-- The installed Grassfield version (the first line of the sources' VERSION, written by the PKGBUILD), or nil.
+function M.installed_source(read_text)
+  local text = (read_text or read)(M.source_version)
+  if type(text) ~= "string" then return nil end
+  local v = text:match("^([^\n]*)"):gsub("[^%w%._%+:~%-]", "")
+  if v == "" then return nil end
+  return v
+end
+
 -- The check runs while Hyprland parses its config, on its main thread: bounded (coreutils timeout, then a kill one second
 -- later). A check that times out, fails or cannot run vouches for nothing.
 M.timeout = "/usr/bin/timeout"
@@ -117,11 +137,13 @@ M.vetted_seconds = 5
 
 -- What grassfield-compositor-rebuild --vetted vouches for (the user's build for `abi`, default the installed Hyprland's),
 -- or nil. `abi` comes from M.user_build_abi (letters, digits, dots, dashes, underscores): nothing for the shell to expand.
-function M.vetted(abi)
+-- `loaded` (with an ABI): the build this Hyprland instance loaded at its first parse, kept on a reload until the next
+-- login: every check but the source version (a package update in the session may have moved it on).
+function M.vetted(abi, loaded)
   if not exists(M.rebuild) or not exists(M.timeout) or type(io.popen) ~= "function" then return nil end
   if abi and not abi:match("^%w[%w%._%-]*$") then return nil end
-  local command = string.format("%s -k 1 %d %s --vetted%s 2>/dev/null", M.timeout, M.vetted_seconds, M.rebuild,
-    abi and (" '" .. abi .. "'") or "")
+  local command = string.format("%s -k 1 %d %s --vetted%s%s 2>/dev/null", M.timeout, M.vetted_seconds, M.rebuild,
+    abi and (" '" .. abi .. "'") or "", (abi and loaded) and " --loaded" or "")
   local ok, p = pcall(io.popen, command)
   if not ok or not p then return nil end
   local line = p:read("l")
@@ -142,10 +164,11 @@ function M.verifying(read_cmdline)
 end
 
 -- The build to load, and why: path and "packaged" | "user" | "kept" (a config reload keeps the build of the first parse);
--- or nil and "no-match" (no build for this Hyprland: degraded mode, the shell's notice), "updated" (the running Hyprland
--- is not the installed one: nothing until the next login), "none" (no extension installed).
+-- or nil and "no-match" (no build for this Hyprland and this Grassfield version: degraded mode, the shell's notice),
+-- "updated" (the running Hyprland is not the installed one: nothing until the next login), "none" (no extension
+-- installed).
 -- `env` (tests): { read = fn(path) -> text|nil, line = fn(path) -> first line|nil, exists = fn(path) -> bool,
--- getenv = fn(name) -> string|nil, vetted = fn(abi|nil) -> path|nil }.
+-- getenv = fn(name) -> string|nil, vetted = fn(abi|nil, loaded|nil) -> path|nil }.
 function M.choose(env)
   env = env or {}
   local present = env.exists or exists
@@ -161,11 +184,16 @@ function M.choose(env)
   local kept = note and line(note)
   if kept and kept == M.packaged and present(kept) then return kept, "kept" end
   local kept_abi = kept and running and M.user_build_abi(kept, getenv)
-  if kept_abi and kept_abi:sub(1, #running + 1) == running .. "_" and vetted(kept_abi) == kept then return kept, "kept" end
-  local installed = M.abi((env.read or read)(M.version_h))
+  if kept_abi and kept_abi:sub(1, #running + 1) == running .. "_" and vetted(kept_abi, true) == kept then return kept, "kept" end
+  local read_text = env.read or read
+  local installed = M.abi(read_text(M.version_h))
   if not installed then return nil, present(M.packaged) and "no-match" or "none" end
   if running and installed:sub(1, #running + 1) ~= running .. "_" then return nil, "updated" end
-  if present(M.packaged) and M.stamp(M.packaged, line) == installed then return M.packaged, "packaged" end
+  local source = M.installed_source(read_text)
+  if present(M.packaged) and M.stamp(M.packaged, line) == installed and source
+      and M.stamp_source(M.packaged, read_text) == source then
+    return M.packaged, "packaged"
+  end
   local user = M.user_build(installed, getenv)
   if user and vetted() == user then return user, "user" end
   return nil, present(M.packaged) and "no-match" or "none"

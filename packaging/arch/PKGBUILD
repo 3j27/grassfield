@@ -239,7 +239,10 @@ package_grassfield-compositor() {
   # (ADR-0009 "Amendment 2026-10-23", audit GF-033): the session loads this build only when its stamp is the running
   # Hyprland's ABI, else the user's own build (grassfield-compositor-rebuild, as the user, into the user's cache), else none
   # (degraded mode with a notice). Nothing is ever compiled as root or by a pacman hook.
-  depends=(hyprland)
+  # The plugin and the shell of one release speak one protocol (ADR-0007; the gfc/1 amendment of 2026-10-24 changed the
+  # Stages event): this package needs the desktop of exactly its own version, so pacman upgrades the pair together and
+  # refuses a partial upgrade of either. The desktop does not depend on this package: it runs without the plugin (C2).
+  depends=(hyprland "grassfield-desktop=$pkgver-$pkgrel")
   # Own code MIT; the server code generated from the KDE appmenu protocol XML LGPL-2.1-or-later; Hyprland's headers BSD-3-Clause.
   license=(MIT LGPL-2.1-or-later BSD-3-Clause)
   # Debug symbols stay in the .so (built RelWithDebInfo): a crash inside Hyprland has to be readable. No split package.
@@ -265,7 +268,11 @@ package_grassfield-compositor() {
     echo "grassfield-compositor: the plugin was built for '$built_abi', the installed Hyprland is '$installed_abi': rebuild it" >&2
     return 1
   fi
-  install -Dm644 "$srcdir/compositor-out/grassfield-compositor.abi" "$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
+  # The stamp's second line: the Grassfield version of the build (the same id as the sources' VERSION below), compared by
+  # the loader and the rebuild with the installed sources: a build of another Grassfield version is never loaded.
+  install -d "$pkgdir/usr/lib/grassfield"
+  printf '%s\nsource %s-%s\n' "$built_abi" "$pkgver" "$pkgrel" >"$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
+  chmod 0644 "$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
   install -Dm755 "$root/packaging/arch/grassfield-compositor-rebuild" "$pkgdir/usr/lib/grassfield/grassfield-compositor-rebuild"
   # The commands a person types are on PATH (grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
   install -d "$pkgdir/usr/bin"

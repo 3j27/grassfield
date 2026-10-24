@@ -43,7 +43,6 @@ TestCase {
     }
 
     function test_firesOncePerVisit() {
-        gate.coverGraceMs = 0;
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
         wait(120);
@@ -57,9 +56,9 @@ TestCase {
     // Closing the surface the action opened: the covered window loses and regains hover with the
     // pointer still in the corner. Must not fire again (fire -> covered -> uncovered).
     function test_coverExitAndReenterDoesNotRefire() {
-        gate.coverGraceMs = 5000;
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
+        gate.covered = true;
         gate.hovering = false;
         verify(gate.latched);
         gate.pointerSeen(3);
@@ -71,9 +70,9 @@ TestCase {
 
     // Moving away (reported by another surface) re-arms; coming back fires again.
     function test_movingAwayRearms() {
-        gate.coverGraceMs = 5000;
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
+        gate.covered = true;
         gate.hovering = false;
         gate.hovering = true;
         gate.pointerSeen(5);
@@ -81,29 +80,54 @@ TestCase {
         gate.hovering = false;
         gate.pointerSeen(20);
         verify(!gate.latched);
+        gate.covered = false;
         gate.hovering = true;
         tryCompare(testCase, "fires", 2, 1000);
     }
 
-    // The pointer leaves within the cover grace window and jumps straight back.
+    // The pointer leaves onto a client window (nothing covers the corner) and jumps straight back: a true leave, the
+    // corner fires again however quick (the old 800-ms grace swallowed it).
     function test_quickLeaveAndJumpBackFires() {
-        gate.coverGraceMs = 5000;
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
         gate.hovering = false;
-        gate.pointerSeen(40);
         verify(!gate.latched);
         gate.hovering = true;
         tryCompare(testCase, "fires", 2, 1000);
     }
 
-    function test_lateExitRearms() {
-        gate.coverGraceMs = 30;
+    // Re-review (the latent risk): a panel slow to cover the corner (well past the old 800-ms grace) and then closed
+    // with the pointer still resting there. A hover exit while a full-attention surface is up is a cover, whenever it
+    // comes: the corner does not fire again until the pointer truly leaves.
+    function test_aSlowCoverThenACloseWithThePointerRestingDoesNotRefire() {
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
-        wait(60);
+        gate.covered = true;   // the panel is open (FocusReturn) ...
+        wait(900);             // ... and maps late
+        gate.hovering = false; // the cover
+        verify(gate.latched);
+        gate.covered = false;  // closed
+        gate.hovering = true;  // uncovered, the pointer never moved
+        wait(150);
+        compare(fires, 1);
+        verify(gate.latched);
+        gate.pointerSeen(30);  // the pointer really goes away ...
         gate.hovering = false;
-        verify(!gate.latched);
+        gate.hovering = true;  // ... and comes back
+        tryCompare(testCase, "fires", 2, 1000);
+    }
+
+    // The session lock (the `lock` action) covers the corner too: after the unlock with the pointer resting, no new lock.
+    function test_theSessionLockCountsAsACover() {
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 1, 1000);
+        gate.covered = true;
+        gate.hovering = false;
+        wait(1000);
+        gate.covered = false;
+        gate.hovering = true;
+        wait(150);
+        compare(fires, 1);
     }
 
     function test_blockedNeverFires() {

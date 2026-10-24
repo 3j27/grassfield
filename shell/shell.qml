@@ -167,6 +167,9 @@ ShellRoot {
     readonly property string extensionTool: "/usr/lib/grassfield/grassfield-compositor-rebuild"
     property string extensionVersion: ""
     property bool extensionRebuildTried: false
+    // The build that needs rebuilding was made from an older Grassfield (ExtensionStatus "stale"): its notices speak of an
+    // update to finish, never of the Hyprland version.
+    property bool extensionStale: false
 
     // The degraded notice is shown once the compositor extension is known to be absent (Capabilities.absent: not at the
     // first timeout, a loaded plugin can answer late at login) and withdrawn when it is present.
@@ -193,16 +196,30 @@ ShellRoot {
         if (!Capabilities.absent || degradedNoticeKey !== "")
             return;
         const status = ExtensionStatus.parse(text);
-        const kind = ExtensionStatus.notice(status);
-        console.info("grassfield: degraded notice posted (compositor extension absent: " + kind + ")");
-        if (kind !== "mismatch") {
+        // The choice is ExtensionStatus.degradedNotice (unit tested: a stale build never gets a text naming Hyprland).
+        const key = ExtensionStatus.degradedNotice(status, Settings.windowsRebuildExtension, extensionRebuildTried);
+        console.info("grassfield: degraded notice posted (compositor extension absent: " + ExtensionStatus.notice(status) + ")");
+        extensionVersion = ExtensionStatus.version(status);
+        extensionStale = key.startsWith("stale");
+        const rebuild = key.endsWith("-rebuilding");
+        switch (key) {
+        case "stale-rebuilding":
+            // GF-083's wording: an update finishes at the next login (macOS: "Restart to finish installing").
+            degradedNoticeKey = Notifications.postInternal(qsTr("Updating the compositor extension"), qsTr("Grassfield was updated, and its compositor extension is being updated in the background. Window titlebars and minimize come back once it is done, or after the next login."));
+            break;
+        case "stale-manual":
+            degradedNoticeKey = Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Run grassfield-compositor-rebuild in a terminal to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then."));
+            break;
+        case "mismatch-rebuilding":
+            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.").arg(hyprlandName()));
+            break;
+        case "mismatch-manual":
+            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.").arg(hyprlandName()));
+            break;
+        default:
             degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
             return;
         }
-        extensionVersion = ExtensionStatus.version(status);
-        const rebuild = ExtensionStatus.rebuilds(status, Settings.windowsRebuildExtension, extensionRebuildTried);
-        const body = rebuild ? qsTr("It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.") : qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.");
-        degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), body.arg(hyprlandName()));
         if (rebuild) {
             extensionRebuildTried = true;
             console.info("grassfield: compositor extension rebuild started");
@@ -212,11 +229,16 @@ ShellRoot {
 
     // The notice for the --session answer.
     function postRebuildResult(text: string): void {
-        const outcome = ExtensionStatus.outcome(ExtensionStatus.parse(text));
-        console.info("grassfield: compositor extension rebuild: " + outcome);
-        if (outcome === "loaded")
+        const status = ExtensionStatus.parse(text);
+        const outcome = ExtensionStatus.resultNotice(status, extensionStale);
+        console.info("grassfield: compositor extension rebuild: " + ExtensionStatus.outcome(status));
+        if (outcome === "updated-loaded")
+            Notifications.postInternal(qsTr("Compositor extension updated"), qsTr("It is up to date and active."));
+        else if (outcome === "updated-built")
+            Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("The compositor extension was updated. Log out and back in to use it."));
+        else if (outcome === "rebuilt-loaded")
             Notifications.postInternal(qsTr("Compositor extension rebuilt"), qsTr("It is built for %1 and loaded.").arg(hyprlandName()));
-        else if (outcome === "built")
+        else if (outcome === "rebuilt-built")
             Notifications.postInternal(qsTr("Compositor extension rebuilt"), qsTr("It is built for %1. Log out and back in to use it.").arg(hyprlandName()));
         else if (outcome === "cannot-build")
             Notifications.postInternal(qsTr("Compositor extension not rebuilt"), qsTr("The build tools are missing or another build is running. Run grassfield-compositor-rebuild in a terminal to see why."));

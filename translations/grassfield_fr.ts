@@ -6194,6 +6194,10 @@
 <context>
     <name>shell</name>
     <message>
+        <source>Grassfield was updated, and its compositor extension is being updated in the background. Window titlebars and minimize come back once it is done, or after the next login.</source>
+        <translation>Grassfield a été mis à jour et son extension du compositeur est en cours de mise à jour en arrière-plan. Les barres de titre et la réduction des fenêtres reviennent dès qu’elle est terminée, ou après la prochaine ouverture de session.</translation>
+    </message>
+    <message>
         <source>It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.</source>
         <translation>Elle n’est pas encore compilée pour %1. Les barres de titre et la réduction des fenêtres sont indisponibles pendant sa compilation en arrière-plan.</translation>
     </message>
@@ -6204,6 +6208,18 @@
     <message>
         <source>Compositor extension needs a rebuild</source>
         <translation>L’extension du compositeur doit être recompilée</translation>
+    </message>
+    <message>
+        <source>Compositor extension updated</source>
+        <translation>Extension du compositeur mise à jour</translation>
+    </message>
+    <message>
+        <source>It is up to date and active.</source>
+        <translation>Elle est à jour et active.</translation>
+    </message>
+    <message>
+        <source>The compositor extension was updated. Log out and back in to use it.</source>
+        <translation>L’extension du compositeur a été mise à jour. Fermez la session et rouvrez-la pour l’utiliser.</translation>
     </message>
     <message>
         <source>Compositor extension rebuilt</source>
@@ -6232,6 +6248,14 @@
     <message>
         <source>Log out to finish updating</source>
         <translation>Fermez la session pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>Updating the compositor extension</source>
+        <translation>Mise à jour de l’extension du compositeur</translation>
+    </message>
+    <message>
+        <source>Grassfield was updated. Run grassfield-compositor-rebuild in a terminal to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then.</source>
+        <translation>Grassfield a été mis à jour. Lancez grassfield-compositor-rebuild dans un terminal pour mettre à jour son extension du compositeur, puis fermez la session et rouvrez-la. Les barres de titre et la réduction des fenêtres sont indisponibles d’ici là.</translation>
     </message>
     <message>
         <source>Grassfield was updated. Log out and back in to use the new version.</source>

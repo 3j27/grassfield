@@ -27,7 +27,7 @@ Singleton {
     // Last state (StagesState.parse of `hyprctl grassfield-stages`, or the off state of a notice) or null: none yet, Stages
     // not active, or the state could not be fetched (the strip hides rather than show a stale state as current).
     property var state: null
-    // The fetch of the state (StagesState.newFetch: running, again, tries); StagesState decides, this file runs it.
+    // The fetch of the state (StagesState.newFetch); StagesState decides, this file runs it.
     property var fetch: StagesState.newFetch()
     // The running fetch's reply is still wanted (false once it timed out: a stopped fetch's late output is dropped).
     property bool awaiting: false
@@ -46,8 +46,13 @@ Singleton {
         return state && state.monitors[name] ? state.monitors[name] : null;
     }
 
-    // Applies a step of the fetch (StagesState.onNotice/onReply/onTimeout/onRetry). `text`: the reply the step parsed ("" for
-    // the others); Compositor gets it with each new state, nothing when the state is off or unknown.
+    // What a step of the fetch needs to know: may Stages run, what is shown, the time.
+    function context(): var {
+        return {active: root.active, shown: root.state, now: Date.now()};
+    }
+
+    // Applies a step of the fetch (StagesState.onNotice/onReply/onTimeout/onRetry/onTick). `text`: the reply the step
+    // parsed ("" for the others); Compositor gets it with each new state, nothing when the state is off or unknown.
     function step(out: var, text: string): void {
         root.fetch = out.fetch;
         if (out.state !== undefined) {
@@ -57,6 +62,12 @@ Singleton {
         if (out.retryMs > 0) {
             retryTimer.interval = out.retryMs;
             retryTimer.restart();
+        }
+        if (out.staleMs > 0) {
+            staleTimer.interval = out.staleMs;
+            staleTimer.restart();
+        } else {
+            staleTimer.stop();
         }
         if (out.start)
             root.startFetch();
@@ -75,6 +86,7 @@ Singleton {
     // Stages is no longer active: no state, no fetch, nothing pending (a fetch still running ends unheard).
     function reset(): void {
         retryTimer.stop();
+        staleTimer.stop();
         fetchDeadline.stop();
         root.awaiting = false;
         root.startPending = false;
@@ -136,7 +148,7 @@ Singleton {
             if (!notice)
                 return;
             root.reason = notice.reason;
-            root.step(StagesState.onNotice(root.fetch, notice, root.active), "");
+            root.step(StagesState.onNotice(root.fetch, notice, root.context()), "");
             if (notice.reason === "no-strip" || notice.reason === "interrupted")
                 root.resendNeeded(notice.reason);
         }
@@ -153,7 +165,7 @@ Singleton {
                     return;
                 root.awaiting = false;
                 fetchDeadline.stop();
-                root.step(StagesState.onReply(root.fetch, text, root.state, root.active), text);
+                root.step(StagesState.onReply(root.fetch, text, root.context()), text);
             }
         }
         onRunningChanged: {
@@ -175,14 +187,21 @@ Singleton {
             root.awaiting = false;
             root.startPending = false;
             stateFetch.running = false;
-            root.step(StagesState.onTimeout(root.fetch, root.active), "");
+            root.step(StagesState.onTimeout(root.fetch, root.context()), "");
         }
     }
 
     Timer {
         id: retryTimer
 
-        onTriggered: root.step(StagesState.onRetry(root.fetch, root.active), "")
+        onTriggered: root.step(StagesState.onRetry(root.fetch, root.context()), "")
+    }
+
+    // The time bound on a state no successful fetch has confirmed since a newer notice (StagesState.staleAfterMs).
+    Timer {
+        id: staleTimer
+
+        onTriggered: root.step(StagesState.onTick(root.fetch, root.context()), "")
     }
 
     // Test hook (tests/visual waits on it): `qs ipc call stages status` is "unavailable" without `stages-available`,
