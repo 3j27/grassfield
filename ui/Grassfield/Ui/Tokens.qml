@@ -1125,6 +1125,11 @@ QtObject {
     // minimum width of the list Name column (was filesColumnWidth)
     readonly property int filesListNameMinWidth: 230
 
+    // estimate: ms after Show Desktop moved the windows during which compositor events are not taken as the user switching Space or opening a window
+    readonly property int showDesktopGuardMs: 400
+    // estimate: ms after start before the windows a previous run left parked by Show Desktop are brought back (the window list must be known)
+    readonly property int showDesktopRecoverMs: 1500
+
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewWindowWidth: 860
     // estimate: Preview app (docs/specs/preview.md)

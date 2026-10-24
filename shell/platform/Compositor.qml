@@ -8,6 +8,7 @@ import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
+import "ShowDesktop.js" as ShowDesktop
 import "StagesFront.js" as StagesFront
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
@@ -91,6 +92,8 @@ Singleton {
     function activate(toplevel: var): void {
         if (!toplevel)
             return;
+        // Show Desktop ends: every window is back before the chosen one is raised.
+        root.endShowDesktop();
         if (isMinimized(toplevel)) {
             unminimize(toplevel);
             return;
@@ -300,6 +303,9 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "configreloaded" && root.reduceMotion)
                 root.pushMotion();
+            // Switching Space or opening a window ends Show Desktop (our own moves raise neither).
+            if (ShowDesktop.endsOn(event.name) && root.desktopRecord && Date.now() - root.desktopHiddenAt > Tokens.showDesktopGuardMs)
+                root.endShowDesktop();
         }
     }
 
@@ -476,37 +482,124 @@ Singleton {
         hiddenWindows(0).forEach(w => dispatchRequest(moveRequest(Minimized.normalizeAddress(w.address), String(root.focusedWorkspace.id))));
     }
 
-    // Windows Show Desktop moved away: [address]. Non-empty means the desktop is shown and the next call brings them back.
-    property var desktopHidden: []
+    // ---- Show Desktop (macOS F11 / Cmd+F3, GF-106) ----
+    //
+    // Moves the windows of the focused display's Space aside (to special:desktop) and hands the keyboard to the desktop
+    // icons. Switching Space, opening a window, activating a window (Dock, switcher) or pressing it again ends it: every
+    // window goes back to its Space in its tiling order and the window that had the focus gets it again (ShowDesktop.js).
+    // The record is kept in the state dir, so a restarted shell (or one that crashed) puts the windows back at start.
+    // Does nothing with Stages on (a stage cannot be rebuilt window by window, docs/specs/stages.md ST8/ST9), and minimized
+    // or hidden windows are left alone.
+    property var desktopRecord: null
+    property real desktopHiddenAt: 0
+    readonly property string desktopStateDir: {
+        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
+        if (dev)
+            return dev;
+        const xdg = Quickshell.env("XDG_STATE_HOME");
+        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
+    }
+    readonly property string desktopStatePath: desktopStateDir + "/show-desktop.json"
 
-    // Show Desktop (macOS F11 / Cmd+F3, GF-106): hides every visible window of the focused Space and hands the keyboard to
-    // the desktop icons (arrows and Tab move between them); called again it brings back the windows it hid, the ones still
-    // open. Without a focused Space nothing happens.
+    function toplevelData(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => {
+            const at = t.lastIpcObject && Array.isArray(t.lastIpcObject.at) ? t.lastIpcObject.at : [0, 0];
+            return {
+                address: t.address,
+                workspace: t.workspace ? t.workspace.id : 0,
+                parked: t.workspace ? t.workspace.name === ShowDesktop.PARKING : false,
+                x: at[0],
+                y: at[1],
+                minimized: t.wayland ? isMinimized(t.wayland) : false,
+                hidden: t.wayland ? isHidden(t.wayland) : false
+            };
+        });
+    }
+
+    function persistDesktopRecord(): void {
+        if (desktopFile.path !== "")
+            desktopFile.setText(ShowDesktop.serialize(root.desktopRecord));
+    }
+
+    // Brings back the windows of `record` that still wait on the parking workspace, then the focus.
+    function restoreDesktop(record: var): void {
+        if (!record)
+            return;
+        const parked = toplevelData().filter(w => w.parked).map(w => w.address);
+        const back = ShowDesktop.survivors(record, parked);
+        back.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
+        if (record.focus !== "" && back.indexOf(record.focus) >= 0)
+            dispatchRequest(Minimized.focusWindowRequest(record.focus));
+    }
+
+    // Ends Show Desktop (if on): the record is gone before the windows move, so that nothing can end it twice.
+    function endShowDesktop(): bool {
+        const record = root.desktopRecord;
+        if (!record)
+            return false;
+        root.desktopRecord = null;
+        persistDesktopRecord();
+        restoreDesktop(record);
+        return true;
+    }
+
     function showDesktop(): void {
-        const space = root.focusedWorkspace;
+        if (endShowDesktop())
+            return;
+        const monitor = Hyprland.focusedMonitor;
+        const space = monitor ? monitor.activeWorkspace : null;
         if (!space)
             return;
-        if (root.desktopHidden.length > 0) {
-            const back = root.desktopHidden;
-            root.desktopHidden = [];
-            const parked = hiddenWindows(0).map(w => Minimized.normalizeAddress(w.address));
-            back.filter(a => parked.indexOf(a) >= 0).forEach(a => dispatchRequest(moveRequest(a, String(space.id))));
-            return;
-        }
-        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
-        const hide = [];
-        for (let i = 0; i < all.length; i++) {
-            const t = all[i];
-            if (t.workspace && t.workspace.id === space.id && t.wayland && !isMinimized(t.wayland) && !isHidden(t.wayland))
-                hide.push(t);
-        }
-        if (hide.length === 0) {
+        const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
+        const record = ShowDesktop.capture(toplevelData(), monitor.name, space.id, focused ? focused.address : "", Settings.windowsStages);
+        if (!record) {
             DesktopState.focusRequested();
             return;
         }
-        root.desktopHidden = hide.map(t => Minimized.normalizeAddress(t.address));
-        hide.forEach(t => dispatchRequest(moveRequest(t.address, hiddenWorkspace)));
+        root.desktopRecord = record;
+        root.desktopHiddenAt = Date.now();
+        persistDesktopRecord();
+        record.windows.forEach(w => dispatchRequest(moveRequest(w.address, ShowDesktop.PARKING)));
         DesktopState.focusRequested();
+    }
+
+    // The windows still parked by a Show Desktop of a previous run (the shell restarted or crashed): back at start, once
+    // the window list is known.
+    Timer {
+        id: desktopRecover
+        interval: Tokens.showDesktopRecoverMs
+        onTriggered: {
+            const record = root.desktopRecord;
+            if (record) {
+                root.desktopRecord = null;
+                root.persistDesktopRecord();
+                root.restoreDesktop(record);
+            }
+        }
+    }
+
+    Process {
+        id: desktopPrepare
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; chmod 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.desktopStateDir, root.desktopStatePath]
+        running: true
+        onRunningChanged: {
+            if (!running)
+                desktopFile.path = root.desktopStatePath;
+        }
+    }
+
+    FileView {
+        id: desktopFile
+        printErrors: false
+        atomicWrites: true
+        onLoaded: {
+            const record = ShowDesktop.parse(desktopFile.text());
+            if (record && !root.desktopRecord) {
+                root.desktopRecord = record;
+                desktopRecover.restart();
+            }
+        }
     }
 
     // "Hide Others": hides every visible window of other apps.
