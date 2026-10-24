@@ -20,6 +20,7 @@ runs (hyprctl, notify-send or gdbus, systemctl, uwsm) are found through PATH.
 import fcntl
 import glob
 import json
+import math
 import os
 import re
 import subprocess
@@ -33,13 +34,27 @@ ACTIONS = {
 }
 ADDRESS = re.compile(r"^0x[0-9a-fA-F]+$")
 POLL = 0.25
+TIMED_OUT = 124  # returncode of a helper that did not answer in time
+SETTLE_EMPTY = 2  # consecutive empty window lists before the windows count as gone
+ASK_TIMEOUT = 295  # seconds a "<Action> Anyway" notice waits; it expires by itself a little after
 
 
 def run(argv, **kw):
     try:
         return subprocess.run(argv, capture_output=True, text=True, timeout=kw.pop("timeout", 10), **kw)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(argv, TIMED_OUT, "", "")
     except (OSError, subprocess.SubprocessError):
         return None
+
+
+def bounded_seconds(text, default, lo=0.0, hi=600.0):
+    """A finite number of seconds within [lo, hi]; anything else (nan, inf, text, out of range) is the default."""
+    try:
+        v = float(text)
+    except (TypeError, ValueError):
+        return default
+    return v if math.isfinite(v) and lo <= v <= hi else default
 
 
 def windows():
@@ -51,7 +66,8 @@ def windows():
         data = json.loads(r.stdout)
     except ValueError:
         return None
-    if not isinstance(data, list):
+    # Anything but a list of objects is not an answer about windows ([1], "x", {}): unknown, never "no windows".
+    if not isinstance(data, list) or not all(isinstance(c, dict) for c in data):
         return None
     return [(c.get("address", ""), c.get("class", "") or "", c.get("title", "") or "") for c in data if isinstance(c, dict)]
 
@@ -104,11 +120,15 @@ def notify_blocked(action, names, unknown=False):
     label, anyway = ACTIONS[action]
     title = "Can't %s now" % label.lower()
     if unknown:
-        body = "The list of open windows could not be read, so nothing was closed. Your work may still be open."
+        body = "The list of open windows could not be read, so the session was not ended. Your work may still be open."
     else:
         body = "These applications are still open and may be waiting for you to save your work: %s." % ", ".join(names[:5])
-    r = run(["notify-send", "-a", "Grassfield", "-u", "critical", "-t", "0", "-w", "-A", "force=" + anyway, title, body],
-            timeout=300)
+    # The notice expires after ASK_TIMEOUT s (-t, milliseconds), before this process stops waiting: no "Anyway" button is left
+    # behind that does nothing. A helper that timed out anyway has already shown the notice: no second one.
+    r = run(["notify-send", "-a", "Grassfield", "-u", "critical", "-t", str(ASK_TIMEOUT * 1000), "-w", "-A", "force=" + anyway,
+             title, body], timeout=ASK_TIMEOUT + 5)
+    if r is not None and r.returncode == TIMED_OUT:
+        return False
     if r is None or r.returncode != 0:
         notify_plain(title, body)
         return False
@@ -139,15 +159,19 @@ def first_list(deadline):
 
 def settle(deadline):
     """(known, windows still open) at the deadline. A failed query is retried and is never read as "no windows": the state
-    is known only when the compositor's last answer was a list, and the session may end only on an empty known list."""
-    cur = None
+    is known only when the compositor's last answer was a list, and the windows count as gone only after SETTLE_EMPTY empty
+    lists in a row (an application may close its window and open its "Save changes?" sheet a moment later)."""
     last = []
+    empty = 0
     while True:
         cur = windows()
         if cur is not None:
             last = cur
-            if not cur:
+            empty = empty + 1 if not cur else 0
+            if empty >= SETTLE_EMPTY:
                 return True, []
+        else:
+            empty = 0
         if time.monotonic() >= deadline:
             return cur is not None, last
         time.sleep(POLL)
@@ -155,12 +179,12 @@ def settle(deadline):
 
 def main(argv):
     force = "--force" in argv
-    timeout = float(os.environ.get("GRASSFIELD_SESSION_END_TIMEOUT", "15"))
+    timeout = bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_TIMEOUT"), 15.0)
     args = []
     rest = iter(argv[1:])
     for a in rest:
         if a == "--timeout":
-            timeout = float(next(rest, "15"))
+            timeout = bounded_seconds(next(rest, None), timeout)
         elif not a.startswith("--"):
             args.append(a)
     if len(args) != 1 or args[0] not in ACTIONS:
@@ -180,7 +204,7 @@ def main(argv):
             # Ask the windows that exist now, once. A window that appears later is the application's own "Save changes?"
             # sheet: closing it would answer Cancel for the user, so it is left alone and counted as "still open".
             close_windows(first)
-            known, current = settle(time.monotonic() + timeout) if first else (True, [])
+            known, current = settle(time.monotonic() + timeout)
             if not known:
                 print("grassfield-session-end: the window list stayed unknown, nothing is ended", file=sys.stderr)
                 if not notify_blocked(action, app_names(current), unknown=True):
@@ -188,7 +212,16 @@ def main(argv):
             elif current:
                 if not notify_blocked(action, app_names(current)):
                     return 3
-    time.sleep(float(os.environ.get("GRASSFIELD_SESSION_END_GRACE", "1")))  # Chromium and friends finish writing
+        # Chromium and friends finish writing; then one more look: a window that appeared during the grace (a late Save
+        # sheet) or an answer that cannot be read stops the logout. macOS ends it only when every app has really quit.
+        time.sleep(bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_GRACE"), 1.0, 0.0, 30.0))
+        last = windows()
+        if last is None or last:
+            print("grassfield-session-end: windows are open after the grace, nothing is ended", file=sys.stderr)
+            if not notify_blocked(action, app_names(last or []), unknown=last is None):
+                return 3
+    else:
+        time.sleep(bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_GRACE"), 1.0, 0.0, 30.0))
     end_session(action)
     return 0
 

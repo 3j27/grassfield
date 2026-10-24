@@ -22,6 +22,12 @@ if args == ["-j", "clients"]:
     open(d + "/clients.calls", "w").write(str(n))
     if os.path.exists(d + "/compositor-down") or str(n) in os.environ.get("FAKE_FAIL_CALLS", "").split():
         sys.exit(1)
+    # A scripted answer per call (seq/N.json; a call past the last file repeats the last one), else the live client list.
+    seq = sorted(int(f[:-5]) for f in os.listdir(d + "/seq") if f.endswith(".json")) if os.path.isdir(d + "/seq") else []
+    if seq:
+        use = max([i for i in seq if i <= n] or [seq[0]])
+        sys.stdout.write(open(d + "/seq/%d.json" % use).read())
+        sys.exit(0)
     print(json.dumps(clients()))
 elif args and args[0] == "dispatch":
     open(d + "/hyprctl.log", "a").write(args[1] + "\n")
@@ -50,8 +56,9 @@ SH
 chmod +x "$bin"/*
 
 run() { # run <clients-json> <args...>; env FAKE_* passes through; prints the exit status in $status
-  : >"$tmp/calls.log"; : >"$tmp/hyprctl.log"; rm -f "$tmp/compositor-down" "$tmp/clients.calls"
+  : >"$tmp/calls.log"; : >"$tmp/hyprctl.log"; rm -rf "$tmp/compositor-down" "$tmp/clients.calls" "$tmp/seq"
   printf '%s' "$1" >"$tmp/clients.json"; shift
+  if [[ -n ${SEQ:-} ]]; then mkdir -p "$tmp/seq"; i=0; for j in $SEQ; do i=$((i + 1)); printf '%s' "$j" >"$tmp/seq/$i.json"; done; fi
   status=0
   FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_RUNTIME_DIR=$tmp XDG_STATE_HOME=$tmp/state GRASSFIELD_SESSION_END_TIMEOUT=${SESSION_END_TIMEOUT:-1} GRASSFIELD_SESSION_END_GRACE=0 \
     python3 -I "$root/packaging/bin/grassfield-session-end" "$@" >"$tmp/out.log" 2>&1 || status=$?
@@ -125,6 +132,27 @@ wait "$holder" || true
 desc="without notify-send the blocked logout still shows a notice through the shell's notification service (gdbus), ends nothing"
 FAKE_NOTIFY_FAIL=1 FAKE_REFUSE="0x2" run "$two" logout
 check bash -c 'grep -q "^gdbus call --session --dest org.freedesktop.Notifications .*kate" "$1/calls.log" && ! grep -q "uwsm stop" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+
+A='[{"address":"0x1","class":"editor","title":"doc"}]'
+SAVE='[{"address":"0x9","class":"editor","title":"Save_changes?"}]'
+desc="GF-025 review M1: window list A, then ONE empty list, then a Save sheet: the session is not ended (two empty lists in a row are needed)"
+SEQ="$A [] $SAVE" run "$A" logout
+check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*editor" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="GF-025 review M1: A, [], [], then a Save sheet during the grace: the last look stops the logout"
+SEQ="$A [] [] $SAVE" run "$A" logout
+check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*editor" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="GF-025 review M1: A, then empty lists for good: the session ends"
+SEQ="$A []" run "$A" logout
+check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+desc="a JSON list of non-objects ([1]) is not 'no windows': unknown, nothing is ended"
+SEQ="[1]" run "[1]" logout
+check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*could not be read" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="a timeout of nan or inf is refused (the previous value stays): the run ends instead of waiting for ever with the lock held"
+FAKE_REFUSE="0x2" run "$two" logout --timeout nan --timeout inf
+check bash -c '[[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="the 'Anyway' notice expires by itself (-t 295000), so none is left behind when this process stops waiting"
+FAKE_REFUSE="0x2" run "$two" logout
+check grep -q "^notify-send .* -t 295000 " "$tmp/calls.log"
 
 desc="an unknown action is refused (exit 2) and ends nothing"
 run '[]' hibernate
