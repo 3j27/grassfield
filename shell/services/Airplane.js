@@ -14,8 +14,8 @@ function radiosFromRfkill(devices) {
     for (const d of devices) {
         if (TYPES.indexOf(d.type) < 0)
             continue;
-        const on = !d.soft && !d.hard;
-        out[d.type] = out[d.type] === true || on;
+        // The soft state is what Airplane Mode records and restores; a hardware switch is not ours to remember.
+        out[d.type] = out[d.type] === true || !d.soft;
     }
     return out;
 }
@@ -51,6 +51,12 @@ function reconcile(state, radios) {
         return {on: false, restore: []};
     const allOn = Object.keys(radios).every(t => radios[t] === true);
     return allOn ? {on: false, restore: []} : state;
+}
+
+// Whether a persisted "on" is stale and must be erased (written): radios are known and every one is on again (switched on by
+// hand, restored by another tool, an rfkill that failed, a reboot). Unknown radios (nothing listed yet) never clear it.
+function shouldClear(state, radios) {
+    return !!state && state.on === true && anyRadio(radios) && Object.keys(radios).every(t => radios[t] === true);
 }
 
 // Radio types to switch back on when Airplane Mode ends: those remembered that still exist.

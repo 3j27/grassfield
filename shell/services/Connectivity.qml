@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Networking
+import Grassfield.Ui
 import "Airplane.js" as Airplane
 import "../overlay/controlcenter/Model.js" as Model
 
@@ -163,9 +164,31 @@ Singleton {
         return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
     }
 
+    // Written 0600 in a 0700 directory (the repo convention for state files).
     function saveAirplane(state: var): void {
         airplaneState = state;
-        airplaneWriter.setText(Airplane.serialize(state));
+        airplaneWriter.command = ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\" && printf '%s' \"$2\" > \"$3.tmp\" && mv \"$3.tmp\" \"$3\"", "sh", stateDir, Airplane.serialize(state), airplaneFile];
+        airplaneWriter.running = true;
+    }
+
+    // A persisted "on" that no longer matches the radios is erased, not just hidden: it is checked at start (after the radios were
+    // read) and whenever a radio changes, except for a moment after Airplane Mode was just switched on or at start (the
+    // radios have not followed yet), and again when that moment ends (a failed block leaves nothing behind).
+    property bool airplaneSettling: true
+    function settleAirplane(): void {
+        if (!airplaneSettling && Airplane.shouldClear(airplaneState, radiosNow))
+            saveAirplane(Airplane.end());
+    }
+    onRadiosNowChanged: settleAirplane()
+
+    Timer {
+        id: airplaneSettle
+        running: true
+        interval: Tokens.quicksettingsAirplaneSettleMs
+        onTriggered: {
+            root.airplaneSettling = false;
+            root.settleAirplane();
+        }
     }
 
     FileView {
@@ -175,11 +198,8 @@ Singleton {
         onLoaded: root.airplaneState = Airplane.parse(text())
     }
 
-    FileView {
+    Process {
         id: airplaneWriter
-        path: root.airplaneFile
-        printErrors: false
-        atomicWrites: true
     }
     // Why the soft block is not used, "" while it is (or while the probe has not finished).
     readonly property string airplaneNote: Rfkill.probed && !Rfkill.usable ? qsTr("Airplane Mode: %1; using the Wi-Fi and Bluetooth switches").arg(Rfkill.reasonText) : ""
@@ -192,6 +212,8 @@ Singleton {
         const radios = radiosNow;
         const restore = on ? [] : Airplane.typesToRestore(airplaneState, radios);
         saveAirplane(on ? Airplane.begin(radios) : Airplane.end());
+        airplaneSettling = true;
+        airplaneSettle.restart();
         if (rfkillMode) {
             Rfkill.setBlocked(on, restore);
             return;

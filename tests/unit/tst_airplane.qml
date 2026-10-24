@@ -65,6 +65,32 @@ TestCase {
         verify(!Airplane.parse(Airplane.serialize(Airplane.end())).on);
     }
 
+    function test_staleOnIsErasedWhenEveryKnownRadioIsOn() {
+        const s = {on: true, restore: ["wlan", "bluetooth"]};
+        verify(Airplane.shouldClear(s, Airplane.radiosFromServices(true, true)));
+        verify(!Airplane.shouldClear(s, Airplane.radiosFromServices(true, false)));
+        // nothing listed yet (start-up): never erased
+        verify(!Airplane.shouldClear(s, {}));
+        verify(!Airplane.shouldClear(Airplane.end(), Airplane.radiosFromServices(true, true)));
+    }
+
+    function test_afterTheClearWifiOffAloneDoesNotComeBack() {
+        // on -> both radios back on -> cleared -> Wi-Fi off alone: not Airplane Mode, nothing to restore
+        let s = Airplane.begin(Airplane.radiosFromServices(true, true));
+        const allOn = Airplane.radiosFromServices(true, true);
+        if (Airplane.shouldClear(s, allOn))
+            s = Airplane.end();
+        const wifiOff = Airplane.radiosFromServices(false, true);
+        verify(!Airplane.reconcile(s, wifiOff).on);
+        compare(Airplane.typesToRestore(s, wifiOff), []);
+    }
+
+    function test_aHardBlockedRadioIsRecordedByItsSoftState() {
+        const r = Airplane.radiosFromRfkill([{id: 0, type: "wlan", soft: false, hard: true}]);
+        compare(r.wlan, true);
+        compare(Airplane.begin(r).restore, ["wlan"]);
+    }
+
     function test_aTypeWithSeveralDevicesIsOnWhileAnyIs() {
         const r = Airplane.radiosFromRfkill([dev("wlan", true), dev("wlan", false)]);
         compare(r.wlan, true);
