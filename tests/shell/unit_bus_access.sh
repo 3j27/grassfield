@@ -13,14 +13,16 @@ fail=0
 bus_users=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 # Compiled bus clients (no script to read): named here.
-BINARY_BUS_UNITS="grassfield-menu-bridge.service"
+BINARY_BUS_UNITS="grassfield-menu-bridge.service grassfield-shell.service"
 
 # hides_bus FILE: true when the unit hides /run/user (and so the session bus socket).
 hides_bus() {
   grep -qiE '^[[:space:]]*ProtectHome[[:space:]]*=[[:space:]]*(yes|true|1|on|tmpfs)[[:space:]]*$' "$1" ||
-    grep -qiE '^[[:space:]]*(TemporaryFileSystem|InaccessiblePaths|InaccessibleDirectories)[[:space:]]*=[[:space:]]*([^#]*[[:space:]:-])?/run(/user)?(/[^[:space:]:]*)?(:[^[:space:]]*)?([[:space:]]|$)' "$1"
+    grep -qiE '^[[:space:]]*(RootDirectory|RootImage|RootDirectoryStartOnly)[[:space:]]*=[[:space:]]*[^[:space:]]' "$1" ||
+    grep -qiE '^[[:space:]]*(TemporaryFileSystem|InaccessiblePaths|InaccessibleDirectories)[[:space:]]*=[[:space:]]*([^#]*[[:space:]:+-])?/run(/user)?(/[^[:space:]:]*)?(:[^[:space:]]*)?([[:space:]]|$)' "$1"
 }
 
+export -f hides_bus
 for unit in "$root"/packaging/systemd/*.service "$root"/packaging/systemd/*/*.conf; do
   [[ -f $unit ]] || continue
   name=${unit#"$root"/packaging/systemd/}
@@ -40,8 +42,10 @@ for unit in "$root"/packaging/systemd/*.service "$root"/packaging/systemd/*/*.co
   fi
 done
 
-desc="the scan is not vacuous: the crash, battery and migration notifiers and the menu bridge are among the bus users"
-check test "$bus_users" -ge 4
+desc="no packaged unit or drop-in hides /run/user at all (bus user or not), nor sets RootDirectory=/RootImage="
+check bash -c 'for f in "$1"/packaging/systemd/*.service "$1"/packaging/systemd/*/*.conf; do [ -f "$f" ] || continue; hides_bus "$f" && { echo "hides: $f"; exit 1; }; done; exit 0' _ "$root"
+desc="the scan is not vacuous: the crash, battery and migration notifiers, the menu bridge and the shell are among the bus users"
+check test "$bus_users" -ge 5
 for u in crash-watch battery-watch migrate-notify; do
   desc="grassfield-$u.service is recognised as a session bus user"
   check bash -c 'prog=$(sed -n "s/^ExecStart=//p" "$1/packaging/systemd/grassfield-$2.service" | head -n1); grep -qE "notify-send|busctl|gdbus" "$1/packaging/bin/${prog##*/}"' _ "$root" "$u"
@@ -55,7 +59,7 @@ mutant() { # <line>: a copy of the crash watcher with the line added
   sed -i '/^ProtectHome=/d' "$tmp/m.service"
   printf '%s\n' "$1" >>"$tmp/m.service"
 }
-for line in 'ProtectHome=yes' 'ProtectHome=true' 'ProtectHome=1' 'ProtectHome=on' 'ProtectHome=tmpfs' 'ProtectHome = yes' 'ProtectHome=YES' \
+for line in 'InaccessiblePaths=+/run/user' 'RootDirectory=/var/lib/x' 'RootImage=/var/lib/x.img' 'ProtectHome=yes' 'ProtectHome=true' 'ProtectHome=1' 'ProtectHome=on' 'ProtectHome=tmpfs' 'ProtectHome = yes' 'ProtectHome=YES' \
   'TemporaryFileSystem=/run/user' 'TemporaryFileSystem=/run' 'TemporaryFileSystem=/run/user:ro' 'InaccessiblePaths=/run/user' 'InaccessiblePaths=-/run/user' \
   'InaccessiblePaths=/run' 'InaccessiblePaths=/proc /run/user/1000'; do
   mutant "$line"

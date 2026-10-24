@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# grassfield-shell.service: the shell loads only from the system location (GF-115), a normal session end is not a failure
-# (GF-081) and the resource guard is set (GF-040). Static checks of the unit and of every `qs` caller; `systemd-analyze
-# verify` runs when the environment allows it (the Claude Code sandbox does not: then it is reported, not counted).
+# grassfield-shell.service: the shell loads only from the system location (GF-115), 255 stays a failure so OnFailure= still
+# fires (the logout case is the sleep-lock gate, GF-081) and the resource guard is set (GF-040). Static checks of the unit and of
+# every `qs`/`quickshell` ipc/kill/log caller in the shipped tree, with mutations proving the scan; `systemd-analyze verify` runs
+# when the environment allows it (the Claude Code sandbox does not: then it is reported, not counted).
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 unit=$root/packaging/systemd/grassfield-shell.service
@@ -17,10 +18,13 @@ check test "$exec_line" = "ExecStart=/usr/bin/qs -n -p $SYSTEM_PATH"
 desc="no shipped file selects the shell by name (-c/--config grassfield): that also searches the user-writable ~/.config/quickshell"
 check bash -c '! grep -rnIE "qs[[:space:]]+((ipc|log|kill)[[:space:]]+)?(-c|--config)[[:space:]]+grassfield" "$@" | grep -vE "^[^:]*:[0-9]*:[[:space:]]*(#|--|//)"' _ \
   "$root/apps" "$root/bridges" "$root/packaging" "$root/config" "$root/shell" "$root/ui" "$root/scripts/dev/gate-run.sh"
-# bare_qs DIR...: qs ipc/kill/log callers that name neither the system path (-p) nor a pid (--pid). Comment lines are skipped.
+# bare_qs DIR...: qs/quickshell ipc|kill|log callers (any quoting, /usr/bin/ prefix) that do not select the instance by pid
+# (--pid), by the system path (-p /usr/share/grassfield/shell) or through bindings.lua's shell_selector (itself checked below).
+# Comment lines are skipped. A -p with any other path, a -c name, or no selector is reported.
 bare_qs() {
-  grep -rnIHE '("qs", *"(ipc|kill|log)"|\bqs[[:space:]]+(ipc|kill|log)\b)' "$@" 2>/dev/null |
-    grep -vE '^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)' | grep -vE '(-p |--pid|"--pid"|"-p")' | grep -v shell_selector
+  grep -rnIHE "([\"']?(/usr/bin/)?(qs|quickshell)[\"']?([[:space:]]*,[[:space:]]*|[[:space:]]+)[\"']?(ipc|kill|log)[\"']?([^[:alnum:]_]|$))" "$@" 2>/dev/null |
+    grep -vE '^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)' |
+    grep -vE "(--pid|[\"']--pid[\"']|(-p|[\"']-p[\"'][[:space:]]*,)[[:space:]]+[\"']?/usr/share/grassfield/shell([\"' ]|$))" | grep -v shell_selector
 }
 export -f bare_qs
 desc="every shipped qs ipc/kill/log caller (the whole of apps, bridges, packaging, config, shell and ui) selects an instance by the system path (-p) or by pid (--pid), never by name or bare"
@@ -30,12 +34,17 @@ mkdir -p "$mut/shell/services" "$mut/packaging/bin" "$mut/config"
 printf 'var c = ["qs", "ipc", "call", "lock", "lock"];\n' >"$mut/shell/services/X.js"
 printf 'command: ["qs", "kill", "-c", "other"]\n' >"$mut/shell/services/Y.qml"
 printf 'qs ipc call lock lock\n' >"$mut/packaging/bin/z"
+printf "x = ['qs', 'ipc', 'call', 'a', 'b']\n" >"$mut/shell/services/S.js"
+printf 'exec /usr/bin/qs ipc call lock lock\n' >"$mut/packaging/bin/u"
+printf 'quickshell ipc call lock lock\n' >"$mut/packaging/bin/q"
+printf 'qs ipc -p /home/someone/shell call lock lock\n' >"$mut/packaging/bin/wp"
+printf 'command: ["qs", "ipc", "-p", "/tmp/x", "call", "a", "b"]\n' >"$mut/shell/services/W.qml"
 printf 'hl.exec_cmd("qs ipc call lock lock")\n' >"$mut/config/w.lua"
-for f in shell/services/X.js shell/services/Y.qml packaging/bin/z config/w.lua; do
+for f in shell/services/X.js shell/services/Y.qml packaging/bin/z config/w.lua shell/services/S.js packaging/bin/u packaging/bin/q packaging/bin/wp shell/services/W.qml; do
   desc="mutation: a bare qs caller in $f is caught"
   check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/$f"
 done
-printf 'var c = ["qs", "ipc", "--pid", String(pid), "call", "a", "b"];\n// qs ipc call documented in a comment\nqs ipc -p /usr/share/grassfield/shell call a b\n' >"$mut/ok.txt"
+printf 'var c = ["qs", "ipc", "--pid", String(pid), "call", "a", "b"];\n// qs ipc call documented in a comment\nqs ipc -p /usr/share/grassfield/shell call a b\ncmd = ['qs', 'ipc', '--pid', 1]\n/usr/bin/qs ipc -p /usr/share/grassfield/shell call a b\n' >"$mut/ok.txt"
 desc="a --pid caller, a -p caller and a comment are not flagged"
 check bash -c '[ -z "$(bare_qs "$1")" ]' _ "$mut/ok.txt"
 desc="every installed qs ipc caller (bindings, lid, sleep-lock stand-in) names the same system path as the unit"
