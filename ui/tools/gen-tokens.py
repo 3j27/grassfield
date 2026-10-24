@@ -208,11 +208,9 @@ def source_problems(source, headings):
             lead = re.match(r"\d+(?:\.\d+)?", section)
             ok = bool(lead) and lead.group(0) in numbers
         else:
-            ok = any(name.startswith(section.lower()) for name in names)
+            ok = section.lower() in names  # the whole heading, not a prefix of it
         if not ok:
             problems.append("cites '%s \u00a7 %s', which is not a heading of that file" % (path, section))
-    if re.search(r"master-prompt|f1-reference-gaps", source):
-        cited = True
     # A declared estimate: no reference covers the value, and the source says what it is and why ("estimate: a pressed light
     # darkens by this much": a role, not a bare word). A bare "estimate" is still not a source.
     declared_estimate = re.match(r"estimate: \S+(?:\s+\S+){3,}", source) is not None
@@ -227,10 +225,9 @@ def provenance_errors(data):
 
     def walk(node, path):
         if is_leaf(node):
-            # The plugin group's sources are copied into compositor/src/core/ThemeTokens.hpp (compositor-owned): follow-up.
-            if path[0] not in PLUGIN_GROUPS:
-                for problem in source_problems(str(node.get("source", "")), headings):
-                    errors.append(".".join(path) + " " + problem)
+            # No group is exempt, the plugin groups included (their sources are copied into the generated header).
+            for problem in source_problems(str(node.get("source", "")), headings):
+                errors.append(".".join(path) + " " + problem)
             return
         if isinstance(node, dict):
             for key, child in node.items():

@@ -38,8 +38,15 @@ def selftest():
     assert problems("docs/specs/does-not-exist.md: x"), "a missing file"
     assert problems("ADR-9999 says"), "a missing ADR"
     # Every pointer kind: a good one passes, a renamed one fails.
-    assert problems("x [ref: docs/specs/ui.md \u00a7 Material blur]") == []
+    assert problems("x [ref: docs/specs/ui.md \u00a7 Material blur follows transparency]") == []
     assert problems("x [ref: docs/specs/ui.md \u00a7 Material blurred]"), "a renamed spec section"
+    assert problems("x [ref: docs/specs/ui.md \u00a7 Material blur]"), "a prefix of a heading is not the section"
+    assert problems("x [ref: docs/specs/ui.md \u00a7 M]"), "one letter is not a section"
+    assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 M]"), "one letter is not an F1 section"
+    assert problems("estimate (see f1-reference-gaps)"), "a bare mention of the F1 file is not a pointer"
+    assert problems("see master-prompt 99.9"), "a master prompt mention without a section is not a pointer"
+    assert problems("estimate:pressed light darkens by this much"), "the declared form needs 'estimate: ' exactly"
+    assert problems("Estimate: a pressed light darkens by this much"), "and lower case"
     assert problems("x [ref: docs/specs/ui.md \u00a7 Material shadow]"), "a section that is not in the spec"
     assert problems("x (master-prompt \u00a7 5.5)") == []
     assert problems("x (master-prompt \u00a7 5.55)"), "a master prompt section that does not exist"
@@ -59,7 +66,7 @@ def real():
         print("FAIL:", e)
     # Mutation: renaming one real pointer of each kind makes the lint fail on the real file.
     text = (ROOT / "ui" / "tokens" / "tokens.json").read_text()
-    for needle, renamed in (("docs/specs/ui.md \u00a7 Material blur", "docs/specs/ui.md \u00a7 Material blurX"),
+    for needle, renamed in (("docs/specs/ui.md \u00a7 Material blur follows transparency", "docs/specs/ui.md \u00a7 Material blur follows"),
                             ("master-prompt \u00a7 5.5", "master-prompt \u00a7 5.99"),
                             ("ADR-0016 section 5", "ADR-0016 section 99"),
                             ("f1-reference-gaps.md \u00a7 Menu bar", "f1-reference-gaps.md \u00a7 Menu barX"),

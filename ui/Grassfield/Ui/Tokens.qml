@@ -141,7 +141,7 @@ QtObject {
     readonly property int radiusPanel: 18
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusDialog: 14
-    // design/reference/macos (f1-reference-gaps.md gap 7): notification banner radius 18 pt
+    // design/reference/macos (gap 7): notification banner radius 18 pt [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int radiusBanner: 18
     // docs/specs/search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
@@ -176,15 +176,15 @@ QtObject {
     readonly property real materialTintAlphaClamp: 0.82
     // A2: master-prompt § 5.5, every slider value up to 0.6 must pass; beyond it the tint falls linearly from tintAlphaClamp to tintAlphaMin at 1
     readonly property real materialTintClampUntil: 0.6
-    // GF-125: compositor blur size (per-pass radius, px) at transparency 0+: the blur grows with transparency (master-prompt § 5.5); at the default 0.25 the size is 18, what config/hypr/grassfield/looknfeel.lua ships [ref: docs/specs/ui.md § Material blur]
+    // GF-125: compositor blur size (per-pass radius, px) at transparency 0+: the blur grows with transparency (master-prompt § 5.5); at the default 0.25 the size is 18, what config/hypr/grassfield/looknfeel.lua ships [ref: docs/specs/ui.md § Material blur follows transparency]
     readonly property int materialBlurSizeMin: 12
-    // GF-125: compositor blur size at transparency 1 (linear from blurSizeMin; 12 + 24 x 0.25 = 18 at the default) [ref: docs/specs/ui.md § Material blur]
+    // GF-125: compositor blur size at transparency 1 (linear from blurSizeMin; 12 + 24 x 0.25 = 18 at the default) [ref: docs/specs/ui.md § Material blur follows transparency]
     readonly property int materialBlurSizeMax: 36
-    // GF-125: blur passes below blurPassesFrom (a nearly opaque material shows little blur: one pass fewer saves GPU time) [ref: docs/specs/ui.md § Material blur]
+    // GF-125: blur passes below blurPassesFrom (a nearly opaque material shows little blur: one pass fewer saves GPU time) [ref: docs/specs/ui.md § Material blur follows transparency]
     readonly property int materialBlurPassesLight: 2
-    // GF-125: blur passes from blurPassesFrom up (3 is what looknfeel.lua ships) [ref: docs/specs/ui.md § Material blur]
+    // GF-125: blur passes from blurPassesFrom up (3 is what looknfeel.lua ships) [ref: docs/specs/ui.md § Material blur follows transparency]
     readonly property int materialBlurPassesFull: 3
-    // GF-125: transparency from which the full pass count is used (below the default 0.25, so the default look is unchanged) [ref: docs/specs/ui.md § Material blur]
+    // GF-125: transparency from which the full pass count is used (below the default 0.25, so the default look is unchanged) [ref: docs/specs/ui.md § Material blur follows transparency]
     readonly property real materialBlurPassesFrom: 0.15
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHighlightOpacity: 0.22
@@ -619,7 +619,7 @@ QtObject {
     readonly property int notificationAppsWriteMs: 500
     // F1 gap 7: gap between stacked cards 6 +-1 (value only) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerGap: 6
-    // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards
+    // design/reference/macos (gap 7): app icon 32 pt in banners and cards [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerIconSize: 32
     // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationIconInset: 2
@@ -1520,32 +1520,32 @@ QtObject {
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it [ref: docs/decisions/ADR-0012-desktop-focus-model.md; docs/specs/desktop.md]
     readonly property int focusReturnReleaseHoldMs: 120
 
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh)
+    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarBackgroundDark: "#28282C"
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value)
+    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarBackgroundLight: "#ECECEE"
-    // window title on the dark titlebar, drawn at titleOpacity
+    // window title on the dark titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarTitleDark: "#ECECEE"
-    // window title on the light titlebar, drawn at titleOpacity
+    // window title on the light titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarTitleLight: "#28282C"
-    // estimate: the title a little softer than full ink, both appearances
+    // estimate: the title a little softer than full ink, both appearances [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property real titlebarTitleOpacity: 0.85
-    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them)
+    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarInactiveButtonDark: "#5A5A5E"
-    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar
+    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarInactiveButtonLight: "#D1D1D3"
-    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS)
+    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarPreviewTintDark: "#1D1F24"
-    // the same, light appearance (color.light.materialTint)
+    // the same, light appearance (color.light.materialTint) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarPreviewTintLight: "#F3F4F6"
-    // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review)
+    // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property real titlebarPreviewTintAlpha: 0.45
-    // the preview's edge, dark appearance (color.dark.materialBorder)
+    // the preview's edge, dark appearance (color.dark.materialBorder) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarPreviewRimDark: "#FFFFFF"
-    // the preview's edge, light appearance (color.light.materialBorder)
+    // the preview's edge, light appearance (color.light.materialBorder) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarPreviewRimLight: "#000000"
-    // estimate: the edge readable over light and dark windows (pending F1 review)
+    // estimate: the edge readable over light and dark windows (pending F1 review) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property real titlebarPreviewRimOpacity: 0.22
-    // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8)
+    // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property int titlebarPreviewRimWidth: 2
 }
