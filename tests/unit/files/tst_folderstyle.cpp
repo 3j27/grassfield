@@ -588,7 +588,10 @@ TEST(FolderStyleStore, ARealPruneWorkerCannotDropTheEntriesOfFoldersBeingMoved)
     ASSERT_TRUE(QDir().rename(f.a, f.da));
     ASSERT_TRUE(QDir().rename(f.c, f.dc));
     go.set_value();
-    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // the worker finishes: both old paths are gone on disk
+    // The worker finishes (waited for, not slept for): both old paths are gone on disk when it looked.
+    for (int i = 0; i < 500 && !store.pruneFinishedForTests(); ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_TRUE(store.pruneFinishedForTests());
     FolderStyleStore::setStatObserverForTests({});
     // Something else collects the finished result before the job's own result slot runs (a write to another folder).
     ASSERT_TRUE(store.write(other, style("#8e5bea")).fellBack);
@@ -604,6 +607,30 @@ TEST(FolderStyleStore, ARealPruneWorkerCannotDropTheEntriesOfFoldersBeingMoved)
     store.waitForPrune();
     EXPECT_EQ(store.read(f.da).color, QStringLiteral("#e5484d"));
     EXPECT_EQ(store.fallbackCount(), 2) << "the entry of the vanished unrelated folder is pruned, the moved ones stay";
+}
+
+// A move job that fails or is cancelled part-way (a conflict the user declined) leaves the other folders moved: FilesApp applies
+// the pairs KIO reported whatever the job's verdict, before lifting the protection (GF review 4). Without that, a's entry stays at
+// the old path and the next prune deletes it.
+TEST(FolderStyleStore, AFolderMovedByAJobThatFailedLaterKeepsItsColour)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 0:1 / / rw - ext4 /dev/x rw\n", ""));
+    const TwoFolders f = makeTwoFolders(*dir, store);
+    store.beginMoves({f.a, f.c});
+    ASSERT_TRUE(QDir().rename(f.a, f.da)); // a was moved; c's move failed (it stays where it was)
+    store.injectFinishedPruneForTests({f.a}); // a prune that looked after a's move
+    // The result slot of the failed job: the pairs that were really moved, then the release.
+    EXPECT_TRUE(store.moveEntries(QList<QPair<QString, QString>>{{f.a, f.da}}));
+    store.endMoves({f.a, f.c});
+    store.startPrune(true);
+    store.waitForPrune();
+    EXPECT_EQ(store.read(f.da).color, QStringLiteral("#e5484d")) << "the moved folder's entry followed it and survives the prune";
+    EXPECT_EQ(store.read(f.c).color, QStringLiteral("#3fae5a")) << "the folder that did not move keeps its entry";
+    EXPECT_EQ(store.fallbackCount(), 2);
 }
 
 TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)

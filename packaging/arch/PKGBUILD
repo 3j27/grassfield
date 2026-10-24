@@ -52,7 +52,8 @@ prepare() {
   # Nothing a previous `makepkg` run left may survive: `git archive` gives every file the commit's time, so a build directory
   # of another commit with the same VERSION would answer "no work to do" and ship that commit's plugin and libraries under
   # this commit's BUILD-COMMIT. Every build and output directory goes, and the files are extracted with the time of now (tar -m).
-  rm -rf "$srcdir/snapshot" "$srcdir"/*-build "$srcdir/compositor-out" "$srcdir/icons" "$srcdir/grassfield-icons" "$srcdir/grassfield.db" "$srcdir/BUILD-COMMIT"
+  # ${srcdir:?}: an empty $srcdir must stop here, never turn these into paths at the root.
+  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT"
   mkdir -p "$srcdir/snapshot"
   git -C "$repo" archive --format=tar HEAD | tar -x -m -C "$srcdir/snapshot"
   git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"

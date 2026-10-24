@@ -40,7 +40,12 @@ fi
 
 mode=${1:-}
 instance=""
-if [[ ${2:-} == --instance ]]; then instance=${3:-}; elif [[ -n ${2:-} ]]; then mode=""; fi
+if [[ ${2:-} == --instance ]]; then
+  instance=${3:-}
+  [[ -n $instance ]] || { echo "version-agreement: --instance needs a value (the Hyprland instance signature)" >&2; exit 2; }
+elif [[ -n ${2:-} ]]; then
+  mode=""
+fi
 [[ $mode == --nested || $mode == --installed ]] || { echo "usage: version-agreement.sh --nested | --installed [--instance SIG] | --selftest" >&2; exit 2; }
 want=$(tr -d '[:space:]' <"$root/VERSION")
 declare -a names=() vals=()

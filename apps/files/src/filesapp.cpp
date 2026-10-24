@@ -547,13 +547,14 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
         const QStringList pending = beginStyleMoves(urls);
         connect(job, &KJob::result, this, [this, job, urls, destination, created, pending] {
             // A cut selection is consumed by its paste.
-            if (!job->error()) {
+            if (!job->error())
                 QGuiApplication::clipboard()->clear();
-                QList<QPair<QUrl, QUrl>> pairs;
-                for (const auto &pair : FolderStyleLogic::followingPaste(urls, destination, *created))
-                    pairs.append({pair.first, pair.second});
-                styleMovedAll(pairs);
-            }
+            // What the job really created is listed in `created` whatever its verdict (a cancelled conflict or one failed item
+            // leaves the other folders moved): their entries follow them before the protection is lifted.
+            QList<QPair<QUrl, QUrl>> pairs;
+            for (const auto &pair : FolderStyleLogic::followingPaste(urls, destination, *created))
+                pairs.append({pair.first, pair.second});
+            styleMovedAll(pairs);
             endStyleMoves(pending);
         });
     }
@@ -788,12 +789,12 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         });
         const QStringList pending = beginStyleMoves(sources);
         connect(job, &KJob::result, this, [this, job, done, pending] {
-            if (!job->error()) {
-                QList<QPair<QUrl, QUrl>> pairs;
-                for (const auto &pair : *done)
-                    pairs.append({pair.first, pair.second});
-                styleMovedAll(pairs);
-            }
+            // The folders KIO really moved are listed in `done` whatever the job's verdict: a conflict the user cancelled, or one
+            // item that failed, leaves the others moved, and their entries must follow them before the protection is lifted.
+            QList<QPair<QUrl, QUrl>> pairs;
+            for (const auto &pair : *done)
+                pairs.append({pair.first, pair.second});
+            styleMovedAll(pairs);
             endStyleMoves(pending);
         });
     }

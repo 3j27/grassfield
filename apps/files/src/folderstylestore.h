@@ -93,6 +93,8 @@ public:
     // Tests: a prune job that started from the entries as they are now and has finished, saying `gone` (paths as given), waiting
     // to be collected: the interleaving "a job looked at the old path, then the folder was renamed" without timing.
     void injectFinishedPruneForTests(const QStringList &gone);
+    // Tests: the running prune job has finished (and waits to be collected).
+    bool pruneFinishedForTests() const;
 
     void setFallbackFile(const QString &file);
     QString fallbackFile() const { return m_file; }

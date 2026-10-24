@@ -39,6 +39,21 @@ else
   echo "  SKIP the shipped rebuild layout (cmake, ninja or the hyprland headers missing)"
 fi
 
+# The environmental-line filter of global_menus.sh on lines in the real shell.log format (timestamp, two spaces, level).
+. "$root/tests/integration/env_lines.sh"
+real_pam='2026-10-23 03:35:20.400  WARN qml: grassfield-lock: dev: PAM is suppressed on the lock (no real authentication; set GRASSFIELD_DEV_ALLOW_PAM=1 for the L2 failure-path test)'
+qs_polkit='2026-10-23 03:35:21.100 ERROR quickshell.service.polkit: failed to register listener: Operation not permitted'
+elsewhere='2026-10-23 03:35:22.000  WARN qml: boom ERROR quickshell.service.polkit: failed to register listener: in the middle'
+other_lock='2026-10-23 03:35:23.000  WARN qml: grassfield-lock: dev: PAM is suppressed on the lock (and another thing)'
+real_issue='2026-10-23 03:35:24.000  WARN qml: TypeError: Cannot read property x of null'
+left=$(printf '%s\n' "$real_pam" "$qs_polkit" "$elsewhere" "$other_lock" "$real_issue" | filter_env_lines)
+expect "the real PAM line is environmental" "$([[ $left != *"PAM is suppressed on the lock (no real"* ]] && echo yes)" yes
+expect "Quickshell's polkit line, with its timestamp, is environmental" "$([[ $left != *"Operation not permitted"* ]] && echo yes)" yes
+expect "the same text in the middle of another line stays visible" "$([[ $left == *"in the middle"* ]] && echo yes)" yes
+expect "a longer lock message stays visible" "$([[ $left == *"and another thing"* ]] && echo yes)" yes
+expect "a real issue stays visible" "$([[ $left == *"TypeError"* ]] && echo yes)" yes
+expect "exactly three lines are left" "$(wc -l <<<"$left")" 3
+
 # PKGBUILD prepare(): a rerun for another commit starts from nothing (stale build directories answered "no work to do").
 pk=$work/pkg
 mkdir -p "$pk/src/compositor-build" "$pk/src/compositor-out" "$pk/src/files-build" "$pk/src/snapshot"

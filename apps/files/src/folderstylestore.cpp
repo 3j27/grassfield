@@ -792,6 +792,11 @@ void FolderStyleStore::injectFinishedPruneForTests(const QStringList &gone)
     m_job = job;
 }
 
+bool FolderStyleStore::pruneFinishedForTests() const
+{
+    return m_job && m_job->done.load();
+}
+
 void FolderStyleStore::waitForPrune()
 {
     // Also the job a forced request queued behind the one that was running.
