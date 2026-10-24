@@ -1,25 +1,60 @@
 #!/usr/bin/env bash
-# Show Desktop wiring in shell/platform/Compositor.qml (static; the behaviour is tests/unit/tst_showdesktop.qml and the nested
-# tests/shell/show_desktop_nested.sh). A stale handler once survived an edit and never ended Show Desktop: this fails on
-#  * a Space/window event handler that does not pass the event data and the records to ShowDesktop.endsOn;
-#  * a name that no longer exists (the single `desktopRecord`, a timing guard);
-#  * a Tokens.showDesktop* name that Tokens.qml does not define;
-#  * an ending that asks for focus when it was not the second press (activate() focuses only the window it activates).
+# Show Desktop wiring in shell/platform/Compositor.qml (static). Every decision lives in shell/platform/ShowDesktopFlow.js and is
+# tested by behaviour (tests/unit/tst_showdesktopflow.qml, tst_showdesktopreplay.qml; nested: tests/shell/show_desktop_nested.sh).
+# What is left to check here is that Compositor.qml stays a thin forwarder, so a decision cannot creep back into it unseen:
+#  * every call into the flow goes through desktopStep, and the events, the timers, the press, the capture, the file read and the
+#    activations are each forwarded to their function of the flow;
+#  * desktopStep runs the dispatches with a plain loop, in the order given (no timer, no callLater: the hide must stay first);
+#  * the Show Desktop block takes no decision of its own (no ShowDesktop.* rule, no focus request, no Qt.callLater);
+#  * a Tokens.showDesktop* name that Tokens.qml does not define.
+# WIRING_ROOT (a copy of the tree) is for tests/shell/ux_mutants.sh.
 set -uo pipefail
 root=${WIRING_ROOT:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
 cd "$root" || exit 2
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 f=shell/platform/Compositor.qml
+# the Show Desktop block of the singleton
+block() { awk '/---- Show Desktop \(macOS/,/"Hide Others"/' "$f"; }
 
-desc="the raw-event handler ends Show Desktop with the event data and the records"
-check grep -q 'ShowDesktop.endsOn(event.name, event.data, root.desktopRecords)' "$f"
+desc="the raw events go to ShowDesktopFlow.onEvent with the name and the data, through desktopStep"
+check grep -qF 'root.desktopStep(ShowDesktopFlow.onEvent(root.desktopFlow, root.desktopContext(), event.name, event.data));' "$f"
 
-desc="a workspace or monitor event only schedules a look at what each display shows (a focus move raises one too)"
-check bash -c 'grep -q "ShowDesktop.checksSpaces(event.name)" "$1" && grep -q "ShowDesktop.spaceChanged(root.desktopRecords, root.shownSpaces())" "$1"' _ "$f"
+desc="each timer forwards its own id to ShowDesktopFlow.onTimer (activation, check, verify, recover)"
+check bash -c 'for id in activation check verify recover; do grep -qF "root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), \"$id\"))" "$1" || exit 1; done' _ "$f"
 
-desc="no removed name is left (desktopRecord, desktopHiddenAt, a timing guard)"
-check bash -c '! grep -nE "desktopRecord\b|desktopHiddenAt|showDesktopGuardMs" "$1"' _ "$f"
+desc="the press, the capture, the file read, the screens change and the shell's own activations are forwarded to the flow"
+check bash -c 'for c in "ShowDesktopFlow.onPress(" "ShowDesktopFlow.onCapture(" "ShowDesktopFlow.onLoaded(" "ShowDesktopFlow.onScreensChanged(" "ShowDesktopFlow.onActivate("; do grep -qF "$c" "$1" || exit 1; done' _ "$f"
+
+desc="every call into the flow goes through desktopStep (the state is only ever replaced by a result)"
+check bash -c 'n=$(grep -c "ShowDesktopFlow\\.on" "$1"); d=$(grep -c "desktopStep(ShowDesktopFlow\\.on" "$1"); [ "$n" -ge 9 ] && [ "$n" = "$d" ] && [ "$(grep -c "root.desktopFlow = " "$1")" = 1 ]' _ "$f"
+
+desc="desktopStep runs the dispatches in the order given with a plain loop, before the file and the timers"
+check bash -c 'b=$(awk "/function desktopStep/,/^    }/" "$1"); [ -n "$b" ] && grep -qF "for (const request of res.dispatches)" <<<"$b" && grep -qF "dispatchRequest(request);" <<<"$b" && d=$(grep -n "res.dispatches" <<<"$b" | head -1 | cut -d: -f1) && p=$(grep -n "res.persist" <<<"$b" | head -1 | cut -d: -f1) && t=$(grep -n "res.timers" <<<"$b" | head -1 | cut -d: -f1) && [ "$d" -lt "$p" ] && [ "$p" -lt "$t" ] && ! grep -qE "callLater|Timer|setTimeout" <<<"$b"' _ "$f"
+
+desc="desktopStep writes the record file from the result's records, restarts or stops the timers it names, and hands the keyboard to the desktop when asked"
+check bash -c 'b=$(awk "/function desktopStep/,/^    }/" "$1"); grep -qF "if (res.persist && desktopFile.path !== \"\")" <<<"$b" && grep -qF "desktopFile.setText(ShowDesktop.serialize(res.state.records));" <<<"$b" && grep -qF "timers[id].stop();" <<<"$b" && grep -qF "timers[id].restart();" <<<"$b" && grep -qF "if (res.focusDesktop)" <<<"$b" && grep -qF "DesktopState.focusRequested();" <<<"$b" && grep -qF "root.desktopFlow = res.state;" <<<"$b"' _ "$f"
+
+desc="the press reads the window list first when the flow asks for it (refresh), and the second press is the flow's"
+check bash -c 'b=$(awk "/function showDesktop\\(/,/^    }/" "$1"); grep -qF "if (res.refresh) {" <<<"$b" && grep -qF "Hyprland.refreshToplevels();" <<<"$b" && grep -qF "desktopRefresh.restart();" <<<"$b"' _ "$f"
+
+desc="the Show Desktop block takes no decision of its own: no callLater, no focus request, no rule of ShowDesktop.js (only the file format and the parking name)"
+check bash -c 'b=$(awk "/---- Show Desktop \\(macOS/,/\"Hide Others\"/" "$1"); [ "$(wc -l <<<"$b")" -gt 100 ] && ! grep -qE "Qt.callLater|focusWindowRequest|moveRequest|hideParkingRequest|endsOn|checksSpaces|spaceChanged|toRestore|survivors|stragglerRecords|recoverStep|parkingShownAfter|captureAll" <<<"$b"' _ "$f"
+
+desc="the only focus request next to the flow is activate() giving the focus to the window it activates (after the ending); the other is the plain focus action"
+check bash -c 'a=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); [ "$(grep -c "focusWindowRequest(" "$1")" = 2 ] && [ "$a" = 1 ]' _ "$f"
+
+desc="activate() and unminimize() end Show Desktop first (before the Stages test, before the focus)"
+check bash -c 'awk "/function activate\\(/,/^    }/" "$1" | head -8 | grep -q "root.endShowDesktop()" && awk "/function unminimize/,/^    }/" "$1" | grep -q "root.endShowDesktop()"' _ "$f"
+
+desc="the verify, the check, the activation and the recovery timers are the Tokens ones (no literal interval)"
+check bash -c 'for t in desktopActivation desktopCheck desktopVerify desktopRefresh desktopRecover; do awk "/id: $t/,/^    }/" "$1" | grep -qE "interval: Tokens\\.showDesktop" || exit 1; done' _ "$f"
+
+desc="the context carries the bounds and windows the flow needs (lookback, echo, verify and recovery bounds from Tokens)"
+check bash -c 'b=$(awk "/function desktopContext/,/^    }/" "$1"); grep -qF "lookbackMs: Tokens.showDesktopCheckMs" <<<"$b" && grep -qF "echoMs: Tokens.showDesktopVerifyMs" <<<"$b" && grep -qF "maxRecover: Tokens.showDesktopRecoverTries" <<<"$b" && grep -qF "windows: toplevelData()" <<<"$b" && grep -qF "now: Date.now()" <<<"$b"' _ "$f"
+
+desc="no removed name is left (the single desktopRecord, desktopHiddenAt, a timing guard, the old imperative functions)"
+check bash -c '! grep -nE "desktopRecord\b|desktopHiddenAt|showDesktopGuardMs|captureDesktop|recoverDesktop|endForActivation|activationWatch|parkingShown" "$1"' _ "$f"
 
 desc="every Tokens.showDesktop* the shell uses is defined"
 missing=""
@@ -27,40 +62,5 @@ for t in $(grep -ohE 'Tokens\.showDesktop[A-Za-z]+' shell/platform/*.qml | sort 
   grep -q "property .* $t:" ui/Grassfield/Ui/Tokens.qml || missing+=" $t"
 done
 check test -z "$missing"
-
-desc="every ending except the second press passes refocus=false"
-check bash -c 'n=$(grep -c "endShowDesktop(" "$1"); t=$(grep -c "endShowDesktop(true)" "$1"); [ "$(grep -cE "endShowDesktop\(\)" "$1")" = 0 ] && [ "$t" = 1 ] && [ "$n" -ge 4 ]' _ "$f"
-desc="every ending is followed by the bounded verify (endShowDesktop restarts it, at most 3 tries)"
-check bash -c 'grep -q "desktopVerify.restart()" "$1" && grep -qF "++tries < 3) {" "$1" && grep -q "id: desktopVerify" "$1"' _ "$f"
-
-desc="a new capture stops the verify of the previous ending (three quick presses)"
-check bash -c 'awk "/function captureDesktop/,/^    }/" "$1" | grep -q "desktopVerify.stop()"' _ "$f"
-
-desc="a focus request only comes from the second press (endShowDesktop) and from the window that was activated (activate, the desktopActivation timer)"
-check bash -c 'n=$(grep -c "focusWindowRequest(" "$1"); a=$(awk "/function endShowDesktop/,/^    }/" "$1" | grep -c "focusWindowRequest("); b=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); c=$(awk "/id: desktopActivation/,/^    }/" "$1" | grep -c "focusWindowRequest("); [ "$a" = 1 ] && [ "$b" = 1 ] && [ "$c" = 1 ] && [ "$n" = 4 ]' _ "$f"
-
-desc="every ending hides the parking workspace by STATE and BEFORE the windows move (no frame with the parked windows on screen, never a blind toggle)"
-check bash -c 'body=$(awk "/function endShowDesktop/,/^    }/" "$1"); h=$(grep -n "parkingVisible(root.parkingShown)" <<<"$body" | head -1 | cut -d: -f1); d=$(grep -n "hideParkingRequest()" <<<"$body" | head -1 | cut -d: -f1); m=$(grep -n "ShowDesktop.toRestore(" <<<"$body" | head -1 | cut -d: -f1); [ -n "$h" ] && [ -n "$d" ] && [ -n "$m" ] && [ "$h" -lt "$d" ] && [ "$d" -lt "$m" ] && ! grep -q "hideParkingRequest" <(awk "/id: desktopActivation/,/^    }/" "$1")' _ "$f"
-
-desc="the parking workspace state is tracked from every activespecial event, also when Show Desktop is off"
-check bash -c 'awk "/function onRawEvent/,/^        }/" "$1" | head -16 | grep -q "ShowDesktop.parkingShownAfter(root.parkingShown"' _ "$f"
-
-desc="the activation ends Show Desktop at once (no timer before the ending) and the timer only asks for the focus"
-check bash -c 'awk "/function onRawEvent/,/^        }/" "$1" | grep -q "root.endShowDesktop(false);" && ! awk "/id: desktopActivation/,/^    }/" "$1" | grep -q "endShowDesktop"' _ "$f"
-
-desc="the window an app activated is the one the FIRST activewindowv2 after the workspace event names (later ones are caused by the ending, and the toplevel property is stale)"
-check bash -c 'grep -q "root.activatedAddress = event.data" "$1" && grep -q "root.activationWatch = true;" "$1" && b=$(awk "/id: desktopActivation/,/^    }/" "$1") && grep -q "root.activatedAddress" <<<"$b" && ! grep -q "activeToplevel" <<<"$b" && c=$(awk "/function onRawEvent/,/^        }/" "$1") && [ $(grep -c "root.activationWatch = false;" <<<"$c") = 1 ]' _ "$f"
-
-desc="the crash recovery applies ShowDesktop.recoverStep: its moves, its retry (bounded by the step, not by a loop here) and its clear"
-check bash -c 'b=$(awk "/function recoverDesktop/,/^    }/" "$1"); grep -q "ShowDesktop.recoverStep(root.desktopRecords, toplevelData(), loaded, root.recoverTries, Tokens.showDesktopRecoverTries)" <<<"$b" && grep -q "step.moves.forEach" <<<"$b" && grep -q "root.recoverTries++" <<<"$b" && grep -q "if (step.retry)" <<<"$b" && grep -q "else if (step.clear)" <<<"$b" && grep -q "const loaded = Hyprland.toplevels" <<<"$b"' _ "$f"
-
-desc="the verify keeps a record for what is still parked at its bound, and a new capture finishes the previous restore and merges its stragglers"
-check bash -c 'grep -q "ShowDesktop.stragglerRecords(records, parked)" "$1" && awk "/function captureDesktop/,/^    }/" "$1" | grep -q "records.concat(stragglers)" && awk "/function captureDesktop/,/^    }/" "$1" | grep -q "ShowDesktop.stragglerRecords(desktopVerify.records"' _ "$f"
-
-desc="no activation is read from the focus (a parked window can keep it): only the parking workspace being shown ends it"
-check bash -c '! grep -qE "parkedHasFocus|checksActivation" "$1" shell/platform/ShowDesktop.js' _ "$f"
-
-desc="restoring a minimized window and the second press end it (unminimize and showDesktop call endShowDesktop before the Stages test)"
-check bash -c 'awk "/function unminimize/,/^    }/" "$1" | grep -q "endShowDesktop(false)" && awk "/function showDesktop\\(/,/^    }/" "$1" | head -4 | grep -q "endShowDesktop(true)"' _ "$f"
 
 exit $fail

@@ -1,0 +1,88 @@
+{
+  "scenario": "dispatcher",
+  "focusBefore": "0x5e4dc8a7ff60",
+  "window": "0x5e4dc9076dc0",
+  "windows": [
+    {
+      "address": "0x5e4dc9076dc0",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-main",
+      "pid": 2093556
+    },
+    {
+      "address": "0x5e4dc8a82d00",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-main",
+      "pid": 2093601
+    },
+    {
+      "address": "0x5e4dc8a7ff60",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-other",
+      "pid": 2093658
+    }
+  ],
+  "events": [
+    {
+      "t": 0,
+      "name": "activespecial",
+      "data": "special:desktop,GF-REF"
+    },
+    {
+      "t": 0,
+      "name": "activespecialv2",
+      "data": "-98,special:desktop,GF-REF"
+    },
+    {
+      "t": 0,
+      "name": "activewindow",
+      "data": "gf-sd-main,user@gf-host:/home/user/workspace/grassfieldos/.claude/worktrees/agent-ad39980283bf69619"
+    },
+    {
+      "t": 0,
+      "name": "activewindowv2",
+      "data": "5e4dc9076dc0"
+    },
+    {
+      "t": 4,
+      "name": "activespecial",
+      "data": ",GF-REF"
+    },
+    {
+      "t": 4,
+      "name": "activespecialv2",
+      "data": ",,GF-REF"
+    },
+    {
+      "t": 5,
+      "name": "movewindowv2",
+      "data": "5e4dc9076dc0,2,2"
+    },
+    {
+      "t": 5,
+      "name": "movewindowv2",
+      "data": "5e4dc8a82d00,2,2"
+    },
+    {
+      "t": 6,
+      "name": "movewindowv2",
+      "data": "5e4dc8a7ff60,2,2"
+    },
+    {
+      "t": 139,
+      "name": "activewindow",
+      "data": "gf-sd-main,user@gf-host:/home/user/workspace/grassfieldos/.claude/worktrees/agent-ad39980283bf69619"
+    },
+    {
+      "t": 139,
+      "name": "activewindowv2",
+      "data": "5e4dc9076dc0"
+    }
+  ]
+}

@@ -14,8 +14,10 @@
 #   5 activation (the switcher's next/release goes through Compositor.activate, as a Dock click does): show, switcher
 #     next + release: every window back, the focus is the window of the other app (C), on its Space;
 #   6 three presses in a row (0.45 s, 0.25 s): the verify of the second ending must not send the third's windows back;
-#   7 an app activating a parked window (a `focus` dispatch on it, as focus_on_activate does for a client): everything comes
-#     back, no special workspace stays shown over a screen, the activated window has the focus;
+#   7 the focus dispatcher on a parked window (hl.dsp.focus: Hyprland shows the parking workspace, THEN focuses): everything
+#     comes back, no special workspace stays shown over a screen, the activated window has the focus;
+#   8 a REAL xdg-activation (tests/tools/xdgact: a window that gets an xdg_activation_v1 token and activates itself while parked;
+#     Hyprland focuses it FIRST, which shows the parking workspace): the same, in the other event order;
 #   R crash recovery: show, then the shell is restarted (scripts/dev/shell-run.sh) with the windows parked: within the bound
 #     (Tokens showDesktopRecoverMs + tries, 25 s here) every window is back on its Space, nothing was focused by the recovery
 #     (the focus is what it was), nothing stays shown over a screen and the record file is gone.
@@ -183,7 +185,7 @@ sleep 2.5
 show_desktop
 all_home "6"
 
-# 7 an app activating a parked window (focus_on_activate): everything comes back, nothing is left over the screen
+# 7 the focus dispatcher on a parked window: everything comes back, nothing is left over the screen
 show_desktop
 on_space "7: A was parked first" "$a" special:desktop
 addr_a=$(hq clients | jq -r --argjson p "$a" '.[] | select(.pid == $p) | .address')
@@ -192,6 +194,37 @@ all_home "7"
 no_special() { [[ $(hq monitors | jq '[.[] | select(.specialWorkspace.name != "")] | length') == 0 ]]; }
 wait_for no_special && pass "7: the parking workspace is not shown over a screen" || fail "7: a special workspace is still shown"
 focus_is "7: the window that was activated (A) has the focus" "$a"
+
+# 8 a real xdg-activation: window X (tests/tools/xdgact) activates itself while parked. Hyprland handles the request in
+# CWindow::activate (misc.focus_on_activate): the focus moves to X first and shows the parking workspace as a consequence, the
+# opposite order of step 7.
+"$root/tests/tools/xdgact/xdgact.sh" --build >/dev/null 2>&1 || { echo "show_desktop: could not build tests/tools/xdgact"; exit 2; }
+open_xdgact() {
+  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/xdgact/xdgact.sh" gf-sd-act >/dev/null 2>&1 </dev/null &
+  pids+=($!)
+  sleep 1.8
+  NEWPID=$(active_pid)
+}
+# On a Space of its own, X first and a foot window after it: Hyprland gives the focus to the last window parked, and the
+# activation of the focused window is a no-op, so X must not be the last one.
+S3=$((S2 + 20))
+focus_space "$S3"
+open_xdgact; x=$NEWPID
+open_foot gf-sd-main "$OUT"; f=$NEWPID
+[[ -n $x && $x != null && -n $f && $f != null && $x != "$f" ]] || { echo "show_desktop: could not open the xdg-activation window and its neighbour"; exit 2; }
+on_space "8: setup: X is on Space $S3" "$x" "$S3"
+show_desktop
+on_space "8: X was parked first" "$x" special:desktop
+on_space "8: F was parked first" "$f" special:desktop
+[[ $(active_pid) != "$x" ]] && pass "8: setup: X does not have the focus (the activation must change it)" || fail "8: setup: X has the focus already"
+kill -USR1 "$x"
+on_space "8: X is back on Space $S3" "$x" "$S3"
+on_space "8: F is back on Space $S3" "$f" "$S3"
+nothing_parked "8: nothing left on special:desktop"
+wait_for no_special && pass "8: the parking workspace is not shown over a screen" || fail "8: a special workspace is still shown"
+focus_is "8: the window that activated itself (X) has the focus" "$x"
+space_is "8: the Space is X's Space" "$S3"
+focus_space "$S1"
 
 # R crash recovery: the shell dies with the windows parked; the one that starts finds the record and sends them back
 focus_space "$S1"

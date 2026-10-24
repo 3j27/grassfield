@@ -9,6 +9,7 @@ import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
+import "ShowDesktopFlow.js" as ShowDesktopFlow
 import "ScreenChoice.js" as ScreenChoice
 import "StagesFront.js" as StagesFront
 
@@ -98,7 +99,7 @@ Singleton {
             return;
         // Show Desktop ends: every window goes back first, then the chosen one gets the focus (both requests go through the
         // same dispatch channel, in this order, so the focus is not lost to the windows that are still moving).
-        if (root.endShowDesktop(false)) {
+        if (root.endShowDesktop()) {
             const chosen = hyprlandToplevel(toplevel);
             if (chosen)
                 dispatchRequest(Minimized.focusWindowRequest(chosen.address));
@@ -251,7 +252,7 @@ Singleton {
         if (!rec)
             return;
         // Restoring a window (Dock tile, Overview) is an activation: Show Desktop ends first, as in activate().
-        root.endShowDesktop(false);
+        root.endShowDesktop();
         const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false, toplevel);
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize")) {
@@ -314,34 +315,8 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "configreloaded" && root.reduceMotion)
                 root.pushMotion();
-            // A new window ends Show Desktop (our own parked windows are recognised by address, not by timing). A Space
-            // switch on either display ends it too, but a workspace event is also what a focus move to the other display
-            // raises: those events only schedule a look at what each display shows (desktopCheck). An ending never asks for
-            // focus: the user's new Space or window has it.
-            if (event.name === "activewindowv2" && root.activationWatch) {
-                root.activatedAddress = event.data;
-                root.activationWatch = false;
-            }
-            if (event.name.startsWith("activespecial"))
-                root.parkingShown = ShowDesktop.parkingShownAfter(root.parkingShown, event.name, event.data);
-            if (root.desktopRecords.length > 0) {
-                if (ShowDesktop.endsOn(event.name, event.data, root.desktopRecords)) {
-                    console.info("grassfield: Show Desktop ends: " + event.name);
-                    if (event.name.startsWith("activespecial")) {
-                        // An app activated a parked window: the workspace is hidden FIRST (no frame with the parked windows
-                        // over the screen), the windows go back, and the activated window keeps the focus a moment later.
-                        // The window is named by the first activewindowv2 after the workspace event: it comes before anything the
-                        // ending itself causes (the hide gives the focus to another window, which is not the activated one).
-                        root.activatedAddress = "";
-                        root.activationWatch = true;
-                        root.endShowDesktop(false);
-                        desktopActivation.restart();
-                    } else {
-                        root.endShowDesktop(false);
-                    }
-                } else if (ShowDesktop.checksSpaces(event.name))
-                    desktopCheck.restart();
-            }
+            // The Show Desktop flow (ShowDesktopFlow.js) decides what every event means; this only forwards it.
+            root.desktopStep(ShowDesktopFlow.onEvent(root.desktopFlow, root.desktopContext(), event.name, event.data));
         }
     }
 
@@ -520,21 +495,16 @@ Singleton {
 
     // ---- Show Desktop (macOS F11 / Cmd+F3, GF-106) ----
     //
-    // Moves the windows of the focused display's Space aside (to special:desktop) and hands the keyboard to the desktop
-    // icons. Switching Space, opening a window, activating a window (Dock, switcher) or pressing it again ends it: every
-    // window goes back to its Space in its tiling order and the window that had the focus gets it again (ShowDesktop.js).
+    // Moves the windows of every display's Space aside (to special:desktop) and hands the keyboard to the desktop icons.
+    // Switching Space, opening a window, activating a window (Dock, switcher, an app) or pressing it again ends it: every
+    // window goes back to its Space in its tiling order and, for the second press, the window that had the focus gets it again.
     // The record is kept in the state dir, so a restarted shell (or one that crashed) puts the windows back at start.
     // Does nothing with Stages on (a stage cannot be rebuilt window by window, docs/specs/stages.md ST8/ST9), and minimized
     // or hidden windows are left alone.
-    property var desktopRecords: []
-    // The parking workspace shown per display ({monitor: true}, from the activespecial events), the window an app activated and
-    // the windows the last ending sent back.
-    property var parkingShown: ({})
-    property bool activationWatch: false
-    property string activatedAddress: ""
-    property var desktopEndedAddresses: []
-    // A press waits for the window positions to be read (see showDesktop).
-    property bool desktopPending: false
+    //
+    // All the decisions are in ShowDesktopFlow.js (a pure reducer, tests/unit/tst_showdesktopflow.qml). This file reads the
+    // context, hands events, timers and presses to it, and runs what comes back: dispatches in order, timers, the record file.
+    property var desktopFlow: ShowDesktopFlow.initial()
     readonly property string desktopStateDir: {
         const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
         if (dev)
@@ -566,57 +536,58 @@ Singleton {
         return all.filter(m => m.activeWorkspace).map(m => ({name: m.name, workspace: m.activeWorkspace.id}));
     }
 
-    function persistDesktopRecords(): void {
-        if (desktopFile.path !== "")
-            desktopFile.setText(ShowDesktop.serialize(root.desktopRecords));
+    // What the flow reads at every call.
+    function desktopContext(): var {
+        const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
+        return {
+            now: Date.now(),
+            windows: toplevelData(),
+            shown: shownSpaces(),
+            focused: focused ? focused.address : "",
+            stages: Settings.windowsStages,
+            loaded: !!Hyprland.toplevels && Hyprland.toplevels.values.length > 0,
+            lookbackMs: Tokens.showDesktopCheckMs,
+            echoMs: Tokens.showDesktopVerifyMs,
+            maxVerify: 3,
+            maxRecover: Tokens.showDesktopRecoverTries
+        };
     }
 
-    // Ends Show Desktop (if on): the records are gone before the windows move, so that nothing can end it twice. Every window
-    // goes back to the Space it came from; `refocus` (only the second press of Show Desktop, on the Space it was pressed on)
-    // gives the focus back to the window that had it. Every other ending (Space switch, new window, activation, restart)
-    // issues no focus request at all: Hyprland would switch to the old window's Space.
-    function endShowDesktop(refocus: bool): bool {
-        const records = root.desktopRecords;
-        if (records.length === 0)
-            return false;
-        root.desktopRecords = [];
-        persistDesktopRecords();
-        // Every ending leaves the parking workspace hidden: if it is shown (an app activated a parked window) it is hidden first,
-        // by state, never by toggling a workspace that is already hidden.
-        if (ShowDesktop.parkingVisible(root.parkingShown)) {
-            Hyprland.dispatch(ShowDesktop.hideParkingRequest());
-            root.parkingShown = ({});
+    // Runs a result of the flow: the new state, then its dispatches in the order given (the hide is always first), the record
+    // file, the timers.
+    function desktopStep(res: var): var {
+        root.desktopFlow = res.state;
+        for (const l of res.logs) {
+            if (l.level === "warn")
+                console.warn(l.text);
+            else
+                console.info(l.text);
         }
-        const windows = toplevelData();
-        const focus = refocus ? ShowDesktop.focusTarget(records, shownSpaces()) : "";
-        let back = [];
-        for (const record of records) {
-            const mine = ShowDesktop.toRestore(record, windows);
-            back = back.concat(mine);
-            mine.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
+        for (const request of res.dispatches)
+            dispatchRequest(request);
+        if (res.persist && desktopFile.path !== "")
+            desktopFile.setText(ShowDesktop.serialize(res.state.records));
+        const timers = {activation: desktopActivation, check: desktopCheck, verify: desktopVerify, recover: desktopRecover};
+        for (const id of Object.keys(res.timers)) {
+            if (res.timers[id] === "stop")
+                timers[id].stop();
+            else
+                timers[id].restart();
         }
-        root.desktopEndedAddresses = back;
-        if (focus !== "" && back.indexOf(focus) >= 0)
-            dispatchRequest(Minimized.focusWindowRequest(focus));
-        // Nothing may stay hidden: a window still on the parking workspace a moment later is sent back again.
-        desktopVerify.records = records;
-        desktopVerify.tries = 0;
-        desktopVerify.restart();
-        return true;
+        if (res.focusDesktop)
+            DesktopState.focusRequested();
+        return res;
     }
 
-    // The window an app activated keeps the focus: asked for a moment after the ending (the windows went back first), for the
-    // window the first activewindowv2 after the workspace event named, if it is one of those that went back.
+    // Ends Show Desktop for an activation by the shell itself (activate(), unminimize()): true when it was on.
+    function endShowDesktop(): bool {
+        return root.desktopStep(ShowDesktopFlow.onActivate(root.desktopFlow, root.desktopContext())).ended;
+    }
+
     Timer {
         id: desktopActivation
         interval: Tokens.showDesktopCheckMs
-        onTriggered: {
-            root.activationWatch = false;
-            const a = root.activatedAddress;
-            root.activatedAddress = "";
-            if (a !== "" && root.desktopEndedAddresses.some(x => ShowDesktop.sameAddress(x, a)))
-                root.dispatchRequest(Minimized.focusWindowRequest(a));
-        }
+        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "activation"))
     }
 
     // A display plugged or unplugged: the Spaces the displays show are compared again (a removed display ends Show Desktop).
@@ -624,121 +595,44 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            if (root.desktopRecords.length > 0)
-                desktopCheck.restart();
+            root.desktopStep(ShowDesktopFlow.onScreensChanged(root.desktopFlow, root.desktopContext()));
         }
     }
 
     Timer {
         id: desktopCheck
         interval: Tokens.showDesktopCheckMs
-        onTriggered: {
-            if (root.desktopRecords.length > 0 && ShowDesktop.spaceChanged(root.desktopRecords, root.shownSpaces())) {
-                console.info("grassfield: Show Desktop ends: a display shows another Space or went away");
-                root.endShowDesktop(false);
-            }
-        }
+        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "check"))
     }
 
     Timer {
         id: desktopVerify
-        property var records: []
-        property int tries: 0
         interval: Tokens.showDesktopVerifyMs
-        onTriggered: {
-            const parked = root.toplevelData().filter(w => w.parked).map(w => w.address);
-            let again = 0;
-            for (const record of records) {
-                const stuck = ShowDesktop.survivors(record, parked);
-                again += stuck.length;
-                stuck.forEach(a => root.dispatchRequest(root.moveRequest(a, String(record.workspace))));
-            }
-            if (again > 0 && ++tries < 3) {
-                restart();
-            } else if (again > 0 && root.desktopRecords.length === 0) {
-                // Still parked after the last try: they get a record again (Show Desktop is on for them), never none.
-                console.warn("grassfield: Show Desktop: " + again + " window(s) did not come back; kept for the next press");
-                root.desktopRecords = ShowDesktop.stragglerRecords(records, parked);
-                root.persistDesktopRecords();
-            }
-        }
+        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "verify"))
     }
 
     // Super+F3. The window positions come from Hyprland's window data, which is read again first (the model may be stale):
     // the press waits for the answer, at most Tokens.showDesktopRefreshMs.
     function showDesktop(): void {
-        // The second press always ends it, with Stages on too (it may have been turned on while Show Desktop was on).
-        if (endShowDesktop(true))
-            return;
-        if (Settings.windowsStages)
-            return;
-        if (root.desktopPending)
-            return;
-        root.desktopPending = true;
-        Hyprland.refreshToplevels();
-        desktopRefresh.restart();
-    }
-
-    function captureDesktop(): void {
-        root.desktopPending = false;
-        // A verify of the previous ending must not send this press's parked windows back (three quick presses): it is finished
-        // now instead. What is still parked after this last push goes into the new record (never parked with no record).
-        let stragglers = [];
-        if (desktopVerify.records.length > 0) {
-            const parkedNow = toplevelData().filter(w => w.parked).map(w => w.address);
-            stragglers = ShowDesktop.stragglerRecords(desktopVerify.records, parkedNow);
-            stragglers.forEach(r => r.windows.forEach(w => dispatchRequest(moveRequest(w.address, String(r.workspace)))));
+        const res = root.desktopStep(ShowDesktopFlow.onPress(root.desktopFlow, root.desktopContext()));
+        if (res.refresh) {
+            Hyprland.refreshToplevels();
+            desktopRefresh.restart();
         }
-        desktopVerify.stop();
-        desktopVerify.records = [];
-        desktopVerify.tries = 0;
-        const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
-        const records = ShowDesktop.captureAll(toplevelData(), shownSpaces(), focused ? focused.address : "", Settings.windowsStages);
-        if (records.length === 0 && stragglers.length === 0) {
-            DesktopState.focusRequested();
-            return;
-        }
-        root.desktopRecords = records.concat(stragglers);
-        persistDesktopRecords();
-        records.forEach(r => r.windows.forEach(w => dispatchRequest(moveRequest(w.address, ShowDesktop.PARKING))));
-        DesktopState.focusRequested();
     }
 
     Timer {
         id: desktopRefresh
         interval: Tokens.showDesktopRefreshMs
-        onTriggered: root.captureDesktop()
+        onTriggered: root.desktopStep(ShowDesktopFlow.onCapture(root.desktopFlow, root.desktopContext()))
     }
 
     // The windows still parked by a Show Desktop of a previous run (the shell restarted or crashed): back at start, once
-    // the window list is known.
+    // the window list is known (ShowDesktopFlow.recover: the record stays while a window is still parked, bounded retries).
     Timer {
         id: desktopRecover
         interval: Tokens.showDesktopRecoverMs
-        onTriggered: root.recoverDesktop()
-    }
-
-    property int recoverTries: 0
-
-    // The record stays (in memory and on disk) until every window it lists is back or known to be closed (ShowDesktop.recoverStep):
-    // nothing is decided before the window list has loaded, a window still parked after a step is sent back again, a bounded
-    // number of times (Tokens.showDesktopRecoverTries), and at the bound the record stays. No focus request: the user did not
-    // ask for anything.
-    function recoverDesktop(): void {
-        if (root.desktopRecords.length === 0)
-            return;
-        const loaded = Hyprland.toplevels && Hyprland.toplevels.values.length > 0;
-        const step = ShowDesktop.recoverStep(root.desktopRecords, toplevelData(), loaded, root.recoverTries, Tokens.showDesktopRecoverTries);
-        step.moves.forEach(m => dispatchRequest(moveRequest(m.address, String(m.workspace))));
-        root.recoverTries++;
-        if (step.retry) {
-            desktopRecover.restart();
-        } else if (step.clear) {
-            root.desktopRecords = [];
-            persistDesktopRecords();
-        } else {
-            console.warn("grassfield: Show Desktop: windows left over from an earlier run did not come back; the record stays");
-        }
+        onTriggered: root.desktopStep(ShowDesktopFlow.onTimer(root.desktopFlow, root.desktopContext(), "recover"))
     }
 
     Process {
@@ -755,14 +649,7 @@ Singleton {
         id: desktopFile
         printErrors: false
         atomicWrites: true
-        onLoaded: {
-            const records = ShowDesktop.parse(desktopFile.text());
-            if (records.length > 0 && root.desktopRecords.length === 0) {
-                root.desktopRecords = records;
-                root.recoverTries = 0;
-                desktopRecover.restart();
-            }
-        }
+        onLoaded: root.desktopStep(ShowDesktopFlow.onLoaded(root.desktopFlow, root.desktopContext(), ShowDesktop.parse(desktopFile.text())))
     }
 
     // "Hide Others": hides every visible window of other apps.
