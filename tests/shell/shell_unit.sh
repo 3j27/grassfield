@@ -25,8 +25,9 @@ named_qs() {
 }
 export -f named_qs
 desc="no shipped file selects the shell by name (-c/--config grassfield, command line or array): that also searches the user-writable ~/.config/quickshell"
-check bash -c 'out=$(named_qs "$@"); [ -z "$out" ] || { echo "$out"; exit 1; }' _ \
-  "$root/apps" "$root/bridges" "$root/packaging" "$root/config" "$root/shell" "$root/ui" "$root/scripts/dev/gate-run.sh"
+# Only what git tracks is shipped: an untracked makepkg tree (packaging/arch/pkg, src) or a stale build is not scanned.
+mapfile -t shipped < <(git -C "$root" ls-files -- apps bridges packaging config shell ui scripts/dev/gate-run.sh | sed "s|^|$root/|")
+check bash -c 'out=$(named_qs "$@"); [ -z "$out" ] || { echo "$out"; exit 1; }' _ "${shipped[@]}"
 mut=${mut:-$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/shell-unit.XXXXXX")}
 printf 'command: ["qs", "-c", "grassfield", "ipc"]\n' >"$mut/n1.qml"
 printf "x = ['quickshell', '--config', 'grassfield']\n" >"$mut/n2.js"
@@ -48,7 +49,7 @@ bare_qs() {
 }
 export -f bare_qs
 desc="every shipped qs ipc/kill/log caller (the whole of apps, bridges, packaging, config, shell and ui) selects an instance by the system path (-p) or by pid (--pid), never by name or bare"
-check bash -c 'out=$(bare_qs "$@"); [ -z "$out" ] || { echo "$out"; exit 1; }' _ "$root/apps" "$root/bridges" "$root/packaging" "$root/config" "$root/shell" "$root/ui"
+check bash -c 'out=$(bare_qs "$@"); [ -z "$out" ] || { echo "$out"; exit 1; }' _ "${shipped[@]}"
 # Mutation: the scan must catch a bare caller anywhere in a tree (a JS list, a QML command, a shell script, a Lua exec).
 mkdir -p "$mut/shell/services" "$mut/packaging/bin" "$mut/config"
 printf 'var c = ["qs", "ipc", "call", "lock", "lock"];\n' >"$mut/shell/services/X.js"
