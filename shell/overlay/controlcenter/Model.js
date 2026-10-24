@@ -53,19 +53,6 @@ function audioRows(nodes, defaultNode, describe) {
         .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-// Airplane mode is derived: on when every present radio is off. With no radio at all it is off.
-function airplaneOn(wifiPresent, wifiOn, btPresent, btOn) {
-    if (!wifiPresent && !btPresent)
-        return false;
-    return (!wifiPresent || !wifiOn) && (!btPresent || !btOn);
-}
-
-// Radios to switch when airplane mode is turned on/off: {wifi: bool|null, bluetooth: bool|null}
-// (null = not present, leave alone). Turning it off re-enables every present radio.
-function airplaneTargets(wifiPresent, btPresent, turnOn) {
-    return {wifi: wifiPresent ? !turnOn : null, bluetooth: btPresent ? !turnOn : null};
-}
-
 // Next index for arrow navigation over `count` items (no wrap).
 function stepIndex(current, count, delta) {
     if (count <= 0)

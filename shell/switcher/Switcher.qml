@@ -142,9 +142,7 @@ Scope {
         let name = Compositor.windowScreenName(Compositor.hyprlandToplevel(Compositor.focusedToplevel));
         if (name === "")
             name = Compositor.focusedScreenName;
-        if (name === "" && Quickshell.screens.length > 0)
-            name = Quickshell.screens[0].name;
-        return name;
+        return name !== "" ? name : Compositor.activeScreenName;
     }
 
     // The modifier was released. `id`: hold id from the compositor config, "" from the surface's own key event.
