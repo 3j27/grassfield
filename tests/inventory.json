@@ -144,6 +144,7 @@
  {"path": "tests/shell/pointer_theme/shell.qml", "layer": "headless"},
  {"path": "tests/shell/search_chips/shell.qml", "layer": "headless"},
  {"path": "tests/shell/settings_roundtrip/shell.qml", "layer": "headless"},
+ {"path": "tests/shell/settings_external_write/shell.qml", "layer": "headless"},
  {"path": "tests/shell/a2_limits_doc.sh", "layer": "data"},
  {"path": "tests/shell/apps_nested.sh", "layer": "nested"},
  {"path": "tests/shell/cc_sliders_ipc.sh", "layer": "nested"},
