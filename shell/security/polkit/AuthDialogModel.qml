@@ -1,8 +1,9 @@
 import QtQuick
+import Grassfield.Ui
 
 // State of the authorization dialog over one polkit AuthFlow (Quickshell.Services.Polkit).
 // Non-visual and free of Quickshell imports so tests drive it with a mock flow
-// (tests/security/tst_authdialogmodel.qml).
+// (tests/security/tst_authdialogmodel.qml). Grassfield.Ui gives it the shared icon name rule (pure JS).
 //
 // Never auto-approve: the only call that answers polkit is submit(), and only with a non-empty
 // password typed by the user while polkit asks for a response. Nothing here calls submit() on
@@ -28,8 +29,9 @@ QtObject {
     // The action's theme icon (polkit `icon_name` of the root-installed .policy file, AuthFlow.iconName), shown with a lock
     // badge (D-4: macOS shows an icon for the request). It describes the action, not the program that asked: Quickshell
     // 0.3.1's AuthFlow exposes no subject, process or command line; the message (pkexec names the program there), the
-    // action ID and this icon are all it offers. Only a plain theme icon name is accepted (no path, no URL), else "".
-    readonly property string iconName: flow ? safeIconName(flow.iconName) : ""
+    // action ID and this icon are all it offers. Only a plain theme icon name is accepted, by the one rule the notification
+    // icons use (NotificationPrefs.safeIconName: no path, URL, leading "." or ".."; review of 2dfd992), else "".
+    readonly property string iconName: flow ? NotificationPrefs.safeIconName(flow.iconName) : ""
     readonly property var identities: flow && flow.identities ? flow.identities : []
     readonly property var selectedIdentity: flow ? flow.selectedIdentity : null
     readonly property string identityName: identityLabel(selectedIdentity)
@@ -120,12 +122,6 @@ QtObject {
         if (maxLength > 0 && t.length > maxLength)
             t = t.slice(0, maxLength - 1).trim() + "\u2026";
         return t;
-    }
-
-    // A theme icon name (letters, digits, ".", "_", "-"; 1 to 128 characters), else "".
-    function safeIconName(name: var): string {
-        const s = String(name === undefined || name === null ? "" : name);
-        return /^[A-Za-z0-9._-]{1,128}$/.test(s) ? s : "";
     }
 
     // "Password: " → "Password"
