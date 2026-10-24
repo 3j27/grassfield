@@ -214,11 +214,30 @@ TestCase {
         compare(History.localPathOf(undefined), "");
     }
 
-    function test_parseFileChecks() {
-        compare(History.parseFileChecks(["/a", "/b", "/c"], "ok\nno\nok\n"), {"/a": "ok", "/b": "no", "/c": "ok"});
-        compare(History.parseFileChecks(["/a", "/b"], "ok\n"), {"/a": "ok", "/b": "no"}, "a missing line is no (a check that timed out)");
-        compare(History.parseFileChecks(["/a"], "OK\n"), {"/a": "no"});
-        compare(History.parseFileChecks(["/a"], undefined), {"/a": "no"});
+    // Review of beebaff: the forms where the checked name and the loaded URL could differ are refused outright.
+    function test_localPathOfRefusesUrlLookalikes() {
+        compare(History.localPathOf("/dir/x.png?a"), "", "a plain path with ?");
+        compare(History.localPathOf("/dir/x.png#f"), "", "a plain path with #");
+        compare(History.localPathOf("/dir/x%2Epng"), "", "a plain path with %");
+        compare(History.localPathOf("file:///dir/x.png?a"), "", "a file: URL with a query");
+        compare(History.localPathOf("file:///dir/x.png#f"), "", "a file: URL with a fragment");
+        compare(History.localPathOf("file:///dir/x%3Fa.png"), "", "an escape decoding to ?");
+        compare(History.localPathOf("file:///dir/x%2525.png"), "", "an escape decoding to %");
+        compare(History.localPathOf("image://icon//dir/x.png?fallback=a"), "", "Quickshell's icon path with a query");
+        compare(History.localPathOf("/dir/./x.png"), "", "a . segment");
+        compare(History.localPathOf("/dir/../etc/x.png"), "", "a .. segment");
+        compare(History.localPathOf("/dir//x.png"), "", "an empty segment");
+        compare(History.localPathOf("/dir/"), "", "a directory path");
+        compare(History.localPathOf("file:///dir/x%2Epng"), "/dir/x.png", "a file: URL escape decodes to the plain name it names");
+    }
+
+    function test_copySource() {
+        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12), "file:///run/user/1000/grassfield-notification-images/12.img");
+        compare(History.copySource("/tmp/my dir", 3), "file:///tmp/my%20dir/3.img", "every segment encoded");
+        compare(History.copySource("/tmp/a?b", 3), "", "an odd directory name");
+        compare(History.copySource("relative", 3), "");
+        compare(History.copySource("/tmp", 0), "");
+        compare(History.copySource("/tmp", 1.5), "");
         verify(History.MAX_IMAGE_FILE_BYTES > 0 && History.MAX_IMAGE_FILE_BYTES <= 64 * 1024 * 1024);
     }
 

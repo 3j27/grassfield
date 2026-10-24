@@ -155,21 +155,21 @@ Singleton {
         const ref = History.imageRef(image);
         if (ref.kind === "attached")
             return ref.source;
-        // A local file only once it is known to be a regular file of a bounded size (fileOk).
-        if (ref.kind === "file" && fileOk(History.localPathOf(ref.source)))
-            return ref.source;
+        // A local file: never its own path, only the shell's private copy of it, once made (copySourceOf).
+        if (ref.kind === "file") {
+            const copy = copySourceOf(History.localPathOf(ref.source));
+            if (copy !== "")
+                return copy;
+        }
         // Quickshell reports a themed app_icon name as image://icon/<name>.
         if (ref.kind === "themed" && Quickshell.hasThemeIcon(ref.name))
             return ref.source;
-        // No usable image (none, refused, not checked yet, or a name the theme lacks): the app icon.
+        // No usable image (none, refused, not copied yet, or a name the theme lacks): the app icon.
         const icon = appIcon;
         if (!icon)
             return "";
-        if (icon.startsWith("/") || icon.startsWith("file:")) {
-            if (History.imageRef(icon).kind !== "file" || !fileOk(History.localPathOf(icon)))
-                return "";
-            return icon.startsWith("/") ? "file://" + icon : icon;
-        }
+        if (icon.startsWith("/") || icon.startsWith("file:"))
+            return copySourceOf(History.localPathOf(icon));
         // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
         // and paints a checkerboard), so ask the theme first.
         return Quickshell.hasThemeIcon(icon) ? Quickshell.iconPath(icon) : "";
@@ -688,61 +688,120 @@ Singleton {
         return (n.actions || []).map(a => ({id: a.identifier, text: a.text}));
     }
 
-    // Local image files a notification may show, by path: "ok" (stat says a regular file of at most
-    // History.MAX_IMAGE_FILE_BYTES, symlinks followed) or "no"; absent while unchecked. A file is never handed to an Image
-    // before it is "ok" (review of 8b2a710: a FIFO, a device or a socket blocks the one image loader for good, and the
-    // process cannot exit). Reassigned on every answer so bindings that called iconSource() re-evaluate. Bounded.
-    property var fileChecks: ({})
-    property var fileQueue: []
-    property var fileBatch: []
-    readonly property int maxFileChecks: 512
-    // POSIX sh, run with the paths as arguments (never interpolated): `test -f` is true only for a regular file (symlinks
-    // followed), `stat` never opens it. One "ok" or "no" line per path, in order.
-    readonly property string fileCheckScript: "cap=$1; shift; for p do if [ -f \"$p\" ] && s=$(stat -L -c %s -- \"$p\" 2>/dev/null) && [ \"$s\" -le \"$cap\" ] 2>/dev/null; then echo ok; else echo no; fi; done"
-
-    function fileOk(path: string): bool {
-        if (path === "")
-            return false;
-        const state = fileChecks[path];
-        if (state === undefined)
-            Qt.callLater(root.requestFileCheck, path);
-        return state === "ok";
+    // Local image files (an image hint or an app icon path) are never loaded from where the app named them (reviews of
+    // 8b2a710 and beebaff): a FIFO or a device blocked the one image loader for good; a check of the named path could be
+    // fooled by "?", "#" or "%XX" (Qt reads a URL, not a path) or by a file swapped after the check. Instead a helper
+    // process opens the named plain path (History.localPathOf), checks that the OPENED descriptor is a regular file of at
+    // most History.MAX_IMAGE_FILE_BYTES (`test -f` and `stat -L` on /proc/self/fd/3), and copies it into the shell's
+    // private directory ($XDG_RUNTIME_DIR/grassfield-notification-images, 0700, emptied at start). The Image loads that
+    // copy, by a URL built from its number with every segment encoded (History.copySource): a file nobody else writes.
+    // Opening a FIFO blocks the helper, never the shell: each file has `timeout 3`. Each intake makes a fresh copy (an app
+    // may reuse a path for new content); at most copyWindow copies are kept, older ones are deleted and re-made on use.
+    // Without XDG_RUNTIME_DIR no local file is shown. Path -> {state: "pending"|"ok"|"no", n}; reassigned on every change so
+    // bindings that called iconSource() re-evaluate.
+    // One directory per Wayland display: a nested dev shell never empties the real session's directory.
+    readonly property string copyDir: {
+        const runtime = Quickshell.env("XDG_RUNTIME_DIR");
+        const display = String(Quickshell.env("WAYLAND_DISPLAY") || "none").replace(/[^A-Za-z0-9._-]/g, "_");
+        return runtime ? runtime + "/grassfield-notification-images-" + display : "";
     }
+    property var localCopies: ({})
+    property var copyQueue: []
+    property var copyBatch: []
+    property int copyCounter: 0
+    property bool copyDirReady: false
+    readonly property int copyWindow: 48
+    // POSIX sh; the directory, the size cap, then "<n> <path>" pairs as arguments (never interpolated). One line per pair:
+    // "ok" when "<dir>/<n>.img" now holds the copy, else "no". The one-file step runs under `timeout 3` (a FIFO named or
+    // swapped in blocks only that step), opens the path once and decides on the opened descriptor.
+    readonly property string copyScript: "dir=$1; cap=$2; win=$3; shift 3; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
+        + "one='[ -f \"$1\" ] || exit 1; exec 3<\"$1\" || exit 1; [ -f /proc/self/fd/3 ] || exit 1; "
+        + "s=$(stat -L -c %s /proc/self/fd/3) || exit 1; [ \"$s\" -le \"$3\" ] || exit 1; umask 077; "
+        + "head -c \"$3\" <&3 >\"$2.tmp\" && mv -f \"$2.tmp\" \"$2\"'; "
+        + "while [ $# -ge 2 ]; do n=$1; p=$2; shift 2; rm -f \"$dir/$n.img.tmp\"; "
+        + "if timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.img\" \"$cap\" 2>/dev/null; then echo ok; else rm -f \"$dir/$n.img.tmp\"; echo no; fi; "
+        + "old=$((n - win)); [ \"$old\" -gt 0 ] && rm -f \"$dir/$old.img\"; done"
 
-    function requestFileCheck(path: string): void {
-        if (path === "" || fileChecks[path] !== undefined || fileQueue.indexOf(path) >= 0 || fileBatch.indexOf(path) >= 0)
-            return;
-        fileQueue = fileQueue.concat([path]);
-        runFileChecks();
-    }
-
-    function runFileChecks(): void {
-        if (fileCheck.running || fileQueue.length === 0)
-            return;
-        fileBatch = fileQueue.slice(0, 32);
-        fileQueue = fileQueue.slice(32);
-        // Bounded: a stat stuck on a dead network mount ends after 5 s and its paths count as "no".
-        fileCheck.command = ["timeout", "5", "sh", "-c", fileCheckScript, "gf-image-check", String(History.MAX_IMAGE_FILE_BYTES)].concat(fileBatch);
-        fileCheck.running = true;
-    }
-
-    function fileChecksDone(output: string): void {
-        const results = History.parseFileChecks(fileBatch, output);
-        const next = Object.keys(fileChecks).length + fileBatch.length > maxFileChecks ? {} : Object.assign({}, fileChecks);
-        for (const p in results) {
-            next[p] = results[p];
-            if (results[p] !== "ok")
-                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes; not shown");
+    // The URL of the private copy of `path`, or "" (not copied yet: a copy is requested; refused; or expired).
+    function copySourceOf(path: string): string {
+        if (path === "" || copyDir === "")
+            return "";
+        const entry = localCopies[path];
+        if (entry === undefined || (entry.state === "ok" && entry.n <= copyCounter - copyWindow)) {
+            Qt.callLater(root.requestCopy, path, false);
+            return "";
         }
-        fileBatch = [];
-        fileChecks = next;
-        Qt.callLater(runFileChecks);
+        return entry.state === "ok" ? History.copySource(copyDir, entry.n) : "";
+    }
+
+    // Asks for a copy of `path`; `fresh`: also when one exists (a new notification naming it). The current copy stays shown
+    // until the new one is made.
+    function requestCopy(path: string, fresh: bool): void {
+        if (path === "" || copyDir === "" || copyQueue.some(q => q.path === path) || copyBatch.some(q => q.path === path))
+            return;
+        const entry = localCopies[path];
+        const live = entry !== undefined && entry.state === "ok" && entry.n > copyCounter - copyWindow;
+        if (!fresh && entry !== undefined && (live || entry.state !== "ok"))
+            return;
+        copyCounter++;
+        copyQueue = copyQueue.concat([{path: path, n: copyCounter}]);
+        if (!live) {
+            const next = Object.assign({}, localCopies);
+            next[path] = {state: "pending", n: -1};
+            localCopies = next;
+        }
+        runCopies();
+    }
+
+    function runCopies(): void {
+        if (!copyDirReady || copier.running || copyQueue.length === 0)
+            return;
+        copyBatch = copyQueue.slice(0, 16);
+        copyQueue = copyQueue.slice(16);
+        const args = [];
+        for (const q of copyBatch)
+            args.push(String(q.n), q.path);
+        copier.command = ["sh", "-c", copyScript, "gf-image-copy", copyDir, String(History.MAX_IMAGE_FILE_BYTES), String(copyWindow)].concat(args);
+        copier.running = true;
+    }
+
+    function copiesDone(output: string): void {
+        const lines = String(output || "").split("\n");
+        const next = Object.keys(localCopies).length > 4 * copyWindow ? {} : Object.assign({}, localCopies);
+        for (let i = 0; i < copyBatch.length; i++) {
+            const q = copyBatch[i];
+            if (lines[i] === "ok") {
+                next[q.path] = {state: "ok", n: q.n};
+            } else {
+                next[q.path] = {state: "no", n: -1};
+                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes; not shown");
+            }
+        }
+        copyBatch = [];
+        localCopies = next;
+        Qt.callLater(runCopies);
     }
 
     Process {
-        id: fileCheck
+        id: copier
         stdout: StdioCollector {
-            onStreamFinished: root.fileChecksDone(text)
+            onStreamFinished: root.copiesDone(text)
+        }
+    }
+
+    // Empties (and creates, 0700) the private copy directory once at start; copies wait for it.
+    Process {
+        id: copyPrepare
+        running: root.copyDir !== ""
+        command: ["sh", "-c", "case $1 in /*/grassfield-notification-images-*) ;; *) exit 1 ;; esac; rm -rf -- \"$1\" && mkdir -m 700 -- \"$1\"", "gf-image-copy-prepare", root.copyDir]
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: code => {
+            // qmllint enable signal-handler-parameters
+            root.copyDirReady = code === 0;
+            if (code !== 0)
+                console.warn("grassfield-notifications: the private image directory could not be prepared; local notification images are not shown");
+            root.runCopies();
         }
     }
 
@@ -751,17 +810,17 @@ Singleton {
     function keptImage(image: string): string {
         const ref = History.imageRef(image);
         if (ref.kind === "file")
-            requestFileCheck(History.localPathOf(ref.source)); // shown once checked (fileOk)
+            requestCopy(History.localPathOf(ref.source), true); // shown as a private copy once made (copySourceOf)
         if (ref.kind !== "refused")
             return image;
         console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");
         return "";
     }
 
-    // An app icon path is checked like an image file before it is shown (fileOk); names pass unchanged.
+    // An app icon path is shown like an image file, as a private copy (copySourceOf); names pass unchanged.
     function checkedAppIcon(icon: string): string {
         if (icon.startsWith("/") || icon.startsWith("file:"))
-            requestFileCheck(History.localPathOf(icon));
+            requestCopy(History.localPathOf(icon), true);
         return icon;
     }
 

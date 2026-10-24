@@ -191,39 +191,55 @@ function imageRef(image) {
     return refused;
 }
 
-// Largest local image file a notification may show (review of 8b2a710: only regular files, bounded).
-const MAX_IMAGE_FILE_BYTES = 16 * 1024 * 1024;
+// Largest local image file a notification may show (review of 8b2a710: only regular files, bounded). Shown files are COPIED
+// into the shell's private directory first (Notifications.requestCopy), so this also bounds that directory.
+const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024;
 
-// The local path a "file" image reference (imageRef) or an app icon path loads: "/abs" as given, Quickshell's
-// image://icon//abs -> "/abs", a file: URL decoded. "" for anything else or a malformed escape. The shell shows such a
-// file only after `stat` said it is a regular file of at most MAX_IMAGE_FILE_BYTES (Notifications.fileOk): a FIFO, a
-// device or a socket would block the one image loader for good (and the process with it).
+// A plain absolute path the copy helper may read: "/" then segments, no "//", no "." or ".." segment, no control
+// character, and none of "?", "#", "%" (review of beebaff: in a URL Qt reads them as query, fragment and escapes, so the
+// checked file and the loaded file could differ; the copy design never hands the path to Qt, but such names are refused
+// all the same).
+function plainPath(path) {
+    if (typeof path !== "string" || !path.startsWith("/") || path.length > 4096)
+        return false;
+    if (/[\u0000-\u001f\u007f?#%]/.test(path) || path.indexOf("//") >= 0)
+        return false;
+    const parts = path.split("/").slice(1);
+    return parts.every(seg => seg !== "." && seg !== "..") && parts[parts.length - 1] !== "";
+}
+
+// The local path a "file" image reference (imageRef) or an app icon path names: "/abs" as given, Quickshell's
+// image://icon//abs -> "/abs", a file: URL without query or fragment, decoded. "" unless the result is a plainPath. The
+// shell never loads that path: it shows a private copy made by a helper that opened it and checked the opened descriptor
+// is a regular file of at most MAX_IMAGE_FILE_BYTES (Notifications.requestCopy; a FIFO or a device would block the one
+// image loader for good, and a file swapped after a check would be another file).
 function localPathOf(source) {
     if (typeof source !== "string" || source === "")
         return "";
-    if (source.startsWith("/"))
-        return source.startsWith("//") ? "" : source;
-    if (source.toLowerCase().startsWith("image://icon//"))
-        return source.slice(13);
-    const m = /^file:(?:\/\/(?:localhost)?)?(\/[^/].*)$/i.exec(source);
-    if (!m)
-        return "";
-    try {
-        const path = decodeURIComponent(m[1]);
-        return /[\u0000-\u001f\u007f]/.test(path) ? "" : path;
-    } catch (e) {
-        return "";
+    let path = "";
+    if (source.startsWith("/")) {
+        path = source;
+    } else if (source.toLowerCase().startsWith("image://icon//")) {
+        path = source.slice(13);
+    } else {
+        const m = /^file:(?:\/\/(?:localhost)?)?(\/[^/?#][^?#]*)$/i.exec(source);
+        if (!m)
+            return "";
+        try {
+            path = decodeURIComponent(m[1]);
+        } catch (e) {
+            return "";
+        }
     }
+    return plainPath(path) ? path : "";
 }
 
-// The answer of the check helper (one line per path, "ok" or "no", in order) -> {path: "ok"|"no"}; a missing or odd line
-// is "no" (fail closed: the file is not shown).
-function parseFileChecks(paths, output) {
-    const lines = String(output || "").split("\n");
-    const out = {};
-    for (let i = 0; i < paths.length; i++)
-        out[paths[i]] = lines[i] === "ok" ? "ok" : "no";
-    return out;
+// The file: URL of private copy number `n` in directory `dir` (an absolute path), every segment percent-encoded: what the
+// Image loads names exactly that file. "" when the directory is not a plain absolute path or `n` is not a positive integer.
+function copySource(dir, n) {
+    if (!plainPath(dir) || !Number.isInteger(n) || n <= 0)
+        return "";
+    return "file://" + (dir + "/" + n + ".img").split("/").map(encodeURIComponent).join("/");
 }
 
 // The URL scheme of a refused image, for a log line that never repeats the reference itself ("" when there is none).

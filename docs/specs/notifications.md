@@ -166,12 +166,20 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   and only when they are a local file, the image data the app sent or a theme icon name (`History.imageRef`, GF-114): an
   http(s), data, ftp or other URL is dropped at arrival (log line with the scheme only) and the app icon is shown instead;
   `tests/unit/tst_notifhistory.qml`, nested DT-07 `tests/security/notif_remote_image.sh`. A local file (image or app icon
-  path) is shown only after `stat` (a helper process, `timeout 5`, the path as an argument, never opened) said it is a
-  regular file of at most 16 MiB (`Notifications.fileOk`, results cached by path, at most 512): a FIFO, a device, a socket,
-  a directory or a bigger file would block the one image loader (a FIFO did, for good: review of 8b2a710). Until then the
-  app icon or the bell shows. `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a
-  directory, a missing file; mutation `-e` instead of `-f` fails it). Residual: a file swapped for a FIFO after its check
-  (by a process of the same user) still blocks the loader.
+  path) is never loaded from where the app named it (reviews of 8b2a710 and beebaff: a FIFO blocked the one image loader
+  for good; a check of the named path was fooled by `?`, `#` and `%XX`, which Qt reads in a URL, and by a file swapped
+  after the check). Only a plain absolute path is accepted (`History.localPathOf`: a path, a file: URL without query or
+  fragment, Quickshell's `image://icon//path`; no `?`, `#`, `%` after decoding, no `.`/`..`/empty segment). A helper process
+  (`Notifications.requestCopy`; the path as an argument) opens it under `timeout 3`, checks that the OPENED descriptor is a
+  regular file of at most 8 MiB (`test -f` and `stat -L` on `/proc/self/fd/3`) and copies it into the shell's private
+  directory `$XDG_RUNTIME_DIR/grassfield-notification-images-<display>` (0700, emptied at start); the Image loads that copy by a URL
+  built from its number with every segment encoded (`History.copySource`), a file nobody else writes. Each intake makes a
+  fresh copy (album art at a reused path changes); 48 copies are kept, older ones are deleted and re-made when shown again.
+  Until the copy exists the app icon or the bell shows; without `XDG_RUNTIME_DIR` no local file is shown.
+  `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a directory, a missing file,
+  the reviewer's bypass forms `x.png?a`, `file://…?a`, `x%2Epng`, `file://…#f`, `image://icon//…?fallback=a` and an app
+  icon path, a file swapped for a FIFO after its copy; a normal image still loads afterwards; mutation allowing `?#%` fails
+  it).
 - DND: `notifications.dnd` in grassfield.json; Quick Settings "Do Not Disturb" tile; moon icon in the menu bar (click turns it off).
   Critical notifications still show; history is kept. `notifications.previews = never` hides bodies (banners and Center).
 - History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`
