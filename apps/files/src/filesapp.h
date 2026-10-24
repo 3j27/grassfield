@@ -223,6 +223,11 @@ private:
     QString tagsReason(const QUrl &url, TagStore::Support support) const;
     QString schemeReason(const QUrl &url) const;
     void styleMoved(const QUrl &from, const QUrl &to);
+    // Every folder pair a job moved, in one call (each pair protected before any is handled); and the registration of the
+    // sources while the job runs, so a prune that looks at the disk after the rename cannot drop their entries.
+    void styleMovedAll(const QList<QPair<QUrl, QUrl>> &pairs);
+    QStringList beginStyleMoves(const QList<QUrl> &sources);
+    void endStyleMoves(const QStringList &paths);
     QVariantMap changeFolderStyles(const QList<QUrl> &urls, const FolderStyleLogic::Style &style);
     // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
     void noteTags(const QStringList &tags);

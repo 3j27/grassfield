@@ -117,7 +117,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   only while its flag is on
   (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times"]`
   when everything works and the flag is off).
-- **FR10** `hyprctl grassfield` returns the same capabilities JSON.
+- **FR10** `hyprctl grassfield` returns the capabilities JSON plus one field, `"version"` (the product version of the plugin, from the VERSION file; GF-013), as its last member. The `capabilities` event is unchanged (no `version`): its wire format is fixed by the unit tests.
 - **FR54** Presented-frame times (ADR-0006 gate P3): every output's presented frames (Hyprland's
   `CMonitor::m_events.presented`, the presentation feedback) go into a ring of 1024 CLOCK_MONOTONIC microsecond stamps per
   output (`core/FrameLog.*`, `FrameProbe.*`; a stamp not newer than the last is refused). `hyprctl grassfield-frames`

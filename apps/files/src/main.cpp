@@ -13,8 +13,8 @@
 #ifndef GRASSFIELD_FILES_QML_DIR
 #define GRASSFIELD_FILES_QML_DIR "/usr/share/grassfield/files/qml"
 #endif
-#ifndef GRASSFIELD_FILES_VERSION
-#define GRASSFIELD_FILES_VERSION "0.1.0"
+#ifndef GRASSFIELD_VERSION
+#define GRASSFIELD_VERSION "unknown" // the real one comes from VERSION (cmake/GrassfieldVersion.cmake, build-direct.sh)
 #endif
 
 int main(int argc, char *argv[])
@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("grassfield-files"));
     app.setApplicationDisplayName(QObject::tr("Files"));
-    app.setApplicationVersion(QStringLiteral(GRASSFIELD_FILES_VERSION));
+    app.setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));
     // Wayland app_id: matches org.grassfield.Files.desktop.
     app.setDesktopFileName(QStringLiteral("org.grassfield.Files"));

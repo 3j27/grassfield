@@ -25,7 +25,7 @@ if [[ ${1:-} == "--tests" ]]; then
   exit 0
 fi
 
-defs=()
+defs=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"") # the one version source
 if [[ ${1:-} != "--install-paths" ]]; then
   defs+=("-DGRASSFIELD_SETTINGS_QML_DIR=\"$here/qml\"" "-DGRASSFIELD_DEV_BINDINGS=\"$root/config/hypr/grassfield/bindings.lua\"")
 fi

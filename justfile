@@ -9,7 +9,19 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-secrets
+check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-tidy check-secrets
+
+# clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
+check-tidy:
+    scripts/dev/tidy.sh
+
+# One version source: every consumer agrees with the VERSION file (D-11).
+check-version:
+    scripts/dev/check-version.sh
+
+# Licence notices: Omarchy's LICENSE verbatim, license= arrays, shipped notices (GF-014).
+check-licenses:
+    scripts/dev/check-licenses.sh
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland. Verify mode inherits this environment, a
 # running Hyprland's signature included: it runs with a scratch runtime directory and a signature of the installed
@@ -20,9 +32,11 @@ check-config:
     [[ -r /usr/include/hyprland/src/version.h ]] || { echo "check-config: no Hyprland headers (/usr/include/hyprland/src/version.h): install hyprland" >&2; exit 1; }; \
     commit=$(sed -n 's/^#define[[:space:]]*GIT_COMMIT_HASH[[:space:]]*"\([0-9a-f]*\)".*/\1/p' /usr/include/hyprland/src/version.h); \
     for cfg in dev session; do \
-      XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
+      out=$(XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
         GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
-        | sed -n '/Config parsing result/,$p' | tee /dev/stderr | grep -qx 'config ok'; \
+        | sed -n '/Config parsing result/,$p'); \
+      printf '%s\n' "$out"; \
+      printf '%s\n' "$out" | grep -qx 'config ok' || { echo "check-config: $cfg.lua: no 'config ok'" >&2; exit 1; }; \
     done; \
     if compgen -G "$rt/grassfield-compositor-*" >/dev/null; then \
       echo "check-config: verify mode wrote a compositor runtime note" >&2; exit 1; \
@@ -60,7 +74,7 @@ check-secrets:
 
 # Syntax-check shell scripts.
 check-scripts:
-    for f in scripts/dev/*.sh; do bash -n "$f"; done
+    for f in scripts/dev/*.sh scripts/gates/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
 
 # Omarchy private paths, commands and units Grassfield relies on (docs/compat.md); --require fails without Omarchy.
 check-omarchy *args:
@@ -112,6 +126,10 @@ visual *args:
 contrast *args:
     tests/visual/contrast.sh {{args}}
 
+# Nested smoke set (about 20 s) on the running nested session of this tree; skips without one.
+smoke-nested:
+    tests/shell/smoke_nested.sh
+
 # Scripted nested scenario → tests/visual/scenarios/<name>.sh (ask).
 scenario name:
     tests/visual/scenarios/{{name}}.sh
@@ -132,6 +150,38 @@ cursors *args:
 plugin-build:
     cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
     cmake --build compositor/build
+
+# The local CI equivalent (D-6): a clean build of a `git archive` of HEAD with `just check` (incl. tidy), `just test`, coverage, gitleaks and the plugin build. Bare command. Flags: --rc-headers ROOT --keep --only steps
+release-check *args:
+    scripts/gates/release-check.sh {{args}}
+
+# Gate Q3: gcov line coverage of the compositor core and the menu bridge logic (>= 70 %).
+coverage *args:
+    scripts/gates/coverage.sh {{args}}
+
+# Gate P1: idle CPU of grassfield-shell + menu bridge from /proc, e.g. `just gate-idle --nested` or `just gate-idle --real` (read only; bare command).
+gate-idle *args:
+    scripts/gates/idle-cpu.sh {{args}}
+
+# Gate P2: resident memory against the omarchy-shell baseline, e.g. `just gate-rss --real --baseline-mb 458` (bare command).
+gate-rss *args:
+    scripts/gates/rss.sh {{args}}
+
+# Gate P3: frame pacing while the Dock magnifies, the Overview and Apps open/close, in the nested session (reference machine; bare command).
+gate-frames *args:
+    scripts/gates/frame-pacing.sh {{args}}
+
+# Gate P5: session start to "grassfield-shell: usable", from the user journal (read only; bare command).
+gate-startup *args:
+    scripts/gates/session-start.sh {{args}}
+
+# GF-013: About, pacman, the plugin (`hyprctl grassfield`) and the menu bridge report the VERSION file's version: `just gate-version --nested` or `--installed` (bare command).
+gate-version *args:
+    scripts/gates/version-agreement.sh {{args}}
+
+# Off-machine copy: a verified git bundle of the whole repository into DIR (an external disk; GF-034).
+backup dir:
+    scripts/dev/backup.sh {{dir}}
 
 # Load/unload the plugin in the NESTED instance via scripts/nestctl (ask).
 plugin-load:

@@ -264,7 +264,10 @@ ShellRoot {
         }
     }
 
-    Wallpaper {}
+    Wallpaper {
+        // The session lock owns the screen: a video wallpaper pauses (ADR-0016 section 5).
+        locked: Lock.lockState !== "unlocked"
+    }
     HotCorners {}
     DesktopIcons {}
     DesktopWidgets {}
@@ -314,5 +317,5 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened).
-    Component.onCompleted: console.info("grassfield-shell: started, plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max)
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max)
 }

@@ -10,7 +10,7 @@ out=$root/.dev/build
 mkdir -p "$out"
 
 # GCC 16 warns inside Qt headers (-Wsfinae-incomplete); keep our own warnings visible.
-cxxflags=(-std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC)
+cxxflags=(-std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"") # VERSION: the one version source
 # Build against the non-deprecated KF6 API only (also hides deprecated declarations in KIO headers).
 kfdefs=(-DKF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00)
 
