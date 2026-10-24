@@ -9,11 +9,11 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-tidy check-secrets
+check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-version check-licenses check-tidy check-secrets
 
 # Every offline check except clang-tidy, for a tree that leaves compositor/ unchanged (`just check` runs them all). One
 # recipe on purpose: `just check-schema check-shell` would pass check-shell to check-schema as a file argument.
-check-quick: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-secrets
+check-quick: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-version check-licenses check-secrets
 
 # clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
 check-tidy:
@@ -71,6 +71,13 @@ i18n-update:
 # Every test is registered in tests/inventory.json with exactly one layer (static, cheap; docs/testing/README.md).
 check-inventory:
     python3 -I tests/ci/inventory.py
+
+# The gfc/1 table in ADR-0007 = the compositor code = what the shell reads; every qmldir change of Grassfield.Ui has a changelog line.
+check-contracts:
+    python3 -I tests/ci/gfc_parity.py --selftest
+    python3 -I tests/ci/gfc_parity.py
+    python3 -I tests/ci/ui_api.py --selftest
+    python3 -I tests/ci/ui_api.py
 
 # Secret scan of the whole history (gate S1).
 check-secrets:
