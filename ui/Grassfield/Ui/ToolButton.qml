@@ -29,7 +29,9 @@ T.ToolButton {
     implicitHeight: root.buttonSize
     autoExclusive: root.radio
     hoverEnabled: true
-    focusPolicy: Qt.StrongFocus
+    // Reachable by keyboard navigation, never by a click: a toolbar button does not take the focus from the view it acts on
+    // (macOS), so Space after a click still goes to the view.
+    focusPolicy: Qt.TabFocus
     Accessible.role: root.checkable ? (root.radio ? Accessible.RadioButton : Accessible.CheckBox) : Accessible.Button
     Accessible.name: root.accessibleName !== "" ? root.accessibleName : root.text
     // An assistive technology's press (AT-SPI) acts only like the pointer and the keys would: never hidden or disabled (R12).
@@ -89,6 +91,6 @@ T.ToolButton {
 
     FocusRing {
         shapeRadius: root.capsule ? root.height / 2 : Tokens.radiusControl
-        visible: root.activeFocus
+        visible: root.visualFocus
     }
 }

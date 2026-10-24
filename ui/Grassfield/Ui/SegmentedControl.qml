@@ -112,6 +112,6 @@ T.Control {
     }
 
     FocusRing {
-        visible: root.activeFocus
+        visible: root.visualFocus
     }
 }

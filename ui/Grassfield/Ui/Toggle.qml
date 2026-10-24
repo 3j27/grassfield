@@ -44,7 +44,7 @@ T.Control {
 
     FocusRing {
         shapeRadius: root.height / 2
-        visible: root.activeFocus
+        visible: root.visualFocus
     }
 
     Rectangle {

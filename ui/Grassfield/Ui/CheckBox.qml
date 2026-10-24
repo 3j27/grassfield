@@ -51,7 +51,7 @@ T.CheckBox {
 
         FocusRing {
             shapeRadius: Tokens.controlCheckRadius
-            visible: root.activeFocus
+            visible: root.visualFocus
         }
     }
 

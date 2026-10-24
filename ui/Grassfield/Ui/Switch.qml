@@ -53,7 +53,7 @@ T.Switch {
 
         FocusRing {
             shapeRadius: height / 2
-            visible: root.activeFocus
+            visible: root.visualFocus
         }
     }
 

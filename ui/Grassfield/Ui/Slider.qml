@@ -106,7 +106,7 @@ T.Control {
 
         FocusRing {
             shapeRadius: parent.radius
-            visible: root.activeFocus
+            visible: root.visualFocus
         }
     }
 

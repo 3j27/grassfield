@@ -71,6 +71,6 @@ T.Button {
 
     FocusRing {
         shapeRadius: root.capsule ? root.height / 2 : Tokens.radiusControl
-        visible: root.activeFocus
+        visible: root.visualFocus
     }
 }

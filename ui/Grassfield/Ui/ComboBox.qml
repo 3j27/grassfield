@@ -64,7 +64,7 @@ T.ComboBox {
         }
 
         FocusRing {
-            visible: root.activeFocus
+            visible: root.visualFocus
         }
     }
 

@@ -15,6 +15,7 @@ TestCase {
 
     property int clicks: 0
     property int toggles: 0
+    property int viewKeys: 0
 
     Column {
         id: host
@@ -58,6 +59,14 @@ TestCase {
             accessibleName: "Sidebar"
         }
 
+        Item {
+            id: view
+            width: 10
+            height: 10
+            activeFocusOnTab: true
+            Keys.onSpacePressed: tc.viewKeys++
+        }
+
         CheckBox {
             id: check
             text: "Remember"
@@ -94,6 +103,7 @@ TestCase {
     function init() {
         tc.clicks = 0;
         tc.toggles = 0;
+        tc.viewKeys = 0;
         Appearance.increaseContrast = false;
         Appearance.reduceMotion = false;
         button.enabled = true;
@@ -125,7 +135,8 @@ TestCase {
     }
 
     function test_oneFocusRingOfTheTokenWidth() {
-        button.forceActiveFocus();
+        view.forceActiveFocus();
+        button.forceActiveFocus(Qt.TabFocusReason);
         let ring = null;
         for (let i = 0; i < button.children.length; i++) {
             if (button.children[i].border !== undefined && button.children[i].border.width === Tokens.controlFocusOutline)
@@ -135,8 +146,36 @@ TestCase {
         verify(ring.visible);
         compare(ring.border.width, 3);
         compare(ring.anchors.margins, -Tokens.controlFocusOutline);
-        tool.forceActiveFocus();
+        tool.forceActiveFocus(Qt.TabFocusReason);
         verify(!ring.visible, "the ring leaves with the focus");
+    }
+
+    // The ring is for keyboard focus: a click gives the focus to a button but shows no ring.
+    function test_noRingAfterAClick() {
+        mouseClick(button);
+        verify(button.activeFocus);
+        verify(!button.visualFocus);
+        let shown = false;
+        for (let i = 0; i < button.children.length; i++) {
+            if (button.children[i].border !== undefined && button.children[i].border.width === Tokens.controlFocusOutline && button.children[i].visible)
+                shown = true;
+        }
+        verify(!shown, "no ring after a click");
+    }
+
+    // macOS toolbar buttons never take the focus on a click: the view they act on keeps it (Space then goes to the view).
+    function test_toolButtonClickKeepsTheFocusOnTheView() {
+        view.forceActiveFocus();
+        mouseClick(tool);
+        compare(tc.clicks, 1);
+        verify(view.activeFocus, "the view still has the focus");
+        verify(!tool.activeFocus);
+        keyClick(Qt.Key_Space);
+        compare(tc.clicks, 1, "Space does not fire the button again");
+        compare(tc.viewKeys, 1);
+        // Keyboard navigation reaches it.
+        tool.forceActiveFocus(Qt.TabFocusReason);
+        verify(tool.visualFocus);
     }
 
     function test_increaseContrastDrawsABorder() {
@@ -146,7 +185,7 @@ TestCase {
     }
 
     function test_toolButtonReturnClicks() {
-        tool.forceActiveFocus();
+        tool.forceActiveFocus(Qt.TabFocusReason);
         keyClick(Qt.Key_Return);
         keyClick(Qt.Key_Space);
         compare(tc.clicks, 2);
