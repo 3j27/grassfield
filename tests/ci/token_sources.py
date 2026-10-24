@@ -43,6 +43,9 @@ def selftest():
     assert problems(good + "docs/specs/ui.md \u00a7\u00a0Nope]"), "a no-break space"
     assert problems(good + "docs/specs/ui.md  \u00a7 Nope]"), "two spaces before the sign"
     assert problems(good + "see \u00a7 Nope]"), "a sign with no file before it"
+    assert problems(good + "foo/docs/specs/ui.md \u00a7 Functional requirements]"), "a prefixed path"
+    assert problems(good + "docs/specs/ui.md \u00a7  Functional requirements]"), "two spaces after the sign"
+    assert problems("see foo/docs/specs/ui.md"), "a prefixed path is not a pointer either"
     assert problems("ADR-0016 section 5: video") == []
     assert problems("tests/visual/test_contrast_tokens.py: A2") == []
     assert problems("estimate"), "a bare estimate is not a source"

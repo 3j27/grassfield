@@ -9,18 +9,20 @@ TestCase {
 
     name: "ControlsButtons"
     width: 400
-    height: 300
+    height: 640   // every tested control must lie inside the window (a click outside it is lost under load)
     visible: true
     when: windowShown
 
     property int clicks: 0
     property int toggles: 0
     property int viewKeys: 0
+    property int escapes: 0
 
     Column {
         id: host
 
         spacing: 8
+        Keys.onEscapePressed: tc.escapes++
 
         Button {
             id: button
@@ -87,6 +89,17 @@ TestCase {
             onActivated: tc.clicks++
         }
 
+        SwatchRow {
+            id: swatches
+            model: [{id: "a", color: "#ff0000", name: "Red", state: 0}, {id: "b", color: "#00ff00", name: "Green", state: 0}]
+            onChosen: index => tc.clicks++
+        }
+
+        SearchField {
+            id: searchField
+            accessibleName: "Find"
+        }
+
         CheckBox {
             id: check
             text: "Remember"
@@ -124,6 +137,7 @@ TestCase {
         tc.clicks = 0;
         tc.toggles = 0;
         tc.viewKeys = 0;
+        tc.escapes = 0;
         Appearance.increaseContrast = false;
         Appearance.reduceMotion = false;
         button.enabled = true;
@@ -463,6 +477,49 @@ TestCase {
         link.Accessible.pressAction();
         compare(tc.clicks, 0, "nor a disabled one");
         link.enabled = true;
+    }
+
+    // The tests click and key these controls: each one must lie inside the window (the old window cut off the Switch once more
+    // controls were added, and the click then went nowhere under load).
+    function test_everyTestedControlLiesInsideTheWindow() {
+        for (const c of [button, tool, toggleTool, radioA, radioB, check, radio1, radio2, sw, toggle, link, swatches, searchField, view]) {
+            const centre = c.mapToItem(null, c.width / 2, c.height / 2);
+            verify(centre.x >= 0 && centre.x < tc.width && centre.y >= 0 && centre.y < tc.height, c + " centre " + centre.x + "," + centre.y + " is outside the " + tc.width + "x" + tc.height + " window");
+        }
+    }
+
+    // A hidden swatch row picks nothing on any activation key; Tab, Backtab and Escape are not swallowed.
+    function test_aHiddenSwatchRowPicksNothing() {
+        swatches.forceActiveFocus(Qt.TabFocusReason);
+        swatches.currentIndex = 0;
+        keyClick(Qt.Key_Return);
+        compare(tc.clicks, 1, "a shown row picks on Return");
+        tc.clicks = 0;
+        swatches.visible = false;
+        swatches.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Space);
+        keyClick(Qt.Key_Select);
+        keyClick(Qt.Key_Right);
+        compare(tc.clicks, 0, "a hidden row picks nothing");
+        keyClick(Qt.Key_Escape);
+        compare(tc.escapes, 1, "Escape propagates from it");
+        swatches.visible = true;
+    }
+
+    // A hidden search field that holds text and was given the focus by code does not clear on Escape: it propagates.
+    function test_aHiddenSearchFieldDoesNotActOnEscape() {
+        searchField.text = "abc";
+        searchField.visible = false;
+        searchField.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Escape);
+        compare(searchField.text, "abc", "the text was not cleared");
+        compare(tc.escapes, 1, "Escape reached the parent");
+        searchField.visible = true;
+        searchField.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Escape);
+        compare(searchField.text, "", "a shown field clears on the first Escape");
+        compare(tc.escapes, 1, "and does not pass that Escape on");
     }
 
     function test_reduceMotionCapsTheSwitchAnimation() {

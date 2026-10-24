@@ -135,10 +135,10 @@ def generate_plugin(data):
 # reference analysis, a spec, an ADR, a test, the master prompt or an audit. A bare "estimate" is not a source.
 REPO = UI.parent
 F1 = REPO / "docs" / "testing" / "f1-reference-gaps.md"
-PATH_CITE = re.compile(r"(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
+PATH_CITE = re.compile(r"(?<![\w./-])(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
 ADR_CITE = re.compile(r"ADR-(\d{4})")
 # A section pointer has one form: `<file> \u00a7 <section>` (docs/**.md or master-prompt), ended by ";" or "]".
-SECTION_START = re.compile(r"(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 ")
+SECTION_START = re.compile(r"(?<![\w./-])(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 (?=\S)")  # anchored path, one plain space, then text
 
 
 def section_cites(source):

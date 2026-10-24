@@ -22,7 +22,8 @@ TextField {
     }
 
     Keys.onEscapePressed: event => {
-        if (root.text !== "") {
+        // A hidden or disabled field does not act on Escape: it propagates (to the dialog around it).
+        if (root.text !== "" && root.visible && root.enabled) {
             root.clear();
             event.accepted = true;
         } else {
