@@ -38,8 +38,8 @@ moc=/usr/lib/qt6/moc
 # shellcheck disable=SC2046
 g++ -std=c++17 -O2 -Wall -Wextra -fPIC "${defs[@]}" \
   -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
-  $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
+  $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus) $(pkg-config --cflags wayland-client) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui)/QtGui -I/usr/include/qt6/QtCore/$(pkg-config --modversion Qt6Gui) \
   "$here/src/main.cpp" "$here/src/backend.cpp" "$here/src/systemguard.cpp" "$out/moc_backend.cpp" \
-  $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
+  $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus) -lwayland-client \
   -o "$out/grassfield-settings"
 echo "built $out/grassfield-settings"

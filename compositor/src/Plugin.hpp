@@ -4,6 +4,7 @@
 
 #include "core/EventThrottle.hpp"
 #include "core/Protocol.hpp"
+#include "core/Quiet.hpp"
 #include "core/Theme.hpp"
 #include "core/Tiling.hpp"
 
@@ -15,6 +16,7 @@
 #include <chrono>
 #include <exception>
 #include <format>
+#include <utility>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -38,6 +40,8 @@ namespace gf {
 
         std::vector<CHyprSignalListener>   listeners;
         SP<SHyprCtlCommand>                hyprctlCommand;
+        SP<SHyprCtlCommand>                hyprctlFramesCommand; // `hyprctl grassfield-frames` (FrameProbe, feature frame-times)
+        SP<SHyprCtlCommand>                hyprctlFramesStartCommand; // `hyprctl grassfield-frames-start` (records for 60 s)
         bool                               luaHelloRegistered    = false;
         bool                               luaMinimizeRegistered = false;
         bool                               luaRestoreRegistered  = false;
@@ -72,8 +76,11 @@ namespace gf {
     // another window's decoration would remove that decoration.
     void forgetRegisteredDecoration(IHyprWindowDecoration* deco) noexcept;
 
+    // Nothing is written from a key path (core/Quiet.hpp): not a line, not a count.
     template <typename... Args>
     void log(Hyprutils::CLI::eLogLevel level, std::format_string<Args...> fmt, Args&&... args) {
+        if (quiet::inKeyPath())
+            return;
         try {
             Log::logger->log(level, std::string{"[grassfield] "} + std::format(fmt, std::forward<Args>(args)...));
         } catch (...) { // NOLINT(bugprone-empty-catch): nothing to report to, and nothing may escape
@@ -86,6 +93,8 @@ namespace gf {
     // held back.
     template <typename... Args>
     void logRequest(Hyprutils::CLI::eLogLevel level, std::format_string<Args...> fmt, Args&&... args) {
+        if (quiet::inKeyPath())
+            return; // before the budget: a dropped line would be counted in the next "held back" (a count of keys)
         try {
             const auto held = state().requestLog.admit(events::Clock::now());
             if (!held)
@@ -111,6 +120,13 @@ namespace gf {
             log(Log::ERR, "unknown exception in {}", where);
         }
         return false;
+    }
+
+    // A key listener's body (Event::bus()->m_events.input.keyboard.key): guarded, and with every log line off while it runs,
+    // whatever it calls (core/Quiet.hpp; compositor/tests/QuietTest.cpp fails on a key listener without it).
+    template <typename Fn, typename Event, typename Info>
+    void keyPath(std::string_view /*where*/, Fn&& fn, const Event& event, Info& info) noexcept {
+        quiet::runKeyPath(std::forward<Fn>(fn), event, info);
     }
 
 } // namespace gf

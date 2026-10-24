@@ -1,0 +1,100 @@
+#include "ClientChrome.hpp"
+
+#include <algorithm>
+
+namespace gf::chrome {
+
+    bool hasClientChromeTag(const std::set<std::string>& tags) {
+        return std::ranges::any_of(tags, [](const std::string& tag) {
+            std::string_view name = tag;
+            if (name.ends_with('*'))
+                name.remove_suffix(1);
+            return name == kTag;
+        });
+    }
+
+    double band(bool clientChrome) {
+        return clientChrome ? 0.0 : theme::kTitlebarHeight;
+    }
+
+    bool moveAnswersPress(const std::optional<ZoomedPress>& press, uint64_t window, bool buttonHeld, uint64_t nowMs) {
+        if (!press || press->window == 0 || press->window != window || !buttonHeld)
+            return false;
+        return nowMs >= press->timeMs && nowMs - press->timeMs <= kMovePressMaxAgeMs;
+    }
+
+    titlebar::Rect unzoomedBox(const ZoomedPress& press, double restoredW, double restoredH, double pointerX, double pointerY) {
+        return titlebar::unzoomedDragBox(press.zoomed, restoredW, restoredH, press.x, press.y, pointerX, pointerY);
+    }
+
+    ZoomAction zoomAction(bool maximized, bool fullscreen, bool altHeld) {
+        if (fullscreen)
+            return ZoomAction::LeaveFullscreen;
+        if (altHeld)
+            return ZoomAction::EnterFullscreen;
+        return maximized ? ZoomAction::Unzoom : ZoomAction::Zoom;
+    }
+
+    bool zoomGlyphIsArrows(bool altHeld, bool fullscreen) {
+        return altHeld || fullscreen;
+    }
+
+    bool nextRevealed(bool revealed, const RevealInput& in) {
+        if (!in.fullscreen)
+            return false;
+        if (revealed && in.pressing)
+            return true; // a press on a light is decided at its release, over the bar
+        if (!in.onMonitor || in.pointerY < 0.0)
+            return false;
+        if (!revealed)
+            return in.pointerY <= kRevealEdge;
+        return in.pointerY < in.barTop + theme::kTitlebarHeight + kRevealSlack;
+    }
+
+    bool lightAvailableInFullscreen(titlebar::Button button) {
+        return button != titlebar::Button::Minimize;
+    }
+
+    void CRevealPresses::onPress(uint32_t button, bool onBar) {
+        m_owed.erase(button);
+        if (onBar)
+            m_owed.insert(button);
+    }
+
+    bool CRevealPresses::takeRelease(uint32_t button) {
+        return m_owed.erase(button) > 0;
+    }
+
+    bool CRevealPresses::pressing() const {
+        return !m_owed.empty();
+    }
+
+    void CRevealPresses::reset() {
+        m_owed.clear();
+    }
+
+    void CHeldButtons::observe(uint32_t button, bool pressed) {
+        if (pressed)
+            m_held.insert(button);
+        else
+            m_held.erase(button);
+    }
+
+    bool CHeldButtons::mayTake(uint32_t button, bool hyprlandHoldsNone) {
+        if (hyprlandHoldsNone) {
+            m_held.clear();
+            m_known = true;
+        }
+        return m_known && !m_held.contains(button);
+    }
+
+    bool CHeldButtons::known() const {
+        return m_known;
+    }
+
+    void CHeldButtons::reset() {
+        m_held.clear();
+        m_known = false;
+    }
+
+} // namespace gf::chrome

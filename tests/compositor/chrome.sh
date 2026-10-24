@@ -19,7 +19,10 @@
 #   3b the light appearance (audit UX-06; plugin feature "appearance"): the dev settings file says "light", the shell pushes
 #     it; A's bar in the light palette (ui/tokens/tokens.json titlebar.backgroundLight), its lights in place, grey while
 #     inactive, coloured once focused; back to dark: the dark bar again. The settings file is restored at exit.
-#   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): the same lights and bar,
+#   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): a window that draws its own
+#     chrome (ADR-0015, tag grassfield-client-chrome): no plugin bar above it (0 rows of the bar colour), its own lights at
+#     their own geometry (centres 25.75 px from the surface's top-left, 23 px apart, 14 px across, coloured while active)
+#     and glyphs on all three while the pointer is between two of them (macOS); the window's corner radius as before;
 #     radius 26 (the global default; corner inset 7-10 px), square join, glyphs with the pointer between its minimize
 #     and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
@@ -52,8 +55,15 @@ clients() { timeout 5 "$root/scripts/nestctl" -j clients; }
 dispatch() { timeout 5 "$root/scripts/nestctl" dispatch "$1" >>"$log" 2>&1; }
 rounding_of() { timeout 5 "$root/scripts/nestctl" getprop "address:$1" rounding 2>>"$log" | head -n 1; } # effective window rule value
 
-read -r mon_x mon_y mon_w mon_h < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
-[[ -n ${mon_w:-} ]] || { echo "chrome: output $out not found" >&2; exit 2; }
+# In a fresh nested session GF-REF appears a moment after nested-up (Hyprland creates it from its start callback): wait
+# for it, bounded (10 s), instead of failing.
+mon_w=""
+for _ in $(seq 1 40); do
+  read -r mon_x mon_y mon_w mon_h < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
+  [[ -n ${mon_w:-} ]] && break
+  sleep 0.25
+done
+[[ -n ${mon_w:-} ]] || { echo "chrome: output $out not found (waited 10 s)" >&2; exit 2; }
 plugin=0
 HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("decorations")' >/dev/null 2>&1 && plugin=1
 
@@ -151,6 +161,31 @@ check_lights() { # <label> <x> <y>: positions and size of the lights, no glyph
   check "$label: lights" "$ok" "$details"
 }
 
+# The lights an app draws itself (grassfield-ui WindowControls, unified toolbar, ADR-0015): centres at 25.75 px from the
+# surface's top-left and 23 px apart (window tokens), on the app's own toolbar colour (sampled right of the lights).
+measure_app() { # <name> <x> <y> <w> -> m[...] as measure
+  local name=$1 x=$2 y=$3 w=$4 bg
+  bg=$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 110)),$((y + 8))}]" info: | cut -c1-6)
+  python3 -I "$root/tests/compositor/chrome_measure.py" "$run/$name.ppm" "$x" "$y" "$w" 0 26 49 72 -26 "bar=$bg" "fill=$bg" \
+    "inactive=$(token_hex inactiveButtonDark)" >"$run/$name-app.txt" 2>>"$log"
+  unset m
+  declare -gA m=()
+  local k v
+  while IFS='=' read -r k v; do m[$k]=$v; done <"$run/$name-app.txt"
+  say "  measured $name (app lights on $bg): $(tr '\n' ' ' <"$run/$name-app.txt")"
+}
+
+check_app_lights() { # <label> <x> <y>: positions and size of the app's own lights
+  local label=$1 x=$2 y=$3 name i=0 ok=0 details="" ex
+  for name in close minimize zoom; do
+    ex=$(awk -v x="$x" -v i="$i" 'BEGIN { print x + 25.75 + 23 * i }')
+    within "${m[${name}_cx]}" "$ex" 0.75 && within "${m[${name}_cy]}" "$(awk -v y="$y" 'BEGIN { print y + 25.75 }')" 0.75 && within "${m[${name}_d]}" 14 1 || ok=1
+    details+="$name (${m[${name}_cx]},${m[${name}_cy]}) d ${m[${name}_d]}, expected ($ex,$(awk -v y="$y" 'BEGIN { print y + 25.75 }')) d 14; "
+    i=$((i + 1))
+  done
+  check "$label: lights" "$ok" "$details"
+}
+
 check_glyphs() { # <label> <0 = expect glyphs on all three | 1 = expect none>
   local label=$1 want=$2 ok=0 name
   for name in close minimize zoom; do
@@ -171,15 +206,18 @@ check_junction() { # <label>: no curve where the content meets the bar (the cont
   check "$1: bar and content join square" "$ok" "pixels of the cut top corners that differ from the content: left ${m[junction_left]:-?}, right ${m[junction_right]:-?} (before the fix: 21 at radius 12, 98 at radius 26)"
 }
 
-check_grey() { # <label> <0 = expect grey lights | 1 = expect coloured lights>
-  local label=$1 want=$2 ok=0 name details=""
+check_grey() { # <label> <0 = expect grey lights | 1 = expect coloured lights> [core]
+  # core (the light appearance): a coloured light is told from a grey one by the grey inside its 5 px core only; over a
+  # light bar the anti-aliased ring of the green light passes for the light grey (chrome_measure.py <light>_grey_core).
+  local label=$1 want=$2 key=grey ok=0 name details=""
+  [[ ${3:-} == core ]] && key=grey_core
   for name in close minimize zoom; do
     if ((want == 0)); then
       ((${m[${name}_grey]:-0} >= 100)) || ok=1 # a 14-px light is about 150 px
     else
-      ((${m[${name}_grey]:-0} <= 4)) && within "${m[${name}_d]:-0}" 14 1.2 || ok=1
+      ((${m[${name}_${key}]:-0} <= 4)) && within "${m[${name}_d]:-0}" 14 1.2 || ok=1
     fi
-    details+="$name grey ${m[${name}_grey]} px, colour diameter ${m[${name}_d]}; "
+    details+="$name grey ${m[${name}_grey]} px (core ${m[${name}_grey_core]:-?}), diameter ${m[${name}_d]} (${m[${name}_ref]:-colour}); "
   done
   check "$label" "$ok" "$details"
 }
@@ -280,7 +318,7 @@ if ((plugin)); then
     park
     capture a-light-active
     measure a-light-active "$ax" "$ay" "$aw"
-    check_grey "A active (light): coloured lights" 1
+    check_grey "A active (light): coloured lights" 1 core
     set_appearance dark
     palette_for Dark
     park
@@ -317,20 +355,31 @@ if [[ -x $settings ]]; then
     crops settings "$sx" "$sy" "$sw"
     measure settings "$sx" "$sy" "$sw" "$(rounding_of "$s_addr")"
     if ((plugin)); then
-      check_lights "Settings" "$sx" "$sy"
-      check_grey "Settings (active): coloured lights" 1
-      check_bar "Settings"
-      check_junction "Settings"
+      ((${m[bar_rows]:-1} == 0))
+      check "Settings (client chrome): no plugin bar above it" $? "${m[bar_rows]} rows of the plugin bar colour above the surface (expected 0)"
     fi
+    # The corner on the app's own top edge (its toolbar colour, measured with no plugin bar): the measurement above looks
+    # for the plugin bar, absent by design here, and finds no corner (integrator run 2026-10-24: diagonal inset -1).
+    measure_app settings "$sx" "$sy" "$sw"
     check_corner "Settings (org.grassfield.*)" 7 10 26
-    if ((plugin)); then
-      pointer abs $((sx + (GF_TB_MIN_X + GF_TB_ZOOM_X) / 2)) $((sy - GF_TB_MID)) sleep 400
+    check_app_lights "Settings (its own lights)" "$sx" "$sy"
+    check_grey "Settings (active): its own lights coloured" 1
+    # Between the minimize and zoom lights. The app draws the glyphs itself, from the pointer events it gets: up to three
+    # looks 400 ms apart, with 1 px of motion before each (integrator runs 2026-10-24 at load 11-18: no glyph after one
+    # look of 400 ms, twice; the same step passed earlier). The number of looks is logged: always 3 with no glyph means the
+    # pointer events do not reach the window.
+    hx=$((sx + 26 + 23 + 12)) hy=$((sy + 26))
+    pointer abs "$hx" "$hy" sleep 400
+    for look in 1 2 3; do
       capture settings-hover
-      crops settings-hover "$sx" "$sy" "$sw"
-      measure settings-hover "$sx" "$sy" "$sw"
-      check_glyphs "Settings, pointer between its minimize and zoom lights: glyphs on all three" 0
-      park
-    fi
+      crops settings-hover "$sx" "$((sy + (plugin ? GF_TB_HEIGHT : 0)))" "$sw" # the crop then starts at the surface top
+      measure_app settings-hover "$sx" "$sy" "$sw"
+      ((${m[close_glyph]:-0} >= 6 && ${m[minimize_glyph]:-0} >= 6 && ${m[zoom_glyph]:-0} >= 6)) && break
+      ((look < 3)) && pointer abs $((hx + look % 2)) "$hy" sleep 400
+    done
+    say "  Settings hover: glyphs looked for $look time(s)"
+    check_glyphs "Settings, pointer between its minimize and zoom lights: glyphs on all three" 0
+    park
   else
     check "Settings opened" 1 "no org.grassfield.Settings window (see $log)"
   fi

@@ -34,4 +34,46 @@ namespace gf::theme::tokens {
     inline constexpr double kTitlebarPreviewRimOpacity = 0.22;
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr int kTitlebarPreviewRimWidth = 2;
+    // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
+    inline constexpr int kWindowLightDiameter = 14;
+    // ADR-0015 / f1-reference-gaps.md:103: gap between two light edges (pitch 23); plugin kButtonSpacing
+    inline constexpr int kWindowLightGap = 9;
+    // ADR-0015 / f1-reference-gaps.md:107: unified toolbar row, 52 pt, holds the lights and the toolbar items
+    inline constexpr int kWindowUnifiedHeight = 52;
+    // ADR-0015 / f1-reference-gaps.md:106: centre of the first light in a unified toolbar window, from the window's top-left corner (x and y)
+    inline constexpr double kWindowUnifiedLightCentre = 25.75;
+    // ADR-0015: titlebar-only style, the plugin's kTitlebarHeight (32); also overview.windowTitlebarHeight
+    inline constexpr int kWindowTitlebarHeight = 32;
+    // ADR-0015: titlebar style, left edge to the first light's edge (plugin kButtonInsetLeft); the centre is then at (16, 16)
+    inline constexpr int kWindowTitlebarLightInset = 9;
+    // plugin kButtonHitSlop = diameter / 6: extra hit radius around a light, the gaps between lights stay drag area [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr double kWindowLightHitSlop = 2.3333;
+    // plugin kTitlePadding: least gap between the lights and the title [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr int kWindowTitleGap = 8;
+    // plugin kGlyphRatio, measured on the 2x reference: glyph box side over light diameter [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr double kWindowGlyphRatio = 0.55;
+    // plugin kGlyphStroke, measured: stroke width over light diameter [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr double kWindowGlyphStroke = 0.12;
+    // plugin kGlyphColor alpha: the glyph darkens the light under it by this much [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr double kWindowGlyphOpacity = 0.5;
+    // plugin kCloseColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowCloseColor = 0xE5534B;
+    // plugin kMinimizeColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowMinimizeColor = 0xD9A93B;
+    // plugin kZoomColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowZoomColor = 0x4FA64F;
+    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowInactiveLightDark = 0x5A5A5E;
+    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowInactiveLightLight = 0xD1D1D3;
+    // estimate: hairline around a light (darkening, drawn in the glyph colour), keeps the grey light visible on a same-grey toolbar
+    inline constexpr double kWindowLightBorderOpacity = 0.18;
+    // estimate: a pressed light darkens by this much
+    inline constexpr double kWindowPressedOpacity = 0.2;
+    // ADR-0015 / f1-reference-gaps.md:109: toolbar window title, about 15 pt bold
+    inline constexpr int kWindowTitleSize = 15;
+    // estimate: gap between toolbar items and groups
+    inline constexpr int kWindowItemsGap = 8;
+    // estimate: space between the toolbar's trailing edge and its last item
+    inline constexpr int kWindowItemsInset = 14;
 } // namespace gf::theme::tokens

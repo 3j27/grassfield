@@ -19,6 +19,9 @@ Window {
     readonly property var folder: win.tab ? win.tab.activeFolder : null
     readonly property alias menuLayer: menuLayer
     property string notice: ""
+    // ADR-0015: the window draws its own chrome; the apps' tagger (apps/windowchrome.h) names its role for the
+    // compositor, whose plugin then draws no titlebar on it.
+    property string gfChromeRole: "browser"
     property string bannerText: ""
     // The registrar is there: the window exports its menus to the global menu bar (GlobalMenu.qml).
     readonly property bool globalMenu: win.manager.globalMenu
@@ -364,6 +367,17 @@ Window {
         height: parent.height
         app: win.app
         tab: win.tab
+        topInset: sidebarToolbar.height
+    }
+
+    // The window lights in the corner of the sidebar (ADR-0015); the toolbar over the content holds the title.
+    UnifiedToolbar {
+        id: sidebarToolbar
+        width: sidebar.width
+        window: win
+        showTitle: false
+        doubleClickAction: win.app.titlebarDoubleClick
+        canMinimize: win.app.canMinimize
     }
 
     Item {
@@ -372,18 +386,19 @@ Window {
         width: parent.width - sidebar.width
         height: parent.height
 
-        // Toolbar
-        Item {
+        // Toolbar: the title and the app's items in the unified toolbar of grassfield-ui (ADR-0015); the lights are in the
+        // sidebar's corner (sidebarToolbar above).
+        UnifiedToolbar {
             id: toolbar
             width: parent.width
-            height: Tokens.filesToolbarHeight
-            Accessible.role: Accessible.ToolBar
-            Accessible.name: qsTr("Toolbar")
+            window: win
+            showControls: false
+            title: win.title
+            doubleClickAction: win.app.titlebarDoubleClick
+            canMinimize: win.app.canMinimize
 
-            Row {
+            leading: Row {
                 id: navButtons
-                x: Tokens.spacingSm
-                anchors.verticalCenter: parent.verticalCenter
                 spacing: Tokens.spacingXs / 2
 
                 ToolButton {
@@ -402,28 +417,8 @@ Window {
                 }
             }
 
-            Text {
-                textFormat: Text.PlainText
-                anchors.left: navButtons.right
-                anchors.leftMargin: Tokens.spacingMd
-                anchors.right: tools.left
-                anchors.rightMargin: Tokens.spacingMd
-                anchors.verticalCenter: parent.verticalCenter
-                text: win.title
-                elide: Text.ElideRight
-                color: Appearance.colors.text
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyTitleSize
-                font.weight: Tokens.typographyMenuBoldWeight
-                Accessible.role: Accessible.Heading
-                Accessible.name: text
-            }
-
-            Row {
+            trailing: Row {
                 id: tools
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.spacingMd
-                anchors.verticalCenter: parent.verticalCenter
                 spacing: Tokens.spacingSm
 
                 // View switcher (segmented)

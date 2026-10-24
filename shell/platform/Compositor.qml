@@ -823,7 +823,7 @@ Singleton {
     }
 
     // Mapped windows of an output on any regular workspace, monitor-relative geometry:
-    // [{address, toplevel, appId, title, x, y, w, h, workspaceId, fullscreen}]. `toplevel` is the
+    // [{address, toplevel, appId, title, x, y, w, h, workspaceId, fullscreen, tags}]. `toplevel` is the
     // foreign-toplevel handle (null until matched), usable as a capture source.
     function windowsAcross(screenName: string): var {
         const out = [];
@@ -848,7 +848,9 @@ Singleton {
                 w: data.size[0],
                 h: data.size[1],
                 workspaceId: data.workspace.id,
-                fullscreen: data.fullscreen === 2
+                fullscreen: data.fullscreen === 2,
+                // Hyprland's window tags (rule-set ones print with a trailing "*"): Overview reads grassfield-client-chrome.
+                tags: Array.isArray(data.tags) ? data.tags : []
             });
         }
         return out;

@@ -1,8 +1,10 @@
 #include "TitlebarLayout.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 
 namespace gf::titlebar {
 
@@ -105,11 +107,52 @@ namespace gf::titlebar {
             const double t   = len > 0 ? std::clamp((((px - s.x0) * dx) + ((py - s.y0) * dy)) / len, 0.0, 1.0) : 0.0;
             return std::hypot(px - (s.x0 + (t * dx)), py - (s.y0 + (t * dy)));
         }
+
+        struct Point {
+            double x, y;
+        };
+
+        // Signed distance from (px, py) to the triangle's boundary: positive inside, negative outside (the nearest edge
+        // line's distance, exact enough for a one-pixel anti-aliasing ramp).
+        double insideTriangle(double px, double py, const std::array<Point, 3>& t) {
+            double inside = std::numeric_limits<double>::infinity();
+            for (size_t i = 0; i < 3; ++i) {
+                const Point& a     = t[i];
+                const Point& b     = t[(i + 1) % 3];
+                const Point& c     = t[(i + 2) % 3];
+                const double ex    = b.x - a.x;
+                const double ey    = b.y - a.y;
+                const double len   = std::hypot(ex, ey);
+                const double side  = (ex * (c.y - a.y)) - (ey * (c.x - a.x)); // the third corner is on the inner side
+                const double cross = (ex * (py - a.y)) - (ey * (px - a.x));
+                if (len <= 0)
+                    return -1.0;
+                inside = std::min(inside, (side >= 0 ? cross : -cross) / len);
+            }
+            return inside;
+        }
+
+        std::vector<uint8_t> arrowsMask(int sizePx) {
+            const double                   n = sizePx;
+            const std::array<Point, 3>     bottomLeft{Point{0, n}, Point{0, 0.3 * n}, Point{0.7 * n, n}};
+            const std::array<Point, 3>     topRight{Point{n, 0}, Point{n, 0.7 * n}, Point{0.3 * n, 0}};
+            std::vector<uint8_t>           mask(static_cast<size_t>(sizePx) * static_cast<size_t>(sizePx), 0);
+            for (int y = 0; y < sizePx; ++y) {
+                for (int x = 0; x < sizePx; ++x) {
+                    const double d        = std::max(insideTriangle(x + 0.5, y + 0.5, bottomLeft), insideTriangle(x + 0.5, y + 0.5, topRight));
+                    const double coverage = std::clamp(d + 0.5, 0.0, 1.0);
+                    mask[(static_cast<size_t>(y) * static_cast<size_t>(sizePx)) + static_cast<size_t>(x)] = static_cast<uint8_t>(std::lround(coverage * 255.0));
+                }
+            }
+            return mask;
+        }
     } // namespace
 
-    std::vector<uint8_t> glyphMask(Button button, int sizePx, double strokePx) {
+    std::vector<uint8_t> glyphMask(Button button, int sizePx, double strokePx, bool fullScreenArrows) {
         if (sizePx < 1 || sizePx > theme::kMaxGlyphPx || !(strokePx > 0))
             return {};
+        if (button == Button::Zoom && fullScreenArrows)
+            return arrowsMask(sizePx);
         const double n    = sizePx;
         const double half = std::min(strokePx, n) / 2.0;
         // Ends inset by half a stroke: the round caps stay inside the square.

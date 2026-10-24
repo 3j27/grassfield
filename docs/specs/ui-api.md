@@ -62,4 +62,7 @@ add ScrollBar
 add Sheet
 add FocusGuard
 add ActivationKeys
+add WindowActions
+add WindowControls
+add UnifiedToolbar
 ```

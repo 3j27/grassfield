@@ -1,10 +1,12 @@
 #include "Titlebar.hpp"
 
+#include "ClientChrome.hpp"
 #include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "Tiling.hpp"
+#include "core/ClientChrome.hpp"
 #include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
 #include "core/Theme.hpp"
@@ -12,15 +14,23 @@
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/ViewHitTester.hpp>
+#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
+#include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/WLSurface.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/layout/supplementary/DragController.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/protocols/XDGShell.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
+#include <hyprland/src/protocols/core/DataDevice.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
@@ -71,7 +81,44 @@ namespace {
         gf::input::CPointerGestureTracker presses;
         CGrassfieldTitlebar*              hovered = nullptr; // lights under the pointer (glyphs); checked with isLive
         PHLWINDOWREF                      activeWindow;      // last window reported active (its lights are coloured)
+        gf::chrome::CRevealPresses        revealPresses;     // presses on a revealed full-screen titlebar (P6)
+        gf::chrome::CHeldButtons          heldButtons;       // the buttons Hyprland holds, as the bus shows them (P6)
+        CGrassfieldTitlebar*              revealArmed = nullptr; // its light pressed, activated on release over it
+        std::optional<tb::Button>         revealLight;
     };
+
+    bool sessionLocked() {
+        return !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked(); // undecidable: locked (failures stay locked)
+    }
+
+    // The shell's menu bar (a layer of that namespace on the monitor): a revealed full-screen titlebar starts below it.
+    constexpr std::string_view kMenubarNamespace = "grassfield-menubar";
+    constexpr double           kMaxMenubarInset  = 64.0; // a larger layer of that name is not a menu bar: the bar stays at the top
+
+    double menubarInset(const PHLMONITOR& mon) {
+        if (!mon)
+            return 0.0;
+        for (const auto& level : mon->m_layerSurfaceLayers) {
+            for (const auto& ref : level) {
+                const auto ls = ref.lock();
+                if (ls && ls->m_mapped && ls->m_namespace == kMenubarNamespace)
+                    return ls->m_geometry.h > 0.0 && ls->m_geometry.h <= kMaxMenubarInset ? ls->m_geometry.h : 0.0;
+            }
+        }
+        return 0.0;
+    }
+
+    // A surface drawn over a revealed full-screen titlebar takes its own presses: a layer popup (the menu bar's menus) or
+    // an Overlay layer (a dialog, the menu bar itself), as Hyprland orders pointer focus (CInputManager::mouseMoveUnified).
+    bool overlaySurfaceAt(const Vector2D& pos, const PHLMONITOR& mon) {
+        if (!mon || !Desktop::viewState())
+            return false;
+        Vector2D local;
+        PHLLS    layer;
+        if (Desktop::viewState()->hitTest().layerPopupSurfaceAt(pos, mon, &local, &layer))
+            return true;
+        return Desktop::viewState()->hitTest().layerSurfaceAt(pos, &mon->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY], &local, &layer) != nullptr;
+    }
 
     // Constructed on first use, inside a guarded call, so a throwing constructor cannot escape (R13).
     SPointerInput& pointerInput() {
@@ -134,8 +181,7 @@ namespace {
     // parks the window on special:minimized itself when the plugin lacks the feature). Clicks can come from a
     // virtual pointer at any rate: the request is coalesced per window (spec FR24).
     void requestMinimize(const PHLWINDOW& w) {
-        const uint64_t address = reinterpret_cast<uintptr_t>(w.get());
-        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::MinimizeRequest, .id = address}, gf::gfc::minimizeRequestJson(std::format("{:x}", address)));
+        gf::ipc::postMinimizeRequest(reinterpret_cast<uintptr_t>(w.get()));
     }
 
     // The one zoom toggle, shared by the zoom button and the double-click on the drag area.
@@ -151,6 +197,29 @@ namespace {
     Fullscreen::eFullscreenMode fullscreenMode(const PHLWINDOW& w) {
         const auto& fs = Fullscreen::controller();
         return fs ? fs->getFullscreenModes(w).internal : Fullscreen::FSMODE_NONE;
+    }
+
+    // Alt (Option) held on any keyboard.
+    bool altHeld() {
+        return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & HL_MODIFIER_ALT) != 0;
+    }
+
+    // The zoom light (ADR-0015 P6, REQ-ADR0002-6): zoom (maximized) and back; with Alt held, true full screen (the shell
+    // hides the menu bar as in any full screen); a window in full screen leaves it.
+    void zoomLight(const PHLWINDOW& w) {
+        auto& fs = Fullscreen::controller();
+        if (!fs)
+            return;
+        const auto mode = fullscreenMode(w);
+        switch (gf::chrome::zoomAction(mode == Fullscreen::FSMODE_MAXIMIZED, mode == Fullscreen::FSMODE_FULLSCREEN, altHeld())) {
+            case gf::chrome::ZoomAction::EnterFullscreen:
+                gf::logRequest(Log::DEBUG, "titlebar zoom with Alt -> full screen");
+                fs->setFullscreenMode(w, Fullscreen::FSMODE_FULLSCREEN, Fullscreen::FSMODE_FULLSCREEN, false);
+                break;
+            case gf::chrome::ZoomAction::LeaveFullscreen: fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false); break;
+            case gf::chrome::ZoomAction::Zoom:
+            case gf::chrome::ZoomAction::Unzoom: toggleZoom(w); break;
+        }
     }
 
     // A move that starts on a maximized window: leave the maximized mode first (the layout gives the window
@@ -276,6 +345,11 @@ namespace {
         const auto& all = gf::state().titlebars;
         if (all.empty() || !Desktop::windowState())
             return nullptr;
+        // A revealed full-screen titlebar is drawn over every window (P6).
+        for (auto* deco : all) {
+            if (deco->revealed() && deco->barContains(pos))
+                return deco->buttonGroupContains(pos) ? deco : nullptr;
+        }
         const auto& windows = Desktop::windowState()->windows();
         for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
             const auto& w = *it;
@@ -317,6 +391,10 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
         auto& input = pointerInput();
         if (input.hovered == this)
             input.hovered = nullptr;
+        if (input.revealArmed == this) {
+            input.revealArmed = nullptr;
+            input.revealLight.reset();
+        }
         if (input.grab.deco == this) {
             // The window is going away: drop the gesture (and redraw where its tiling preview was). The press ownership
             // stays, so the release that will still arrive is not mistaken for a client's (another titlebar under the
@@ -332,17 +410,54 @@ PHLWINDOW CGrassfieldTitlebar::window() const {
     return m_owner.lock();
 }
 
-bool CGrassfieldTitlebar::shouldShow() const {
+bool CGrassfieldTitlebar::titlebarAllowed() const {
     const auto w = window();
-    if (!w || !w->m_isMapped || w->isHidden() || !w->m_isFloating)
+    if (!w || !w->m_isMapped || w->isHidden())
         return false;
     if (w->m_isX11 && (w->isX11OverrideRedirect() || w->m_X11DoesntWantBorders))
         return false;
     if (w->m_ruleApplicator && !w->m_ruleApplicator->decorate().valueOrDefault())
         return false;
-    if (const auto& fs = Fullscreen::controller(); fs && fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_FULLSCREEN)
+    return !gf::chrome::isClientChrome(w); // the app draws its own lights and toolbar (ADR-0015 P1)
+}
+
+bool CGrassfieldTitlebar::shouldShow() const {
+    const auto w = window();
+    if (!w || !w->m_isFloating || !titlebarAllowed())
         return false;
+    if (const auto& fs = Fullscreen::controller(); fs && fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_FULLSCREEN)
+        return false; // away; the pointer at the top edge reveals it (P6, revealable)
     return true;
+}
+
+bool CGrassfieldTitlebar::revealable() const {
+    const auto w = window();
+    if (!w || !w->m_workspace || !w->m_workspace->isVisible())
+        return false;
+    const auto& fs = Fullscreen::controller();
+    if (!fs || fs->getFullscreenModes(w).internal != Fullscreen::FSMODE_FULLSCREEN)
+        return false;
+    if (sessionLocked())
+        return false; // every press is the lock screen's
+    // The pointer belongs to the client (review of part B, major 2): a pointer it confines or locks (a game that scrolls at
+    // the screen's edge: pushing up there and clicking the corner hit a working close light), a move or resize it started
+    // (or a key binding's), a drag and drop.
+    if (g_pInputManager && g_pInputManager->isConstrained())
+        return false;
+    if (g_layoutManager) {
+        if (const auto& drag = g_layoutManager->dragController(); drag && drag->mode() != MBIND_INVALID)
+            return false;
+    }
+    if (PROTO::data && PROTO::data->dndActive())
+        return false;
+    // A special workspace shown on the monitor is drawn above the full-screen window: the bar would be under its windows.
+    if (const auto mon = w->m_monitor.lock(); mon && mon->m_activeSpecialWorkspace && mon->m_activeSpecialWorkspace != w->m_workspace)
+        return false;
+    return drawnInPlace(w) && titlebarAllowed();
+}
+
+bool CGrassfieldTitlebar::revealed() const {
+    return m_revealed;
 }
 
 SDecorationPositioningInfo CGrassfieldTitlebar::getPositioningInfo() {
@@ -387,6 +502,10 @@ void CGrassfieldTitlebar::refresh() {
     const auto w = window();
     if (!w)
         return;
+    if (m_revealed && !revealable()) {
+        damageRevealed(); // the window left full screen (or its workspace): the revealed bar goes with it
+        m_revealed = false;
+    }
     const bool show = shouldShow();
     if (show == m_lastShown)
         return;
@@ -412,15 +531,39 @@ CBox CGrassfieldTitlebar::layoutBox() const {
     return g_pDecorationPositioner->getWindowDecorationBox(const_cast<CGrassfieldTitlebar*>(this));
 }
 
+CBox CGrassfieldTitlebar::revealBox() const {
+    const auto w   = window();
+    const auto mon = w ? w->m_monitor.lock() : nullptr;
+    if (!w || !mon)
+        return {};
+    const CBox surface = w->getWindowMainSurfaceBox(); // the monitor's box in full screen
+    return CBox{surface.x, mon->m_position.y + menubarInset(mon), surface.w, theme::kTitlebarHeight};
+}
+
+CBox CGrassfieldTitlebar::barBox() const {
+    return m_revealed ? revealBox() : layoutBox();
+}
+
+bool CGrassfieldTitlebar::barShown() const {
+    return m_revealed || shouldShow();
+}
+
 bool CGrassfieldTitlebar::barContains(const Vector2D& pos) const {
-    return shouldShow() && layoutBox().containsPoint(pos);
+    return barShown() && barBox().containsPoint(pos);
 }
 
 bool CGrassfieldTitlebar::buttonGroupContains(const Vector2D& pos) const {
-    if (!shouldShow())
+    if (!barShown())
         return false;
-    const CBox bar = layoutBox();
+    const CBox bar = barBox();
     return tb::overButtonGroup(pos.x - bar.x, pos.y - bar.y, bar.w);
+}
+
+void CGrassfieldTitlebar::damageRevealed() {
+    if (!m_revealed || !g_pHyprRenderer)
+        return;
+    CBox box = revealBox();
+    g_pHyprRenderer->damageBox(box.expand(2));
 }
 
 void CGrassfieldTitlebar::damageEntire() {
@@ -428,6 +571,10 @@ void CGrassfieldTitlebar::damageEntire() {
         const auto w = window();
         if (!w || !g_pHyprRenderer)
             return;
+        if (m_revealed) {
+            damageRevealed();
+            return;
+        }
         CBox box = layoutBox();
         box.translate(w->m_floatingOffset);
         g_pHyprRenderer->damageBox(box.expand(2));
@@ -476,15 +623,15 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
                        power, alpha);
     }
 
-    // 1. Background with rounded top corners: a rounded rect taller than the bar, clipped to the bar.
-    CBox bgBox   = bar;
-    bgBox.h     += 2.0 * rounding;
-    CBox clipBox = bar;
-    addRect(bgBox.scale(scale).round(), bgColor, roundPx, power, clipBox.scale(scale).round());
+    // 1. The bar: background, lights and their glyphs, title (drawBar). The pointer is checked again here: the window may
+    //    have moved or gone under a pointer that has not moved since.
+    const bool hovered = pointerInput().hovered == this && g_pInputManager && drawnInPlace(w) && buttonGroupContains(g_pInputManager->getMouseCoordsInternal());
+    drawBar(w, bar, scale, rounding, power, alpha, hovered, false);
 
     // 2. The surface's rounded top corners, under the surface: Hyprland cuts them away with the window's rounding, so the
     //    bar colour fills them, then the content's own pixels are drawn there unrounded (macOS: bar and content are one
-    //    shape, square where they meet). Where the content is transparent the bar colour stays.
+    //    shape, square where they meet). Where the content is transparent the bar colour stays. Below the bar: nothing
+    //    drawBar draws overlaps them.
     if (rounding > 0) {
         CBox left{bar.x, bar.y + bar.h, rounding, rounding};
         CBox right{bar.x + bar.w - rounding, bar.y + bar.h, rounding, rounding};
@@ -492,22 +639,34 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
         addRect(right.scale(scale).round(), bgColor, 0, power);
         drawContentCorners(w, bar, rounding, scale, alpha);
     }
+}
 
-    // 3. Buttons (owner-drawn circles): coloured on the active window, grey on the others; coloured again with their
-    //    glyphs while the pointer is over the group (macOS). The pointer is checked again here: the window may have moved
-    //    or gone under a pointer that has not moved since.
-    const bool hovered = pointerInput().hovered == this && g_pInputManager && drawnInPlace(w) && buttonGroupContains(g_pInputManager->getMouseCoordsInternal());
-    const bool active  = Desktop::focusState() && Desktop::focusState()->window() == w;
+void CGrassfieldTitlebar::drawBar(const PHLWINDOW& w, const CBox& bar, float scale, double rounding, float power, float alpha, bool hovered, bool fullscreen) {
+    const auto appearance = gf::state().appearance;
+    const auto palette    = theme::titlebarPalette(appearance);
+    const auto bgColor    = toColor(palette.background, alpha);
+    const int  roundPx    = static_cast<int>(std::round(rounding * scale));
+
+    // Background with rounded top corners: a rounded rect taller than the bar, clipped to the bar.
+    CBox bgBox   = bar;
+    bgBox.h     += 2.0 * rounding;
+    CBox clipBox = bar;
+    addRect(bgBox.scale(scale).round(), bgColor, roundPx, power, clipBox.scale(scale).round());
+
+    // Buttons (owner-drawn circles): coloured on the active window, grey on the others; coloured again with their glyphs
+    // while the pointer is over the group (macOS). On a full-screen window minimize stays grey (unavailable).
+    const bool active = Desktop::focusState() && Desktop::focusState()->window() == w;
     for (const auto button : tb::kButtonOrder) {
-        const auto r = tb::buttonRect(button);
+        const bool available = !fullscreen || gf::chrome::lightAvailableInFullscreen(button);
+        const auto r         = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round();
-        addRect(box, toColor(tb::lightColor(button, active, hovered, appearance), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
+        addRect(box, toColor(tb::lightColor(button, active && available, hovered && available, appearance), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
     }
     if (hovered)
-        drawGlyphs(bar, scale, alpha);
+        drawGlyphs(bar, scale, alpha, fullscreen);
 
-    // 4. Title, centered on the bar, never over the buttons.
+    // Title, centered on the bar, never over the buttons.
     const int maxWidthPx = static_cast<int>(std::floor(tb::maxTitleWidth(bar.w) * scale));
     if (w->m_title.empty() || maxWidthPx <= 0)
         return;
@@ -538,9 +697,11 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
 }
 
-void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha) {
+void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen) {
     for (size_t i = 0; i < tb::kButtonOrder.size(); ++i) {
         const auto button = tb::kButtonOrder[i];
+        if (fullscreen && !gf::chrome::lightAvailableInFullscreen(button))
+            continue;
         const auto r      = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round(); // the light exactly as drawn above
@@ -548,15 +709,17 @@ void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha) 
         if (sizePx <= 0)
             continue;
 
-        auto& glyph = m_glyphs[i];
-        if (!glyph.texture || glyph.sizePx != sizePx || glyph.scale != scale) {
+        auto&      glyph  = m_glyphs[i];
+        const bool arrows = button == tb::Button::Zoom && gf::chrome::zoomGlyphIsArrows(altHeld(), fullscreen);
+        if (!glyph.texture || glyph.sizePx != sizePx || glyph.scale != scale || glyph.arrows != arrows) {
             glyph = {};
-            auto pixels = tb::premultipliedBgra(tb::glyphMask(button, sizePx, theme::kGlyphStroke * theme::kButtonDiameter * scale), theme::kGlyphColor);
+            auto pixels = tb::premultipliedBgra(tb::glyphMask(button, sizePx, theme::kGlyphStroke * theme::kButtonDiameter * scale, arrows), theme::kGlyphColor);
             if (pixels.empty())
                 continue;
             glyph.texture = g_pHyprRenderer->createTexture(DRM_FORMAT_ARGB8888, pixels.data(), static_cast<uint32_t>(sizePx) * 4U, Vector2D{static_cast<double>(sizePx), static_cast<double>(sizePx)});
             glyph.sizePx  = sizePx;
             glyph.scale   = scale;
+            glyph.arrows  = arrows;
         }
         if (!glyph.texture || !glyph.texture->ok())
             continue;
@@ -629,6 +792,14 @@ void CGrassfieldTitlebar::onAppearanceChanged() {
             deco->m_title.texture.reset(); // the title colour is in its texture: rebuilt on the next draw
             deco->damageEntire();
         }
+    });
+}
+
+void CGrassfieldTitlebar::onKey() {
+    gf::guarded("titlebar onKey", [] {
+        // Only the lights under the pointer show glyphs; the frame drawn next reads Alt after Hyprland applied this key.
+        if (auto* hovered = pointerInput().hovered; isLive(hovered))
+            hovered->damageEntire();
     });
 }
 
@@ -732,7 +903,7 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
             gf::logRequest(Log::DEBUG, "titlebar close");
             logIfFailed("close", Config::Actions::closeWindow(w));
             break;
-        case tb::Button::Zoom: gf::logRequest(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
+        case tb::Button::Zoom: gf::logRequest(Log::DEBUG, "titlebar zoom"); zoomLight(w); break;
         case tb::Button::Minimize: gf::logRequest(Log::DEBUG, "titlebar minimize"); requestMinimize(w); break;
     }
 }
@@ -794,6 +965,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
 }
 
 void CGrassfieldTitlebar::onGlobalMouseMove() {
+    gf::guarded("titlebar reveal", [] { updateReveal(); }); // before the hover: a bar just revealed shows its glyphs
     gf::guarded("titlebar hover", [] { updateHover(); });
     gf::guarded("titlebar onGlobalMouseMove", [] {
         auto& input = pointerInput();
@@ -821,5 +993,154 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
         input.hovered      = nullptr;
         input.activeWindow = {};
         input.presses.reset();
+        // A release still owed reaches Hyprland, which has no such button held and returns (read from the binary).
+        input.revealPresses.reset();
+        input.heldButtons.reset();
+        input.revealArmed = nullptr;
+        input.revealLight.reset();
+        for (auto* deco : gf::state().titlebars) {
+            deco->damageRevealed();
+            deco->m_revealed = false;
+        }
     });
+}
+
+void CGrassfieldTitlebar::updateReveal() {
+    if (!g_pInputManager)
+        return;
+    const Vector2D pos      = g_pInputManager->getMouseCoordsInternal();
+    const bool     pressing = pointerInput().revealPresses.pressing();
+    for (auto* deco : gf::state().titlebars) {
+        gf::chrome::RevealInput in;
+        const auto              w   = deco->window();
+        const auto              mon = w ? w->m_monitor.lock() : nullptr;
+        if (mon) {
+            in.onMonitor = pos.x >= mon->m_position.x && pos.x < mon->m_position.x + mon->m_size.x && pos.y >= mon->m_position.y && pos.y < mon->m_position.y + mon->m_size.y;
+            in.pointerY  = pos.y - mon->m_position.y;
+        }
+        // The cheap test first, on every pointer motion: away and the pointer not at its monitor's top edge, nothing changes.
+        if (!deco->m_revealed && (!in.onMonitor || in.pointerY > gf::chrome::kRevealEdge))
+            continue;
+        in.fullscreen = deco->revealable();
+        if (!in.fullscreen && !deco->m_revealed)
+            continue;
+        in.barTop       = menubarInset(mon);
+        in.pressing     = pressing;
+        const bool next = gf::chrome::nextRevealed(deco->m_revealed, in);
+        if (next == deco->m_revealed)
+            continue;
+        deco->damageRevealed(); // where it was
+        deco->m_revealed = next;
+        deco->damageRevealed(); // where it is
+        if (!sessionLocked())
+            gf::logRequest(Log::DEBUG, "titlebar of a full-screen window {}", next ? "revealed" : "away");
+    }
+}
+
+void CGrassfieldTitlebar::drawRevealed() {
+    gf::guarded("titlebar drawRevealed", [] {
+        if (!g_pHyprRenderer)
+            return;
+        const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock();
+        if (!mon)
+            return;
+        for (auto* deco : gf::state().titlebars) {
+            if (!deco->m_revealed)
+                continue;
+            const auto w = deco->window();
+            if (!w || w->m_monitor.lock() != mon || !deco->revealable())
+                continue;
+            CBox bar = deco->revealBox();
+            if (bar.w <= 0 || bar.h <= 0)
+                continue;
+            bar.translate(-mon->m_position);
+            const bool hovered = pointerInput().hovered == deco && g_pInputManager && deco->buttonGroupContains(g_pInputManager->getMouseCoordsInternal());
+            deco->drawBar(w, bar, mon->m_scale, 0.0, w->roundingPower(), 1.F, hovered, true); // square: it spans the monitor
+        }
+    });
+}
+
+bool CGrassfieldTitlebar::onRevealedBarButton(const IPointer::SButtonEvent& e) {
+    bool cancel = false;
+    gf::guarded("titlebar revealed bar button", [&] {
+        auto&      input  = pointerInput();
+        const bool locked = sessionLocked();
+        if (locked) {
+            // A light armed before the lock never acts (review of part B, 2026-10-24).
+            input.revealArmed = nullptr;
+            input.revealLight.reset();
+        }
+        if (e.state == WL_POINTER_BUTTON_STATE_RELEASED) {
+            if (!input.revealPresses.takeRelease(e.button))
+                return; // a release Hyprland expects
+            cancel           = true;
+            auto*      armed = std::exchange(input.revealArmed, nullptr);
+            const auto light = std::exchange(input.revealLight, std::nullopt);
+            if (e.button == BTN_LEFT && light && isLive(armed) && armed->m_revealed && armed->revealable() && g_pInputManager) {
+                const auto pos    = g_pInputManager->getMouseCoordsInternal();
+                const CBox bar    = armed->revealBox();
+                const bool overIt = tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == light;
+                gf::logRequest(Log::INFO, "revealed titlebar: release {}", overIt ? "on the light: it acts" : "away from the light: nothing");
+                if (overIt)
+                    armed->activate(*light);
+            } else if (light && !locked)
+                gf::logRequest(Log::INFO, "revealed titlebar: release of an armed light with the bar gone: nothing");
+            updateReveal(); // the pointer may have left the bar during the press
+            return;
+        }
+        if (!g_pInputManager)
+            return;
+        const auto           pos     = g_pInputManager->getMouseCoordsInternal();
+        auto&                held    = input.heldButtons;
+        const bool           none    = !g_pInputManager->hasHeldButtons();
+        CGrassfieldTitlebar* deco    = nullptr;
+        const char*          refused = nullptr;
+        for (auto* d : gf::state().titlebars) {
+            if (!d->m_revealed || !d->revealBox().containsPoint(pos))
+                continue;
+            const auto w = d->window();
+            if (!w || !d->revealable())
+                refused = "the window cannot show it now";
+            else if (overlaySurfaceAt(pos, w->m_monitor.lock()))
+                refused = "a layer popup or an Overlay layer is over it";
+            // Hyprland's held buttons are per button and the bus event names no device (IPointer::SButtonEvent): a press of a
+            // button another device already holds goes to Hyprland, so that the other device's release is never mistaken
+            // for the bar's (review of part B: B holds LEFT, A presses LEFT on the bar); so does any press until the plugin
+            // has seen Hyprland hold nothing (core CHeldButtons).
+            else if (!held.mayTake(e.button, none))
+                refused = held.known() ? "that button is already held" : "the held buttons are not known yet";
+            else
+                deco = d;
+            break;
+        }
+        // One line per press over the revealed bar (never a key, never while locked, never a position): what it did and
+        // why (tests/compositor/fullscreen_reveal.sh prints them).
+        if (refused && !locked)
+            gf::logRequest(Log::INFO, "revealed titlebar: a press left to Hyprland: {} (Hyprland {})", refused, none ? "holds no button" : "holds some button");
+        if (deco)
+            cancel = true; // first: whatever follows, the press never reaches Hyprland without its release owed
+        input.revealPresses.onPress(e.button, deco != nullptr);
+        if (!deco)
+            return;
+        input.revealArmed = nullptr;
+        input.revealLight.reset();
+        const auto w = deco->window();
+        if (e.button != BTN_LEFT || !w)
+            return; // other buttons do nothing on the bar
+        const CBox bar = deco->revealBox();
+        const auto hit = tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w);
+        gf::logRequest(Log::INFO, "revealed titlebar: a press taken -> {}", hitName(hit));
+        focusAndRaise(w);
+        if (const auto light = tb::buttonForHit(hit); light && gf::chrome::lightAvailableInFullscreen(*light)) {
+            input.revealArmed = deco;
+            input.revealLight = light;
+        }
+    });
+    // What Hyprland holds from here on: a press it processes adds its button, a release it processes removes it (its list
+    // removes every entry of that button).
+    gf::guarded("titlebar held buttons", [&] {
+        if (!cancel)
+            pointerInput().heldButtons.observe(e.button, e.state == WL_POINTER_BUTTON_STATE_PRESSED);
+    });
+    return cancel;
 }

@@ -17,6 +17,8 @@ FocusScope {
     readonly property var places: root.app.places
     readonly property int currentRow: root.tab ? root.places.rowForUrl(root.tab.url) : -1
     property int keyRow: -1
+    // Space kept free at the top for the window lights (the toolbar drawn over it, ADR-0015).
+    property real topInset: 0
 
     // Eject (macOS File > Eject, Cmd+E here Ctrl+E, and Eject in the sidebar item's context menu): the volume of the row the
     // keyboard is on while the sidebar has the focus, else the one whose folder is shown; -1 when that is not an ejectable,
@@ -122,7 +124,7 @@ FocusScope {
     ListView {
         id: list
         anchors.fill: parent
-        anchors.topMargin: Tokens.spacingSm
+        anchors.topMargin: root.topInset + Tokens.spacingSm
         anchors.leftMargin: Tokens.spacingSm
         anchors.rightMargin: Tokens.spacingSm + Tokens.appsBorderWidth
         model: root.places

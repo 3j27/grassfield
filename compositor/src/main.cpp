@@ -5,8 +5,10 @@
 // its degraded mode because no `grassfield` capabilities event is ever posted.
 
 #include "AppmenuServer.hpp"
+#include "ClientChrome.hpp"
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
+#include "FrameProbe.hpp"
 #include "Ipc.hpp"
 #include "LayerPointer.hpp"
 #include "Minimize.hpp"
@@ -19,6 +21,7 @@
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
@@ -95,8 +98,10 @@ namespace {
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
         // its held-button state, which pins pointer focus while a button is down. Stages first: a pointer focus
         // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before
-        // anything else sees the press (R13 review of 46b3e9b).
-        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
+        // anything else sees the press (R13 review of 46b3e9b). One exception: a press on the revealed titlebar of a
+        // full-screen window and the release of that press are cancelled together (ADR-0015 P6): Hyprland returns before
+        // its held-button state for a cancelled event, so the pair leaves it unchanged.
+        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
             // A shell layer mapped or took the keyboard under the resting pointer and its pointer focus is not refreshed yet
             // (a button was held, no pointer device, or the press came in the same event loop pass): a press is delivered
             // at the right place, a release schedules the refresh after Hyprland handled it (FR51).
@@ -104,7 +109,21 @@ namespace {
             gf::guarded("stages pointer guard", [&] { gf::stager::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             // A press after an overview focus request wins over the target the shell named (recorded only).
             gf::guarded("overview focus press", [&] { gf::overviewFocus::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            // A press on a zoomed window that draws its own chrome, recorded while it is still zoomed: the app's move request
+            // that may follow takes it out of the zoom under the pointer (ADR-0015 P4).
+            gf::guarded("client chrome press", [&] { gf::chrome::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
+            if (CGrassfieldTitlebar::onRevealedBarButton(e))
+                info.cancelled = true;
+        }));
+        // The revealed titlebar of a full-screen window: Hyprland draws no decoration in full screen (P6).
+        l.push_back(ev.render.stage.listen([](eRenderStage stage) {
+            if (stage == RENDER_POST_WINDOWS)
+                CGrassfieldTitlebar::drawRevealed();
+        }));
+        // Keys are observed, never cancelled: Alt changes the zoom glyph of the hovered lights (ADR-0015 P6).
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) {
+            gf::keyPath("titlebar key", [](const IKeyboard::SKeyEvent& /*e*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onKey(); }, e, info);
         }));
     }
 
@@ -185,6 +204,8 @@ namespace {
             }
         };
         step("listeners", [&] { s.listeners.clear(); });
+        step("client chrome", [] { gf::chrome::stop(); });   // per-window toplevel listeners removed
+        step("frame probe", [] { gf::frameProbe::stop(); }); // presentation listeners removed
         step("desktop focus", [] { gf::desktopFocus::stop(); }); // no press or commit may reach the policy any more
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
@@ -285,6 +306,22 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!layerPointerOk) {
             gf::guarded("layer pointer rollback", [] { gf::layerPointer::stop(); });
             gf::log(Log::WARN, "layer pointer listener failed to register; layer-pointer not advertised");
+        }
+        // Optional feature: without it windows that draw their own chrome still get no titlebar (P1 needs no listener), but
+        // their minimize light and zoomed drag are not bridged and client-chrome is not advertised (the shell's Overview
+        // then keeps the titlebar band above them).
+        bool clientChromeOk = false;
+        gf::guarded("client chrome start", [&] { clientChromeOk = gf::chrome::start(); });
+        if (!clientChromeOk) {
+            gf::guarded("client chrome rollback", [] { gf::chrome::stop(); });
+            gf::log(Log::WARN, "client chrome listeners failed to register; client-chrome not advertised");
+        }
+        // Optional feature (ADR-0006 P3): presented-frame timestamps; without it frame-times is not advertised.
+        bool frameProbeOk = false;
+        gf::guarded("frame probe start", [&] { frameProbeOk = gf::frameProbe::start(); });
+        if (!frameProbeOk) {
+            gf::guarded("frame probe rollback", [] { gf::frameProbe::stop(); });
+            gf::log(Log::WARN, "frame probe listeners failed to register; frame-times not advertised");
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");

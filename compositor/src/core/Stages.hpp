@@ -47,7 +47,8 @@ namespace gf::stages {
     // in front of it; windows further back share the backmost position.
     inline constexpr size_t kStackDepth = 3;
     inline constexpr double kStackStep  = 8;
-    // The plugin's titlebar above each window's surface box (logical px, scaled with the thumbnail).
+    // The plugin's titlebar above each window's surface box (logical px, scaled with the thumbnail). A window that draws
+    // its own chrome has none (ADR-0015 P3, core/ClientChrome.hpp band): the glue passes the band of each window.
     inline constexpr double kTitlebarHeight = gf::theme::kTitlebarHeight;
     // How far left of its monitor a hidden strip's thumbnails are drawn (they are then not visible).
     inline constexpr double kHiddenMargin = 48;
@@ -153,7 +154,9 @@ namespace gf::stages {
     // Where each window of a strip stage is drawn in its tile: one surface rect per window, same order as
     // `surfacesBackToFront` (the windows' current surface boxes). Each window is fitted (uniform scale, centred, never
     // distorted) with its titlebar band into its stack position; the front window takes the bottom-right position.
-    std::vector<Box> thumbRects(const Box& tile, std::span<const Box> surfacesBackToFront);
+    // `bands`: the band above each window (same order; kTitlebarHeight, 0 for a window that draws its own chrome); empty,
+    // shorter, or a value that is not finite and >= 0: kTitlebarHeight.
+    std::vector<Box> thumbRects(const Box& tile, std::span<const Box> surfacesBackToFront, std::span<const double> bands = {});
 
     // How far a hidden strip slides left: the horizontal shift that puts the right edge of its tiles kHiddenMargin px left
     // of the monitor (its thumbnails are then not visible). Stages without a tile use the last tile, shifted the same way.
@@ -176,7 +179,7 @@ namespace gf::stages {
         std::optional<Box> thumb;
     };
     std::vector<StripTarget> stripTargets(size_t slot, std::span<const Box> tiles, bool hidden, bool fullscreen, const Box& monitor,
-                                          std::span<const Box> surfacesBackToFront);
+                                          std::span<const Box> surfacesBackToFront, std::span<const double> bands = {});
 
     // Every tile lies inside `monitor` (1 px tolerance; finite and bounded). False without tiles.
     bool tilesInMonitor(std::span<const Box> tiles, const Box& monitor);
@@ -310,6 +313,71 @@ namespace gf::stages {
     // The keyboard never stays on a minimized, hidden or strip window: an eligible holder keeps it, otherwise the active
     // stage's front window takes it (`hasFront`), otherwise nothing holds it.
     KeyboardTarget keyboardAfterLeave(const KeyboardHolder& holder, bool hasFront);
+
+    // Before every key (keepKeyboardFocus in Stages.cpp; integrator decision 2026-10-24, by the macOS model: a modal system
+    // prompt always gets the keyboard, and there is always a key window). wlr-layer-shell: a Top or Overlay surface with
+    // Exclusive keyboard interactivity gets every key; on Bottom and Background ones the compositor's normal focus stays.
+    // Hyprland drops a keyboard focus change while the session has no keyboard device (CSeatManager::setKeyboardFocus:
+    // "BUG THIS: setKeyboardFocus without a valid keyboard set") and gives a keyboard device that appears only its own
+    // focus surface (CInputManager::setupKeyboard), both read from the 0.56.2 binary. In a session whose keyboards come and
+    // go (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) the seat's keyboard could stay
+    // off a dialog, or on nothing after it, and every key was lost (stages.sh 8c, 8f, 8g, 8h, 8i(e): the three nested runs
+    // without a keyboard device of their own lost them all, the thirteen with one lost none).
+    enum class KeyFocusAction : uint8_t {
+        None,     // the seat's keyboard focus stands
+        ToLayer,  // the frontmost Exclusive Top or Overlay layer gets the keyboard
+        ToWindow, // Hyprland's active window gets the keyboard back
+    };
+    inline constexpr uint32_t kLayerTop = 2; // zwlr_layer_shell_v1 layers: 0 background, 1 bottom, 2 top, 3 overlay
+
+    struct KeyFocusFacts {
+        bool     locked            = true;  // the session is locked, or that is not known (failures stay locked)
+        bool     inputMethodGrab   = false; // an input method grabs the keyboard: its keys and surfaces are left alone
+        bool     exclusive         = false; // a mapped layer surface has Exclusive keyboard interactivity (any layer)
+        uint32_t frontmostLevel    = 0;     // the frontmost such layer's level (replacesFrontmost)
+        bool     seatOnFrontmost   = false; // the seat's keyboard is on it (or one of its popups)
+        bool     grabRejectsLayer  = false; // a seat grab is set and does not accept it
+        bool     seatFocusNone     = false; // the seat's keyboard is on no surface
+        bool     activeWindow      = false; // Hyprland has an active window that may take the keyboard (mapped, shown, takes input)
+        bool     grabRejectsWindow = false; // a seat grab is set and does not accept that window's surface
+        bool     keyArriving       = true;  // checked before a key; false: from the event loop after a focus change, a layer
+                                            // mapped or unmapped, or a keyboard device that appeared
+    };
+
+    // ToLayer: an Exclusive layer is up, the frontmost is on Top or Overlay and the seat's keyboard is not on it. ToWindow:
+    // no Exclusive layer, the seat's keyboard on nothing, an active window that may take it, and a key arriving (from the
+    // event loop the plugin's other focus rules and Hyprland's refocus may still give the keyboard elsewhere: the overview's
+    // "no window is key", a deferred focus). Never while locked, under an input method's keyboard grab, or against a seat
+    // grab that rejects the surface. While an Exclusive layer is up no window gets the keyboard (Hyprland refuses every
+    // window focus then).
+    KeyFocusAction keyFocusAction(const KeyFocusFacts& facts);
+
+    // A keyboard device that replaced the one of the previous key (that one went away: a keyboard plugged in again, a
+    // Bluetooth keyboard reconnecting; in the nested session every keys.sh burst). When the seat lost its keyboard
+    // capability in between, clients destroyed and re-created their wl_keyboard, and a Quickshell (Qt) client then ignores
+    // the keys of the new one until it gets a new wl_keyboard.leave and enter (nested 2026-10-24, plugin unloaded: a
+    // Quickshell layer surface and a Quickshell window got the first burst only, foot every burst; after a focus cycle the
+    // Quickshell window got the next burst). So before the first key of such a device the surface that holds the keyboard
+    // is announced again (leave, then enter), unless an input method grabs the keyboard or the keyboard is on nothing.
+    // Unlocked: not under a seat grab (a menu). Locked, or the lock state not known (integrator decision 2026-10-24: a lock
+    // screen gone deaf after the only keyboard reconnected, at resume, is a lock-out; "failures stay locked" never allows a
+    // deaf password field): only when the surface that holds the keyboard is a session-lock surface (ext-session-lock), and
+    // to that same surface; a seat grab must accept it. The surface that has the keyboard never changes, and nothing that
+    // is not a lock surface is ever given it.
+    struct ReannounceFacts {
+        bool replaced         = false; // the previous key's keyboard device went away; the one typing now is the only one
+        bool locked           = true;  // the session is locked, or that is not known
+        bool inputMethodGrab  = false;
+        bool seatGrab         = false; // a seat grab is set
+        bool grabAcceptsFocus = false; // ... and accepts the surface that holds the keyboard
+        bool focus            = false; // the seat's keyboard is on a surface
+        bool focusIsLock      = false; // that surface is a session-lock surface, as Hyprland reports it (false when unknown)
+    };
+    bool reannounceFocus(const ReannounceFacts& facts);
+
+    // Walking Hyprland's Exclusive-layer list in order: a layer on `level` replaces the frontmost found so far (on
+    // `bestLevel`, if any) unless its level is lower (the latest to become Exclusive wins among equals).
+    bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel);
 
     // Hyprland's active window (CFocusState::window()) is what window key bindings (close, full screen, floating), window
     // dispatchers without an explicit window and the shell's menu bar (foreign-toplevel "activated") act on. It can differ
