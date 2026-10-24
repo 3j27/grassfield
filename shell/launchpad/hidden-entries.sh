@@ -1,8 +1,10 @@
 #!/bin/sh
 # Prints the desktop entry ids hidden by OnlyShowIn / NotShowIn for $XDG_CURRENT_DESKTOP, and the helper launchers
 # (GF-102; macOS Launchpad lists applications, not their helpers): the ids in the helpers list below (Avahi browsers, lstopo,
-# the Fcitx configuration tool and wrappers), and terminal emulators' server and client launchers (a TerminalEmulator
-# entry whose Exec runs "--server" or whose program is "<name>client": foot-server, footclient). One per
+# the Fcitx daemon, migrator and Qt wrappers; NOT fcitx5-configtool, the only way to the input-method settings, which
+# Grassfield Settings has no page for), and terminal emulators' server and client launchers (a TerminalEmulator
+# entry whose Exec runs "--server" or whose program is "<name>client": foot-server, footclient). The list can be replaced
+# for a test or a distribution with GRASSFIELD_HELPER_IDS (space-separated ids; empty hides no helper by id). One per
 # line, in the form of Quickshell's DesktopEntry.id: no ".desktop" suffix, subfolders joined with
 # "-" (applications/kde/foo.desktop -> kde-foo). Quickshell's DesktopEntry does not expose those
 # keys. Read only; no arguments. Handles CRLF files, "Key = value" spacing and symlinked folders.
@@ -18,7 +20,7 @@ IFS=:
     printf '/%s/applications/\n' "${d#/}"
     find -L "$d/applications" -name '*.desktop' ! -name "*$NL*" ! -path "*$NL*" -printf '%P\n' 2>/dev/null
   done
-} | awk -v cur="$XDG_CURRENT_DESKTOP" -v helpers="${GRASSFIELD_HELPER_IDS-avahi-discover bssh bvnc lstopo fcitx5-configtool org.fcitx.Fcitx5 org.fcitx.fcitx5-qt5-gui-wrapper org.fcitx.fcitx5-qt6-gui-wrapper fcitx5-migrator}" '
+} | awk -v cur="$XDG_CURRENT_DESKTOP" -v helpers="${GRASSFIELD_HELPER_IDS-avahi-discover bssh bvnc lstopo org.fcitx.Fcitx5 org.fcitx.fcitx5-qt5-gui-wrapper org.fcitx.fcitx5-qt6-gui-wrapper fcitx5-migrator}" '
   function has(list,    i, n, a) {
     n = split(list, a, ";")
     for (i = 1; i <= n; i++)
