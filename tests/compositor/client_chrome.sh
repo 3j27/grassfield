@@ -43,6 +43,8 @@ plugin=1
 
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
@@ -85,13 +87,17 @@ geom() {
     '.[] | select(.class == $c) | "\(.at[0] - $mx) \(.at[1] - $my) \(.size[0]) \(.size[1]) \(.fullscreen)"' | head -1
 }
 mapped() { [[ -n $(client "$1" .address) ]]; }
-# The plugin strip above a surface: 1 when the row 16 px above its top edge has the strip's colour (either appearance) at
-# five points across the window (20 % to 80 % of its width; a shadow over the wallpaper is neither that colour nor
-# uniform), 0 otherwise. <png> <x> <y> <w> (output px).
+# The plugin strip above a surface: 1 when two rows of the strip, 4 px above the surface's top edge and 4 px below the
+# strip's own top, have the strip's colour (either appearance; the same for an active and an inactive window) at five
+# points across the window (20 % to 80 % of its width; a shadow over the wallpaper is neither that colour nor uniform), 0
+# otherwise. Not the strip's middle row: the title is drawn there (integrator capture 2026-10-24, foot's title "CFCFD2"
+# across 20-80 % of the row 16 px up). <png> <x> <y> <w> (output px).
 strip_above() {
-  local i hexes=()
-  for i in 20 35 50 65 80; do
-    hexes+=("$(magick "$1" -format "%[hex:p{$(($2 + $4 * i / 100)),$(($3 - 16))}]" info: 2>/dev/null | cut -c1-6)")
+  local i r hexes=()
+  for r in 4 $((GF_TB_HEIGHT - 4)); do
+    for i in 20 35 50 65 80; do
+      hexes+=("$(magick "$1" -format "%[hex:p{$(($2 + $4 * i / 100)),$(($3 - r))}]" info: 2>/dev/null | cut -c1-6)")
+    done
   done
   python3 -I - "$(jq -r '.titlebar.backgroundDark.value' "$root/ui/tokens/tokens.json")" \
     "$(jq -r '.titlebar.backgroundLight.value' "$root/ui/tokens/tokens.json")" "${hexes[@]}" <<'PY'
