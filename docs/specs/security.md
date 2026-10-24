@@ -176,8 +176,16 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   counts as a failure; after 5 in a row the module is "degraded": the user gets a notice in Notifications ("The screen
   may not lock before sleep", with the lock shortcut; Do Not Disturb silences its banner, the entry stays in the
   Notification Center), the journal says why, and the child is retried every 60 s instead of every 5 s. A run of 2 s
-  resets the count and withdraws the notice. Pure logic in `IdleModel.js` (`failuresAfterExit`, `retryDelayMs`,
-  `degraded`), unit-tested in `tst_idlemodel.qml`.
+  resets the count and withdraws the notice. Whether a run lasted 2 s is timed by a Timer (`inhibitorHealthy`,
+  `watcherHealthy`: a monotonic clock), never by `Date.now()` (review of 2dfd992: a wall-clock step forward made an early
+  exit look long and hid the failure); a child that never started counts as a failure. Pure logic in `IdleModel.js`
+  (`failuresAfterRun`, `retryDelayMs`, `degraded`), unit-tested in `tst_idlemodel.qml`.
+- No wall clock in `shell/security`: every delay is a Qt Timer. The lock ownership check skips Hyprland answers for
+  500 ms after the compositor confirmed the lock (`Lock.qml` `secureGrace`, single-shot Timer; with `Date.now()` a clock
+  step back turned the check off for as long as the step, review of 2dfd992); a Timer that is not running means no
+  window, so the check stays on. The only `Date` left is the arrival time the held polkit sheet prints (`new Date()`,
+  display only). `tests/security/lock_surfaces.sh` fails on any `Date.now`, `getTime`, `performance.now` or other
+  `new Date(` in shell/security (comments excluded), with mutants.
 - Sleep delay budget: the release timer was 4 s, below logind windows of 15 s that Omarchy ships
   (`InhibitDelayMaxSec=15`, because a lid close that reconfigures displays can take longer to lock). It is now derived
   from logind's `InhibitDelayMaxUSec` (`busctl get-property`, read once at start): window minus a fifth (at least 1 s),
@@ -386,8 +394,10 @@ Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quicks
 request: the message (polkit's text; for `pkexec` it names the program and its arguments), "Action: <id>", the
 identity, and now the action's `iconName` (from the root-installed `.policy` file) with the lock as a badge, macOS style.
 That icon describes the action, not the program that asked: polkit does not tell the agent which process requested it
-through this API (`AuthDialogModel.iconName`: plain theme names only; `AuthAgent` shows it only when the
-theme has it; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
+through this API (`AuthDialogModel.iconName`: plain theme names only, by the one rule notification icons use,
+`NotificationPrefs.safeIconName`, review of 2dfd992; `AuthAgent` shows it through `ThemeIcons.source`, only when the
+theme has it and every file Qt could read for the name is a regular file of bounded size, no FIFO or device:
+`tests/security/theme_icon_files.sh`; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
 
 ## L5 polkit (owner, real session)

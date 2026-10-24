@@ -176,11 +176,19 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   built from its number with every segment encoded (`History.copySource`), a file nobody else writes. Each intake makes a
   fresh copy (album art at a reused path changes). The directory holds at most 48 copies and 64 MiB across all senders
   (`copyWindow`, `copyBudgetBytes`; review of 6e24d36: 60 notifications naming one 8 MiB file filled 384 MiB of the
-  session's tmpfs): the helper evicts the oldest copies first, never one a banner on screen shows, and refuses an image
-  that would not fit even then before evicting anything. An evicted or refused image shows the app icon; an evicted copy is
-  re-made only when a new notification names the file, never because it is shown (copies cannot evict each other in a
-  loop). `tests/shell/notif_image_budget` (budget lowered to 3 MiB: six 1 MiB images, an image larger than the budget, a
-  banner's copy kept, an image the kept copies leave no room for; six mutants fail it).
+  session's tmpfs), and at most half of the budget for one sender (`copyShareBytes`; the sender is the notification's
+  app name, a number of it is part of each copy's file name; review of 2dfd992: eight critical banners of one sender held
+  the whole budget). The helper evicts first the sender's own oldest copies while it is over its share, then the oldest
+  copies overall, never one shown on screen: a displayed banner's or, while it is open, a Notification Center row's,
+  including copies made in the same helper batch (review of 2dfd992: they were not protected); the batch starts later in
+  the turn that asked for it, once the notification's banner is on screen. An image larger than a sender's share, or that
+  would not fit even after those evictions, is refused before anything is evicted. An evicted or refused image shows the
+  app icon; an evicted copy is re-made only when a new notification names the file, never because it is shown (copies
+  cannot evict each other in a loop). `tests/shell/notif_image_budget` (budget lowered to 3 MiB: six 1 MiB images, an
+  image larger than the budget, a banner's copy kept, an image the banners' copies leave no room for) and
+  `tests/shell/notif_image_fairness` (one batch of banners keeps its copies; one sender's banners keep half the budget,
+  another sender still fits; a sender replaces its own older copy; an open Center row's copy is kept; four mutants fail
+  it).
   Until the copy exists the app icon or the bell shows; without `XDG_RUNTIME_DIR` no local file is shown.
   `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a directory, a missing file,
   the reviewer's bypass forms `x.png?a`, `file://…?a`, `x%2Epng`, `file://…#f`, `image://icon//…?fallback=a` and an app
@@ -192,6 +200,12 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   missing); it applies at intake (`checkedAppIcon`, `History.keptAppIcon`), on history load (`History.parse`) and in
   `iconSource`; with previews hidden `NotificationPrefs.appIconShown` keeps only a name that passes the same test, so the
   sender's image and an app icon path (its private copy included) give way to the app's theme icon or the generic one.
+  A name that passes reaches an Image only through `ThemeIcons.source` (shell/services, shared with the polkit sheet;
+  review of 2dfd992): a helper first checks every file Qt could read for it (`<name>`, `.png`, `.svg`, `.svgz`, `.xpm`
+  under the icon search paths the user owns or can write, symlinks followed) and refuses the name unless each is a
+  regular file of at most 8 MiB; until the verdict (well under a second) and after a refusal the generic icon shows.
+  `tests/security/theme_icon_files.sh` (FIFO, symlink to a FIFO, symlinks to /dev/zero and /dev/null, FIFO .svg, FIFO
+  under ~/.icons; a regular icon still shows; the mutant without the verdict stalls the loader).
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the

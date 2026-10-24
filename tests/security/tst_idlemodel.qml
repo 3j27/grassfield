@@ -41,14 +41,16 @@ TestCase {
 
     // GF-030: a failing inhibitor or watcher is never given up; after MAX_FAST_FAILURES fast exits in a row the module is
     // degraded (the user is told) and retries slowly; a run of FAST_EXIT_MS resets the count.
-    function test_failuresAfterExit() {
-        compare(IdleModel.failuresAfterExit(0, 10), 1);
-        compare(IdleModel.failuresAfterExit(4, 1999), 5);
-        compare(IdleModel.failuresAfterExit(7, IdleModel.FAST_EXIT_MS), 0);
-        compare(IdleModel.failuresAfterExit(3, 60000), 0);
-        compare(IdleModel.failuresAfterExit(undefined, 5), 1);
-        compare(IdleModel.failuresAfterExit(-2, 5), 1);
-        compare(IdleModel.failuresAfterExit(2, NaN), 3, "unknown run time counts as a failure");
+    // Review of 2dfd992: whether the child ran FAST_EXIT_MS comes from a Timer (monotonic), never from the wall clock.
+    function test_failuresAfterRun() {
+        compare(IdleModel.failuresAfterRun(0, false), 1);
+        compare(IdleModel.failuresAfterRun(4, false), 5);
+        compare(IdleModel.failuresAfterRun(7, true), 0);
+        compare(IdleModel.failuresAfterRun(undefined, false), 1);
+        compare(IdleModel.failuresAfterRun(-2, false), 1);
+        compare(IdleModel.failuresAfterRun(2, undefined), 3, "unknown counts as a failure");
+        compare(IdleModel.failuresAfterRun(2, 1), 3, "only true resets");
+        compare(IdleModel.failuresAfterRun(2, 60000), 3, "a duration is not an answer");
     }
 
     function test_retryNeverStops() {

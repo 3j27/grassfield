@@ -79,7 +79,9 @@ TestCase {
         compare(model.iconName, "org.gnome.Software");
         flow.iconName = "drive-harddisk_x-1";
         compare(model.iconName, "drive-harddisk_x-1");
-        const refused = ["/usr/share/icons/x.png", "file:///etc/passwd", "http://127.0.0.1:9/x.png", "../x", "a b", "image://icon/x", "x\ny", "‮x", "x".repeat(129)];
+        // The shared rule (NotificationPrefs.safeIconName, review of 2dfd992): also no leading ".", "-" or "_", no "..".
+        const refused = ["/usr/share/icons/x.png", "file:///etc/passwd", "http://127.0.0.1:9/x.png", "../x", "a b", "image://icon/x", "x\ny", "‮x", "x".repeat(129),
+            "..", ".hidden", "a..b", "-x", "_x"];
         for (let i = 0; i < refused.length; i++) {
             flow.iconName = refused[i];
             compare(model.iconName, "", JSON.stringify(refused[i]).slice(0, 40));
@@ -183,6 +185,8 @@ TestCase {
         verify(notice.indexOf("while the screen was locked") !== -1, notice);
         verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
         verify(model.heldNotice(Date.now(), false).indexOf("just as the screen was unlocked") !== -1);
+        // AuthAgent passes the arrival time as a Date (display only; shell/security reads no Date.now).
+        compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), true), notice);
     }
 
     // Review of d8e654c: a request arriving within heldAfterUnlockMs after an unlock is held like one that arrived while locked.
