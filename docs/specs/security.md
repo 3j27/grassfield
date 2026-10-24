@@ -568,9 +568,14 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
 - Keyboards that come and go (2026-10-24): when the session's only keyboard device goes away and another appears (a
   desktop's Bluetooth keyboard reconnecting at resume, on the lock screen), Quickshell ignores the keys of its re-created
   `wl_keyboard` until it gets a new `wl_keyboard.leave` and `enter`: the lock's password field (and the polkit dialog) is
-  deaf, the session stays locked (fail closed, but a lock-out). grassfield-compositor announces the focus again before
-  the first key of the new device, to the same session-lock surface only, also while locked (integrator decision
-  2026-10-24; docs/specs/compositor.md "Keyboard focus before every key"); without the plugin the limit stays.
+  deaf, the session stays locked (fail closed, but a lock-out). grassfield-compositor announces the focus again once the
+  client's new `wl_keyboard` exists, to the same session-lock surface only, also while locked (integrator decision
+  2026-10-24; docs/specs/compositor.md "Keyboard focus before every key"); without the plugin the limit stays. NOT
+  VERIFIED in a session without a keyboard of its own (no WAYLAND-1 output in nested: no backend input): the fix has run
+  only in sessions with a keyboard. Its fallback announces before the first key of the new device, and that key can be
+  lost (Qt 6.11 activates the window only after a `wl_display.sync` round trip): on the lock screen, a password without
+  its first character, so one wrong password attempt. Owner check (L2, real session): with only an external keyboard,
+  lock, unplug and replug the keyboard, then type the password; it must unlock at the first attempt.
   `tests/security/lock_keyboard_replaced.sh` (nested, bare) checks it in a session with no keyboard of its own and SKIPs
   otherwise: the condition depends on the parent seat at nested start and cannot be produced through scripts/nestctl.
 - A foreign locker that takes over a live Grassfield lock and then dies (no release) leaves the session locked behind

@@ -311,11 +311,11 @@ event_lines() { sleep 0.2; grep -ac "" "$events"; } # socat writes with a short 
 events_since() { tail -n +"$(($1 + 1))" "$events"; } # <line count before>
 # How many key lines of a fixture log name one of <characters> (each test types its own letters into a freshly started
 # fixture); polls 1 s for Quickshell's late log lines.
-layer_got() { # <log> <prefix> <characters>
-  local n=0 i
+layer_got() { # <log> <prefix> <characters> [expected count, default: one per character]: the lines for those keys
+  local n=0 i want=${4:-${#3}}
   for i in $(seq 1 20); do
     n=$(grep -cE "\[stages-fixture\] $2 [$3]\$" "$1" 2>/dev/null)
-    ((n >= ${#3})) && break
+    ((n >= want)) && break
     sleep 0.05
   done
   echo "${n:-0}"
@@ -686,7 +686,7 @@ for _ in $(seq 1 40); do # Quickshell writes its log lines with a delay
   grep -q "\[stages-fixture\] key" "$exlog" && break
   sleep 0.05
 done
-ex_keys=$(grep -c "\[stages-fixture\] key" "$exlog")
+ex_keys=$(layer_got "$exlog" key x8)
 sb=$(stage_of "$addr_b3")
 a0=$(st_count '"active":'"$sb"',')
 stages "{\"op\":\"activate\",\"stage\":$sb}"
@@ -699,9 +699,9 @@ capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
 keys k8
 sleep 0.4
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
-((ex_rc == 0 && sw_rc == 0 && ex_keys >= 1)) && [[ $(active_id) == "$sb" && $capb_new == *k8* && -z $capc_new ]]
+((ex_rc == 0 && sw_rc == 0 && ex_keys == 2)) && [[ $(active_id) == "$sb" && $capb_new == *k8* && -z $capc_new ]]
 check "8b swap while an Exclusive layer holds the keyboard: kept when the layer closes, the keys go to the new stage (b3)" $? \
-  "layer got $ex_keys key line(s) while open; active $(active_id) (expected $sb); b3 got '$capb_new', c3 got '$capc_new'"
+  "layer got $ex_keys of the 2 keys (x 8) while open; active $(active_id) (expected $sb); b3 got '$capb_new', c3 got '$capc_new'"
 
 # 8c. window actions after a swap under an Exclusive layer never reach the strip window (R13 counter-review of 17208af:
 # Hyprland's active window stayed on the outgoing window, hidden in the strip, and hl.dsp.window.close() closed it), and the
@@ -752,6 +752,7 @@ nestctl dispatch 'hl.dsp.window.close()' >>"$log" 2>&1
 sleep 1
 f_left=$(client_mapped "$addr_f" && echo yes || echo no)
 g_left=$(client_mapped "$addr_g" && echo yes || echo no)
+ex0=$(layer_got "$exlog" key x9)
 ex1=$(layer_got "$exlog" key uc)
 capf_mid=$(cap_since "$cap_f" "$capf0"); capg_mid=$(cap_since "$cap_g" "$capg0")
 focus_ev=$(events_since "$ev0" | grep -acE " activewindowv2>>($(hexof "$addr_g")|$(hexof "$addr_f"))$")
@@ -762,9 +763,9 @@ capf1=$(stat -c %s "$cap_f")
 keys k9
 sleep 0.4
 capf_new=$(cap_since "$cap_f" "$capf1"); capg_new=$(cap_since "$cap_g" "$capg0")
-((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0 && mon_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
+((ex_rc == 0 && sw_rc == 0 && ex0 == 2 && ex1 == 2 && focus_ev == 0 && mon_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
 check "8c swap under an Exclusive layer: Hyprland's active window is never the strip window (g), no window focus while the layer is up, the focused monitor stays, the layer keeps the keys" $? \
-  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1, focusedmon events: $mon_ev; layer got $ex1 of the 2 keys; f got '$capf_mid', g got '$capg_mid'"
+  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1, focusedmon events: $mon_ev; layer got $ex0 of the 2 keys before the swap (x 9), $ex1 of the 2 after it (u c); f got '$capf_mid', g got '$capg_mid'"
 [[ $g_left == yes && $f_left == yes && $capf_new == *k9* && -z $capg_new ]] && in_active "$addr_f"
 check "8c hl.dsp.window.close() under the layer closes no window (the strip window g survives); after the layer the new stage's front window (f) gets the keys" $? \
   "f mapped after close: $f_left, g mapped: $g_left; f got '$capf_new', g got '$capg_new'"
@@ -810,14 +811,15 @@ sw_rc=$?
 sleep 0.6
 keys vq
 sleep 0.4
+ex0=$(layer_got "$exlog" key x1)
 ex1=$(layer_got "$exlog" key vq)
 sp1=$(special_of); mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0"); caps_new=$(cap_since "$cap_s" "$caps0")
 focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
-((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0)) && [[ $sp0 == special:gf-st && $sp1 == special:gf-st && $mon1 == "$mon0" && -z $capb_new && -z $capc_new && -z $caps_new ]] \
+((ex_rc == 0 && sw_rc == 0 && ex0 == 2 && ex1 == 2 && focus_ev == 0)) && [[ $sp0 == special:gf-st && $sp1 == special:gf-st && $mon1 == "$mon0" && -z $capb_new && -z $capc_new && -z $caps_new ]] \
   && in_active "$addr_c3"
 check "8f Exclusive layer + special workspace + activate: the layer keeps every key, the special workspace stays open, no window focus" $? \
-  "special $sp0 -> $sp1; layer got $ex1 of the 2 keys; window or monitor focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
+  "special $sp0 -> $sp1; layer got $ex0 of the 2 keys before the swap (x 1), $ex1 of the 2 after it (v q); window or monitor focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
 stop_exclusive
 sleep 1
 sp2=$(special_of)
@@ -864,13 +866,14 @@ stages "{\"op\":\"activate\",\"stage\":$sc}"
 sleep 1
 keys wr
 sleep 0.4
+ex0=$(layer_got "$exlog" key x2)
 ex1=$(layer_got "$exlog" key wr)
 ws1=$(shown_ws); mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 moves=$(events_since "$ev0" | grep -acE ' (workspace|workspacev2|focusedmon|focusedmonv2)>>| activewindowv2>>[0-9a-f]+$')
-((ex_rc == 0 && ex1 >= 1 && moves == 0)) && [[ $ws9 == 9 && $ws1 == 9 && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
+((ex_rc == 0 && ex0 == 2 && ex1 == 2 && moves == 0)) && [[ $ws9 == 9 && $ws1 == 9 && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
 check "8g a stage of a Desktop not shown activated under an Exclusive layer: no Desktop switch, no window focus, the layer keeps every key" $? \
-  "Desktop $ws_g -> $ws9 -> $ws1; focus or Desktop events under the layer: $moves; focused monitor $mon0 -> $mon1; layer got $ex1 of the 2 keys; b3 got '$capb_new', c3 got '$capc_new'"
+  "Desktop $ws_g -> $ws9 -> $ws1; focus or Desktop events under the layer: $moves; focused monitor $mon0 -> $mon1; layer got $ex0 of the 2 keys before (x 2), $ex1 of the 2 after the activation (w r); b3 got '$capb_new', c3 got '$capc_new'"
 stop_exclusive
 sleep 0.8
 nestctl dispatch "hl.dsp.focus({ workspace = \"$ws_g\" })" >>"$log" 2>&1
@@ -905,13 +908,14 @@ sleep 0.6
 aw=$(active_window)
 keys secret
 sleep 0.4
-pk1=$(layer_got "$pklog" "polkit key" secrt)
+pk0=$(layer_got "$pklog" "polkit key" pw)
+pk1=$(layer_got "$pklog" "polkit key" secrt 6)
 mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
-((pk_rc == 0 && sw_rc == 0 && pk1 >= 5 && focus_ev == 0)) && [[ $aw != "$addr_b3" && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
+((pk_rc == 0 && sw_rc == 0 && pk0 == 2 && pk1 == 6 && focus_ev == 0)) && [[ $aw != "$addr_b3" && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
 check "8h polkit-like dialog: a stage activated under it, every key goes to its password field, none to a window; the active window is never the strip window" $? \
-  "field got $pk1 of the 6 keys; active window '$aw' (b3 $addr_b3); window or monitor focus events under the dialog: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
+  "field got $pk0 of the 2 keys before (p w), $pk1 of the 6 after the activation (s e c r e t); active window '$aw' (b3 $addr_b3); window or monitor focus events under the dialog: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
 keys -k Escape
 wait_log "$pklog" "polkit hidden" 40
 sleep 0.8
@@ -1119,19 +1123,20 @@ vkbd_pid=$!
 sleep 1.4
 keys lm
 sleep 0.4
+ex0=$(layer_got "$exlog" key x3)
 ex1=$(layer_got "$exlog" key jklm)
 capb_mid=$(cap_since "$cap_b" "$capb0"); capc_mid=$(cap_since "$cap_c" "$capc0")
 wait "$vkbd_pid" 2>/dev/null
-((ex_rc == 0 && sw_rc == 0 && ex1 >= 4)) && [[ -z $capb_mid && -z $capc_mid ]]
+((ex_rc == 0 && sw_rc == 0 && ex0 == 2 && ex1 == 4)) && [[ -z $capb_mid && -z $capc_mid ]]
 check "8j a keyboard device appears under the Exclusive layer after a swap: the layer gets every key of it and of the next one, no window one" $? \
-  "layer got $ex1 of the 4 keys (j k from the new device, l m from the next); b3 got '$capb_mid', c3 got '$capc_mid'"
+  "layer got $ex0 of the 2 keys before the swap (x 3), $ex1 of the 4 after it (j k from the new device, l m from the next); b3 got '$capb_mid', c3 got '$capc_mid'"
 start_ondemand
 od_rc=$?
 keys op
 sleep 0.4
 ex2=$(layer_got "$exlog" key op)
 od_keys=$(grep -c "\[stages-fixture\] ondemand key" "$odlog")
-((od_rc == 0 && ex2 >= 2 && od_keys == 0))
+((od_rc == 0 && ex2 == 2 && od_keys == 0))
 check "8j a surface that takes the keyboard on demand maps over the Exclusive layer: the layer keeps every key, the banner none" $? \
   "banner shown: $((od_rc == 0)); layer got $ex2 of the 2 keys; banner got $od_keys"
 stop_ondemand
@@ -1176,7 +1181,7 @@ if [[ ${own_kbds:-1} == 0 ]]; then
   sleep 0.4
   ex1=$(layer_got "$exlog" key ghu)
   capb_mid=$(cap_since "$cap_b" "$capb0"); capc_mid=$(cap_since "$cap_c" "$capc0")
-  ((ex_rc == 0 && sw_rc == 0 && ex0 >= 1 && ex1 >= 3)) && [[ -z $capb_mid && -z $capc_mid ]]
+  ((ex_rc == 0 && sw_rc == 0 && ex0 == 1 && ex1 == 3)) && [[ -z $capb_mid && -z $capc_mid ]]
   check "8k the only keyboard replaced under the Exclusive layer after a swap: the layer gets every burst, no window one" $? \
     "layer got the first burst: $ex0, the next two: $ex1 of 3 keys (g h, u); b3 got '$capb_mid', c3 got '$capc_mid'"
   stop_exclusive

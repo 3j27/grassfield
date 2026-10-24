@@ -409,16 +409,25 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   layer surface and a Quickshell window got the first burst only, foot every burst; after a keyboard leave/enter cycle the
   Quickshell window got the next one). So when a device replaces the previous one while no other keyboard is left, the
   surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again as soon as its client's re-created
-  `wl_keyboard` exists (`CWLSeatResource::m_keyboards`, checked every 10 ms for at most 500 ms after the device appeared:
-  a key that arrives right after an enter is lost by a Quickshell client, so an announce made in the key path lost the
-  first key of every burst, the integrator's keyboard-less run of 2026-10-24), else before the device's first key; to that same surface
+  `wl_keyboard` exists (every `wl_seat` the client bound, through libwayland's list of its resources, checked every 10
+  ms for at most 500 ms after the device appeared; Qt 6.11 activates a window only after a `wl_display.sync` round trip,
+  so a key sent in the same batch as the enter is dropped: an announce made in the key path lost the first key of every
+  burst, the integrator's keyboard-less run of 2026-10-24); else, as a fallback, before the device's first key, and
+  that key can then be lost (a key stops a pending announce; the fallback is skipped when the timer already announced
+  that device); to that same surface
   (`reannounceKeyboardFocus`, core `reannounceFocus`; not under an input method's grab or with the keyboard on nothing;
   unlocked, not under a seat grab; Hyprland's focus state untouched). While locked, or when the lock state is unknown
   (integrator decision 2026-10-24: a lock screen gone deaf after a desktop's only keyboard reconnected at resume is a
   lock-out; "failures stay locked" never allows a deaf password field): only when the surface that holds the keyboard is
   a session-lock surface (`CSessionLockManager::isSurfaceSessionLock`), to that same surface, and only when a seat grab, if
   any, accepts it; the surface that has the keyboard never changes and nothing else is given it
-  (`tests/security/lock_keyboard_replaced.sh`). The focus rules above never act while the session is locked or
+  (`tests/security/lock_keyboard_replaced.sh`). NOT VERIFIED in a session without a keyboard of its own (a nested session
+  that came up with no WAYLAND-1 output, so no backend input until the parent presents its window): the announce made
+  once the new `wl_keyboard` exists has run only in sessions with a keyboard (no regression there); in the one
+  keyboard-less run so far (2f3d408, key-path announce) the first key of every burst was lost. When the fallback runs,
+  the first key of the burst can be lost: on the lock screen that is a password without its first character, one wrong
+  password attempt. Owner check (L2, real session): with only an external keyboard, lock, unplug and replug the keyboard,
+  then type the password; it must unlock at the first attempt. The focus rules above never act while the session is locked or
   its state is unknown (a missing lock manager counts as locked: failures stay locked), never under an input method's
   keyboard grab, never against a seat grab that rejects the surface (checked first: Hyprland would log a refusal per
   key); a Bottom or Background Exclusive layer keeps Hyprland's normal focus, and no window gets the keyboard while an
@@ -1384,6 +1393,11 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
   handling, so with `follow_mouse = 1` (not Grassfield's setting, 2) it could also move the keyboard to a window under the
   pointer, as a real one-pixel motion would.
 - Stages (prototype behind a flag): limits and risks in `docs/specs/stages.md` "Known limitations and risks".
+- Keyboard-less nested session, open item (8i(e2)): after the layer goes, Hyprland neither refocused the window under the
+  pointer nor focused the window clicked just after (u): no focus change was logged for the click, and the keys went to the
+  window the deferred focus had chosen (h2). Next: an A/B run of stages.sh 8i(e2) with the plugin unloaded the next time
+  a session comes up without its own keyboard, to tell Hyprland's pointer path with transient pointer devices from the
+  plugin's focus rules.
 - Keyboards that come and go, without the plugin (degraded mode): when the session's only keyboard device goes away and
   another appears (a desktop's Bluetooth keyboard reconnecting; in the nested session every `wtype` burst when the parent
   seat had no keyboard at start), the seat loses its keyboard capability in between and clients re-create their

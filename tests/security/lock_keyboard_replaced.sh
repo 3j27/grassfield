@@ -12,11 +12,12 @@
 # focus before every key"). Hyprland 0.56.2 keeps a disabled keyboard (device `enabled = false`) in the seat's
 # capabilities, so the condition cannot be produced through scripts/nestctl: without it the scenario is SKIPPED (exit 3).
 #
-# Steps: a foot probe window gets a control word while unlocked; `lock lock`; then four bursts, each from a new keyboard
-# device: "x" (the field fills), Escape (the field empties), "yz" (it fills again), Escape (it empties). After each: the
-# lock's field state (`lock devLockView`: filled or empty, never the text), the lock state `locked`, Hyprland's LOCK on
-# every monitor, nothing typed in the foot window, no PAM attempt. Without the announce the second burst and every later
-# one are lost (the field stays filled after the first Escape).
+# Steps: a foot probe window gets a control word while unlocked; `lock lock`; then six bursts of ONE key each, each from a
+# new keyboard device, so that every check is about the first key of a burst (the key a late announce loses): "x" (the
+# field fills), Escape (it empties), "y", Escape, "z", Escape. After each: the lock's field state (`lock devLockView`:
+# filled or empty, never the text), the lock state `locked`, Hyprland's LOCK on every monitor, nothing typed in the foot
+# window, no PAM attempt. Without the announce the second burst and every later one are lost (the field stays filled
+# after the first Escape); with an announce made in the key path, each burst's only key is lost.
 #
 # Usage: tests/security/lock_keyboard_replaced.sh   (bare; NESTED only, GRASSFIELD_DEV=1 shell from nested-up.sh)
 # The nested session stays LOCKED afterwards (only a real password opens it, and PAM is suppressed): finish with
@@ -130,8 +131,10 @@ burst() { # <label> <expected field> <command...>
 }
 burst "burst 1 (x, a new keyboard device)" filled type_letters x
 burst "burst 2 (Escape, the keyboard replaced)" empty press_escape
-burst "burst 3 (y z, the keyboard replaced again)" filled type_letters yz
-burst "burst 4 (Escape, once more)" empty press_escape
+burst "burst 3 (y, replaced again)" filled type_letters y
+burst "burst 4 (Escape, replaced again)" empty press_escape
+burst "burst 5 (z, replaced again)" filled type_letters z
+burst "burst 6 (Escape, replaced again)" empty press_escape
 
 kill "$foot_pid" 2>/dev/null
 if ((status == 0)); then echo "lock_keyboard_replaced: PASS"; else echo "lock_keyboard_replaced: FAIL"; fi
