@@ -32,6 +32,7 @@
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/InputMethodV2.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
+#include <hyprland/src/protocols/core/Seat.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/transformer/Transformer.hpp>
@@ -131,6 +132,10 @@ namespace {
         bool                             movingKeyFocus = false; // keepKeyboardFocus is moving the keyboard (its own focus event is not a cause)
         WP<IKeyboard>                    keyDevice;              // Hyprland's keyboard device at the previous key
         bool                             hadKeyDevice = false;
+        SP<CEventLoopTimer>              announceTimer;          // waits for the re-created wl_keyboard (removed in stop())
+        WP<IKeyboard>                    announceDevice;         // the device that replaced the session's only keyboard
+        std::vector<WP<CWLKeyboardResource>> announceKnown;      // the focused client's wl_keyboards when it appeared
+        int                              announceTries = 0;
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
         bool                             warnedNoBuffer = false;
         // A window a titlebar drag dropped on the strip (dropOnStrip): drawn from where it was dropped, then put back at its
@@ -1329,6 +1334,77 @@ namespace {
         s.movingKeyFocus = wasMoving;
     }
 
+    // The wl_keyboard objects of the client that holds the keyboard (CWLSeatResource::m_keyboards), live ones only.
+    std::vector<WP<CWLKeyboardResource>> focusClientKeyboards() {
+        std::vector<WP<CWLKeyboardResource>> out;
+        const auto                           seat = gf::surfaces::keyboardFocus();
+        const auto                           res  = seat && g_pSeatManager ? g_pSeatManager->seatResourceForClient(seat->client()) : nullptr;
+        if (res) {
+            for (const auto& k : res->m_keyboards) {
+                if (!k.expired())
+                    out.push_back(k);
+            }
+        }
+        return out;
+    }
+
+    void stopAnnounce() {
+        auto& s = S();
+        s.announceDevice.reset();
+        s.announceKnown.clear();
+        if (s.announceTimer)
+            s.announceTimer->updateTimeout(std::nullopt);
+    }
+
+    // A keyboard device appeared as the session's only one (core ReannounceFacts): when the seat had no keyboard in
+    // between, the client that holds the keyboard re-creates its wl_keyboard once it sees the capability again, a moment
+    // later. The announce is made as soon as that new wl_keyboard exists, before the first key (a key that arrives right
+    // after wl_keyboard.enter is lost by a Quickshell client: stages.sh 8j and 8k lost the first key of each burst with the
+    // announce made in the key path). Checked every 10 ms for at most 500 ms; after that the key path announces it (that
+    // key may be lost, the next ones arrive). Allocates when a device appears, never per key.
+    constexpr int kAnnounceTries = 50;
+
+    void announceTick() {
+        auto&      s      = S();
+        const auto device = s.announceDevice.lock();
+        if (!device) {
+            stopAnnounce();
+            return;
+        }
+        const auto now      = focusClientKeyboards();
+        const bool reCreated = std::ranges::any_of(now, [&s](const WP<CWLKeyboardResource>& k) {
+            return std::ranges::none_of(s.announceKnown, [&k](const WP<CWLKeyboardResource>& known) { return known.lock() == k.lock(); });
+        });
+        if (reCreated) {
+            s.keyDevice    = device; // its first key is not announced again
+            s.hadKeyDevice = true;
+            stopAnnounce();
+            reannounceKeyboardFocus();
+            return;
+        }
+        if (++s.announceTries >= kAnnounceTries) {
+            stopAnnounce();
+            return;
+        }
+        s.announceTimer->updateTimeout(std::chrono::milliseconds(10));
+    }
+
+    void armAnnounce(const SP<IKeyboard>& keyboard) {
+        auto&      s     = S();
+        const bool alone = g_pInputManager && g_pInputManager->m_keyboards.size() == 1;
+        if (!keyboard || !alone || !g_pEventLoopManager || s.keyDevice.lock() == keyboard)
+            return;
+        s.announceDevice = keyboard;
+        s.announceKnown  = focusClientKeyboards();
+        s.announceTries  = 0;
+        if (!s.announceTimer) {
+            s.announceTimer = makeShared<CEventLoopTimer>(
+                std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("stages keyboard announce", [] { announceTick(); }); }, nullptr);
+            g_pEventLoopManager->addTimer(s.announceTimer);
+        }
+        s.announceTimer->updateTimeout(std::chrono::milliseconds(10));
+    }
+
     // The same check from the event loop, after Hyprland's own handling of the event that may have moved the keyboard (a
     // focus change, a layer surface mapped or unmapped, a keyboard device that appeared). Coalesced; never for the plugin's
     // own move.
@@ -1684,8 +1760,13 @@ namespace gf::stager {
         // The keyboard focus check (keepKeyboardFocus) also runs from the event loop after these: a layer surface mapped or
         // unmapped, a keyboard device that appeared (its layout set), and every keyboard focus change below.
         l.push_back(ev.layer.opened.listen([](const PHLLS& /*ls*/) { gf::guarded("stages layer.opened", [] { scheduleKeyFocusCheck(); }); }));
-        l.push_back(ev.input.keyboard.layout.listen(
-            [](const SP<IKeyboard>& /*keyboard*/, const std::string& /*layout*/) { gf::guarded("stages keyboard.layout", [] { scheduleKeyFocusCheck(); }); }));
+        // A keyboard device that appears sets its layout (CInputManager::setupKeyboard -> applyConfigToKeyboard).
+        l.push_back(ev.input.keyboard.layout.listen([](const SP<IKeyboard>& keyboard, const std::string& /*layout*/) {
+            gf::guarded("stages keyboard.layout", [&] {
+                scheduleKeyFocusCheck();
+                armAnnounce(keyboard);
+            });
+        }));
         l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& /*surface*/) {
             gf::guarded("stages keyboard.focus", [] {
                 scheduleKeyFocusCheck();
@@ -1713,6 +1794,11 @@ namespace gf::stager {
         if (s.keyFocusLater && g_pEventLoopManager)
             g_pEventLoopManager->removeDoLater(*s.keyFocusLater); // likewise
         s.keyFocusLater.reset();
+        if (s.announceTimer && g_pEventLoopManager)
+            g_pEventLoopManager->removeTimer(s.announceTimer); // its callback is code of this library
+        s.announceTimer.reset();
+        s.announceDevice.reset();
+        s.announceKnown.clear();
         s.refocusSpace.reset();
         restoreFocusSurface();
         s.focusLater.reset();

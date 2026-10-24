@@ -407,8 +407,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   a new device; a Bluetooth keyboard reconnecting on a desktop): clients re-create their `wl_keyboard` each time, and a
   Quickshell (Qt) client then ignores the keys of the new one (nested 2026-10-24, with the plugin unloaded: a Quickshell
   layer surface and a Quickshell window got the first burst only, foot every burst; after a keyboard leave/enter cycle the
-  Quickshell window got the next one). So before the first key of a device that replaced the previous one while no other
-  keyboard was left, the surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again, to that same surface
+  Quickshell window got the next one). So when a device replaces the previous one while no other keyboard is left, the
+  surface that holds the keyboard gets `wl_keyboard.leave` and `enter` again as soon as its client's re-created
+  `wl_keyboard` exists (`CWLSeatResource::m_keyboards`, checked every 10 ms for at most 500 ms after the device appeared:
+  a key that arrives right after an enter is lost by a Quickshell client, so an announce made in the key path lost the
+  first key of every burst, the integrator's keyboard-less run of 2026-10-24), else before the device's first key; to that same surface
   (`reannounceKeyboardFocus`, core `reannounceFocus`; not under an input method's grab or with the keyboard on nothing;
   unlocked, not under a seat grab; Hyprland's focus state untouched). While locked, or when the lock state is unknown
   (integrator decision 2026-10-24: a lock screen gone deaf after a desktop's only keyboard reconnected at resume is a
