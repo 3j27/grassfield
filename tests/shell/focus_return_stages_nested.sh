@@ -69,7 +69,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-last_stages() { grep -a 'grassfield>>{"v":"gfc/1","type":"stages"' "$events" | tail -n 1 | sed 's/^grassfield>>//'; }
+# The stages event is a small notice since the gfc/1 amendment of 2026-10-24 (Hyprland cuts socket2 payloads at 1024
+# bytes); the state is the reply of `hyprctl grassfield-stages`.
+last_stages() { nest grassfield-stages 2>/dev/null | tr -d '\n'; }
 stage_of_class() { # <class> -> id of the stage holding that window
   local addr
   addr=$(nest -j clients | jq -r --arg c "$1" '[.[] | select(.class == $c)][0].address | sub("^0x"; "")')
