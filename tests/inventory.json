@@ -176,6 +176,8 @@
  {"path": "tests/shell/auto_appearance_tokens.sh", "layer": "logic"},
  {"path": "tests/shell/ipc_real_values.sh", "layer": "logic"},
  {"path": "tests/shell/ipc_real_values_mutants.sh", "layer": "logic"},
+ {"path": "tests/shell/qs_wiring.sh", "layer": "logic"},
+ {"path": "tests/shell/qs_wiring_mutants.sh", "layer": "logic"},
  {"path": "tests/shell/write_private.sh", "layer": "logic"},
  {"path": "tests/shell/autostart_write.sh", "layer": "logic"},
  {"path": "tests/shell/check_schema_pattern.sh", "layer": "logic"},
