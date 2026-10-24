@@ -47,4 +47,5 @@ add IconTile
 add IconShapePrewarm
 add AutoAppearance
 add NotificationPrefs
+add DisplayName
 ```
