@@ -250,6 +250,8 @@ Singleton {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
         if (!rec)
             return;
+        // Restoring a window (Dock tile, Overview) is an activation: Show Desktop ends first, as in activate().
+        root.endShowDesktop(false);
         const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false, toplevel);
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize")) {
@@ -321,6 +323,9 @@ Singleton {
                     root.endShowDesktop(false);
                 else if (ShowDesktop.checksSpaces(event.name))
                     desktopCheck.restart();
+                // An app activating a parked window ends it too: looked at once the focus has settled.
+                if (ShowDesktop.checksActivation(event.name))
+                    desktopActivation.restart();
             }
         }
     }
@@ -591,6 +596,19 @@ Singleton {
         }
     }
 
+    // An app activated a parked window (focus_on_activate shows the special workspace over the screen): Show Desktop is over.
+    Timer {
+        id: desktopActivation
+        interval: Tokens.showDesktopCheckMs
+        onTriggered: {
+            if (root.desktopRecords.length === 0)
+                return;
+            const focused = root.focusedToplevel ? root.hyprlandToplevel(root.focusedToplevel) : null;
+            if (ShowDesktop.parkedHasFocus(root.toplevelData(), focused ? focused.address : ""))
+                root.endShowDesktop(false);
+        }
+    }
+
     Timer {
         id: desktopVerify
         property var records: []
@@ -612,9 +630,10 @@ Singleton {
     // Super+F3. The window positions come from Hyprland's window data, which is read again first (the model may be stale):
     // the press waits for the answer, at most Tokens.showDesktopRefreshMs.
     function showDesktop(): void {
-        if (Settings.windowsStages)
-            return;
+        // The second press always ends it, with Stages on too (it may have been turned on while Show Desktop was on).
         if (endShowDesktop(true))
+            return;
+        if (Settings.windowsStages)
             return;
         if (root.desktopPending)
             return;
@@ -625,6 +644,10 @@ Singleton {
 
     function captureDesktop(): void {
         root.desktopPending = false;
+        // A verify of the previous ending must not send this press's parked windows back (three quick presses).
+        desktopVerify.stop();
+        desktopVerify.records = [];
+        desktopVerify.tries = 0;
         const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
         const records = ShowDesktop.captureAll(toplevelData(), shownSpaces(), focused ? focused.address : "", Settings.windowsStages);
         if (records.length === 0) {
@@ -648,7 +671,35 @@ Singleton {
     Timer {
         id: desktopRecover
         interval: Tokens.showDesktopRecoverMs
-        onTriggered: root.endShowDesktop(false)
+        onTriggered: root.recoverDesktop()
+    }
+
+    property int recoverTries: 0
+
+    // The record stays (in memory and on disk) until every window it lists is back or known to be closed: nothing is decided
+    // before the window list has loaded, and a window that is still parked after a step is sent back again, a bounded number
+    // of times (Tokens.showDesktopRecoverTries). No focus request: the user did not ask for anything.
+    function recoverDesktop(): void {
+        if (root.desktopRecords.length === 0)
+            return;
+        const loaded = Hyprland.toplevels && Hyprland.toplevels.values.length > 0;
+        if (!loaded && ++root.recoverTries < Tokens.showDesktopRecoverTries) {
+            desktopRecover.restart();
+            return;
+        }
+        const windows = toplevelData();
+        let stuck = 0;
+        for (const record of root.desktopRecords) {
+            const mine = ShowDesktop.toRestore(record, windows);
+            stuck += mine.length;
+            mine.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
+        }
+        if (stuck > 0 && ++root.recoverTries < Tokens.showDesktopRecoverTries) {
+            desktopRecover.restart();
+            return;
+        }
+        root.desktopRecords = [];
+        persistDesktopRecords();
     }
 
     Process {
@@ -669,6 +720,7 @@ Singleton {
             const records = ShowDesktop.parse(desktopFile.text());
             if (records.length > 0 && root.desktopRecords.length === 0) {
                 root.desktopRecords = records;
+                root.recoverTries = 0;
                 desktopRecover.restart();
             }
         }

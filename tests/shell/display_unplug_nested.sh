@@ -27,6 +27,13 @@ shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
 [[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null || { echo "display_unplug: grassfield-shell is not running (scripts/dev/shell-run.sh)"; exit 2; }
 bus=$(cat "$dev/bus.address" 2>/dev/null || true)
 [[ -n $bus ]] || { echo "display_unplug: no private bus address in .dev/bus.address"; exit 2; }
+# The notification goes to the session's PRIVATE bus, never the owner's (as the nested files scenario does).
+case $bus in
+  unix:path=/tmp/dbus-*) ;;
+  *) echo "display_unplug: refusing: '$bus' is not a private bus of the dev session"; exit 2 ;;
+esac
+owner_bus=${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}
+[[ $bus != "$owner_bus" && $bus != "unix:path=${XDG_RUNTIME_DIR:-}/bus"* ]] || { echo "display_unplug: refusing the owner's session bus"; exit 2; }
 
 fails=0
 pass() { echo "PASS: $*"; }

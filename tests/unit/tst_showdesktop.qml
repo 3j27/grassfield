@@ -50,17 +50,47 @@ TestCase {
         compare(SD.restoreOrder(null), []);
     }
 
-    function test_toRestoreSendsBackWhatExistsAndIsNotHome() {
+    function parkedWin(address, x, y) {
+        return {address: address, workspace: -98, x: x, y: y, parked: true};
+    }
+
+    function test_toRestoreSendsBackTheParkedOnesInOrder() {
         const r = SD.capture(all, "DP-1", 1, "", false);
-        // Both parked (model says special workspace, id negative): both go back, in order.
-        compare(SD.toRestore(r, [win("0xa1", -98, 0, 0), win("0xb2", -98, 0, 0)]), ["a1", "b2"]);
-        // One closed, one already home: neither is moved.
-        compare(SD.toRestore(r, [win("0xa1", 1, 0, 0)]), []);
+        compare(SD.toRestore(r, [parkedWin("0xa1", 0, 0), parkedWin("0xb2", 0, 0)]), ["a1", "b2"]);
+        // closed: skipped; already home: not moved; no windows at all: nothing
+        compare(SD.toRestore(r, [parkedWin("0xa1", 0, 0)]), ["a1"]);
+        compare(SD.toRestore(r, [win("0xa1", 1, 0, 0), win("0xb2", 1, 0, 0)]), []);
         compare(SD.toRestore(r, []), []);
         compare(SD.toRestore(r, undefined), []);
-        compare(SD.toRestore(null, [win("0xa1", -98, 0, 0)]), []);
+        compare(SD.toRestore(null, [parkedWin("0xa1", 0, 0)]), []);
         verify(SD.sameAddress("0xA1", "a1"));
         verify(!SD.sameAddress("", ""));
+    }
+
+    // One rule everywhere: a window the user moved by hand out of the parking workspace stays where the user put it.
+    function test_aWindowMovedByHandStaysWhereItIs() {
+        const r = SD.capture([win("0xa1", 1, 0, 0), win("0xb2", 1, 9, 0)], "DP-1", 1, "", false);
+        compare(SD.toRestore(r, [parkedWin("0xa1", 0, 0), win("0xb2", 5, 0, 0)]), ["a1"]);
+        compare(SD.survivors(r, ["a1"]), ["a1"], "the verify applies the same rule");
+    }
+
+    function test_theFileNeverHoldsAWindowTwice() {
+        const recs = SD.parse("{\"version\":1,\"records\":[{\"screen\":\"DP-1\",\"workspace\":1,\"focus\":\"\",\"windows\":[{\"address\":\"a1\"},{\"address\":\"0xA1\"},{\"address\":\"a1\"}]}]}");
+        compare(recs[0].windows.length, 1);
+    }
+
+    // An app activating a parked window: not decided by the event alone, by who has the focus a moment later.
+    function test_activationOfAParkedWindow() {
+        for (const e of ["activewindowv2", "activewindow", "urgent", "activespecial", "activespecialv2"])
+            verify(SD.checksActivation(e), e);
+        for (const e of ["openwindow", "workspace", "movewindow", "configreloaded"])
+            verify(!SD.checksActivation(e), e);
+        const windows = [parkedWin("0xa1", 0, 0), win("0xc3", 2, 0, 0)];
+        verify(SD.parkedHasFocus(windows, "0xa1"), "the focus reached a parked window");
+        verify(SD.parkedHasFocus(windows, "A1"));
+        verify(!SD.parkedHasFocus(windows, "0xc3"), "a visible window has it");
+        verify(!SD.parkedHasFocus(windows, ""), "nothing has it (the state right after parking)");
+        verify(!SD.parkedHasFocus(undefined, "0xa1"));
     }
 
     function test_survivorsSkipWindowsThatClosedOrMoved() {

@@ -57,14 +57,16 @@ function restoreOrder(record) {
     return record.windows.slice().sort((a, b) => a.y - b.y || a.x - b.x).map(w => w.address);
 }
 
-// The windows of `record` to send back: those that still exist (`windows`: the toplevel data, [{address, workspace, ...}])
-// and are not on the recorded Space already, in restoreOrder. A window that closed is skipped. (The check is on where the
-// window is, not on whether the model says "parked": a model that has not caught up with the park must not leave a window hidden.)
+// The windows of `record` to send back: those that are on the parking workspace now (`windows`: the toplevel data,
+// [{address, parked, ...}]), in restoreOrder. One rule for the ending, the verify and the crash recovery: a window that closed
+// is skipped, and a window the user moved by hand out of the parking workspace stays where the user put it.
 function toRestore(record, windows) {
-    const where = {};
-    for (const w of Array.isArray(windows) ? windows : [])
-        where[address(w.address)] = workspaceId(w.workspace);
-    return restoreOrder(record).filter(a => a in where && where[a] !== record.workspace);
+    const parked = {};
+    for (const w of Array.isArray(windows) ? windows : []) {
+        if (w && w.parked === true)
+            parked[address(w.address)] = true;
+    }
+    return restoreOrder(record).filter(a => parked[a] === true);
 }
 
 function sameAddress(a, b) {
@@ -98,17 +100,31 @@ function captureAll(windows, monitors, focus, stagesOn) {
 // A window opening ends Show Desktop (a window the records parked, or one opening on the parking workspace, is our own move
 // and does not). `data` is the openwindow text "addr,workspace,class,title"; `records` the records now on.
 function endsOn(eventName, data, records) {
-    if (eventName !== "openwindow")
-        return false;
-    const parts = (typeof data === "string" ? data : "").split(",");
-    const a = address(parts[0]);
-    if (parts[1] === PARKING)
-        return false;
-    for (const r of Array.isArray(records) ? records : []) {
-        if (r.windows.some(w => w.address === a))
-            return false;
+    const text = typeof data === "string" ? data : "";
+    const list = Array.isArray(records) ? records : [];
+    const parkedWindow = a => list.some(r => r.windows.some(w => w.address === a));
+    if (eventName === "openwindow") {
+        const parts = text.split(",");
+        return parts[1] !== PARKING && !parkedWindow(address(parts[0]));
     }
-    return true;
+    return false;
+}
+
+// An app activating a parked window (focus_on_activate): Hyprland focuses it and shows the special workspace over the screen,
+// the parked windows as an overlay. Show Desktop is over then (macOS: an app activating a window ends it). These events are
+// not decisive on their own (parking the focused window moves the focus to a window that is about to be parked too), so they
+// only schedule a look at who has the focus (parkedHasFocus).
+function checksActivation(eventName) {
+    return ["activewindowv2", "activewindow", "urgent", "activespecial", "activespecialv2"].indexOf(eventName) >= 0;
+}
+
+// True when the window that has the focus is one of the parked ones: an activation reached a hidden window.
+// `windows`: the toplevel data ({address, parked}); `focus`: the focused window's address, "" for none.
+function parkedHasFocus(windows, focus) {
+    const f = address(focus);
+    if (f === "")
+        return false;
+    return (Array.isArray(windows) ? windows : []).some(w => w && w.parked === true && address(w.address) === f);
 }
 
 // Events after which the Spaces the displays show may have changed. They cannot be read as "the user switched Space": when
@@ -158,7 +174,7 @@ function parseRecord(r) {
     const windows = [];
     for (const w of r.windows.slice(0, MAX_WINDOWS)) {
         const a = w ? address(w.address) : "";
-        if (a !== "")
+        if (a !== "" && !windows.some(x => x.address === a))
             windows.push({address: a, x: num(w.x), y: num(w.y)});
     }
     if (windows.length === 0 || workspaceId(r.workspace) === 0)

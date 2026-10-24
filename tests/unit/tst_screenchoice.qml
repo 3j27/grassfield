@@ -4,6 +4,7 @@ import "../../shell/platform/ScreenChoice.js" as ScreenChoice
 
 // The output a screen-less request opens on: the focused one, the first only as a last resort.
 TestCase {
+    id: testCase
     name: "ScreenChoice"
 
     readonly property var names: ["WAYLAND-1", "GF-REF"]
@@ -83,8 +84,8 @@ TestCase {
 
         function onNamesChanged(): void {
             // the binding object is created later than this handler, as the Compositor singleton is first evaluated after Popups
-            viaBinding = lateBinding ? lateBinding.active : "<not created yet>";
-            viaLive = ScreenChoice.replacement(stored, "GF-SD2", outputs.names);
+            testCase.viaBinding = testCase.lateBinding ? testCase.lateBinding.active : "<not created yet>";
+            testCase.viaLive = ScreenChoice.replacement(testCase.stored, "GF-SD2", outputs.names);
         }
     }
 

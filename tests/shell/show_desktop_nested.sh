@@ -12,7 +12,11 @@
 #   3 Space switch: show, then S2: A, B, C back on S1, the active Space stays S2, the focus is D (never an old window);
 #   4 new window: show, then a new foot E opens: A, B, C back, the focus is E;
 #   5 activation (the switcher's next/release goes through Compositor.activate, as a Dock click does): show, switcher
-#     next + release: every window back, the focus is the window of the other app (C), on its Space.
+#     next + release: every window back, the focus is the window of the other app (C), on its Space;
+#   6 three presses in a row (0.45 s, 0.25 s): the verify of the second ending must not send the third's windows back;
+#   7 an app activating a parked window (a `focus` dispatch on it, as focus_on_activate does for a client): everything comes
+#     back, no special workspace stays shown over a screen, the activated window has the focus.
+# Steps 3 to 5 first check that the windows really were parked.
 # Part 2, TWO displays (macOS: Show Desktop clears every display). A second headless output GF-SD2 is created (and removed at
 # the end): P on the first display, Q on GF-SD2 (focused). Checks:
 #   6 show: both windows parked, on both displays;
@@ -136,6 +140,7 @@ focus_is "2: the window that had the focus (C) has it again" "$c"
 
 # 3 Space switch
 show_desktop
+on_space "3: A was parked first" "$a" special:desktop
 focus_space "$S2"
 all_home "3"
 space_is "3: the Space stays $S2 (the user is not pulled back)" "$S2"
@@ -144,6 +149,7 @@ focus_space "$S1"
 
 # 4 new window
 show_desktop
+on_space "4: A was parked first" "$a" special:desktop
 open_foot gf-sd-main "$OUT"; e=$NEWPID
 all_home "4"
 on_space "4: E stays where it opened" "$e" "$S1"
@@ -152,6 +158,7 @@ focus_is "4: the new window keeps the focus" "$e"
 # 5 activation (switcher next + release)
 focus_space "$S1"
 show_desktop
+on_space "5: A was parked first" "$a" special:desktop
 # The switcher orders its requests by hold id and ignores one it has already seen: a fresh id (the clock) per run, so that a
 # second run against the same shell is not taken for a stale hold.
 hold=$(date +%s)
@@ -162,6 +169,28 @@ all_home "5"
 # The front app is gf-sd-main (E); the switcher's next app is gf-sd-other, whose only window is C: C must have the focus.
 focus_is "5: the switcher's choice (C, the other app) has the focus, not the old window E" "$c"
 space_is "5: the Space is C's Space" "$S1"
+
+# 6 three presses in a row: the verify of the second must not send the third's windows back
+focus_space "$S1"
+ipc windows showDesktop
+sleep 0.45
+ipc windows showDesktop
+sleep 0.25
+ipc windows showDesktop
+sleep 2.5
+[[ $(parked_count) -ge 4 ]] && pass "6: after three quick presses Show Desktop is on and stays on ($(parked_count) windows parked)" || fail "6: only $(parked_count) window(s) parked after three quick presses"
+show_desktop
+all_home "6"
+
+# 7 an app activating a parked window (focus_on_activate): everything comes back, nothing is left over the screen
+show_desktop
+on_space "7: A was parked first" "$a" special:desktop
+addr_a=$(hq clients | jq -r --argjson p "$a" '.[] | select(.pid == $p) | .address')
+nest dispatch "hl.dsp.focus({ window = \"address:$addr_a\" })" >/dev/null 2>&1
+all_home "7"
+no_special() { [[ $(hq monitors | jq '[.[] | select(.specialWorkspace.name != "")] | length') == 0 ]]; }
+wait_for no_special && pass "7: the parking workspace is not shown over a screen" || fail "7: a special workspace is still shown"
+focus_is "7: the window that was activated (A) has the focus" "$a"
 
 # ---- part 2: two displays ----------------------------------------------------------------------------------------------
 close_test_windows

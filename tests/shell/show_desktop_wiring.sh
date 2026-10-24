@@ -30,4 +30,21 @@ check test -z "$missing"
 
 desc="every ending except the second press passes refocus=false"
 check bash -c 'n=$(grep -c "endShowDesktop(" "$1"); t=$(grep -c "endShowDesktop(true)" "$1"); [ "$(grep -cE "endShowDesktop\(\)" "$1")" = 0 ] && [ "$t" = 1 ] && [ "$n" -ge 4 ]' _ "$f"
+desc="every ending is followed by the bounded verify (endShowDesktop restarts it, at most 3 tries)"
+check bash -c 'grep -q "desktopVerify.restart()" "$1" && grep -q "++tries < 3" "$1" && grep -q "id: desktopVerify" "$1"' _ "$f"
+
+desc="a new capture stops the verify of the previous ending (three quick presses)"
+check bash -c 'awk "/function captureDesktop/,/^    }/" "$1" | grep -q "desktopVerify.stop()"' _ "$f"
+
+desc="a focus request only comes from the second press (endShowDesktop) and from the activated window (activate)"
+check bash -c 'n=$(grep -c "focusWindowRequest(" "$1"); a=$(awk "/function endShowDesktop/,/^    }/" "$1" | grep -c "focusWindowRequest("); b=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); [ "$a" = 1 ] && [ "$b" = 1 ] && [ "$n" = 3 ]' _ "$f"
+
+desc="an app activating a parked window ends it (the activation events schedule the look at who has the focus)"
+check bash -c 'grep -q "ShowDesktop.checksActivation(event.name)" "$1" && grep -q "ShowDesktop.parkedHasFocus(" "$1"' _ "$f"
+
+desc="restoring a minimized window and the second press end it (unminimize and showDesktop call endShowDesktop before the Stages test)"
+check bash -c 'awk "/function unminimize/,/^    }/" "$1" | grep -q "endShowDesktop(false)" && awk "/function showDesktop\\(/,/^    }/" "$1" | head -4 | grep -q "endShowDesktop(true)"' _ "$f"
+
+desc="the crash recovery keeps the record until the windows are back (bounded retries) and decides nothing before the window list is loaded"
+check bash -c 'awk "/function recoverDesktop/,/^    }/" "$1" | grep -q "Tokens.showDesktopRecoverTries" && awk "/function recoverDesktop/,/^    }/" "$1" | grep -q "const loaded"' _ "$f"
 exit $fail
