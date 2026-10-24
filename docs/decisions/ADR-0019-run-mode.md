@@ -1,0 +1,82 @@
+# ADR-0019: One run-mode rule (`Mode` in `qs.lib`, `apps/runmode.h` in C++)
+Status: Proposed (integrator, under owner delegation D-5); accepted when its first slice merges (M1) · Date: 2026-10-24 ·
+Decider: integrator
+
+## Context
+Plan: docs/audits/final-1.0/refactor-plan.md §2 (GF-089). Line numbers re-checked on main 370a45f (only docs changed
+since 2dfd992, so they hold).
+- 23 `GRASSFIELD_*` variables are read in `shell/` and `ui/` through 102 `Quickshell.env(` calls. 29 product QML/JS files
+  mention `GRASSFIELD_DEV` without DevGate, 17 of them in code; 9 files use `shell/services/DevGate.js`.
+- Five different rules coexist: `DEV==="1"` (`shell/services/Apps.qml:124`, `Audio.qml:55`, `Battery.qml:24`,
+  `Power.qml:12`, `shell/widgets/WidgetBase.qml:18`, `shell/platform/MenuBridge.qml:27`, ...);
+  `DEV!=="1" || PRIVATE_BUS` (`shell/menubar/TrayHost.qml:17`); `SESSION==="1" && DEV!=="1"`
+  (`shell/platform/UpdateNotice.qml:18`); `DEV==="1" && !privateBus` (`shell/services/Media.qml:31`); DevGate inline and
+  DevGate.js (`shell/platform/Capabilities.qml:8,81`, `shell/security/lock/Lock.qml:23,72`, `idle/Idle.qml:14,29`,
+  `polkit/AuthAgent.qml:12,111`, ...).
+- `stateDir` is copied 8 times (`shell/desktop/DesktopFiles.qml:23`, `services/RecentItems.qml:24`,
+  `WallpaperState.qml:35`, `Connectivity.qml:159`, `notifications/Notifications.qml:76`, `search/Search.qml:101`,
+  `launchpad/AppsController.qml:96`, `widgets/Widgets.qml:30`); the shell UX branch adds a 9th. `configDir` is defined in
+  `shell/services/Settings.qml:14` and again in C++ (`apps/settings/src/backend.cpp:51`, `apps/files/src/filesapp.cpp:160`,
+  `folderstylestore.cpp:185`, `apps/preview/src/previewapp.cpp:21`).
+- The C++ rules differ too: `apps/appscope.h:17` (session && !dev); `apps/files/src/filesapp.h:72`, `placesmodel.cpp:24`,
+  `apps/settings/src/systemguard.cpp:13`, `apps/wallpaper-tool/src/main.cpp:385` (`DEV==1` only).
+- Open dev hooks that stay active in a real session when `GRASSFIELD_DEV=1` leaks:
+  1. the wallpaper helper's localhost URL (`apps/wallpaper-tool/src/main.cpp:385`, checks `DEV==1` only);
+  2. the compositor's `testFault` (`compositor/src/Ipc.cpp:150`, reads `GRASSFIELD_DEV` with `std::getenv`);
+  3. the opposite failure: the menu bridge refuses a real session where `DEV` leaked
+     (`bridges/menu-bridge/src/main.cpp:76-96`: `dev` takes the private-bus branch and refuses the default bus), so
+     global menus stop working.
+
+  The plan closes them as follows: the wallpaper helper moves to `apps/runmode.h` in M6 (W2); the bridge predicate and
+  `testFault` are fixed in M7 (W4, an optional slice; if skipped they stay listed as open in the security spec).
+
+## Decision
+One predicate, read only by `qs.lib` `Mode` (QML) and `apps/runmode.h` (C++):
+
+    dev = GRASSFIELD_DEV == "1" && GRASSFIELD_SESSION != "1"
+
+"dev" means both "test hooks allowed" and "never act on the owner's machine". The bridge and the compositor keep their own
+reads (process boundaries; the compositor has no Qt) but use the same predicate. A leaked dev value changes nothing in
+a real session. The dev scripts are the only supported way to get a dev session (`devenv.sh` already unsets
+`GRASSFIELD_SESSION`).
+
+Derived values: `fixtures = dev && VISUAL_FIXTURES == "1"`; `ownBus = !dev || privateBus` (notification server, tray
+watcher, media control); `updateNotices = session`.
+
+`shell/lib/` is the new module `qs.lib`, the bottom layer (ADR-0021): `RunMode.js` (pure functions, the only definition
+of the rule) and `Mode.qml` (a singleton, the only reader of `GRASSFIELD_*`). `Mode` also provides `configDir`,
+`stateDir`, `shellDir` and `devValue(name)`, which returns the variable only when `dev`. The C++ side is the header-only
+`apps/runmode.h` next to `apps/appscope.h`: the same rule, `configDir()`, `stateDir()`, `shellIpcArgs()`; used by Files,
+Settings, Preview and the wallpaper tool. Parity between QML and C++ comes from shared vectors in
+`tests/fixtures/run-mode-vectors.json` (same pattern as `glyph-vectors.json`).
+
+Variable classes:
+
+| Class | Variables | Rule |
+|---|---|---|
+| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET` | honoured only when `dev`; inert otherwise |
+| Always honoured | `CONFIG_HOME`, `STATE_HOME`, `APPS_TRACE` | as today |
+| Mode inputs | `DEV`, `SESSION`, `VISUAL_FIXTURES`, private bus selection | read only by `Mode` / `runmode.h` |
+
+## macOS reference
+A debug default never changes a shipped app's behaviour unless the developer build reads it; there is no "developer
+mode" that disables Quick Settings toggles, power actions or global menus. The real session simply works.
+
+## Alternatives rejected
+- Keep per-file rules and document them: five rules already diverge and two dev hooks are open; not auditable.
+- Only fix the open hooks: leaves the 102 reads and the C++ rule copies to drift again.
+- A shared C++/QML library for the rule: needs a new module and build coupling; shared vectors give parity at lower cost.
+
+## Consequences
+- A leaked `GRASSFIELD_DEV=1` no longer turns off toggles, power actions, the tray, update notices or global menus.
+- Enforcement: `tests/ci/run_mode.py --selftest` (M8, in `check-contracts`): no `Quickshell.env("GRASSFIELD_` outside
+  `shell/lib/Mode.qml`, no `qEnvironmentVariable("GRASSFIELD_` outside `apps/runmode.h`, except the documented exceptions
+  (bridge, compositor, Lua, units). `ipc_inventory.sh` accepts `Mode.dev` / `Mode.fixtures` as exact gates (M2, security
+  review; a look-alike mutant must fail).
+- Parity: `tests/unit/tst_runmode.qml` and `tests/unit/files/tst_runmode.cpp` against the shared vectors. Existing:
+  `tst_devgate.qml`, `dev_gate.sh`, `audio_dev_guard.sh` (new case "leaked dev in a real session acts"),
+  `settings_system_guard.sh` and a wallpaper-tool test (localhost URL refused when `SESSION=1`).
+- Slices (plan §2): M1 (qs.lib, Mode, vectors), M2 (gate flip, security), M3 (services), M4 (platform, menubar),
+  M5a/M5b (desktop, widgets, notifications, search, overview), M6 (C++ runmode.h), M7 (bridge and testFault, optional),
+  M8 (enforcement).
+- Unverified: that `hl.env` sets Hyprland's own environ (needed for M7).
