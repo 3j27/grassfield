@@ -175,6 +175,7 @@
  {"path": "tests/shell/osd_keyboard.sh", "layer": "headless"},
  {"path": "tests/shell/auto_appearance_tokens.sh", "layer": "logic"},
  {"path": "tests/shell/ipc_real_values.sh", "layer": "logic"},
+ {"path": "tests/shell/write_private.sh", "layer": "logic"},
  {"path": "tests/shell/autostart_write.sh", "layer": "logic"},
  {"path": "tests/shell/check_schema_pattern.sh", "layer": "logic"},
  {"path": "tests/shell/compositor_rebuild.sh", "layer": "logic"},

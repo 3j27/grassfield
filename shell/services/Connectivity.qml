@@ -167,7 +167,7 @@ Singleton {
     // Written 0600 in a 0700 directory (the repo convention for state files).
     function saveAirplane(state: var): void {
         airplaneState = state;
-        airplaneWriter.command = ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\" && printf '%s' \"$2\" > \"$3.tmp\" && mv \"$3.tmp\" \"$3\"", "sh", stateDir, Airplane.serialize(state), airplaneFile];
+        airplaneWriter.command = ["sh", Quickshell.shellPath("services/write-private.sh"), stateDir, airplaneFile, Airplane.serialize(state)];
         airplaneWriter.running = true;
     }
 
@@ -195,7 +195,10 @@ Singleton {
         id: airplaneReader
         path: root.airplaneFile
         printErrors: false
-        onLoaded: root.airplaneState = Airplane.parse(text())
+        onLoaded: {
+            root.airplaneState = Airplane.parse(text());
+            root.settleAirplane();
+        }
     }
 
     Process {
