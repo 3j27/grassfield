@@ -19,10 +19,10 @@ vs_wait_clients 3
 vs_ipc stages enable true
 # The shell pushes the flag, maps the strip and sends op:on: wait for "ready GF-REF=2" (two strip stages).
 for i in $(seq 1 40); do
-  [[ $(vs_ipc stages status) == "ready GF-REF=2"* ]] && break
+  [[ $(vs_ipc stages status) =~ ^ready\ (.*,)?GF-REF=2(,|$) ]] && break
   sleep 0.5
 done
-[[ $(vs_ipc stages status) == "ready GF-REF=2"* ]] || { echo "stages: strip not ready: $(vs_ipc stages status)" >&2; exit 1; }
+[[ $(vs_ipc stages status) =~ ^ready\ (.*,)?GF-REF=2(,|$) ]] || { echo "stages: strip not ready: $(vs_ipc stages status)" >&2; exit 1; }
 VS_SETTLE=2 vs_capture stages
 vs_ipc menubar open controlcenter GF-REF
 VS_SETTLE=1.5 vs_capture stages-quicksettings
