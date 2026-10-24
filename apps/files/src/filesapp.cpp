@@ -503,9 +503,9 @@ void FilesApp::open(const QList<QUrl> &urls)
         }
     }
     if (refused == 1 && refusedKind == LaunchGuard::Verdict::RefuseLauncher)
-        emit operationFailed(tr("“%1” was not opened: it is an app launcher, and Files never starts apps from a folder. Open apps from the Dock, Apps or Search.").arg(refusedName));
+        emit operationFailed(tr("“%1” was not opened: it is an app launcher, and Files never starts apps from a folder. Open apps from the Dock, Apps or Search.").arg(FileLogic::displayName(refusedName)));
     else if (refused == 1)
-        emit operationFailed(tr("“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.").arg(refusedName));
+        emit operationFailed(tr("“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.").arg(FileLogic::displayName(refusedName)));
     else if (refused > 1)
         emit operationFailed(tr("%1 items were not opened: Files never runs programs, scripts or app launchers from a folder.").arg(refused));
     if (allowed.isEmpty() && webLinks.isEmpty())
