@@ -759,3 +759,44 @@ window's own `xdgMoveRequest` listener is left in place, see spike step 3).
 The tag helper against a live Hyprland (the log line above), every visual state, hover glyphs, AT-SPI exposure with a screen
 reader (the unit test checks the Accessible properties and press actions only), the TapHandler double-tap in a real session
 (Qt's synthetic test events carry no timestamps), and `client_chrome.sh` itself.
+
+## Amendment 2026-10-25: third-party apps that draw their own controls (GF-056)
+Third-party apps with their own title bar showed two sets of controls: theirs and the plugin's traffic lights. macOS: a
+window has one set of traffic lights, and an app that draws its own title bar (Electron hidden-inset frames, GTK header
+bars) gets no second bar from the system.
+
+Research (read only, `/usr/include/hyprland`, Hyprland 0.56.2): is there a per-window signal that a client draws its own
+decorations, so that the plugin could step aside without a list?
+- xdg-decoration: `CXDGDecoration` keeps `mostRecentlyRequested` / `mostRecentlySent` (protocols/XDGDecoration.hpp), but
+  the toplevel-to-decoration map is private (`CXDGDecorationProtocol::m_decorations`, no accessor), and neither
+  `CWindow` nor `CXDGToplevelResource` holds any decoration state. The KDE server-decoration protocol is the same
+  (`CServerDecorationKDEProtocol::m_decos`, private). A plugin cannot read the request through the installed API.
+- It would not be reliable anyway. Hyprland answers server-side: foot started with `csd.preferred=client` drew no bar
+  of its own and got the plugin's (`tests/compositor/third_party_chrome.sh`, report 4, nested 2026-10-25), so a client
+  that negotiates never shows a second set here. The second set comes from clients that draw their frame whatever was
+  negotiated: GTK3/GTK4/libadwaita header bars (they never negotiate, like a bare client that draws nothing at all, e.g.
+  a game) and Electron/Chromium custom frames.
+- XWayland has `CWindow::m_X11DoesntWantBorders`, but Omarchy runs Electron and Chromium on Wayland
+  (`ELECTRON_OZONE_PLATFORM_HINT=wayland`, `--ozone-platform=wayland`), and the field's meaning cannot be read from the
+  headers alone: not used.
+
+Decision: a per-app class list in the session rules, reusing this ADR's tag. `config/hypr/grassfield/windows.lua` rule
+`gf-client-chrome-third-party` tags `grassfield-client-chrome` on: Electron and Chromium custom frames (obsidian, code,
+code-oss, Code, codium, VSCodium, discord, Slack, slack, spotify, Spotify, chromium, google-chrome, brave-browser and
+Chromium's web apps `chrome-*`) and the GTK header-bar apps Omarchy installs (org.gnome.Nautilus and its previewer,
+org.gnome.DiskUtility, org.gnome.Evince, com.github.PintaProject.Pinta, xdg-desktop-portal-gtk). The plugin needs no change:
+P1 (no titlebar), P3 (no band in Overview and Stages), P4 and P5 follow the tag. The same windows are exempt from
+`gf-no-maximize-event`, as Grassfield's apps are (Q4): their own zoom control is the only one they have (a double-click on
+Evince's header bar zooms and unzooms, `third_party_chrome.sh` assertion 3). `tests/shell/client_chrome_rules.sh` checks that
+both maximize negations are built from the two lists.
+
+Consequences:
+- An app set to draw no frame of its own (Chromium's "Use system title bar and borders", VS Code's
+  `"window.titleBarStyle": "native"`) is still tagged and then has no controls: it has to leave the list. A new app that
+  draws its own frame has to join it. Neither is automatic until Hyprland exposes a decoration signal.
+- Degradation (C1-C3): without the plugin nothing about the titlebar changes (there is none). The maximize exemption is a
+  session rule, as for Grassfield's apps: with or without the plugin, these apps' own zoom control works.
+- Verified in the nested session (Hyprland 0.56.2 efb50993, 2026-10-25): `third_party_chrome.sh` PASS (Evince tagged,
+  no plugin strip above it, one above foot, its own double-click zoom and unzoom), `client_chrome.sh` PASS, `chrome.sh`
+  PASS; capture of GF-REF with one set of controls on each window.
+
