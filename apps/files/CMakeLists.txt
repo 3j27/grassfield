@@ -23,6 +23,7 @@ add_executable(grassfield-files
     src/placesmodel.cpp src/placesmodel.h
     src/imageproviders.cpp src/imageproviders.h
     src/filelogic.cpp src/filelogic.h
+    src/launchguard.cpp src/launchguard.h
     src/taglogic.cpp src/taglogic.h
     src/tagstore.cpp src/tagstore.h
     src/tagsearch.cpp src/tagsearch.h
@@ -50,7 +51,7 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_autoappearance.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp
+        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
         src/folderstylelogic.cpp src/folderstylestore.cpp)
     target_include_directories(files-unit-tests PRIVATE src ..)
     target_link_libraries(files-unit-tests PRIVATE Qt6::Core GTest::gtest GTest::gtest_main)

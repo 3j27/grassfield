@@ -91,6 +91,18 @@ TestCase {
         compare(NotificationPrefs.appIconShown(false, undefined), "");
     }
 
+    // The one name test (review of 6e24d36, Quick Settings merge): appIconShown and the shell's History.safeIconName both
+    // use NotificationPrefs.safeIconName.
+    function test_safeIconNameIsTheHiddenPreviewRule() {
+        for (const name of ["firefox", "org.gnome.Nautilus", "steam_icon_570", "a".repeat(128)])
+            compare(NotificationPrefs.appIconShown(false, name), NotificationPrefs.safeIconName(name), name);
+        for (const name of ["a".repeat(129), ".hidden", "-x", "_x", "a\\b", "fire\u0000fox", "fire\nfox", "fire fox", "hicolor/../../x", "file:x"]) {
+            compare(NotificationPrefs.safeIconName(name), "", JSON.stringify(name));
+            compare(NotificationPrefs.appIconShown(false, name), "", JSON.stringify(name));
+        }
+        compare(NotificationPrefs.safeIconName(42), "");
+    }
+
     function test_appsToList() {
         compare(NotificationPrefs.appsToList(["Zed", "mail", "Alpha"], list), ["Alpha", "Mail", "Signal", "Zed"]);
         compare(NotificationPrefs.appsToList(undefined, []), []);

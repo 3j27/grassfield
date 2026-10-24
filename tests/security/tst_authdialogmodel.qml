@@ -163,6 +163,44 @@ TestCase {
         compare(model.identityName, "root eve");
     }
 
+    // Review of 1d2c856: a held request takes the keyboard only through a click, and only heldGuardMs after it appeared.
+    // Review of 6e24d36: both delays are timed by Timers (monotonic), not by the wall clock. The QML engine ignores writes
+    // to Date.now, so a clock step cannot be faked here: tests/security/lock_surfaces.sh checks that the holds never read
+    // Date (with mutants).
+    function test_heldGuard() {
+        compare(model.heldGuardMs, 500);
+        verify(!model.heldClickAccepted(), "the sheet was never noted as shown: when in doubt, no");
+        const start = Date.now();
+        model.noteShown();
+        verify(!model.heldClickAccepted(), "the instant it appeared");
+        wait(250);
+        verify(!model.heldClickAccepted(), "250 ms later");
+        tryVerify(() => model.heldClickAccepted(), 3000, "the guard ends");
+        verify(Date.now() - start >= 450, "not before about heldGuardMs (Qt coarse timers: 5%)");
+        model.noteShown();
+        verify(!model.heldClickAccepted(), "shown again: the guard starts over");
+        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), true);
+        verify(notice.indexOf("while the screen was locked") !== -1, notice);
+        verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
+        verify(model.heldNotice(Date.now(), false).indexOf("just as the screen was unlocked") !== -1);
+    }
+
+    // Review of d8e654c: a request arriving within heldAfterUnlockMs after an unlock is held like one that arrived while locked.
+    function test_heldJustAfterUnlock() {
+        compare(model.heldAfterUnlockMs, 1000);
+        verify(model.arrivesHeld(true), "while locked");
+        verify(!model.arrivesHeld(false), "never unlocked since the start");
+        const start = Date.now();
+        model.noteUnlock();
+        verify(model.arrivesHeld(false), "the instant of the unlock");
+        verify(model.arrivesHeld(true), "while locked, whatever the last unlock");
+        wait(500);
+        verify(model.arrivesHeld(false), "half a second after the unlock");
+        tryVerify(() => !model.arrivesHeld(false), 4000, "the hold ends");
+        verify(Date.now() - start >= 900, "not before about heldAfterUnlockMs (Qt coarse timers: 5%)");
+        verify(model.arrivesHeld(true), "locked again: held");
+    }
+
     function test_newFlowResetsState() {
         flow.isResponseRequired = true;
         model.submit("pw");

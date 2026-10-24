@@ -147,12 +147,157 @@ TestCase {
         compare(History.bannerTimeout(0, -1, 5000), 5000);
     }
 
-    function test_absoluteImage() {
-        const u = "image://icon//usr/share/icons/hicolor/48x48/apps/btop.png";
-        compare(History.absoluteImage(u), u);
-        compare(History.absoluteImage("/tmp/a.png"), "/tmp/a.png");
-        compare(History.absoluteImage("image://icon/firefox"), "");
-        compare(History.absoluteImage("data:image/png;base64,AA"), "");
-        compare(History.absoluteImage(""), "");
+    // GF-114 / DT-07: only local files, the image data the app sent and theme names; never a URL to fetch.
+    function test_imageRef_data() {
+        return [
+            {tag: "app icon path (Quickshell)", image: "image://icon//usr/share/icons/hicolor/48x48/apps/btop.png", kind: "file"},
+            {tag: "absolute path", image: "/tmp/a.png", kind: "file"},
+            {tag: "file URL", image: "file:///home/u/Pictures/a.png", kind: "file"},
+            {tag: "file URL, localhost", image: "file://localhost/tmp/a.png", kind: "file"},
+            {tag: "file URL, one slash", image: "file:/tmp/a.png", kind: "file"},
+            {tag: "file URL, upper-case scheme", image: "FILE:///tmp/a.png", kind: "file"},
+            {tag: "image data the app sent", image: "image://qsimage/12/0", kind: "attached"},
+            {tag: "theme name", image: "image://icon/firefox", kind: "themed", name: "firefox"},
+            {tag: "theme name, encoded", image: "image://icon/org.gnome.Nautilus%2Dsymbolic", kind: "themed", name: "org.gnome.Nautilus-symbolic"},
+            {tag: "http", image: "http://127.0.0.1:8080/p.png", kind: "refused"},
+            {tag: "https", image: "https://tracker.example/pixel.png?u=1", kind: "refused"},
+            {tag: "HTTPS upper case", image: "HTTPS://tracker.example/p.png", kind: "refused"},
+            {tag: "ftp", image: "ftp://example.org/p.png", kind: "refused"},
+            {tag: "data URI", image: "data:image/png;base64,AA", kind: "refused"},
+            {tag: "qrc", image: "qrc:/x.png", kind: "refused"},
+            {tag: "other image provider", image: "image://other/x", kind: "refused"},
+            {tag: "relative path", image: "pictures/a.png", kind: "refused"},
+            {tag: "network-path reference", image: "//host/share/a.png", kind: "refused"},
+            {tag: "file URL of another host", image: "file://evil.example/share/a.png", kind: "refused"},
+            {tag: "file URL with an empty path element", image: "file:////host/a.png", kind: "refused"},
+            {tag: "theme name with a query", image: "image://icon/firefox?fallback=x", kind: "refused"},
+            {tag: "theme name that is a URL", image: "image://icon/http%3A%2F%2Fexample.org%2Fa.png", kind: "refused"},
+            {tag: "theme name, bad escape", image: "image://icon/%E0%A4%A", kind: "refused"},
+            {tag: "empty theme name", image: "image://icon/", kind: "refused"},
+            {tag: "control character", image: "/tmp/a\npng", kind: "refused"},
+            {tag: "oversized", image: "/" + "a".repeat(5000), kind: "refused"},
+            {tag: "empty", image: "", kind: "none"}
+        ];
+    }
+
+    function test_imageRef(data) {
+        const ref = History.imageRef(data.image);
+        compare(ref.kind, data.kind);
+        if (data.kind === "file" || data.kind === "attached" || data.kind === "themed")
+            compare(ref.source, data.image);
+        else
+            compare(ref.source, "");
+        if (data.kind === "themed")
+            compare(ref.name, data.name);
+    }
+
+    function test_imageRefNonString() {
+        compare(History.imageRef(undefined).kind, "none");
+        compare(History.imageRef(null).kind, "none");
+        compare(History.imageRef(42).kind, "none");
+    }
+
+    // Review of 8b2a710: the path a local image loads, so that it can be checked (regular file, bounded) before it is shown.
+    function test_localPathOf() {
+        compare(History.localPathOf("/tmp/a.png"), "/tmp/a.png");
+        compare(History.localPathOf("image://icon//usr/share/icons/x.png"), "/usr/share/icons/x.png");
+        compare(History.localPathOf("file:///home/u/My%20Pictures/a.png"), "/home/u/My Pictures/a.png");
+        compare(History.localPathOf("file://localhost/tmp/a.png"), "/tmp/a.png");
+        compare(History.localPathOf("file:/tmp/a.png"), "/tmp/a.png");
+        compare(History.localPathOf("file:///tmp/a%0Ab.png"), "", "a decoded control character");
+        compare(History.localPathOf("file:///tmp/%E0%A4%A"), "", "a malformed escape");
+        compare(History.localPathOf("file://evil.example/a.png"), "");
+        compare(History.localPathOf("//host/a.png"), "");
+        compare(History.localPathOf("https://example.org/a.png"), "");
+        compare(History.localPathOf("image://icon/firefox"), "");
+        compare(History.localPathOf(""), "");
+        compare(History.localPathOf(undefined), "");
+    }
+
+    // Review of beebaff: the forms where the checked name and the loaded URL could differ are refused outright.
+    function test_localPathOfRefusesUrlLookalikes() {
+        compare(History.localPathOf("/dir/x.png?a"), "", "a plain path with ?");
+        compare(History.localPathOf("/dir/x.png#f"), "", "a plain path with #");
+        compare(History.localPathOf("/dir/x%2Epng"), "", "a plain path with %");
+        compare(History.localPathOf("file:///dir/x.png?a"), "", "a file: URL with a query");
+        compare(History.localPathOf("file:///dir/x.png#f"), "", "a file: URL with a fragment");
+        compare(History.localPathOf("file:///dir/x%3Fa.png"), "", "an escape decoding to ?");
+        compare(History.localPathOf("file:///dir/x%2525.png"), "", "an escape decoding to %");
+        compare(History.localPathOf("image://icon//dir/x.png?fallback=a"), "", "Quickshell's icon path with a query");
+        compare(History.localPathOf("/dir/./x.png"), "", "a . segment");
+        compare(History.localPathOf("/dir/../etc/x.png"), "", "a .. segment");
+        compare(History.localPathOf("/dir//x.png"), "", "an empty segment");
+        compare(History.localPathOf("/dir/"), "", "a directory path");
+        compare(History.localPathOf("file:///dir/x%2Epng"), "/dir/x.png", "a file: URL escape decodes to the plain name it names");
+    }
+
+    // Review of 6e24d36: an app icon NAME reaches the icon theme only when it is a plain theme name; Qt's fallback search
+    // (/usr/share/pixmaps) turned "../../../dir/evil" into any file, a FIFO included.
+    function test_safeIconName_data() {
+        return [
+            {tag: "plain", name: "firefox", kept: "firefox"},
+            {tag: "reverse DNS", name: "org.gnome.Nautilus", kept: "org.gnome.Nautilus"},
+            {tag: "symbolic", name: "dialog-information-symbolic", kept: "dialog-information-symbolic"},
+            {tag: "underscore", name: "steam_icon_570", kept: "steam_icon_570"},
+            {tag: "parent traversal", name: "../../../tmp/evil", kept: ""},
+            {tag: "theme-relative traversal", name: "hicolor/../../../../tmp/evil", kept: ""},
+            {tag: "dot-dot alone", name: "..", kept: ""},
+            {tag: "dot-dot inside", name: "a..b", kept: ""},
+            {tag: "leading dot", name: ".hidden", kept: ""},
+            {tag: "leading dash", name: "-x", kept: ""},
+            {tag: "leading underscore", name: "_x", kept: ""},
+            {tag: "128 characters", name: "a".repeat(128), kept: "a".repeat(128)},
+            {tag: "slash", name: "apps/firefox", kept: ""},
+            {tag: "backslash", name: "a\\b", kept: ""},
+            {tag: "colon", name: "file:x", kept: ""},
+            {tag: "NUL", name: "fire\u0000fox", kept: ""},
+            {tag: "newline", name: "fire\nfox", kept: ""},
+            {tag: "space", name: "fire fox", kept: ""},
+            {tag: "too long", name: "a".repeat(129), kept: ""},
+            {tag: "empty", name: "", kept: ""}
+        ];
+    }
+
+    function test_safeIconName(data) {
+        compare(History.safeIconName(data.name), data.kept);
+    }
+
+    function test_keptAppIconAndHistoryLoad() {
+        compare(History.keptAppIcon("firefox"), "firefox");
+        compare(History.keptAppIcon("../../../tmp/evil"), "", "a traversal name is dropped at intake");
+        compare(History.keptAppIcon("/usr/share/icons/x.png"), "/usr/share/icons/x.png", "a path goes on to the private-copy route");
+        compare(History.keptAppIcon("file:///usr/share/icons/x.png"), "file:///usr/share/icons/x.png");
+        compare(History.keptAppIcon("/tmp/x.png?a"), "", "a path the copy route refuses is dropped");
+        compare(History.keptAppIcon(undefined), "");
+        // A history file written before the rule (or by hand) is cleaned on load.
+        const now = Date.now();
+        const text = JSON.stringify({version: 1, notifications: [
+                {key: "a", appName: "A", appIcon: "../../../tmp/evil", summary: "s", body: "", time: now - 1000, urgency: 1},
+                {key: "b", appName: "B", appIcon: "firefox", summary: "s", body: "", time: now - 2000, urgency: 1}]});
+        const restored = History.parse(text, now);
+        compare(restored.length, 2);
+        compare(restored.find(e => e.key === "a").appIcon, "");
+        compare(restored.find(e => e.key === "b").appIcon, "firefox");
+        // The same rule for a themed image hint (Quickshell's image://icon/<name>).
+        compare(History.imageRef("image://icon/..%2F..%2Ftmp%2Fevil").kind, "refused");
+        compare(History.imageRef("image://icon/.hidden").kind, "refused");
+        compare(History.imageRef("image://icon/firefox").kind, "themed");
+    }
+
+    function test_copySource() {
+        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12), "file:///run/user/1000/grassfield-notification-images/12.img");
+        compare(History.copySource("/tmp/my dir", 3), "file:///tmp/my%20dir/3.img", "every segment encoded");
+        compare(History.copySource("/tmp/a?b", 3), "", "an odd directory name");
+        compare(History.copySource("relative", 3), "");
+        compare(History.copySource("/tmp", 0), "");
+        compare(History.copySource("/tmp", 1.5), "");
+        verify(History.MAX_IMAGE_FILE_BYTES > 0 && History.MAX_IMAGE_FILE_BYTES <= 64 * 1024 * 1024);
+    }
+
+    function test_imageScheme() {
+        compare(History.imageScheme("https://tracker.example/p.png"), "https");
+        compare(History.imageScheme("DATA:image/png;base64,AA"), "data");
+        compare(History.imageScheme("pictures/a.png"), "");
+        compare(History.imageScheme(undefined), "");
     }
 }

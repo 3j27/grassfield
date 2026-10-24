@@ -172,3 +172,25 @@ measured after the Qt reference app, a Qt/KDE app and Chromium have each been fo
 the bridge shares with the shell and other processes by their users, so it counts what the bridge adds to the machine; RSS is
 printed for trend only. `tests/integration/global_menus.sh` asserts it (a bridge whose smaps_rollup cannot be read fails).
 The hostile-application cap (`MemoryMax=256M`, `menu_bridge_memory.sh`) is a different limit and is unchanged.
+
+## Amendment 2026-10-24: org.freedesktop.ScreenSaver idle inhibitors (GF-AUDIT-001 GF-016 residual)
+Context: applications that play video or present (VLC, Chromium and Electron apps, Steam, the GTK portal's Inhibit
+backend) ask `org.freedesktop.ScreenSaver.Inhibit` to keep the screen from idling; nobody owned the name in the
+Grassfield session, so their calls failed and the idle lock fired during a film. Quickshell 0.3.1 cannot own a D-Bus name
+or serve methods (its qmltypes export no D-Bus server type: only `DBusMenuHandle`/`DBusMenuItem` clients, the StatusNotifier,
+MPRIS and Notifications services and the Wayland `IdleInhibitor`), so the shell cannot serve it itself.
+Decision: the bridge, already a session-bus service of the Grassfield session (and a private-bus one in development),
+serves it (`docs/specs/menu-bridge.md` MB16, `bridges/menu-bridge/src/ScreenSaver.h`):
+- owns `org.freedesktop.ScreenSaver` from `listen()` to `stop()` when it is free (never replacing or queuing behind another
+  owner), exports `/org/freedesktop/ScreenSaver` and `/ScreenSaver`, answers `Inhibit(ss) -> u` and `UnInhibit(u)` only;
+  every other member is `NotSupported` (the bridge never locks, unlocks or reports the lock);
+- keeps cookies per unique sender (16 per sender, 64 senders), releases a cookie only for its owner, drops a sender's
+  cookies when it leaves the bus;
+- sends the shell one additive menu/1 line, `{"type":"screensaver","inhibited":bool,"count":N}`, on every change and on
+  connect. The protocol stays `menu/1` (older shells ignore the type).
+It still executes nothing and calls no application. The registrar gating, crash attribution and degraded mode are
+unchanged (degraded mode concerns menus; the inhibitor book does not call applications and is bounded).
+Consequences: a same-user process can keep the idle lock from firing for as long as it holds a cookie, exactly as it can
+with the Wayland idle-inhibit protocol or on any desktop serving this interface (macOS power assertions likewise); the
+security consequence is recorded in ADR-0010's amendment of the same date. Tests: `tests/unit/menu-bridge/tst_screensaver.cpp`,
+`tests/integration/screensaver_inhibit.sh` (bare, private bus).

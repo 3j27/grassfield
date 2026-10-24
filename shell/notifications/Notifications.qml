@@ -35,6 +35,11 @@ Singleton {
     // (Settings.notificationsAppPreviews, NotificationPrefs.js).
     // The session lock (SessionState mirrors shell/security/lock; false where nothing feeds it).
     readonly property bool sessionLocked: SessionState.locked
+    // The session locks: the Notification Center closes (GF-116).
+    onSessionLockedChanged: {
+        if (sessionLocked && centerOpen)
+            closeCenter();
+    }
     // Wall clock for relative times, refreshed every 30 s.
     property real nowMs: Date.now()
 
@@ -168,36 +173,35 @@ Singleton {
     }
 
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the
-    // UI falls back to the bell tile without asking Qt for a missing icon.
+    // UI falls back to the bell tile without asking Qt for a missing icon. Only local files, the image data the app sent
+    // and theme names are ever loaded (History.imageRef, GF-114): never a URL.
     function iconSource(image: string, appIcon: string): string {
-        if (image) {
-            // An absolute local path (image://icon//abs/path or a plain path) loads as given.
-            const local = History.absoluteImage(image);
-            if (local !== "")
-                return local;
-            // Quickshell reports a themed app_icon name as image://icon/<name>.
-            const themed = "image://icon/";
-            if (image.startsWith(themed) && image.indexOf("?") < 0) {
-                let name = "";
-                try {
-                    name = decodeURIComponent(image.slice(themed.length));
-                } catch (e) {
-                    return "";
-                }
-                return Quickshell.hasThemeIcon(name) ? image : "";
-            }
-            return image;
+        const ref = History.imageRef(image);
+        if (ref.kind === "attached")
+            return ref.source;
+        // A local file: never its own path, only the shell's private copy of it, once made (copySourceOf).
+        if (ref.kind === "file") {
+            const copy = copySourceOf(History.localPathOf(ref.source));
+            if (copy !== "")
+                return copy;
         }
+        // Quickshell reports a themed app_icon name as image://icon/<name>.
+        if (ref.kind === "themed" && Quickshell.hasThemeIcon(ref.name))
+            return ref.source;
+        // No usable image (none, refused, not copied yet, or a name the theme lacks): the app icon.
         const icon = appIcon;
         if (!icon)
             return "";
-        if (icon.startsWith("/"))
-            return "file://" + icon;
-        if (icon.startsWith("file:"))
-            return icon;
+        if (icon.startsWith("/") || icon.startsWith("file:"))
+            return copySourceOf(History.localPathOf(icon));
+        // Only a plain theme name reaches the icon theme (History.safeIconName): Qt also searches its fallback directories,
+        // where a name with "/" or ".." named any file (review of 6e24d36). Anything else: the generic notification icon.
+        const name = History.safeIconName(icon);
+        if (name === "")
+            return "";
         // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
         // and paints a checkerboard), so ask the theme first.
-        return Quickshell.hasThemeIcon(icon) ? Quickshell.iconPath(icon) : "";
+        return Quickshell.hasThemeIcon(name) ? Quickshell.iconPath(name) : "";
     }
 
     // "now", "5m ago", "3h ago", "2d ago" (translatable).
@@ -265,6 +269,8 @@ Singleton {
     property bool galleryWanted: false
 
     function openWidgetGallery(screen: string): void {
+        if (SessionState.refuses("widget gallery"))
+            return;
         galleryWanted = true;
         if (!centerOpen)
             toggleCenter(screen);
@@ -275,6 +281,9 @@ Singleton {
             closeCenter();
             return;
         }
+        // Nothing opens over the lock screen (GF-116): SUPER+N, the clock, a screen corner and IPC alike.
+        if (SessionState.refuses("notification center"))
+            return;
         centerScreen = screen !== "" ? screen : Compositor.activeScreenName;
         Popups.close();
         centerOpen = true;
@@ -708,13 +717,196 @@ Singleton {
         return (n.actions || []).map(a => ({id: a.identifier, text: a.text}));
     }
 
+    // Local image files (an image hint or an app icon path) are never loaded from where the app named them (reviews of
+    // 8b2a710 and beebaff): a FIFO or a device blocked the one image loader for good; a check of the named path could be
+    // fooled by "?", "#" or "%XX" (Qt reads a URL, not a path) or by a file swapped after the check. Instead a helper
+    // process opens the named plain path (History.localPathOf), checks that the OPENED descriptor is a regular file of at
+    // most History.MAX_IMAGE_FILE_BYTES (`test -f` and `stat -L` on /proc/self/fd/3), and copies it into the shell's
+    // private directory ($XDG_RUNTIME_DIR/grassfield-notification-images, 0700, emptied at start). The Image loads that
+    // copy, by a URL built from its number with every segment encoded (History.copySource): a file nobody else writes.
+    // Opening a FIFO blocks the helper, never the shell: each file has `timeout 3`. Each intake makes a fresh copy (an app
+    // may reuse a path for new content); at most copyWindow copies and copyBudgetBytes bytes are kept, the oldest copies
+    // not on a banner are evicted first, and an image that does not fit falls back to the app icon.
+    // Without XDG_RUNTIME_DIR no local file is shown. Path -> {state: "pending"|"ok"|"no"|"gone", n}; reassigned on every
+    // change so bindings that called iconSource() re-evaluate.
+    // One directory per Wayland display: a nested dev shell never empties the real session's directory.
+    readonly property string copyDir: {
+        const runtime = Quickshell.env("XDG_RUNTIME_DIR");
+        const display = String(Quickshell.env("WAYLAND_DISPLAY") || "none").replace(/[^A-Za-z0-9._-]/g, "_");
+        return runtime ? runtime + "/grassfield-notification-images-" + display : "";
+    }
+    property var localCopies: ({})
+    property var copyQueue: []
+    property var copyBatch: []
+    property int copyCounter: 0
+    property bool copyDirReady: false
+    readonly property int copyWindow: 48
+    // At most copyWindow copies and copyBudgetBytes bytes in the directory, across all senders (review of 6e24d36: 60
+    // notifications naming one 8 MiB file filled 384 MiB of the session's tmpfs). A test may lower the budget.
+    property real copyBudgetBytes: 64 * 1024 * 1024
+    // POSIX sh; the directory, the size cap, the copy window, the byte budget, the numbers of the copies to keep (the
+    // banners on screen; comma list), then "<n> <path>" pairs as arguments (never interpolated). One line per pair: "ok"
+    // when "<dir>/<n>.img" now holds the copy, else "no", followed by the numbers of the copies evicted to make room. The
+    // one-file step runs under `timeout 3` (a FIFO named or swapped in blocks only that step), opens the path once and
+    // decides on the opened descriptor. It then deletes the oldest copies (lowest number) not in the keep list while the
+    // directory would hold more than the window or the budget with this file; when even that would not be enough (a file
+    // larger than the budget, or the kept copies fill it) it refuses the file before evicting anything. It copies at most
+    // the size it checked.
+    readonly property string copyScript: "dir=$1; cap=$2; win=$3; budget=$4; keep=\",$5,\"; shift 5; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
+        + "one='src=$1; dst=$2; cap=$3; dir=$4; win=$5; budget=$6; keep=$7; [ -f \"$src\" ] || exit 1; exec 3<\"$src\" || exit 1; "
+        + "[ -f /proc/self/fd/3 ] || exit 1; s=$(stat -L -c %s /proc/self/fd/3) || exit 1; "
+        + "[ \"$s\" -le \"$cap\" ] && [ \"$s\" -le \"$budget\" ] || exit 1; "
+        + "while :; do count=0; total=0; kc=0; kt=0; oldest=; for f in \"$dir\"/*.img; do [ -f \"$f\" ] || continue; t=$(stat -c %s \"$f\") || exit 1; "
+        + "count=$((count + 1)); total=$((total + t)); b=${f##*/}; b=${b%.img}; case $keep in *\",$b,\"*) kc=$((kc + 1)); kt=$((kt + t)); continue ;; esac; "
+        + "if [ -z \"$oldest\" ] || [ \"$b\" -lt \"$oldest\" ]; then oldest=$b; fi; done; "
+        + "[ \"$kc\" -lt \"$win\" ] && [ $((kt + s)) -le \"$budget\" ] || exit 1; [ \"$count\" -lt \"$win\" ] && [ $((total + s)) -le \"$budget\" ] && break; "
+        + "[ -n \"$oldest\" ] || exit 1; rm -f \"$dir/$oldest.img\" || exit 1; printf \" %s\" \"$oldest\"; done; "
+        + "umask 077; head -c \"$s\" <&3 >\"$dst.tmp\" && mv -f \"$dst.tmp\" \"$dst\" && printf \" ok\"'; "
+        + "while [ $# -ge 2 ]; do n=$1; p=$2; shift 2; rm -f \"$dir/$n.img.tmp\"; "
+        + "out=$(timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.img\" \"$cap\" \"$dir\" \"$win\" \"$budget\" \"$keep\" 2>/dev/null); "
+        + "case $out in *' ok') echo \"ok${out% ok}\" ;; *) rm -f \"$dir/$n.img.tmp\"; echo \"no$out\" ;; esac; done"
+
+    // The URL of the private copy of `path`, or "" (not copied yet: a copy is requested; refused; or evicted).
+    function copySourceOf(path: string): string {
+        if (path === "" || copyDir === "")
+            return "";
+        const entry = localCopies[path];
+        if (entry === undefined) {
+            Qt.callLater(root.requestCopy, path, false);
+            return "";
+        }
+        return entry.state === "ok" ? History.copySource(copyDir, entry.n) : "";
+    }
+
+    // Asks for a copy of `path`; `fresh`: also when the path was already copied, refused or evicted (a new notification
+    // naming it). Without `fresh` (shown, e.g. a history row after a restart) only a path never seen in this run is copied:
+    // an evicted copy is not re-made on use, so copies never evict each other in a loop; the app icon shows instead. The
+    // current copy stays shown until the new one is made.
+    function requestCopy(path: string, fresh: bool): void {
+        if (path === "" || copyDir === "" || copyQueue.some(q => q.path === path) || copyBatch.some(q => q.path === path))
+            return;
+        const entry = localCopies[path];
+        if (!fresh && entry !== undefined)
+            return;
+        copyCounter++;
+        copyQueue = copyQueue.concat([{path: path, n: copyCounter}]);
+        if (entry === undefined || entry.state !== "ok") {
+            const next = Object.assign({}, localCopies);
+            next[path] = {state: "pending", n: -1};
+            localCopies = next;
+        }
+        runCopies();
+    }
+
+    // The numbers of the copies the banners on screen show: never evicted.
+    function bannerCopyNumbers(): var {
+        const kept = [];
+        for (let i = 0; i < bannerStore.count; i++) {
+            const row = bannerStore.get(i);
+            const ref = History.imageRef(row.image);
+            for (const path of [ref.kind === "file" ? History.localPathOf(ref.source) : "", History.localPathOf(row.appIcon || "")]) {
+                const entry = path === "" ? undefined : localCopies[path];
+                if (entry !== undefined && entry.state === "ok")
+                    kept.push(entry.n);
+            }
+        }
+        return kept;
+    }
+
+    function runCopies(): void {
+        if (!copyDirReady || copier.running || copyQueue.length === 0)
+            return;
+        copyBatch = copyQueue.slice(0, 16);
+        copyQueue = copyQueue.slice(16);
+        const args = [];
+        for (const q of copyBatch)
+            args.push(String(q.n), q.path);
+        copier.command = ["sh", "-c", copyScript, "gf-image-copy", copyDir, String(History.MAX_IMAGE_FILE_BYTES), String(copyWindow),
+            String(Math.max(0, Math.floor(copyBudgetBytes))), bannerCopyNumbers().join(",")].concat(args);
+        copier.running = true;
+    }
+
+    // Line i of the helper's output answers copyBatch[i]: "ok" or "no", then the numbers of the copies it evicted (also
+    // when the copy then failed). An evicted copy's path keeps a "gone" entry (not shown, not re-made on use; a new
+    // notification naming it copies it again).
+    function copiesDone(output: string): void {
+        const lines = String(output || "").split("\n");
+        const next = Object.keys(localCopies).length > 4 * copyWindow ? {} : Object.assign({}, localCopies);
+        for (let i = 0; i < copyBatch.length; i++) {
+            const q = copyBatch[i];
+            const words = String(lines[i] || "").split(" ");
+            if (words[0] === "ok") {
+                next[q.path] = {state: "ok", n: q.n};
+            } else {
+                next[q.path] = {state: "no", n: -1};
+                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes, or does not fit the " + copyBudgetBytes + "-byte budget of copies; not shown");
+            }
+            for (const word of words.slice(1)) {
+                const evicted = Number(word);
+                for (const path in next) {
+                    if (next[path].state === "ok" && next[path].n === evicted)
+                        next[path] = {state: "gone", n: -1};
+                }
+            }
+        }
+        copyBatch = [];
+        localCopies = next;
+        Qt.callLater(runCopies);
+    }
+
+    Process {
+        id: copier
+        stdout: StdioCollector {
+            onStreamFinished: root.copiesDone(text)
+        }
+    }
+
+    // Empties (and creates, 0700) the private copy directory once at start; copies wait for it.
+    Process {
+        id: copyPrepare
+        running: root.copyDir !== ""
+        command: ["sh", "-c", "case $1 in /*/grassfield-notification-images-*) ;; *) exit 1 ;; esac; rm -rf -- \"$1\" && mkdir -m 700 -- \"$1\"", "gf-image-copy-prepare", root.copyDir]
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: code => {
+            // qmllint enable signal-handler-parameters
+            root.copyDirReady = code === 0;
+            if (code !== 0)
+                console.warn("grassfield-notifications: the private image directory could not be prepared; local notification images are not shown");
+            root.runCopies();
+        }
+    }
+
+    // The notification's image hint as kept: "" when it is not a local file, image data the app sent or a theme name
+    // (History.imageRef, GF-114: a URL is never fetched). Logged with its scheme only, never the reference.
+    function keptImage(image: string): string {
+        const ref = History.imageRef(image);
+        if (ref.kind === "file")
+            requestCopy(History.localPathOf(ref.source), true); // shown as a private copy once made (copySourceOf)
+        if (ref.kind !== "refused")
+            return image;
+        console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");
+        return "";
+    }
+
+    // An app icon path is shown like an image file, as a private copy (copySourceOf); a name is kept only when it is a
+    // plain theme name (History.keptAppIcon, review of 6e24d36); anything else is dropped at intake (the generic icon).
+    function checkedAppIcon(icon: string): string {
+        const kept = History.keptAppIcon(icon);
+        if (kept !== icon)
+            console.info("grassfield-notifications: a notification app icon was refused: only plain theme names and local image files are shown");
+        if (kept.startsWith("/") || kept.toLowerCase().startsWith("file:"))
+            requestCopy(History.localPathOf(kept), true);
+        return kept;
+    }
+
     function makeEntry(n: var, key: string): var {
         return {
             key: key,
             nid: n.id,
             appName: n.appName,
-            appIcon: n.appIcon,
-            image: n.image,
+            appIcon: checkedAppIcon(n.appIcon),
+            image: keptImage(n.image),
             summary: n.summary,
             body: n.body,
             bodyHtml: Sanitizer.sanitize(n.body),

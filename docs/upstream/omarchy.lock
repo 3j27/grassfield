@@ -1,0 +1,16 @@
+# Upstream Omarchy files the Grassfield security modules derive from (GF-AUDIT-001 GF-031, docs/specs/security.md
+# "Upstream base"). Checked by scripts/dev/upstream-drift.sh, part of `just check`: every file below must still have
+# this sha256 in the installed Omarchy (OMARCHY_PATH, default /usr/share/omarchy). A difference means upstream changed
+# code a Grassfield fork was taken from: read the change, port or reject it in the fork (and say so in
+# docs/specs/security.md "Upstream base"), then re-pin with `scripts/dev/upstream-drift.sh --update`.
+#
+# omarchy-package 4.0.4-1
+# upstream basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5 (v4.0.4, byte-identical to the installed files)
+# reviewed-against basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0 (v4.0.6)
+#
+# sha256 | upstream path (relative to OMARCHY_PATH) | Grassfield files derived from it (comma-separated)
+3f0a265a09f7957e8f5d74666595d3136ec64899c414426190460f9e2098e701 shell/plugins/lock/Service.qml shell/security/lock/Lock.qml
+50f5c81e2e94fab32395a5bc3cce982e30a10ab1b3f56cc58f29055951518a51 shell/plugins/services/idle/Service.qml shell/security/idle/Idle.qml
+dfd8e994bd774b9d6d5375f1380a51db1813ce2c060a37c3519c75f0c089dde6 shell/plugins/polkit/PolkitAgent.qml shell/security/polkit/AuthAgent.qml
+6081b11c89d47ab3242a5eb25793724ebd09e1a99aa391950fea6e08b559cb39 bin/omarchy-system-sleep-lock shell/security/idle/IdleModel.js,packaging/shims/omarchy-shell
+e5004580e41475932f852d622b36ec07bfb0e98633c4d3c3055071a54d0eda07 bin/omarchy-hyprland-session-locked shell/security/lock/Lock.qml

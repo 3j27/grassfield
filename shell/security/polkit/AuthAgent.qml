@@ -40,6 +40,37 @@ Scope {
         // qmllint disable unresolved-type
         flow: agent.isActive ? agent.flow : null
         // qmllint enable unresolved-type
+
+        onActiveChanged: {
+            root.heldWhileLocked = active && SessionState.locked;
+            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked);
+            root.userFocused = false;
+            root.requestStartedAt = active ? Date.now() : 0;
+        }
+    }
+
+    // The request arrived, or was open, while the session was locked (review of 1d2c856), or arrived within
+    // AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the keyboard until the
+    // user clicks it (AuthDialogModel.heldGuardMs after it appeared), so keys typed right after the unlock never reach its
+    // field; it says when the request arrived. Both delays are timed by the model's Timers (monotonic, review of 6e24d36);
+    // requestStartedAt is only the time shown in the notice.
+    property bool heldByLock: false
+    property bool heldWhileLocked: false
+    property bool userFocused: false
+    property double requestStartedAt: 0
+
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (!SessionState.locked) {
+                dialogModel.noteUnlock();
+            } else if (dialogModel.active) {
+                root.heldByLock = true;
+                root.heldWhileLocked = true;
+                root.userFocused = false;
+            }
+        }
     }
 
     // Registration is asynchronous; report a refusal once, after it had time to complete.
@@ -58,7 +89,27 @@ Scope {
         // qmllint enable uncreatable-type
         id: win
 
-        visible: dialogModel.active
+        // A request that arrives while the session is locked waits behind the lock (macOS: the authorization sheet shows
+        // once the user is back): the sheet is mapped, and takes the keyboard, only after the unlock (GF-116). The request
+        // itself stays pending; nothing is answered or approved meanwhile.
+        readonly property bool shown: dialogModel.active && !SessionState.locked
+        // The sheet holds the keyboard: shown, and not a held request the user has not clicked yet.
+        readonly property bool takesKeys: shown && (!root.heldByLock || root.userFocused)
+
+        visible: shown
+        // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: a request that was not
+        // held takes the keys at once; a held one waits for a click (takesKeys) with an empty field.
+        onShownChanged: {
+            if (shown)
+                dialogModel.noteShown();
+            const dialog = holder.item as AuthDialog;
+            if (!dialog)
+                return;
+            if (shown && !root.heldByLock)
+                dialog.focusField();
+            else if (dialogModel.active)
+                dialogModel.clearRequested();
+        }
         anchors {
             top: true
             bottom: true
@@ -68,10 +119,10 @@ Scope {
         exclusionMode: ExclusionMode.Ignore
         color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity)
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: dialogModel.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: win.takesKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-polkit"
         // qmllint disable missing-type
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && dialogModel.active ? blurRegion : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blurRegion : null
         // qmllint enable missing-type
 
         Region {
@@ -98,6 +149,23 @@ Scope {
                 model: dialogModel
                 // The action's theme icon (sanitized by the model), only when the theme has it (no broken image).
                 appIconSource: dialogModel.iconName !== "" && Quickshell.hasThemeIcon(dialogModel.iconName) ? Quickshell.iconPath(dialogModel.iconName) : ""
+                heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhileLocked) : ""
+            }
+        }
+
+        // A held request: the first click on the sheet (anywhere, the field included) gives it the keyboard, once
+        // AuthDialogModel.heldGuardMs passed since it appeared; the press goes on to what is under it.
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.heldByLock && !root.userFocused
+            onPressed: mouse => {
+                mouse.accepted = false;
+                if (!dialogModel.heldClickAccepted())
+                    return;
+                root.userFocused = true;
+                const dialog = holder.item as AuthDialog;
+                if (dialog)
+                    dialog.focusField();
             }
         }
     }
