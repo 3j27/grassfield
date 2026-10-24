@@ -25,8 +25,8 @@ import Grassfield.Ui
 //    included (a "../" section leads outside); and <dir>/<name>[.png|.svg|.svgz|.xpm] in the fallback (pixmaps) and
 //    search-path roots the user owns or can write. Each one present must be a regular file (symlinks resolved; no FIFO,
 //    device, socket, directory, dangling link or loop) of at most maxFileBytes, else the name is refused;
-//  - an icon path (appIcon): a regular file of at most maxFileBytes, symlinks resolved, then loaded by a file: URL with
-//    every segment encoded.
+//  - an icon or picture path (appIcon, fileSource): a regular file of at most maxPathBytes, symlinks resolved, then
+//    loaded by a file: URL with every segment encoded.
 // The candidates of a whole batch are stat()ed in two calls; listing the folders reads every entry of the user's theme
 // directories (about 0.4 s for a theme of 99k files, once per batch). Root-owned trees can only hold what root put there.
 // A new check of a key (a new notification naming it) hides it ("pending") until its new verdict; a helper failure or
@@ -42,6 +42,8 @@ Singleton {
 
     readonly property real maxFileBytes: 8 * 1024 * 1024
     readonly property real maxThemeFileBytes: 64 * 1024 * 1024
+    // An icon or picture named by path (Icon=/path, a desktop file's thumbnail): loaded asynchronously, a photo may be big.
+    readonly property real maxPathBytes: 64 * 1024 * 1024
     readonly property int batchSize: 24
     // A test may lower it.
     property int signatureIntervalMs: 20000
@@ -61,13 +63,13 @@ Singleton {
     property string signature: ""
     // A user theme file (index.theme, icon-theme.cache, an Inherits= traversal) refuses every name.
     property bool themeFilesRefused: false
-    // POSIX sh: the two size caps, the mode, then arguments (never interpolated):
+    // POSIX sh: the three size caps (theme icon files, theme files, paths), the mode, then arguments (never interpolated):
     //   check <keys>: "sig <n>", "bad" when the user theme files refuse every name, "ok <key>" or "no <key>" per key,
     //                 "ksig <n> <key>" per key found ok, "dep <folder>" lines;
     //   ksig <keys>:  "sig <n>", maybe "bad", "ksig <n> <key>" per key;
     //   sig <folders>: "sig <n>" over the theme folders and files plus the given folders, maybe "bad".
     // A key without an "ok" line (the helper failed or timed out) is refused.
-    readonly property string script: "cap=$1; tcap=$2; mode=$3; shift 3; set -f; names=; paths=\n"
+    readonly property string script: "cap=$1; tcap=$2; pcap=$3; mode=$4; shift 4; set -f; names=; paths=\n"
         + "nl='\n"
         + "'\n"
         + "for n in \"$@\"; do case $n in /*\"$nl\"*) ;; /*) paths=\"$paths$nl$n\" ;; ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*|*..*) printf 'no %s\\n' \"$n\" ;; *) names=\"$names$nl$n\" ;; esac; done\n"
@@ -120,13 +122,14 @@ Singleton {
         + "xargs -r -d '\\n' stat -c '%n|%F|%i|%Y|%s' -- <\"$t/cands\" >\"$t/ls\" 2>/dev/null\n"
         + "xargs -r -d '\\n' stat -L -c '%n|%F|%i|%Y|%s' -- <\"$t/cands\" >\"$t/lt\" 2>/dev/null\n"
         + "# Per key: \"R <present> <regular of bounded size> <key>\"; its stat lines go to k<index> (its signature).\n"
-        + "awk -F'\\t' -v c=\"$cap\" -v dir=\"$t\" '\n"
+        + "awk -F'\\t' -v c=\"$cap\" -v pc=\"$pcap\" -v dir=\"$t\" '\n"
         + "  function path(l) { sub(/\\|[^|]*\\|[^|]*\\|[^|]*\\|[^|]*$/, \"\", l); return l }\n"
         + "  FILENAME == dir \"/pairs\" { key = $1; p = substr($0, length($1) + 2); if (!(key in idx)) { idx[key] = ++nk; keys[nk] = key }\n"
         + "    owners[p] = owners[p] SUBSEP idx[key]; next }\n"
         + "  FILENAME == dir \"/ls\" { p = path($0); m = split(owners[p], o, SUBSEP); for (i = 2; i <= m; i++) { present[o[i]]++; print \"L \" $0 > (dir \"/k\" o[i]) } next }\n"
-        + "  FILENAME == dir \"/lt\" { p = path($0); n = split($0, f, \"|\"); good = n >= 5 && f[n - 3] ~ /^regular/ && f[n] + 0 <= c + 0\n"
-        + "    m = split(owners[p], o, SUBSEP); for (i = 2; i <= m; i++) { if (good) regular[o[i]]++; print \"T \" $0 > (dir \"/k\" o[i]) } next }\n"
+        + "  FILENAME == dir \"/lt\" { p = path($0); n = split($0, f, \"|\"); reg = n >= 5 && f[n - 3] ~ /^regular/\n"
+        + "    m = split(owners[p], o, SUBSEP); for (i = 2; i <= m; i++) { lim = substr(keys[o[i]], 1, 1) == \"/\" ? pc : c\n"
+        + "      if (reg && f[n] + 0 <= lim + 0) regular[o[i]]++; print \"T \" $0 > (dir \"/k\" o[i]) } next }\n"
         + "  END { for (i = 1; i <= nk; i++) printf \"R %d %d %d %s\\n\", i, present[i] + 0, regular[i] + 0, keys[i] }' \"$t/pairs\" \"$t/ls\" \"$t/lt\" >\"$t/r\"\n"
         + "while IFS=' ' read -r tag i a g key; do\n"
         + "  [ \"$tag\" = R ] || continue\n"
@@ -182,8 +185,8 @@ Singleton {
         return verdict === "ok" && Quickshell.hasThemeIcon(safe) ? Quickshell.iconPath(safe) : "";
     }
 
-    // The file: URL of icon file `icon` (an absolute path or file: URL), every segment encoded, once it was found to be a
-    // regular file of at most maxFileBytes; else "" (not a path, not checked yet: a check is requested, or refused).
+    // The file: URL of icon or picture file `icon` (an absolute path or file: URL), every segment encoded, once it was found
+    // to be a regular file of at most maxPathBytes; else "" (not a path, not checked yet: a check is requested, or refused).
     function fileSource(icon: string): string {
         const path = plainIconPath(icon);
         if (path === "")
@@ -271,7 +274,7 @@ Singleton {
     }
 
     function helper(mode: string, args: var): var {
-        return ["timeout", "-k", "2", "30", "sh", "-c", script, "gf-icon-check", String(maxFileBytes), String(maxThemeFileBytes), mode].concat(args);
+        return ["timeout", "-k", "2", "30", "sh", "-c", script, "gf-icon-check", String(maxFileBytes), String(maxThemeFileBytes), String(maxPathBytes), mode].concat(args);
     }
 
     // "<word> <rest>" lines of the helper's output: {rest: second word} for "ksig <n> <key>", {key: word} for "ok|no <key>".

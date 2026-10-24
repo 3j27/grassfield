@@ -226,8 +226,16 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   The same helper serves icons from desktop entries, applications and files: `ThemeIcons.appIcon(Icon=, fallback)`
   (review of eee45cc: a FIFO `Icon=` in a user .desktop file stalled the loader) checks a theme name as above and an
   absolute path as a regular file of at most 8 MiB, then loads it by a file: URL; until then, and when refused, the
-  checked fallback icon shows (theme_icon_files.sh part 3: real Launchpad cells with a FIFO path and a FIFO theme name in
-  a scratch applications directory).
+  checked fallback icon shows. Every icon named by a desktop entry, an application or a file goes through it, and its
+  Image loads asynchronously, so even a file swapped after its check can stall only the loader, never the GUI thread
+  (review of 100692f): the Dock (application and minimized icons), Launchpad cells, the Apps prewarm list, desktop icons
+  (a launcher's Icon=, a picture's thumbnail via `ThemeIcons.fileSource`, up to 64 MiB), Search rows (the record keeps
+  the raw Icon=), the Switcher, the Overview (tiles, minimized windows, labels), Force Quit, the About panel, and the
+  polkit sheet's icon. theme_icon_files.sh part 3 runs real Launchpad cells, desktop icons and the About panel with a
+  FIFO Icon= path, a FIFO theme name and a FIFO picture in scratch folders (mutants restoring Quickshell.iconPath on the
+  desktop or in About, or an unchecked thumbnail, fail it) and checks the other sites' calls (their windows need
+  toplevels or layer-shell). Icons with fixed names (folder stacks, the trash, the Apps tile) still use
+  Quickshell.iconPath; they are refused only when the theme files are.
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the

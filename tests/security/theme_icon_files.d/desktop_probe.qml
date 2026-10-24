@@ -1,20 +1,27 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.desktop
 import qs.launchpad
+import qs.overlay
 import qs.services
 
-// Probe of tests/security/theme_icon_files.sh, part 3 (review of eee45cc): applications whose Icon= names a FIFO, as a
-// path or as a theme name, in a scratch applications directory. Real Launchpad cells (AppsCell, which loads
-// ThemeIcons.appIcon) are made for the four scratch entries; the Apps prewarm list (Apps.listedIconSources) is read too.
-// Then a control icon is loaded: its Image only becomes Ready when the one image loader never stalled. Prints one
-// "probe:" line per entry and a "probe: done" line, then exits.
+// Probe of tests/security/theme_icon_files.sh, part 3 (reviews of eee45cc and 100692f): icons named by applications
+// and files, one real surface per class, with FIFOs where their files should be:
+//  - Launchpad cells (AppsCell) and the Apps prewarm list, for four entries in a scratch applications directory: a FIFO
+//    Icon= path, an Icon= theme name whose file is a FIFO, a regular path, a regular name;
+//  - desktop icons (DesktopIcon) for launchers in a scratch Desktop folder with the same two FIFO Icon= values, and a
+//    picture file that is a FIFO (its thumbnail);
+//  - the About panel (AppAboutPanel: the class of surfaces that look an application up by id, with the Overview and
+//    Force Quit) for both FIFO applications.
+// Then a control icon is loaded: its Image only becomes Ready when the one image loader never stalled, and the probe
+// exits only when the GUI thread never blocked. Prints "probe:" lines and "probe: done", then exits.
 ShellRoot {
     id: root
 
+    readonly property string desktop: Quickshell.env("PROBE_DESKTOP")
     readonly property var ids: ["gf-fifo-path", "gf-fifo-name", "gf-ok-path", "gf-ok-name"]
     property var entries: ({})
-    property var cells: []
     property int waited: 0
     property string phase: "entries"
 
@@ -26,40 +33,61 @@ ShellRoot {
         return null;
     }
 
-    function settled(): bool {
-        for (const id of ids) {
-            const v = ThemeIcons.verdicts[ThemeIcons.keyOf(entries[id].icon)];
-            if (v === undefined || v === "pending")
-                return false;
-        }
-        return true;
+    function settled(keys: var): bool {
+        return keys.every(k => {
+            const v = ThemeIcons.verdicts[ThemeIcons.keyOf(k)];
+            return v === "ok" || v === "no";
+        });
     }
-
-    // The Apps singleton (prewarm list) starts now, as in the shell (the menu bar hosts the prewarm).
-    Component.onCompleted: console.info("desktop probe: apps revision " + Apps.revision)
 
     function prewarmed(id: string): bool {
         return Apps.listedIconSources.indexOf(ThemeIcons.appIcon(entries[id].icon, "application-x-executable")) >= 0;
     }
+
+    // The Apps singleton (prewarm list) starts now, as in the shell (the menu bar hosts the prewarm).
+    Component.onCompleted: console.info("desktop probe: apps revision " + Apps.revision)
 
     Component {
         id: cellComponent
         AppsCell {}
     }
 
+    Component {
+        id: desktopIconComponent
+        DesktopIcon {}
+    }
+
+    Component {
+        id: aboutComponent
+        AppAboutPanel {}
+    }
+
     FloatingWindow {
         id: win
         visible: true
-        implicitWidth: 600
-        implicitHeight: 160
+        implicitWidth: 900
+        implicitHeight: 400
 
         Row {
             id: row
         }
 
+        Row {
+            id: desktopRow
+            y: 130
+        }
+
+        Item {
+            id: aboutHost
+            y: 230
+            width: 400
+            height: 160
+        }
+
         Image {
             id: control
-            y: 120
+            x: 860
+            y: 360
             width: 32
             height: 32
             asynchronous: true
@@ -89,15 +117,18 @@ ShellRoot {
                     Qt.exit(1);
                     return;
                 }
-                const list = [];
                 for (const id of root.ids)
-                    list.push(cellComponent.createObject(row, {info: {key: id, id: id, name: id, rec: {icon: found[id].icon}}}));
-                root.cells = list;
+                    cellComponent.createObject(row, {info: {key: id, id: id, name: id, rec: {icon: found[id].icon}}});
+                for (const name of ["gf-fifo-path.desktop", "gf-fifo-name.desktop", "photo.png"])
+                    desktopIconComponent.createObject(desktopRow, {name: name, isDir: false, filePath: root.desktop + "/" + name});
+                Popups.open("appabout", "", 0, 0, "center", {appId: "gf-fifo-path"});
+                aboutComponent.createObject(aboutHost, {});
                 root.phase = "verdicts";
                 root.waited = 0;
             } else if (root.phase === "verdicts") {
-                // The cells' bindings asked; wait for every verdict, then a second for any stalled read to begin.
-                const ready = root.settled() && root.prewarmed("gf-ok-path") && root.prewarmed("gf-ok-name");
+                // The surfaces' bindings asked; wait for every verdict, then a second for any stalled read to begin.
+                const icons = root.ids.map(id => root.entries[id].icon).concat([root.desktop + "/photo.png"]);
+                const ready = root.settled(icons) && root.prewarmed("gf-ok-path") && root.prewarmed("gf-ok-name");
                 if ((!ready || root.waited < 1000) && root.waited < 15000)
                     return;
                 for (const id of root.ids) {
@@ -105,6 +136,14 @@ ShellRoot {
                     console.log("probe: " + id + " verdict=" + ThemeIcons.verdicts[ThemeIcons.keyOf(icon)] + " source=" + ThemeIcons.appIcon(icon, "")
                         + " prewarmed=" + root.prewarmed(id));
                 }
+                console.log("probe: thumbnail verdict=" + ThemeIcons.verdicts[root.desktop + "/photo.png"] + " source=" + ThemeIcons.fileSource(root.desktop + "/photo.png"));
+                // The About panel shows the second FIFO application too.
+                Popups.open("appabout", "", 0, 0, "center", {appId: "gf-fifo-name"});
+                root.phase = "about";
+                root.waited = 0;
+            } else if (root.phase === "about") {
+                if (root.waited < 1000)
+                    return;
                 ThemeIcons.check("ctl", false);
                 root.phase = "control";
                 root.waited = 0;

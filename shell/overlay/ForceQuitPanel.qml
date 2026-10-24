@@ -84,8 +84,9 @@ Dialog {
                             anchors.verticalCenter: parent.verticalCenter
                             source: {
                                 const e = Apps.lookup(row.modelData.appId);
-                                return Quickshell.iconPath(e ? e.icon : row.modelData.appId, "application-x-executable");
+                                return ThemeIcons.appIcon(e ? e.icon : row.modelData.appId, "application-x-executable");
                             }
+                            asynchronous: true
                         }
 
                         Text {

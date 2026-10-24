@@ -416,7 +416,7 @@ Variants {
                             oversample: Tokens.searchIconOversample
                             overAccent: row.selected
                             visible: !row.isHeader && row.info.iconSource !== undefined
-                            source: !row.isHeader && row.info.iconSource !== undefined ? row.info.iconSource : ""
+                            source: row.isHeader || row.info.iconSource === undefined ? "" : (row.info.appIcon !== undefined ? ThemeIcons.appIcon(row.info.appIcon, "application-x-executable") : row.info.iconSource)
                             asynchronous: true
                         }
 

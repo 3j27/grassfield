@@ -105,7 +105,7 @@ done
 cp tests/security/theme_icon_files.d/desktop_probe.qml "$dcfg/shell.qml"
 s=$tmp/desktop
 mkdir -p -m 700 "$s/runtime" "$s/cache"
-mkdir -p "$s/home/.local/share/applications" "$s/data/pixmaps" "$s/elsewhere" "$s/state" "$s/config"
+mkdir -p "$s/home/.local/share/applications" "$s/home/Desktop" "$s/data/pixmaps" "$s/elsewhere" "$s/state" "$s/config"
 printf '%s' "$png" | base64 -d >"$s/data/pixmaps/ctl.png"
 cp "$s/data/pixmaps/ctl.png" "$s/elsewhere/good.png"
 mkfifo "$s/elsewhere/evil-path.png" "$s/data/pixmaps/evilname.png"
@@ -114,13 +114,15 @@ desk gf-fifo-path "$s/elsewhere/evil-path.png"
 desk gf-fifo-name evilname
 desk gf-ok-path "$s/elsewhere/good.png"
 desk gf-ok-name ctl
+cp "$s/home/.local/share/applications/gf-fifo-path.desktop" "$s/home/.local/share/applications/gf-fifo-name.desktop" "$s/home/Desktop/"
+mkfifo "$s/home/Desktop/photo.png"
 rc=0
 out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION \
-  GRASSFIELD_DEV=1 HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" \
+  GRASSFIELD_DEV=1 PROBE_DESKTOP="$s/home/Desktop" HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" \
   XDG_CONFIG_HOME="$s/home/.config" XDG_STATE_HOME="$s/home/.local/state" GRASSFIELD_STATE_HOME="$s/state" GRASSFIELD_CONFIG_HOME="$s/config" \
   GRASSFIELD_TEST_TMP="$s" XDG_RUNTIME_DIR="$s/runtime" XDG_CACHE_HOME="$s/cache" \
   QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_LANG=en GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" \
-  timeout -k 3 60 qs -p "$dcfg" --no-color 2>&1) || rc=$?
+  timeout -k 3 90 qs -p "$dcfg" --no-color 2>&1) || rc=$?
 dline() { grep -o "probe: $1 .*" <<<"$out" | head -n 1 || true; }
 dcheck() { # <label> <ok>
   if [[ $2 == 1 ]]; then echo "PASS: theme icon files, application icons: $1"; else echo "FAIL: theme icon files, application icons: $1 (rc $rc; $(grep -o 'probe: .*' <<<"$out" | tr '\n' '|' | cut -c1-400))"; fail=1; fi
@@ -129,7 +131,20 @@ l=$(dline gf-fifo-path); dcheck "a FIFO Icon= path is refused" "$([[ $l == *" ve
 l=$(dline gf-fifo-name); dcheck "an Icon= theme name whose file is a FIFO is refused" "$([[ $l == *" verdict=no source= "* ]] && echo 1)"
 l=$(dline gf-ok-path); dcheck "a regular Icon= path is shown and prewarmed" "$([[ $l == *" verdict=ok source=file://$s/elsewhere/good.png prewarmed=true"* ]] && echo 1)"
 l=$(dline gf-ok-name); dcheck "a regular Icon= theme name is shown and prewarmed" "$([[ $l == *" verdict=ok source=image://icon/ctl prewarmed=true"* ]] && echo 1)"
-dcheck "the image loader never stalled" "$([[ $rc == 0 && $(dline done) == "probe: done ctl=1" ]] && echo 1)"
+l=$(dline thumbnail); dcheck "a desktop picture that is a FIFO gets no thumbnail" "$([[ $l == "probe: thumbnail verdict=no source=" ]] && echo 1)"
+dcheck "Launchpad cells, desktop icons and the About panel never stalled the loader or the GUI thread" "$([[ $rc == 0 && $(dline done) == "probe: done ctl=1" ]] && echo 1)"
+# The other sites (their windows need toplevels or layer-shell, not made offscreen) use the same call, asynchronously.
+site_ok=1
+for site in 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(Apps.lookup(tile.modelData.appIds[index])' 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(mini.entry ? mini.entry.icon' \
+  'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(label.entry ? label.entry.icon' 'shell/overlay/ForceQuitPanel.qml:return ThemeIcons.appIcon(e ? e.icon' \
+  'shell/overlay/AppAboutPanel.qml:ThemeIcons.appIcon(root.entry ? root.entry.icon' 'shell/switcher/SwitcherWindow.qml:ThemeIcons.appIcon(tile.modelData.icon' \
+  'shell/search/SearchPanel.qml:ThemeIcons.appIcon(row.info.appIcon' 'shell/search/Search.qml:iconSource: "", appIcon: r.app.icon'; do
+  grep -qF -- "${site#*:}" "${site%%:*}" || { echo "missing: $site"; site_ok=0; }
+done
+for f in shell/overview/OverviewWindow.qml shell/overlay/ForceQuitPanel.qml shell/overlay/AppAboutPanel.qml shell/switcher/SwitcherWindow.qml shell/search/SearchPanel.qml shell/launchpad/AppsCell.qml shell/desktop/DesktopIcon.qml shell/dock/Dock.qml; do
+  grep -q 'Quickshell.iconPath(.*\(icon\|iconTheme\)' "$f" && { echo "unchecked: $f"; site_ok=0; }
+done
+dcheck "Search, the Switcher, the Overview, Force Quit and About load Icon= through ThemeIcons.appIcon" "$site_ok"
 # The Dock's two application icon sites use the same call (its window is not made offscreen).
 dock_ok=$( [[ $(grep -c 'ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable")' shell/dock/Dock.qml) == 2 ]] && ! grep -q 'Quickshell.iconPath(tile.modelData.icon' shell/dock/Dock.qml && echo 1)
 dcheck "the Dock loads application icons through ThemeIcons.appIcon" "$dock_ok"
@@ -160,7 +175,7 @@ qcase() { # <kind> <expected verdict> <qt alone must stall: yes|no> <setup> [nam
   cp "$s/ok.png" "$U/mytheme/48x48/apps/evil.png"
   eval "$4"
   local envs=(env -i PATH="$PATH" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS="$D:/usr/local/share:/usr/share" XDG_RUNTIME_DIR="$s" QT_QPA_PLATFORM=offscreen)
-  verdict=$("${envs[@]}" timeout -k 2 30 sh "$tmp/checker.sh" 8388608 67108864 check "$name" | grep -E "^(ok|no) $name\$" | cut -d' ' -f1 || true)
+  verdict=$("${envs[@]}" timeout -k 2 30 sh "$tmp/checker.sh" 8388608 67108864 67108864 check "$name" | grep -E "^(ok|no) $name\$" | cut -d' ' -f1 || true)
   local ok=1 note=
   [[ $verdict == "$want" ]] || ok=0
   if [[ $verdict == ok ]]; then
@@ -204,7 +219,7 @@ dirs=$(seq -f "d%g/apps" 1 300 | paste -sd, -)
 printf '[Icon Theme]\nName=bigtheme\nDirectories=%s\n' "$dirs" >"$U/index.theme"
 for i in $(seq 1 300); do mkdir -p "$U/d$i/apps"; (cd "$U/d$i/apps" && touch $(seq -f "icon%g.png" 1 330)); done
 start=$(date +%s%N)
-mkdir -p -m 700 "$s/run"; out=$(env -i PATH="$PATH" XDG_RUNTIME_DIR="$s/run" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS=/usr/local/share:/usr/share timeout -k 2 30 sh "$tmp/checker.sh" 8388608 67108864 check $(seq -f "icon%g" 1 8)) || true
+mkdir -p -m 700 "$s/run"; out=$(env -i PATH="$PATH" XDG_RUNTIME_DIR="$s/run" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS=/usr/local/share:/usr/share timeout -k 2 30 sh "$tmp/checker.sh" 8388608 67108864 67108864 check $(seq -f "icon%g" 1 8)) || true
 ms=$((($(date +%s%N) - start) / 1000000))
 oks=$(grep -c '^ok icon' <<<"$out" || true)
 if [[ $oks == 8 ]] && ((ms < 10000)); then echo "PASS: theme icon files, cost: 8 names against 99k files in ${ms} ms"; else echo "FAIL: theme icon files, cost: $oks/8 ok in ${ms} ms"; fail=1; fi

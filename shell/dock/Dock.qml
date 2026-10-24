@@ -1646,6 +1646,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isApp ? ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable") : ""
+                                    asynchronous: true
 
                                     // Held button: darker by Tokens.dockPressDim (an offscreen layer only while pressed).
                                     layer.enabled: tile.pressedDown
@@ -1834,6 +1835,7 @@ Scope {
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         source: minimizedTile.iconSource
+                                        asynchronous: true
                                     }
                                 }
 
