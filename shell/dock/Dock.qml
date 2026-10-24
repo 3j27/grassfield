@@ -619,6 +619,21 @@ Scope {
             return "";
         }
 
+        // The tile drag state of `screen` as JSON (fixtures only; no tile names): {dragging, from, slot, out, removable,
+        // interrupted}. `out` is the drag past the removal distance (the "Remove" label shows when `out && removable`).
+        // tests/visual/contrast.sh reads it instead of looking for the label's pixels (GF-061).
+        function dragstate(screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    return JSON.stringify({dragging: all[i].dragFrom >= 0, from: all[i].dragFrom, slot: all[i].dragSlot, out: all[i].dragOut,
+                        removable: all[i].dragRemovable, interrupted: all[i].dragInterrupted});
+            }
+            return "";
+        }
+
         function reveal(on: bool): void {
             if (VisualFixtures.dev)
                 root.testReveal = on;

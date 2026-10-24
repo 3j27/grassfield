@@ -122,3 +122,21 @@ Reports live in `.dev/gate-runs/<UTC stamp>-<name>.md` (git-ignored); `just gate
 `NOT VERIFIED` and `PROXY` lines and says so when a run is not a plain pass: cite the report, not a remembered result.
 Release checks and nested gate runs are started through the same helper (`just gate release-check just release-check`), so
 there is one format; a script that prints its own summary line can call `--record` at its end. Test: `tests/shell/gate_run.sh`.
+
+## Functional flows and the nested smoke set (GF-009, GF-094)
+
+`tests/visual/flow-<module>.sh` (bare, nested only; `tests/visual/flow-lib.sh` is the shared helper): one script per module,
+used the way a user does, asserting the shell's own state over its dev IPC, the shared `grassfield.json`, files on disk and the
+windows the compositor reports, with a screenshot per step in `.dev/visual/shots/flow-<module>-*.en.png`. Pixels only prove that
+something appeared or went away. Modules: `search`, `quicksettings`, `widgets`, `settings`, `files`, `preview`, `notifications`.
+Each starts a nested session when none is up (`vs_session`), refuses any other instance (`dev_nested_target`) and ends the windows,
+banners, widgets and settings it changed. Where a control has no IPC (the Tab position of a Quick Settings tile, the row of a context menu) the flow
+finds it by trying and asserting the effect, so a changed layout still passes and a broken control fails with the step named.
+Not driven: the Lock Screen command of Search (it would lock the nested session for good; only its presence is asserted), the
+devices behind the Quick Settings toggles (the dev guard answers; the flow asserts the guard), the transparency slider's drag
+(the IPC hook calls the slider's setter).
+
+`tests/shell/smoke_nested.sh` (run it bare; a `smoke-nested` just recipe is a one-line wrapper): the nested smoke set, eight checks in about 20 s on a nested session that is
+ALREADY up: compositor lists, shell IPC and unlocked, plugin handshake, Quick Settings state and a menu, Search, Apps (and their
+mutual exclusion), the notification server and Center, and no QML error in `.dev/shell.log`. It starts nothing and opens no window,
+and it SKIPs without a session, so `scripts/dev/test.sh` (nested layer) carries it whenever a session happens to be up.

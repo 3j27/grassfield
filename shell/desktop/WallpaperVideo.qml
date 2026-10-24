@@ -69,6 +69,7 @@ Item {
         // qmllint disable signal-handler-parameters
         onErrorOccurred: (error, errorString) => {
             console.warn("wallpaper: the video cannot be played: " + errorString);
+            root.releaseMarker();
             root.failed(errorString);
         }
         // qmllint enable signal-handler-parameters
@@ -93,8 +94,28 @@ Item {
         settle.stop();
     }
     onPlayingChanged: {
-        if (playing)
+        if (playing) {
             tries = 0;
+            playbackStarted();
+        }
+    }
+
+    // The marker is live from the first play() until the video has really played for Tokens.wallpaperVideoStableMs: the window
+    // starts when the player is playing, not when the start was first asked for (a start that succeeds on a late retry is protected
+    // for the full window too).
+    property bool markerLive: false
+    readonly property bool markerWindowOpen: stable.running
+
+    function playbackStarted(): void {
+        if (root.markerLive)
+            stable.restart();
+    }
+
+    // The marker is no longer needed: the video played stably, was paused or released on purpose, failed, or never started.
+    function releaseMarker(): void {
+        stable.stop();
+        root.markerLive = false;
+        WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath);
     }
 
     Timer {
@@ -113,6 +134,9 @@ Item {
         running: root.policy === "play" && root.source.toString() !== "" && !root.playing && root.tries < 15
         onTriggered: {
             root.tries++;
+            // Retries used up without a start: the shell is alive, nothing is starting any more.
+            if (root.tries >= 15)
+                root.releaseMarker();
             console.info("wallpaper video: " + root.markerOwner + " is not playing though the policy says play (status " + player.mediaStatus + ", state " + player.playbackState + "), asking again (" + root.tries + ")");
             root.sync();
         }
@@ -138,8 +162,7 @@ Item {
             if (player.playbackState === MediaPlayer.PlayingState)
                 player.pause();
             // Paused on purpose, the shell is alive: nothing is starting any more.
-            stable.stop();
-            WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath);
+            root.releaseMarker();
         }
     }
 
@@ -147,8 +170,9 @@ Item {
         // The marker is on disk before the first frame is decoded, and only for the first play of this video.
         if (root.markerPath !== "" && !root.markerWritten) {
             root.markerWritten = true;
+            root.markerLive = true;
             WallpaperState.markVideoStarting(root.markerOwner, root.markerPath);
-            stable.restart();
+            // The 10 s window starts at the first real playback (playbackStarted), not here.
         }
         player.play();
     }
@@ -162,8 +186,7 @@ Item {
         duration: Tokens.wallpaperVideoSettleMs
         onFinished: {
             player.pause();
-            stable.stop();
-            WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath);
+            root.releaseMarker();
         }
     }
 
@@ -171,7 +194,7 @@ Item {
     Timer {
         id: stable
         interval: Tokens.wallpaperVideoStableMs
-        onTriggered: WallpaperState.clearVideoStarting(root.markerOwner, root.markerPath)
+        onTriggered: root.releaseMarker()
     }
 
     Component.onDestruction: {

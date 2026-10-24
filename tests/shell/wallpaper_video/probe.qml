@@ -76,12 +76,12 @@ ShellRoot {
             check(WallpaperState.lockStill(o) === "", "lockStill(" + o + ") must be empty: " + WallpaperState.lockStill(o));
         const keep = WallpaperState.currentVideoFiles();
         check(keep.indexOf(v + "/0123.mp4") >= 0 && keep.indexOf(v + "/0123.jpg") >= 0, "the video and its poster are kept: " + JSON.stringify(keep));
-        // Still the wallpaper of output A: not released. Another wallpaper there: released.
-        WallpaperState.releaseVideo();
-        check(WallpaperState.isVideoBlocked("/v/crash.mp4"), "released while an output still shows it");
-        WallpaperState.report("A", {state: "ready", file: "", source: "builtin", path: ""});
-        WallpaperState.releaseVideo();
+        // A fresh choice is consent: unblocking another path changes nothing, unblocking the blocked one releases it (and the file).
+        WallpaperState.unblockVideo("/v/other.mp4");
+        check(WallpaperState.isVideoBlocked("/v/crash.mp4"), "released by another path");
+        WallpaperState.unblockVideo("/v/crash.mp4");
         check(!WallpaperState.isVideoBlocked("/v/crash.mp4"), "not released");
+        WallpaperState.unblockVideo("/v/crash.mp4");
     }
 
     function step4(): void {

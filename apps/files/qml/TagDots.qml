@@ -26,7 +26,10 @@ Row {
         const n = Array.isArray(list) ? list.length : (typeof list.count === "number" ? list.count : (typeof list.length === "number" ? list.length : 0));
         for (let i = 0; i < n && out.length < Tokens.filesTagDotsMax; i++) {
             const v = Array.isArray(list) ? list[i] : (typeof list.get === "function" ? list.get(i) : list[i]);
-            out.push(typeof v === "object" && v !== null ? v.modelData ?? v.color ?? v.index ?? v : v);
+            const idx = typeof v === "object" && v !== null ? v.modelData ?? v.color ?? v.index ?? v : v;
+            // Palette indices only (the delegate takes an int): anything else a role could hold is skipped, not a TypeError.
+            if (typeof idx === "number" && Number.isInteger(idx))
+                out.push(idx);
         }
         return out;
     }
@@ -40,7 +43,7 @@ Row {
 
         delegate: Item {
             id: dot
-            required property var modelData
+            required property int modelData
             readonly property color fill: TagColors.at(Tokens, dot.modelData)
 
             width: root.size

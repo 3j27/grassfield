@@ -318,6 +318,30 @@ function withOutput(list, display, fields) {
     return next;
 }
 
+// True when the display has a wallpaper of its own: its entry chooses a source or a path (a picture, a video, a colour, the
+// artwork). An entry that only sets Fit, Colour, interval or shuffle follows All Displays for the wallpaper itself.
+function sourceOverridden(list, display) {
+    return normalizeOutputs(list).some(e => sameDisplay(e.display, display) && ("source" in e || "path" in e));
+}
+
+// The stored list with the source and path of the display's entry removed (the display follows All Displays again); what it set
+// besides (Fit, Colour, interval, shuffle) stays. An entry left with nothing but its display is removed.
+function withoutSource(list, display) {
+    const out = [];
+    for (const entry of normalizeOutputs(list)) {
+        if (!sameDisplay(entry.display, display)) {
+            out.push(entry);
+            continue;
+        }
+        const kept = Object.assign({}, entry);
+        delete kept.source;
+        delete kept.path;
+        if (Object.keys(kept).some(k => k !== "display"))
+            out.push(cleanOutput(kept));
+    }
+    return out;
+}
+
 function intervalMs(name) {
     return oneOf(INTERVAL_NAMES, name) ? INTERVALS[name] : INTERVALS[WALLPAPER_DEFAULTS.interval];
 }

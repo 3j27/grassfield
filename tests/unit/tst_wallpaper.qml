@@ -845,4 +845,35 @@ TestCase {
         compare(Object.keys(WallpaperConfig.forgetPrevious({all: {}, [A]: {}}, A)), ["all"]);
         compare(WallpaperConfig.forgetPrevious(null, A), {});
     }
+
+    // Review 6: an entry that only sets Fit is not a wallpaper of its own, and Cancel never drops what the display set besides.
+    function test_aFitOnlyEntryIsNotAnOverrideAndSurvivesCancel() {
+        const A = {name: "eDP-1", model: "", serial: ""};
+        const key = WallpaperConfig.displayKey(A);
+        const fitOnly = [{display: A, fit: "fit"}];
+        verify(!WallpaperConfig.sourceOverridden(fitOnly, A));
+        verify(!WallpaperConfig.sourceOverridden([{display: A, color: "#112233", interval: "5m", shuffle: false}], A));
+        verify(WallpaperConfig.sourceOverridden([{display: A, source: "color", color: "#112233"}], A));
+        verify(WallpaperConfig.sourceOverridden([{display: A, source: "file", path: "/p/a.jpg"}], A));
+        verify(WallpaperConfig.sourceOverridden([{display: A, path: "/p/a.jpg"}], A));
+        verify(!WallpaperConfig.sourceOverridden([], A));
+        verify(!WallpaperConfig.sourceOverridden(fitOnly, {name: "HDMI-A-1", model: "", serial: ""}), "another display");
+        // Cancel for A while All Displays' video prepares: it acts on the All Displays choice (the display follows All).
+        const m = WallpaperConfig.rememberPrevious({}, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        const plan = WallpaperConfig.cancelPlan(m, key, true, WallpaperConfig.sourceOverridden(fitOnly, A), "video", "/v/x.mp4");
+        compare(plan.action, "restore");
+        compare(plan.scope, "all");
+        // A video chosen on A (A had only Fit before) then Cancel: its source and path go, its Fit stays.
+        const own = [{display: A, fit: "fit", source: "video", path: "/v/y.mp4"}];
+        const kept = WallpaperConfig.withoutSource(own, A);
+        compare(kept.length, 1);
+        compare(kept[0], {display: A, fit: "fit"});
+        // An entry with nothing else is removed; other displays' entries and a missing list are untouched.
+        const B = {name: "HDMI-A-1", model: "", serial: ""};
+        const both = WallpaperConfig.withoutSource([{display: A, source: "video", path: "/v/y.mp4"}, {display: B, source: "color", color: "#000000"}], A);
+        compare(both.length, 1);
+        compare(both[0].display, B);
+        compare(both[0].source, "color");
+        compare(WallpaperConfig.withoutSource(null, A), []);
+    }
 }

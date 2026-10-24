@@ -1,0 +1,1 @@
+Timing budgets (P3/P4): judged only on a machine whose 1-minute load is at most its core count (scripts/dev/test.sh).

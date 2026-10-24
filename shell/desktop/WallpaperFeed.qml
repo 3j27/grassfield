@@ -70,6 +70,10 @@ Scope {
     property int started: 0
     property int cancelled: 0
 
+    // The first apply of this feed has happened; the video path of the previous apply ("" when it was not a video).
+    property bool appliedOnce: false
+    property string lastVideoPath: ""
+
     property string identity: ""
     property string currentSrc: ""
     property bool advanceRequested: false
@@ -187,9 +191,19 @@ Scope {
         supersede();
         advanceRequested = false;
         const c = cfg;
-        // A crashed video may play again once it is no longer anybody's wallpaper.
-        if (c.source !== "video")
-            WallpaperState.releaseVideo();
+        // The block of a video that crashed the shell is for the automatic restart only. A change of wallpaper after the shell started
+        // is the user's own choice, and a choice is consent to try again: the video left and the video chosen are both unblocked.
+        // (The first apply of the shell's life is the automatic one: it keeps the block.)
+        const firstApply = !appliedOnce;
+        appliedOnce = true;
+        const previousVideo = lastVideoPath;
+        lastVideoPath = c.source === "video" ? c.path : "";
+        if (!firstApply) {
+            if (previousVideo !== "" && previousVideo !== lastVideoPath)
+                WallpaperState.unblockVideo(previousVideo);
+            if (lastVideoPath !== "" && lastVideoPath !== previousVideo)
+                WallpaperState.unblockVideo(lastVideoPath);
+        }
         if (c.source === "builtin") {
             showNone("builtin");
             return;

@@ -121,6 +121,10 @@ visual *args:
 contrast *args:
     tests/visual/contrast.sh {{args}}
 
+# Nested smoke set (about 20 s) on the running nested session of this tree; skips without one.
+smoke-nested:
+    tests/shell/smoke_nested.sh
+
 # Scripted nested scenario → tests/visual/scenarios/<name>.sh (ask).
 scenario name:
     tests/visual/scenarios/{{name}}.sh
