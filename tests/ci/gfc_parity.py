@@ -24,7 +24,9 @@ Three views of the protocol are extracted as sets and compared:
 
 Failures: code but not docs, docs but not code, and anything the shell reads that the plugin never sends (a type, a
 field, a reply or its field, an enum value, a feature, a verb): a shell function that reads a reply's field out of the
-event fails, since the event never carries it. The plugin sending something the shell ignores is allowed (overview-focus).
+event fails, since the event never carries it. A reply parser (a function under a `// gfc1-reply:` comment) fed from an
+event also fails: a call to it inside an `onRawEvent` handler, or with `event.data` in its arguments, anywhere in shell/
+or apps/ (the B1 regression of 6b3a31f: the menu bar parsed the Stages notice as the state). The plugin sending something the shell ignores is allowed (overview-focus).
 Limits: the extraction is textual. A new builder that does not use the patterns above is invisible and shows up as
 "documented but not in code"; teach `code_model` the new pattern rather than loosening the comparison.
 """
@@ -231,6 +233,91 @@ def shell_model(files):
     return m
 
 
+def matching_block(text, pos):
+    """(start, end) of the {...} block that opens at the first '{' at or after pos; strings and // comments skipped."""
+    start = text.find("{", pos)
+    if start < 0:
+        return None
+    depth, i, n = 0, start, len(text)
+    while i < n:
+        c = text[i]
+        if c in "\"'`":
+            j = i + 1
+            while j < n and text[j] != c:
+                j += 2 if text[j] == "\\" else 1
+            i = j + 1
+            continue
+        if text.startswith("//", i):
+            nl = text.find("\n", i)
+            i = n if nl < 0 else nl
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return start, i
+        i += 1
+    return None
+
+
+def call_args(text, pos):
+    """The argument text of the call whose '(' is at pos (up to the matching ')')."""
+    depth, i = 0, pos
+    while i < len(text):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return text[pos + 1:i]
+        i += 1
+    return text[pos + 1:]
+
+
+def reply_parsers(files):
+    """{"File.js": {function: reply command}} for the shell's reply-marked JS functions."""
+    out = {}
+    for path, text in files.items():
+        if not (path.split("/")[0] in ("shell", "apps") and path.endswith(".js")):
+            continue
+        for found in re.finditer(r"(?m)^function (\w+)\(", text):
+            reply = reply_mark(text[:found.start()].splitlines())
+            if reply:
+                out.setdefault(path.rsplit("/", 1)[-1], {})[found.group(1)] = reply
+    return out
+
+
+def reply_feed_errors(files):
+    """A reply parser called from an event: inside an onRawEvent handler, or with event.data in its arguments."""
+    parsers = reply_parsers(files)
+    errs = []
+    for path, text in sorted(files.items()):
+        if not (path.split("/")[0] in ("shell", "apps") and path.endswith((".js", ".qml"))):
+            continue
+        aliases = {a: f for f, a in re.findall(r'import\s+"(?:[^"]*/)?(\w+\.js)"\s+as\s+(\w+)', text) if f in parsers}
+        if not aliases:
+            continue
+        handlers = []
+        for found in re.finditer(r"\bonRawEvent\b", text):
+            block = matching_block(text, found.end())
+            if block:
+                handlers.append(block)
+        for alias, module in aliases.items():
+            for found in re.finditer(r"\b%s\.(\w+)\(" % re.escape(alias), text):
+                reply = parsers[module].get(found.group(1))
+                if not reply:
+                    continue
+                pos = found.start()
+                line = text.count("\n", 0, pos) + 1
+                in_handler = any(a <= pos <= b for a, b in handlers)
+                from_event = "event.data" in call_args(text, found.end() - 1)
+                if in_handler or from_event:
+                    errs.append("shell feeds the reply parser %s.%s (reply %s) from an event: %s:%d"
+                                % (alias, found.group(1), reply, path, line))
+    return errs
+
+
 # ---- comparison ----
 
 def compare(docs, code, shell, adr_problems=()):
@@ -281,7 +368,7 @@ def check_tree(root):
     docs, problems = docs_model(files.get(ADR))
     code = code_model(files)
     shell = shell_model(files)
-    errs = compare(docs, code, shell, problems)
+    errs = compare(docs, code, shell, problems) + reply_feed_errors(files)
     if not code["events"] or not code["features"]:
         errs.append("extractor found no events or features in compositor/src (patterns out of date?)")
     # every declared feature constant must be pushed by features() (a constant nobody advertises is dead protocol)
@@ -366,6 +453,21 @@ function parse(data) {
     return {on: msg.on, gen: msg.gen, monitors: msg.monitors};
 }
 '''
+FIX_LINK_QML = '''
+import "StagesState.js" as StagesState
+Item {
+    Connections {
+        function onRawEvent(event: HyprlandEvent): void {
+            const n = StagesState.parseNotice(event.data); // "}" in a string and a comment { do not end the handler
+            if (n)
+                fetch();
+        }
+    }
+    function applyFetched(text: string): void {
+        state = StagesState.parse(text);
+    }
+}
+'''
 FIX_ADR = '''# ADR
 ```gfc1
 event capabilities: features
@@ -397,13 +499,14 @@ def fixtures():
         "shell/x/Use.qml": 'if (Capabilities.has("stages-available")) {}\n',
         "compositor/src/core/Stages.cpp": FIX_STAGES_CPP,
         "shell/platform/StagesState.js": FIX_STAGES_JS,
+        "shell/platform/Link.qml": FIX_LINK_QML,
         ADR: FIX_ADR,
     }
 
 
 def run_fixture(files):
     docs, problems = docs_model(files.get(ADR))
-    return compare(docs, code_model(files), shell_model(files), problems)
+    return compare(docs, code_model(files), shell_model(files), problems) + reply_feed_errors(files)
 
 
 def selftest():
@@ -471,6 +574,20 @@ def selftest():
     shell_reply = dict(base)
     shell_reply["shell/platform/StagesState.js"] = FIX_STAGES_JS.replace("monitors: msg.monitors", "screens: msg.screens")
     expect("shell reply field never given", run_fixture(shell_reply), "shell reads reply grassfield-stages field screens")
+
+    # the reply parser fed from the event (the exact B1 regression; re-review mutants M5/M6)
+    fed = dict(base)
+    fed["shell/platform/Link.qml"] = FIX_LINK_QML.replace("StagesState.parseNotice(event.data)", "StagesState.parse(event.data)")
+    expect("reply parser fed from an event handler", run_fixture(fed), "feeds the reply parser StagesState.parse (reply grassfield-stages) from an event: shell/platform/Link.qml:6")
+    inside = dict(base)
+    inside["shell/platform/Link.qml"] = FIX_LINK_QML.replace("if (n)\n                fetch();", "if (n)\n                state = StagesState.parse(lastText);")
+    expect("reply parser called inside the handler", run_fixture(inside), "from an event: shell/platform/Link.qml:8")
+    outside = dict(base)
+    outside["shell/platform/Link.qml"] = FIX_LINK_QML.replace("StagesState.parse(text)", "StagesState.parse(event.data)")
+    expect("reply parser given event.data outside the handler", run_fixture(outside), "from an event: shell/platform/Link.qml:12")
+    other = dict(base)
+    other["shell/x/Bar.qml"] = 'import "../platform/StagesState.js" as SS\nConnections { function onRawEvent(event) { SS.parse(event.data) } }\n'
+    expect("reply parser imported under another name", run_fixture(other), "feeds the reply parser SS.parse")
 
     # a docs block that cannot be read
     expect("no block", run_fixture({**base, ADR: "# no table\n"}), "no ```gfc1 block")
