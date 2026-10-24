@@ -112,15 +112,16 @@ event restored: address
 event appmenu: address service path pid
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
-event stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+event stages: gen on reason
 event frames: clock marks monitors name presented refreshHz renders t total unit what
 event frames-recording: ms recording
 event error:
+reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
 enum overview-focus.target: window workspace remembered none press
-enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid
+enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid refused-by-hyprland
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
@@ -143,16 +144,24 @@ windows under Stages. Hyprland 0.56.2 cuts every socket2 event's data at 1024 by
 request socket has no such limit (a `hyprctl` reply is written whole).
 - Every gfc/1 event has a bounded size under that limit (gtest `Protocol.EveryEventStaysUnderHyprlandsSocket2Limit`, at the
   worst case): capabilities (every feature) about 300 bytes; minimize-request, minimized, restored 70; appmenu 609 (service
-  and path are validated to at most 255 bytes of characters that need no escaping); overview 103; overview-focus 188.
+  and path are validated to at most 255 bytes of characters that need no escaping); overview 103; overview-focus 192
+  (reason `refused-by-hyprland`, the longest).
 - `stages` grew with every window (about 25 bytes per window, 70 with a tile rect, plus the app name of each monitor's
   front window): the event is now a change notice, `{"v":"gfc/1","type":"stages","gen":N,"on":bool}` plus `reason` (at
   most 90 bytes), and the state, with exactly the former payload plus `gen`, is the reply of `hyprctl grassfield-stages`
-  (the state of the latest notice). `gen` grows with every notice; the shell applies a fetched state only when it is a
-  complete one and not older than the one shown, and fetches again when a notice came during a fetch.
-- Still `gfc/1`: the notice keeps `on` and `reason`, the state keeps its shape, and the shell accepts both forms (an event
-  that carries `monitors`, from an older plugin, is used as before), so the plugin and the shell of one release need no
-  version bump; a shell older than this amendment would show empty strips with a newer plugin (they ship together).
-  `stages-available` is advertised only when `hyprctl grassfield-stages` is registered.
+  (the state of the latest notice; table line `reply grassfield-stages`). `gen` grows with every notice. The shell
+  (StagesLink, the one consumer; it hands each state to Compositor for the menu bar) reads the event as a notice only,
+  fetches only while Stages is active, one fetch at a time (notices during a fetch ask one more), applies a state only
+  when it is complete and not older than the one shown, retries a failed or timed-out fetch (2 s) three times (200, 400,
+  800 ms) and then shows no state (the strip hides rather than show a stale state as current).
+- Exception to the first Consequence below (decided by the integrator under owner delegation D-5, review of
+  6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`. The shell and the plugin are
+  split packages of one PKGBUILD, built from one tree at one version, so a release always pairs them. The ABI stamp (C2)
+  checks the plugin against the running Hyprland, not against the shell: a mixed pair needs a partial upgrade of the split
+  packages (unsupported on Arch), and then degrades without broken JSON: a shell from before this amendment finds no
+  monitors in the notice and shows no strip; a shell from after it with an older plugin gets `unknown request` from
+  `hyprctl grassfield-stages` and, after its retries, shows no strip. `stages-available` is advertised only when
+  `hyprctl grassfield-stages` is registered.
 
 ## Consequences
 - Breaking payload changes bump `gfc/N` and need a new ADR.

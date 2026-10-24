@@ -643,6 +643,8 @@ namespace gf::stages {
         return out;
     }
 
+    // gfc1-reply: grassfield-stages
+    // The state, the reply of `hyprctl grassfield-stages` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
     std::string stateJson(uint64_t generation, bool on, std::span<const EventMonitor> monitors, Reason reason) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);

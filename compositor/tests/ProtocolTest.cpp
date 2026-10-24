@@ -200,8 +200,9 @@ TEST(Protocol, EveryEventStaysUnderHyprlandsSocket2Limit) {
                                          .id        = std::numeric_limits<uint32_t>::max(),
                                          .window    = std::numeric_limits<uint64_t>::max(),
                                          .workspace = std::numeric_limits<int64_t>::min(),
-                                         .reason    = "exclusive-layer"};
+                                         .reason    = "refused-by-hyprland"}; // the longest reason
     EXPECT_TRUE(under(gf::overviewfocus::eventJson(focus)));
+    EXPECT_EQ(gf::overviewfocus::eventJson(focus).size(), 192U) << "the worst case the ADR-0007 amendment 2026-10-24 states";
 
     EXPECT_TRUE(under(gf::stages::noticeJson(std::numeric_limits<uint64_t>::max(), false, gf::stages::Reason::Interrupted)));
 
