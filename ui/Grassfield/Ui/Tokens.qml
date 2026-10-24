@@ -118,13 +118,13 @@ QtObject {
     // Inter dynamic metrics, text family: see trackingA [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property real typographyTrackingC: -0.1745
 
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Menu bar (the rows that size bar gaps and insets in spacing steps); docs/specs/ui.md]
     readonly property int spacingXs: 4
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Menu bar (the rows that size bar gaps and insets in spacing steps); docs/specs/ui.md]
     readonly property int spacingSm: 8
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Menu bar (the rows that size bar gaps and insets in spacing steps); docs/specs/ui.md]
     readonly property int spacingMd: 12
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Menu bar (the rows that size bar gaps and insets in spacing steps); docs/specs/ui.md]
     readonly property int spacingLg: 16
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
@@ -150,22 +150,22 @@ QtObject {
     // F1 gap 13: sheet radius 26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusSheet: 26
 
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome)
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Material shadow); no F1 measurement of a shadow exists]
     readonly property int shadowBlur: 18
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome)
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Material shadow); no F1 measurement of a shadow exists]
     readonly property int shadowOffsetY: 6
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome)
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Material shadow); no F1 measurement of a shadow exists]
     readonly property real shadowOpacity: 0.3
 
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Limits (no motion capture))
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
     readonly property int motionFast: 120
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Limits (no motion capture))
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
     readonly property int motionNormal: 220
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Limits (no motion capture))
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
     readonly property int motionSlow: 350
-    // master-prompt 5.5: Reduce Motion = crossfades of at most 100 ms
+    // master-prompt 5.5: Reduce Motion = crossfades of at most 100 ms [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
     readonly property int motionReducedMax: 100
-    // estimate; Easing.BezierSpline control points [ref: docs/testing/f1-reference-gaps.md § Limits (no motion capture); docs/specs/ui.md]
+    // estimate; Easing.BezierSpline control points [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
     readonly property var motionCurveStandard: [0.2, 0.0, 0.0, 1.0, 1.0, 1.0]
 
     // master-prompt 5.5 default, owner validates on screenshots
@@ -604,11 +604,11 @@ QtObject {
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
 
-    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
+    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md (Auto appearance); docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19
-    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00 [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
+    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00 [ref: docs/specs/controlcenter.md (Auto appearance); docs/specs/settings.md]
     readonly property int autoAppearanceDarkToHour: 7
-    // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
+    // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/specs/controlcenter.md (Auto appearance); docs/specs/settings.md]
     readonly property int autoAppearanceRecheckInterval: 60000
 
     // docs/specs/notifications.md: about 344 pt
@@ -1515,7 +1515,7 @@ QtObject {
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
 
-    // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it [ref: docs/testing/f1-reference-gaps.md § Limits; docs/specs/desktop.md]
+    // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it [ref: docs/decisions/ADR-0012-desktop-focus-model.md; docs/specs/desktop.md]
     readonly property int focusReturnReleaseHoldMs: 120
 
     // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh)

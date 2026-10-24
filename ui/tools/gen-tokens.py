@@ -133,17 +133,73 @@ def generate_plugin(data):
 
 # Provenance (audit GF-095): every token says where its value comes from, with a pointer a reviewer can follow: the F1
 # reference analysis, a spec, an ADR, a test, the master prompt or an audit. A bare "estimate" is not a source.
-PROVENANCE = re.compile(r"f1-reference-gaps|docs/specs/|docs/decisions/|ADR-|tests/|master-prompt|docs/audits")
+REPO = UI.parent
+F1 = REPO / "docs" / "testing" / "f1-reference-gaps.md"
+PATH_CITE = re.compile(r"(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
+ADR_CITE = re.compile(r"ADR-(\d{4})")
+SECTION_CITE = re.compile(r"\u00a7 ([^;\]]+)")
+
+
+def f1_headings():
+    """Lower-case heading names of the F1 analysis (## and ###), the parenthetical tail dropped: 'Search (macOS Spotlight)' -> 'search'."""
+    names = []
+    for line in F1.read_text().splitlines():
+        m = re.match(r"#{2,3} (.+)", line)
+        if m:
+            names.append(re.sub(r"\s*\(.*$", "", m.group(1)).strip().lower())
+    return names
+
+
+def section_resolves(text, headings):
+    """'Window chrome, Dock and Menus and popovers' must be made of real headings (longest first), joined by ', ' or ' and '."""
+    rest = re.sub(r"\s*\(.*?\)", "", text).strip().lower()
+    by_length = sorted(headings, key=len, reverse=True)
+    while rest:
+        for name in by_length:
+            if rest.startswith(name):
+                rest = rest[len(name):]
+                rest = re.sub(r"^(?:,\s*| and )", "", rest)
+                break
+        else:
+            return False
+    return True
+
+
+def source_problems(source, headings):
+    """Why a token source is not a followable pointer (empty list: it is)."""
+    problems = []
+    cited = False
+    for path in PATH_CITE.findall(source):
+        cited = True
+        if not (REPO / path).exists():
+            problems.append("cites %s, which does not exist" % path)
+    for number in ADR_CITE.findall(source):
+        cited = True
+        if not list((REPO / "docs" / "decisions").glob("ADR-%s*" % number)):
+            problems.append("cites ADR-%s, which does not exist" % number)
+    for section in SECTION_CITE.findall(source):
+        cited = True
+        while section.count(")") > section.count("("):  # the ")" that closes a sentence around the pointer
+            section = section[:section.rindex(")")]
+        if not section_resolves(section, headings):
+            problems.append("cites the F1 section '%s', which is not a heading of f1-reference-gaps.md" % section.strip())
+    if re.search(r"master-prompt|f1-reference-gaps", source):
+        cited = True
+    if not cited:
+        problems.append("has no pointer (f1-reference-gaps section, spec, ADR or test)")
+    return problems
 
 
 def provenance_errors(data):
+    headings = f1_headings()
     errors = []
 
     def walk(node, path):
         if is_leaf(node):
             # The plugin group's sources are copied into compositor/src/core/ThemeTokens.hpp (compositor-owned): follow-up.
-            if path[0] not in PLUGIN_GROUPS and not PROVENANCE.search(str(node.get("source", ""))):
-                errors.append(".".join(path))
+            if path[0] not in PLUGIN_GROUPS:
+                for problem in source_problems(str(node.get("source", "")), headings):
+                    errors.append(".".join(path) + " " + problem)
             return
         if isinstance(node, dict):
             for key, child in node.items():
@@ -158,7 +214,7 @@ def main():
     data = json.loads(SRC.read_text())
     unsourced = provenance_errors(data)
     if unsourced:
-        print("gen-tokens: tokens without a source pointer (f1-reference-gaps, a spec, an ADR or a test): " + ", ".join(unsourced), file=sys.stderr)
+        print("gen-tokens: token sources that are not followable pointers:\n  " + "\n  ".join(unsourced), file=sys.stderr)
         return 1
     outputs = ((DST, generate(data), "ui/Grassfield/Ui/Tokens.qml"), (PLUGIN_DST, generate_plugin(data), "compositor/src/core/ThemeTokens.hpp"))
     if "--check" in sys.argv[1:]:

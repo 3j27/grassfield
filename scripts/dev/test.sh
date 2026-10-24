@@ -250,6 +250,11 @@ if want logic; then
   python3 -I tests/ci/icon_strokes.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/icon_strokes.py "$rc" PASS
+  # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
+  rc=0
+  python3 -I tests/ci/token_sources.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/token_sources.py "$rc" PASS
   # The inventory gate on temporary fixtures.
   rc=0
   python3 -I tests/ci/inventory.py --selftest || rc=1

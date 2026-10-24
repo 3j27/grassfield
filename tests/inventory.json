@@ -223,6 +223,7 @@
  {"path": "tests/ci/qml_warnings.py", "layer": "logic"},
  {"path": "tests/ci/qmldir_types.py", "layer": "logic"},
  {"path": "tests/ci/icon_strokes.py", "layer": "logic"},
+ {"path": "tests/ci/token_sources.py", "layer": "logic"},
  {"path": "scripts/dev/i18n-cmake-check.sh", "layer": "headless"},
  {"path": "tests/compositor/abi_mismatch.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/appmenu.sh", "layer": "nested", "runner": "bare"},
