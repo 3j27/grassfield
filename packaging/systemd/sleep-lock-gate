@@ -7,9 +7,22 @@
 #           (ActiveState=active, SubState=running), so Grassfield holds its own inhibitor and locks before sleep itself.
 # "activating" is never enough: it includes the auto-restart wait after a crash and the shell's start-up, when no
 # Grassfield inhibitor exists yet (a sleep then would not wait for a lock).
-# Read-only: two `systemctl --user show` queries. Any doubt lets Omarchy's unit run (with Grassfield's omarchy-shell
+# Read-only: three `systemctl --user show` queries. Any doubt lets Omarchy's unit run (with Grassfield's omarchy-shell
 # stand-in it only ever asks grassfield-shell to lock).
 [ "${GRASSFIELD_SESSION:-}" = 1 ] || exit 0
+# A session that is ending (GF-081): grassfield-shell exits 255 when the compositor goes away first, which is every logout, and
+# that failure starts this unit through OnFailure=. A logout must never arm the sleep lock, so nothing runs while the graphical
+# session is stopping or stopped (target deactivating/inactive) or its Wayland socket is already gone. A real failure while the
+# session is up still gets here with an active target and a live socket, and runs.
+target=$(systemctl --user show --property=ActiveState --value graphical-session.target 2>/dev/null) || target=
+case $target in deactivating | inactive) exit 1 ;; esac
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  case $WAYLAND_DISPLAY in
+    /*) sock=$WAYLAND_DISPLAY ;;
+    *) sock=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_DISPLAY ;;
+  esac
+  [ -S "$sock" ] || exit 1
+fi
 state=$(systemctl --user show --property=ActiveState --value grassfield-shell.service 2>/dev/null) || exit 0
 sub=$(systemctl --user show --property=SubState --value grassfield-shell.service 2>/dev/null) || exit 0
 [ "$state" = active ] && [ "$sub" = running ] && exit 1
