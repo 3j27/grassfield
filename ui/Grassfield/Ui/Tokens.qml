@@ -186,6 +186,8 @@ QtObject {
     readonly property int materialBlurPassesFull: 3
     // GF-125: transparency from which the full pass count is used (below the default 0.25, so the default look is unchanged) [ref: docs/specs/ui.md § Material blur follows transparency]
     readonly property real materialBlurPassesFrom: 0.15
+    // GF-125: ms the shell waits for the request socket's answer to a blur push before it judges it unanswered (the same wait as the pointer request, settings.pointerAnswerMs) [ref: docs/specs/ui.md § Material blur follows transparency]
+    readonly property int materialBlurAnswerMs: 1000
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHighlightOpacity: 0.22
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)

@@ -373,7 +373,7 @@ Singleton {
 
             // A request nobody answers is judged (as unanswered) after this long.
             readonly property Timer answerTimeout: Timer {
-                interval: Tokens.settingsPointerAnswerMs
+                interval: Tokens.materialBlurAnswerMs
                 onTriggered: sock.finish()
             }
 

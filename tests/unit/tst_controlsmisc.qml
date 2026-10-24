@@ -293,6 +293,33 @@ TestCase {
         combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
     }
 
+    // In a window smaller than the minimum menu width the list is still inside the window (narrower, scrolling).
+    function test_comboListInATinyWindowStaysInside() {
+        const win = tc.Window.window;
+        const w0 = win.width;
+        const h0 = win.height;
+        win.width = 120;
+        win.height = 90;
+        tc.width = 120;   // the test case is the top item of the window here: it does not follow the window by itself
+        tc.height = 90;
+        wait(150);  // the window resizes its root item on the next turn of the event loop
+        combo.model = [{id: "a", text: "Alpha"}, {id: "b", text: "Beta"}, {id: "c", text: "Gamma"}, {id: "d", text: "Delta"}];
+        combo.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        tryCompare(combo, "open", true);
+        const at = combo.popup.contentItem.mapToItem(null, 0, 0);
+        verify(at.x >= 0 && at.x + combo.popup.width <= win.width, "inside horizontally: " + at.x + " + " + combo.popup.width + " of " + win.width);
+        verify(at.y >= 0 && at.y + combo.popup.height <= win.height, "inside vertically: " + at.y + " + " + combo.popup.height + " of " + win.height);
+        verify(combo.popup.height > 0 && combo.popup.width > 0);
+        combo.popup.close();
+        tryCompare(combo, "open", false);
+        win.width = w0;
+        win.height = h0;
+        tc.width = w0;
+        tc.height = h0;
+        combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
+    }
+
     // 40 rows do not fit: the list is capped to the window and scrolls (macOS), the keyboard cursor stays in view.
     function test_comboListOf40RowsScrollsInsideTheWindow() {
         const rows = [];

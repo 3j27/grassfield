@@ -138,7 +138,23 @@ F1 = REPO / "docs" / "testing" / "f1-reference-gaps.md"
 PATH_CITE = re.compile(r"(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
 ADR_CITE = re.compile(r"ADR-(\d{4})")
 # A section pointer has one form: `<file> \u00a7 <section>` (docs/**.md or master-prompt), ended by ";" or "]".
-SECTION_CITE = re.compile(r"(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 ([^;\]]+)")
+SECTION_START = re.compile(r"(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 ")
+
+
+def section_cites(source):
+    """(file, section text) of every `<file> \u00a7 <section>` of a source. A section ends at ";", "[", "]" or where the next pointer starts."""
+    starts = list(SECTION_START.finditer(source))
+    cites = []
+    for i, m in enumerate(starts):
+        end = len(source)
+        for stop in (";", "[", "]"):
+            at = source.find(stop, m.end())
+            if at >= 0:
+                end = min(end, at)
+        if i + 1 < len(starts):
+            end = min(end, starts[i + 1].start())
+        cites.append((m.group(1), source[m.end():end]))
+    return cites
 # `ADR-0016 section 5`: the number of a numbered heading of that ADR.
 ADR_SECTION_CITE = re.compile(r"ADR-(\d{4}) section (\d+(?:\.\d+)?)")
 
@@ -168,9 +184,15 @@ def section_resolves(text, headings):
     by_length = sorted(headings, key=len, reverse=True)
     while rest:
         for name in by_length:
-            if rest.startswith(name):
-                rest = rest[len(name):]
-                rest = re.sub(r"^(?:,\s*| and )", "", rest)
+            if not rest.startswith(name):
+                continue
+            tail = rest[len(name):]
+            if tail == "":
+                rest = ""
+                break
+            separator = re.match(r"^(?:,\s*| and )", tail)
+            if separator:  # a name is followed by a separator or nothing: not by more letters ("Menu barDock")
+                rest = tail[separator.end():]
                 break
         else:
             return False
@@ -193,7 +215,7 @@ def source_problems(source, headings):
         files = list((REPO / "docs" / "decisions").glob("ADR-%s*" % number))
         if files and section not in headings_of(files[0])[1]:
             problems.append("cites section %s of ADR-%s, which has no such numbered heading" % (section, number))
-    for path, section in SECTION_CITE.findall(source):
+    for path, section in section_cites(source):
         cited = True
         while section.count(")") > section.count("("):  # the ")" that closes a sentence around the pointer
             section = section[:section.rindex(")")]
@@ -205,8 +227,9 @@ def source_problems(source, headings):
         if path.endswith("f1-reference-gaps.md"):
             ok = section_resolves(section, names)
         elif path == "master-prompt":
-            lead = re.match(r"\d+(?:\.\d+)?", section)
-            ok = bool(lead) and lead.group(0) in numbers
+            # `5.5`, then end or a separator: not `5.5.9`, not `5.5x`.
+            lead = re.match(r"(\d+(?:\.\d+)?)(?:$|[\s:;,)\]])", section)
+            ok = bool(lead) and lead.group(1) in numbers
         else:
             ok = section.lower() in names  # the whole heading, not a prefix of it
         if not ok:

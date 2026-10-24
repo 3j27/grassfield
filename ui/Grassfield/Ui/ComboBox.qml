@@ -135,8 +135,8 @@ T.ComboBox {
         function place(): void {
             const win = popup.windowItem();
             const margin = Tokens.spacingSm;
-            popup.maxHeight = Math.max(Tokens.menuItemHeight, win.height - 2 * margin);
-            popup.maxWidth = Math.max(Tokens.menuMinWidth, win.width - 2 * margin);
+            popup.maxHeight = Math.max(0, win.height - 2 * margin);
+            popup.maxWidth = Math.max(0, win.width - 2 * margin);
             const at = root.mapToItem(win, 0, 0);
             const w = Math.min(menu.width, popup.maxWidth);
             const h = Math.min(menu.height, popup.maxHeight);
@@ -161,7 +161,7 @@ T.ComboBox {
             const items = [];
             const m = root.model;
             const room = popup.windowItem().width - 2 * Tokens.spacingSm;
-            metrics.elideWidth = Math.max(Tokens.menuMinWidth, room) - 2 * Tokens.menuPadding - 2 * Tokens.menuItemPadding - Tokens.menuIconSize - 2 * Tokens.spacingSm;
+            metrics.elideWidth = Math.max(1, room - 2 * Tokens.menuPadding - 2 * Tokens.menuItemPadding - Tokens.menuIconSize - 2 * Tokens.spacingSm);
             for (let i = 0; m && i < m.length; i++) {
                 metrics.text = m[i].text;
                 items.push({id: m[i].id, text: metrics.elidedText, checked: i === root.valueIndex});

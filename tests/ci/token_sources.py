@@ -27,6 +27,13 @@ def selftest():
     assert problems("estimate [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]") == []
     assert problems("x (docs/testing/f1-reference-gaps.md § Window chrome, Dock and Menus and popovers)") == []
     assert problems("see docs/testing/f1-reference-gaps.md § Search (macOS Spotlight); docs/specs/search.md") == []
+    assert problems("x (master-prompt \u00a7 5.5: Reduce Motion = crossfades)") == []
+    assert problems("x (master-prompt \u00a7 5.5.9)"), "a section number with more parts than the heading"
+    assert problems("x (master-prompt \u00a7 5.5x)"), "a section number with a suffix"
+    assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu bar, Dock]") == []
+    assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu barDock]"), "two names run together"
+    assert problems("x master-prompt \u00a7 5.5: y [ref: docs/specs/ui.md \u00a7 Functional requirements]") == []
+    assert problems("x master-prompt \u00a7 5.5: y [ref: docs/specs/ui.md \u00a7 Nope]"), "a pointer after a master prompt pointer is checked too"
     assert problems("ADR-0016 section 5: video") == []
     assert problems("tests/visual/test_contrast_tokens.py: A2") == []
     assert problems("estimate"), "a bare estimate is not a source"
