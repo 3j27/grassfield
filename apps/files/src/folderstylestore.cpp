@@ -282,34 +282,73 @@ Style FolderStyleStore::read(const QString &path) const
 
 bool FolderStyleStore::moveEntries(const QString &from, const QString &to)
 {
-    const QString a = keyFor(from);
-    const QString b = keyFor(to);
-    if (a == b || a.isEmpty() || b.isEmpty())
-        return false;
-    collectPruned();
-    if (m_job) {
-        m_touched.append(a);
-        m_touched.append(b);
+    return moveEntries(QList<QPair<QString, QString>>{{from, to}});
+}
+
+void FolderStyleStore::beginMoves(const QStringList &paths)
+{
+    for (const QString &p : paths) {
+        const QString key = keyFor(p);
+        if (!key.isEmpty())
+            ++m_pending[key];
     }
+}
+
+void FolderStyleStore::endMoves(const QStringList &paths)
+{
+    for (const QString &p : paths) {
+        const auto it = m_pending.find(keyFor(p));
+        if (it != m_pending.end() && --it.value() <= 0)
+            m_pending.erase(it);
+    }
+}
+
+bool FolderStyleStore::moveEntries(const QList<QPair<QString, QString>> &pairs)
+{
+    QList<QPair<QString, QString>> keyed;
+    for (const auto &pair : pairs) {
+        const QString a = keyFor(pair.first);
+        const QString b = keyFor(pair.second);
+        if (a != b && !a.isEmpty() && !b.isEmpty())
+            keyed.append({a, b});
+    }
+    if (keyed.isEmpty())
+        return false;
+    // Mark EVERY path (and, by prefix, everything under it) as touched BEFORE a finished prune is collected: a job that
+    // started before this change may have looked at an old path and call it gone; its result must not remove an entry that
+    // one of these moves is about to take, whichever pair is handled first.
+    if (m_job) {
+        for (const auto &pair : keyed) {
+            m_touched.append(pair.first);
+            m_touched.append(pair.second);
+        }
+    }
+    collectPruned();
     m_loaded = true;
     loadFile();
     if (m_broken)
         return false;
-    const QString prefix = a.endsWith(QLatin1Char('/')) ? a : a + QLatin1Char('/');
-    QHash<QString, Style> moved;
-    for (auto it = m_entries.begin(); it != m_entries.end();) {
-        if (it.key() == a || it.key().startsWith(prefix)) {
-            moved.insert(b + it.key().mid(a.size()), *it);
-            it = m_entries.erase(it);
-        } else {
-            ++it;
+    bool any = false;
+    for (const auto &pair : keyed) {
+        const QString &a = pair.first;
+        const QString &b = pair.second;
+        const QString prefix = a.endsWith(QLatin1Char('/')) ? a : a + QLatin1Char('/');
+        QHash<QString, Style> moved;
+        for (auto it = m_entries.begin(); it != m_entries.end();) {
+            if (it.key() == a || it.key().startsWith(prefix)) {
+                moved.insert(b + it.key().mid(a.size()), *it);
+                it = m_entries.erase(it);
+            } else {
+                ++it;
+            }
         }
+        // Whatever was at the destination is replaced: it belonged to a folder that is gone.
+        for (auto it = moved.cbegin(); it != moved.cend(); ++it)
+            m_entries.insert(it.key(), *it);
+        any = any || !moved.isEmpty();
     }
-    if (moved.isEmpty())
+    if (!any)
         return false;
-    // Whatever was at the destination is replaced: it belonged to a folder that is gone.
-    for (auto it = moved.cbegin(); it != moved.cend(); ++it)
-        m_entries.insert(it.key(), *it);
     ++m_serial;
     QString error;
     if (!saveFile(&error)) {
@@ -321,9 +360,9 @@ bool FolderStyleStore::moveEntries(const QString &from, const QString &to)
 
 bool FolderStyleStore::dropEntry(const QString &path)
 {
-    collectPruned();
     if (m_job)
         m_touched.append(keyFor(path));
+    collectPruned();
     m_loaded = true;
     loadFile();
     if (m_broken || m_entries.remove(keyFor(path)) == 0)
@@ -390,9 +429,9 @@ FolderStyleStore::Result FolderStyleStore::write(const QString &path, const Styl
         result.error = QCoreApplication::translate("FolderStyleStore", "not a folder on this computer");
         return result;
     }
-    collectPruned();
     if (m_job)
-        m_touched.append(key);
+        m_touched.append(key); // before collecting: see moveEntries
+    collectPruned();
     // Another process may have changed the store: decide from the file as it is now.
     m_loaded = true;
     loadFile();
@@ -617,6 +656,27 @@ void FolderStyleStore::setStatObserverForTests(std::function<void(const QString 
 
 // The worker owns this (a shared copy of everything it reads) and holds no pointer to the store: the store may go away
 // while it is blocked in a stat of a dead mount. `cancel` makes it stop at its next step.
+// A folder whose move is in flight protects itself and everything under it (see beginMoves).
+static bool isPending(const QHash<QString, int> &pending, const QString &key)
+{
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+        const QString &t = it.key();
+        if (key == t || key.startsWith(t.endsWith(QLatin1Char('/')) ? t : t + QLatin1Char('/')))
+            return true;
+    }
+    return false;
+}
+
+// A path touched while a prune ran protects itself and everything under it (a renamed folder takes its children along).
+static bool isTouched(const QStringList &touched, const QString &key)
+{
+    for (const QString &t : touched) {
+        if (key == t || key.startsWith(t.endsWith(QLatin1Char('/')) ? t : t + QLatin1Char('/')))
+            return true;
+    }
+    return false;
+}
+
 struct FolderStyleStore::PruneJob {
     QStringList keys;
     QHash<QString, Style> snapshot;
@@ -647,8 +707,13 @@ FolderStyleStore::~FolderStyleStore()
 
 void FolderStyleStore::startPrune(bool force)
 {
-    if (m_job)
-        return; // one runs, or a finished one waits to be collected
+    if (m_job) {
+        // One runs, or a finished one waits to be collected. A forced request is not dropped: its snapshot must include
+        // what changed since this job started, so it runs once this one has been collected.
+        if (force)
+            m_pruneAgain = true;
+        return;
+    }
     if (m_entries.isEmpty())
         return;
     if (!force && m_lastPrune.isValid() && m_lastPrune.elapsed() < 60000)
@@ -673,6 +738,18 @@ void FolderStyleStore::startPrune(bool force)
 
 bool FolderStyleStore::collectPruned()
 {
+    const bool changed = collectPrunedNow();
+    // A forced prune asked for while that job ran starts now, from the entries as they are after it (plain code, not a
+    // destructor: starting a thread may throw).
+    if (m_pruneAgain && !m_job) {
+        m_pruneAgain = false;
+        startPrune(true);
+    }
+    return changed;
+}
+
+bool FolderStyleStore::collectPrunedNow()
+{
     if (!m_job || !m_job->done.load())
         return false;
     const std::shared_ptr<PruneJob> job = m_job;
@@ -687,7 +764,7 @@ bool FolderStyleStore::collectPruned()
     bool removed = false;
     for (const QString &key : job->gone) {
         const auto it = m_entries.constFind(key);
-        if (it == m_entries.cend() || *it != job->snapshot.value(key) || touched.contains(key))
+        if (it == m_entries.cend() || *it != job->snapshot.value(key) || isTouched(touched, key) || isPending(m_pending, key))
             continue;
         m_entries.remove(key);
         removed = true;
@@ -703,9 +780,28 @@ bool FolderStyleStore::collectPruned()
     return true;
 }
 
+void FolderStyleStore::injectFinishedPruneForTests(const QStringList &gone)
+{
+    auto job = std::make_shared<PruneJob>();
+    job->keys = m_entries.keys();
+    job->snapshot = m_entries;
+    for (const QString &g : gone)
+        job->gone.append(keyFor(g));
+    job->done = true;
+    m_touched.clear();
+    m_job = job;
+}
+
+bool FolderStyleStore::pruneFinishedForTests() const
+{
+    return m_job && m_job->done.load();
+}
+
 void FolderStyleStore::waitForPrune()
 {
-    if (m_job)
+    // Also the job a forced request queued behind the one that was running.
+    for (int round = 0; m_job && round < 4; ++round) {
         m_job->wait(60000);
-    collectPruned();
+        collectPruned();
+    }
 }

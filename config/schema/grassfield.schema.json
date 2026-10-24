@@ -499,9 +499,10 @@
             "provider": {
               "type": "string",
               "enum": [
-                "commons"
+                "commons",
+                "apod"
               ],
-              "description": "commons = the Wikimedia Commons Picture of the Day (commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, once a day)."
+              "description": "commons = the Wikimedia Commons Picture of the Day (commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, once a day). apod = NASA Astronomy Picture of the Day (api.nasa.gov and apod.nasa.gov, once a day; copyrighted days are shown with their credit)."
             }
           }
         },

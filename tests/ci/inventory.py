@@ -7,6 +7,8 @@ tests/inventory.json lists every required test with exactly one layer. This scri
   * a registered test (or an ignored path) does not exist;
   * a registered test is disabled ("enabled": false);
   * a test has no layer, an unknown layer, two layers (a `layers` key, or the same path registered twice);
+  * a QML test file declares a `<name>_data` function (a QtTest data provider) with no `<name>` test function, which
+    QtTest then never runs as a test (GF-122: a bare `test_data` is such a name);
   * a run reports no result for a layer it was asked to run (--results).
 
 Python standard library only. Run it isolated:
@@ -22,6 +24,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -41,6 +44,16 @@ def discovered(root, inv):
             if os.path.isfile(p):
                 found.add(os.path.relpath(p, root))
     return found
+
+
+DATA_FN = re.compile(r"^\s*function\s+([A-Za-z_][A-Za-z0-9_]*)_data\s*\(", re.M)
+ANY_FN = re.compile(r"^\s*function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.M)
+
+
+def orphan_data_providers(text):
+    """Names `<x>_data` whose test `<x>` is missing: QtTest takes them as data providers, never as tests."""
+    fns = set(ANY_FN.findall(text))
+    return sorted(f"{n}_data" for n in set(DATA_FN.findall(text)) if n not in fns and n != "initTestCase")
 
 
 def check(root, inv=None):
@@ -78,6 +91,12 @@ def check(root, inv=None):
             problems.append(f"{path}: disabled (a required test cannot be switched off; remove it with a reason in the commit)")
         if not os.path.isfile(os.path.join(root, path)):
             problems.append(f"{path}: registered but the file does not exist")
+    for path in sorted(seen):
+        if path.endswith(".qml") and os.path.isfile(os.path.join(root, path)):
+            with open(os.path.join(root, path), encoding="utf-8") as f:
+                for name in orphan_data_providers(f.read()):
+                    problems.append(f"{path}: `{name}` is a QtTest data provider without a `{name[:-5]}` test function, "
+                                    "so it never runs (rename it, e.g. test_dataSizes)")
     ignored = {}
     for e in inv.get("ignore", []):
         p = e.get("path") if isinstance(e, dict) else None
@@ -155,6 +174,10 @@ def selftest():
     expect("two layers (key)", check(*make(["tests/t/a.sh"], [dict(a, layers=["data", "logic"])])), "`layers` is not allowed")
     expect("two layers (twice)", check(*make(["tests/t/a.sh"], [a, dict(a, layer="data")])), "registered twice")
     expect("bad runner", check(*make(["tests/t/a.sh"], [dict(a, runner="cron")])), "runner must be")
+
+    expect("orphan data provider", orphan_data_providers("function test_data() {}\n"), "test_data")
+    expect("data provider with its test", [] if not orphan_data_providers(
+        "function test_values_data() {}\nfunction test_values(d) {}\nfunction initTestCase_data() {}\n") else ["x"], None)
 
     inv = {"layers": ["data", "logic", "nested"]}
     ok = ["data\tx\tpass\n", "logic\ty\tfail\n"]

@@ -9,7 +9,18 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    readonly property string grassfieldVersion: "0.1.0-m1"
+    // The product version: the VERSION file next to the shell directory (the repository root in a dev session,
+    // /usr/share/grassfield in the package). Read once, at construction; "unknown" when the file is missing.
+    property string grassfieldVersion: "unknown"
+
+    FileView {
+        id: versionFile
+
+        path: Quickshell.shellPath("../VERSION")
+        blockLoading: true
+        printErrors: false
+        onLoaded: root.grassfieldVersion = text().trim()
+    }
 
     property string osName: ""
     property string osVersion: ""
