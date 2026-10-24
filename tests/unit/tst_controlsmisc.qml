@@ -228,7 +228,7 @@ TestCase {
         combo.forceActiveFocus();
         keyClick(Qt.Key_Space);
         tryCompare(combo, "open", true);
-        const scroller = combo.popup.contentItem;
+        const scroller = combo.popup.contentItem as Flickable;
         verify(combo.list.height > tc.height, "the 40 rows need more than the window: " + combo.list.height);
         verify(combo.popup.height <= tc.height - 2 * Tokens.spacingSm, "popup " + combo.popup.height + " fits the window");
         compare(scroller.contentHeight, combo.list.height);

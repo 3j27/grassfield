@@ -112,7 +112,10 @@ T.ComboBox {
 
         // Below the button and right-aligned with it, above it when that does not fit, always inside the window.
         function place(): void {
-            const win = root.Window.contentItem;
+            // The window's content item: the top of the parent chain.
+            let win = root as Item;
+            while (win.parent)
+                win = win.parent;
             if (!win)
                 return;
             const margin = Tokens.spacingSm;
