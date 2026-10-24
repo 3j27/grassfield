@@ -2840,6 +2840,10 @@
         <translation>«&#xa0;%1&#xa0;» n’existe plus.</translation>
     </message>
     <message>
+        <source>“%1” can’t be copied or moved here: the folder has “%2”, which has the same name once accents are composed. Rename one of them first.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être copié ou déplacé ici&#xa0;: le dossier contient «&#xa0;%2&#xa0;», qui a le même nom une fois les accents composés. Renommez l’un des deux d’abord.</translation>
+    </message>
+    <message>
         <source>Links can’t carry tags.</source>
         <translation>Les liens ne peuvent pas recevoir de tags.</translation>
     </message>
