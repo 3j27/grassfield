@@ -30,6 +30,12 @@ package ships a supported way, without touching any Omarchy file:
 The TTY route below stays valid as the recovery path (and for the very first test, before you install the SDDM drop-in:
 install, then keep the file out of the way with `sudo mv /etc/sddm.conf.d/grassfield.conf ~/` until you want the new login).
 
+**Who gets Grassfield (decision, GF-015 review).** `/etc/sddm.conf.d/grassfield.conf` is system-wide: once the package is
+installed, **every local user** of the machine logs in to Grassfield by default (SDDM has no per-user session list here).
+Each user can choose Omarchy for themselves with `grassfield-login set omarchy` (one line in their own
+`~/.config/grassfield/login-session`; no root). To make Omarchy the default for everyone again, edit or delete the drop-in
+(see "Uninstall" for what remains of it).
+
 ## 1. Prerequisites
 
 1. Save your work. Be on AC power. Have this file open on a phone or another machine (the screen may be unusable).
@@ -319,7 +325,7 @@ journalctl --user -b -u 'wayland-wm@*'        --no-pager > compositor-unit.log
 journalctl -b -p warning --no-pager > system-warnings.log
 ls "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log && cp "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log .   # copy before reboot (tmpfs)
 cp ~/.cache/hyprland/hyprlandCrashReport*.txt . 2>/dev/null                               # only after a crash
-qs log -c grassfield --tail 2000 > quickshell.log
+qs log -p /usr/share/grassfield/shell --tail 2000 > quickshell.log
 coredumpctl list --no-pager > coredumps.txt
 ```
 
@@ -363,17 +369,26 @@ If Grassfield does not start at all: Ctrl+Alt+F3, log in, run `grassfield-login 
 ## 9. Uninstall
 
 ```bash
-sudo pacman -Rns grassfield-desktop grassfield-compositor
+sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons
 ```
 
-This removes only Grassfield: every dependency is either explicitly installed or required by other packages (checked
-with `pacman -Qi`). Left behind in your home (only Grassfield's own paths; remove if you want a clean state):
+All three packages: `grassfield-icons` (the icon theme, 30,000 files, 60 MiB) is installed with the others and is not
+removed when it is left out of the command (GF-046). This removes only Grassfield: every dependency is either
+explicitly installed or required by other packages (checked with `pacman -Qi`). Check afterwards with
+`pacman -Q grassfield-desktop grassfield-compositor grassfield-icons` (all three: "was not found"). Left behind in your home (only Grassfield's own paths; remove if you want a clean state):
 
 ```bash
 rm -rf ~/.config/grassfield ~/.local/state/grassfield ~/.local/share/icons/grassfield-cursors-custom
 rm -rf "$XDG_RUNTIME_DIR/grassfield"   # tmpfs, gone at reboot anyway
 ls ~/.config/autostart/               # delete only entries you added through the Grassfield Dock
 ```
+
+The SDDM drop-in is a pacman backup file: if you edited it, removing the package leaves it as
+`/etc/sddm.conf.d/grassfield.conf.pacsave`. SDDM reads only files named `*.conf` from that directory (name filter in its
+configuration loader, from SDDM's source; **not verified on this machine**), so a `.pacsave` copy is not read and the login
+goes back to Omarchy's own. Check after uninstalling, as your user: `ls /etc/sddm.conf.d/` must show no `grassfield.conf`; delete
+the `.pacsave` with `sudo rm /etc/sddm.conf.d/grassfield.conf.pacsave` if you want it gone. An unedited drop-in is removed with
+the package.
 
 Not Grassfield-only: `~/.local/share/Trash` (shared trash), Wi-Fi/Bluetooth/audio state you changed.
 

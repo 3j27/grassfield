@@ -1,5 +1,5 @@
 # ADR-0007: Shell ↔ plugin IPC (`gfc/1`)
-Status: Proposed (S2 evidence recorded; applied provisionally) · Date: 2026-10-17 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (S2 evidence recorded; applied provisionally)) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 grassfield-shell (Quickshell) must drive `grassfield-compositor` (minimize with target rectangles,
@@ -29,7 +29,7 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   Each function returns `hl.dsp.no_op()` so the wrapping dispatch does not error.
 - **Plugin → shell: socket2 events** `grassfield>>{json}` (`g_pEventManager->postEvent`), received by
   `Hyprland.rawEvent` in `shell/platform/`.
-- **Diagnostics**: `hyprctl grassfield` (read-only JSON, same as the capabilities event).
+- **Diagnostics**: `hyprctl grassfield` (read-only JSON: the capabilities event plus a trailing `"version"` member, the plugin's product version; the event itself is unchanged).
 - Handshake: the shell calls `hl.plugin.grassfield.hello()` at startup; the plugin answers (and emits at load)
   `{"v":"gfc/1","type":"capabilities","features":[...]}`. No reply within 1500 ms → degraded mode (§5.6).
 - Verbs implemented (2026-10-17): `hello()`, `minimize(address, x, y, w, h)`, `restore(address, x, y, w, h)`
@@ -99,7 +99,7 @@ Spike S2 (2026-10-17, nested Hyprland 0.56.2, Quickshell 0.3.1):
   Quickshell sends `return hl.dispatch(grassfield:hello)` → Lua error "function arguments expected".
 - `hl.plugin.grassfield.hello()` registered with `addLuaFunction` WORKS; Quickshell received
   `rawEvent grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}`.
-- `hyprctl grassfield` returns the capabilities JSON.
+- `hyprctl grassfield` returns the capabilities JSON plus a trailing `"version"` member (the event is unchanged).
 
 ## Consequences
 - Breaking payload changes bump `gfc/N` and need a new ADR.

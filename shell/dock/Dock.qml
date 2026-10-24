@@ -619,6 +619,21 @@ Scope {
             return "";
         }
 
+        // The tile drag state of `screen` as JSON (fixtures only; no tile names): {dragging, from, slot, out, removable,
+        // interrupted}. `out` is the drag past the removal distance (the "Remove" label shows when `out && removable`).
+        // tests/visual/contrast.sh reads it instead of looking for the label's pixels (GF-061).
+        function dragstate(screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    return JSON.stringify({dragging: all[i].dragFrom >= 0, from: all[i].dragFrom, slot: all[i].dragSlot, out: all[i].dragOut,
+                        removable: all[i].dragRemovable, interrupted: all[i].dragInterrupted});
+            }
+            return "";
+        }
+
         function reveal(on: bool): void {
             if (VisualFixtures.dev)
                 root.testReveal = on;
@@ -746,6 +761,13 @@ Scope {
             id: win
 
             required property ShellScreen modelData
+
+            // Gate P5: the first frame of this Dock counts toward "grassfield-shell: usable" (platform/Usable.qml).
+            UsableProbe {
+                kind: "dock"
+                screenName: win.modelData.name
+                active: win.visible
+            }
 
             // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
             // it (Geometry.metrics). The setting itself is never changed.

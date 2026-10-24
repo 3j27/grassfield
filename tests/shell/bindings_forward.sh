@@ -107,4 +107,7 @@ check bash -c 'f="$1/apps/files/qml/GlobalMenu.qml"; p="$1/apps/preview/qml/Glob
 desc="Settings > Keyboard lists forwarding.lua (page reads it, parser accepts word_key lines)"
 check bash -c 'grep -q "forwarding.lua" "$1/apps/settings/qml/KeyboardPage.qml" && grep -q "word_key" "$1/apps/settings/qml/Bindings.js"' _ "$root"
 
+desc="WezTerm (class org.wezfurlong.wezterm) is a terminal that keeps its Alt+arrows, with the other terminals of Omarchy's list"
+check bash -c 'for c in alacritty kitty com.mitchellh.ghostty foot org.codeberg.dnkl.foot wezterm org.wezfurlong.wezterm; do grep -q "TERMINAL_CLASSES = {.*\"$c\"" "$1/config/hypr/grassfield/forwarding.lua" || exit 1; done' _ "$root"
+
 exit $fail

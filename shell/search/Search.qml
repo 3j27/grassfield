@@ -75,6 +75,7 @@ Scope {
         {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("menu bar"), qsTr("screen corners")]},
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
         {id: "lock", title: qsTr("Lock Screen"), keywords: [qsTr("idle"), qsTr("password")]},
+        {id: "mouse", title: qsTr("Mouse & Trackpad"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling"), qsTr("tap to click"), qsTr("touchpad")]},
         {id: "keyboard", title: qsTr("Keyboard"), keywords: [qsTr("shortcuts"), qsTr("keys")]},
         {id: "about", title: qsTr("About"), keywords: [qsTr("version"), qsTr("system"), qsTr("hardware")]}
     ].map(p => Object.assign({icon: SettingsPages.PAGES.find(d => d.id === p.id).icon}, p))

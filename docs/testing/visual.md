@@ -73,6 +73,7 @@ badge count) and `dockdrag` (the "Remove" capsule while the pinned foot tile is 
 before the release, so nothing is removed). The dot follows the appearance (white in dark, black in light) over a shelf tint
 alpha per appearance (`dock.tintAlphaDark/Light`), 3:1 or more over any backdrop (computed in `tst_bartone.qml`, measured by
 `contrast.sh` and `tests/visual/dock-backdrop.sh` with a white and a black window under an autohidden shelf).
+The drag state is read from the Dock (`qs ipc call dock dragstate GF-REF`, fixtures IPC: `{dragging, from, slot, out, removable, interrupted}`), not from the label's pixels: the set is taken only while it reports a live, removable, uninterrupted drag past the removal distance (checked before every capture of the set), and the drag is redone up to three times otherwise (GF-061).
 
 Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter` (Quick Settings modules), `controlcenter-detail` (the Wi-Fi
 module opened by a click on its text), `notificationcenter` (3 test notifications on a cleared history: 2 Calendar and 1 Mail, so the top group has two cards and

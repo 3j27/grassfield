@@ -1464,6 +1464,22 @@ QtObject {
     readonly property int wallpaperOnlineMeteredRecheckMs: 3600000
     // ADR-0016 step 2: the nmcli metered query that runs longer than this is killed and counted as not metered (a hung NetworkManager never blocks the fetch)
     readonly property int wallpaperMeteredTimeoutMs: 10000
+    // ADR-0016 section 6: the lock screen draws a wallpaper still only when it is a regular file of at most this many bytes under the wallpaper cache (a prepared JPEG at 4K is a few MB; a PNG of a centred or tiled picture is the largest case)
+    readonly property int wallpaperLockStillMaxBytes: 67108864
+    // ADR-0016 section 5: a video wallpaper settles (rate eases to 0.25, then pauses) after this many idle seconds
+    readonly property int wallpaperVideoIdleSeconds: 60
+    // ADR-0016 section 5: the playback rate eases from 1 to the settle rate over this long when the user goes idle (macOS: the video slows down and comes to rest)
+    readonly property int wallpaperVideoSettleMs: 2000
+    // ADR-0016 section 5: the playback rate a video eases down to before it pauses
+    readonly property real wallpaperVideoSettleRate: 0.25
+    // ADR-0016 section 5: the crash marker is cleared after this long of uninterrupted playback
+    readonly property int wallpaperVideoStableMs: 10000
+    // ADR-0016 section 2: the longest video wallpaper (the helper refuses a longer one)
+    readonly property int wallpaperVideoMaxSeconds: 600
+    // ADR-0016 section 2: the largest transcoded video file (512 MiB)
+    readonly property int wallpaperVideoMaxBytes: 536870912
+    // ADR-0016 section 2: a grassfield-wallpaper transcode that runs longer than this is killed (the helper's own ffmpeg limit is 30 minutes)
+    readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width)
     readonly property int wallpaperAboutWidth: 360
 

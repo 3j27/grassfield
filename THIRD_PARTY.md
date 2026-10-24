@@ -4,8 +4,14 @@ Facts taken from local files (installed headers, `pacman -Qi`, `/usr/share/licen
 repository), as of 2026-10-18. No legal conclusion is stated. Items marked **needs legal review** are open
 questions for counsel; details and evidence are in `docs/legal/licenses-audit.md`.
 
-Grassfield's own licence is not settled (ADR-0005 is Proposed; no root `LICENSE` yet). The package metadata says
-`license=(MIT)` following ADR-0005 pending the owner's decision.
+Grassfield's own code is MIT (root `LICENSE`, ADR-0005 accepted by the owner 2026-10-18). Package licence fields
+(`packaging/arch/PKGBUILD`, checked by `scripts/dev/check-licenses.sh`):
+
+| Package | `license=` | Why |
+|---|---|---|
+| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`); the Unicode-derived grapheme tables (section 5a) |
+| `grassfield-compositor` | `MIT`, `LGPL-2.1-or-later`, `BSD-3-Clause` | own code; server code generated from the KDE appmenu protocol XML; Hyprland headers compiled in |
+| `grassfield-icons` | `MIT`, `GPL-3.0-only` | own glyphs; the third-party icon pack (risk accepted by the owner, decision D-9, 2026-10-23) |
 
 Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 
@@ -15,7 +21,8 @@ Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 | `hyprland-BSD-3-Clause.txt` | grassfield-compositor | Hyprland BSD-3-Clause text, copied from `/usr/share/licenses/hyprland/LICENSE` |
 | `appmenu-LGPL-2.1-or-later.txt` | grassfield-compositor | notice of the KDE appmenu protocol and the LGPL-2.1-or-later text |
 | `BRANDING.md` | grassfield-desktop | `branding/LICENSES.md`, provenance of icons and wallpaper |
-| `omarchy-MIT.txt` | grassfield-desktop | MIT notice for Omarchy-derived QML |
+| `omarchy-MIT.txt` | grassfield-desktop | Omarchy's LICENSE, verbatim (v4.0.4: "Copyright (c) David Heinemeier Hansson"), for Omarchy-derived QML |
+| `unicode-license-v3.txt` | grassfield-desktop | Unicode License v3 notice for the derived grapheme tables (section 5a) |
 
 ## 1. Built against, linked or generated from (grassfield-compositor)
 
@@ -61,13 +68,15 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 | Quickshell 0.3.1 | host that runs the QML shell; `Grassfield.I18n` plugin loads into it | LGPL-3.0-only (`/usr/share/licenses/quickshell/LICENSE`) |
 | Qt 6.11.2 (base, declarative, wayland, svg, imageformats, tools) | linked and loaded | headers: "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only" |
 | QtPdf, QtPdfQuick (package qt6-webengine) | Preview | as Qt; Chromium/PDFium notices in `/usr/share/licenses/qt6-webengine/LICENSE.chromium` |
-| QtMultimedia + FFmpeg backend | Preview | as Qt; ffmpeg 9.0.1 is GPL-3.0-only per pacman. **Needs legal review.** |
+| QtMultimedia + FFmpeg backend | Preview, and the shell for video wallpapers (ADR-0016 W7) | as Qt; ffmpeg 9.0.1 is GPL-3.0-only per pacman. **Needs legal review** (docs/legal/licenses-audit.md, gap G9: now also loaded into the shell process). |
+| ffmpeg and ffprobe programs | `grassfield-wallpaper` transcodes and probes video wallpapers (argument vector, a separate process, plain-file protocol whitelist; ADR-0016) | GPL-3.0-only per pacman (ffmpeg 9.0.1). The programs are run, not linked. **Needs legal review.** |
+| curl | `grassfield-wallpaper fetch` downloads the online pictures of the day (argument vector, https only) | curl licence (MIT-style); run, not linked |
 | KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
 | extra-cmake-modules (build) | CMake modules | pacman "LGPL"; module headers BSD-3-Clause/BSD-2-Clause |
 | uwsm | session launcher | MIT |
 
 Grassfield patches none of these. **Needs legal review:** obligations for MIT code and plugins running inside or
-linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview.
+linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview and, through QtMultimedia, by the shell (video wallpapers).
 
 ## 3. Omarchy-derived code (MIT)
 
@@ -83,7 +92,8 @@ Grassfield source headers name `omacom/omarchy`, branch quattro; both are record
 These three files are security modules; their headers say "Copyright (c) David Heinemeier Hansson, MIT License", as
 upstream's LICENSE at tag v4.0.4 (basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5, the installed version;
 identical at v4.0.6). The installed omarchy package carries no licence file; the text below is upstream's LICENSE,
-verbatim (also shipped as `omarchy-MIT.txt`).
+verbatim (also shipped as `omarchy-MIT.txt`; `scripts/dev/check-licenses.sh` compares the text from the copyright line on with
+SHA-256 `717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2`, the hash of that LICENSE).
 
 ```
 Copyright (c) David Heinemeier Hansson
@@ -124,12 +134,12 @@ no Apple font is used, shipped or required.
 ## 5. Icons and wallpaper
 
 Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 40 SVG icons are Grassfield's own
-(CC-BY-SA-4.0 proposed, ADR-0005); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
+(CC-BY-SA-4.0, owner decision D-9, 2026-10-23); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Authorship by an AI assistant and the licence choice: **needs legal review**.
 
 Cursors (ADR-0014): the `grassfield-cursors` theme (hyprcursor SVG theme plus XCursor fallback, installed under
 `/usr/share/icons/grassfield-cursors`) is generated at package build time from Grassfield's own templates in
-`branding/cursors/` (CC-BY-SA-4.0 proposed, listed in `BRANDING.md`). No file of Adwaita, Yaru or capitaine is
+`branding/cursors/` (CC-BY-SA-4.0, listed in `BRANDING.md`). No file of Adwaita, Yaru or capitaine is
 used; only cursor names (a vocabulary shared by CSS and X11) were read from installed themes. The build uses
 `hyprcursor-util` (BSD-3-Clause), `rsvg-convert` (librsvg, LGPL-2.1-or-later) and Python as build tools; the XCursor
 writer is Grassfield's own stdlib script. The runtime regeneration for the pointer colours (Settings > Accessibility >
@@ -177,6 +187,21 @@ Their licence texts ship with their packages. The WhiteSur icon theme was evalua
 amendment): nothing of it is installed, fetched, filtered or referenced at runtime. **needs legal review:** the
 aggregation of these data packages with the MIT packages of this project, as for any dependency.
 
+## 5b. Online pictures of the day (fetched at run time, opt-in, never shipped)
+
+Settings > Wallpaper > Online (ADR-0016 step 2) lets the user turn on one of two daily pictures. Grassfield ships none of
+them; `grassfield-wallpaper fetch` downloads one picture a day to the user's cache (curl, https only, fixed host
+allow-list) and shows it with its credit. **Needs legal review** (ADR-0016, REQ-ADR0016-29).
+
+| Source | Hosts | Terms as Grassfield applies them | Shown with the picture |
+|---|---|---|---|
+| Wikimedia Commons, Picture of the Day (MediaWiki Action API) | `commons.wikimedia.org`, `thumb.wikimedia.org`, `upload.wikimedia.org` | each file has its own licence: only public-domain marks, CC0, CC BY and CC BY-SA are accepted (NC, ND, GFDL and any other are skipped, the previous picture stays); the Wikimedia User-Agent policy is followed (product, version and the project contact) | Title, Author, Source (link) and Licence (link to its URL), as plain text |
+| NASA Astronomy Picture of the Day (`api.nasa.gov/planetary/apod`, shared `DEMO_KEY`) | `api.nasa.gov`, `apod.nasa.gov` | NASA material is generally not copyrighted in the US, but many APOD pictures belong to third parties: the entry's `copyright` field is shown with the picture (owner decision 2026-10-20); a picture is accepted only under `apod.nasa.gov/apod/image/`, which excludes the NASA logo; a video entry is never downloaded; no NASA insignia or logo is used, "NASA" is only the name of the source | Title, credit and copyright holder (or "Public domain (NASA)" when there is none), link to the APOD page |
+
+The names "Wikimedia", "Wikimedia Commons", "NASA" and "APOD" appear in the interface only to name these sources (no
+logo). Resizing and re-encoding the picture for local display is the only processing; whether that needs anything beyond
+the attribution above is a question for counsel.
+
 ## 5a. Unicode character data (derived tables)
 
 `ui/Grassfield/Ui/GraphemeData.js` (shipped with the shell) and `apps/files/src/graphemedata.inc` (compiled into
@@ -187,8 +212,9 @@ links it to check the rule.
 The data is under the Unicode License v3 as shipped with ICU, "Copyright © 2016-2025 Unicode, Inc."
 (`/usr/share/licenses/icu/LICENSE`); the licence asks that the copyright and permission notice accompany copies of the
 Data Files or appear in associated documentation.
-**Needs legal review:** whether tables generated from ICU's character properties count as a copy of the Data Files,
-and whether the full notice must ship as a separate licence file in the grassfield-desktop package.
+The notice ships as `unicode-license-v3.txt` in the grassfield-desktop package (`license=` lists `Unicode-3.0`).
+**Needs legal review:** whether tables generated from ICU's character properties count as a copy of the Data Files
+(the notice is shipped in any case).
 
 ## 6. Test and build only (not shipped)
 
