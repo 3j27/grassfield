@@ -15,9 +15,29 @@ exec_line=$(grep -E '^ExecStart=' "$unit")
 
 desc="ExecStart loads the shell by path from $SYSTEM_PATH (qs -n -p), never by name"
 check test "$exec_line" = "ExecStart=/usr/bin/qs -n -p $SYSTEM_PATH"
-desc="no shipped file selects the shell by name (-c/--config grassfield): that also searches the user-writable ~/.config/quickshell"
-check bash -c '! grep -rnIE "qs[[:space:]]+((ipc|log|kill)[[:space:]]+)?(-c|--config)[[:space:]]+grassfield" "$@" | grep -vE "^[^:]*:[0-9]*:[[:space:]]*(#|--|//)"' _ \
+# Known limits of these scans (the cheap forms are covered, the rest is documented): an argument list split over several lines
+# (a QML array with "qs", then "ipc" on the next line), a command assembled from variables or systemd specifiers (%t), and a
+# path built at run time are not seen; review such a caller by hand.
+# named_qs DIR...: qs/quickshell started or addressed by NAME (-c/--config grassfield), as a command line or as an array.
+named_qs() {
+  grep -rnIHE "(qs|quickshell)[^#]*[[:space:],\"'](-c|--config)[\"']?[[:space:]]*,?[[:space:]]*[\"']?grassfield" "$@" 2>/dev/null |
+    grep -vE '^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)'
+}
+export -f named_qs
+desc="no shipped file selects the shell by name (-c/--config grassfield, command line or array): that also searches the user-writable ~/.config/quickshell"
+check bash -c 'out=$(named_qs "$@"); [ -z "$out" ] || { echo "$out"; exit 1; }' _ \
   "$root/apps" "$root/bridges" "$root/packaging" "$root/config" "$root/shell" "$root/ui" "$root/scripts/dev/gate-run.sh"
+mut=${mut:-$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/shell-unit.XXXXXX")}
+printf 'command: ["qs", "-c", "grassfield", "ipc"]\n' >"$mut/n1.qml"
+printf "x = ['quickshell', '--config', 'grassfield']\n" >"$mut/n2.js"
+printf 'exec qs -c grassfield call a b\n' >"$mut/n3"
+for f in n1.qml n2.js n3; do
+  desc="mutation: selecting the shell by name in $f is caught"
+  check bash -c '[ -n "$(named_qs "$1")" ]' _ "$mut/$f"
+done
+printf '# qs -c grassfield in a comment\nqs -n -p /usr/share/grassfield/shell\n' >"$mut/n4"
+desc="a comment naming the old form and a -p start are not flagged"
+check bash -c '[ -z "$(named_qs "$1")" ]' _ "$mut/n4"
 # bare_qs DIR...: qs/quickshell ipc|kill|log callers (any quoting, /usr/bin/ prefix) that do not select the instance by pid
 # (--pid), by the system path (-p /usr/share/grassfield/shell) or through bindings.lua's shell_selector (itself checked below).
 # Comment lines are skipped. A -p with any other path, a -c name, or no selector is reported.

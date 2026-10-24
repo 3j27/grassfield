@@ -19,6 +19,7 @@ BINARY_BUS_UNITS="grassfield-menu-bridge.service grassfield-shell.service"
 hides_bus() {
   grep -qiE '^[[:space:]]*ProtectHome[[:space:]]*=[[:space:]]*(yes|true|1|on|tmpfs)[[:space:]]*$' "$1" ||
     grep -qiE '^[[:space:]]*(RootDirectory|RootImage|RootDirectoryStartOnly)[[:space:]]*=[[:space:]]*[^[:space:]]' "$1" ||
+    grep -qiE '^[[:space:]]*(BindPaths|BindReadOnlyPaths)[[:space:]]*=.*:/run(/user)?(/[^[:space:]:]*)?(:|[[:space:]]|$)' "$1" ||
     grep -qiE '^[[:space:]]*(TemporaryFileSystem|InaccessiblePaths|InaccessibleDirectories)[[:space:]]*=[[:space:]]*([^#]*[[:space:]:+-])?/run(/user)?(/[^[:space:]:]*)?(:[^[:space:]]*)?([[:space:]]|$)' "$1"
 }
 
@@ -59,7 +60,7 @@ mutant() { # <line>: a copy of the crash watcher with the line added
   sed -i '/^ProtectHome=/d' "$tmp/m.service"
   printf '%s\n' "$1" >>"$tmp/m.service"
 }
-for line in 'InaccessiblePaths=+/run/user' 'RootDirectory=/var/lib/x' 'RootImage=/var/lib/x.img' 'ProtectHome=yes' 'ProtectHome=true' 'ProtectHome=1' 'ProtectHome=on' 'ProtectHome=tmpfs' 'ProtectHome = yes' 'ProtectHome=YES' \
+for line in 'BindPaths=/var/empty:/run/user' 'BindReadOnlyPaths=/var/empty:/run/user/1000:norbind' 'InaccessiblePaths=+/run/user' 'RootDirectory=/var/lib/x' 'RootImage=/var/lib/x.img' 'ProtectHome=yes' 'ProtectHome=true' 'ProtectHome=1' 'ProtectHome=on' 'ProtectHome=tmpfs' 'ProtectHome = yes' 'ProtectHome=YES' \
   'TemporaryFileSystem=/run/user' 'TemporaryFileSystem=/run' 'TemporaryFileSystem=/run/user:ro' 'InaccessiblePaths=/run/user' 'InaccessiblePaths=-/run/user' \
   'InaccessiblePaths=/run' 'InaccessiblePaths=/proc /run/user/1000'; do
   mutant "$line"
