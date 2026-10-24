@@ -89,6 +89,40 @@ Moved down: `tests/apps/files_registrar.sh` (nested to headless): the nested ses
 now runs on the offscreen platform. It needs a private D-Bus daemon (Unix socket), so it SKIPs inside the Claude Code
 sandbox and stays a bare command (`runner: bare`) until it has run on the owner's machine.
 
+## Gate tools with honest verdicts (GF-008 residual)
+
+`scripts/gates/` holds measurement tools whose verdict says what was measured: `PASS`/`FAIL` only from the real thing, `PROXY`
+for a lower bound (a part of the path), `NOT VERIFIED` when nothing could be measured.
+
+- `scripts/gates/p4-search-latency.sh` (gate P4): builds a 100k-file fixture under `.dev/p4-fixture`, indexes it with user-mode
+  `updatedb` and times the same `plocate` argv the Search provider uses: `PROXY` (provider only, a lower bound, not the gate: 47 ms
+  median, 82 ms p95 on the loaded dev machine, archived as `docs/testing/runs/20261024T035134Z-p4-search-latency.md`; the report's
+  verdict line says "exit 0 with caveats"). `--shell-log-apps FILE` judges app results per keystroke against 50 ms from the shell's own log
+  (`PASS`/`FAIL`); file results stay `PROXY` until the shell timestamps them end to end.
+- `scripts/gates/r1-restart.sh` (gate R1): `--journal` reads the real unit's journal (read-only) and times every restart the
+  unit made itself (a logout is not one) and checks that the lock state came back; `--nested` times a nested shell restart
+  (`PROXY`: the dev launcher, not the unit). Without a crash in the journal it says `NOT VERIFIED`.
+
+Test: `tests/shell/gate_tools.sh` (fixtures only).
+
+## Gate run reports (GF-036)
+
+Run artefacts used to disappear with removed worktrees, so a result could not be re-audited. Every gate run can leave a dated
+report with the commit, the build id, the exit code and the log path:
+
+```bash
+just gate check just check                       # any command: runs it, tees the log, writes the report, keeps its exit code
+just gate nested-overview tests/compositor/overview.sh   # a bare nested command (ask the owner first)
+scripts/dev/gate-run.sh --record NAME EXIT LOG   # a script that ended on its own summary line records itself
+just gate-archive                                # copy .dev/gate-runs/* into docs/testing/runs/ (then review and commit)
+```
+
+Reports live in `.dev/gate-runs/<UTC stamp>-<name>.md` (git-ignored); `just gate-archive` copies reports and logs (a log over
+256 KiB as its last 2000 lines) into `docs/testing/runs/`, which the repository keeps. A report counts `PASS`, `FAIL`, `SKIP`,
+`NOT VERIFIED` and `PROXY` lines and says so when a run is not a plain pass: cite the report, not a remembered result.
+Release checks and nested gate runs are started through the same helper (`just gate release-check just release-check`), so
+there is one format; a script that prints its own summary line can call `--record` at its end. Test: `tests/shell/gate_run.sh`.
+
 ## Functional flows and the nested smoke set (GF-009, GF-094)
 
 `tests/visual/flow-<module>.sh` (bare, nested only; `tests/visual/flow-lib.sh` is the shared helper): one script per module,

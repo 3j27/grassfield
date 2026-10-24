@@ -30,6 +30,12 @@ package ships a supported way, without touching any Omarchy file:
 The TTY route below stays valid as the recovery path (and for the very first test, before you install the SDDM drop-in:
 install, then keep the file out of the way with `sudo mv /etc/sddm.conf.d/grassfield.conf ~/` until you want the new login).
 
+**Who gets Grassfield (decision, GF-015 review).** `/etc/sddm.conf.d/grassfield.conf` is system-wide: once the package is
+installed, **every local user** of the machine logs in to Grassfield by default (SDDM has no per-user session list here).
+Each user can choose Omarchy for themselves with `grassfield-login set omarchy` (one line in their own
+`~/.config/grassfield/login-session`; no root). To make Omarchy the default for everyone again, edit or delete the drop-in
+(see "Uninstall" for what remains of it).
+
 ## 1. Prerequisites
 
 1. Save your work. Be on AC power. Have this file open on a phone or another machine (the screen may be unusable).
@@ -319,7 +325,7 @@ journalctl --user -b -u 'wayland-wm@*'        --no-pager > compositor-unit.log
 journalctl -b -p warning --no-pager > system-warnings.log
 ls "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log && cp "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log .   # copy before reboot (tmpfs)
 cp ~/.cache/hyprland/hyprlandCrashReport*.txt . 2>/dev/null                               # only after a crash
-qs log -c grassfield --tail 2000 > quickshell.log
+qs log -p /usr/share/grassfield/shell --tail 2000 > quickshell.log
 coredumpctl list --no-pager > coredumps.txt
 ```
 
@@ -376,6 +382,13 @@ rm -rf ~/.config/grassfield ~/.local/state/grassfield ~/.local/share/icons/grass
 rm -rf "$XDG_RUNTIME_DIR/grassfield"   # tmpfs, gone at reboot anyway
 ls ~/.config/autostart/               # delete only entries you added through the Grassfield Dock
 ```
+
+The SDDM drop-in is a pacman backup file: if you edited it, removing the package leaves it as
+`/etc/sddm.conf.d/grassfield.conf.pacsave`. SDDM reads only files named `*.conf` from that directory (name filter in its
+configuration loader, from SDDM's source; **not verified on this machine**), so a `.pacsave` copy is not read and the login
+goes back to Omarchy's own. Check after uninstalling, as your user: `ls /etc/sddm.conf.d/` must show no `grassfield.conf`; delete
+the `.pacsave` with `sudo rm /etc/sddm.conf.d/grassfield.conf.pacsave` if you want it gone. An unedited drop-in is removed with
+the package.
 
 Not Grassfield-only: `~/.local/share/Trash` (shared trash), Wi-Fi/Bluetooth/audio state you changed.
 

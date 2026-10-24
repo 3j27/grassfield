@@ -3,7 +3,7 @@
 
 Omarchy's watcher (omarchy-crash-watch.service) waits for the Omarchy shell's notification IPC and so can never notify in a
 Grassfield session; packaging/systemd/omarchy-crash-watch.service.d/10-grassfield.conf keeps it off there. This one follows
-the journal for systemd-coredump entries of this user and sends one notification per program per minute through the
+the journal for systemd-coredump entries of this user and sends one notification per program per 10 minutes (and at most 6 an hour in all) through the
 freedesktop notification service (Grassfield's own). It offers no AI diagnosis: the notification names the program and
 where the report is (coredumpctl).
 
@@ -16,7 +16,10 @@ import sys
 import time
 
 COREDUMP_MESSAGE_ID = "fc2e22bc6ee647b6b90729ab34a250b1"  # systemd.journal-fields(7)
-DEDUPE_SECONDS = float(os.environ.get("GRASSFIELD_CRASH_DEDUPE_SECONDS", "60"))
+# One program that keeps crashing (Xwayland aborting every two minutes) is one notice per 10 minutes, and a bad hour is never
+# more than HOURLY_CAP notices in all: the journal keeps every dump, the notices only say that something is wrong.
+DEDUPE_SECONDS = float(os.environ.get("GRASSFIELD_CRASH_DEDUPE_SECONDS", "600"))
+HOURLY_CAP = int(os.environ.get("GRASSFIELD_CRASH_HOURLY_CAP", "6"))
 SEND_ATTEMPTS = int(os.environ.get("GRASSFIELD_CRASH_SEND_ATTEMPTS", "20"))
 
 
@@ -42,6 +45,11 @@ def interesting(entry, uid, last, now):
     return name
 
 
+def under_cap(sent, now):
+    """True while fewer than HOURLY_CAP notices went out in the last hour (`sent`: monotonic times of delivered ones)."""
+    return sum(1 for t in sent if now - t < 3600) < HOURLY_CAP
+
+
 def announce(name, signal):
     body = "It stopped unexpectedly (%s). The report is kept by the system: coredumpctl list." % (signal or "crash")
     # The notification service may still be starting (or restarting after a shell crash): retry for a while.
@@ -60,6 +68,7 @@ def announce(name, signal):
 def main():
     uid = os.getuid()
     last = {}
+    sent = []
     cmd = ["journalctl", "-f", "-n", "0", "-o", "json", "MESSAGE_ID=" + COREDUMP_MESSAGE_ID]
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True) as proc:
         for line in proc.stdout:
@@ -69,10 +78,12 @@ def main():
                 continue
             if not isinstance(entry, dict):
                 continue
-            name = interesting(entry, uid, last, time.monotonic())
+            now = time.monotonic()
+            name = interesting(entry, uid, last, now) if under_cap(sent, now) else None
             # Only a delivered notification starts the dedupe window (a failed one must not hide the rest of a crash loop).
             if name and announce(name, entry.get("COREDUMP_SIGNAL_NAME")):
                 last[name] = time.monotonic()
+                sent.append(last[name])
     return 1
 
 

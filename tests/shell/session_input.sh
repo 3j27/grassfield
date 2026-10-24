@@ -60,6 +60,40 @@ if case == "omarchy-input" then
   end
   say("grassfield-input-keyboard-keys", #bad, "added-configs", #log.config - before)
   say("layout-after", tostring(flat("kb_layout")), "order", tostring(flat("kb_variant")))
+elseif case == "pointer-order" then
+  -- GF-066: Grassfield's pointer defaults and the Settings file go in BEFORE the user's input.lua, which wins.
+  local d = os.getenv("TMPCASE")
+  fixture(d .. "/omarchy", 'hl.config({ input = { kb_layout = "fr" } })\n')
+  os.execute("mkdir -p " .. d .. "/home/.config/hypr " .. d .. "/cfg")
+  local f = io.open(d .. "/cfg/mouse-trackpad.lua", "w")
+  f:write('return { sensitivity = 0.4, natural_scroll = false, tap_to_click = false, secondary_click = "corner", bogus = 1 }\n'); f:close()
+  f = io.open(d .. "/home/.config/hypr/input.lua", "w"); f:write('hl.config({ input = { sensitivity = 0.9, touchpad = { natural_scroll = true } } })\n'); f:close()
+  local m = dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
+  local function touch(key) local v; for _, c in ipairs(log.config) do if c.input and c.input.touchpad and c.input.touchpad[key] ~= nil then v = c.input.touchpad[key] end end return v end
+  say("applied", tostring(m.input_applied), "problems", #m.problems)
+  say("user-wins sensitivity", tostring(flat("sensitivity")), "natural_scroll", tostring(touch("natural_scroll")))
+  say("settings-file tap", tostring(touch("tap_to_click")), "clickfinger", tostring(touch("clickfinger_behavior")), "follow_mouse", tostring(flat("follow_mouse")))
+  -- order of the hl.config calls: kb layout, Grassfield pointer (twice? no: once), then the user's
+  local idx = {}
+  for i, c in ipairs(log.config) do
+    if c.input and c.input.follow_mouse ~= nil then idx.gf = i end
+    if c.input and c.input.sensitivity == 0.9 then idx.user = i end
+  end
+  say("order grassfield-before-user", tostring(idx.gf ~= nil and idx.user ~= nil and idx.gf < idx.user))
+elseif case == "pointer-file" then
+  -- The Settings file alone (no user input.lua), and invalid files: defaults stay for the bad entries.
+  local d = os.getenv("TMPCASE")
+  os.execute("mkdir -p " .. d)
+  local gi = dofile(repo .. "/config/hypr/grassfield/input.lua")
+  local function put(body) local f = io.open(d .. "/x.lua", "w"); f:write(body); f:close(); return gi.settings(d .. "/x.lua") end
+  local s = put('return { sensitivity = 5, natural_scroll = "yes", tap_to_click = false, secondary_click = "left" }')
+  say("invalid", tostring(s.sensitivity), tostring(s.natural_scroll), tostring(s.tap_to_click), s.secondary_click)
+  s = put('os.execute("touch ' .. d .. '/pwned") return {}')
+  say("no-code-runs", tostring(io.open(d .. "/pwned") == nil), tostring(s.sensitivity))
+  s = put("this is not lua")
+  say("broken", tostring(s.sensitivity), tostring(s.natural_scroll))
+  s = gi.settings(d .. "/missing.lua")
+  say("missing", tostring(s.sensitivity), tostring(s.natural_scroll), s.secondary_click)
 elseif case == "fallback" then
   local d = os.getenv("TMPCASE")
   fixture(d .. "/omarchy", "error('renamed upstream')\n")
@@ -108,6 +142,22 @@ check grep -q "^layout fr variant user-variant options compose:caps$" <<<"$out"
 desc="Grassfield's input.lua sets no keyboard key (layout, options, repeat, numlock stay the system's)"
 check grep -q "^grassfield-input-keyboard-keys 0 added-configs 1$" <<<"$out"
 check grep -q "^layout-after fr " <<<"$out"
+
+out=$(run pointer-order OMARCHY_PATH="$tmp/pointer-order/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/pointer-order/cfg")
+desc="GF-066: Grassfield's pointer defaults were applied by the include, before the user's input.lua"
+check grep -q "^applied true problems 0$" <<<"$out"
+check grep -q "^order grassfield-before-user true$" <<<"$out"
+desc="GF-066: the user's input.lua wins over Grassfield's defaults and over the Settings file (sensitivity 0.9, natural scroll on)"
+check grep -q "^user-wins sensitivity 0.9 natural_scroll true$" <<<"$out"
+desc="GF-066: Settings' Mouse & Trackpad file is applied (tap to click off, corner secondary click), invalid keys ignored"
+check grep -q "^settings-file tap false clickfinger false follow_mouse 2$" <<<"$out"
+out=$(run pointer-file)
+desc="GF-066: out-of-range, mistyped and unknown entries of the Settings file keep the defaults"
+check grep -q "^invalid 0 true false two_finger$" <<<"$out"
+desc="GF-066: the Settings file is read in an empty environment (no os.* call runs), a broken or missing file means defaults"
+check grep -q "^no-code-runs true 0$" <<<"$out"
+check grep -q "^broken 0 true$" <<<"$out"
+check grep -q "^missing 0 true two_finger$" <<<"$out"
 
 out=$(run fallback OMARCHY_PATH="$tmp/fallback/omarchy")
 desc="when Omarchy's input module cannot load, the same defaults are applied (compose:caps, 40/250, numlock) and logged"

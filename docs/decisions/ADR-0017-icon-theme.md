@@ -1,5 +1,5 @@
 # ADR-0017: WhiteSur as the default app icon theme of the Grassfield session (optional), selected per session
-Status: Proposed (applied provisionally; amended 2026-10-21: WhiteSur dropped, see "Amendment 2026-10-21" at the end). Earlier status: Accepted (owner decision 2026-10-20, batch 10); implemented in slices I0-I3 and I5 (slice I4, the icon-mode retune, is not part of this fix); Apple-artwork handling amended 2026-10-20 (pkgrel 5: logo files; pkgrel 6: perceptual detector and blocklist, see "Apple artwork" below) · Date: 2026-10-20 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (applied provisionally; amended 2026-10-21: WhiteSur dropped, see "Amendment 2026-10-21" at the end). Earlier status: Accepted (owner decision 2026-10-20, batch 10); implemented in slices I0-I3 and I5 (slice I4, the icon-mode retune, is not part of this fix); Apple-artwork handling amended 2026-10-20 (pkgrel 5: logo files; pkgrel 6: perceptual detector and blocklist, see "Apple artwork" below)) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 

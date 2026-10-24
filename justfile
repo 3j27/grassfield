@@ -76,6 +76,15 @@ check-secrets:
 check-scripts:
     for f in scripts/dev/*.sh scripts/gates/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
 
+# Run any gate command and keep a dated report (commit, build id, exit code, log path) in .dev/gate-runs/ (GF-036), e.g.
+# `just gate check just check`, `just gate nested-overview tests/compositor/overview.sh`. Exits with the command's code.
+gate name *cmd:
+    scripts/dev/gate-run.sh {{name}} -- {{cmd}}
+
+# Copy the gate reports of .dev/gate-runs/ into docs/testing/runs/ (the repository keeps them); review, then commit.
+gate-archive:
+    scripts/dev/gate-run.sh --archive
+
 # Omarchy private paths, commands and units Grassfield relies on (docs/compat.md); --require fails without Omarchy.
 check-omarchy *args:
     scripts/dev/omarchy-compat.sh {{args}}

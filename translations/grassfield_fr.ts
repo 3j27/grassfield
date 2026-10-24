@@ -3671,6 +3671,14 @@
         <translation>inactivité verrouillage mot de passe</translation>
     </message>
     <message>
+        <source>Mouse &amp; Trackpad</source>
+        <translation>Souris et trackpad</translation>
+    </message>
+    <message>
+        <source>pointer tracking speed scrolling natural tap click secondary right click touchpad</source>
+        <translation>pointeur vitesse de déplacement défilement naturel toucher cliquer clic secondaire droit pavé tactile</translation>
+    </message>
+    <message>
         <source>Keyboard</source>
         <translation>Clavier</translation>
     </message>
@@ -3822,6 +3830,81 @@
     <message>
         <source>Context menu</source>
         <translation>Menu contextuel</translation>
+    </message>
+</context>
+<context>
+    <name>MousePage</name>
+    <message>
+        <source>Mouse &amp; Trackpad</source>
+        <translation>Souris et trackpad</translation>
+    </message>
+    <message>
+        <source>Pointer</source>
+        <translation>Pointeur</translation>
+    </message>
+    <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>La modification n’a pas pu être enregistrée&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Changes apply the next time you log in. Settings you write in your own input.lua take precedence.</source>
+        <translation>Les modifications s’appliquent à votre prochaine ouverture de session. Les réglages de votre propre input.lua restent prioritaires.</translation>
+    </message>
+    <message>
+        <source>Tracking speed</source>
+        <translation>Vitesse de déplacement</translation>
+    </message>
+    <message>
+        <source>Slow</source>
+        <translation>Lente</translation>
+    </message>
+    <message>
+        <source>Fast</source>
+        <translation>Rapide</translation>
+    </message>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>Natural scrolling</source>
+        <translation>Défilement naturel</translation>
+    </message>
+    <message>
+        <source>Content follows your fingers.</source>
+        <translation>Le contenu suit vos doigts.</translation>
+    </message>
+    <message>
+        <source>Tap to click</source>
+        <translation>Toucher pour cliquer</translation>
+    </message>
+    <message>
+        <source>Tap the trackpad with one finger to click.</source>
+        <translation>Touchez le trackpad avec un doigt pour cliquer.</translation>
+    </message>
+    <message>
+        <source>Secondary click</source>
+        <translation>Clic secondaire</translation>
+    </message>
+    <message>
+        <source>Two fingers</source>
+        <translation>Deux doigts</translation>
+    </message>
+    <message>
+        <source>Bottom right corner</source>
+        <translation>Coin inférieur droit</translation>
+    </message>
+    <message>
+        <source>Mouse</source>
+        <translation>Souris</translation>
+    </message>
+    <message>
+        <source>Content follows the wheel.</source>
+        <translation>Le contenu suit la molette.</translation>
+    </message>
+    <message>
+        <source>Natural scrolling, mouse</source>
+        <translation>Défilement naturel, souris</translation>
     </message>
 </context>
 <context>
@@ -4637,6 +4720,26 @@
     <message>
         <source>password</source>
         <translation>mot de passe</translation>
+    </message>
+    <message>
+        <source>Mouse &amp; Trackpad</source>
+        <translation>Souris et trackpad</translation>
+    </message>
+    <message>
+        <source>tracking speed</source>
+        <translation>vitesse de déplacement</translation>
+    </message>
+    <message>
+        <source>scrolling</source>
+        <translation>défilement</translation>
+    </message>
+    <message>
+        <source>tap to click</source>
+        <translation>toucher pour cliquer</translation>
+    </message>
+    <message>
+        <source>touchpad</source>
+        <translation>pavé tactile</translation>
     </message>
     <message>
         <source>Keyboard</source>
@@ -5862,6 +5965,14 @@
     <message>
         <source>The build failed. Run grassfield-compositor-rebuild in a terminal to see why.</source>
         <translation>La compilation a échoué. Lancez grassfield-compositor-rebuild dans un terminal pour en savoir plus.</translation>
+    </message>
+    <message>
+        <source>Log out to finish updating</source>
+        <translation>Fermez la session pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>Grassfield was updated. Log out and back in to use the new version.</source>
+        <translation>Grassfield a été mis à jour. Fermez la session puis rouvrez-la pour utiliser la nouvelle version.</translation>
     </message>
     <message>
         <source>Grassfield Settings is not installed</source>
