@@ -58,6 +58,10 @@ QString displayName(const QString &name);
 // person: macOS compares them equal (GF-105). The file system keeps them apart, so Files checks collisions with this.
 bool sameName(const QString &a, const QString &b);
 
+// The entry of `names` that is the same name as `name` to a person but not the same string (an NFC/NFD twin), or "".
+// Copying, moving or dropping an item next to such a twin would make two entries that look alike (GF-105).
+QString equivalentName(const QStringList &names, const QString &name);
+
 // Match text for the folder filter: canonically decomposed, combining marks dropped, case folded ("resume" finds
 // "Résumé.txt" in either normalization form).
 QString foldForMatch(const QString &text);

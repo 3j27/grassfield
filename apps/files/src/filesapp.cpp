@@ -83,6 +83,25 @@ bool nameTaken(const QUrl &directory, const QString &name, const QString &except
     return false;
 }
 
+// True (after saying why) when an item of `sources` would land next to a name that only differs from its own by Unicode
+// normalization in the local folder `destination`: the file system would keep both, the person sees two of the same name.
+// An exact match is left to the file operation (its conflict handling asks).
+bool refuseTwin(FilesApp *app, const QUrl &destination, const QList<QUrl> &sources)
+{
+    if (!destination.isLocalFile())
+        return false;
+    const QStringList entries = QDir(destination.toLocalFile()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+    for (const QUrl &u : sources) {
+        const QString twin = FileLogic::equivalentName(entries, u.fileName());
+        if (!twin.isEmpty() && !entries.contains(u.fileName())) {
+            emit app->operationFailed(FilesApp::tr("“%1” can’t be copied or moved here: the folder has “%2”, which has the same name once accents are composed. Rename one of them first.")
+                                          .arg(FileLogic::displayName(u.fileName()), FileLogic::displayName(twin)));
+            return true;
+        }
+    }
+    return false;
+}
+
 // Scripted scenarios set GRASSFIELD_FILES_NO_LAUNCH=1: opening reports an error instead of starting
 // applications (a test must never launch the owner's apps). Logged so the scenario can assert it.
 bool launchingBlocked()
@@ -542,6 +561,8 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
             return;
         }
     }
+    if (refuseTwin(this, destination, urls))
+        return;
     // KIO::paste records the copy or move in FileUndoManager itself.
     KIO::PasteJob *job = KIO::paste(data, destination, KIO::HideProgressInfo);
     if (!job)
@@ -730,7 +751,7 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         if (clean.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash) != dest)
             sources << clean;
     }
-    if (sources.isEmpty())
+    if (sources.isEmpty() || refuseTwin(this, dest, sources))
         return;
     const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
     bool copy = mods & (Qt::ControlModifier | Qt::AltModifier);

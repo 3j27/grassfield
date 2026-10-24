@@ -199,6 +199,15 @@ bool sameName(const QString &a, const QString &b)
     return a == b || a.normalized(QString::NormalizationForm_C) == b.normalized(QString::NormalizationForm_C);
 }
 
+QString equivalentName(const QStringList &names, const QString &name)
+{
+    for (const QString &n : names) {
+        if (n != name && sameName(n, name))
+            return n;
+    }
+    return {};
+}
+
 QString foldForMatch(const QString &text)
 {
     const QString decomposed = text.normalized(QString::NormalizationForm_D);

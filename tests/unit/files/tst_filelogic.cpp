@@ -253,6 +253,16 @@ TEST(UnicodeNames, FilterIgnoresCaseAndAccentsInBothForms)
     EXPECT_TRUE(nameMatchesFilter(QStringLiteral("a\"b\\c"), QStringLiteral("\"b\\")));
 }
 
+TEST(UnicodeNames, EquivalentNameFindsOnlyTheTwin)
+{
+    const QString nfc = QString::fromUtf8("R\xc3\xa9sum\xc3\xa9.txt");
+    const QString nfd = QString::fromUtf8("Re\xcc\x81sume\xcc\x81.txt");
+    EXPECT_EQ(equivalentName({QStringLiteral("a.txt"), nfd}, nfc), nfd);
+    EXPECT_TRUE(equivalentName({QStringLiteral("a.txt"), nfc}, nfc).isEmpty()); // the same string is a plain conflict
+    EXPECT_TRUE(equivalentName({}, nfc).isEmpty());
+    EXPECT_TRUE(equivalentName({QStringLiteral("Resume.txt")}, nfc).isEmpty());
+}
+
 TEST(UnicodeNames, DisplayNameWritesOutBidiControlsAndBreaks)
 {
     EXPECT_EQ(displayName(QString::fromUtf8("evil\xe2\x80\xaa" "fdp.exe")), QStringLiteral("evil<U+202A>fdp.exe"));
