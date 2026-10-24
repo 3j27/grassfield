@@ -33,11 +33,18 @@ ShellRoot {
         return null;
     }
 
+    // ThemeIcons' copy key of an Icon= value (none of these names exists in the system theme).
+    function keyOf(icon: string): string {
+        return icon.startsWith("/") ? "icon:" + icon : "name:" + icon;
+    }
+
+    function stateOf(key: string): string {
+        const e = ThemeIcons.copies[key];
+        return e === undefined ? "" : e.state;
+    }
+
     function settled(keys: var): bool {
-        return keys.every(k => {
-            const v = ThemeIcons.verdicts[ThemeIcons.keyOf(k)];
-            return v === "ok" || v === "no";
-        });
+        return keys.every(k => stateOf(k) === "ok" || stateOf(k) === "no");
     }
 
     function prewarmed(id: string): bool {
@@ -127,16 +134,17 @@ ShellRoot {
                 root.waited = 0;
             } else if (root.phase === "verdicts") {
                 // The surfaces' bindings asked; wait for every verdict, then a second for any stalled read to begin.
-                const icons = root.ids.map(id => root.entries[id].icon).concat([root.desktop + "/photo.png"]);
-                const ready = root.settled(icons) && root.prewarmed("gf-ok-path") && root.prewarmed("gf-ok-name");
+                const keys = root.ids.map(id => root.keyOf(root.entries[id].icon)).concat(["picture:" + root.desktop + "/photo.png"]);
+                const ready = root.settled(keys) && root.prewarmed("gf-ok-path") && root.prewarmed("gf-ok-name");
                 if ((!ready || root.waited < 1000) && root.waited < 15000)
                     return;
                 for (const id of root.ids) {
                     const icon = root.entries[id].icon;
-                    console.log("probe: " + id + " verdict=" + ThemeIcons.verdicts[ThemeIcons.keyOf(icon)] + " source=" + ThemeIcons.appIcon(icon, "")
+                    const src = ThemeIcons.appIcon(icon, "");
+                    console.log("probe: " + id + " verdict=" + root.stateOf(root.keyOf(icon)) + " source=" + (src.indexOf("/grassfield-icons-") > 0 ? "copy" : src)
                         + " prewarmed=" + root.prewarmed(id));
                 }
-                console.log("probe: thumbnail verdict=" + ThemeIcons.verdicts[root.desktop + "/photo.png"] + " source=" + ThemeIcons.fileSource(root.desktop + "/photo.png"));
+                console.log("probe: thumbnail verdict=" + root.stateOf("picture:" + root.desktop + "/photo.png") + " source=" + ThemeIcons.fileSource(root.desktop + "/photo.png"));
                 // The About panel shows the second FIFO application too.
                 Popups.open("appabout", "", 0, 0, "center", {appId: "gf-fifo-name"});
                 root.phase = "about";
@@ -144,7 +152,7 @@ ShellRoot {
             } else if (root.phase === "about") {
                 if (root.waited < 1000)
                     return;
-                ThemeIcons.check("ctl", false);
+                ThemeIcons.source("ctl");
                 root.phase = "control";
                 root.waited = 0;
             } else if (root.phase === "control") {

@@ -1862,6 +1862,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isFolder ? Quickshell.iconPath(Stacks.folderIconName(tile.modelData.path, Quickshell.env("HOME")), "folder") : ""
+                                    asynchronous: true
                                 }
 
                                 // Trash: the icon theme's user-trash / user-trash-full (never hand-drawn), in the user's icon
@@ -1877,6 +1878,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isTrash ? themed : ""
+                                    asynchronous: true
                                 }
 
                                 Rectangle {
@@ -1910,6 +1912,7 @@ Scope {
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
                                     source: tile.isAppsTile ? themed : ""
+                                    asynchronous: true
                                 }
 
                                 Rectangle {

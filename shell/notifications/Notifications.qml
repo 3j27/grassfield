@@ -978,7 +978,7 @@ Singleton {
         if (ref.kind === "file")
             requestCopy(History.localPathOf(ref.source), true, sender); // shown as a private copy once made (copySourceOf)
         else if (ref.kind === "themed")
-            ThemeIcons.check(ref.name, true); // its files are checked again for each new notification
+            ThemeIcons.check(ref.name, true); // a user icon of that name is copied again for each new notification
         if (ref.kind !== "refused")
             return image;
         console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");

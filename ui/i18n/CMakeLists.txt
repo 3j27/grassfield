@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Qml LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml LinguistTools)
 qt_policy(SET QTP0001 NEW)
 
 # Backing library STATIC (linked into the plugin, so the plugin .so is the only file to install); the
@@ -21,12 +21,12 @@ qt_add_qml_module(grassfield_i18n
     CLASS_NAME GrassfieldI18nPlugin
     NO_GENERATE_PLUGIN_SOURCE
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Grassfield/I18n
-    SOURCES translator.h translator.cpp translationloader.h)
+    SOURCES translator.h translator.cpp translationloader.h iconsearchpaths.h)
 set_target_properties(grassfield_i18n PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(grassfield_i18n PRIVATE Qt6::Core Qt6::Qml)
 target_sources(grassfield_i18nplugin PRIVATE plugin.cpp)
 target_include_directories(grassfield_i18nplugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(grassfield_i18nplugin PRIVATE Qt6::Core Qt6::Qml)
+target_link_libraries(grassfield_i18nplugin PRIVATE Qt6::Core Qt6::Gui Qt6::Qml)
 
 # Catalogs: translations/grassfield_<lang>.ts -> grassfield_<lang>.qm
 file(GLOB GRASSFIELD_TS ${CMAKE_CURRENT_SOURCE_DIR}/../../translations/grassfield_*.ts)

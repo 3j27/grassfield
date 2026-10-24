@@ -51,11 +51,11 @@ Singleton {
 
     onListChanged: root.refreshIconSources()
 
-    // An icon checked (ThemeIcons): the prewarmed sources follow what the Apps panel now shows.
+    // A user icon copied (ThemeIcons): the prewarmed sources follow what the Apps panel now shows.
     readonly property Connections iconChecks: Connections {
         target: ThemeIcons
 
-        function onVerdictsChanged(): void {
+        function onCopiesChanged(): void {
             root.refreshIconSources();
         }
     }

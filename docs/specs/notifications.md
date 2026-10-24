@@ -200,42 +200,36 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   missing); it applies at intake (`checkedAppIcon`, `History.keptAppIcon`), on history load (`History.parse`) and in
   `iconSource`; with previews hidden `NotificationPrefs.appIconShown` keeps only a name that passes the same test, so the
   sender's image and an app icon path (its private copy included) give way to the app's theme icon or the generic one.
-  A name that passes reaches Qt only through `ThemeIcons.source` (shell/services, shared with the polkit sheet; reviews of
-  2dfd992, eee45cc and 100692f): Qt reads the index.theme and icon-theme.cache of the theme and of every theme it
-  inherits (on the GUI thread, in `hasThemeIcon`) and then the icon file it picks, so a helper first checks, in every
-  icon theme directory the user owns or can write (dot-named ones included): those two files (a FIFO, a device or an
-  oversized one, or an `Inherits=` holding a "/", refuses every name), and the candidate files for the name and its
-  dash-shortened forms (`.png`, `.svg`, `.svgz`, `.xpm` in EVERY folder of those directories, symlinks followed, and in
-  every folder their index.theme names in any form Qt 6.11 uses: each `[section]`, `Directories=`/`ScaledDirectories=`
-  split, unquoted and whole, also inside root-owned directories of that theme since a `../` section leads anywhere;
-  plus the pixmaps directories), each a regular file of at most 8 MiB, symlinks resolved. `hasThemeIcon` runs only for a
-  checked name. Until the verdict the fallback shows; a new notification naming the name hides it until its new verdict.
-  Every 20 s a signature of those folders, theme files and pixmaps directories, plus the folders holding the targets of
-  symlinked candidates and icon paths, is taken; when it changed, each shown key's own signature (its present
-  candidates, lstat and resolved) is taken again in batches and only the keys whose files changed are hidden and checked
-  again; the others stay on screen. A file swapped after its check can still be read until then (residual). Cost:
-  listing the folders reads every entry of the user's theme directories (about 0.4 s for a theme of 99k files, once per
-  batch of 24 keys). `tests/security/theme_icon_files.sh`: the shell offscreen (FIFO, symlinks to a FIFO, /dev/zero and
-  /dev/null, FIFO .svg, FIFO under ~/.icons/hicolor, a swap with and without a new notification, a swapped symlink target
-  outside every icon folder; an unchanged icon stays shown meanwhile) and Qt's own lookup with real-session search paths
-  (FIFO index.theme and icon-theme.cache, FIFO icons in the theme, the inherited hicolor, a symlinked folder, ~/.icons,
-  pixmaps, a section missing from Directories=, a quoted Directories=, a dot-named inherited theme, a 7-part
-  dash-shortened name, a `../` section, a `../` Inherits=; Qt alone stalls on each); mutants without the theme-file
-  check, the dot-named themes, the Inherits= check, the section parsing, the folder listing or the full dash fallback
-  fail it.
-  The same helper serves icons from desktop entries, applications and files: `ThemeIcons.appIcon(Icon=, fallback)`
-  (review of eee45cc: a FIFO `Icon=` in a user .desktop file stalled the loader) checks a theme name as above and an
-  absolute path as a regular file of at most 8 MiB, then loads it by a file: URL; until then, and when refused, the
-  checked fallback icon shows. Every icon named by a desktop entry, an application or a file goes through it, and its
-  Image loads asynchronously, so even a file swapped after its check can stall only the loader, never the GUI thread
-  (review of 100692f): the Dock (application and minimized icons), Launchpad cells, the Apps prewarm list, desktop icons
-  (a launcher's Icon=, a picture's thumbnail via `ThemeIcons.fileSource`, up to 64 MiB), Search rows (the record keeps
-  the raw Icon=), the Switcher, the Overview (tiles, minimized windows, labels), Force Quit, the About panel, and the
-  polkit sheet's icon. theme_icon_files.sh part 3 runs real Launchpad cells, desktop icons and the About panel with a
-  FIFO Icon= path, a FIFO theme name and a FIFO picture in scratch folders (mutants restoring Quickshell.iconPath on the
-  desktop or in About, or an unchecked thumbnail, fail it) and checks the other sites' calls (their windows need
-  toplevels or layer-shell). Icons with fixed names (folder stacks, the trash, the Apps tile) still use
-  Quickshell.iconPath; they are refused only when the theme files are.
+  A name that passes reaches an Image only through `ThemeIcons` (shell/services: the single entry point for every icon
+  named by a notification, the polkit sheet, a desktop entry, an application or a file). Integrator decision after the
+  review of 5ee6240 (mirroring Qt's index.theme parser proved endless): Qt never reads a user-writable icon file.
+  Grassfield.I18n (`ui/i18n/iconsearchpaths.h`, applied when grassfield-shell imports the module, before any binding)
+  sets Qt's theme and fallback search paths to the usual ones minus every directory the user can write or replace (the
+  canonical path and each ancestor must belong to root, or to the overflow uid inside a user namespace, and not be
+  writable by the user): in practice /usr/share/icons and /usr/share/pixmaps; ~/.icons, $XDG_DATA_HOME/icons and
+  user-writable $XDG_DATA_DIRS entries (a flatpak user export) are out. The shell logs the result once
+  (`grassfield-icons: theme search paths ...`). No environment variable changes, so applications launched from the shell
+  keep their own icon paths and Quickshell's DesktopEntries still lists user applications. A theme name is looked up
+  there (`Quickshell.hasThemeIcon` on the GUI thread reads only root-owned theme files). A name found only in the user's
+  folders, an absolute `Icon=` path and a desktop or stack picture are shown as private copies: a helper (python3, off
+  the GUI thread, under `timeout` and `--pdeathsig`) looks the name up plainly (each theme folder x size folder x
+  apps|mimetypes|places x png|svg, hicolor first, then pixmaps; no index.theme), opens each candidate with
+  O_NOFOLLOW|O_NONBLOCK, accepts it when fstat says a regular non-empty file within its cap (8 MiB, 16 MiB for a picture;
+  an SVG also without external references, entities, @import or url() to outside), and copies it into
+  $XDG_RUNTIME_DIR/grassfield-icons-<display> (0700, emptied at start, 128 MiB in all, never evicted). The Image loads
+  only the copy, asynchronously; anything else shows the caller's generic icon. A new notification naming the icon makes
+  a new copy. A helper that hangs is stopped (TERM, KILL 2 s later) and its icons refused. `tests/security/theme_icon_files.sh`:
+  part 1 (FIFO, symlinks to a FIFO, /dev/zero, /dev/null, FIFO .svg, an SVG referencing a FIFO, FIFO under ~/.icons, a
+  swap: the generic icon; a regular user icon: its copy; Qt never sees them), part 2 (the review's hostile index.theme
+  files: escaped sections and Inherits=, continuation, escaped key, Inherits=.., Inherits=., a user hicolor index under
+  Adwaita, FIFO index.theme and icon-theme.cache: the generic icon, no stall; Qt with a real session's search paths
+  stalls on each), part 3 (real Launchpad cells, desktop icons and the About panel with FIFO Icon= values and a FIFO
+  picture; a user-installed icon shown as a copy; the other sites' calls), part 4 (the logged search paths hold no
+  user-changeable directory; an LD_PRELOAD open log shows no open of a user icon file except by the helper with
+  O_NOFOLLOW|O_NONBLOCK; a child process gets the environment unchanged; 24 lookups next to a 99k-file user theme in
+  about 0.2 s). Every Image with a dynamic source loads asynchronously: the Dock (applications, minimized windows, folder,
+  trash and Apps tiles), Launchpad cells, the Apps prewarm list, desktop icons and thumbnails, folder stacks (type icons
+  and previews) and their popup, Search rows, the Switcher, the Overview, Stages, Force Quit, About and the polkit sheet.
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the

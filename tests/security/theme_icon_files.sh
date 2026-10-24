@@ -1,113 +1,166 @@
 #!/usr/bin/env bash
-# Reviews of 2dfd992 and eee45cc: a valid theme icon NAME must never make Qt read a FIFO, a device or a huge file.
+# Integrator decision after the review of 5ee6240: Qt never reads a user-writable icon file. The shell's icon search
+# paths hold only directories the user can neither write nor replace (ui/i18n/iconsearchpaths.h); an icon found only in
+# the user's folders, an Icon= path and a desktop picture are shown as private copies made by ThemeIcons' helper
+# (O_NOFOLLOW|O_NONBLOCK open, fstat: a regular file within a size cap). Every run below uses the REAL shell modules
+# offscreen in a scratch HOME / XDG_DATA_HOME / XDG_DATA_DIRS and must finish (a stalled GUI thread or image loader keeps
+# the process from exiting).
 #
-# Part 1, the shell: tests/security/theme_icon_files.d/probe.qml offscreen against the REAL Notifications and ThemeIcons
-# singletons, in a scratch HOME / XDG_DATA_HOME / XDG_DATA_DIRS, once per planted file for the name "evil" (offscreen
-# Quickshell searches only the fallback pixmaps directories, so these cases sit there or are judged by the verdict):
-#   reg      a regular PNG in <XDG_DATA_DIRS entry>/pixmaps        -> shown (control: the guard does not hide icons)
-#   fifo     a FIFO there                                          -> refused, the image loader never stalls
-#   link     a symlink there to a FIFO elsewhere                   -> refused
-#   zero     a symlink there to /dev/zero                          -> refused
-#   null     a symlink to /dev/null as XDG_DATA_HOME/icons/hicolor/48x48/apps/evil.svg -> refused
-#   svgfifo  a FIFO evil.svg in the pixmaps directory              -> refused
-#   homefifo a FIFO evil.xpm in ~/.icons/hicolor/48x48/apps        -> refused
-#   swap     shown, then the file becomes a FIFO and a new notification names it: hidden at once, then refused
-#   change   shown, then the file becomes a FIFO and nothing names it: the next signature finds its files changed, refused,
-#            while "ctl" (unchanged) stays shown
-#   linkswap evil.png is a symlink to a file outside every icon folder, whose target becomes a FIFO: refused, "ctl" shown
-# Each run must print the probe line within its time limit (a stalled loader keeps the process from exiting) with the
-# expected verdict, empty icon sources for both call sites (notification iconSource, polkit ThemeIcons.source), and the
-# control icon loaded afterwards.
-#
-# Part 2, Qt itself with the theme search paths of a real session (theme_icon_files.d/qt_icon_lookup.cpp, built here; SKIP
-# without g++ or the Qt headers): ThemeIcons' own checker script (extracted from ThemeIcons.qml) judges each case, and a
-# name it passes is then looked up by Qt (hasThemeIcon on the "GUI thread", then a pixmap) and must not stall. For the
-# refused cases Qt alone must stall (or the case proves nothing): a FIFO index.theme or icon-theme.cache of the current
-# theme, a FIFO icon in the theme, in the inherited hicolor theme, behind a symlinked directory, in ~/.icons, in pixmaps.
-# Plus the cost bound: a user theme of 300 directories with 99k files, 8 names in under 10 s.
-#
-# Part 3, application icons (Dock, Launchpad): see below.
+# Part 1, files for the theme icon name "evil" in the user's icon folders (the notification icon and the polkit sheet's):
+#   reg       a regular PNG                       -> shown, as a private copy
+#   fifo      a FIFO                              -> the generic icon
+#   link      a symlink to a FIFO elsewhere       -> the generic icon (O_NOFOLLOW)
+#   zero      a symlink to /dev/zero              -> the generic icon
+#   devnull   a symlink to /dev/null (.svg)       -> the generic icon
+#   svgfifo   a FIFO evil.svg                     -> the generic icon
+#   svgref    an SVG referencing an outside file  -> the generic icon
+#   homefifo  a FIFO under ~/.icons/hicolor       -> the generic icon
+#   swap      shown, then a FIFO named by a new notification -> its new copy is refused
+# Qt must not see any of them (hasThemeIcon false: user folders are not searched).
+# Part 2, the review's hostile user index.theme files (escaped sections and Inherits=, continuation lines, an escaped key,
+# Inherits=.., Inherits=., a hicolor index in the user's folder with Adwaita as the theme): the shell's lookup never
+# reads them, shows the generic icon and never stalls; Qt with a real session's search paths (user folders included,
+# theme_icon_files.d/qt_icon_lookup.cpp, built here, SKIP without g++) stalls on each, so each case is real, and the same
+# lookup after the shell's policy function (iconsearchpaths.h) finishes without finding the icon (offscreen, the shell
+# itself never has user search paths, so this is what shows the policy at work).
+# Part 3, icons named by applications and files (Launchpad cells, desktop icons, the About panel; the other sites'
+# calls checked in the source).
+# Part 4, the policy itself: the search paths the shell logs contain no directory the user can change; no process of the
+# shell opens a file in the user's icon folders except the copy helper (O_NOFOLLOW|O_NONBLOCK) or for a directory
+# listing (LD_PRELOAD open log, theme_icon_files.d/openlog.c); a child process (an application launched from the shell)
+# gets the environment unchanged. Plus the helper's cost with a user theme of 99k files.
 # Plain shell test: PASS/FAIL lines, non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
 unset QT_QPA_PLATFORMTHEME
+ui/i18n/build-direct.sh >/dev/null
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/theme-icon-files.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/cfg"
-for entry in shell/*; do
-  [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
-done
-cp tests/security/theme_icon_files.d/probe.qml "$tmp/cfg/shell.qml"
+mkcfg() { # <dir> <probe>
+  mkdir -p "$1"
+  for entry in shell/*; do
+    [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$1/$(basename "$entry")"
+  done
+  cp "tests/security/theme_icon_files.d/$2" "$1/shell.qml"
+}
+mkcfg "$tmp/cfg" probe.qml
 png=iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-
 fail=0
-run() { # <kind> <expected verdict>
-  local kind=$1 want=$2 s out rc line
-  s=$tmp/$kind
-  mkdir -p -m 700 "$s/runtime" "$s/cache"
-  mkdir -p "$s/home/.local/share/icons/hicolor/48x48/apps" "$s/home/.icons/hicolor/48x48/apps" "$s/data/pixmaps" "$s/elsewhere" "$s/state" "$s/config"
-  printf '%s' "$png" | base64 -d >"$s/data/pixmaps/ctl.png"
-  case $kind in
-    reg | swap | change) cp "$s/data/pixmaps/ctl.png" "$s/data/pixmaps/evil.png" ;;
-    linkswap) cp "$s/data/pixmaps/ctl.png" "$s/elsewhere/target.png" && ln -s "$s/elsewhere/target.png" "$s/data/pixmaps/evil.png" ;;
-    fifo) mkfifo "$s/data/pixmaps/evil.png" ;;
-    link) mkfifo "$s/elsewhere/f" && ln -s "$s/elsewhere/f" "$s/data/pixmaps/evil.png" ;;
-    zero) ln -s /dev/zero "$s/data/pixmaps/evil.png" ;;
-    null) ln -s /dev/null "$s/home/.local/share/icons/hicolor/48x48/apps/evil.svg" && cp "$s/data/pixmaps/ctl.png" "$s/data/pixmaps/evil.png" ;;
-    svgfifo) mkfifo "$s/data/pixmaps/evil.svg" ;;
-    homefifo) mkfifo "$s/home/.icons/hicolor/48x48/apps/evil.xpm" && cp "$s/data/pixmaps/ctl.png" "$s/data/pixmaps/evil.png" ;;
-  esac
-  rc=0
-  out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION \
-    GRASSFIELD_DEV=1 PROBE_KIND="$kind" PROBE_PIXMAPS="$s/data/pixmaps" HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" \
+pass() { echo "PASS: theme icon files $*"; }
+bad() { echo "FAIL: theme icon files $*"; fail=1; }
+
+shellenv() { # <scratch> -> the environment of a probe run
+  local s=$1
+  printf '%s\n' -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION \
+    GRASSFIELD_DEV=1 HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" \
     XDG_CONFIG_HOME="$s/home/.config" XDG_STATE_HOME="$s/home/.local/state" GRASSFIELD_STATE_HOME="$s/state" GRASSFIELD_CONFIG_HOME="$s/config" \
     GRASSFIELD_TEST_TMP="$s" XDG_RUNTIME_DIR="$s/runtime" XDG_CACHE_HOME="$s/cache" \
-    QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_LANG=en GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" \
-    timeout -k 3 40 qs -p "$tmp/cfg" --no-color 2>&1) || rc=$?
-  line=$(grep -o "probe: .*" <<<"$out" | head -n 1 || true)
-  local ok=1
-  ((rc == 0)) || ok=0
-  [[ $line == *" verdict=$want "* ]] || ok=0
-  [[ $line == *" ctl=1"* ]] || ok=0
-  if [[ $want == ok ]]; then
-    [[ $line == *" notif=image://icon/evil "* && $line == *" polkit=image://icon/evil "* && $line == *" evil=1 "* ]] || ok=0
-  else
-    [[ $line == *" notif= polkit= evil=0 "* ]] || ok=0
-  fi
-  case $kind in
-    swap) [[ $line == *" before=ok:image://icon/evil atswap=|pending "* ]] || ok=0 ;;
-    change | linkswap) [[ $line == *" before=ok:image://icon/evil atswap= ctlblanked=false "* ]] || ok=0 ;;
-  esac
-  if ((ok)); then
-    echo "PASS: theme icon files $kind ($line)"
-  else
-    echo "FAIL: theme icon files $kind: rc $rc, ${line:-no probe line} $(grep -E 'TypeError|ReferenceError' <<<"$out" | head -n 3)"
-    fail=1
-  fi
+    QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_LANG=en GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations"
 }
 
-run reg ok
-for kind in fifo link zero null svgfifo homefifo swap change linkswap; do
-  run "$kind" no
+scratch() { # <dir>: a fresh scratch tree with the regular user icon "ctl"
+  local s=$1
+  mkdir -p -m 700 "$s/runtime" "$s/cache"
+  mkdir -p "$s/home/.local/share/icons/hicolor/48x48/apps" "$s/home/.icons" "$s/data/pixmaps" "$s/outside" "$s/state" "$s/config"
+  printf '%s' "$png" | base64 -d >"$s/home/.local/share/icons/hicolor/48x48/apps/ctl.png"
+}
+
+probe() { # <scratch> <kind> [VAR=value...]: one run of probe.qml; prints its line, sets rc
+  local s=$1 kind=$2
+  shift 2
+  local -a e
+  mapfile -t e < <(shellenv "$s")
+  rc=0
+  out=$(env "${e[@]}" PROBE_KIND="$kind" PROBE_USER_ICON="$s/home/.local/share/icons/hicolor/48x48/apps/evil.png" "$@" \
+    timeout -k 3 60 qs -p "$tmp/cfg" --no-color 2>&1) || rc=$?
+  line=$(grep -o "probe: .*" <<<"$out" | head -n 1 || true)
+}
+
+# ---- Part 1 ----
+for kind in reg fifo link zero devnull svgfifo svgref homefifo swap; do
+  s=$tmp/p1-$kind
+  scratch "$s"
+  A=$s/home/.local/share/icons/hicolor/48x48/apps
+  case $kind in
+    reg | swap) printf '%s' "$png" | base64 -d >"$A/evil.png" ;;
+    fifo) mkfifo "$A/evil.png" ;;
+    link) mkfifo "$s/outside/f" && ln -s "$s/outside/f" "$A/evil.png" ;;
+    zero) ln -s /dev/zero "$A/evil.png" ;;
+    devnull) ln -s /dev/null "$A/evil.svg" ;;
+    svgfifo) mkdir -p "$s/home/.local/share/icons/hicolor/scalable/apps" && mkfifo "$s/home/.local/share/icons/hicolor/scalable/apps/evil.svg" ;;
+    svgref) mkfifo "$s/outside/f" && printf '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><image xlink:href="%s"/></svg>' "$s/outside/f" >"$A/evil.svg" ;;
+    homefifo) mkdir -p "$s/home/.icons/hicolor/48x48/apps" && mkfifo "$s/home/.icons/hicolor/48x48/apps/evil.png" ;;
+  esac
+  probe "$s" "$kind"
+  ok=1
+  ((rc == 0)) || ok=0
+  [[ $line == *" has=false "* && $line == *" ctl=1"* ]] || ok=0
+  case $kind in
+    reg) [[ $line == *" state=ok notif=copy polkit=copy evil=1 "* ]] || ok=0 ;;
+    swap) [[ $line == *" before=ok:shown state=no notif=none polkit=none evil=0 "* ]] || ok=0 ;;
+    *) [[ $line == *" state=no notif=none polkit=none evil=0 "* ]] || ok=0 ;;
+  esac
+  if ((ok)); then pass "$kind ($line)"; else bad "$kind: rc $rc, ${line:-no probe line} $(grep -E 'TypeError|ReferenceError' <<<"$out" | head -n 2)"; fi
 done
 
-# ---- Part 3: applications whose Icon= is a FIFO (review of eee45cc) ----
-# The Dock and the Launchpad load an application's Icon= through ThemeIcons.appIcon. Real Launchpad cells and the Apps
-# prewarm list, for four entries in a scratch applications directory: a FIFO path, a theme name whose file is a FIFO, a
-# regular path, a regular theme name. The FIFOs are refused (no source), the regular ones shown, and a control icon loads
-# afterwards (the loader never stalled).
-dcfg=$tmp/dcfg
-mkdir -p "$dcfg"
-for entry in shell/*; do
-  [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$dcfg/$(basename "$entry")"
-done
-cp tests/security/theme_icon_files.d/desktop_probe.qml "$dcfg/shell.qml"
+# ---- Part 2 ----
+qprobe=$tmp/qt_icon_lookup
+if command -v g++ >/dev/null && [[ -f /usr/include/qt6/QtGui/QIcon ]]; then
+  g++ -std=c++20 -fPIC -O1 -o "$qprobe" tests/security/theme_icon_files.d/qt_icon_lookup.cpp -Iui/i18n -I/usr/include/qt6 -I/usr/include/qt6/QtGui -I/usr/include/qt6/QtCore -lQt6Gui -lQt6Core
+else
+  qprobe=
+  echo "SKIP: theme icon files, part 2 controls (Qt alone with user search paths): g++ or Qt headers missing"
+fi
+hostile() { # <case> <theme> <setup> [nostall]: the shell shows the generic icon without a stall; Qt alone stalls
+  # (unless "nostall": a case the review asked to confirm irrelevant, slow rather than stuck for Qt alone)
+  local name=$1 theme=$2 mode=${4:-} s=$tmp/p2-$1 U H qrc
+  scratch "$s"
+  H=$s/home; U=$H/.local/share/icons
+  mkdir -p "$U/mytheme/48x48/apps"
+  printf '[Icon Theme]\nName=mytheme\nInherits=hicolor\nDirectories=48x48/apps\n\n[48x48/apps]\nSize=48\nType=Fixed\n' >"$U/mytheme/index.theme"
+  mkfifo "$s/outside/evil.png" "$s/outside/index.theme"
+  eval "$3"
+  probe "$s" "hostile-$name" QS_ICON_THEME="$theme"
+  local ok=1 note=
+  [[ $rc == 0 && $line == *" has=false "* && $line == *" state=no notif=none polkit=none evil=0 "* && $line == *" ctl=1"* ]] || { ok=0; note="shell: rc $rc ${line:-no probe line}"; }
+  if [[ -n $qprobe ]]; then
+    qrc=0
+    env -i PATH="$PATH" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" XDG_RUNTIME_DIR="$s/runtime" \
+      QT_QPA_PLATFORM=offscreen timeout -k 1 4 "$qprobe" "$theme" evil >/dev/null 2>&1 || qrc=$?
+    [[ $mode == nostall || $qrc == 124 ]] || { ok=0; note="$note; Qt alone did not stall (rc $qrc): the case proves nothing"; }
+    # The same lookup after the shell's policy function (the offscreen shell above never had user search paths).
+    qrc=0
+    pout=$(env -i PATH="$PATH" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" XDG_RUNTIME_DIR="$s/runtime" \
+      QT_QPA_PLATFORM=offscreen timeout -k 1 8 "$qprobe" --policy "$theme" evil 2>/dev/null) || qrc=$?
+    [[ $qrc == 0 && $pout == *"has evil=0"* && $pout == *done* ]] || { ok=0; note="$note; with the policy Qt still stalled or found it (rc $qrc)"; }
+  fi
+  local said="Qt alone stalls, Qt under the policy does not"
+  [[ $mode == nostall ]] && said="Qt under the policy finishes"
+  if ((ok)); then pass "hostile index.theme: $name (generic icon, no stall${qprobe:+; $said})"; else bad "hostile index.theme: $name: $note"; fi
+}
+hostile esc-section-backslash mytheme 'printf "\n[..\\\\..\\\\..\\\\..\\\\..\\\\outside]\nSize=48\nType=Fixed\n" >>"$U/mytheme/index.theme"; sed -i "s|^Directories=48x48/apps|Directories=48x48/apps,..\\\\\\\\..\\\\\\\\..\\\\\\\\..\\\\\\\\..\\\\\\\\outside|" "$U/mytheme/index.theme"'
+hostile esc-section-percent mytheme 'printf "\n[%%2E%%2E/%%2E%%2E/%%2E%%2E/%%2E%%2E/%%2E%%2E/outside]\nSize=48\nType=Fixed\n" >>"$U/mytheme/index.theme"; sed -i "s|^Directories=48x48/apps|Directories=48x48/apps,%2E%2E/%2E%2E/%2E%2E/%2E%2E/%2E%2E/outside|" "$U/mytheme/index.theme"'
+hostile inherits-hex-slash mytheme 'sed -i "s|^Inherits=hicolor|Inherits=..\\\\x2f..\\\\x2f..\\\\x2f..\\\\x2foutside|" "$U/mytheme/index.theme"'
+hostile inherits-octal-slash mytheme 'sed -i "s|^Inherits=hicolor|Inherits=..\\\\57..\\\\57..\\\\57..\\\\57outside|" "$U/mytheme/index.theme"'
+hostile inherits-escaped-key mytheme 'sed -i "s|^Inherits=hicolor|Inherit%73=../../../../outside|" "$U/mytheme/index.theme"'
+hostile inherits-continuation mytheme 'sed -i "s|^Inherits=hicolor|Inherits=hicolor,\\\\\n../../../../outside|" "$U/mytheme/index.theme"'
+hostile inherits-dotdot mytheme 'sed -i "s|^Inherits=hicolor|Inherits=..|" "$U/mytheme/index.theme"; mkfifo "$H/.local/share/index.theme"'
+hostile inherits-dot mytheme 'sed -i "s|^Inherits=hicolor|Inherits=.|" "$U/mytheme/index.theme"; mkfifo "$U/index.theme"'
+hostile user-hicolor-under-adwaita Adwaita 'printf "[Icon Theme]\nName=hicolor\nInherit%%73=../../../../outside\nDirectories=48x48/apps\n\n[48x48/apps]\nSize=48\nType=Fixed\n" >"$U/hicolor/index.theme"'
+hostile fifo-index-and-cache mytheme 'rm "$U/mytheme/index.theme"; mkfifo "$U/mytheme/index.theme" "$U/mytheme/icon-theme.cache"'
+# The review's minors, confirmed irrelevant once user folders are out of Qt's search paths: a 60 MiB index.theme, a theme
+# that is a symlink to /proc/self.
+hostile huge-index mytheme 'head -c 62914560 /dev/zero | tr "\\0" "x" >>"$U/mytheme/index.theme"' nostall
+hostile proc-symlink-theme mytheme 'rm -r "$U/mytheme"; ln -s /proc/self "$U/mytheme"' nostall
+
+# ---- Part 3: icons named by applications and files ----
+mkcfg "$tmp/dcfg" desktop_probe.qml
 s=$tmp/desktop
-mkdir -p -m 700 "$s/runtime" "$s/cache"
-mkdir -p "$s/home/.local/share/applications" "$s/home/Desktop" "$s/data/pixmaps" "$s/elsewhere" "$s/state" "$s/config"
+scratch "$s"
+mkdir -p "$s/home/.local/share/applications" "$s/home/Desktop" "$s/elsewhere"
 printf '%s' "$png" | base64 -d >"$s/data/pixmaps/ctl.png"
-cp "$s/data/pixmaps/ctl.png" "$s/elsewhere/good.png"
+printf '%s' "$png" | base64 -d >"$s/elsewhere/good.png"
 mkfifo "$s/elsewhere/evil-path.png" "$s/data/pixmaps/evilname.png"
 desk() { printf '[Desktop Entry]\nType=Application\nName=%s\nExec=true\nIcon=%s\n' "$1" "$2" >"$s/home/.local/share/applications/$1.desktop"; }
 desk gf-fifo-path "$s/elsewhere/evil-path.png"
@@ -116,111 +169,124 @@ desk gf-ok-path "$s/elsewhere/good.png"
 desk gf-ok-name ctl
 cp "$s/home/.local/share/applications/gf-fifo-path.desktop" "$s/home/.local/share/applications/gf-fifo-name.desktop" "$s/home/Desktop/"
 mkfifo "$s/home/Desktop/photo.png"
+mapfile -t e < <(shellenv "$s")
 rc=0
-out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION \
-  GRASSFIELD_DEV=1 PROBE_DESKTOP="$s/home/Desktop" HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" \
-  XDG_CONFIG_HOME="$s/home/.config" XDG_STATE_HOME="$s/home/.local/state" GRASSFIELD_STATE_HOME="$s/state" GRASSFIELD_CONFIG_HOME="$s/config" \
-  GRASSFIELD_TEST_TMP="$s" XDG_RUNTIME_DIR="$s/runtime" XDG_CACHE_HOME="$s/cache" \
-  QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_LANG=en GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" \
-  timeout -k 3 90 qs -p "$dcfg" --no-color 2>&1) || rc=$?
+out=$(env "${e[@]}" PROBE_DESKTOP="$s/home/Desktop" timeout -k 3 90 qs -p "$tmp/dcfg" --no-color 2>&1) || rc=$?
 dline() { grep -o "probe: $1 .*" <<<"$out" | head -n 1 || true; }
 dcheck() { # <label> <ok>
-  if [[ $2 == 1 ]]; then echo "PASS: theme icon files, application icons: $1"; else echo "FAIL: theme icon files, application icons: $1 (rc $rc; $(grep -o 'probe: .*' <<<"$out" | tr '\n' '|' | cut -c1-400))"; fail=1; fi
+  if [[ $2 == 1 ]]; then pass "application icons: $1"; else bad "application icons: $1 (rc $rc; $(grep -o 'probe: .*' <<<"$out" | tr '\n' '|' | cut -c1-400))"; fi
 }
 l=$(dline gf-fifo-path); dcheck "a FIFO Icon= path is refused" "$([[ $l == *" verdict=no source= "* ]] && echo 1)"
-l=$(dline gf-fifo-name); dcheck "an Icon= theme name whose file is a FIFO is refused" "$([[ $l == *" verdict=no source= "* ]] && echo 1)"
-l=$(dline gf-ok-path); dcheck "a regular Icon= path is shown and prewarmed" "$([[ $l == *" verdict=ok source=file://$s/elsewhere/good.png prewarmed=true"* ]] && echo 1)"
-l=$(dline gf-ok-name); dcheck "a regular Icon= theme name is shown and prewarmed" "$([[ $l == *" verdict=ok source=image://icon/ctl prewarmed=true"* ]] && echo 1)"
+l=$(dline gf-fifo-name); dcheck "an Icon= name whose user file is a FIFO is refused" "$([[ $l == *" verdict=no source= "* ]] && echo 1)"
+l=$(dline gf-ok-path); dcheck "a regular Icon= path is shown as a copy and prewarmed" "$([[ $l == *" verdict=ok source=copy prewarmed=true"* ]] && echo 1)"
+l=$(dline gf-ok-name); dcheck "a user-installed icon name is shown as a copy and prewarmed" "$([[ $l == *" verdict=ok source=copy prewarmed=true"* ]] && echo 1)"
 l=$(dline thumbnail); dcheck "a desktop picture that is a FIFO gets no thumbnail" "$([[ $l == "probe: thumbnail verdict=no source=" ]] && echo 1)"
 dcheck "Launchpad cells, desktop icons and the About panel never stalled the loader or the GUI thread" "$([[ $rc == 0 && $(dline done) == "probe: done ctl=1" ]] && echo 1)"
-# The other sites (their windows need toplevels or layer-shell, not made offscreen) use the same call, asynchronously.
 site_ok=1
 for site in 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(Apps.lookup(tile.modelData.appIds[index])' 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(mini.entry ? mini.entry.icon' \
   'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(label.entry ? label.entry.icon' 'shell/overlay/ForceQuitPanel.qml:return ThemeIcons.appIcon(e ? e.icon' \
   'shell/overlay/AppAboutPanel.qml:ThemeIcons.appIcon(root.entry ? root.entry.icon' 'shell/switcher/SwitcherWindow.qml:ThemeIcons.appIcon(tile.modelData.icon' \
-  'shell/search/SearchPanel.qml:ThemeIcons.appIcon(row.info.appIcon' 'shell/search/Search.qml:iconSource: "", appIcon: r.app.icon'; do
+  'shell/search/SearchPanel.qml:ThemeIcons.appIcon(row.info.appIcon' 'shell/search/Search.qml:iconSource: "", appIcon: r.app.icon' \
+  'shell/dock/Dock.qml:ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable")' 'shell/dock/StackIcon.qml:ThemeIcons.fileSource(root.path)' \
+  'shell/dock/StackIcon.qml:ThemeIcons.appIcon(names.length > 0 ? names[0] : ""' 'shell/stages/Stages.qml:ThemeIcons.appIcon(tile.entry ? tile.entry.icon'; do
   grep -qF -- "${site#*:}" "${site%%:*}" || { echo "missing: $site"; site_ok=0; }
 done
-for f in shell/overview/OverviewWindow.qml shell/overlay/ForceQuitPanel.qml shell/overlay/AppAboutPanel.qml shell/switcher/SwitcherWindow.qml shell/search/SearchPanel.qml shell/launchpad/AppsCell.qml shell/desktop/DesktopIcon.qml shell/dock/Dock.qml; do
-  grep -q 'Quickshell.iconPath(.*\(icon\|iconTheme\)' "$f" && { echo "unchecked: $f"; site_ok=0; }
+for f in shell/overview/OverviewWindow.qml shell/overlay/ForceQuitPanel.qml shell/overlay/AppAboutPanel.qml shell/switcher/SwitcherWindow.qml shell/search/SearchPanel.qml shell/launchpad/AppsCell.qml shell/desktop/DesktopIcon.qml shell/dock/Dock.qml shell/dock/StackIcon.qml shell/stages/Stages.qml; do
+  grep -q 'Quickshell.iconPath(.*\(\.icon\b\|iconTheme\)' "$f" && { echo "unchecked: $f"; site_ok=0; }
 done
-dcheck "Search, the Switcher, the Overview, Force Quit and About load Icon= through ThemeIcons.appIcon" "$site_ok"
-# The Dock's two application icon sites use the same call (its window is not made offscreen).
-dock_ok=$( [[ $(grep -c 'ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable")' shell/dock/Dock.qml) == 2 ]] && ! grep -q 'Quickshell.iconPath(tile.modelData.icon' shell/dock/Dock.qml && echo 1)
-dcheck "the Dock loads application icons through ThemeIcons.appIcon" "$dock_ok"
+dcheck "Search, the Switcher, the Overview, Stages, Force Quit, About, the Dock and its stacks load such icons through ThemeIcons" "$site_ok"
 
-# ---- Part 2: Qt with real-session search paths ----
-probe=$tmp/qt_icon_lookup
-if ! command -v g++ >/dev/null || [[ ! -f /usr/include/qt6/QtGui/QIcon ]]; then
-  echo "SKIP: theme icon files, Qt lookup with real-session search paths (g++ or Qt headers missing)"
+# ---- Part 4: the policy ----
+if ! command -v gcc >/dev/null; then
+  echo "SKIP: theme icon files, part 4 open log (gcc missing)"
   exit $fail
 fi
-g++ -std=c++20 -fPIC -O1 -o "$probe" tests/security/theme_icon_files.d/qt_icon_lookup.cpp -I/usr/include/qt6 -I/usr/include/qt6/QtGui -I/usr/include/qt6/QtCore -lQt6Gui -lQt6Core
-# ThemeIcons' checker, exactly as the shell runs it (the string literal of ThemeIcons.script).
-python3 -I - shell/services/ThemeIcons.qml "$tmp/checker.sh" <<'PY'
+gcc -shared -fPIC -O1 -o "$tmp/openlog.so" tests/security/theme_icon_files.d/openlog.c -ldl
+mkcfg "$tmp/pcfg" policy_probe.qml
+s=$tmp/policy
+scratch "$s"
+H=$s/home; U=$H/.local/share/icons
+mkdir -p "$H/.icons/hicolor" "$s/data/icons/hicolor/48x48/apps"
+printf '%s' "$png" | base64 -d >"$U/hicolor/48x48/apps/useronly.png"
+mkfifo "$U/hicolor/index.theme" "$U/hicolor/icon-theme.cache" "$U/hicolor/48x48/apps/evil.png" "$H/.icons/hicolor/index.theme" \
+  "$s/data/icons/hicolor/index.theme" "$s/data/pixmaps/evil.png"
+mapfile -t e < <(shellenv "$s")
+rc=0
+out=$(env "${e[@]}" LD_PRELOAD="$tmp/openlog.so" OPENLOG="$tmp/policy-opens.log" timeout -k 3 30 qs -p "$tmp/pcfg" --no-color 2>&1) || rc=$?
+[[ $rc == 0 && $(grep -c "probe: .* has=" <<<"$out") == 4 ]] && pass "policy: Qt's lookups finish next to FIFO theme files in every user folder" || bad "policy: lookups: rc $rc $(grep -o 'probe: .*' <<<"$out" | tr '\n' '|')"
+grep -q "probe: child environment same=true" <<<"$out" && pass "policy: a child process gets the shell's environment unchanged" || bad "policy: child environment: $(grep -o 'probe: child.*' <<<"$out")"
+paths=$(grep -o 'grassfield-icons: theme search paths .*' <<<"$out" | head -n 1 || true)
+python3 -I - "$s" "$paths" <<'PY' && pass "policy: Qt's icon search paths hold no directory the user can change ($(sed "s|$s|\$S|g" <<<"$paths"))" || bad "policy: search paths: $paths"
+import os, sys
+scratch, line = sys.argv[1], sys.argv[2]
+if not line.startswith("grassfield-icons: theme search paths "):
+    sys.exit(1)
+rest = line[len("grassfield-icons: theme search paths "):]
+theme, _, fallback = rest.partition(" fallback ")
+dirs = [d for d in theme.split(";") + fallback.split(";") if d and not d.startswith(":")]
+def mapped_root():
+    if open("/proc/self/uid_map").read().split()[:2] == ["0", "0"]:
+        return -1
+    return int(open("/proc/sys/kernel/overflowuid").read())
+ROOT = mapped_root()
+ok = bool(dirs)
+for d in dirs:
+    p = os.path.realpath(d)
+    if p != d or p.startswith(scratch) or p.startswith(os.path.expanduser("~")):
+        ok = False
+    while ok:
+        st = os.stat(p)
+        if st.st_uid not in (0, ROOT) or st.st_uid == os.geteuid() or os.access(p, os.W_OK):
+            ok = False
+        if p == "/":
+            break
+        p = os.path.dirname(p)
+sys.exit(0 if ok else 1)
+PY
+[[ -s $tmp/policy-opens.log ]] || bad "policy: the open log is empty (the shim did not load)"
+user_opens=$(grep -E "^OPEN [0-9]+ -?[0-9]+ ($s/home/\.local/share/icons|$s/home/\.icons|$s/home/\.local/share/pixmaps|$s/data/icons|$s/data/pixmaps)(/|$)" "$tmp/policy-opens.log" || true)
+[[ -z $user_opens ]] && pass "policy: the shell opened no file in the user's icon folders" || bad "policy: opens in user icon folders: $(head -n 3 <<<"$user_opens" | sed "s|$s|\$S|g")"
+# The copy helper itself: under the same log, every open of a user icon file carries O_NOFOLLOW|O_NONBLOCK (or is a
+# directory listing).
+s=$tmp/p4-helper
+scratch "$s"
+mkfifo "$s/home/.local/share/icons/hicolor/48x48/apps/evil.png"
+probe "$s" helper-log LD_PRELOAD="$tmp/openlog.so" OPENLOG="$tmp/helper-opens.log"
+python3 -I - "$s" "$tmp/helper-opens.log" <<'PY' && pass "policy: the copy helper opens user icon files only with O_NOFOLLOW|O_NONBLOCK" || bad "policy: unsafe opens of user icon files"
+import os, re, sys
+scratch = sys.argv[1]
+O_NONBLOCK, O_NOFOLLOW, O_DIRECTORY = os.O_NONBLOCK, os.O_NOFOLLOW, os.O_DIRECTORY
+seen = bad = 0
+for line in open(sys.argv[2], errors="replace"):
+    m = re.match(r"OPEN (\d+) (-?\d+) (.*)$", line.rstrip("\n"))
+    icon_dirs = [scratch + d for d in ("/home/.local/share/icons", "/home/.icons", "/home/.local/share/pixmaps", "/data/icons", "/data/pixmaps")]
+    if not m or not any(m.group(3) == d or m.group(3).startswith(d + "/") for d in icon_dirs):
+        continue
+    flags = int(m.group(2))
+    if flags >= 0 and flags & O_DIRECTORY:
+        continue
+    seen += 1
+    if flags < 0 or not (flags & O_NONBLOCK and flags & O_NOFOLLOW):
+        bad += 1
+        print("unsafe:", line.strip().replace(scratch, "$S"))
+sys.exit(0 if seen > 0 and bad == 0 else 1)
+PY
+
+# Cost: a user theme of 300 folders x 330 files; 24 names not found anywhere (the worst case: every candidate tried).
+s=$tmp/cost; U=$s/home/.local/share/icons/bigtheme
+mkdir -p -m 700 "$s/out"
+for i in $(seq 1 300); do mkdir -p "$U/d$i/apps"; (cd "$U/d$i/apps" && touch $(seq -f "icon%g.png" 1 330)); done
+python3 -I - shell/services/ThemeIcons.qml "$tmp/helper.py" <<'PY'
 import json, re, sys
 src = open(sys.argv[1], encoding="utf-8").read()
 i = src.index("readonly property string script:")
 j = src.index("\n\n", i)
-literals = re.findall(r'"((?:[^"\\]|\\.)*)"', src[i:j])
-open(sys.argv[2], "w", encoding="utf-8").write("".join(json.loads('"' + l + '"') for l in literals))
+open(sys.argv[2], "w", encoding="utf-8").write("".join(json.loads('"' + l + '"') for l in re.findall(r'"((?:[^"\\]|\\.)*)"', src[i:j])))
 PY
-
-qcase() { # <kind> <expected verdict> <qt alone must stall: yes|no> <setup> [name]
-  local kind=$1 want=$2 stall=$3 name=${5:-evil} s H U D verdict qt qrc
-  s=$(mktemp -d "$tmp/q.XXXXXX"); H=$s/home; U=$H/.local/share/icons; D=$s/data
-  mkdir -p "$U/hicolor/48x48/apps" "$U/mytheme/48x48/apps" "$H/.icons" "$D/pixmaps" "$s/elsewhere"
-  printf '%s' "$png" | base64 -d >"$s/ok.png"
-  printf '[Icon Theme]\nName=mytheme\nInherits=hicolor\nDirectories=48x48/apps\n\n[48x48/apps]\nSize=48\nType=Fixed\n' >"$U/mytheme/index.theme"
-  cp "$s/ok.png" "$U/mytheme/48x48/apps/evil.png"
-  eval "$4"
-  local envs=(env -i PATH="$PATH" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS="$D:/usr/local/share:/usr/share" XDG_RUNTIME_DIR="$s" QT_QPA_PLATFORM=offscreen)
-  verdict=$("${envs[@]}" timeout -k 2 30 sh "$tmp/checker.sh" 8388608 67108864 67108864 check "$name" | grep -E "^(ok|no) $name\$" | cut -d' ' -f1 || true)
-  local ok=1 note=
-  [[ $verdict == "$want" ]] || ok=0
-  if [[ $verdict == ok ]]; then
-    # What ThemeIcons does next: Qt's lookup, which must finish.
-    qrc=0; qt=$("${envs[@]}" timeout -k 1 8 "$probe" mytheme "$name" 2>/dev/null | tail -n 1) || qrc=$?
-    [[ $qrc == 0 && $qt == done ]] || { ok=0; note="Qt stalled or failed after an ok (rc $qrc)"; }
-  elif [[ $stall == yes ]]; then
-    # The case is real: Qt alone stalls on it.
-    qrc=0; "${envs[@]}" timeout -k 1 4 "$probe" mytheme "$name" >/dev/null 2>&1 || qrc=$?
-    [[ $qrc == 124 ]] || { ok=0; note="Qt alone did not stall (rc $qrc): the case proves nothing"; }
-  fi
-  if ((ok)); then echo "PASS: theme icon files, Qt search paths: $kind (verdict $verdict)"; else echo "FAIL: theme icon files, Qt search paths: $kind: verdict ${verdict:-none} (want $want) $note"; fail=1; fi
-  rm -rf "$s"
-}
-
-qcase control ok no ''
-qcase index-current no yes 'rm "$U/mytheme/index.theme"; mkfifo "$U/mytheme/index.theme"'
-qcase icon-theme-cache no yes 'mkfifo "$U/mytheme/icon-theme.cache"'
-qcase inherited-index no no 'mkfifo "$U/hicolor/index.theme"'
-qcase theme-icon no yes 'rm "$U/mytheme/48x48/apps/evil.png"; mkfifo "$U/mytheme/48x48/apps/evil.png"'
-qcase hicolor-icon no yes 'rm "$U/mytheme/48x48/apps/evil.png"; mkfifo "$U/hicolor/48x48/apps/evil.png"'
-qcase scalable-icon no yes 'rm "$U/mytheme/48x48/apps/evil.png"; mkdir -p "$U/hicolor/scalable/apps"; mkfifo "$U/hicolor/scalable/apps/evil.svg"'
-qcase home-icons no yes 'rm "$U/mytheme/48x48/apps/evil.png"; mkdir -p "$H/.icons/mytheme/48x48/apps"; mkfifo "$H/.icons/mytheme/48x48/apps/evil.png"'
-qcase dir-symlink no yes 'rm -r "$U/mytheme/48x48"; mkdir -p "$s/elsewhere/apps"; mkfifo "$s/elsewhere/apps/evil.png"; ln -s "$s/elsewhere" "$U/mytheme/48x48"'
-qcase pixmaps no yes 'rm "$U/mytheme/48x48/apps/evil.png"; mkfifo "$D/pixmaps/evil.png"'
-qcase dev-zero no no 'rm "$U/mytheme/48x48/apps/evil.png"; ln -s /dev/zero "$U/mytheme/48x48/apps/evil.png"'
-qcase oversized no no 'rm "$U/mytheme/48x48/apps/evil.png"; truncate -s 9M "$U/mytheme/48x48/apps/evil.png"'
-# Review of 100692f (regressions against eee45cc's walk, and more of Qt 6.11's reading of index.theme).
-qcase section-not-in-Directories no yes 'rm "$U/mytheme/48x48/apps/evil.png"; printf "\n[hidden/apps]\nSize=48\nType=Fixed\n" >>"$U/mytheme/index.theme"; mkdir -p "$U/mytheme/hidden/apps"; mkfifo "$U/mytheme/hidden/apps/evil.png"'
-qcase quoted-Directories no yes 'rm "$U/mytheme/48x48/apps/evil.png"; printf "[Icon Theme]\nName=mytheme\nInherits=hicolor\nDirectories=\"q,r\"\n\n[q,r]\nSize=48\nType=Fixed\n" >"$U/mytheme/index.theme"; mkdir -p "$U/mytheme/q,r"; mkfifo "$U/mytheme/q,r/evil.png"'
-qcase inherits-dot-theme-index no yes 'rm "$U/mytheme/48x48/apps/evil.png"; sed -i "s/^Inherits=hicolor/Inherits=.x/" "$U/mytheme/index.theme"; mkdir -p "$H/.icons/.x"; mkfifo "$H/.icons/.x/index.theme"'
-qcase inherits-dot-theme-icon no yes 'rm "$U/mytheme/48x48/apps/evil.png"; sed -i "s/^Inherits=hicolor/Inherits=.x/" "$U/mytheme/index.theme"; mkdir -p "$H/.icons/.x/48x48/apps"; printf "[Icon Theme]\nName=x\nDirectories=48x48/apps\n\n[48x48/apps]\nSize=48\nType=Fixed\n" >"$H/.icons/.x/index.theme"; mkfifo "$H/.icons/.x/48x48/apps/evil.png"'
-qcase dash-shortened-7 no yes 'rm "$U/mytheme/48x48/apps/evil.png"; mkfifo "$U/mytheme/48x48/apps/evil.png"' evil-a-b-c-d-e-f
-qcase section-traversal no yes 'rm "$U/mytheme/48x48/apps/evil.png"; printf "\n[../../../../../elsewhere/apps]\nSize=48\nType=Fixed\n" >>"$U/mytheme/index.theme"; mkdir -p "$s/elsewhere/apps"; mkfifo "$s/elsewhere/apps/evil.png"'
-qcase inherits-traversal no yes 'rm "$U/mytheme/48x48/apps/evil.png"; sed -i "s|^Inherits=hicolor|Inherits=../../../../elsewhere/t|" "$U/mytheme/index.theme"; mkdir -p "$s/elsewhere/t"; mkfifo "$s/elsewhere/t/index.theme"'
-
-# Cost: a user theme of 300 directories x 330 files; one batch of 8 names.
-s=$tmp/cost; H=$s/home; U=$H/.local/share/icons/bigtheme
-mkdir -p "$U"
-dirs=$(seq -f "d%g/apps" 1 300 | paste -sd, -)
-printf '[Icon Theme]\nName=bigtheme\nDirectories=%s\n' "$dirs" >"$U/index.theme"
-for i in $(seq 1 300); do mkdir -p "$U/d$i/apps"; (cd "$U/d$i/apps" && touch $(seq -f "icon%g.png" 1 330)); done
+args=()
+for i in $(seq 1 24); do args+=(name "$i" "missing$i"); done
 start=$(date +%s%N)
-mkdir -p -m 700 "$s/run"; out=$(env -i PATH="$PATH" XDG_RUNTIME_DIR="$s/run" HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS=/usr/local/share:/usr/share timeout -k 2 30 sh "$tmp/checker.sh" 8388608 67108864 67108864 check $(seq -f "icon%g" 1 8)) || true
+n=$(env -i PATH="$PATH" HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" python3 -I "$tmp/helper.py" "$s/out" 8388608 16777216 134217728 "${args[@]}" | grep -c '^no' || true)
 ms=$((($(date +%s%N) - start) / 1000000))
-oks=$(grep -c '^ok icon' <<<"$out" || true)
-if [[ $oks == 8 ]] && ((ms < 10000)); then echo "PASS: theme icon files, cost: 8 names against 99k files in ${ms} ms"; else echo "FAIL: theme icon files, cost: $oks/8 ok in ${ms} ms"; fail=1; fi
+if [[ $n == 24 ]] && ((ms < 10000)); then pass "cost: 24 names looked up next to a user theme of 99k files in ${ms} ms"; else bad "cost: $n/24 answered in ${ms} ms"; fi
 exit $fail
