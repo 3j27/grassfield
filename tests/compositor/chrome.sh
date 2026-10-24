@@ -364,10 +364,20 @@ if [[ -x $settings ]]; then
     check_corner "Settings (org.grassfield.*)" 7 10 26
     check_app_lights "Settings (its own lights)" "$sx" "$sy"
     check_grey "Settings (active): its own lights coloured" 1
-    pointer abs $((sx + 26 + 23 + 12)) $((sy + 26)) sleep 400 # between the minimize and zoom lights
-    capture settings-hover
-    crops settings-hover "$sx" "$((sy + (plugin ? GF_TB_HEIGHT : 0)))" "$sw" # the crop then starts at the surface top
-    measure_app settings-hover "$sx" "$sy" "$sw"
+    # Between the minimize and zoom lights. The app draws the glyphs itself, from the pointer events it gets: up to three
+    # looks 400 ms apart, with 1 px of motion before each (integrator runs 2026-10-24 at load 11-18: no glyph after one
+    # look of 400 ms, twice; the same step passed earlier). The number of looks is logged: always 3 with no glyph means the
+    # pointer events do not reach the window.
+    hx=$((sx + 26 + 23 + 12)) hy=$((sy + 26))
+    pointer abs "$hx" "$hy" sleep 400
+    for look in 1 2 3; do
+      capture settings-hover
+      crops settings-hover "$sx" "$((sy + (plugin ? GF_TB_HEIGHT : 0)))" "$sw" # the crop then starts at the surface top
+      measure_app settings-hover "$sx" "$sy" "$sw"
+      ((${m[close_glyph]:-0} >= 6 && ${m[minimize_glyph]:-0} >= 6 && ${m[zoom_glyph]:-0} >= 6)) && break
+      ((look < 3)) && pointer abs $((hx + look % 2)) "$hy" sleep 400
+    done
+    say "  Settings hover: glyphs looked for $look time(s)"
     check_glyphs "Settings, pointer between its minimize and zoom lights: glyphs on all three" 0
     park
   else
