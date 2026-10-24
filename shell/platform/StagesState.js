@@ -129,7 +129,9 @@ function parse(data) {
 // `staleMs` > 0: call onTick after that many ms; `state`: the state to show (undefined: unchanged; null: none, the strip
 // hides, rather than a stale one shown as current).
 // Staleness is bounded by time: a notice that no successful fetch has answered for more than staleAfterMs means no state,
-// however many notices keep coming (each one restarts the retries, never the clock).
+// however many notices keep coming (each one restarts the retries, never the clock), unless a fetch is under way: its
+// answer (or its 2-s deadline) decides, so slow fetches under a steady flow of notices never make the strip flicker. The
+// worst case is staleAfterMs plus one fetch deadline.
 
 const maxTries = 3;              // retries after a failed fetch before the state is given up as unknown
 const retryBaseMs = 200;         // backoff: 200, 400, 800 ms
@@ -146,16 +148,17 @@ function step(fetch, extra) {
     return {fetch: Object.assign({}, fetch, extra || {}), start: false, retryMs: 0, staleMs: 0, state: undefined};
 }
 
-// The time bound on what is shown: none once the oldest unanswered notice is staleAfterMs old, else when to look again.
+// The time bound on what is shown: none once the oldest unanswered notice is staleAfterMs old and no fetch is under way
+// (a running fetch ends in onReply or onTimeout, which look again), else when to look again.
 function bounded(out, ctx) {
     const visible = out.state !== undefined ? out.state : ctx.shown;
     if (!ctx.active || out.fetch.pendingSince < 0 || !visible)
         return out;
     const left = out.fetch.pendingSince + staleAfterMs - ctx.now;
-    if (left <= 0)
-        out.state = null;
-    else
+    if (left > 0)
         out.staleMs = left;
+    else if (!out.fetch.running)
+        out.state = null;
     return out;
 }
 
