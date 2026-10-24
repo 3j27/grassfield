@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "ClientChrome.js" as ClientChrome
 import "Layout.js" as Layout
 import "V2.js" as V2
 import "../dock/Geometry.js" as DockGeometry
@@ -123,15 +124,21 @@ Variants {
             })
         property string layoutSignature: ""
 
+        // The titlebar band of a window: the plugin's strip, or none for a window that draws its own chrome while the plugin
+        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome).
+        function bandOf(w: var): real {
+            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight);
+        }
+
         // Window rectangles in this window's coordinates, laid out when the window ids, rects or
         // the area actually changed (toplevel refreshes re-deliver identical data).
         function relayout(): void {
             const a = area;
             if (!(a.w > 1 && a.h > 1))
                 return;
-            // v2: the layout includes the titlebar band the compositor draws above each window.
-            const band = v2 ? Tokens.overviewWindowTitlebarHeight : 0;
-            const input = wins.map(w => V2.layoutInput(w.address, w.x, w.y - Tokens.menubarHeight, w.w, w.h, band));
+            // v2: the layout includes the titlebar band the compositor draws above each window (none above a window that
+            // draws its own chrome, ADR-0015).
+            const input = wins.map(w => V2.layoutInput(w.address, w.x, w.y - Tokens.menubarHeight, w.w, w.h, v2 ? bandOf(w) : 0));
             const sig = Layout.signature(input, a);
             if (sig === layoutSignature)
                 return;
@@ -155,7 +162,7 @@ Variants {
                 const r = placedMap[w.address];
                 if (!r || w.fullscreen)
                     continue;
-                const s = V2.surfaceRect(r, w.w, Tokens.overviewWindowTitlebarHeight, modelData.x, modelData.y, Tokens.menubarHeight);
+                const s = V2.surfaceRect(r, w.w, bandOf(w), modelData.x, modelData.y, Tokens.menubarHeight);
                 out.push({
                     address: w.address,
                     x: s.x,

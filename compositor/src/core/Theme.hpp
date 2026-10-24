@@ -3,9 +3,10 @@
 // Grassfield titlebar constants (S2 / M1 decorations).
 //
 // Single source of the plugin's visual values. The colours of the chrome come from the design tokens
-// (ui/tokens/tokens.json group "titlebar", generated into ThemeTokens.hpp, ADR-0003); the metrics below are still plain
-// literals (tests/compositor/titlebar_geometry.sh reads them). Grassfield's own values, not Apple's. No Hyprland
-// includes: this header is used by the unit tests.
+// (ui/tokens/tokens.json groups "titlebar" and "window", generated into ThemeTokens.hpp, ADR-0003); the metrics below are
+// still plain literals (tests/compositor/titlebar_geometry.sh reads them) and must equal the "window" tokens the apps
+// draw their own lights with (ADR-0015 P7): checked at compile time below and in compositor/tests/ClientChromeTest.cpp.
+// Grassfield's own values, not Apple's. No Hyprland includes: this header is used by the unit tests.
 
 #include "ThemeTokens.hpp"
 
@@ -64,11 +65,23 @@ namespace gf::theme {
     // floating geometry, which the zoom toggle restores).
     inline constexpr double kDragThreshold = 4.0;
 
-    // ---- Colors ----
-    inline constexpr Rgba kCloseColor    = fromHex(0xE5534B);
-    inline constexpr Rgba kMinimizeColor = fromHex(0xD9A93B);
-    inline constexpr Rgba kZoomColor     = fromHex(0x4FA64F);
-    inline constexpr Rgba kGlyphColor    = Rgba{.r = 0.F, .g = 0.F, .b = 0.F, .a = 0.5F}; // darkens the light under it
+    // ---- Colors (design tokens "window": the apps' lights are the same) ----
+    inline constexpr Rgba kCloseColor    = fromHex(tokens::kWindowCloseColor);
+    inline constexpr Rgba kMinimizeColor = fromHex(tokens::kWindowMinimizeColor);
+    inline constexpr Rgba kZoomColor     = fromHex(tokens::kWindowZoomColor);
+    inline constexpr Rgba kGlyphColor    = Rgba{.r = 0.F, .g = 0.F, .b = 0.F, .a = static_cast<float>(tokens::kWindowGlyphOpacity)}; // darkens the light under it
+
+    // ADR-0015 P7: the lights the plugin draws are the ones the apps draw (ui/tokens/tokens.json "window"). The metrics stay
+    // literals for titlebar_geometry.sh; a token change that leaves them behind does not build.
+    static_assert(kButtonDiameter == tokens::kWindowLightDiameter, "kButtonDiameter must equal window.lightDiameter");
+    static_assert(kButtonSpacing == tokens::kWindowLightGap, "kButtonSpacing must equal window.lightGap");
+    static_assert(kTitlebarHeight == tokens::kWindowTitlebarHeight, "kTitlebarHeight must equal window.titlebarHeight");
+    static_assert(kButtonInsetLeft == tokens::kWindowTitlebarLightInset, "kButtonInsetLeft must equal window.titlebarLightInset");
+    static_assert(kTitlePadding == tokens::kWindowTitleGap, "kTitlePadding must equal window.titleGap");
+    static_assert(kGlyphRatio == tokens::kWindowGlyphRatio, "kGlyphRatio must equal window.glyphRatio");
+    static_assert(kGlyphStroke == tokens::kWindowGlyphStroke, "kGlyphStroke must equal window.glyphStroke");
+    static_assert(tokens::kWindowInactiveLightDark == tokens::kTitlebarInactiveButtonDark, "window.inactiveLightDark must equal titlebar.inactiveButtonDark");
+    static_assert(tokens::kWindowInactiveLightLight == tokens::kTitlebarInactiveButtonLight, "window.inactiveLightLight must equal titlebar.inactiveButtonLight");
 
     enum class Appearance : uint8_t {
         Dark,

@@ -98,7 +98,7 @@ namespace {
         seat.keyboardGrab = g_pSeatManager && g_pSeatManager->m_seatGrab && g_pSeatManager->m_seatGrab->m_keyboard;
         seat.exclusiveLayer =
             g_pInputManager && std::ranges::any_of(g_pInputManager->m_exclusiveLSes, [](const PHLLSREF& ls) { return ls && ls->m_mapped; });
-        seat.locked = g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
+        seat.locked = !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked(); // undecidable: locked
         return seat;
     }
 

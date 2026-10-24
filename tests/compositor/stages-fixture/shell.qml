@@ -14,9 +14,11 @@
 //     (shell/security/polkit/AuthAgent.qml: a full-output Overlay-layer surface with Exclusive keyboard interactivity and a
 //     password field). It logs every key the field receives (test text only, never a real password). Escape releases it
 //     as the dialog does when it ends: the keyboard interactivity goes to None first, the surface unmaps 400 ms later.
+//   - ondemand (GF_STAGES_ROLE=ondemand, another instance): a Top-layer surface with OnDemand keyboard interactivity in the
+//     bottom-left corner (what a clickable banner is to Hyprland), logging every key it receives.
 // Input (validated): GF_STAGES_OUTPUT (output name, required), GF_STAGES_TILES (JSON array of {x,y,w,h} in layout
 // coordinates, at most 8), GF_STAGES_STRIP (JSON {x,y,w,h}: the strip surface box in layout coordinates), GF_STAGES_ROLE
-// ("strip", the default, "exclusive", "popup" or "polkit").
+// ("strip", the default, "exclusive", "popup", "polkit" or "ondemand").
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -49,7 +51,7 @@ ShellRoot {
     readonly property var screen: Quickshell.screens.find(s => s.name === root.outputName) ?? null
     readonly property string role: {
         const raw = Quickshell.env("GF_STAGES_ROLE") ?? "";
-        return raw === "exclusive" || raw === "popup" || raw === "polkit" ? raw : "strip";
+        return raw === "exclusive" || raw === "popup" || raw === "polkit" || raw === "ondemand" ? raw : "strip";
     }
     // polkit role: the dialog holds the keyboard until Escape (then None, and unmapped 400 ms later).
     property bool polkitHeld: true
@@ -132,6 +134,37 @@ ShellRoot {
             anchors.fill: parent
             focus: true
             Keys.onPressed: event => console.log("[stages-fixture] key " + event.text)
+        }
+    }
+
+    // qmllint disable uncreatable-type
+    PanelWindow {
+        // qmllint enable uncreatable-type
+        id: onDemandWindow
+
+        visible: root.role === "ondemand" && root.screen !== null
+        screen: root.screen
+        anchors {
+            bottom: true
+            left: true
+        }
+        // qmllint disable unqualified unresolved-type
+        margins.bottom: 40
+        margins.left: 40
+        // qmllint enable unqualified unresolved-type
+        implicitWidth: 300
+        implicitHeight: 80
+        exclusionMode: ExclusionMode.Ignore
+        color: Qt.rgba(0.5, 0.3, 0.2, 0.85)
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.namespace: "grassfield-stages-test-ondemand"
+        Component.onCompleted: if (visible) console.log("[stages-fixture] ondemand surface shown")
+
+        Item {
+            anchors.fill: parent
+            focus: true
+            Keys.onPressed: event => console.log("[stages-fixture] ondemand key " + event.text)
         }
     }
 

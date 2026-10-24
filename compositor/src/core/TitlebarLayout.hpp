@@ -77,8 +77,10 @@ namespace gf::titlebar {
 
     // Coverage mask of a button's glyph (x close, - minimize, + zoom): sizePx x sizePx bytes, row-major, 0..255. Strokes
     // strokePx wide with round caps, inside the square, anti-aliased over one pixel. Empty if sizePx is outside
-    // [1, kMaxGlyphPx] or strokePx is not positive.
-    std::vector<uint8_t> glyphMask(Button button, int sizePx, double strokePx);
+    // [1, kMaxGlyphPx] or strokePx is not positive. fullScreenArrows (zoom only, Alt held: ADR-0015 P6): the full-screen
+    // arrows instead of the +, two filled triangles pointing at the bottom-left and top-right corners, the shape the
+    // apps' WindowGlyph.qml draws ("arrows": legs of 0.7 of the box along two edges).
+    std::vector<uint8_t> glyphMask(Button button, int sizePx, double strokePx, bool fullScreenArrows = false);
 
     // The mask as premultiplied 32-bit pixels, bytes B, G, R, A (DRM_FORMAT_ARGB8888 on little-endian).
     std::vector<uint8_t> premultipliedBgra(const std::vector<uint8_t>& mask, const theme::Rgba& color);

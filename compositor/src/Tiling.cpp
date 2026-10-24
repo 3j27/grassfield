@@ -1,5 +1,6 @@
 #include "Tiling.hpp"
 
+#include "ClientChrome.hpp"
 #include "Plugin.hpp"
 #include "core/Minimize.hpp"
 #include "core/Theme.hpp"
@@ -114,8 +115,9 @@ namespace gf::tiler {
         if (!place)
             return std::nullopt;
         const auto current = w->layoutTarget()->position();
-        const auto surface = tiling::surfaceFor(*place, toRect(m->logicalBoxMinusReserved()), theme::kTitlebarHeight, state().tilingMargins, toRect(current));
-        return Snap{*place, toCBox(tiling::frameOf(surface, theme::kTitlebarHeight)), m};
+        const auto band    = gf::chrome::bandOf(w); // none above a window that draws its own chrome (ADR-0015)
+        const auto surface = tiling::surfaceFor(*place, toRect(m->logicalBoxMinusReserved()), band, state().tilingMargins, toRect(current));
+        return Snap{*place, toCBox(tiling::frameOf(surface, band)), m};
     }
 
     bool tile(const PHLWINDOW& w, tiling::Place place, const PHLMONITOR& monitor) {
@@ -130,7 +132,7 @@ namespace gf::tiler {
             m = w->m_monitor.lock();
         if (!m)
             return false;
-        const CBox surface = toCBox(tiling::surfaceFor(place, toRect(m->logicalBoxMinusReserved()), theme::kTitlebarHeight, state().tilingMargins, toRect(current)));
+        const CBox surface = toCBox(tiling::surfaceFor(place, toRect(m->logicalBoxMinusReserved()), gf::chrome::bandOf(w), state().tilingMargins, toRect(current)));
         if (auto* entry = entryFor(w); entry && sameBox(current, entry->tiled))
             entry->tiled = surface; // re-tiled: the box from before the first tiling stays
         else {

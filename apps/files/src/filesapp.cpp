@@ -1,5 +1,6 @@
 #include "filesapp.h"
 #include "appscope.h"
+#include "chromecaps.h"
 #include "autoappearance.h"
 
 #include "filelogic.h"
@@ -123,10 +124,23 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
         m_watcher.addPath(configDir);
     if (QFileInfo::exists(file))
         m_watcher.addPath(file);
-    const auto reread = [this] {
+    // The shell's capabilities file (chromecaps.h, ADR-0015 Q4b) is watched the same way: it may not exist yet, so its directory too.
+    const auto watchCapabilities = [this] {
+        const QString caps = grassfield::apps::capabilitiesFile();
+        if (caps.isEmpty())
+            return;
+        const QString capsDir = QFileInfo(caps).absolutePath();
+        if (QFileInfo(capsDir).isDir() && !m_watcher.directories().contains(capsDir))
+            m_watcher.addPath(capsDir);
+        if (QFileInfo::exists(caps) && !m_watcher.files().contains(caps))
+            m_watcher.addPath(caps);
+    };
+    watchCapabilities();
+    const auto reread = [this, watchCapabilities] {
         const QString f = configFile();
         if (QFileInfo::exists(f) && !m_watcher.files().contains(f))
             m_watcher.addPath(f);
+        watchCapabilities();
         const QString styles = m_folderStyles.fallbackFile();
         if (QFileInfo::exists(styles) && !m_watcher.files().contains(styles))
             m_watcher.addPath(styles);
@@ -195,6 +209,16 @@ void FilesApp::readAppearance()
     if (!QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                      QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(accent))
         accent = QStringLiteral("multicolor");
+    // Same rule as the compositor plugin: anything but "minimize" and "none" is the default, "zoom".
+    QString doubleClick = root.value(QStringLiteral("windows")).toObject().value(QStringLiteral("titlebarDoubleClick")).toString();
+    if (doubleClick != QLatin1String("minimize") && doubleClick != QLatin1String("none"))
+        doubleClick = QStringLiteral("zoom");
+    const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
+    if (doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize) {
+        m_titlebarDoubleClick = doubleClick;
+        m_canMinimize = canMinimize;
+        emit appearanceChanged();
+    }
     if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor || accent != m_accentColor) {
         m_accentColor = accent;
         m_folderColor = folderColor;

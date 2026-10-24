@@ -460,7 +460,7 @@ namespace gf::stages {
 
     // ---- geometry ----
 
-    std::vector<Box> thumbRects(const Box& tile, std::span<const Box> surfacesBackToFront) {
+    std::vector<Box> thumbRects(const Box& tile, std::span<const Box> surfacesBackToFront, std::span<const double> bands) {
         std::vector<Box> out;
         const size_t     n = surfacesBackToFront.size();
         if (n == 0)
@@ -485,10 +485,11 @@ namespace gf::stages {
                 out.push_back(slot);
                 continue;
             }
-            const double scale = std::min({1.0, slot.w / s.w, slot.h / (s.h + kTitlebarHeight)});
+            const double band  = i < bands.size() && std::isfinite(bands[i]) && bands[i] >= 0 ? bands[i] : kTitlebarHeight;
+            const double scale = std::min({1.0, slot.w / s.w, slot.h / (s.h + band)});
             const double w     = s.w * scale;
             const double h     = s.h * scale;
-            const double bar   = kTitlebarHeight * scale;
+            const double bar   = band * scale;
             out.push_back(Box{slot.x + ((slot.w - w) / 2), slot.y + ((slot.h - (h + bar)) / 2) + bar, w, h});
         }
         return out;
@@ -521,12 +522,12 @@ namespace gf::stages {
     }
 
     std::vector<StripTarget> stripTargets(size_t slot, std::span<const Box> tiles, bool hidden, bool fullscreen, const Box& monitor,
-                                          std::span<const Box> surfacesBackToFront) {
+                                          std::span<const Box> surfacesBackToFront, std::span<const double> bands) {
         std::vector<StripTarget> out;
         if (tiles.empty())
             return out;
         const bool   hasTile = slot < tiles.size();
-        const auto   rects   = thumbRects(hasTile ? tiles[slot] : tiles.back(), surfacesBackToFront);
+        const auto   rects   = thumbRects(hasTile ? tiles[slot] : tiles.back(), surfacesBackToFront, bands);
         const double shift   = (hidden || !hasTile || fullscreen) ? hiddenShift(tiles, monitor) : 0.0;
         out.reserve(rects.size());
         for (const auto& r : rects)
@@ -689,6 +690,26 @@ namespace gf::stages {
         if (hasFront)
             return KeyboardTarget::FrontOfActive;
         return KeyboardTarget::Nothing;
+    }
+
+    KeyFocusAction keyFocusAction(const KeyFocusFacts& facts) {
+        if (facts.locked || facts.inputMethodGrab)
+            return KeyFocusAction::None;
+        if (facts.exclusive)
+            return facts.frontmostLevel >= kLayerTop && !facts.seatOnFrontmost && !facts.grabRejectsLayer ? KeyFocusAction::ToLayer : KeyFocusAction::None;
+        return facts.keyArriving && facts.seatFocusNone && facts.activeWindow && !facts.grabRejectsWindow ? KeyFocusAction::ToWindow : KeyFocusAction::None;
+    }
+
+    bool reannounceFocus(const ReannounceFacts& facts) {
+        if (!facts.replaced || !facts.focus || facts.inputMethodGrab)
+            return false;
+        if (facts.locked) // or not known: the same lock surface only, and only when a seat grab accepts it
+            return facts.focusIsLock && (!facts.seatGrab || facts.grabAcceptsFocus);
+        return !facts.seatGrab;
+    }
+
+    bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel) {
+        return !bestLevel || level >= *bestLevel;
     }
 
     ActiveWindowAction activeWindowAction(const ActiveWindowState& state) {
