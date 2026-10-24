@@ -17,9 +17,25 @@ force=0
 cd "$root/compositor"
 stamp=build/tidy.stamp
 key=$({ find src tests protocols .clang-tidy build-direct.sh -type f -print0 | sort -z | xargs -0 sha256sum; clang-tidy --version; pkg-config --modversion hyprland; } | sha256sum | cut -d' ' -f1)
-if (($# == 0 && force == 0)) && [[ -f $stamp && $(<"$stamp") == "$key" ]]; then
+# The key hashes the content, so a pass in one worktree holds for every worktree with the same compositor tree: passing
+# keys are also kept in the repository's common git dir, and full runs are serialized there (one at a time across the
+# worktrees; a waiting run re-checks the stamps first). Without this every agent worktree re-ran the same minutes-long
+# analysis in parallel after merging main (40 clang-tidy processes, load 48 on 8 cores, 2026-10-24).
+shared=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)/grassfield-tidy
+mkdir -p "$shared"
+passed() { [[ -f $stamp && $(<"$stamp") == "$key" ]] || [[ -f $shared/$key ]]; }
+if (($# == 0 && force == 0)) && passed; then
   echo "tidy: up to date (nothing changed since the last passing run; --force runs it again)"
   exit 0
+fi
+exec 9>"$shared/lock"
+if ! flock -n 9; then
+  echo "tidy: another worktree is running clang-tidy; waiting for it" >&2
+  flock 9
+  if (($# == 0 && force == 0)) && passed; then
+    echo "tidy: up to date (the other run passed on this same tree)"
+    exit 0
+  fi
 fi
 if (($# > 0)); then
   files=("$@")
@@ -38,5 +54,8 @@ if ((findings > 0 || rc != 0)); then
   exit 1
 fi
 echo "tidy: ok (${#files[@]} files, 0 findings)"
-(($# == 0)) && printf '%s' "$key" >"$stamp"
+if (($# == 0)); then
+  printf '%s' "$key" >"$stamp"
+  : >"$shared/$key"
+fi
 exit 0
