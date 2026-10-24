@@ -122,7 +122,9 @@ namespace {
                 CGrassfieldTitlebar::drawRevealed();
         }));
         // Keys are observed, never cancelled: Alt changes the zoom glyph of the hovered lights (ADR-0015 P6).
-        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::keyPath("titlebar key", [] { CGrassfieldTitlebar::onKey(); }); }));
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) {
+            gf::keyPath("titlebar key", [](const IKeyboard::SKeyEvent& /*e*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onKey(); }, e, info);
+        }));
     }
 
     // The window whose m_windowDecorations owns `deco` (normally deco->window(); scanned as a fallback).

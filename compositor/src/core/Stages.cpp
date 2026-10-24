@@ -692,6 +692,10 @@ namespace gf::stages {
         return KeyboardTarget::Nothing;
     }
 
+    bool giveKeysToLayer(const KeysOnLayerFacts& facts) {
+        return facts.cleared && facts.target && !facts.locked && !facts.seatOnExclusive && !facts.grabRejects;
+    }
+
     ActiveWindowAction activeWindowAction(const ActiveWindowState& state) {
         if (!state.hidden || state.locked)
             return ActiveWindowAction::None;

@@ -6,6 +6,8 @@
 // budget's "held back" count would count keys). compositor/tests/QuietTest.cpp checks the scope and that every key listener
 // of the plugin's sources opens one. Pure (no Hyprland include).
 
+#include <utility>
+
 namespace gf::quiet {
 
     class CKeyPath {
@@ -22,14 +24,15 @@ namespace gf::quiet {
     // A key path is running on this thread (Hyprland's: the compositor is single-threaded).
     bool inKeyPath() noexcept;
 
-    // A key listener's body inside a CKeyPath scope (gf::keyPath, Plugin.hpp). It runs once and all it does stands; the
-    // event and its cancel flag are the listener's own and never touched here. An exception it throws stays here (false):
-    // nothing may escape into Hyprland, and nothing is logged from a key path.
-    template <typename Fn>
-    bool runKeyPath(Fn&& fn) noexcept {
+    // A key listener's body inside a CKeyPath scope (gf::keyPath, Plugin.hpp), given the listener's own event and callback
+    // info (the event by const reference: never changed here; the info as the listener got it, untouched here). The body
+    // runs once and all it does stands. An exception it throws stays here (false): nothing may escape into Hyprland, and
+    // nothing is logged from a key path.
+    template <typename Fn, typename Event, typename Info>
+    bool runKeyPath(Fn&& fn, const Event& event, Info& info) noexcept {
         const CKeyPath scope;
         try {
-            fn();
+            std::forward<Fn>(fn)(event, info);
             return true;
         } catch (...) { // NOLINT(bugprone-empty-catch): a key path logs nothing; it must not throw into Hyprland
             return false;

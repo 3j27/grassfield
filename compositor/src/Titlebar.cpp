@@ -88,7 +88,7 @@ namespace {
     };
 
     bool sessionLocked() {
-        return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
+        return !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked(); // undecidable: locked (failures stay locked)
     }
 
     // The shell's menu bar (a layer of that namespace on the monitor): a revealed full-screen titlebar starts below it.
@@ -437,7 +437,7 @@ bool CGrassfieldTitlebar::revealable() const {
     const auto& fs = Fullscreen::controller();
     if (!fs || fs->getFullscreenModes(w).internal != Fullscreen::FSMODE_FULLSCREEN)
         return false;
-    if (g_pSessionLockManager && g_pSessionLockManager->isSessionLocked())
+    if (sessionLocked())
         return false; // every press is the lock screen's
     // The pointer belongs to the client (review of part B, major 2): a pointer it confines or locks (a game that scrolls at
     // the screen's edge: pushing up there and clicking the corner hit a working close light), a move or resize it started

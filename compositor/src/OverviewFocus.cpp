@@ -477,8 +477,8 @@ namespace gf::overviewFocus {
         auto& ev = bus->m_events;
         auto& l  = s.listeners;
         // Before a key is delivered: the last Exclusive layer may have gone in this same dispatch, before the attempt ran.
-        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) {
-            gf::keyPath("overview focus key", [] { attempt("before a key"); });
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) {
+            gf::keyPath("overview focus key", [](const IKeyboard::SKeyEvent& /*e*/, Event::SCallbackInfo& /*info*/) { attempt("before a key"); }, e, info);
         }));
         l.push_back(ev.input.touch.down.listen([](const ITouch::SDownEvent& /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("overview focus touch", [] { onPress(false); }); }));
         l.push_back(ev.input.tablet.tip.listen([](const CTablet::STipEvent& e, Event::SCallbackInfo& /*info*/) {

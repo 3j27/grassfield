@@ -8,8 +8,9 @@
 #   3 minimize     top edge, then a click on the minimize light: inert (still full screen, not minimized), nothing to the client
 #   4 overlay      an Overlay layer of another client over the lights (tests/compositor/reveal-fixture): a control click on
 #                  the layer below the bar reaches it (the layer takes input here); top edge, then a click on the zoom
-#                  light's place: the bar leaves that press to Hyprland (the layer gets it, or else the plugin's log
-#                  line for it, looked for again at the end: Hyprland writes its log late), the window stays in full screen
+#                  light's place: the layer logs that press (awaited 10 s), foot gets nothing, the window stays in full
+#                  screen; the plugin's own line ("left to Hyprland", written before Hyprland delivers) alone gives
+#                  NOT VERIFIED, never PASS
 #   5 lock         the session locked (tests/security/foreign_locker, released over its IPC): top edge, then a click on the
 #                  zoom light's place: still full screen after the unlock (the bar never takes a click while locked); then
 #                  the session must be unlocked again: a click in the content reaches foot
@@ -20,7 +21,7 @@
 # Not covered here: a pointer the client confines (no constraining client in the fixtures; the plugin checks
 # CInputManager::isConstrained).
 # Usage: tests/compositor/fullscreen_reveal.sh   (bare; NESTED only: scripts/dev/nested-up.sh with grassfield-compositor)
-# Exit: 0 PASS, 1 FAIL, 2 setup or environment error. Log: .dev/fullscreen-reveal/run-<timestamp>.log.
+# Exit: 0 PASS, 1 FAIL or NOT VERIFIED, 2 setup or environment error. Log: .dev/fullscreen-reveal/run-<timestamp>.log.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -111,6 +112,7 @@ bar_y=$((inset + GF_TB_MID))
 reveal() { pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100 abs $((mon_w / 2)) 0 sleep 250; } # from the content to the top edge
 say "  menu bar ${inset} px: the revealed bar's middle at y $bar_y"
 
+lrun0=$(log_at) # step 4's own plugin line is counted from here
 say "1 control: a click in the content reaches foot"
 l0=$(log_at)
 off=$(size_of "$cap")
@@ -150,11 +152,11 @@ WAYLAND_DISPLAY=$sock GF_RV_OUTPUT=$out setsid "$root/scripts/dev/isolated.sh" -
 fixture_pid=$!
 pids+=("$fixture_pid")
 for _ in $(seq 1 40); do grep -aq "\[rv-fixture\] mapped" "$fixlog" && break; sleep 0.2; done
-# The fixture's presses so far, once it logged more than <count> or 3 s passed (its log is written by another process,
-# late under load).
-presses_after() { # <count before>
+# The fixture's presses so far, once it logged more than <count> or <seconds> passed (default 3; its log is written by
+# another process, late under load).
+presses_after() { # <count before> [seconds]
   local n i
-  for i in $(seq 1 30); do
+  for i in $(seq 1 $((${2:-3} * 10))); do
     n=$(grep -ac "\[rv-fixture\] press" "$fixlog")
     ((n > $1)) && break
     sleep 0.1
@@ -170,22 +172,23 @@ if grep -aq "\[rv-fixture\] mapped" "$fixlog"; then
   [[ $((c1 - c0)) -ge 1 ]]
   check "control: a click on the layer outside the bar reaches it" $? "presses to the layer $((c1 - c0))"
   p0=$(grep -ac "\[rv-fixture\] press" "$fixlog")
-  lc0=$(log_at)
+  off=$(size_of "$cap")
   reveal
   pointer abs "$GF_TB_ZOOM_X" "$bar_y" sleep 200 click sleep 300
-  p1=$(presses_after "$p0")
+  p1=$(presses_after "$p0" 10) # the fixture stays mapped while its own line is awaited
+  ev=$(sgr_since "$cap" "$off")
   read -r _ _ _ _ fs _ < <(geom)
-  # The bar must leave the press to Hyprland. Either proof will do: the layer got it (a press the bar takes never reaches
-  # Hyprland), or the plugin's line for this press, the only one an Overlay layer can produce. Hyprland writes its log
-  # late (tens of seconds under load): without the first, the line is looked for again at the end of the run
-  # (integrator runs 2026-10-24: twice the plugin left the press and the fixture logged none).
-  step4_fs=$fs step4_presses=$((p1 - p0)) step4_from=$lc0
-  if ((step4_presses >= 1)); then
-    [[ $fs == 2 ]]
-    check "the bar leaves the press to the layer (the layer got it); still full screen" $? "presses to the layer $step4_presses, fullscreen ${fs:-?}"
+  # PASS only on the layer's own press line, with nothing to foot and the window still in full screen. The plugin's line
+  # ("left to Hyprland") is written before Hyprland delivers the press: it cannot prove the layer got it, so on its own it
+  # gives NOT VERIFIED (counter-review of part B, 2026-10-24); it is looked for at the end (Hyprland writes its log late).
+  step4_presses=$((p1 - p0))
+  if [[ -n $ev || $fs != 2 ]]; then
+    check "the layer gets the press; foot nothing; still full screen" 1 "presses to the layer $step4_presses, foot events: ${ev:-none}, fullscreen ${fs:-?}"
+  elif ((step4_presses >= 1)); then
+    check "the layer gets the press; foot nothing; still full screen" 0 "presses to the layer $step4_presses, foot events: none, fullscreen 2"
   else
     step4_pending=1
-    say "  the layer logged no press: the plugin's line is looked for at the end (Hyprland writes its log late)"
+    say "  the layer logged no press in 10 s; foot nothing, still full screen: the plugin's line is looked for at the end"
   fi
 else
   check "the Overlay fixture mapped" 1 "see $fixlog"
@@ -241,19 +244,34 @@ read -r _ _ _ _ fs _ < <(geom)
 check "full screen left; nothing to the client" $? "fullscreen ${fs:-?} (want 0), events: ${ev:-none}"
 plugin_lines "$l0"
 
+notverified=0
 if ((${step4_pending:-0})); then
-  left=0
+  # Step 4's own line: the third press line over the revealed bar since the run began (2: the drag area taken, 3: minimize
+  # taken, 4: left to Hyprland; nothing is logged while locked (5); 6 comes after it). Only that line counts.
+  line4=""
   for _ in $(seq 1 100); do
-    tail -n +"$((step4_from + 1))" "$hyprlog" 2>/dev/null | grep -aq "revealed titlebar: a press left to Hyprland: a layer popup or an Overlay layer" && { left=1; break; }
+    line4=$(tail -n +"$((lrun0 + 1))" "$hyprlog" 2>/dev/null | grep -a "revealed titlebar: a press" | sed -n 3p)
+    [[ -n $line4 ]] && break
     sleep 0.3
   done
-  [[ $left == 1 && $step4_fs == 2 ]]
-  check "4 the bar left the press to the layer (the plugin's line); still full screen then" $? "plugin left it to Hyprland: $left, fullscreen ${step4_fs:-?}"
+  if [[ $line4 == *"left to Hyprland: a layer popup or an Overlay layer"* ]]; then
+    notverified=1
+    say "  4 the layer gets the press: NOT VERIFIED (the plugin left it to Hyprland, the layer logged no press: ${line4##*\] })"
+  else
+    check "4 the layer gets the press (step 4's plugin line)" 1 "step 4's line: ${line4:-none}"
+  fi
 fi
 if ! kill -0 "$hypr_pid" 2>/dev/null; then
   say "check: FAIL nested Hyprland pid $hypr_pid is gone"
   fail=1
 fi
-if ((fail == 0)); then say "fullscreen_reveal: PASS"; else say "fullscreen_reveal: FAIL"; fi
+if ((fail)); then
+  say "fullscreen_reveal: FAIL"
+elif ((notverified)); then
+  say "fullscreen_reveal: NOT VERIFIED (step 4)"
+  fail=1
+else
+  say "fullscreen_reveal: PASS"
+fi
 say "fullscreen_reveal: log $log"
 exit "$fail"

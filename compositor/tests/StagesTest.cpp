@@ -702,3 +702,28 @@ TEST(StagesInput, AScrollOnABlockedFocusRefreshesIt) {
     EXPECT_EQ(beforePointerEvent(PointerEvent::Axis, {.onBlocked = true, .hasFocus = true, .parked = false}), PointerAction::Refresh);
     EXPECT_EQ(beforePointerEvent(PointerEvent::Axis, {.onBlocked = false, .hasFocus = true, .parked = false}), PointerAction::None);
 }
+
+// Review of part B, 2026-10-24: keys go back to the frontmost Exclusive layer only when the seat is on no Exclusive layer,
+// never under a seat grab that rejects it (Hyprland would log a line per key), never while locked or not known.
+TEST(StagesKeysOnLayer, KeysGoBackToTheLayerOnlyWhenNothingElseDecides) {
+    using gf::stages::giveKeysToLayer;
+    using gf::stages::KeysOnLayerFacts;
+    const KeysOnLayerFacts base{.cleared = true, .target = true, .locked = false, .seatOnExclusive = false, .grabRejects = false};
+    EXPECT_TRUE(giveKeysToLayer(base)) << "the seat is on nothing (or a window): the keys go to the layer";
+    auto f = base;
+    f.grabRejects = true;
+    EXPECT_FALSE(giveKeysToLayer(f)) << "a seat grab rejects the layer: no refocus attempted";
+    f        = base;
+    f.locked = true;
+    EXPECT_FALSE(giveKeysToLayer(f)) << "locked";
+    EXPECT_FALSE(giveKeysToLayer(KeysOnLayerFacts{.cleared = true, .target = true})) << "the lock state not known: locked";
+    f                 = base;
+    f.seatOnExclusive = true;
+    EXPECT_FALSE(giveKeysToLayer(f)) << "an Exclusive layer already has the keys";
+    f         = base;
+    f.cleared = false;
+    EXPECT_FALSE(giveKeysToLayer(f)) << "the plugin cleared nothing: Hyprland's own path";
+    f        = base;
+    f.target = false;
+    EXPECT_FALSE(giveKeysToLayer(f)) << "no mapped Exclusive layer";
+}

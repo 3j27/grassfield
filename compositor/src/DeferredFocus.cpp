@@ -20,7 +20,7 @@ namespace df = gf::deferredfocus;
 namespace gf::deferredFocus {
 
     bool sessionLocked() {
-        return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
+        return !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked(); // undecidable: locked (failures stay locked)
     }
 
     bool exclusiveLayerMapped() {

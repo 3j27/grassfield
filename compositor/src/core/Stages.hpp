@@ -322,6 +322,19 @@ namespace gf::stages {
     // window (R13 counter-review of 17208af). The plugin never works around Hyprland's refusal (R13 counter-review #3 of
     // e9ebc7f: setting Hyprland's Exclusive-layer list aside let the keyboard leave an Exclusive layer through Hyprland's
     // side paths: a special workspace closing, a Desktop switch).
+    // Before a key, after the plugin cleared Hyprland's active window under an Exclusive layer (keepKeysOnLayer in
+    // Stages.cpp): the keys go to the frontmost mapped Exclusive layer (the frontmost modal gets the keys, macOS) when
+    // the seat's keyboard is on no Exclusive layer, unless the session is locked (or its state is unknown: failures stay
+    // locked) or a seat grab would reject that layer (Hyprland logs a line per key then; review of part B, 2026-10-24).
+    struct KeysOnLayerFacts {
+        bool cleared         = false; // the plugin cleared the active window while an Exclusive layer held the keyboard
+        bool target          = false; // a mapped Exclusive layer is there (the frontmost one is the target)
+        bool locked          = true;  // the session is locked, or that is not known
+        bool seatOnExclusive = false; // the seat's keyboard is on an Exclusive layer (or one of its popups)
+        bool grabRejects     = false; // a seat grab is set and does not accept the target
+    };
+    bool giveKeysToLayer(const KeysOnLayerFacts& facts);
+
     struct ActiveWindowState {
         bool hidden        = false; // Hyprland's active window is a strip window (or is about to be blocked as one)
         bool locked        = false; // the session is locked (nothing is focused until the unlock; the lock is not touched)

@@ -124,9 +124,9 @@ namespace gf {
 
     // A key listener's body (Event::bus()->m_events.input.keyboard.key): guarded, and with every log line off while it runs,
     // whatever it calls (core/Quiet.hpp; compositor/tests/QuietTest.cpp fails on a key listener without it).
-    template <typename Fn>
-    void keyPath(std::string_view /*where*/, Fn&& fn) noexcept {
-        quiet::runKeyPath(std::forward<Fn>(fn));
+    template <typename Fn, typename Event, typename Info>
+    void keyPath(std::string_view /*where*/, Fn&& fn, const Event& event, Info& info) noexcept {
+        quiet::runKeyPath(std::forward<Fn>(fn), event, info);
     }
 
 } // namespace gf

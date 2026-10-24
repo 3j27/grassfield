@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -38,36 +39,45 @@ TEST(Quiet, AScopeClosesWhenItsCodeThrows) {
     EXPECT_FALSE(inKeyPath());
 }
 
-// Coordinator, 2026-10-24 (stages.sh 60/66 after aedc242): the wrapper lets a key listener's work and its event through
-// unchanged; it only opens the scope.
+// Coordinator, 2026-10-24 (stages.sh 60/66 after aedc242; counter-review m4): the wrapper gives the body the listener's
+// own event and callback info and changes neither; the body's work stands; it only opens the scope. The types stand in for
+// IKeyboard::SKeyEvent and Event::SCallbackInfo (their fields; no Hyprland header in the unit tests).
 TEST(Quiet, AKeyListenerUnderTheScopeLetsTheEventThroughUnchanged) {
-    struct Event {
-        int key = 30;
+    struct SKeyEvent {
+        uint32_t timeMs  = 1234;
+        uint32_t keycode = 30;
+        uint32_t state   = 1; // pressed
+        bool     operator==(const SKeyEvent&) const = default;
     };
-    struct Info {
+    struct SCallbackInfo {
         bool cancelled = false;
     };
-    Event event;
-    Info  info;
-    int   calls  = 0;
-    bool  inside = false;
-    int   moved  = 0; // a side effect of the body (as keepActiveOffStrip moves the focus)
-    auto  listener = [&](Event e, Info& /*i*/) {
-        EXPECT_TRUE(gf::quiet::runKeyPath([&] {
-            ++calls;
-            inside = inKeyPath();
-            moved  = e.key;
-        }));
+    const SKeyEvent original;
+    SKeyEvent       event = original;
+    SCallbackInfo   info;
+    int             calls  = 0;
+    bool            inside = false;
+    SKeyEvent       seen{.timeMs = 0, .keycode = 0, .state = 0};
+    int             moved = 0; // a side effect of the body (as keepActiveOffStrip moves the focus)
+    const auto      body  = [&](const SKeyEvent& e, SCallbackInfo& i) {
+        ++calls;
+        inside = inKeyPath();
+        seen   = e;
+        moved  = static_cast<int>(e.keycode);
+        EXPECT_FALSE(i.cancelled);
     };
-    listener(event, info);
+    EXPECT_TRUE(gf::quiet::runKeyPath(body, event, info));
     EXPECT_EQ(calls, 1) << "the body runs exactly once";
     EXPECT_TRUE(inside);
+    EXPECT_EQ(seen, original) << "the body got the listener's own event";
     EXPECT_EQ(moved, 30) << "its work stands";
-    EXPECT_FALSE(info.cancelled) << "the event's cancel flag is untouched";
-    EXPECT_EQ(event.key, 30);
+    EXPECT_EQ(event, original) << "the event is untouched";
+    EXPECT_FALSE(info.cancelled) << "the cancel flag is untouched";
     EXPECT_FALSE(inKeyPath()) << "the scope is closed after it";
-    EXPECT_FALSE(gf::quiet::runKeyPath([] { throw std::runtime_error("x"); })) << "an exception stays here";
+    EXPECT_FALSE(gf::quiet::runKeyPath([](const SKeyEvent&, SCallbackInfo&) { throw std::runtime_error("x"); }, event, info)) << "an exception stays here";
     EXPECT_FALSE(inKeyPath());
+    EXPECT_EQ(event, original);
+    EXPECT_FALSE(info.cancelled);
 }
 
 namespace {

@@ -50,7 +50,7 @@ namespace gf::frameProbe {
         }
 
         bool sessionLocked() {
-            return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
+            return !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked(); // undecidable: locked (failures stay locked)
         }
 
         // Forgets every record (the session locked; unload).
