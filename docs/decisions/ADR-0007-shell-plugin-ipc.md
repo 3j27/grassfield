@@ -157,12 +157,13 @@ request socket has no such limit (a `hyprctl` reply is written whole).
   fetch has answered within 3 s also means no state, however many notices keep coming (a fetch under way is waited for,
   up to its 2-s deadline).
 - Exception to the first Consequence below (decided by the integrator under owner delegation D-5, review of
-  6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`, because the session never
-  runs a shell and a plugin of different Grassfield versions together (re-review of c3cb01b; the ABI stamp alone did not
-  ensure it, it names the Hyprland build only):
-  - the packages: `grassfield-compositor` depends on exactly `grassfield-desktop=$pkgver-$pkgrel` (pacman upgrades the
-    pair together and refuses a partial upgrade of either; the desktop does not depend on the plugin and runs without it,
-    C2). `scripts/dev/check-version.sh` fails without that pin;
+  6b3a31f..bbcc769): this is a breaking change of the `stages` event and it stays `gfc/1`, because a session loads a
+  plugin only next to the shell of its own Grassfield version (re-review of c3cb01b; the ABI stamp alone did not ensure
+  it, it names the Hyprland build only):
+  - the packages: `grassfield-compositor` depends on exactly `grassfield-desktop=$pkgver-$pkgrel` (one-way: pacman
+    refuses to upgrade the desktop alone while the compositor needs the old version, and upgrading the compositor pulls
+    the desktop of its version; the desktop does not depend on the plugin and runs without it, C2).
+    `scripts/dev/check-version.sh` fails when the compositor package's final depends lacks that pin;
   - the builds: every stamp has a second line, `source <pkgver-pkgrel>`, the Grassfield version the plugin was built from
     (the PKGBUILD writes it for the packaged build, `grassfield-compositor-rebuild` for the user's). The session loader
     (`config/hypr/grassfield/compositor.lua`) and the rebuild's `--vetted` load a build only when its stamp names the
@@ -170,8 +171,10 @@ request socket has no such limit (a `hyprctl` reply is written whole).
     a build in the user's cache made from older sources is stale even for the right Hyprland, `--status` says
     `state=mismatch` / `reason=stale-build`, the shell shows its one degraded notice and, with the opt-in setting,
     rebuilds it (`--session`); otherwise nothing is loaded (C2). Tests: `tests/shell/compositor_rebuild.sh`.
-  A mixed pair is then only possible against the package manager (a forced install) or with a plugin loaded by hand, and
-  degrades without broken JSON: a shell from before this amendment finds no monitors in the notice and shows no strip; a
+  One mixed pair remains by design: a package upgrade during a session (GF-083, "Log out to finish updating") leaves the
+  plugin loaded at login in Hyprland until the next login, so a shell that restarts meanwhile (a crash, a `uwsm`
+  restart) is the new version next to the old plugin. Otherwise a mixed pair needs a forced install or a plugin loaded by
+  hand. Every mixed pair degrades without broken JSON: a shell from before this amendment finds no monitors in the notice and shows no strip; a
   shell from after it with an older plugin gets `unknown request` from `hyprctl grassfield-stages` and shows no strip.
   `stages-available` is advertised only when `hyprctl grassfield-stages` is registered.
 

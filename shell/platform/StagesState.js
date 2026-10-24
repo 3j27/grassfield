@@ -3,9 +3,10 @@
 // The gfc/1 Stages notice and state (docs/specs/stages.md "Shell contract" 4), validated, and the fetch of the state: pure,
 // no compositor access, unit tested in tests/unit/tst_stages.qml. The `stages` event is a change notice ({gen, on, reason}:
 // Hyprland cuts socket2 events at 1024 bytes); the state with its monitors is the reply of `hyprctl grassfield-stages`
-// (ADR-0007 amendment 2026-10-24). The event never carries monitors: the session runs the shell and the plugin of one
-// Grassfield version only (the packages pin each other's version and the loader checks the stamp's `source` line;
-// ADR-0007's exception to the gfc/N rule).
+// (ADR-0007 amendment 2026-10-24). The event never carries monitors: a session loads a plugin only next to the shell of
+// its own Grassfield version (the compositor package pins the desktop's exact version, the loader checks the stamp's
+// `source` line; ADR-0007's exception to the gfc/N rule). A shell restarted after a mid-session upgrade runs next to the
+// plugin loaded at login until the next login (GF-083): an older plugin's full-state event then reads as a notice.
 
 const reasons = ["invalid", "disabled", "no-strip", "unknown", "unavailable", "interrupted"];
 const maxStages = 64;
