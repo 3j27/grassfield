@@ -170,9 +170,14 @@ Singleton {
             return "";
         if (icon.startsWith("/") || icon.startsWith("file:"))
             return copySourceOf(History.localPathOf(icon));
+        // Only a plain theme name reaches the icon theme (History.safeIconName): Qt also searches its fallback directories,
+        // where a name with "/" or ".." named any file (review of 6e24d36). Anything else: the generic notification icon.
+        const name = History.safeIconName(icon);
+        if (name === "")
+            return "";
         // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
         // and paints a checkerboard), so ask the theme first.
-        return Quickshell.hasThemeIcon(icon) ? Quickshell.iconPath(icon) : "";
+        return Quickshell.hasThemeIcon(name) ? Quickshell.iconPath(name) : "";
     }
 
     // "now", "5m ago", "3h ago", "2d ago" (translatable).
@@ -817,11 +822,15 @@ Singleton {
         return "";
     }
 
-    // An app icon path is shown like an image file, as a private copy (copySourceOf); names pass unchanged.
+    // An app icon path is shown like an image file, as a private copy (copySourceOf); a name is kept only when it is a
+    // plain theme name (History.keptAppIcon, review of 6e24d36); anything else is dropped at intake (the generic icon).
     function checkedAppIcon(icon: string): string {
-        if (icon.startsWith("/") || icon.startsWith("file:"))
-            requestCopy(History.localPathOf(icon), true);
-        return icon;
+        const kept = History.keptAppIcon(icon);
+        if (kept !== icon)
+            console.info("grassfield-notifications: a notification app icon was refused: only plain theme names and local image files are shown");
+        if (kept.startsWith("/") || kept.toLowerCase().startsWith("file:"))
+            requestCopy(History.localPathOf(kept), true);
+        return kept;
     }
 
     function makeEntry(n: var, key: string): var {

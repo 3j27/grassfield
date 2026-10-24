@@ -231,6 +231,56 @@ TestCase {
         compare(History.localPathOf("file:///dir/x%2Epng"), "/dir/x.png", "a file: URL escape decodes to the plain name it names");
     }
 
+    // Review of 6e24d36: an app icon NAME reaches the icon theme only when it is a plain theme name; Qt's fallback search
+    // (/usr/share/pixmaps) turned "../../../dir/evil" into any file, a FIFO included.
+    function test_safeIconName_data() {
+        return [
+            {tag: "plain", name: "firefox", kept: "firefox"},
+            {tag: "reverse DNS", name: "org.gnome.Nautilus", kept: "org.gnome.Nautilus"},
+            {tag: "symbolic", name: "dialog-information-symbolic", kept: "dialog-information-symbolic"},
+            {tag: "underscore", name: "steam_icon_570", kept: "steam_icon_570"},
+            {tag: "parent traversal", name: "../../../tmp/evil", kept: ""},
+            {tag: "theme-relative traversal", name: "hicolor/../../../../tmp/evil", kept: ""},
+            {tag: "dot-dot alone", name: "..", kept: ""},
+            {tag: "dot-dot inside", name: "a..b", kept: ""},
+            {tag: "leading dot", name: ".hidden", kept: ""},
+            {tag: "slash", name: "apps/firefox", kept: ""},
+            {tag: "backslash", name: "a\\b", kept: ""},
+            {tag: "colon", name: "file:x", kept: ""},
+            {tag: "NUL", name: "fire\u0000fox", kept: ""},
+            {tag: "newline", name: "fire\nfox", kept: ""},
+            {tag: "space", name: "fire fox", kept: ""},
+            {tag: "too long", name: "a".repeat(129), kept: ""},
+            {tag: "empty", name: "", kept: ""}
+        ];
+    }
+
+    function test_safeIconName(data) {
+        compare(History.safeIconName(data.name), data.kept);
+    }
+
+    function test_keptAppIconAndHistoryLoad() {
+        compare(History.keptAppIcon("firefox"), "firefox");
+        compare(History.keptAppIcon("../../../tmp/evil"), "", "a traversal name is dropped at intake");
+        compare(History.keptAppIcon("/usr/share/icons/x.png"), "/usr/share/icons/x.png", "a path goes on to the private-copy route");
+        compare(History.keptAppIcon("file:///usr/share/icons/x.png"), "file:///usr/share/icons/x.png");
+        compare(History.keptAppIcon("/tmp/x.png?a"), "", "a path the copy route refuses is dropped");
+        compare(History.keptAppIcon(undefined), "");
+        // A history file written before the rule (or by hand) is cleaned on load.
+        const now = Date.now();
+        const text = JSON.stringify({version: 1, notifications: [
+                {key: "a", appName: "A", appIcon: "../../../tmp/evil", summary: "s", body: "", time: now - 1000, urgency: 1},
+                {key: "b", appName: "B", appIcon: "firefox", summary: "s", body: "", time: now - 2000, urgency: 1}]});
+        const restored = History.parse(text, now);
+        compare(restored.length, 2);
+        compare(restored.find(e => e.key === "a").appIcon, "");
+        compare(restored.find(e => e.key === "b").appIcon, "firefox");
+        // The same rule for a themed image hint (Quickshell's image://icon/<name>).
+        compare(History.imageRef("image://icon/..%2F..%2Ftmp%2Fevil").kind, "refused");
+        compare(History.imageRef("image://icon/.hidden").kind, "refused");
+        compare(History.imageRef("image://icon/firefox").kind, "themed");
+    }
+
     function test_copySource() {
         compare(History.copySource("/run/user/1000/grassfield-notification-images", 12), "file:///run/user/1000/grassfield-notification-images/12.img");
         compare(History.copySource("/tmp/my dir", 3), "file:///tmp/my%20dir/3.img", "every segment encoded");

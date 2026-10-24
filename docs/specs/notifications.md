@@ -179,7 +179,13 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a directory, a missing file,
   the reviewer's bypass forms `x.png?a`, `file://…?a`, `x%2Epng`, `file://…#f`, `image://icon//…?fallback=a` and an app
   icon path, a file swapped for a FIFO after its copy; a normal image still loads afterwards; mutation allowing `?#%` fails
-  it).
+  it). An app icon NAME (and a themed image hint) reaches the icon theme only when it is a plain theme name
+  (`History.safeIconName`: 1–128 of letters, digits, `.`, `_`, `-`, no leading `.`, no `..`): Qt also searches its fallback
+  directory `/usr/share/pixmaps`, where `../../../dir/evil` named any file, a FIFO included (review of 6e24d36). The rule
+  applies at intake (`checkedAppIcon`, `History.keptAppIcon`), on history load (`History.parse`) and in `iconSource`; anything
+  else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender names).
+  Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `notif_image_files` (traversal names to
+  a FIFO and to a regular file; the mutant without the rule stalls the loader and fails).
 - DND: `notifications.dnd` in grassfield.json; Quick Settings "Do Not Disturb" tile; moon icon in the menu bar (click turns it off).
   Critical notifications still show; history is kept. `notifications.previews = never` hides bodies (banners and Center).
 - History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`

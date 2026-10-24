@@ -75,7 +75,7 @@ function parse(text, now) {
             key: str(raw.key) !== "" ? str(raw.key) : "restored-" + entries.length,
             nid: -1,
             appName: str(raw.appName),
-            appIcon: str(raw.appIcon),
+            appIcon: keptAppIcon(str(raw.appIcon)),
             summary: str(raw.summary),
             body: str(raw.body),
             time: raw.time,
@@ -183,12 +183,32 @@ function imageRef(image) {
         } catch (e) {
             return refused;
         }
-        return name !== "" && name.indexOf("/") < 0 && name.indexOf(":") < 0 ? {kind: "themed", source: image, name: name} : refused;
+        return safeIconName(name) !== "" ? {kind: "themed", source: image, name: name} : refused;
     }
     // file:/path, file:///path, file://localhost/path (case-insensitive scheme and host); never another host.
     if (/^file:(?:\/\/(?:localhost)?)?\/[^/]/i.test(image))
         return {kind: "file", source: image, name: ""};
     return refused;
+}
+
+// A plain icon-theme name (review of 6e24d36; macOS model: a notification shows its app's icon, never a file the sender
+// names): 1 to 128 of letters, digits, ".", "_", "-", not starting with "." and without "..", so no "/", "\", ":", NUL or
+// control character. Qt resolves a name through the theme AND its fallback directories (/usr/share/pixmaps): a name like
+// "../../../dir/evil" reached any file, a FIFO included, which stalled the one image loader. "" for anything else: the
+// generic notification icon is shown. Aligned with the polkit sheet's AuthDialogModel.safeIconName.
+function safeIconName(name) {
+    const s = typeof name === "string" ? name : "";
+    return /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$/.test(s) && s.indexOf("..") < 0 ? s : "";
+}
+
+// An app_icon as kept (intake, history load): a path or file: URL that localPathOf accepts (shown only as a private
+// copy), else a safeIconName, else "".
+function keptAppIcon(icon) {
+    if (typeof icon !== "string" || icon === "")
+        return "";
+    if (icon.startsWith("/") || icon.toLowerCase().startsWith("file:"))
+        return localPathOf(icon) !== "" ? icon : "";
+    return safeIconName(icon);
 }
 
 // Largest local image file a notification may show (review of 8b2a710: only regular files, bounded). Shown files are COPIED

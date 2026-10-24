@@ -52,7 +52,7 @@ ShellRoot {
         running: true
         command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d/folder.png\"; printf '%s' \"$2\" | base64 -d >\"$d/ok.png\"; "
             + "cp \"$d/ok.png\" \"$d/swap.png\"; mkfifo \"$d/fifo.png\" \"$d/x.png\"; ln -s fifo.png \"$d/link.png\"; "
-            + "truncate -s 20M \"$d/big.png\"; for n in 'x.png?a' 'x%2Epng' 'x.png#f' 'x.png?fallback=a'; do cp \"$d/ok.png\" \"$d/$n\"; done", "sh", root.dir, root.png]
+            + "truncate -s 20M \"$d/big.png\"; mkfifo \"$d/evil.png\"; cp \"$d/ok.png\" \"$d/evil2.png\"; for n in 'x.png?a' 'x%2Epng' 'x.png#f' 'x.png?fallback=a'; do cp \"$d/ok.png\" \"$d/$n\"; done", "sh", root.dir, root.png]
         // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
         // qmllint disable signal-handler-parameters
         onExited: code => {
@@ -130,6 +130,17 @@ ShellRoot {
         root.firstCopy = Notifications.iconSource(p.swap, "");
         check("swap: the file is first copied", root.firstCopy !== "");
         shown.source = copy;
+        // Review of 6e24d36: an app icon NAME with "../" resolved through Qt's fallback icon directory (/usr/share/pixmaps)
+        // to any file. evil.png is a FIFO (it stalled the one image loader for good), evil2.png a regular file (any file
+        // the sender picks). Both names are refused at intake and by iconSource; whatever iconSource returns is given to
+        // an Image, so a regression stalls the loader and the "later image still loads" check below fails.
+        const rel = "../../.." + d;
+        for (const name of [rel + "/evil", rel + "/evil2", "hicolor/../../../.." + d + "/evil"]) {
+            check("a traversal app icon name is dropped at intake: " + name, Notifications.checkedAppIcon(name) === "");
+            check("a traversal app icon name is never resolved: " + name, Notifications.iconSource("", name) === "");
+        }
+        check("a plain theme name still reaches the theme", Notifications.checkedAppIcon("dialog-information") === "dialog-information");
+        nameShown.source = Notifications.iconSource("", rel + "/evil");
     }
 
     function finish(): void {
@@ -161,6 +172,15 @@ ShellRoot {
             width: 32
             height: 32
             asynchronous: true
+        }
+
+        Image {
+            id: nameShown
+            y: 32
+            width: 32
+            height: 32
+            asynchronous: true
+            sourceSize: Qt.size(256, 256)
         }
     }
 
