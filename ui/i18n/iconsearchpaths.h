@@ -6,6 +6,11 @@
 // user can neither write nor replace: the directory and every ancestor of its canonical path belong to root (or, inside
 // a user namespace such as a test sandbox, to the overflow uid root maps to), not to this user, and are not writable by
 // this user. User-installed icons are shown through ThemeIcons' checked private copies instead (shell/services).
+// Review of dce68c2 (minor 2): root-owned is not enough. Flatpak and snap system exports (/var/lib/flatpak/exports/share/
+// icons, /var/lib/snapd/desktop/icons) are root-owned but written by app installs, and Qt hands a theme SVG to QtSvg,
+// which follows its hrefs (a FIFO stalled the loader). So Qt searches only the directories system packages fill,
+// /usr/share/icons and /usr/share/pixmaps (the packaged themes, grassfield-icons included); every other icon directory
+// (/usr/local/share, the exports, the user's) goes through ThemeIcons' helper, which re-encodes what it finds.
 //
 // Only this process is affected: no environment variable changes, so applications launched from the shell keep the
 // session's own XDG_DATA_HOME / XDG_DATA_DIRS and icon paths, and Quickshell's DesktopEntries still lists user
@@ -62,7 +67,15 @@ inline bool userCannotChange(const QString &path)
     }
 }
 
-// Canonical forms of the existing directories among `candidates` that the user cannot change, in order, once each.
+// The only directories Qt may search: filled by system packages (shell/services/image-copy.py mirrors the list).
+inline const QStringList &packagedDirectories()
+{
+    static const QStringList dirs{QStringLiteral("/usr/share/icons"), QStringLiteral("/usr/share/pixmaps")};
+    return dirs;
+}
+
+// Canonical forms of the existing directories among `candidates` that are packaged directories the user cannot change,
+// in order, once each.
 inline QStringList systemOnly(const QStringList &candidates)
 {
     QStringList kept;
@@ -71,18 +84,18 @@ inline QStringList systemOnly(const QStringList &candidates)
         const QString canonical = info.canonicalFilePath();
         if (canonical.isEmpty() || !QFileInfo(canonical).isDir() || kept.contains(canonical))
             continue;
-        if (userCannotChange(canonical))
+        if (packagedDirectories().contains(canonical) && userCannotChange(canonical))
             kept << canonical;
     }
     return kept;
 }
 
-// Sets Qt's icon theme and fallback search paths to the system-only directories of the usual ones (the platform theme's
-// $HOME/.icons and every GenericDataLocation "icons"; Quickshell's fallback /usr/share/pixmaps and every
+// Sets Qt's icon theme and fallback search paths to the packaged system directories among the usual ones (the platform
+// theme's $HOME/.icons and every GenericDataLocation "icons"; Quickshell's fallback /usr/share/pixmaps and every
 // GenericDataLocation "pixmaps"), plus Qt's own resources. What Qt then uses is logged once: tests read the line.
 inline void restrictToSystemDirectories()
 {
-    QStringList themeCandidates{QDir::homePath() + QStringLiteral("/.icons")};
+    QStringList themeCandidates{QStringLiteral("/usr/share/icons"), QDir::homePath() + QStringLiteral("/.icons")};
     themeCandidates << QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("icons"), QStandardPaths::LocateDirectory);
     QStringList fallbackCandidates{QStringLiteral("/usr/share/pixmaps")};
     fallbackCandidates << QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("pixmaps"), QStandardPaths::LocateDirectory);

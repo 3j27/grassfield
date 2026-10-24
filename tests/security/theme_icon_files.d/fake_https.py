@@ -7,6 +7,9 @@
 #   /redir-file      302 to file:///etc/hostname               /redir/<n>   n more 302s, then /ok.png
 #   /cookie          302 to /ok.png with Set-Cookie             /big-length  6 MiB announced and sent
 #   /big-chunked     6 MiB without a length (chunked)           /slow        nothing for 8 s, then a PNG
+#   /slow3           nothing for 3 s, then a PNG                /flaky       503 twice, then a PNG
+#   /dead            always 404                                 /redir-loop  302 to https://loop.test:<port>/ok.png
+#   /redir-numeric   302 to https://127.0.0.1:<port>/ok.png
 import base64
 import http.server
 import json
@@ -21,6 +24,7 @@ PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4
 SVG = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="32">'
        '<rect width="64" height="32" fill="red"/><image xlink:href="%s" width="8" height="8"/></svg>' % fifo).encode()
 lock = threading.Lock()
+counts = {}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -48,10 +52,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         with lock, open(log_path, "a") as f:
-            f.write(json.dumps({"scheme": self.server.scheme, "path": self.path, "cookie": self.headers.get("Cookie"), "auth": self.headers.get("Authorization"),
+            f.write(json.dumps({"scheme": self.server.scheme, "host": self.headers.get("Host"), "path": self.path, "cookie": self.headers.get("Cookie"), "auth": self.headers.get("Authorization"),
                                 "agent": self.headers.get("User-Agent")}) + "\n")
         p = self.path
-        if p in ("/ok.png", "/a.png", "/b.png", "/c.png", "/locked.png"):
+        port = self.server.server_address[1]
+        if p == "/flaky":
+            with lock:
+                counts[p] = counts.get(p, 0) + 1
+                n = counts[p]
+            self.send(503 if n <= 2 else 200, b"busy" if n <= 2 else PNG, "text/plain" if n <= 2 else "image/png")
+        elif p == "/dead":
+            self.send(404, b"gone", "text/plain")
+        elif p == "/slow3":
+            time.sleep(3)
+            try:
+                self.send(200, PNG)
+            except OSError:
+                pass
+        elif p == "/redir-loop":
+            self.redirect("https://loop.test:%d/ok.png" % port)
+        elif p == "/redir-numeric":
+            self.redirect("https://127.0.0.1:%d/ok.png" % port)
+        elif p in ("/ok.png", "/a.png", "/b.png", "/c.png", "/locked.png"):
             self.send(200, PNG)
         elif p == "/svgref.svg":
             self.send(200, SVG, "image/svg+xml")

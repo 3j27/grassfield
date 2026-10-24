@@ -27,9 +27,11 @@ import "../widgets/ArtUrl.js" as ArtUrl
 //    recently used copies deleted to make room). The Image loads only that PNG, asynchronously. Anything else (refused,
 //    not made yet): the caller's generic icon.
 // Media art named by an https URL (macOS shows the artwork apps provide; Spotify and browsers name https URLs) is fetched
-// by the same helper (curl, https only, 5 MiB, 5 s, no cookies or credentials) and re-encoded like a file; one URL key
-// per address, in the same budget and least-recently-used order. Only the newest asked URL is fetched (older queued ones
-// are forgotten, asked again if still shown), and none while the session is locked: then only art already made shows.
+// by the same helper (curl, https only, public addresses only, 5 MiB, 5 s, no cookies or credentials) and re-encoded like
+// a file; one URL key per address, in the same budget and least-recently-used order. Only the newest asked URL is fetched
+// (older queued ones are forgotten, asked again if still shown). No fetch starts while the session is locked, and a run
+// fetching art when it locks is stopped (its items wait for the unlock): then only art already made shows. A URL that
+// fails is asked again after retryDelaysMs (60 s, then 10 min) while still shown, then no more this session.
 // The copy directory belongs to the user, like every file of the session: a process of the same user can replace a copy,
 // as it could the shell's own QML. The copies protect against what applications NAME (a path, a theme file, a FIFO, an
 // SVG with references), not against code already running as the user.
@@ -69,6 +71,11 @@ Singleton {
     // Keys asked by bindings during this event-loop turn, requested together by flushAsks (Qt.callLater runs a function
     // once per turn with the last arguments, so asking per key would request only the last). Mutated in place.
     readonly property var asks: ({list: []})
+    // Art URL retries after a failure: the delays (a test may shorten them), in ticks of retryTickMs; key -> {tries, left}.
+    // Mutated in place.
+    property var retryDelaysMs: [60000, 600000]
+    property int retryTickMs: 5000
+    readonly property var retries: ({})
 
     // An absolute icon path (Icon=/path, file:///path) as a plain path, or "": no control character, at most 4096 characters.
     function plainIconPath(icon: string): string {
@@ -179,6 +186,11 @@ Singleton {
             Qt.callLater(root.flushAsks);
             return "";
         }
+        if (entry.state === "retry") {
+            asks.list.push([kind, value]);
+            Qt.callLater(root.flushAsks);
+            return "";
+        }
         if (entry.state !== "ok")
             return "";
         lru.tick++;
@@ -207,7 +219,7 @@ Singleton {
             if (queue.some(q => q.key === key) || batch.some(q => q.key === key) || added.some(q => q.key === key))
                 continue;
             const entry = (next || copies)[key];
-            if (!fresh && entry !== undefined)
+            if (!fresh && entry !== undefined && entry.state !== "retry")
                 continue;
             counter++;
             added.push({key: key, kind: kind, value: value, n: counter});
@@ -332,15 +344,82 @@ Singleton {
                 dropped = dropped.concat([next[key].file]);
             if (file !== undefined) {
                 next[key] = {state: "ok", url: "file://" + file.split("/").map(encodeURIComponent).join("/"), file: file.slice(copyDir.length + 1)};
+                delete retries[key];
             } else {
                 next[key] = {state: "no", url: "", file: ""};
                 console.info("grassfield-icons: no usable image for a " + key.slice(0, key.indexOf(":")) + " request (none found, not a regular file within its size cap, or not an image rsvg-convert could re-encode)");
+                if (key.startsWith("url:"))
+                    scheduleRetry(key);
             }
         }
         batch = [];
         queue = again.concat(queue);
         copies = next;
         Qt.callLater(run);
+    }
+
+    // A failed art URL: asked again after the next delay of retryDelaysMs, while still shown; after the last, never again
+    // this session.
+    function scheduleRetry(key: string): void {
+        const r = retries[key] || {tries: 0, left: 0, done: false};
+        if (r.tries >= retryDelaysMs.length) {
+            r.done = true;
+            r.left = 0;
+        } else {
+            r.left = retryDelaysMs[r.tries];
+            r.tries++;
+        }
+        retries[key] = r;
+        retryTimer.running = Object.keys(retries).some(k => !retries[k].done);
+    }
+
+    // One tick: a URL whose delay ran out is marked "retry", so the bindings still showing it ask for it again
+    // (copyOf); one no binding asks for is not fetched.
+    function retryTick(): void {
+        let next = null;
+        for (const key of Object.keys(retries)) {
+            const r = retries[key];
+            if (r.done || r.left <= 0)
+                continue;
+            r.left -= retryTickMs;
+            if (r.left > 0)
+                continue;
+            if (copies[key] !== undefined && copies[key].state === "no") {
+                next = next || Object.assign({}, copies);
+                next[key] = {state: "retry", url: "", file: ""};
+            }
+        }
+        if (next !== null)
+            copies = next;
+        retryTimer.running = Object.keys(retries).some(k => !retries[k].done && retries[k].left > 0);
+    }
+
+    // The session locks while a run fetches art: the run is stopped (TERM to timeout's process group: python and curl),
+    // its items wait in the queue with new numbers, and whatever it wrote is deleted by the next run.
+    function stopArtRun(): void {
+        const proc = activeRun;
+        if (proc === null || !batch.some(q => q.kind === "url"))
+            return;
+        activeRun = null;
+        watchdog.stop();
+        proc.signal(15);
+        killer.proc = proc;
+        killer.restart();
+        const again = batch.map(q => {
+            counter++;
+            return {key: q.key, kind: q.kind, value: q.value, n: counter};
+        });
+        dropped = dropped.concat(batch.map(q => q.n + ".png"));
+        batch = [];
+        queue = again.concat(queue);
+        console.info("grassfield-icons: the session locked during an art fetch: stopped, asked again once unlocked");
+    }
+
+    Timer {
+        id: retryTimer
+        interval: root.retryTickMs
+        repeat: true
+        onTriggered: root.retryTick()
     }
 
     Component {
@@ -390,8 +469,9 @@ Singleton {
         target: SessionState
 
         function onLockedChanged(): void {
-            if (!SessionState.locked)
-                root.run();
+            if (SessionState.locked)
+                root.stopArtRun();
+            root.run();
         }
     }
 

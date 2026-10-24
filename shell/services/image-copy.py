@@ -17,11 +17,16 @@
 # rsvg-convert runs with an address-space limit, a CPU-time limit and a wall-clock timeout; its output must be a PNG
 # within OUT_CAP. The shell then loads only that PNG, which it made, by its .png name.
 #
-# Media art an app names by an https URL (Spotify, browsers; macOS shows the artwork apps provide) is fetched by curl
-# into memory, then re-encoded the same way: https only (also for every redirect, at most FETCH_REDIRECTS), no
-# user, password or whitespace in the URL, at most FETCH_BYTES, at most FETCH_SECONDS in all, no cookies, no
-# credentials (no HOME, no .curlrc or .netrc: `-q` first), no URL globbing, a fixed user agent with nothing personal.
-# Only the proxy and CA variables of the session reach curl.
+# Media art an app names by an https URL (Spotify, browsers) is fetched by curl into memory, then re-encoded the same
+# way (macOS itself fetches nothing: apps hand over image bytes; review of dce68c2, minor 1, integrator decision):
+#   - the URL: https only, a host name (never an IP literal in any notation, never localhost or *.localhost), no user,
+#     password or whitespace;
+#   - the name is resolved here first; every address must be public (no private, loopback, link-local, shared, reserved
+#     or multicast range, also inside IPv4-mapped, 6to4 and Teredo addresses), and curl connects to exactly those
+#     addresses (`--resolve`: no second lookup, so no DNS rebinding) and to no proxy;
+#   - redirects are followed here, at most FETCH_REDIRECTS, each target checked like the first URL;
+#   - at most FETCH_BYTES, FETCH_SECONDS in all, no cookies, no credentials (no HOME, no .curlrc or .netrc: `-q` first),
+#     no URL globbing, a fixed user agent with nothing personal; only the CA variables of the session reach curl.
 #
 #   image-copy.py batch <out dir> <icon cap> <picture cap> <budget> [<kind> <n> <value>]...
 #       ThemeIcons. Kinds: "name" (a plain theme name: looked up in the user-changeable icon folders), "icon" and
@@ -35,7 +40,7 @@
 #       re-encodes at most NAME_ATTEMPTS readable candidates.
 #   image-copy.py file <source> <cap> <destination>
 #       Notifications: one file, written to <destination> (created, 0600); exit status 0 when written.
-import base64, os, re, resource, stat, subprocess, sys, time
+import base64, ipaddress, os, re, resource, socket, stat, subprocess, sys, threading, time
 
 BOX = 256
 MAX_SIDE = 16384
@@ -50,10 +55,13 @@ FETCH_SECONDS = 5
 FETCH_REDIRECTS = 3
 FETCH_AGENT = "Grassfield-NowPlaying/1.0"
 # https://host[:port][/path]: host of letters, digits, "." and "-" (no user or password, no IP v6 literal), the path of
-# printable ASCII without spaces or backslashes.
-FETCH_URL = re.compile(r"https://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[!-\[\]-~]*)?")
-FETCH_ENV = ("https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY", "CURL_CA_BUNDLE", "SSL_CERT_FILE",
-             "SSL_CERT_DIR")
+# printable ASCII without spaces or backslashes. ArtUrl.remoteUrl (shell/widgets/ArtUrl.js) applies the same rules.
+FETCH_URL = re.compile(r"https://([A-Za-z0-9.-]{1,253})(?::([0-9]{1,5}))?(/[!-\[\]-~]*)?")
+FETCH_ENV = ("CURL_CA_BUNDLE", "SSL_CERT_FILE", "SSL_CERT_DIR")
+RESOLVE_SECONDS = 3
+# The only directories Qt searches for icons (ui/i18n/iconsearchpaths.h): filled by system packages. Every other icon
+# directory (the user's, /usr/local/share, flatpak and snap system exports written by app installs) is looked up here.
+PACKAGED = ("/usr/share/icons", "/usr/share/pixmaps")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 SIZES = ["scalable", "512x512", "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48", "36x36", "32x32",
          "24x24", "22x22", "16x16"]
@@ -76,7 +84,7 @@ def real_roots(paths):
 
 # Where a source file may really lie (after symlinks): the user's home and data folders, the system's, flatpak's, the
 # account pictures, and the places applications put images for notifications and media art. Never /proc, /sys or /dev.
-ROOTS = real_roots([home, data_home] + data_dirs + ["/usr", "/opt", "/var/lib/flatpak", "/var/lib/AccountsService/icons",
+ROOTS = real_roots([home, data_home] + data_dirs + ["/usr", "/opt", "/var/lib/flatpak", "/var/lib/snapd/desktop", "/var/lib/AccountsService/icons",
                    "/tmp", "/var/tmp", os.environ.get("XDG_RUNTIME_DIR", ""), "/media", "/mnt", "/run/media", "/srv"])
 
 
@@ -214,17 +222,65 @@ def fetch_limits():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 
-def fetch(url):
-    """The body of https `url` (at most FETCH_BYTES), or None."""
-    if len(url) > 2048 or not FETCH_URL.fullmatch(url):
+def url_target(url):
+    """(host, port) of an https URL the helper may fetch, or None (ArtUrl.remoteUrl's rules)."""
+    m = FETCH_URL.fullmatch(url) if len(url) <= 2048 else None
+    if m is None:
         return None
+    host = m.group(1).lower().rstrip(".")
+    labels = host.split(".")
+    # An IP literal in any notation (decimal, octal, hex, dotted or not: a host whose last label is a number is one),
+    # localhost and *.localhost are refused outright.
+    if not host or re.fullmatch(r"[0-9]+|0x[0-9a-f]*", labels[-1]) or host == "localhost" or host.endswith(".localhost"):
+        return None
+    port = int(m.group(2)) if m.group(2) else 443
+    return (host, port) if 0 < port < 65536 else None
+
+
+def public_address(ip):
+    """True for an address that is public: not private, loopback, link-local, shared, reserved, unspecified or multicast,
+    also once an IPv4 address embedded in an IPv4-mapped, 6to4 or Teredo address is taken out."""
+    try:
+        a = ipaddress.ip_address(ip.split("%")[0])
+    except ValueError:
+        return False
+    if a.version == 6:
+        inner = [x for x in (a.ipv4_mapped, a.sixtofour) if x is not None] + (list(a.teredo) if a.teredo else [])
+        if any(not public_address(str(x)) for x in inner):
+            return False
+    return a.is_global and not a.is_multicast
+
+
+def address_allowed(host, ip):
+    return public_address(ip)
+
+
+def resolve_host(host, port):
+    """The addresses `host` resolves to (within RESOLVE_SECONDS), or []."""
+    found = []
+
+    def lookup():
+        try:
+            found.extend(sorted({i[4][0] for i in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)}))
+        except (OSError, UnicodeError):
+            pass
+
+    t = threading.Thread(target=lookup, daemon=True)
+    t.start()
+    t.join(RESOLVE_SECONDS)
+    return [] if t.is_alive() else list(found)
+
+
+def curl_once(url, host, port, addresses, seconds):
+    """(status, body, redirect URL) of one request to `url` at exactly `addresses`, or None."""
     env = {"PATH": "/usr/bin:/bin"}
     env.update({k: os.environ[k] for k in FETCH_ENV if k in os.environ})
-    cmd = ["curl", "-q", "--silent", "--fail", "--globoff", "--location", "--max-redirs", str(FETCH_REDIRECTS),
-           "--proto", "=https", "--proto-redir", "=https", "--max-filesize", str(FETCH_BYTES), "--max-time", str(FETCH_SECONDS),
-           "--connect-timeout", str(FETCH_SECONDS), "--user-agent", FETCH_AGENT, "--output", "-", "--", url]
+    pinned = ",".join("[%s]" % a if ":" in a else a for a in addresses)
+    cmd = ["curl", "-q", "--silent", "--fail", "--globoff", "--noproxy", "*", "--proto", "=https", "--max-filesize", str(FETCH_BYTES),
+           "--max-time", "%.1f" % seconds, "--connect-timeout", "%.1f" % seconds, "--resolve", "%s:%d:%s" % (host, port, pinned),
+           "--user-agent", FETCH_AGENT, "--output", "-", "--write-out", "%{stderr}%{http_code} %{redirect_url}\n", "--", url]
     try:
-        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                              close_fds=True, preexec_fn=fetch_limits)
     except OSError:
         return None
@@ -234,14 +290,43 @@ def fetch(url):
             p.kill()
             p.wait()
             return None
-        rc = p.wait(timeout=FETCH_SECONDS + 3)
+        info = p.stderr.read(8192).decode("ascii", "replace").strip().split("\n")[-1].split(" ", 1)
+        rc = p.wait(timeout=seconds + 3)
     except (OSError, subprocess.SubprocessError):
         p.kill()
         p.wait()
         return None
     finally:
         p.stdout.close()
-    return data if rc == 0 and data else None
+        p.stderr.close()
+    if rc != 0 or not info[0].isdigit():
+        return None
+    return int(info[0]), data, (info[1] if len(info) > 1 else "")
+
+
+def fetch(url):
+    """The body of https `url` (at most FETCH_BYTES, FETCH_SECONDS in all), or None."""
+    deadline = time.monotonic() + FETCH_SECONDS
+    for _ in range(FETCH_REDIRECTS + 1):
+        target = url_target(url)
+        if target is None:
+            return None
+        host, port = target
+        addresses = resolve_host(host, port)
+        if not addresses or not all(address_allowed(host, a) for a in addresses):
+            return None
+        left = deadline - time.monotonic()
+        if left < 0.5:
+            return None
+        answer = curl_once(url, host, port, addresses, left)
+        if answer is None:
+            return None
+        status, data, location = answer
+        if status in (301, 302, 303, 307, 308):
+            url = location
+            continue
+        return data if status == 200 and data else None
+    return None
 
 
 def normalize(data):
@@ -395,18 +480,30 @@ def one_file(argv):
     return 0
 
 
-# Icon directories Qt no longer searches (iconsearchpaths.h): the user's own, and user-changeable data dirs.
+def qt_searches(path):
+    """The rule of iconsearchpaths.h: Qt searches only the packaged directories, and only when the user cannot change them."""
+    return os.path.realpath(path) in PACKAGED and not user_changeable(path)
+
+
+# Every existing icon directory Qt does not search: the user's, user-changeable data dirs, and root-owned ones that are
+# not packaged (/usr/local/share, flatpak and snap system exports).
 BASES = [b for b in [os.path.join(home, ".icons"), os.path.join(data_home, "icons")] + [os.path.join(d, "icons") for d in data_dirs]
-         if user_changeable(b)]
-PIXMAPS = [p for p in [os.path.join(data_home, "pixmaps")] + [os.path.join(d, "pixmaps") for d in data_dirs] if user_changeable(p)]
+         if os.path.isdir(b) and not qt_searches(b)]
+PIXMAPS = [p for p in [os.path.join(data_home, "pixmaps")] + [os.path.join(d, "pixmaps") for d in data_dirs]
+           if os.path.isdir(p) and not qt_searches(p)]
+
+
+def main(argv):
+    mode = argv[1] if len(argv) > 1 else ""
+    try:
+        if mode == "batch" and len(argv) >= 6:
+            return batch(argv[2:])
+        if mode == "file" and len(argv) == 5:
+            return one_file(argv[2:])
+    except (ValueError, OSError):
+        return 1
+    return 2
+
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else ""
-    try:
-        if mode == "batch" and len(sys.argv) >= 6:
-            sys.exit(batch(sys.argv[2:]))
-        if mode == "file" and len(sys.argv) == 5:
-            sys.exit(one_file(sys.argv[2:]))
-    except (ValueError, OSError):
-        sys.exit(1)
-    sys.exit(2)
+    sys.exit(main(sys.argv))

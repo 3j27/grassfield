@@ -45,11 +45,16 @@
 # `env -i` with only that address, a guard refusing any other bus; SKIP where Unix sockets cannot be created).
 # Part 6, media art over https (coordinator, after the review of 80f0f19: macOS shows the artwork apps provide), offline:
 # a local HTTPS server on 127.0.0.1 with a throwaway CA (theme_icon_files.d/fake_https.py; no proxy variable, no other
-# host). The helper fetches a PNG and an SVG naming a FIFO (rendered, the FIFO untouched), refuses text/html, a redirect to
-# http or file:, a fourth redirect, more than 5 MiB (announced or chunked), a response slower than 5 s, an http URL and
-# a URL with credentials (no request made), and sends no cookie, no credentials and only its fixed user agent. The shell
-# (ThemeIcons.artSource) shows the art as a PNG it made, fetches nothing while the session is locked (the art already made
-# still shows), fetches the held URL after unlocking, and of three URLs asked in one turn fetches only the newest.
+# host), reached as art.test through a test stand-in of the helper that changes only name resolution
+# (image-copy-testnet.py). The helper fetches a PNG (from the checked address: --resolve) and an SVG naming a FIFO
+# (rendered, the FIFO untouched), refuses text/html, a redirect to http or file:, a fourth redirect, more than 5 MiB
+# (announced or chunked), a response slower than 5 s, an http URL and a URL with credentials; IP literals in every
+# notation, localhost names, names resolving to loopback, private or mapped-loopback addresses and redirects to them
+# never reach the server (review of dce68c2, minor 1); the address rule refuses every non-public range; requests carry
+# no cookie, no credentials and only the fixed user agent. The shell (ThemeIcons.artSource) shows the art as a PNG it
+# made, starts no fetch while the session is locked (the art already made still shows) and stops a fetch running when it
+# locks (minor 3), fetches held URLs after unlocking, fetches only the newest of three URLs asked in one turn, and
+# retries a failed URL with backoff, three tries at most (minor 4).
 # Plain shell test: PASS/FAIL lines, non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -363,7 +368,7 @@ else
   grep -q "probe: loaded " <<<"$out" && pass "policy: their image://icon URLs were loaded and the loads finished" || bad "policy: loads did not finish"
   grep -q "probe: child environment same=true" <<<"$out" && pass "policy: a child process gets the shell's environment unchanged" || bad "policy: child environment: $(grep -o 'probe: child.*' <<<"$out")"
   paths=$(grep -o 'grassfield-icons: theme search paths .*' <<<"$out" | head -n 1 || true)
-  python3 -I - "$s" "$paths" <<'PY' && pass "policy: Qt's icon search paths hold no directory the user can change ($(sed "s|$s|\$S|g" <<<"$paths"))" || bad "policy: search paths: $paths"
+  python3 -I - "$s" "$paths" <<'PY' && pass "policy: Qt's icon search paths are only packaged directories the user cannot change ($(sed "s|$s|\$S|g" <<<"$paths"))" || bad "policy: search paths: $paths"
 import os, sys
 scratch, line = sys.argv[1], sys.argv[2]
 if not line.startswith("grassfield-icons: theme search paths "):
@@ -379,7 +384,7 @@ ROOT = mapped_root()
 ok = bool(dirs)
 for d in dirs:
     p = os.path.realpath(d)
-    if p != d or p.startswith(scratch) or p.startswith(os.path.expanduser("~")):
+    if p != d or p.startswith(scratch) or p.startswith(os.path.expanduser("~")) or p not in ("/usr/share/icons", "/usr/share/pixmaps"):
         ok = False
     while ok:
         st = os.stat(p)
@@ -395,6 +400,48 @@ PY
     [[ -z $user_opens ]] && pass "policy: the shell opened no file in the user's icon folders" || bad "policy: opens in user icon folders: $(head -n 3 <<<"$user_opens" | sed "s|$s|\$S|g")"
   else
     bad "policy: the open log is empty (the shim did not load)"
+  fi
+  # Review of dce68c2 (minor 2): root-owned is not enough (flatpak and snap system exports are written by app installs).
+  # A root-owned icon directory outside /usr/share (found on this machine) named by XDG_DATA_DIRS is not searched by Qt,
+  # and the helper looks it up instead.
+  extra=
+  while read -r d; do
+    parent=$(dirname "$d")
+    if python3 -I - "$parent" <<'PY'; then extra=$parent; break; fi
+import os, sys
+def mapped_root():
+    if open("/proc/self/uid_map").read().split()[:2] == ["0", "0"]:
+        return -1
+    return int(open("/proc/sys/kernel/overflowuid").read())
+p = os.path.realpath(sys.argv[1])
+if p.startswith("/usr/share/"):
+    sys.exit(1)
+while True:
+    st = os.stat(p)
+    if st.st_uid not in (0, mapped_root()) or st.st_uid == os.geteuid() or os.access(p, os.W_OK):
+        sys.exit(1)
+    if p == "/":
+        sys.exit(0)
+    p = os.path.dirname(p)
+PY
+  done < <(find /opt /usr/lib /usr/local /var/lib/flatpak /var/lib/snapd -maxdepth 5 -type d -name icons 2>/dev/null | head -n 40)
+  if [[ -z $extra ]]; then
+    echo "SKIP: theme icon files, policy: no root-owned icon directory outside /usr/share on this machine: NOT VERIFIED here"
+  else
+    xout=$(env "${e[@]}" XDG_DATA_DIRS="$s/data:$extra:/usr/local/share:/usr/share" timeout -k 3 30 qs -p "$tmp/pcfg" --no-color 2>&1 || true)
+    xpaths=$(grep -o 'grassfield-icons: theme search paths .*' <<<"$xout" | head -n 1 || true)
+    bases=$(env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:$extra:/usr/local/share:/usr/share" \
+      python3 -I - shell/services/image-copy.py <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("imagecopy", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+print("\n".join(m.BASES))
+PY
+)
+    [[ -n $xpaths && $xpaths != *"$extra/icons"* ]] && grep -qxF "$extra/icons" <<<"$bases" && ! grep -qxF "/usr/share/icons" <<<"$bases" \
+      && pass "policy: a root-owned icon directory outside /usr/share ($extra/icons) is left to the helper, not searched by Qt" \
+      || bad "policy: $extra/icons: Qt paths [$xpaths], helper bases [$(tr '\n' ' ' <<<"$bases")]"
   fi
   # The copy helper itself: under the same log, every open of a user icon file carries O_NOFOLLOW|O_NONBLOCK (or is a
   # directory listing).
@@ -553,8 +600,8 @@ if ! command -v openssl >/dev/null || ! command -v curl >/dev/null; then
 else
   h=$tmp/https
   mkdir -p "$h"
-  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$h/key.pem" -out "$h/cert.pem" -days 1 -subj "/CN=127.0.0.1" \
-    -addext "subjectAltName=IP:127.0.0.1" >/dev/null 2>&1
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$h/key.pem" -out "$h/cert.pem" -days 1 -subj "/CN=art.test" \
+    -addext "subjectAltName=DNS:art.test,DNS:loop.test,DNS:private.test,DNS:mapped.test,DNS:localhost,DNS:art.localhost,IP:127.0.0.1" >/dev/null 2>&1
   s=$tmp/art
   scratch "$s"
   mkfifo "$s/outside/art-ref.fifo"
@@ -567,23 +614,29 @@ else
   if [[ ! $port =~ ^[0-9]+$ ]]; then
     echo "SKIP: theme icon files, part 6 media art over https: no local HTTPS server here ($(head -c 200 "$h/server.err")): NOT VERIFIED"
   else
-    B=https://127.0.0.1:$port
-    # The helper alone, as ThemeIcons runs it: no variable but the CA bundle of the throwaway CA (no proxy: offline).
-    helper_url() { # <n> <url>...: one batch of "url" items; prints its answer lines
+    B=https://art.test:$port
+    # The helper as ThemeIcons runs it, through the test stand-in (image-copy-testnet.py: only name resolution changes,
+    # art.test -> 127.0.0.1); no variable but the throwaway CA's bundle (no proxy: offline).
+    helper_url() { # <url>...: one batch of "url" items; prints its answer lines
       local -a a=()
       local n=0 u
       for u in "$@"; do n=$((n + 1)); a+=(url "$n" "$u"); done
       rm -rf "$s/fetch-out" && mkdir -m 700 "$s/fetch-out"
-      env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" CURL_CA_BUNDLE="$h/cert.pem" \
-        timeout -k 2 90 python3 -I shell/services/image-copy.py batch "$s/fetch-out" 8388608 16777216 134217728 "${a[@]}"
+      env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" CURL_CA_BUNDLE="$h/cert.pem" GF_REAL_HELPER="$root/shell/services/image-copy.py" \
+        timeout -k 2 120 python3 -I tests/security/theme_icon_files.d/image-copy-testnet.py batch "$s/fetch-out" 8388608 16777216 134217728 "${a[@]}"
     }
-    answer() { grep -F -- "$2" <<<"$1" | grep -E "^(ok|no)	url:" | head -n 1 | cut -f1; }
-    out=$(helper_url "$B/ok.png" "$B/svgref.svg" "$B/html" "$B/redir-http" "$B/redir-file" "$B/redir/3" "$B/redir/4" "$B/cookie" \
-      "$B/big-length" "$B/big-chunked" "http://127.0.0.1:$port/ok.png" "https://user:pw@127.0.0.1:$port/a.png")
+    answer() { grep -F -- "	$2" <<<"$1" | grep -E "^(ok|no)	url:" | head -n 1 | cut -f1; }
+    requested() { python3 -I -c 'import json, sys; print(sum(1 for l in open(sys.argv[1]) if json.loads(l)["path"] == sys.argv[2]))' "$h/requests.log" "$1"; }
     acheck() { # <label> <ok>
       if [[ $2 == 1 ]]; then pass "https art: $1"; else bad "https art: $1 ($(tr '\n' '|' <<<"$out" | sed "s|$B|\$B|g" | cut -c1-600))"; fi
     }
-    acheck "a PNG is fetched and re-encoded" "$([[ $(answer "$out" "url:$B/ok.png	") == ok ]] && echo 1)"
+    # Precondition for the pinning check: the system resolver does not know art.test.
+    pinned=0
+    python3 -I -c 'import socket; socket.getaddrinfo("art.test", 443)' 2>/dev/null || pinned=1
+    out=$(helper_url "$B/ok.png" "$B/svgref.svg" "$B/html" "$B/redir-http" "$B/redir-file" "$B/redir/3" "$B/redir/4" "$B/cookie" \
+      "$B/big-length" "$B/big-chunked" "http://art.test:$port/ok.png" "https://user:pw@art.test:$port/a.png")
+    acheck "a PNG is fetched and re-encoded, from the address the helper checked (art.test is unknown to the system resolver: curl --resolve)" \
+      "$([[ $pinned == 1 && $(answer "$out" "url:$B/ok.png	") == ok ]] && echo 1)"
     acheck "an SVG naming a FIFO is fetched and rendered (the FIFO is never opened)" "$([[ $(answer "$out" "url:$B/svgref.svg") == ok ]] && fifos_untouched "$s" >/dev/null && echo 1)"
     acheck "text/html is refused (not an image)" "$([[ $(answer "$out" "url:$B/html") == no ]] && echo 1)"
     acheck "a redirect to http is refused (its plain-HTTP target, which would answer, is never asked)" \
@@ -592,7 +645,7 @@ else
     acheck "three redirects are followed, a fourth is refused" "$([[ $(answer "$out" "url:$B/redir/3") == ok && $(answer "$out" "url:$B/redir/4") == no ]] && echo 1)"
     acheck "a response over 5 MiB is refused, announced or chunked" "$([[ $(answer "$out" "url:$B/big-length") == no && $(answer "$out" "url:$B/big-chunked") == no ]] && echo 1)"
     acheck "an http URL and a URL with credentials are refused before any request" \
-      "$([[ $(answer "$out" "url:http://127.0.0.1:$port/ok.png") == no && $(answer "$out" "url:https://user:pw@") == no ]] && ! grep -q '"/a.png"' "$h/requests.log" && echo 1)"
+      "$([[ $(answer "$out" "url:http://art.test:$port/ok.png") == no && $(answer "$out" "url:https://user:pw@") == no && $(requested /a.png) == 0 ]] && echo 1)"
     acheck "every copy is a PNG the shell made" "$(python3 -I - "$s/fetch-out" <<'PY' && echo 1
 import os, sys
 d = sys.argv[1]
@@ -600,30 +653,84 @@ ok = all(open(os.path.join(d, f), "rb").read(8) == b"\x89PNG\r\n\x1a\n" for f in
 sys.exit(0 if ok and os.listdir(d) else 1)
 PY
 )"
-    # No cookie (the /cookie redirect set one), no credentials, the fixed user agent, on every request.
-    acheck "requests carry no cookie, no credentials and only the fixed user agent" "$(python3 -I - "$h/requests.log" <<'PY' && echo 1
+    # Review of dce68c2, minor 1: no IP literal in any notation, no localhost name, no name that resolves to a private,
+    # loopback or mapped-loopback address, and no redirect to one; none of them reaches the server.
+    before=$(wc -l <"$h/requests.log")
+    out=$(helper_url "https://127.0.0.1:$port/ok.png" "https://2130706433:$port/ok.png" "https://0x7f000001:$port/ok.png" "https://0177.0.0.1:$port/ok.png" \
+      "https://127.1:$port/ok.png" "https://localhost:$port/ok.png" "https://art.localhost:$port/ok.png" "https://LOCALHOST.:$port/ok.png" \
+      "https://loop.test:$port/ok.png" "https://private.test:$port/ok.png" "https://mapped.test:$port/ok.png" "https://unknown.test:$port/ok.png")
+    refused=1
+    for u in "https://127.0.0.1:$port/ok.png" "https://2130706433:$port/ok.png" "https://0x7f000001:$port/ok.png" "https://0177.0.0.1:$port/ok.png" \
+      "https://127.1:$port/ok.png" "https://localhost:$port/ok.png" "https://art.localhost:$port/ok.png" "https://LOCALHOST.:$port/ok.png" \
+      "https://loop.test:$port/ok.png" "https://private.test:$port/ok.png" "https://mapped.test:$port/ok.png" "https://unknown.test:$port/ok.png"; do
+      [[ $(answer "$out" "url:$u") == no ]] || { refused=0; echo "not refused: $u"; }
+    done
+    acheck "IP literals (dotted, decimal, hex, octal, short), localhost names, and names resolving to loopback, private or mapped-loopback addresses are refused before any request" \
+      "$([[ $refused == 1 && $(wc -l <"$h/requests.log") == "$before" ]] && echo 1)"
+    out=$(helper_url "$B/redir-loop" "$B/redir-numeric")
+    acheck "a redirect to a loopback name or to an IP literal is refused (only the first hop reached the server)" \
+      "$([[ $(answer "$out" "url:$B/redir-loop") == no && $(answer "$out" "url:$B/redir-numeric") == no ]] && ! grep -q '"host": "loop.test\|"host": "127.0.0.1' "$h/requests.log" && echo 1)"
+    out=$(env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" python3 -I - "$root/shell/services/image-copy.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("imagecopy", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+cases = {"8.8.8.8": True, "2606:4700:4700::1111": True, "127.0.0.1": False, "10.1.2.3": False, "172.16.0.1": False,
+         "192.168.1.1": False, "169.254.169.254": False, "100.64.0.1": False, "0.0.0.0": False, "224.0.0.1": False,
+         "255.255.255.255": False, "192.0.2.1": False, "::1": False, "fe80::1": False, "fc00::1": False, "::": False,
+         "::ffff:127.0.0.1": False, "::ffff:10.0.0.1": False, "2002:7f00:1::1": False, "2002:a00:1::1": False,
+         "2001:0:4136:e378:8000:63bf:80ff:fffe": False, "ff02::1": False, "not an address": False}
+bad = [ip for ip, want in cases.items() if m.public_address(ip) != want]
+urls = {"https://cdn.example.com/a.png": ("cdn.example.com", 443), "https://art.test:8443/x": ("art.test", 8443),
+        "https://1.example.com/a.png": ("1.example.com", 443), "https://127.0.0.1/a": None, "https://2130706433/a": None,
+        "https://0x7f000001/a": None, "https://0x7f.0.0.1/a": None, "https://0177.0.0.1/a": None, "https://127.1/a": None,
+        "https://10.0.0.1./a": None, "https://localhost/a": None, "https://LOCALHOST./a": None, "https://a.localhost/a": None,
+        "https://[::1]/a": None, "https://u:p@cdn.example.com/a": None, "http://cdn.example.com/a": None, "https://x:0/a": None}
+bad += [u for u, want in urls.items() if m.url_target(u) != want]
+print("bad=" + ",".join(bad))
+PY
+)
+    acheck "the URL rule (IP literals in every notation and localhost names refused) and the address rule (public addresses only: private, loopback, link-local, shared, reserved, multicast, mapped, 6to4 and Teredo forms refused)" \
+      "$([[ $out == "bad=" ]] && echo 1)"
+    rows_ok=$(python3 -I - "$h/requests.log" <<'PY'
 import json, sys
 rows = [json.loads(l) for l in open(sys.argv[1])]
-sys.exit(0 if rows and all(r["cookie"] is None and r["auth"] is None and r["agent"] == "Grassfield-NowPlaying/1.0" for r in rows) else 1)
+print(1 if rows and all(r["cookie"] is None and r["auth"] is None and r["agent"] == "Grassfield-NowPlaying/1.0" for r in rows) else 0)
 PY
-)"
+)
+    acheck "requests carry no cookie, no credentials and only the fixed user agent" "$rows_ok"
     start=$(date +%s%N)
     out=$(helper_url "$B/slow")
     ms=$((($(date +%s%N) - start) / 1000000))
     acheck "a response that does not come within 5 s is refused (${ms} ms)" "$([[ $(answer "$out" "url:$B/slow") == no ]] && ((ms < 8000)) && echo 1)"
 
-    # The shell: ThemeIcons.artSource as the Now Playing views use it (no proxy variable: offline).
+    # The shell: ThemeIcons.artSource as the Now Playing views use it, with the stand-in in place of the helper (no proxy
+    # variable: offline).
     mkcfg "$tmp/acfg" art_probe.qml
+    rm "$tmp/acfg/services"
+    mkdir "$tmp/acfg/services"
+    for entry in shell/services/*; do
+      [[ $(basename "$entry") == image-copy.py ]] || ln -s "$root/$entry" "$tmp/acfg/services/$(basename "$entry")"
+    done
+    cp tests/security/theme_icon_files.d/image-copy-testnet.py "$tmp/acfg/services/image-copy.py"
     mapfile -t e < <(shellenv "$s")
     rc=0
     out=$(env -u https_proxy -u HTTPS_PROXY -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY "${e[@]}" CURL_CA_BUNDLE="$h/cert.pem" PROBE_BASE="$B" \
-      timeout -k 3 90 qs -p "$tmp/acfg" --no-color 2>&1) || rc=$?
+      GF_REAL_HELPER="$root/shell/services/image-copy.py" timeout -k 3 120 qs -p "$tmp/acfg" --no-color 2>&1) || rc=$?
     acheck "the shell shows https art as a PNG it made" "$(grep -q 'probe: unlocked class=copy status=1' <<<"$out" && echo 1)"
-    acheck "while locked nothing is fetched (no request, no entry) and only art already made shows" \
+    acheck "while locked no fetch starts (no request, no entry) and only art already made shows" \
       "$(grep -q 'probe: locked source=none entry=none cached=copy' <<<"$out" && echo 1)"
-    acheck "after unlocking the held art is fetched once" "$(grep -q 'probe: after-unlock class=copy status=1' <<<"$out" && [[ $(grep -c '"/locked.png"' "$h/requests.log") == 1 ]] && echo 1)"
+    acheck "after unlocking the held art is fetched once" "$(grep -q 'probe: after-unlock class=copy status=1' <<<"$out" && [[ $(requested /locked.png) == 1 ]] && echo 1)"
     acheck "three URLs asked in one turn: only the newest is fetched" \
-      "$(grep -q 'probe: newest a=none b=none c=ok' <<<"$out" && ! grep -q '"/a.png"\|"/b.png"' "$h/requests.log" && echo 1)"
+      "$(grep -q 'probe: newest a=none b=none c=ok' <<<"$out" && [[ $(requested /a.png) == 0 && $(requested /b.png) == 0 ]] && echo 1)"
+    acheck "a fetch running when the session locks is stopped at once and its URL waits (review of dce68c2, minor 3)" \
+      "$(grep -q 'probe: lock-stop running=false entry=pending queued=true' <<<"$out" && grep -q 'probe: lock-stop while-locked entry=pending source=none' <<<"$out" && echo 1)"
+    acheck "after unlocking, the stopped URL is fetched again (two requests in all)" \
+      "$(grep -q 'probe: lock-stop after-unlock class=copy status=1' <<<"$out" && [[ $(requested /slow3) == 2 ]] && echo 1)"
+    acheck "a failed URL is retried with backoff while shown: one that works on its third try is shown (review of dce68c2, minor 4)" \
+      "$(grep -q 'probe: retry flaky=ok class=copy' <<<"$out" && [[ $(requested /flaky) == 3 ]] && echo 1)"
+    acheck "one that always fails is asked exactly three times, then never again" \
+      "$(grep -q 'dead=no tries=2 done=true' <<<"$out" && [[ $(requested /dead) == 3 ]] && echo 1)"
     acheck "the shell never stalled" "$([[ $rc == 0 ]] && grep -q 'probe: done' <<<"$out" && echo 1)"
   fi
 fi
