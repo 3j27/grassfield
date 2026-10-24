@@ -110,6 +110,8 @@ event appmenu: address service path pid
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+event frames: clock marks monitors name presented refreshHz renders t total unit what
+event frames-recording: ms recording
 event error:
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
@@ -118,7 +120,7 @@ enum overview-focus.target: window workspace remembered none press
 enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
-feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance
+feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile
 ```
 
