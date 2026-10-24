@@ -18,8 +18,29 @@
 
 namespace gf::frames {
 
-    // `hyprctl grassfield-frames` (exact name, no argument).
+    // `hyprctl grassfield-frames` (exact name, no argument): what was recorded.
     inline constexpr std::string_view kHyprctlCommand = "grassfield-frames";
+    // `hyprctl grassfield-frames-start` (exact name, no argument): record for the next kMaxRecordingMs.
+    inline constexpr std::string_view kHyprctlStartCommand = "grassfield-frames-start";
+
+    // Nothing is recorded unless a measurement asked for it, and never for long (review of part B, 2026-10-24: frame times
+    // on the lock screen give the typing rhythm away, each key redrawing the password dots): a start request records for
+    // this long, a new one extends it. While the session is locked nothing is recorded and what was recorded is dropped.
+    inline constexpr uint64_t kMaxRecordingMs = 60'000;
+
+    class CRecording {
+      public:
+        // A start request at `nowMs`: recording until nowMs + kMaxRecordingMs.
+        void     start(uint64_t nowMs);
+        void     stop();
+        // Recording at `nowMs` (not past the bound; a clock that went backwards stops it).
+        bool     active(uint64_t nowMs) const;
+        uint64_t untilMs() const;
+
+      private:
+        uint64_t m_startMs = 0;
+        uint64_t m_untilMs = 0;
+    };
 
     // Frames kept per monitor: 1024 is about 17 s at 60 Hz, more than any of the P3 animations plus its margins.
     inline constexpr size_t kCapacity = 1024;
@@ -42,6 +63,9 @@ namespace gf::frames {
         size_t size() const {
             return m_size;
         }
+
+        // Forgets every timestamp (the session locked).
+        void clear();
 
         // Every timestamp accepted since the start (the ring holds the last kCapacity of them).
         uint64_t total() const {
@@ -70,6 +94,7 @@ namespace gf::frames {
       public:
         bool                    push(const RenderSpan& span);
         std::vector<RenderSpan> snapshot() const;
+        void                    clear();
 
         size_t size() const {
             return m_size;
@@ -99,6 +124,7 @@ namespace gf::frames {
       public:
         bool              push(uint64_t us, std::string_view what);
         std::vector<Mark> snapshot() const;
+        void              clear();
 
       private:
         std::vector<Mark> m_slots = std::vector<Mark>(kMaxMarks);

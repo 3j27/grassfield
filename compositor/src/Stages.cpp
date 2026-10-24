@@ -110,6 +110,7 @@ namespace {
         double                           durationMs = 0; // of swaps (from op on)
         st::Curve                        curve;
         bool                             animating = false;
+        uint64_t                         lockStayLogged = 0; // the strip window logged as staying active under the lock
         Time::steady_tp                  start;
         double                           animMs = 0;
         std::vector<CHyprSignalListener> listeners;
@@ -718,8 +719,14 @@ namespace {
         for (int attempt = 0; attempt < 2; ++attempt) {
             switch (st::activeWindowAction(state)) {
                 case st::ActiveWindowAction::None:
-                    if (state.locked)
-                        gf::logRequest(Log::DEBUG, "stages: strip window {:x} stays Hyprland's active window under the session lock ({})", addressOf(active), when);
+                    // Once per window and lock, never per event: this runs before every key and pointer event while it
+                    // lasts (review of part B, 2026-10-24; a key path logs nothing at all, core/Quiet.hpp).
+                    if (state.locked && S().lockStayLogged != addressOf(active)) {
+                        S().lockStayLogged = addressOf(active);
+                        gf::logRequest(Log::DEBUG, "stages: strip window {:x} stays Hyprland's active window under the session lock", addressOf(active));
+                    }
+                    if (!state.locked)
+                        S().lockStayLogged = 0;
                     return;
                 case st::ActiveWindowAction::FocusFront: {
                     forgetPending();
@@ -1426,7 +1433,7 @@ namespace gf::stager {
         auto& l         = S().listeners;
         // Input guards, observed and never cancelled (FR13): they move a stale focus off a blocked window before Hyprland
         // delivers the event. Pointer buttons are guarded from the plugin's first button listener (main.cpp).
-        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("stages key guard", [] { beforeKey(); }); }));
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::keyPath("stages key guard", [] { beforeKey(); }); }));
         l.push_back(ev.input.mouse.axis.listen(
             [](IPointer::SAxisEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("stages scroll guard", [] { beforePointer(st::PointerEvent::Axis); }); }));
         // Presses other than pointer buttons (beforePointerButton): Hyprland refocuses at the touch point / tool on a touch

@@ -10,7 +10,7 @@ what=${1:-all}
 
 core_srcs=(src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp src/core/Json.cpp src/core/Stages.cpp src/core/CursorRefresh.cpp
-  src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/Tiling.cpp src/core/LayerPointer.cpp src/core/ClientChrome.cpp src/core/FrameLog.cpp)
+  src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/Tiling.cpp src/core/LayerPointer.cpp src/core/ClientChrome.cpp src/core/FrameLog.cpp src/core/Quiet.cpp)
 glue_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp src/Tiling.cpp src/LayerPointer.cpp src/ClientChrome.cpp src/FrameProbe.cpp)
 plugin_srcs=("${glue_srcs[@]}" "${core_srcs[@]}")
 test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp

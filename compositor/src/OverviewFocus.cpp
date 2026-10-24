@@ -65,6 +65,9 @@ namespace {
         // The namespace of the layer surface that held the keyboard when the request came (the closing chrome, e.g.
         // grassfield-overview; "" when none): its layers never get the keyboard from the dialog hand-over (GF-038).
         std::string closing;
+        // The request whose keyboard hand-over was logged: one line per request, never one per attempt (an attempt runs
+        // before every key while it waits; review of part B, 2026-10-24).
+        uint32_t handOverLogged = 0;
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -367,6 +370,9 @@ namespace {
         const bool     held = gf::surfaces::keyboardFocus() == surface;
         const auto&    req  = S().pending;
         const uint32_t id   = req ? req->id : 0;
+        if (id != 0 && S().handOverLogged == id)
+            return;
+        S().handOverLogged = id;
         gf::logRequest(held ? Log::INFO : Log::WARN, "overview focus: request {}: the keyboard was on nothing: {} the layer {} that opened during the close ({})", id,
                        held ? "given to" : "Hyprland did not give it to", ls->m_namespace, when);
     }
@@ -472,7 +478,7 @@ namespace gf::overviewFocus {
         auto& l  = s.listeners;
         // Before a key is delivered: the last Exclusive layer may have gone in this same dispatch, before the attempt ran.
         l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) {
-            gf::guarded("overview focus key", [] { attempt("before a key"); });
+            gf::keyPath("overview focus key", [] { attempt("before a key"); });
         }));
         l.push_back(ev.input.touch.down.listen([](const ITouch::SDownEvent& /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("overview focus touch", [] { onPress(false); }); }));
         l.push_back(ev.input.tablet.tip.listen([](const CTablet::STipEvent& e, Event::SCallbackInfo& /*info*/) {

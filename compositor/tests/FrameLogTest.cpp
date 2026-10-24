@@ -106,10 +106,45 @@ TEST(FrameLog, JsonCarriesRendersAndMarks) {
                                     R"("marks":[{"t":5,"what":"overview-opening"},{"t":9,"what":"a\"b"}]})");
 }
 
+// Review of part B, 2026-10-24: off unless a measurement asked, bounded, and nothing kept from a locked session.
+TEST(FrameLog, RecordingIsOffUntilStartedAndStopsByItself) {
+    CRecording r;
+    EXPECT_FALSE(r.active(1000)) << "off by default";
+    r.start(1000);
+    EXPECT_TRUE(r.active(1000));
+    EXPECT_TRUE(r.active(1000 + kMaxRecordingMs - 1));
+    EXPECT_FALSE(r.active(1000 + kMaxRecordingMs)) << "auto-stop";
+    r.start(50'000);
+    EXPECT_EQ(r.untilMs(), 50'000 + kMaxRecordingMs) << "a new start extends it";
+    EXPECT_FALSE(r.active(49'999)) << "a clock that went backwards";
+    r.stop();
+    EXPECT_FALSE(r.active(50'001));
+}
+
+TEST(FrameLog, RingsForgetEverythingOnClear) {
+    CRing frames;
+    ASSERT_TRUE(frames.push(10));
+    frames.clear();
+    EXPECT_TRUE(frames.snapshot().empty());
+    EXPECT_EQ(frames.total(), 0U);
+    EXPECT_TRUE(frames.push(5)) << "after a clear, any time is accepted";
+    CSpanRing spans;
+    ASSERT_TRUE(spans.push({.beginUs = 10, .cpuUs = 1}));
+    spans.clear();
+    EXPECT_TRUE(spans.snapshot().empty());
+    EXPECT_TRUE(spans.push({.beginUs = 5, .cpuUs = 1}));
+    CMarkRing marks;
+    ASSERT_TRUE(marks.push(10, "overview-open"));
+    marks.clear();
+    EXPECT_TRUE(marks.snapshot().empty());
+    EXPECT_TRUE(marks.push(5, "overview-closed"));
+}
+
 TEST(FrameLog, FeatureName) {
     using namespace gf::gfc;
     EXPECT_EQ(kFeatureFrameTimes, "frame-times");
     EXPECT_EQ(gf::frames::kHyprctlCommand, "grassfield-frames");
+    EXPECT_EQ(gf::frames::kHyprctlStartCommand, "grassfield-frames-start");
     EXPECT_EQ(capabilitiesJson(features(false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","frame-times"]})");
 }

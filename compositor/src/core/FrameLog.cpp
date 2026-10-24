@@ -19,6 +19,31 @@ namespace gf::frames {
         return true;
     }
 
+    void CRing::clear() {
+        m_next  = 0;
+        m_size  = 0;
+        m_total = 0;
+        m_last  = 0;
+    }
+
+    void CRecording::start(uint64_t nowMs) {
+        m_startMs = nowMs;
+        m_untilMs = nowMs + kMaxRecordingMs;
+    }
+
+    void CRecording::stop() {
+        m_startMs = 0;
+        m_untilMs = 0;
+    }
+
+    bool CRecording::active(uint64_t nowMs) const {
+        return m_untilMs != 0 && nowMs >= m_startMs && nowMs < m_untilMs;
+    }
+
+    uint64_t CRecording::untilMs() const {
+        return m_untilMs;
+    }
+
     std::vector<uint64_t> CRing::snapshot() const {
         std::vector<uint64_t> out;
         out.reserve(m_size);
@@ -38,6 +63,13 @@ namespace gf::frames {
         m_last = span.beginUs;
         m_any  = true;
         return true;
+    }
+
+    void CSpanRing::clear() {
+        m_next = 0;
+        m_size = 0;
+        m_last = 0;
+        m_any  = false;
     }
 
     std::vector<RenderSpan> CSpanRing::snapshot() const {
@@ -71,6 +103,12 @@ namespace gf::frames {
             ++m_size;
         m_last = us;
         return true;
+    }
+
+    void CMarkRing::clear() {
+        m_next = 0;
+        m_size = 0;
+        m_last = 0;
     }
 
     std::vector<Mark> CMarkRing::snapshot() const {

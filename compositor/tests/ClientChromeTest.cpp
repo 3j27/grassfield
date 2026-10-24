@@ -217,6 +217,26 @@ TEST(ClientChromeFullscreenTitlebar, ALostReleaseIsForgottenAtTheNextPress) {
     EXPECT_FALSE(p.pressing());
 }
 
+// Review of part B, 2026-10-24: a button already held when the plugin loads must not be mistaken for nothing held.
+TEST(ClientChromeFullscreenTitlebar, HeldButtonsAreUnknownUntilHyprlandHoldsNone) {
+    constexpr uint32_t kLeft  = 0x110;
+    constexpr uint32_t kRight = 0x111;
+    CHeldButtons       held;
+    EXPECT_FALSE(held.mayTake(kLeft, false)) << "just loaded, Hyprland holds something: unknown, refused";
+    EXPECT_FALSE(held.known());
+    EXPECT_TRUE(held.mayTake(kLeft, true)) << "Hyprland holds nothing: known from here";
+    held.observe(kRight, true);
+    EXPECT_TRUE(held.mayTake(kLeft, false)) << "another button held";
+    EXPECT_FALSE(held.mayTake(kRight, false)) << "the same button held by another device: refused";
+    held.observe(kRight, false);
+    EXPECT_TRUE(held.mayTake(kRight, false));
+    held.observe(kLeft, true); // its release lost (a device that went away): Hyprland keeps it too
+    EXPECT_FALSE(held.mayTake(kLeft, false));
+    EXPECT_TRUE(held.mayTake(kLeft, true)) << "Hyprland holds nothing again: the record starts over";
+    held.reset();
+    EXPECT_FALSE(held.mayTake(kLeft, false)) << "reset: unknown again";
+}
+
 TEST(ClientChromeZoomLight, TheArrowsAreTwoTrianglesAtOppositeCorners) {
     using namespace gf::titlebar;
     const int  n    = 16;

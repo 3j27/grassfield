@@ -73,4 +73,28 @@ namespace gf::chrome {
         m_owed.clear();
     }
 
+    void CHeldButtons::observe(uint32_t button, bool pressed) {
+        if (pressed)
+            m_held.insert(button);
+        else
+            m_held.erase(button);
+    }
+
+    bool CHeldButtons::mayTake(uint32_t button, bool hyprlandHoldsNone) {
+        if (hyprlandHoldsNone) {
+            m_held.clear();
+            m_known = true;
+        }
+        return m_known && !m_held.contains(button);
+    }
+
+    bool CHeldButtons::known() const {
+        return m_known;
+    }
+
+    void CHeldButtons::reset() {
+        m_held.clear();
+        m_known = false;
+    }
+
 } // namespace gf::chrome

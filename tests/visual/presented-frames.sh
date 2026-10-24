@@ -111,7 +111,10 @@ drop_spanning() {
   awk 'NR == FNR { ev[NR] = int($2 / 1000); n = NR; next }
        { t = $1; i = $2; skip = 0; for (k = 1; k <= n; k++) if (t - i < ev[k] && ev[k] <= t) skip = 1; if (!skip) print }' "$2" "$1"
 }
-event() { echo "$1 $(mono_ns)" >>"$out/events.txt"; }
+# The plugin records frames only for 60 s after a start request (never while the session is locked; FR54): every request
+# asks again, so the recording covers the whole run.
+frames_start() { nestctl grassfield-frames-start >/dev/null 2>&1 || true; }
+event() { frames_start; echo "$1 $(mono_ns)" >>"$out/events.txt"; }
 
 overview_round() { # <label suffix>
   event "overview-open$1"
@@ -123,6 +126,8 @@ overview_round() { # <label suffix>
   collect
 }
 
+frames_start
+sleep 0.5
 collect
 for ((c = 1; c <= cycles; c++)); do
   event overview-open
@@ -142,6 +147,7 @@ for ((c = 1; c <= cycles; c++)); do
     y=$gy x0=$gx0 x1=$gx1
     vs_pointer abs "$x0" "$y" sleep 300 >/dev/null
     # The request's time, with the glide's own duration as timed (third column, read by animation-windows.py).
+    frames_start
     t0=$(mono_ns)
     vs_pointer drag "$x1" "$y" drag "$x0" "$y" drag "$x1" "$y" drag "$x0" "$y" >/dev/null
     t1=$(mono_ns)

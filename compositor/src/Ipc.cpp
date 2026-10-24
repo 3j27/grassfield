@@ -186,7 +186,7 @@ namespace gf::ipc {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered,
-                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr);
+                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr);
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -565,6 +565,15 @@ namespace gf::ipc {
             return out;
         }
 
+        // `hyprctl grassfield-frames-start`: the frames of the next 60 s are recorded (nothing is otherwise, never while the
+        // session is locked); the measurement tools send it (tests/visual/presented-frames.sh).
+        std::string hyprctlFramesStart(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+            std::string out;
+            if (!guarded("hyprctl grassfield-frames-start", [&] { out = frameProbe::startRecording(); }))
+                out = R"({"v":"gfc/1","type":"error"})";
+            return out;
+        }
+
         bool addLua(std::string_view name, PLUGIN_LUA_FN fn) {
             const bool ok = HyprlandAPI::addLuaFunction(state().handle, std::string{gfc::kLuaNamespace}, std::string{name}, fn);
             if (!ok)
@@ -610,6 +619,10 @@ namespace gf::ipc {
             s.hyprctlFramesCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{frames::kHyprctlCommand}, .exact = true, .fn = hyprctlFrames});
             if (!s.hyprctlFramesCommand)
                 log(Log::WARN, "registerHyprCtlCommand({}) failed; frame-times not advertised", frames::kHyprctlCommand);
+            s.hyprctlFramesStartCommand =
+                HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{frames::kHyprctlStartCommand}, .exact = true, .fn = hyprctlFramesStart});
+            if (!s.hyprctlFramesStartCommand)
+                log(Log::WARN, "registerHyprCtlCommand({}) failed; frame-times not advertised", frames::kHyprctlStartCommand);
         }
 
         return ok;
@@ -630,6 +643,10 @@ namespace gf::ipc {
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();
+        }
+        if (s.hyprctlFramesStartCommand) {
+            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlFramesStartCommand);
+            s.hyprctlFramesStartCommand.reset();
         }
         if (s.hyprctlFramesCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlFramesCommand);

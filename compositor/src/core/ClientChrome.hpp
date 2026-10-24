@@ -111,4 +111,25 @@ namespace gf::chrome {
         std::set<uint32_t> m_owed;
     };
 
+    // The buttons Hyprland holds, as the bus shows them (its own list, CInputManager::m_currentlyHeldButtons, is private;
+    // hasHeldButtons() only says whether it is empty). A press it processes adds its button, a release it processes removes
+    // it. Unknown until the plugin has seen Hyprland hold nothing (a button held when the plugin loaded would otherwise
+    // be missed, and its device's release delayed behind a bar press; review of part B, 2026-10-24): until then, and
+    // whenever reset, no press is taken by the bar.
+    class CHeldButtons {
+      public:
+        // A button event Hyprland processed (the bar did not cancel it).
+        void observe(uint32_t button, bool pressed);
+        // Whether the bar may take a press of `button`. `hyprlandHoldsNone`: hasHeldButtons() was false before this press
+        // (the list is then known to be empty, and the record starts over from it).
+        bool mayTake(uint32_t button, bool hyprlandHoldsNone);
+        bool known() const;
+        // Unknown again (unload).
+        void reset();
+
+      private:
+        std::set<uint32_t> m_held;
+        bool               m_known = false;
+    };
+
 } // namespace gf::chrome
