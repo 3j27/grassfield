@@ -19,7 +19,6 @@ Singleton {
     // The radios as read from rfkill (see Logic.parseList) and Airplane Mode derived from them.
     property var devices: []
     readonly property bool known: usable && Logic.airplane(devices).known
-    readonly property bool airplane: known && Logic.airplane(devices).on
 
     readonly property string reasonText: {
         switch (reason) {
@@ -34,10 +33,13 @@ Singleton {
     }
 
     // Blocks (on) or unblocks the radios. Returns false when the soft block is not usable (the caller falls back).
-    function setBlocked(on: bool): bool {
+    // `types`: with `on` false, only these radio types are unblocked (empty: nothing to do; undefined: all).
+    function setBlocked(on: bool, types: var): bool {
         if (!usable)
             return false;
-        setter.command = Logic.command(on);
+        if (!on && types !== undefined && types.length === 0)
+            return true;
+        setter.command = Logic.command(on, types);
         setter.running = true;
         return true;
     }

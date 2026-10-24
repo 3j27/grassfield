@@ -47,9 +47,10 @@ function airplane(devices) {
     return {known: true, on: r.every(d => d.soft || d.hard)};
 }
 
-// Command line that blocks or unblocks the radios (no root: /dev/rfkill is opened through the session's uaccess ACL).
-function command(on) {
-    return ["rfkill", on ? "block" : "unblock"].concat(TYPES);
+// Command line that blocks every governed radio, or unblocks `types` only (the radios Airplane Mode remembered; null =
+// all of them). No root: /dev/rfkill is opened through the session's uaccess ACL.
+function command(on, types) {
+    return ["rfkill", on ? "block" : "unblock"].concat(on || !types ? TYPES : types.filter(t => TYPES.indexOf(t) >= 0));
 }
 
 // Why the soft block is not used, "" when it is. `exists`: /dev/rfkill is there; `writable`: this user may open it for

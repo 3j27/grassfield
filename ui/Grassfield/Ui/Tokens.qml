@@ -601,6 +601,8 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsNoteHeight: 26
+    // ms after Airplane Mode is switched on, or at start, before a persisted on that no radio backs is erased: the rfkill and NetworkManager state settle in this time (behaviour pinned by tests/unit/tst_airplane.qml) [ref: docs/specs/controlcenter.md § Functional requirements]
+    readonly property int quicksettingsAirplaneSettleMs: 3000
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
 

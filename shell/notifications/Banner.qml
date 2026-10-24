@@ -30,7 +30,7 @@ Item {
     height: card.height
 
     Accessible.role: Accessible.AlertMessage
-    Accessible.name: summary !== "" ? summary : appName
+    Accessible.name: Notifications.summaryFor(summary, appName) !== "" ? Notifications.summaryFor(summary, appName) : appName
     Accessible.description: appName
     // The default action (a click on the banner outside its buttons) for assistive technologies too (A11Y-09).
     Accessible.onPressAction: Notifications.activateDefault(root.key)
@@ -71,14 +71,14 @@ Item {
             x: Tokens.spacingMd
             y: Tokens.spacingMd
             width: parent.width - 2 * Tokens.spacingMd
-            summary: root.summary
+            summary: Notifications.summaryFor(root.summary, root.appName)
             appName: root.appName
             urgency: root.urgency
-            actionsJson: root.actionsJson
+            actionsJson: Notifications.actionsFor(root.actionsJson, root.appName)
             live: root.nid >= 0
             body: Notifications.bodyFor(root.bodyHtml, root.appName)
             timeText: Notifications.timeFor(root.time)
-            iconSource: Notifications.iconSource(root.image, root.appIcon)
+            iconSource: Notifications.iconSource(Notifications.imageFor(root.image, root.appName), Notifications.appIconFor(root.appIcon, root.appName))
             onActionTriggered: actionId => Notifications.invokeAction(root.key, actionId)
         }
 
