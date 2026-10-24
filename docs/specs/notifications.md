@@ -170,10 +170,12 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   for good; a check of the named path was fooled by `?`, `#` and `%XX`, which Qt reads in a URL, and by a file swapped
   after the check). Only a plain absolute path is accepted (`History.localPathOf`: a path, a file: URL without query or
   fragment, Quickshell's `image://icon//path`; no `?`, `#`, `%` after decoding, no `.`/`..`/empty segment). A helper process
-  (`Notifications.requestCopy`; the path as an argument) opens it under `timeout 3`, checks that the OPENED descriptor is a
-  regular file of at most 8 MiB (`test -f` and `stat -L` on `/proc/self/fd/3`) and copies it into the shell's private
-  directory `$XDG_RUNTIME_DIR/grassfield-notification-images-<display>` (0700, emptied at start); the Image loads that copy by a URL
-  built from its number with every segment encoded (`History.copySource`), a file nobody else writes. Each intake makes a
+  (`Notifications.requestCopy`; the path as an argument) runs `shell/services/image-copy.py` under `timeout 12`: it opens
+  the file safely (real path under an allowed root, O_NOFOLLOW|O_NONBLOCK, fstat: a regular file of at most 8 MiB) and
+  re-encodes it into a PNG of at most 256 x 256 pixels (review of 423766f: a verbatim copy of an SVG naming a FIFO still
+  stalled the loader; the shell only ever decodes images it produced itself, see `docs/specs/security-images.md`), in
+  the shell's private directory `$XDG_RUNTIME_DIR/grassfield-notification-images-<display>` (0700, emptied at start); the
+  Image loads that `<n>.<sender>.png` by a URL built from its number with every segment encoded (`History.copySource`). Each intake makes a
   fresh copy (album art at a reused path changes). The directory holds at most 48 copies and 64 MiB across all senders
   (`copyWindow`, `copyBudgetBytes`; review of 6e24d36: 60 notifications naming one 8 MiB file filled 384 MiB of the
   session's tmpfs), and at most half of the budget for one sender (`copyShareBytes`; the sender is the notification's
@@ -211,13 +213,14 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   (`grassfield-icons: theme search paths ...`). No environment variable changes, so applications launched from the shell
   keep their own icon paths and Quickshell's DesktopEntries still lists user applications. A theme name is looked up
   there (`Quickshell.hasThemeIcon` on the GUI thread reads only root-owned theme files). A name found only in the user's
-  folders, an absolute `Icon=` path and a desktop or stack picture are shown as private copies: a helper (python3, off
-  the GUI thread, under `timeout` and `--pdeathsig`) looks the name up plainly (each theme folder x size folder x
-  apps|mimetypes|places x png|svg, hicolor first, then pixmaps; no index.theme), opens each candidate with
-  O_NOFOLLOW|O_NONBLOCK, accepts it when fstat says a regular non-empty file within its cap (8 MiB, 16 MiB for a picture;
-  an SVG also without external references, entities, @import or url() to outside), and copies it into
-  $XDG_RUNTIME_DIR/grassfield-icons-<display> (0700, emptied at start, 128 MiB in all, never evicted). The Image loads
-  only the copy, asynchronously; anything else shows the caller's generic icon. A new notification naming the icon makes
+  folders, an absolute `Icon=` path, a tray icon from the app's IconThemePath, media art and a desktop or stack picture
+  are shown as PNGs the shell made (`docs/specs/security-images.md`): `shell/services/image-copy.py` (python3, off the
+  GUI thread, under `timeout` and `--pdeathsig`) looks the name up plainly (each theme folder x size folder x
+  apps|status|mimetypes|places|devices x png|svg, hicolor first, then pixmaps; no index.theme), opens each candidate
+  safely (real path under an allowed root, O_NOFOLLOW|O_NONBLOCK, fstat: a regular non-empty file within its cap, 8 MiB,
+  16 MiB for a picture) and re-encodes it with rsvg-convert fed on stdin (no reference to another file is followed) into
+  $XDG_RUNTIME_DIR/grassfield-icons-<display>/<n>.png (0700, emptied at start, 128 MiB in all, least recently used copies
+  deleted to make room). The Image loads only that PNG, asynchronously; anything else shows the caller's generic icon. A new notification naming the icon makes
   a new copy. A helper that hangs is stopped (TERM, KILL 2 s later) and its icons refused. `tests/security/theme_icon_files.sh`:
   part 1 (FIFO, symlinks to a FIFO, /dev/zero, /dev/null, FIFO .svg, an SVG referencing a FIFO, FIFO under ~/.icons, a
   swap: the generic icon; a regular user icon: its copy; Qt never sees them), part 2 (the review's hostile index.theme

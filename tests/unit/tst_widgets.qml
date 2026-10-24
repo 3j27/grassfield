@@ -371,18 +371,17 @@ TestCase {
 
     // ---- art URL filter --------------------------------------------------------------------------
 
+    // Review of 423766f: only a local file's path is kept, and it is shown only as a PNG the shell made (ThemeIcons).
     function test_artUrlFilter() {
-        compare(ArtUrl.safe("file:///home/u/.cache/art.png"), "file:///home/u/.cache/art.png");
-        compare(ArtUrl.safe("file://localhost/tmp/a.jpg"), "file://localhost/tmp/a.jpg");
-        compare(ArtUrl.safe("FILE:///tmp/a.jpg"), "FILE:///tmp/a.jpg");
-        compare(ArtUrl.safe("data:image/png;base64,AAAA"), "data:image/png;base64,AAAA");
+        compare(ArtUrl.localPath("file:///home/u/.cache/art.png"), "/home/u/.cache/art.png");
+        compare(ArtUrl.localPath("file://localhost/tmp/a.jpg"), "/tmp/a.jpg");
+        compare(ArtUrl.localPath("FILE:///tmp/a.jpg"), "/tmp/a.jpg");
+        compare(ArtUrl.localPath("file:///tmp/my%20art.png"), "/tmp/my art.png", "percent-decoded");
         ["http://127.0.0.1:18765/art.png", "https://example.com/a.png", "HTTP://x/a", "//example.com/a.png", "ftp://x/a", "smb://h/s/a.png",
          "file://example.com/share/a.png", "file:////server/share/a.png", "file:///tmp/a.png?x=1", "file:///", "file://", "qrc:/a.png", "image://theme/x",
-         "/tmp/a.png", "a.png", "", "data:text/html,<script>", "data:application/octet-stream;base64,AAAA", " http://x/a", "file:///tmp/a\u0000.png",
-         "file:///tmp/a\n.png", null, undefined, 5, {}].forEach(u => compare(ArtUrl.safe(u), "", "rejected: " + u));
-        compare(ArtUrl.safe("data:image/png;base64," + "A".repeat(2000), 1000), "", "oversized data URL");
-        compare(ArtUrl.safe("data:image/png;base64," + "A".repeat(500), 1000).length, 522);
-        compare(ArtUrl.safe("data:image/png;base64," + "A".repeat(2000000)), "", "default cap");
+         "/tmp/a.png", "a.png", "", "data:image/png;base64,AAAA", "data:image/svg+xml,<svg/>", "data:text/html,<script>", " http://x/a",
+         "file:///tmp/a\u0000.png", "file:///tmp/a\n.png", "file:///tmp/a%0A.png", "file:///tmp/a%00.png", "file:///tmp/%E0%A4%A.png",
+         null, undefined, 5, {}].forEach(u => compare(ArtUrl.localPath(u), "", "rejected: " + u));
     }
 
     // ---- calendar in a zone with DST at midnight ------------------------------------------------------

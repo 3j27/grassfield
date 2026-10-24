@@ -6,32 +6,42 @@ import Quickshell.Io
 import Grassfield.I18n
 import Grassfield.Ui
 
-// The one way an icon named by a notification, the polkit sheet, a desktop entry, an application or a file reaches an
-// Image (Notifications, AuthAgent, the Dock, the Launchpad, the desktop, Search, the Switcher, the Overview, Force Quit,
-// About). Integrator decision after the review of 5ee6240 (mirroring Qt's index.theme parser to check what it would read
-// proved endless): Qt never reads a user-writable icon file.
+// The one way an icon or picture the shell does not own reaches an Image: named by a notification, the polkit sheet, a
+// desktop entry, an application, a tray item (StatusNotifierItem) or a file (Notifications, AuthAgent, the Dock, the
+// Launchpad, the desktop, Search, the Switcher, the Overview, Stages, Force Quit, About, the menu bar's tray, media art,
+// the lock screen's account picture). Integrator decisions after the reviews of 5ee6240 and 423766f: Qt never reads a
+// user-writable icon file, and the shell only ever decodes images it produced itself.
 //  - Qt's theme and fallback search paths hold only directories the user can neither write nor replace (Grassfield.I18n,
 //    ui/i18n/iconsearchpaths.h, applied when that module is imported, before any binding; imported here too so no
-//    lookup can come first). A theme name is looked up there (Quickshell.hasThemeIcon on the GUI thread reads only
+//    lookup can come first). A plain theme name is looked up there (Quickshell.hasThemeIcon on the GUI thread reads only
 //    root-owned theme files) and shown by its image://icon URL.
-//  - A name found only in the user's icon directories (a user-installed application, a flatpak user export), an absolute
-//    Icon= path and a desktop picture's thumbnail are shown as private copies: a helper process (python3, off the GUI
-//    thread) finds the name with a plain lookup (each theme directory x size folder x apps|mimetypes|places x png|svg,
-//    hicolor first, then pixmaps; no index.theme), opens each candidate with O_NOFOLLOW|O_NONBLOCK, accepts it only when
-//    fstat says a regular, non-empty file within the size cap (an SVG also without external references or entities),
-//    and copies it into $XDG_RUNTIME_DIR/grassfield-icons-<display> (0700, emptied at start, maxCopyBytes in all). The
-//    Image loads only that copy, asynchronously. Anything else: the caller's generic icon.
-// A copy is made once per run (a new notification naming the icon makes a new one); until then, and when refused, the
-// fallback shows. A helper that hangs is stopped (TERM, then KILL) and its keys refused.
+//  - Everything else is shown as a PNG the shell made: a name found only in the user's icon folders (a user-installed
+//    application, a flatpak user export), an absolute Icon= path, a tray icon from the app's own IconThemePath, a
+//    desktop picture's thumbnail, a stack preview, a media art file, the account picture. services/image-copy.py (python3
+//    -I, a process of its own, never the GUI thread) finds the file (a plain lookup: theme directory x size folder x
+//    apps|status|mimetypes|places|devices x png|svg, hicolor first, then pixmaps; no index.theme), opens it safely
+//    (real path under an allowed root, O_NOFOLLOW|O_NONBLOCK, fstat: a regular file within the size cap) and re-encodes
+//    it with rsvg-convert, fed on stdin (no base URL: no reference to another file is ever followed), into
+//    $XDG_RUNTIME_DIR/grassfield-icons-<display>/<n>.png (0700, emptied at start, maxCopyBytes in all, the least
+//    recently used copies deleted to make room). The Image loads only that PNG, asynchronously. Anything else (refused,
+//    not made yet): the caller's generic icon.
+// The copy directory belongs to the user, like every file of the session: a process of the same user can replace a copy,
+// as it could the shell's own QML. The copies protect against what applications NAME (a path, a theme file, a FIFO, an
+// SVG with references), not against code already running as the user.
+// A copy is made once per run (a new notification naming the icon, or a new media art, makes a new one); until then, and
+// when refused, the fallback shows. A helper that hangs is stopped (TERM, then KILL) and its keys refused.
 Singleton {
     id: root
 
     readonly property real maxIconBytes: 8 * 1024 * 1024
-    // A desktop picture's thumbnail (a photo may be big).
+    // A picture's source file (a photo may be big); its copy is at most 256 x 256 pixels like any other.
     readonly property real maxPictureBytes: 16 * 1024 * 1024
-    // All private copies together; past it, new ones are refused (the generic icon), none is evicted.
+    // All copies together; past it, the least recently used are deleted to make room.
     readonly property real maxCopyBytes: 128 * 1024 * 1024
+    // Past this many keys the least recently used quarter is forgotten (and its copies deleted).
+    readonly property int maxKeys: 4096
     readonly property int batchSize: 24
+    readonly property string helperPath: Quickshell.shellPath("services/image-copy.py")
     // One directory per Wayland display: a nested dev shell never empties the real session's.
     readonly property string copyDir: {
         const runtime = Quickshell.env("XDG_RUNTIME_DIR");
@@ -39,149 +49,18 @@ Singleton {
         return runtime ? runtime + "/grassfield-icons-" + display : "";
     }
     property bool copyDirReady: false
-    // Key ("name:<theme name>", "icon:<path>", "picture:<path>") -> {state: "pending" | "ok" | "no", url, file}; reassigned on
-    // every change so bindings that asked re-evaluate.
+    // Key ("name:<theme name>", "icon:<path>", "picture:<path>", "tray:<name>|<IconThemePath>") -> {state: "pending" |
+    // "ok" | "no", url, file}; reassigned on every change so bindings that asked re-evaluate.
     property var copies: ({})
+    // The least-recently-used order: at[key] is the value of `tick` at the key's last use. Mutated in place, never
+    // reassigned: a use (a binding asking) notifies nobody.
+    readonly property var lru: ({tick: 0, at: {}})
     property var queue: []
     property var batch: []
-    // Copies replaced by a newer one, deleted by the next helper run.
+    // Copies replaced by a newer one or forgotten, deleted by the next helper run.
     property var dropped: []
     property int counter: 0
     property var activeRun: null
-    // POSIX-free: python3 -I -c <script> <dir> <icon cap> <picture cap> <total cap> then "<kind> <n> <value>" triples and
-    // "drop 0 <file>" (never interpolated). One line per triple: "ok<TAB><key><TAB><copy path>" or "no<TAB><key>".
-    readonly property string script: "import os, re, stat, sys\n"
-        + "out, iconcap, piccap, budget = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])\n"
-        + "args = sys.argv[5:]\n"
-        + "home = os.environ.get(\"HOME\", \"\")\n"
-        + "data_home = os.environ.get(\"XDG_DATA_HOME\") or os.path.join(home, \".local/share\")\n"
-        + "data_dirs = [d for d in (os.environ.get(\"XDG_DATA_DIRS\") or \"/usr/local/share:/usr/share\").split(\":\") if d]\n"
-        + "sizes = [\"scalable\", \"512x512\", \"256x256\", \"192x192\", \"128x128\", \"96x96\", \"72x72\", \"64x64\", \"48x48\", \"36x36\", \"32x32\", \"24x24\", \"22x22\", \"16x16\"]\n"
-        + "kinds = [\"apps\", \"mimetypes\", \"places\"]\n"
-        + "svg_bad = re.compile(rb\"<!ENTITY|<!DOCTYPE[^>]*\\[|@import|url\\(\\s*[\\\"']?\\s*(?!#)|href\\s*=\\s*[\\\"']\\s*(?!#|data:)\", re.I)\n"
-        + "\n"
-        + "def mapped_root():\n"
-        + "    try:\n"
-        + "        if open(\"/proc/self/uid_map\").read().split()[:2] == [\"0\", \"0\"]:\n"
-        + "            return -1\n"
-        + "        return int(open(\"/proc/sys/kernel/overflowuid\").read())\n"
-        + "    except (OSError, ValueError):\n"
-        + "        return -1\n"
-        + "\n"
-        + "ROOT = mapped_root()\n"
-        + "\n"
-        + "# The rule of iconsearchpaths.h: Qt searches a directory only when it and every ancestor belong to root and the user can\n"
-        + "# neither own nor write them; every other existing icon directory is the user's, looked up here.\n"
-        + "def user_changeable(path):\n"
-        + "    p = os.path.realpath(path)\n"
-        + "    if not os.path.isdir(p):\n"
-        + "        return False\n"
-        + "    while True:\n"
-        + "        try:\n"
-        + "            st = os.stat(p)\n"
-        + "        except OSError:\n"
-        + "            return True\n"
-        + "        if st.st_uid not in (0, ROOT) or st.st_uid == os.geteuid() or os.access(p, os.W_OK):\n"
-        + "            return True\n"
-        + "        if p == \"/\":\n"
-        + "            return False\n"
-        + "        p = os.path.dirname(p)\n"
-        + "\n"
-        + "# Icon directories Qt no longer searches (iconsearchpaths.h): the user's own, and user-changeable data dirs.\n"
-        + "bases = [b for b in [os.path.join(home, \".icons\"), os.path.join(data_home, \"icons\")] + [os.path.join(d, \"icons\") for d in data_dirs] if user_changeable(b)]\n"
-        + "pixmaps = [p for p in [os.path.join(data_home, \"pixmaps\")] + [os.path.join(d, \"pixmaps\") for d in data_dirs] if user_changeable(p)]\n"
-        + "\n"
-        + "def candidates(name):\n"
-        + "    for base in bases:\n"
-        + "        try:\n"
-        + "            themes = sorted(e.name for e in os.scandir(base) if e.is_dir())[:64]\n"
-        + "        except OSError:\n"
-        + "            continue\n"
-        + "        themes = [\"hicolor\"] + [t for t in themes if t != \"hicolor\"]\n"
-        + "        for theme in themes:\n"
-        + "            for size in sizes:\n"
-        + "                for kind in kinds:\n"
-        + "                    for ext in (\"png\", \"svg\"):\n"
-        + "                        yield os.path.join(base, theme, size, kind, name + \".\" + ext)\n"
-        + "    for d in pixmaps:\n"
-        + "        for ext in (\"png\", \"svg\"):\n"
-        + "            yield os.path.join(d, name + \".\" + ext)\n"
-        + "\n"
-        + "def used():\n"
-        + "    total = 0\n"
-        + "    for e in os.scandir(out):\n"
-        + "        try:\n"
-        + "            total += e.stat(follow_symlinks=False).st_size\n"
-        + "        except OSError:\n"
-        + "            pass\n"
-        + "    return total\n"
-        + "\n"
-        + "def copy(src, n, cap):\n"
-        + "    try:\n"
-        + "        st = os.lstat(src)\n"
-        + "    except OSError:\n"
-        + "        return None\n"
-        + "    if not stat.S_ISREG(st.st_mode):\n"
-        + "        return None\n"
-        + "    try:\n"
-        + "        fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)\n"
-        + "    except OSError:\n"
-        + "        return None\n"
-        + "    try:\n"
-        + "        st = os.fstat(fd)\n"
-        + "        if not stat.S_ISREG(st.st_mode) or st.st_size > cap or st.st_size == 0:\n"
-        + "            return None\n"
-        + "        chunks, left = [], st.st_size\n"
-        + "        while left > 0:\n"
-        + "            b = os.read(fd, min(left, 1 << 20))\n"
-        + "            if not b:\n"
-        + "                break\n"
-        + "            chunks.append(b)\n"
-        + "            left -= len(b)\n"
-        + "        data = b\"\".join(chunks)\n"
-        + "    finally:\n"
-        + "        os.close(fd)\n"
-        + "    ext = os.path.splitext(src)[1].lower().lstrip(\".\")\n"
-        + "    if not re.fullmatch(r\"[a-z0-9]{1,5}\", ext):\n"
-        + "        ext = \"img\"\n"
-        + "    if (ext == \"svg\" or data.lstrip()[:5].lower() in (b\"<?xml\", b\"<svg \", b\"<svg>\")) and svg_bad.search(data):\n"
-        + "        return None\n"
-        + "    if used() + len(data) > budget:\n"
-        + "        return None\n"
-        + "    dst = os.path.join(out, \"%d.%s\" % (n, ext))\n"
-        + "    fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)\n"
-        + "    try:\n"
-        + "        os.write(fd, data)\n"
-        + "    finally:\n"
-        + "        os.close(fd)\n"
-        + "    return dst\n"
-        + "\n"
-        + "if not os.path.isdir(out) or os.path.islink(out):\n"
-        + "    sys.exit(1)\n"
-        + "i = 0\n"
-        + "while i + 3 <= len(args):\n"
-        + "    kind, n, value = args[i], args[i + 1], args[i + 2]\n"
-        + "    i += 3\n"
-        + "    if kind == \"drop\":\n"
-        + "        if re.fullmatch(r\"[0-9]+\\.[a-z0-9]{1,5}\", value):\n"
-        + "            try:\n"
-        + "                os.unlink(os.path.join(out, value))\n"
-        + "            except OSError:\n"
-        + "                pass\n"
-        + "        continue\n"
-        + "    key = kind + \":\" + value\n"
-        + "    path = None\n"
-        + "    try:\n"
-        + "        if kind == \"name\" and re.fullmatch(r\"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\", value) and \"..\" not in value:\n"
-        + "            for c in candidates(value):\n"
-        + "                path = copy(c, int(n), iconcap)\n"
-        + "                if path:\n"
-        + "                    break\n"
-        + "        elif kind in (\"icon\", \"picture\") and value.startswith(\"/\") and \"\\n\" not in value:\n"
-        + "            path = copy(value, int(n), iconcap if kind == \"icon\" else piccap)\n"
-        + "    except Exception:\n"
-        + "        path = None\n"
-        + "    print((\"ok\\t%s\\t%s\" % (key, path)) if path else (\"no\\t%s\" % key), flush=True)\n"
 
     // An absolute icon path (Icon=/path, file:///path) as a plain path, or "": no control character, at most 4096 characters.
     function plainIconPath(icon: string): string {
@@ -196,8 +75,8 @@ Singleton {
         return path.startsWith("/") && path.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(path) ? path : "";
     }
 
-    // The image URL for theme icon `name`: the system theme's (only root-owned directories are searched), else the private
-    // copy of the user's icon of that name (a copy is requested; "" until it exists or when there is none).
+    // The image URL for theme icon `name`: the system theme's (only root-owned directories are searched), else the copy
+    // of the user's icon of that name (a copy is requested; "" until it exists or when there is none).
     function source(name: string): string {
         const safe = NotificationPrefs.safeIconName(name);
         if (safe === "")
@@ -207,15 +86,29 @@ Singleton {
         return copyOf("name", safe);
     }
 
-    // The private copy of icon file `icon` (an absolute path or file: URL), "" until it exists or when refused.
+    // The copy of picture file `icon` (an absolute path or file: URL), "" until it exists or when refused.
     function fileSource(icon: string): string {
         const path = plainIconPath(icon);
         return path !== "" ? copyOf("picture", path) : "";
     }
 
+    // "pending", "ok" or "no" for picture file `icon` (fileSource's), "" when never asked.
+    function fileState(icon: string): string {
+        const entry = copies["picture:" + plainIconPath(icon)];
+        return entry === undefined ? "" : entry.state;
+    }
+
+    // Picture file `icon` may have new content (a player reuses its art file): a new copy is made, the old one shown
+    // until then.
+    function refreshFile(icon: string): void {
+        const path = plainIconPath(icon);
+        if (path !== "")
+            request("picture", path, true);
+    }
+
     // An icon from a desktop entry, an application or a file (Icon=: a theme name or an absolute path), as
-    // Quickshell.iconPath(icon, fallback) gave it: the system theme's icon or the private copy of the user's; until then,
-    // and when there is none or it is refused, the fallback theme icon.
+    // Quickshell.iconPath(icon, fallback) gave it: the system theme's icon or the copy of the user's; until then, and when
+    // there is none or it is refused, the fallback theme icon.
     function appIcon(icon: string, fallback: string): string {
         const value = String(icon || "");
         const path = plainIconPath(value);
@@ -223,7 +116,34 @@ Singleton {
         return own !== "" ? own : (fallback !== "" ? source(fallback) : "");
     }
 
-    // A new notification names `name`: a user icon of that name is copied again (it may have changed), hidden until then.
+    // A tray item's icon (Quickshell's SystemTrayItem.icon). Quickshell would resolve an app's IconThemePath and a
+    // path-like IconName itself, reading whatever file they name (review of 423766f): only its pixmap images
+    // (image://qspixmap/, the IconPixmap pixels the app sent) pass as they are. From image://icon/<name>[?path=<dir>]
+    // only a plain theme name is kept: the system theme's icon, else a copy made by the helper from the app's own folder
+    // (a user-writable directory like any other), then from the user's icon folders. Anything else: "" (no icon).
+    function trayIcon(icon: string): string {
+        const value = String(icon || "");
+        if (value.startsWith("image://qspixmap/"))
+            return value;
+        if (!value.startsWith("image://icon/"))
+            return "";
+        const rest = value.slice(13);
+        const q = rest.indexOf("?");
+        const raw = q < 0 ? rest : rest.slice(0, q);
+        const name = NotificationPrefs.safeIconName(raw);
+        if (name === "" || name !== raw)
+            return "";
+        if (Quickshell.hasThemeIcon(name))
+            return Quickshell.iconPath(name);
+        const query = q < 0 ? "" : rest.slice(q + 1);
+        const dir = query.startsWith("path=") ? query.slice(5).replace(/&fallback=.*$/, "") : "";
+        if (dir !== "" && plainIconPath(dir) === dir)
+            return copyOf("tray", name + "|" + dir);
+        return copyOf("name", name);
+    }
+
+    // A new notification names `name`: a user icon of that name is copied again (it may have changed); the current copy
+    // shows until then.
     function check(name: string, fresh: bool): void {
         const safe = NotificationPrefs.safeIconName(name);
         if (safe === "" || Quickshell.hasThemeIcon(safe))
@@ -232,12 +152,17 @@ Singleton {
     }
 
     function copyOf(kind: string, value: string): string {
-        const entry = copies[kind + ":" + value];
+        const key = kind + ":" + value;
+        const entry = copies[key];
         if (entry === undefined) {
             Qt.callLater(root.request, kind, value, false);
             return "";
         }
-        return entry.state === "ok" ? entry.url : "";
+        if (entry.state !== "ok")
+            return "";
+        lru.tick++;
+        lru.at[key] = lru.tick;
+        return entry.url;
     }
 
     function request(kind: string, value: string, fresh: bool): void {
@@ -249,12 +174,36 @@ Singleton {
             return;
         counter++;
         queue = queue.concat([{key: key, kind: kind, value: value, n: counter}]);
-        const next = Object.keys(copies).length > 4096 ? {} : Object.assign({}, copies);
-        if (entry !== undefined && entry.file)
-            dropped = dropped.concat([entry.file]);
-        next[key] = {state: "pending", url: "", file: ""};
-        copies = next;
+        // A copy already made stays shown until its replacement is made (or refused): done() drops it then.
+        if (entry === undefined || entry.state !== "ok") {
+            const next = Object.assign({}, copies);
+            next[key] = {state: "pending", url: "", file: ""};
+            copies = Object.keys(next).length > maxKeys ? forget(next) : next;
+        }
         run();
+    }
+
+    // Past maxKeys keys: the least recently used quarter of the settled keys is forgotten, their copies deleted by the
+    // next run (a key asked again is copied again).
+    function forget(map: var): var {
+        const settled = Object.keys(map).filter(k => map[k].state !== "pending");
+        settled.sort((a, b) => (lru.at[a] || 0) - (lru.at[b] || 0));
+        const files = [];
+        for (const key of settled.slice(0, Math.ceil(maxKeys / 4))) {
+            if (map[key].file)
+                files.push(map[key].file);
+            delete map[key];
+            delete lru.at[key];
+        }
+        dropped = dropped.concat(files);
+        return map;
+    }
+
+    // The copies the helper may delete to make room, least recently used first.
+    function evictable(): var {
+        const keys = Object.keys(copies).filter(k => copies[k].state === "ok" && copies[k].file);
+        keys.sort((a, b) => (lru.at[a] || 0) - (lru.at[b] || 0));
+        return keys.map(k => copies[k].file);
     }
 
     // One helper run at a time, each its own Process with its batch (Process.running turns true only once started, so two
@@ -268,11 +217,13 @@ Singleton {
         for (const file of dropped)
             args.push("drop", "0", file);
         dropped = [];
+        for (const file of evictable())
+            args.push("lru", "0", file);
         for (const q of batch)
             args.push(q.kind, String(q.n), q.value);
         const proc = helperRun.createObject(root, {
             keys: batch.map(q => q.key),
-            command: ["timeout", "-k", "2", "30", "setpriv", "--pdeathsig", "KILL", "--", "python3", "-I", "-c", script, copyDir,
+            command: ["timeout", "-k", "2", "30", "setpriv", "--pdeathsig", "KILL", "--", "python3", "-I", helperPath, "batch", copyDir,
                 String(maxIconBytes), String(maxPictureBytes), String(maxCopyBytes)].concat(args)
         });
         activeRun = proc;
@@ -292,21 +243,34 @@ Singleton {
         proc.destroy();
     }
 
+    // "ok<TAB><key><TAB><copy>" for each copy made, "gone<TAB><file>" for each copy deleted to make room; a key with no
+    // "ok" line is refused.
     function done(keys: var, output: string): void {
         const said = {};
+        const gone = {};
         for (const line of String(output || "").split("\n")) {
             const f = line.split("\t");
-            if (f[0] === "ok" && f.length === 3 && f[2].startsWith(copyDir + "/"))
+            if (f[0] === "ok" && f.length === 3 && f[2].startsWith(copyDir + "/") && /^[0-9]+\.png$/.test(f[2].slice(copyDir.length + 1)))
                 said[f[1]] = f[2];
+            else if (f[0] === "gone" && f.length === 2)
+                gone[f[1]] = true;
         }
         const next = Object.assign({}, copies);
+        for (const key in next) {
+            if (next[key].file && gone[next[key].file]) {
+                delete next[key];
+                delete lru.at[key];
+            }
+        }
         for (const key of keys) {
             const file = said[key];
+            if (next[key] !== undefined && next[key].file)
+                dropped = dropped.concat([next[key].file]);
             if (file !== undefined) {
                 next[key] = {state: "ok", url: "file://" + file.split("/").map(encodeURIComponent).join("/"), file: file.slice(copyDir.length + 1)};
             } else {
                 next[key] = {state: "no", url: "", file: ""};
-                console.info("grassfield-icons: no usable icon for \"" + key + "\" (none in the user's icon folders, or not a regular file within its size cap)");
+                console.info("grassfield-icons: no usable image for a " + key.slice(0, key.indexOf(":")) + " request (none found, not a regular file within its size cap, or not an image rsvg-convert could re-encode)");
             }
         }
         batch = [];
@@ -327,7 +291,8 @@ Singleton {
     }
 
     // A run that does not answer within its own timeout (30 s, KILL 2 s later) is stopped: TERM, then KILL 2 s later (the
-    // helper dies with it: --pdeathsig), and its keys are refused.
+    // helper dies with it: --pdeathsig; rsvg-convert, in timeout's process group, too, and it has its own CPU limit), and
+    // its keys are refused.
     Timer {
         id: watchdog
         interval: 40000

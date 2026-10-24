@@ -15,8 +15,8 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 2. SEC2 Only PAM success (`omarchy-lock-password`) unlocks; errors/timeouts/crashes/graceful exits stay locked.
 3. SEC3 Password cleared from the field and memory after each attempt; field disabled while authenticating.
 4. SEC4 Lock surface on every monitor; input never reaches other clients (ext-session-lock).
-5. SEC5 Lock screen shows clock, date, avatar (`~/.face` or AccountsService icon) and name — no notification
-   content, no thumbnails.
+5. SEC5 Lock screen shows clock, date, avatar (`~/.face` or AccountsService icon, only as a PNG the shell made from it:
+   security-images.md) and name — no notification content, no thumbnails.
 6. SEC6 Polkit agent: exactly one; shows message, action ID and the requesting program as far as polkit tells it
    (see "Polkit details"); Cancel/Esc cancel; never auto-approve.
 7. SEC7 Idle: dim → lock → displays off on the idle lock screen (DPMS); respects Wayland idle inhibitors.
@@ -409,8 +409,8 @@ identity, and now the action's `iconName` (from the root-installed `.policy` fil
 That icon describes the action, not the program that asked: polkit does not tell the agent which process requested it
 through this API (`AuthDialogModel.iconName`: plain theme names only, by the one rule notification icons use,
 `NotificationPrefs.safeIconName`, review of 2dfd992; `AuthAgent` shows it through `ThemeIcons.source`: the system
-theme's icon (Qt searches only directories the user cannot change, `ui/i18n/iconsearchpaths.h`) or a checked private copy
-of a user icon of that name (see notifications.md, `tests/security/theme_icon_files.sh`); else the lock alone; the Image
+theme's icon (Qt searches only directories the user cannot change, `ui/i18n/iconsearchpaths.h`) or a PNG the shell made
+from a user icon of that name (see security-images.md, `tests/security/theme_icon_files.sh`); else the lock alone; the Image
 loads asynchronously, review of 100692f). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
 

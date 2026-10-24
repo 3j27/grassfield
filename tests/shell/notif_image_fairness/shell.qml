@@ -5,7 +5,8 @@ import Quickshell.Io
 import qs.notifications
 
 // Review of 2dfd992, on the REAL Notifications singleton (scripts/dev/test.sh: `qs -p tests/shell/notif_image_fairness`,
-// a dev session without the D-Bus server; see the dev-session marker file). Budget lowered to 3 MiB (share 1.5 MiB).
+// a dev session without the D-Bus server; see the dev-session marker file). Every image is the same noise PNG, `unit`
+// bytes once re-encoded (services/image-copy.py); the budget is lowered to 3.5 of them (a sender's share: 1.75).
 //  A. Copies made in the same helper batch are protected too (the reviewer's batchevict probe): notification 1 arrives
 //     alone, then four more of other senders arrive together (one batch); all five are banners on screen. Banners 1-3
 //     keep their images, 4 and 5 show their app icon (no room), and no banner's copy is evicted.
@@ -21,7 +22,14 @@ ShellRoot {
 
     property var failures: []
     readonly property string dir: Quickshell.env("GRASSFIELD_TEST_TMP") + "/notif-image-fairness"
-    readonly property real mib: 1024 * 1024
+    property real unit: 0
+    readonly property real budget: Math.floor(3.5 * unit)
+    readonly property real share: Math.floor(budget / 2)
+    // A 256 x 256 PNG of noise (the same bytes every time): the PNG the helper makes of it has one size, `unit`.
+    readonly property string noiseScript: "import random, struct, sys, zlib\nw = 256\nr = random.Random(7)\n"
+        + "raw = b''.join(b'\\0' + r.randbytes(w * 4) for _ in range(w))\n"
+        + "c = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))\n"
+        + "open(sys.argv[1], 'wb').write(b'\\x89PNG\\r\\n\\x1a\\n' + c(b'IHDR', struct.pack('>IIBBBBB', w, w, 8, 6, 0, 0, 0)) + c(b'IDAT', zlib.compress(raw)) + c(b'IEND', b''))\n"
     property string phase: "setup"
     property int waited: 0
     property var files: []
@@ -53,7 +61,7 @@ ShellRoot {
         return Notifications.copyQueue.length === 0 && Notifications.copyBatch.length === 0;
     }
 
-    // Bytes of the copies of sender `appName` in the private directory ("<n>.<sender>.img").
+    // Bytes of the copies of sender `appName` in the private directory ("<n>.<sender>.png").
     function bytesOf(appName: string): real {
         const sid = Notifications.senderIds[appName.toLowerCase()];
         return files.filter(f => f.sid === sid).reduce((a, f) => a + f.size, 0);
@@ -62,23 +70,26 @@ ShellRoot {
     Process {
         id: setup
         running: true
-        command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d\"; for n in a1 a2 a3 a4 a5 f1 f2 f3 f4 o1 q1 q2 c1 d1 d2 d3; do head -c 1048576 /dev/zero >\"$d/$n.png\"; done", "sh", root.dir]
-        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
-        // qmllint disable signal-handler-parameters
-        onExited: code => {
-            // qmllint enable signal-handler-parameters
-            root.check("fixtures created", code === 0);
-            Notifications.copyBudgetBytes = 3 * root.mib;
-            root.notify("a1", "Burst 1");
-            root.phase = "a1";
-            poll.start();
+        command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d\"; python3 -I -c \"$3\" \"$d/noise.png\"; "
+            + "for n in a1 a2 a3 a4 a5 f1 f2 f3 f4 o1 q1 q2 c1 d1 d2 d3; do cp \"$d/noise.png\" \"$d/$n.png\"; done; "
+            + "python3 -I \"$2\" file \"$d/noise.png\" 8388608 \"$d/unit.png\"; stat -c %s \"$d/unit.png\"",
+            "sh", root.dir, Quickshell.shellPath("services/image-copy.py"), root.noiseScript]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.unit = Number(text.trim().split("\n").pop());
+                root.check("fixtures created (the re-encoded test image: " + root.unit + " bytes)", root.unit > 100000);
+                Notifications.copyBudgetBytes = root.budget;
+                root.notify("a1", "Burst 1");
+                root.phase = "a1";
+                poll.start();
+            }
         }
     }
 
     // "size name" of each copy in the private directory.
     Process {
         id: lister
-        command: ["sh", "-c", "for f in \"$1\"/*.img; do [ -f \"$f\" ] && printf '%s %s\\n' \"$(stat -c %s \"$f\")\" \"${f##*/}\"; done; exit 0", "sh", Notifications.copyDir]
+        command: ["sh", "-c", "for f in \"$1\"/*.png; do [ -f \"$f\" ] && printf '%s %s\\n' \"$(stat -c %s \"$f\")\" \"${f##*/}\"; done; exit 0", "sh", Notifications.copyDir]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.files = text.split("\n").filter(l => l !== "").map(l => {
@@ -97,7 +108,7 @@ ShellRoot {
                 state("a1") === "ok" && state("a2") === "ok" && state("a3") === "ok" && state("a4") === "no" && state("a5") === "no");
             check("A: banners 1-3 show their images, 4 and 5 their app icon",
                 ["a1", "a2", "a3"].every(n => Notifications.iconSource(path(n), "") !== "") && ["a4", "a5"].every(n => Notifications.iconSource(path(n), "") === ""));
-            check("A: within the budget (" + total + " bytes in " + files.length + " copies)", total <= 3 * mib && files.length === 3);
+            check("A: within the budget (" + total + " bytes in " + files.length + " copies)", total <= budget && files.length === 3);
             // B: the burst's banners go away; four critical banners of one sender arrive together.
             for (const n of ["a1", "a2", "a3", "a4", "a5"])
                 Notifications.expireBanner("k-" + n);
@@ -108,7 +119,7 @@ ShellRoot {
             poll.start();
         } else if (phase === "flood") {
             check("B: one sender's banners keep at most its half of the budget (" + states(["f1", "f2", "f3", "f4"]) + ", " + bytesOf("Flood") + " bytes)",
-                state("f1") === "ok" && state("f2") === "no" && state("f3") === "no" && state("f4") === "no" && bytesOf("Flood") <= 1.5 * mib);
+                state("f1") === "ok" && state("f2") === "no" && state("f3") === "no" && state("f4") === "no" && bytesOf("Flood") <= share);
             check("B: the overflow shows the app icon", ["f2", "f3", "f4"].every(n => Notifications.iconSource(path(n), "") === ""));
             notify("o1", "Other");
             phase = "other";
@@ -132,7 +143,7 @@ ShellRoot {
             check("B: a sender over its share replaces its own oldest copy, not another sender's (" + states(["q1", "q2", "o1", "f1"]) + ")",
                 state("q1") === "gone" && state("q2") === "ok" && state("o1") === "ok" && state("f1") === "ok");
             check("B: within the budget (" + total + " bytes in " + files.length + " copies), no sender above half of it",
-                total <= 3 * mib && ["Flood", "Other", "Quiet"].every(s => bytesOf(s) <= 1.5 * mib));
+                total <= budget && ["Flood", "Other", "Quiet"].every(s => bytesOf(s) <= share));
             // C: no banner any more; the Notification Center is open and shows one notification with an image.
             Notifications.toggleCenter("");
             check("C: the Notification Center is open", Notifications.centerOpen);

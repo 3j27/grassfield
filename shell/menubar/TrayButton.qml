@@ -56,9 +56,13 @@ BarButton {
         height: Tokens.menubarIconSize
 
         Image {
+            objectName: "menubar-tray-icon"
             anchors.fill: parent
-            // The item can already be gone while its delegate is being removed.
-            source: root.item ? root.item.icon : ""
+            // The item can already be gone while its delegate is being removed. Never the item's icon URL as such: an app's
+            // IconThemePath or a path-like IconName would have Quickshell read any file (review of 423766f); ThemeIcons
+            // keeps the pixels the app sent and plain theme names (a copy the shell made when the file is the app's).
+            readonly property string own: ThemeIcons.trayIcon(root.item ? root.item.icon : "")
+            source: own !== "" ? own : ThemeIcons.source("application-x-executable")
             sourceSize: Qt.size(Tokens.menubarIconSize * 2, Tokens.menubarIconSize * 2)
             fillMode: Image.PreserveAspectFit
             asynchronous: true

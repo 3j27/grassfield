@@ -248,6 +248,23 @@ function displayName(passwd, user) {
     return String(user || "");
 }
 
+// The AccountsService picture of login `user`: "" unless `user` is a plain login name (no "/", no leading ".").
+function accountsIconPath(user) {
+    var name = String(user || "");
+    return /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/.test(name) ? "/var/lib/AccountsService/icons/" + name : "";
+}
+
+// The lock screen's account picture (review of 423766f: never a file where it lies, only a PNG the shell made from it).
+// `source(path)` gives the URL of that PNG ("" until made or when refused) and `state(path)` says "pending", "ok", "no" or
+// "" (never asked): ThemeIcons.fileSource and ThemeIcons.fileState. ~/.face first; once it is refused (missing, not a
+// regular file, not an image), the AccountsService picture; else "" (the initials).
+function avatarSource(facePath, accountsPath, source, state) {
+    var face = facePath ? source(facePath) : "";
+    if (face !== "" || (facePath && state(facePath) !== "no"))
+        return face;
+    return accountsPath ? source(accountsPath) : "";
+}
+
 // Up to two initials for the avatar placeholder.
 function initials(name) {
     var parts = String(name || "").trim().split(/\s+/).filter(function (p) {

@@ -7,9 +7,9 @@ import qs.services
 
 // Reviews of 8b2a710 (major 2) and beebaff (major), on the REAL Notifications singleton (scripts/dev/test.sh:
 // `qs -p tests/shell/notif_image_files`, a dev session without the D-Bus server; see the dev-session marker file).
-// A notification image or app icon that names a local file is never loaded from where it was named: a helper copies it
-// into the shell's private directory after checking the OPENED descriptor (regular file, at most
-// History.MAX_IMAGE_FILE_BYTES), and the Image loads the copy by a URL built from its number.
+// A notification image or app icon that names a local file is never loaded from where it was named: a helper opens it
+// safely (regular file, at most History.MAX_IMAGE_FILE_BYTES) and re-encodes it into a PNG in the shell's private
+// directory (services/image-copy.py), and the Image loads that PNG by a URL built from its number.
 //  - a small PNG is copied and shown (as a path, a file: URL, Quickshell's image://icon//path and an app icon path), and
 //    the Image of the copy becomes Ready;
 //  - a FIFO, a symlink to a FIFO, /dev/null, a directory, a missing file and an oversized (sparse) file are refused;
@@ -18,6 +18,10 @@ import qs.services
 //    refused by the copy step;
 //  - a checked file later swapped for a FIFO: the shown copy stays a regular file of the shell; the next intake's copy
 //    is refused;
+//  - review of 423766f (the shell only ever decodes images it produced itself): an SVG in a ".img" file, a gzip SVG, a
+//    UTF-16 SVG, and SVG content in ".png" files behind a BOM or a comment, each naming a FIFO (absolute and relative
+//    hrefs): each becomes a PNG the shell made and its Image becomes Ready; the FIFO is never opened (a writer waiting
+//    on it would have been released); a text file is refused; every file in the private directory is a PNG;
 //  - after all of it, a normal image still loads (the one image loader never stalled);
 //  - previews hidden for a sender (Quick Settings merge): its image and an app icon path are dropped, the private copy
 //    included; only a plain theme name stays (Notifications.imageFor/appIconFor, as Banner and NotificationList call them).
@@ -47,24 +51,59 @@ ShellRoot {
             missing: dir + "/missing.png",
             device: "/dev/null",
             swap: dir + "/swap.png",
-            bypassFifo: dir + "/x.png"
+            bypassFifo: dir + "/x.png",
+            svgImg: dir + "/svg.img",
+            gzSvg: dir + "/gz.svg",
+            u16Svg: dir + "/u16.svg",
+            bomPng: dir + "/bom.png",
+            commentPng: dir + "/comment.png",
+            notImage: dir + "/text.png"
         })
+    readonly property var hostileSvgs: ["svgImg", "gzSvg", "u16Svg", "bomPng", "commentPng"]
 
     Process {
         id: setup
         running: true
         command: ["sh", "-c", "set -e; d=$1; rm -rf \"$d\"; mkdir -p \"$d/folder.png\"; printf '%s' \"$2\" | base64 -d >\"$d/ok.png\"; "
             + "cp \"$d/ok.png\" \"$d/swap.png\"; mkfifo \"$d/fifo.png\" \"$d/x.png\"; ln -s fifo.png \"$d/link.png\"; "
-            + "truncate -s 20M \"$d/big.png\"; mkfifo \"$d/evil.png\"; cp \"$d/ok.png\" \"$d/evil2.png\"; for n in 'x.png?a' 'x%2Epng' 'x.png#f' 'x.png?fallback=a'; do cp \"$d/ok.png\" \"$d/$n\"; done", "sh", root.dir, root.png]
+            + "truncate -s 20M \"$d/big.png\"; mkfifo \"$d/evil.png\"; cp \"$d/ok.png\" \"$d/evil2.png\"; for n in 'x.png?a' 'x%2Epng' 'x.png#f' 'x.png?fallback=a'; do cp \"$d/ok.png\" \"$d/$n\"; done; "
+            + "mkfifo \"$d/ref.fifo\"; svg=\"<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='64' height='32'><rect width='64' height='32' fill='red'/>"
+            + "<image xlink:href='$d/ref.fifo' width='8' height='8'/><image xlink:href='ref.fifo' width='8' height='8'/></svg>\"; "
+            + "printf '%s' \"$svg\" >\"$d/svg.img\"; printf '%s' \"$svg\" | gzip >\"$d/gz.svg\"; printf '%s' \"$svg\" | iconv -f UTF-8 -t UTF-16 >\"$d/u16.svg\"; "
+            + "printf '\\357\\273\\277%s' \"$svg\" >\"$d/bom.png\"; printf '<!-- c -->%s' \"$svg\" >\"$d/comment.png\"; printf 'not an image' >\"$d/text.png\"", "sh", root.dir, root.png]
         // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
         // qmllint disable signal-handler-parameters
         onExited: code => {
             // qmllint enable signal-handler-parameters
             root.check("fixtures created", code === 0);
+            fifoWatch.running = true;
             const p = root.paths;
             for (const k in p)
                 Notifications.requestCopy(p[k], true, "Files Test");
             poll.start();
+        }
+    }
+
+    // Waits to write to ref.fifo: an open of it for reading (by the converter, librsvg or Qt) releases it and leaves
+    // ref.opened behind.
+    Process {
+        id: fifoWatch
+        command: ["timeout", "50", "sh", "-c", "exec 3>\"$1/ref.fifo\" && echo opened >\"$1/ref.opened\"", "sh", root.dir]
+    }
+
+    // Every file in the private directory starts with the PNG signature; ref.opened does not exist.
+    Process {
+        id: inspect
+        command: ["python3", "-I", "-c", "import os, sys\nd, t = sys.argv[1], sys.argv[2]\nfiles = [f for f in os.listdir(d) if not f.endswith('.tmp')]\n"
+            + "png = all(open(os.path.join(d, f), 'rb').read(8) == bytes.fromhex('89504e470d0a1a0a') for f in files)\n"
+            + "print('files=%d png=%s opened=%s' % (len(files), png, os.path.exists(os.path.join(t, 'ref.opened'))))", Notifications.copyDir, root.dir]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.check("every file in the private directory is a PNG the shell made, and the FIFO was never opened (" + text.trim() + ")",
+                    /^files=[1-9][0-9]* png=True opened=False$/.test(text.trim()));
+                fifoWatch.signal(9);
+                root.finish();
+            }
         }
     }
 
@@ -108,8 +147,12 @@ ShellRoot {
         check("a directory is refused", state(p.folder) === "no");
         check("a missing file is refused", state(p.missing) === "no");
         check("the bypass FIFO is refused", state(p.bypassFifo) === "no");
+        for (const k of hostileSvgs)
+            check("review of 423766f: " + k + " (an SVG naming a FIFO) becomes a PNG the shell made (" + state(p[k]) + ")", state(p[k]) === "ok" && Notifications.iconSource(p[k], "").endsWith(".png"));
+        check("a file that is no image is refused", state(p.notImage) === "no");
+        hostile.model = hostileSvgs.map(k => Notifications.iconSource(p[k], ""));
         const copy = Notifications.iconSource(p.regular, "");
-        check("the shown source is the private copy (" + copy + ")", copy.startsWith("file://") && copy.indexOf("/grassfield-notification-images-") > 0 && copy.endsWith(".img"));
+        check("the shown source is the private copy (" + copy + ")", copy.startsWith("file://") && copy.indexOf("/grassfield-notification-images-") > 0 && copy.endsWith(".png"));
         check("never the named path itself", copy.indexOf("/notif-image-files/") < 0);
         check("a file: URL shows the copy", Notifications.iconSource("file://" + p.regular, "") === copy);
         check("Quickshell's app icon path shows the copy", Notifications.iconSource("image://icon/" + p.regular, "") === copy);
@@ -186,6 +229,24 @@ ShellRoot {
             asynchronous: true
             sourceSize: Qt.size(256, 256)
         }
+
+        Row {
+            x: 32
+            y: 32
+
+            Repeater {
+                id: hostile
+
+                Image {
+                    required property string modelData
+                    width: 4
+                    height: 4
+                    asynchronous: true
+                    source: modelData
+                    sourceSize: Qt.size(256, 256)
+                }
+            }
+        }
     }
 
     Timer {
@@ -217,6 +278,10 @@ ShellRoot {
                     return;
                 stop();
                 root.check("a later image still loads: the image loader never stalled (" + control.status + ")", control.status === Image.Ready);
+                const statuses = [];
+                for (let i = 0; i < hostile.count; i++)
+                    statuses.push((hostile.itemAt(i) as Image).status);
+                root.check("the PNGs made from the hostile SVGs loaded (" + statuses.join(",") + ")", statuses.length === 5 && statuses.every(x => x === Image.Ready));
                 // Seconds later (any copy a bypass form could have queued is long done): still nothing for them.
                 const d = root.dir;
                 for (const name of ["x.png?a", "x%2Epng", "x.png#f", "x.png?fallback=a"]) {
@@ -225,11 +290,11 @@ ShellRoot {
                 }
                 const p = root.paths;
                 const shownFor = app => Notifications.iconSource(Notifications.imageFor(p.regular, app), Notifications.appIconFor(p.regular, app));
-                root.check("previews shown: the private copy (" + shownFor("Open Sender") + ")", shownFor("Open Sender").endsWith(".img"));
+                root.check("previews shown: the private copy (" + shownFor("Open Sender") + ")", shownFor("Open Sender").endsWith(".png"));
                 root.check("previews hidden: neither the image nor the app icon path, not even as a copy (" + shownFor("Private Sender") + ")", shownFor("Private Sender") === "");
                 root.check("previews hidden: a plain theme name stays", Notifications.appIconFor("dialog-information", "Private Sender") === "dialog-information");
                 root.check("previews hidden: a traversal name is dropped", Notifications.appIconFor("../../.." + d + "/evil", "Private Sender") === "");
-                root.finish();
+                inspect.running = true;
             }
         }
     }

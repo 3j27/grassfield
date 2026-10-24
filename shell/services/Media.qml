@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Mpris
+import "../widgets/ArtUrl.js" as ArtUrl
 
 // Active MPRIS player: the first one that is playing, else the first one. null when none runs.
 Singleton {
@@ -24,11 +25,18 @@ Singleton {
     readonly property string title: available ? player.trackTitle : ""
     readonly property string artist: available ? player.trackArtist : ""
     readonly property string artUrl: available ? player.trackArtUrl : ""
+    // The art's local file ("" for any other URL: ArtUrl.localPath), shown only as ThemeIcons.fileSource(artPath).
+    readonly property string artPath: ArtUrl.localPath(artUrl)
     readonly property bool playing: available && player.isPlaying
 
     // A GRASSFIELD_DEV session runs on the owner's machine: the transport never drives the real player there. On the
     // private bus only a test player can answer, so the transport is live there.
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1" && !privateBus
+
+    // A player may reuse its art file for the next track: the PNG the shell shows is made again (the current one shows
+    // until then).
+    onArtPathChanged: ThemeIcons.refreshFile(artPath)
+    onTitleChanged: ThemeIcons.refreshFile(artPath)
 
     function devGuarded(what: string): bool {
         if (devSession)

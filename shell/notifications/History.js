@@ -266,9 +266,9 @@ function plainPath(path) {
 
 // The local path a "file" image reference (imageRef) or an app icon path names: "/abs" as given, Quickshell's
 // image://icon//abs -> "/abs", a file: URL without query or fragment, decoded. "" unless the result is a plainPath. The
-// shell never loads that path: it shows a private copy made by a helper that opened it and checked the opened descriptor
-// is a regular file of at most MAX_IMAGE_FILE_BYTES (Notifications.requestCopy; a FIFO or a device would block the one
-// image loader for good, and a file swapped after a check would be another file).
+// shell never loads that path: it shows a PNG made by a helper that opened it safely, checked the opened descriptor is a
+// regular file of at most MAX_IMAGE_FILE_BYTES and re-encoded it (Notifications.requestCopy; a FIFO or a device would
+// block the one image loader for good, a file swapped after a check would be another file, and an SVG may name others).
 function localPathOf(source) {
     if (typeof source !== "string" || source === "")
         return "";
@@ -290,13 +290,13 @@ function localPathOf(source) {
     return plainPath(path) ? path : "";
 }
 
-// The file: URL of private copy number `n` of sender number `sender` ("<n>.<sender>.img") in directory `dir` (an absolute
-// path), every segment percent-encoded: what the Image loads names exactly that file. "" when the directory is not a plain
-// absolute path, `n` is not a positive integer or `sender` not a non-negative one.
+// The file: URL of private copy number `n` of sender number `sender` ("<n>.<sender>.png", a PNG the shell made) in
+// directory `dir` (an absolute path), every segment percent-encoded: what the Image loads names exactly that file. "" when
+// the directory is not a plain absolute path, `n` is not a positive integer or `sender` not a non-negative one.
 function copySource(dir, n, sender) {
     if (!plainPath(dir) || !Number.isInteger(n) || n <= 0 || !Number.isInteger(sender) || sender < 0)
         return "";
-    return "file://" + (dir + "/" + n + "." + sender + ".img").split("/").map(encodeURIComponent).join("/");
+    return "file://" + (dir + "/" + n + "." + sender + ".png").split("/").map(encodeURIComponent).join("/");
 }
 
 // The URL scheme of a refused image, for a log line that never repeats the reference itself ("" when there is none).

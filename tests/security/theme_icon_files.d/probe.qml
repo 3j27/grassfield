@@ -6,11 +6,12 @@ import Grassfield.I18n
 import qs.notifications
 import qs.services
 
-// Probe of tests/security/theme_icon_files.sh, parts 1 and 2 (integrator decision after the review of 5ee6240: Qt never
-// reads a user-writable icon file). The script planted files for the theme icon name "evil" (PROBE_KIND says which) in
-// the user's icon folders and a regular user icon "ctl", then may have set QS_ICON_THEME to a user theme whose
-// index.theme is hostile. As a notification would, the probe takes "evil" in as an app icon, asks Qt directly
-// (Quickshell.hasThemeIcon on the GUI thread: Qt must not read the user's theme files), waits for ThemeIcons' copy,
+// Probe of tests/security/theme_icon_files.sh, parts 1 and 2 (integrator decisions after the reviews of 5ee6240 and
+// 423766f: Qt never reads a user-writable icon file; the shell only decodes images it produced itself). The script
+// planted files for the theme icon name "evil" (PROBE_KIND says which) in the user's icon folders and a regular user icon
+// "ctl", then may have set QS_ICON_THEME to a user theme whose index.theme is hostile. As a notification would, the probe
+// takes "evil" in as an app icon, asks Qt directly (Quickshell.hasThemeIcon on the GUI thread: Qt must not read the
+// user's theme files), waits for ThemeIcons' answer (the PNG it made, or a refusal),
 // gives the notification's icon source and the polkit sheet's (ThemeIcons.source, AuthAgent's call) to Images, then
 // loads "ctl" (a private copy too): that Image only becomes Ready when the image loader never stalled, and the probe
 // exits only when the GUI thread never blocked. Kind "swap" starts from a regular evil.png, shown as a copy, then makes
@@ -93,8 +94,10 @@ ShellRoot {
         onTriggered: {
             root.waited += interval;
             if (root.phase === "copy") {
+                // A new request keeps the current copy shown until the helper answers: wait for it to be idle too.
                 const s = root.stateOf("name:evil");
-                if ((s === "" || s === "pending") && root.waited < 15000)
+                const busy = ThemeIcons.queue.length > 0 || ThemeIcons.batch.length > 0 || ThemeIcons.activeRun !== null;
+                if ((s === "" || s === "pending" || busy) && root.waited < 15000)
                     return;
                 if (root.kind === "swap" && root.before === "") {
                     root.before = s + ":" + (Notifications.iconSource("", "evil") !== "" ? "shown" : "hidden");
