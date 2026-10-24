@@ -29,6 +29,14 @@ TestCase {
         compare(ScreenChoice.centered(true, "", "A"), "A");
     }
 
+    function test_theAskingPanelsDisplayWinsForAConfirm() {
+        // Search is on B, the pointer-active display is A, a menu was last open on C: the confirm opens on B
+        compare(ScreenChoice.centered(false, "C", "A", "B"), "B");
+        compare(ScreenChoice.centered(true, "C", "A", "B"), "B");
+        compare(ScreenChoice.centered(true, "C", "A", ""), "C");
+        compare(ScreenChoice.centered(false, "", "A", undefined), "A");
+    }
+
     function test_noOutputs() {
         compare(ScreenChoice.pick("", "GF-REF", []), "");
     }
