@@ -134,6 +134,7 @@ namespace {
         bool                             hadKeyDevice = false;
         SP<CEventLoopTimer>              announceTimer;          // waits for the re-created wl_keyboard (removed in stop())
         WP<IKeyboard>                    announceDevice;         // the device that replaced the session's only keyboard
+        WP<IKeyboard>                    announcedDevice;        // the device the timer already announced
         std::vector<WP<CWLKeyboardResource>> announceKnown;      // the focused client's wl_keyboards when it appeared
         int                              announceTries = 0;
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
@@ -1335,16 +1336,29 @@ namespace {
     }
 
     // The wl_keyboard objects of the client that holds the keyboard (CWLSeatResource::m_keyboards), live ones only.
+    // Every wl_seat the client bound (a client may bind it more than once; CSeatManager::seatResourceForClient returns the
+    // first only): its live wl_keyboard objects, through libwayland's own list of the client's resources.
     std::vector<WP<CWLKeyboardResource>> focusClientKeyboards() {
         std::vector<WP<CWLKeyboardResource>> out;
-        const auto                           seat = gf::surfaces::keyboardFocus();
-        const auto                           res  = seat && g_pSeatManager ? g_pSeatManager->seatResourceForClient(seat->client()) : nullptr;
-        if (res) {
-            for (const auto& k : res->m_keyboards) {
-                if (!k.expired())
-                    out.push_back(k);
-            }
-        }
+        const auto                           seat   = gf::surfaces::keyboardFocus();
+        wl_client*                           client = seat ? seat->client() : nullptr;
+        if (!client)
+            return out;
+        wl_client_for_each_resource(
+            client,
+            [](wl_resource* resource, void* data) -> wl_iterator_result {
+                const char* cls = resource ? wl_resource_get_class(resource) : nullptr;
+                if (cls && std::string_view{cls} == wl_seat_interface.name) {
+                    if (const auto seatResource = CWLSeatResource::fromResource(resource)) {
+                        for (const auto& k : seatResource->m_keyboards) {
+                            if (!k.expired())
+                                static_cast<std::vector<WP<CWLKeyboardResource>>*>(data)->push_back(k);
+                        }
+                    }
+                }
+                return WL_ITERATOR_CONTINUE;
+            },
+            &out);
         return out;
     }
 
@@ -1376,8 +1390,9 @@ namespace {
             return std::ranges::none_of(s.announceKnown, [&k](const WP<CWLKeyboardResource>& known) { return known.lock() == k.lock(); });
         });
         if (reCreated) {
-            s.keyDevice    = device; // its first key is not announced again
-            s.hadKeyDevice = true;
+            s.keyDevice       = device; // its first key is not announced again
+            s.hadKeyDevice    = true;
+            s.announcedDevice = device;
             stopAnnounce();
             reannounceKeyboardFocus();
             return;
@@ -1448,9 +1463,14 @@ namespace {
     // The keyboard focus itself is checked first (keepKeyboardFocus), whether Stages is on or not.
     void beforeKey() {
         auto& s = S();
+        // A key arrived: a pending announce stops here (a late one could land between this key's press and release); the
+        // key path announces instead, unless the timer already did for this device.
+        const auto keyboard = g_pSeatManager ? g_pSeatManager->m_keyboard.lock() : nullptr;
+        if (s.announceDevice.lock())
+            stopAnnounce();
         const bool replaced = keyDeviceReplaced();
-        if (!keepKeyboardFocus(true) && replaced)
-            reannounceKeyboardFocus(); // a fresh enter, unless the keyboard was just moved (that was one)
+        if (!keepKeyboardFocus(true) && replaced && (!keyboard || s.announcedDevice.lock() != keyboard))
+            reannounceKeyboardFocus(); // a fresh enter, unless the keyboard was just moved (that was one); may lose this key
         if (!s.on)
             return;
         if (s.pendingSpace) { // the layer may have released the keyboard before the deferred focus ran
@@ -1798,6 +1818,7 @@ namespace gf::stager {
             g_pEventLoopManager->removeTimer(s.announceTimer); // its callback is code of this library
         s.announceTimer.reset();
         s.announceDevice.reset();
+        s.announcedDevice.reset();
         s.announceKnown.clear();
         s.refocusSpace.reset();
         restoreFocusSurface();
