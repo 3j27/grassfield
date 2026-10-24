@@ -150,41 +150,41 @@ QtObject {
     // F1 gap 13: sheet radius 26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusSheet: 26
 
-    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Material shadow); no F1 measurement of a shadow exists]
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property int shadowBlur: 18
-    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Material shadow); no F1 measurement of a shadow exists]
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property int shadowOffsetY: 6
-    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Material shadow); no F1 measurement of a shadow exists]
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property real shadowOpacity: 0.3
 
-    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property int motionFast: 120
-    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property int motionNormal: 220
-    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
+    // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property int motionSlow: 350
-    // master-prompt 5.5: Reduce Motion = crossfades of at most 100 ms [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
+    // master-prompt § 5.5: Reduce Motion = crossfades of at most 100 ms [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property int motionReducedMax: 100
-    // estimate; Easing.BezierSpline control points [ref: docs/specs/ui.md (Appearance.duration, Reduce Motion); no F1 capture of motion exists]
+    // estimate; Easing.BezierSpline control points [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property var motionCurveStandard: [0.2, 0.0, 0.0, 1.0, 1.0, 1.0]
 
-    // master-prompt 5.5 default, owner validates on screenshots
+    // master-prompt § 5.5 default, owner validates on screenshots
     readonly property real materialDefaultTransparency: 0.25
     // tint alpha at transparency 1 (frosted material); the A2 clamp below keeps it readable up to 0.6 [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialTintAlphaMin: 0.4
     // A2 clamp: tint alpha never drops below this for transparency up to tintClampUntil (default 0.25 gives 0.85, unclamped); text and danger colours do the rest, tested in tests/visual/test_contrast_tokens.py
     readonly property real materialTintAlphaClamp: 0.82
-    // A2: master-prompt 5.5, every slider value up to 0.6 must pass; beyond it the tint falls linearly from tintAlphaClamp to tintAlphaMin at 1
+    // A2: master-prompt § 5.5, every slider value up to 0.6 must pass; beyond it the tint falls linearly from tintAlphaClamp to tintAlphaMin at 1
     readonly property real materialTintClampUntil: 0.6
-    // GF-125: compositor blur size (per-pass radius, px) at transparency 0+: the blur grows with transparency (master-prompt 5.5); at the default 0.25 the size is 18, what config/hypr/grassfield/looknfeel.lua ships [ref: docs/specs/ui.md Material blur]
+    // GF-125: compositor blur size (per-pass radius, px) at transparency 0+: the blur grows with transparency (master-prompt § 5.5); at the default 0.25 the size is 18, what config/hypr/grassfield/looknfeel.lua ships [ref: docs/specs/ui.md § Material blur]
     readonly property int materialBlurSizeMin: 12
-    // GF-125: compositor blur size at transparency 1 (linear from blurSizeMin; 12 + 24 x 0.25 = 18 at the default) [ref: docs/specs/ui.md Material blur]
+    // GF-125: compositor blur size at transparency 1 (linear from blurSizeMin; 12 + 24 x 0.25 = 18 at the default) [ref: docs/specs/ui.md § Material blur]
     readonly property int materialBlurSizeMax: 36
-    // GF-125: blur passes below blurPassesFrom (a nearly opaque material shows little blur: one pass fewer saves GPU time) [ref: docs/specs/ui.md Material blur]
+    // GF-125: blur passes below blurPassesFrom (a nearly opaque material shows little blur: one pass fewer saves GPU time) [ref: docs/specs/ui.md § Material blur]
     readonly property int materialBlurPassesLight: 2
-    // GF-125: blur passes from blurPassesFrom up (3 is what looknfeel.lua ships) [ref: docs/specs/ui.md Material blur]
+    // GF-125: blur passes from blurPassesFrom up (3 is what looknfeel.lua ships) [ref: docs/specs/ui.md § Material blur]
     readonly property int materialBlurPassesFull: 3
-    // GF-125: transparency from which the full pass count is used (below the default 0.25, so the default look is unchanged) [ref: docs/specs/ui.md Material blur]
+    // GF-125: transparency from which the full pass count is used (below the default 0.25, so the default look is unchanged) [ref: docs/specs/ui.md § Material blur]
     readonly property real materialBlurPassesFrom: 0.15
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHighlightOpacity: 0.22
@@ -489,41 +489,41 @@ QtObject {
     readonly property int controlTooltipTailWidth: 13
     // F1 gap 4: tail 7.3 high [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipTailHeight: 7
-    // GF-085: toolbar button, a square 28 (the Files and Preview toolbars, which keep their own tokens for the bars) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: toolbar button, a square 28 (the Files and Preview toolbars, which keep their own tokens for the bars) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlToolButtonSize: 28
-    // GF-085: glyph inside a tool button [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: glyph inside a tool button [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlToolIconSize: 16
-    // GF-085: check box and radio button box, 14 as the AppKit control [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: check box and radio button box, 14 as the AppKit control [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckSize: 14
-    // GF-085: check box corner radius [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: check box corner radius [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckRadius: 4
-    // GF-085: text field and search field height, 22 as the AppKit control [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: text field and search field height, 22 as the AppKit control [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlFieldHeight: 22
-    // GF-085: stepper arrows column width [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: stepper arrows column width [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlStepperWidth: 14
-    // GF-085: progress bar thickness [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: progress bar thickness [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlProgressHeight: 6
-    // GF-085: overlay scroll bar thumb width (moved from files.scrollbarWidth) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: overlay scroll bar thumb width (moved from files.scrollbarWidth) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlScrollbarWidth: 6
-    // GF-085: shortest scroll bar thumb [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: shortest scroll bar thumb [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlScrollbarMinLength: 24
-    // GF-085: scroll bar while the view is still [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: scroll bar while the view is still [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property real controlScrollbarIdleOpacity: 0.5
-    // GF-085: scroll bar thumb (text colour alpha) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: scroll bar thumb (text colour alpha) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property real controlScrollbarThumbOpacity: 0.3
-    // GF-085: dragged scroll bar thumb [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: dragged scroll bar thumb [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property real controlScrollbarPressedOpacity: 0.55
-    // GF-085: sheet width (moved from files.sheetWidth) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: sheet width (moved from files.sheetWidth) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlSheetWidth: 420
-    // GF-085: extra fill over a pressed control (the hover colour at this opacity) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: extra fill over a pressed control (the hover colour at this opacity) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property real controlPressedOpacity: 0.18
-    // GF-085: hairline border of a control (Increase Contrast, unchecked box) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: hairline border of a control (Increase Contrast, unchecked box) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlBorderWidth: 1
-    // GF-085: check mark inset inside the 14 px box, both sides [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: check mark inset inside the 14 px box, both sides [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckMarkInset: 2
-    // GF-085: Page Up / Page Down step of a spin box, in steps [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: Page Up / Page Down step of a spin box, in steps [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlPageStepFactor: 10
-    // GF-085: inset of the stepper arrow highlight [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    // GF-085: inset of the stepper arrow highlight [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlStepperInset: 1
 
     // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
@@ -604,11 +604,11 @@ QtObject {
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
 
-    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md (Auto appearance); docs/specs/settings.md]
+    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19
-    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00 [ref: docs/specs/controlcenter.md (Auto appearance); docs/specs/settings.md]
+    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00 [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceDarkToHour: 7
-    // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/specs/controlcenter.md (Auto appearance); docs/specs/settings.md]
+    // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceRecheckInterval: 60000
 
     // docs/specs/notifications.md: about 344 pt

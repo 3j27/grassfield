@@ -137,17 +137,29 @@ REPO = UI.parent
 F1 = REPO / "docs" / "testing" / "f1-reference-gaps.md"
 PATH_CITE = re.compile(r"(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
 ADR_CITE = re.compile(r"ADR-(\d{4})")
-SECTION_CITE = re.compile(r"\u00a7 ([^;\]]+)")
+# A section pointer has one form: `<file> \u00a7 <section>` (docs/**.md or master-prompt), ended by ";" or "]".
+SECTION_CITE = re.compile(r"(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 ([^;\]]+)")
+# `ADR-0016 section 5`: the number of a numbered heading of that ADR.
+ADR_SECTION_CITE = re.compile(r"ADR-(\d{4}) section (\d+(?:\.\d+)?)")
+
+
+def headings_of(path):
+    """Heading names (## and ###) of a markdown file, lower-case, the parenthetical tail dropped, and their numbers ('5.5')."""
+    names, numbers = [], set()
+    for line in path.read_text().splitlines():
+        m = re.match(r"#{1,4} (.+)", line)
+        if not m:
+            continue
+        text = m.group(1).strip()
+        number = re.match(r"(\d+(?:\.\d+)?)\.?(?:\s|$)", text)
+        if number:
+            numbers.add(number.group(1))
+        names.append(re.sub(r"\s*\(.*$", "", text).strip().lower())
+    return names, numbers
 
 
 def f1_headings():
-    """Lower-case heading names of the F1 analysis (## and ###), the parenthetical tail dropped: 'Search (macOS Spotlight)' -> 'search'."""
-    names = []
-    for line in F1.read_text().splitlines():
-        m = re.match(r"#{2,3} (.+)", line)
-        if m:
-            names.append(re.sub(r"\s*\(.*$", "", m.group(1)).strip().lower())
-    return names
+    return headings_of(F1)[0]
 
 
 def section_resolves(text, headings):
@@ -177,12 +189,28 @@ def source_problems(source, headings):
         cited = True
         if not list((REPO / "docs" / "decisions").glob("ADR-%s*" % number)):
             problems.append("cites ADR-%s, which does not exist" % number)
-    for section in SECTION_CITE.findall(source):
+    for number, section in ADR_SECTION_CITE.findall(source):
+        files = list((REPO / "docs" / "decisions").glob("ADR-%s*" % number))
+        if files and section not in headings_of(files[0])[1]:
+            problems.append("cites section %s of ADR-%s, which has no such numbered heading" % (section, number))
+    for path, section in SECTION_CITE.findall(source):
         cited = True
         while section.count(")") > section.count("("):  # the ")" that closes a sentence around the pointer
             section = section[:section.rindex(")")]
-        if not section_resolves(section, headings):
-            problems.append("cites the F1 section '%s', which is not a heading of f1-reference-gaps.md" % section.strip())
+        section = section.strip()
+        target = REPO / ("docs/master-prompt.md" if path == "master-prompt" else path)
+        if not target.exists():
+            continue  # reported above as a missing path
+        names, numbers = headings_of(target)
+        if path.endswith("f1-reference-gaps.md"):
+            ok = section_resolves(section, names)
+        elif path == "master-prompt":
+            lead = re.match(r"\d+(?:\.\d+)?", section)
+            ok = bool(lead) and lead.group(0) in numbers
+        else:
+            ok = any(name.startswith(section.lower()) for name in names)
+        if not ok:
+            problems.append("cites '%s \u00a7 %s', which is not a heading of that file" % (path, section))
     if re.search(r"master-prompt|f1-reference-gaps", source):
         cited = True
     if not cited:

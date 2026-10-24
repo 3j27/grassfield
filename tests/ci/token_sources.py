@@ -35,6 +35,18 @@ def selftest():
     assert problems("[ref: docs/testing/f1-reference-gaps.md § Menu bar and Nonsense]"), "a part that is not a heading"
     assert problems("docs/specs/does-not-exist.md: x"), "a missing file"
     assert problems("ADR-9999 says"), "a missing ADR"
+    # Every pointer kind: a good one passes, a renamed one fails.
+    assert problems("x [ref: docs/specs/ui.md \u00a7 Material blur]") == []
+    assert problems("x [ref: docs/specs/ui.md \u00a7 Material blurred]"), "a renamed spec section"
+    assert problems("x [ref: docs/specs/ui.md \u00a7 Material shadow]"), "a section that is not in the spec"
+    assert problems("x (master-prompt \u00a7 5.5)") == []
+    assert problems("x (master-prompt \u00a7 5.55)"), "a master prompt section that does not exist"
+    assert problems("ADR-0016 section 5: video") == []
+    assert problems("ADR-0016 section 55: video"), "an ADR section that does not exist"
+    assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu bar]") == []
+    assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu barr]"), "a renamed F1 section"
+    assert problems("tests/visual/test_contrast_tokens.py: A2") == []
+    assert problems("tests/visual/test_contrast_token.py: A2"), "a renamed test path"
     print("PASS: token_sources selftest")
 
 
@@ -43,8 +55,21 @@ def real():
     errors = gen.provenance_errors(data)
     for e in errors:
         print("FAIL:", e)
+    # Mutation: renaming one real pointer of each kind makes the lint fail on the real file.
+    text = (ROOT / "ui" / "tokens" / "tokens.json").read_text()
+    for needle, renamed in (("docs/specs/ui.md \u00a7 Material blur", "docs/specs/ui.md \u00a7 Material blurX"),
+                            ("master-prompt \u00a7 5.5", "master-prompt \u00a7 5.99"),
+                            ("ADR-0016 section 5", "ADR-0016 section 99"),
+                            ("f1-reference-gaps.md \u00a7 Menu bar", "f1-reference-gaps.md \u00a7 Menu barX"),
+                            ("docs/specs/dock.md", "docs/specs/dockX.md")):
+        if needle not in text:
+            print("FAIL: mutation needle not in tokens.json:", needle)
+            return 1
+        if not gen.provenance_errors(json.loads(text.replace(needle, renamed, 1))):
+            print("FAIL: renaming '%s' went unnoticed" % needle)
+            return 1
     if not errors:
-        print("PASS: every token source is a followable pointer")
+        print("PASS: every token source is a followable pointer (and a renamed pointer of each kind fails)")
     return 1 if errors else 0
 
 
