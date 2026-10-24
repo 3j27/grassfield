@@ -34,6 +34,15 @@ def selftest():
     assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu barDock]"), "two names run together"
     assert problems("x master-prompt \u00a7 5.5: y [ref: docs/specs/ui.md \u00a7 Functional requirements]") == []
     assert problems("x master-prompt \u00a7 5.5: y [ref: docs/specs/ui.md \u00a7 Nope]"), "a pointer after a master prompt pointer is checked too"
+    # A second, valid pointer does not excuse a malformed one beside it.
+    good = "x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu bar; "
+    assert problems(good + "master-prompt \u00a7 5.5]") == []
+    assert problems(good + "master-prompt \u00a79.9]"), "no space after the sign"
+    assert problems(good + "master-prompt section 9.9]"), "the master prompt cited as 'section'"
+    assert problems(good + "ui.md \u00a7Nope]"), "a bare file name and no space"
+    assert problems(good + "docs/specs/ui.md \u00a7\u00a0Nope]"), "a no-break space"
+    assert problems(good + "docs/specs/ui.md  \u00a7 Nope]"), "two spaces before the sign"
+    assert problems(good + "see \u00a7 Nope]"), "a sign with no file before it"
     assert problems("ADR-0016 section 5: video") == []
     assert problems("tests/visual/test_contrast_tokens.py: A2") == []
     assert problems("estimate"), "a bare estimate is not a source"

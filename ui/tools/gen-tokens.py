@@ -234,6 +234,15 @@ def source_problems(source, headings):
             ok = section.lower() in names  # the whole heading, not a prefix of it
         if not ok:
             problems.append("cites '%s \u00a7 %s', which is not a heading of that file" % (path, section))
+    # Any section sign must belong to a well-formed `<file> \u00a7 <section>` pointer (one plain space each side of the sign, a
+    # full docs path or master-prompt): `ui.md \u00a7Nope`, `master-prompt \u00a79.9` and a no-break space do not slip through
+    # because the source also holds another valid pointer. `master-prompt section 9.9` is the wrong form for the master prompt.
+    well_formed = {m.end() - 2 for m in SECTION_START.finditer(source)}
+    for at, ch in enumerate(source):
+        if ch == "\u00a7" and at not in well_formed:
+            problems.append("has a section sign that is not part of a `<docs path or master-prompt> \u00a7 <section>` pointer (near '%s')" % source[max(0, at - 24):at + 24].replace("\u00a0", "<nbsp>"))
+    if re.search(r"master-prompt\s+(?:section|sec\b)", source):
+        problems.append("cites the master prompt as `section`: write `master-prompt \u00a7 <n.n>`")
     # A declared estimate: no reference covers the value, and the source says what it is and why ("estimate: a pressed light
     # darkens by this much": a role, not a bare word). A bare "estimate" is still not a source.
     declared_estimate = re.match(r"estimate: \S+(?:\s+\S+){3,}", source) is not None
