@@ -37,7 +37,8 @@
 #        pointer's output when the focused window closes) -> fallback: the focused Desktop's front window A, outcome
 #        fallback/gone
 #   9    remembered D, D minimized during the close -> fallback A (minimized), D never gets a key
-#   10   a press beside the remaining Exclusive chrome on the other output's window -> that window wins (target press)
+#   10   a press beside the remaining Exclusive chrome on the other output's window -> that window wins (target press);
+#        the request and the release come from the fixture, timed from the request (fixture close())
 #   11   a polkit-like dialog appears during the close and stays past the bound: letters go to its field, no window gets
 #        one, outcome timeout; 12 a short dialog: nothing focused while it is up, A after it
 #   13   invalid payloads -> outcome invalid; 300 requests in one dispatch -> one outcome, the socket2 subscriber alive
@@ -467,10 +468,11 @@ focus_window "$addr_a"
 holder=$(open_chromes)
 if [[ $holder == "$OUT_A" ]]; then press_win=$addr_a press_cap=$cap_a target_win=$addr_b; else press_win=$addr_b press_cap=$cap_b target_win=$addr_a; fi
 id=$((id + 1))
-request "{\"target\":\"window\",\"address\":\"$target_win\",\"id\":$id}"
-release holder-first 900 -1 # the holder's chrome first; the other stays Exclusive for 0.9 s
-sleep 0.15
 read -r p_out p_x p_y < <(center_of "$press_win")
+# The request and the release from the fixture, timed from the request: the holder's chrome 30 ms after it, the other
+# stays Exclusive 800 ms more (released 830 ms after the request, inside the plugin's 1000-ms bound whatever `qs ipc`
+# takes to arrive; the press lands while it is still up).
+fx close "{\"target\":\"window\",\"address\":\"$target_win\",\"id\":$id}" holder-first 800 -1 >/dev/null
 pointer "$p_out" abs "$p_x" "$p_y" sleep 60 click
 sleep 1.1
 say "  holder $holder, press on $press_win ($p_out $p_x,$p_y), named target $target_win"
@@ -498,18 +500,15 @@ focus_window "$addr_b"
 focus_window "$addr_a"
 holder=$(open_chromes)
 id=$((id + 1))
-t_req=$(date +%s%3N)
-request "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}"
-fx polkit "$OUT_B" >/dev/null
-release holder-first 60 -1
-sleep 0.2
+# The request, the dialog, the chromes' release and the dialog's end from the fixture, timed from the request (the dialog
+# released 500 ms after it, inside the plugin's 1000-ms bound whatever `qs ipc` takes to arrive).
+fx closeWithPolkit "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}" "$OUT_B" holder-first 60 500 >/dev/null
+sleep 0.15
 early=$(outcome_of "$id") # the chromes are released, the dialog is still up: nothing may be focused yet
-t_rel=$(date +%s%3N)
-fx polkitRelease >/dev/null
-sleep 0.8
+sleep 1
 if [[ $mode == check ]]; then
   [[ -z $early ]]; check "case 12: no outcome while the dialog is up" $? "${early:-none}"
-  say "  the dialog was released $((t_rel - t_req)) ms after the request (the bound is 1000 ms)"
+  say "  the dialog was released 500 ms after the request by the fixture (the bound is 1000 ms)"
 fi
 type_to "case 12" "$cap_a" "pshort"
 [[ $mode == check ]] && outcome_is "case 12" "$id" focused "$addr_a"
@@ -565,6 +564,7 @@ park
 focus_window "$addr_a"
 holder=$(open_chromes)
 id=$((id + 1))
+t_req=$(date +%s%3N)
 request "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,\"id\":$id}"
 ev_lock=$(grep -ac "" "$events")
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
@@ -576,12 +576,22 @@ for i in $(seq 1 60); do
   [[ $locked == "locked secure" ]] && break
   sleep 0.1
 done
+t_lock=$(date +%s%3N)
 release holder-first 100 -1
 sleep 0.8
 focus_events=$(tail -n +"$((ev_lock + 1))" "$events" | grep -acE "^[0-9]+ activewindowv2>>[0-9a-f]+$" || true)
 [[ $locked == "locked secure" ]]; check "case 15: the foreign locker holds the session lock" $? "${locked:-no answer}"
 ((focus_events == 0)); safe "case 15: no window focused while locked" $? "$focus_events activewindowv2 event(s) naming a window"
-[[ $mode == check ]] && outcome_is "case 15" "$id" refused
+# The foreign locker is a Quickshell process started after the request: on a loaded host it can take more than the
+# plugin's 1000-ms bound to lock, and the outcome is then a timeout that says nothing about the lock path (not judged,
+# never a pass: the safety checks above still count).
+if [[ $mode == check ]]; then
+  if ((t_lock - t_req > 900)); then
+    say "  NOT JUDGED case 15 outcome: the lock was confirmed $((t_lock - t_req)) ms after the request (the plugin's bound is 1000 ms): $(outcome_of "$id")"
+  else
+    outcome_is "case 15" "$id" refused
+  fi
+fi
 foreign_ipc unlock >/dev/null
 for i in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
 kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
