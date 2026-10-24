@@ -174,7 +174,13 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   regular file of at most 8 MiB (`test -f` and `stat -L` on `/proc/self/fd/3`) and copies it into the shell's private
   directory `$XDG_RUNTIME_DIR/grassfield-notification-images-<display>` (0700, emptied at start); the Image loads that copy by a URL
   built from its number with every segment encoded (`History.copySource`), a file nobody else writes. Each intake makes a
-  fresh copy (album art at a reused path changes); 48 copies are kept, older ones are deleted and re-made when shown again.
+  fresh copy (album art at a reused path changes). The directory holds at most 48 copies and 64 MiB across all senders
+  (`copyWindow`, `copyBudgetBytes`; review of 6e24d36: 60 notifications naming one 8 MiB file filled 384 MiB of the
+  session's tmpfs): the helper evicts the oldest copies first, never one a banner on screen shows, and refuses an image
+  that would not fit even then before evicting anything. An evicted or refused image shows the app icon; an evicted copy is
+  re-made only when a new notification names the file, never because it is shown (copies cannot evict each other in a
+  loop). `tests/shell/notif_image_budget` (budget lowered to 3 MiB: six 1 MiB images, an image larger than the budget, a
+  banner's copy kept, an image the kept copies leave no room for; six mutants fail it).
   Until the copy exists the app icon or the bell shows; without `XDG_RUNTIME_DIR` no local file is shown.
   `tests/shell/notif_image_files` (FIFO, symlink to it, `/dev/null`, a sparse 20 MiB file, a directory, a missing file,
   the reviewer's bypass forms `x.png?a`, `file://…?a`, `x%2Epng`, `file://…#f`, `image://icon//…?fallback=a` and an app

@@ -701,9 +701,10 @@ Singleton {
     // private directory ($XDG_RUNTIME_DIR/grassfield-notification-images, 0700, emptied at start). The Image loads that
     // copy, by a URL built from its number with every segment encoded (History.copySource): a file nobody else writes.
     // Opening a FIFO blocks the helper, never the shell: each file has `timeout 3`. Each intake makes a fresh copy (an app
-    // may reuse a path for new content); at most copyWindow copies are kept, older ones are deleted and re-made on use.
-    // Without XDG_RUNTIME_DIR no local file is shown. Path -> {state: "pending"|"ok"|"no", n}; reassigned on every change so
-    // bindings that called iconSource() re-evaluate.
+    // may reuse a path for new content); at most copyWindow copies and copyBudgetBytes bytes are kept, the oldest copies
+    // not on a banner are evicted first, and an image that does not fit falls back to the app icon.
+    // Without XDG_RUNTIME_DIR no local file is shown. Path -> {state: "pending"|"ok"|"no"|"gone", n}; reassigned on every
+    // change so bindings that called iconSource() re-evaluate.
     // One directory per Wayland display: a nested dev shell never empties the real session's directory.
     readonly property string copyDir: {
         const runtime = Quickshell.env("XDG_RUNTIME_DIR");
@@ -716,46 +717,76 @@ Singleton {
     property int copyCounter: 0
     property bool copyDirReady: false
     readonly property int copyWindow: 48
-    // POSIX sh; the directory, the size cap, then "<n> <path>" pairs as arguments (never interpolated). One line per pair:
-    // "ok" when "<dir>/<n>.img" now holds the copy, else "no". The one-file step runs under `timeout 3` (a FIFO named or
-    // swapped in blocks only that step), opens the path once and decides on the opened descriptor.
-    readonly property string copyScript: "dir=$1; cap=$2; win=$3; shift 3; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
-        + "one='[ -f \"$1\" ] || exit 1; exec 3<\"$1\" || exit 1; [ -f /proc/self/fd/3 ] || exit 1; "
-        + "s=$(stat -L -c %s /proc/self/fd/3) || exit 1; [ \"$s\" -le \"$3\" ] || exit 1; umask 077; "
-        + "head -c \"$3\" <&3 >\"$2.tmp\" && mv -f \"$2.tmp\" \"$2\"'; "
+    // At most copyWindow copies and copyBudgetBytes bytes in the directory, across all senders (review of 6e24d36: 60
+    // notifications naming one 8 MiB file filled 384 MiB of the session's tmpfs). A test may lower the budget.
+    property real copyBudgetBytes: 64 * 1024 * 1024
+    // POSIX sh; the directory, the size cap, the copy window, the byte budget, the numbers of the copies to keep (the
+    // banners on screen; comma list), then "<n> <path>" pairs as arguments (never interpolated). One line per pair: "ok"
+    // when "<dir>/<n>.img" now holds the copy, else "no", followed by the numbers of the copies evicted to make room. The
+    // one-file step runs under `timeout 3` (a FIFO named or swapped in blocks only that step), opens the path once and
+    // decides on the opened descriptor. It then deletes the oldest copies (lowest number) not in the keep list while the
+    // directory would hold more than the window or the budget with this file; when even that would not be enough (a file
+    // larger than the budget, or the kept copies fill it) it refuses the file before evicting anything. It copies at most
+    // the size it checked.
+    readonly property string copyScript: "dir=$1; cap=$2; win=$3; budget=$4; keep=\",$5,\"; shift 5; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
+        + "one='src=$1; dst=$2; cap=$3; dir=$4; win=$5; budget=$6; keep=$7; [ -f \"$src\" ] || exit 1; exec 3<\"$src\" || exit 1; "
+        + "[ -f /proc/self/fd/3 ] || exit 1; s=$(stat -L -c %s /proc/self/fd/3) || exit 1; "
+        + "[ \"$s\" -le \"$cap\" ] && [ \"$s\" -le \"$budget\" ] || exit 1; "
+        + "while :; do count=0; total=0; kc=0; kt=0; oldest=; for f in \"$dir\"/*.img; do [ -f \"$f\" ] || continue; t=$(stat -c %s \"$f\") || exit 1; "
+        + "count=$((count + 1)); total=$((total + t)); b=${f##*/}; b=${b%.img}; case $keep in *\",$b,\"*) kc=$((kc + 1)); kt=$((kt + t)); continue ;; esac; "
+        + "if [ -z \"$oldest\" ] || [ \"$b\" -lt \"$oldest\" ]; then oldest=$b; fi; done; "
+        + "[ \"$kc\" -lt \"$win\" ] && [ $((kt + s)) -le \"$budget\" ] || exit 1; [ \"$count\" -lt \"$win\" ] && [ $((total + s)) -le \"$budget\" ] && break; "
+        + "[ -n \"$oldest\" ] || exit 1; rm -f \"$dir/$oldest.img\" || exit 1; printf \" %s\" \"$oldest\"; done; "
+        + "umask 077; head -c \"$s\" <&3 >\"$dst.tmp\" && mv -f \"$dst.tmp\" \"$dst\" && printf \" ok\"'; "
         + "while [ $# -ge 2 ]; do n=$1; p=$2; shift 2; rm -f \"$dir/$n.img.tmp\"; "
-        + "if timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.img\" \"$cap\" 2>/dev/null; then echo ok; else rm -f \"$dir/$n.img.tmp\"; echo no; fi; "
-        + "old=$((n - win)); [ \"$old\" -gt 0 ] && rm -f \"$dir/$old.img\"; done"
+        + "out=$(timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.img\" \"$cap\" \"$dir\" \"$win\" \"$budget\" \"$keep\" 2>/dev/null); "
+        + "case $out in *' ok') echo \"ok${out% ok}\" ;; *) rm -f \"$dir/$n.img.tmp\"; echo \"no$out\" ;; esac; done"
 
-    // The URL of the private copy of `path`, or "" (not copied yet: a copy is requested; refused; or expired).
+    // The URL of the private copy of `path`, or "" (not copied yet: a copy is requested; refused; or evicted).
     function copySourceOf(path: string): string {
         if (path === "" || copyDir === "")
             return "";
         const entry = localCopies[path];
-        if (entry === undefined || (entry.state === "ok" && entry.n <= copyCounter - copyWindow)) {
+        if (entry === undefined) {
             Qt.callLater(root.requestCopy, path, false);
             return "";
         }
         return entry.state === "ok" ? History.copySource(copyDir, entry.n) : "";
     }
 
-    // Asks for a copy of `path`; `fresh`: also when one exists (a new notification naming it). The current copy stays shown
-    // until the new one is made.
+    // Asks for a copy of `path`; `fresh`: also when the path was already copied, refused or evicted (a new notification
+    // naming it). Without `fresh` (shown, e.g. a history row after a restart) only a path never seen in this run is copied:
+    // an evicted copy is not re-made on use, so copies never evict each other in a loop; the app icon shows instead. The
+    // current copy stays shown until the new one is made.
     function requestCopy(path: string, fresh: bool): void {
         if (path === "" || copyDir === "" || copyQueue.some(q => q.path === path) || copyBatch.some(q => q.path === path))
             return;
         const entry = localCopies[path];
-        const live = entry !== undefined && entry.state === "ok" && entry.n > copyCounter - copyWindow;
-        if (!fresh && entry !== undefined && (live || entry.state !== "ok"))
+        if (!fresh && entry !== undefined)
             return;
         copyCounter++;
         copyQueue = copyQueue.concat([{path: path, n: copyCounter}]);
-        if (!live) {
+        if (entry === undefined || entry.state !== "ok") {
             const next = Object.assign({}, localCopies);
             next[path] = {state: "pending", n: -1};
             localCopies = next;
         }
         runCopies();
+    }
+
+    // The numbers of the copies the banners on screen show: never evicted.
+    function bannerCopyNumbers(): var {
+        const kept = [];
+        for (let i = 0; i < bannerStore.count; i++) {
+            const row = bannerStore.get(i);
+            const ref = History.imageRef(row.image);
+            for (const path of [ref.kind === "file" ? History.localPathOf(ref.source) : "", History.localPathOf(row.appIcon || "")]) {
+                const entry = path === "" ? undefined : localCopies[path];
+                if (entry !== undefined && entry.state === "ok")
+                    kept.push(entry.n);
+            }
+        }
+        return kept;
     }
 
     function runCopies(): void {
@@ -766,20 +797,32 @@ Singleton {
         const args = [];
         for (const q of copyBatch)
             args.push(String(q.n), q.path);
-        copier.command = ["sh", "-c", copyScript, "gf-image-copy", copyDir, String(History.MAX_IMAGE_FILE_BYTES), String(copyWindow)].concat(args);
+        copier.command = ["sh", "-c", copyScript, "gf-image-copy", copyDir, String(History.MAX_IMAGE_FILE_BYTES), String(copyWindow),
+            String(Math.max(0, Math.floor(copyBudgetBytes))), bannerCopyNumbers().join(",")].concat(args);
         copier.running = true;
     }
 
+    // Line i of the helper's output answers copyBatch[i]: "ok" or "no", then the numbers of the copies it evicted (also
+    // when the copy then failed). An evicted copy's path keeps a "gone" entry (not shown, not re-made on use; a new
+    // notification naming it copies it again).
     function copiesDone(output: string): void {
         const lines = String(output || "").split("\n");
         const next = Object.keys(localCopies).length > 4 * copyWindow ? {} : Object.assign({}, localCopies);
         for (let i = 0; i < copyBatch.length; i++) {
             const q = copyBatch[i];
-            if (lines[i] === "ok") {
+            const words = String(lines[i] || "").split(" ");
+            if (words[0] === "ok") {
                 next[q.path] = {state: "ok", n: q.n};
             } else {
                 next[q.path] = {state: "no", n: -1};
-                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes; not shown");
+                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes, or does not fit the " + copyBudgetBytes + "-byte budget of copies; not shown");
+            }
+            for (const word of words.slice(1)) {
+                const evicted = Number(word);
+                for (const path in next) {
+                    if (next[path].state === "ok" && next[path].n === evicted)
+                        next[path] = {state: "gone", n: -1};
+                }
             }
         }
         copyBatch = [];
