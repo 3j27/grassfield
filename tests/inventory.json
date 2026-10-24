@@ -151,6 +151,7 @@
  {"path": "tests/security/notif_remote_image.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/security/lock_surfaces/shell.qml", "layer": "headless"},
  {"path": "tests/security/lock_surfaces.sh", "layer": "data"},
+ {"path": "tests/security/theme_icon_files.sh", "layer": "headless"},
  {"path": "tests/shell/apps_panel_perf/shell.qml", "layer": "headless"},
  {"path": "tests/shell/desktop_rename_focus/shell.qml", "layer": "headless"},
  {"path": "tests/shell/i18n_live/shell.qml", "layer": "headless"},

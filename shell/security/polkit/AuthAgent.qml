@@ -147,8 +147,9 @@ Scope {
             anchors.centerIn: parent
             sourceComponent: AuthDialog {
                 model: dialogModel
-                // The action's theme icon (sanitized by the model), only when the theme has it (no broken image).
-                appIconSource: dialogModel.iconName !== "" && Quickshell.hasThemeIcon(dialogModel.iconName) ? Quickshell.iconPath(dialogModel.iconName) : ""
+                // The action's theme icon (sanitized by the model), only when the theme has it (no broken image) and every
+                // file Qt could read for it is a regular file of bounded size (ThemeIcons, review of 2dfd992).
+                appIconSource: ThemeIcons.source(dialogModel.iconName)
                 heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhileLocked) : ""
             }
         }

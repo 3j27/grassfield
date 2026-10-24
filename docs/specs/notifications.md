@@ -192,6 +192,12 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   missing); it applies at intake (`checkedAppIcon`, `History.keptAppIcon`), on history load (`History.parse`) and in
   `iconSource`; with previews hidden `NotificationPrefs.appIconShown` keeps only a name that passes the same test, so the
   sender's image and an app icon path (its private copy included) give way to the app's theme icon or the generic one.
+  A name that passes reaches an Image only through `ThemeIcons.source` (shell/services, shared with the polkit sheet;
+  review of 2dfd992): a helper first checks every file Qt could read for it (`<name>`, `.png`, `.svg`, `.svgz`, `.xpm`
+  under the icon search paths the user owns or can write, symlinks followed) and refuses the name unless each is a
+  regular file of at most 8 MiB; until the verdict (well under a second) and after a refusal the generic icon shows.
+  `tests/security/theme_icon_files.sh` (FIFO, symlink to a FIFO, symlinks to /dev/zero and /dev/null, FIFO .svg, FIFO
+  under ~/.icons; a regular icon still shows; the mutant without the verdict stalls the loader).
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the

@@ -185,9 +185,13 @@ Singleton {
             if (copy !== "")
                 return copy;
         }
-        // Quickshell reports a themed app_icon name as image://icon/<name>.
-        if (ref.kind === "themed" && Quickshell.hasThemeIcon(ref.name))
-            return ref.source;
+        // Quickshell reports a themed app_icon name as image://icon/<name>. A theme name reaches an Image only through
+        // ThemeIcons (every file Qt could read for it checked first: review of 2dfd992).
+        if (ref.kind === "themed") {
+            const themed = ThemeIcons.source(ref.name);
+            if (themed !== "")
+                return themed;
+        }
         // No usable image (none, refused, not copied yet, or a name the theme lacks): the app icon.
         const icon = appIcon;
         if (!icon)
@@ -199,9 +203,9 @@ Singleton {
         const name = History.safeIconName(icon);
         if (name === "")
             return "";
-        // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
-        // and paints a checkerboard), so ask the theme first.
-        return Quickshell.hasThemeIcon(name) ? Quickshell.iconPath(name) : "";
+        // ThemeIcons: shown once every file Qt could read for the name is a regular file of bounded size, and only when the
+        // theme has it (no checkerboard).
+        return ThemeIcons.source(name);
     }
 
     // "now", "5m ago", "3h ago", "2d ago" (translatable).
@@ -883,6 +887,8 @@ Singleton {
         const ref = History.imageRef(image);
         if (ref.kind === "file")
             requestCopy(History.localPathOf(ref.source), true); // shown as a private copy once made (copySourceOf)
+        else if (ref.kind === "themed")
+            ThemeIcons.check(ref.name, true); // its files are checked again for each new notification
         if (ref.kind !== "refused")
             return image;
         console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");
@@ -897,6 +903,8 @@ Singleton {
             console.info("grassfield-notifications: a notification app icon was refused: only plain theme names and local image files are shown");
         if (kept.startsWith("/") || kept.toLowerCase().startsWith("file:"))
             requestCopy(History.localPathOf(kept), true);
+        else if (kept !== "")
+            ThemeIcons.check(kept, true);
         return kept;
     }
 
