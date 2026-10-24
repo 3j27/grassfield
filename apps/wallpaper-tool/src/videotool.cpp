@@ -393,7 +393,7 @@ QString videoKey(const QString &realPath, qint64 bytes, qint64 mtimeMs, const QS
     QByteArray in = realPath.toUtf8();
     in += '\0' + QByteArray::number(bytes) + '\0' + QByteArray::number(mtimeMs) + '\0';
     in += QByteArray::number(size.width()) + 'x' + QByteArray::number(size.height());
-    in += QByteArray("\0vid1", 5);
+    in += QByteArray("\0vid2", 5);
     return QString::fromLatin1(QCryptographicHash::hash(in, QCryptographicHash::Sha256).toHex().left(32));
 }
 
@@ -513,7 +513,9 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
         QFile f(sidecar);
         if (f.open(QIODevice::ReadOnly) && f.size() < 256 * 1024) {
             const QJsonObject cached = QJsonDocument::fromJson(f.readAll()).object();
-            if (cached.value(QStringLiteral("key")).toString() == full) {
+            // The sidecar must describe THESE files: its key, its video the current mp4 and its picture the current poster (a sidecar
+            // copied or left from another run, or edited, is not a hit).
+            if (cached.value(QStringLiteral("key")).toString() == full && cached.value(QStringLiteral("video")).toString() == mp4 && cached.value(QStringLiteral("file")).toString() == poster) {
                 touch(mp4);
                 touch(poster);
                 *result = cached;
