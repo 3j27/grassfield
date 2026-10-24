@@ -65,11 +65,12 @@ stop_all() {
 }
 trap stop_all EXIT
 
-setsid dbus-daemon --session --nofork --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
+# The bus socket lives in the test's own private directory (works where /tmp is not writable, e.g. a sandbox).
+setsid dbus-daemon --session --nofork --address="unix:path=$work/bus.sock" --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
 bus_pid=$!
 wait_until 5 test -s "$work/bus.address"
 bus=$(head -n 1 "$work/bus.address")
-case $bus in unix:path=/tmp/dbus-*) ;; *) die "unexpected bus address '$bus'" ;; esac
+case $bus in "unix:path=$work/bus.sock"*) ;; *) die "unexpected bus address '$bus' ($work/bus.log)" ;; esac
 say "private bus $bus (dbus-daemon pid $bus_pid)"
 
 env -u GRASSFIELD_SESSION DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_DEV=1 GRASSFIELD_MENU_BRIDGE_SOCKET="$sock" \
@@ -148,6 +149,29 @@ say ""
 say "[6] nothing else is served"
 start_client "call Lock" "call SetActive" "call GetActive" "call SimulateUserActivity"
 check "Lock, SetActive, GetActive, SimulateUserActivity: NotSupported (4)" test "$(grep -c 'NotSupported' "$client_out")" -eq 4
+
+say ""
+say "[6b] clients that leave before the bridge handled their Inhibit (review of 4b8592d: 11 of 60 stayed forever)"
+race_pids=()
+for i in $(seq 1 30); do
+  for verb in inhibit-noreply inhibit-async; do
+    printf '%s\n' "$verb Race r$i" >"$work/race-$verb-$i.steps"
+    env DBUS_SESSION_BUS_ADDRESS="$bus" GF_TEST_BUS=1 python3 -I "$root/tests/fixtures/screensaver-client.py" \
+      --steps "$work/race-$verb-$i.steps" --out "$work/race.out" --done "$work/race-$verb-$i.done" >>"$work/clients.log" 2>&1 &
+    race_pids+=($!)
+  done
+done
+for p in "${race_pids[@]}"; do wait "$p" 2>/dev/null; done
+check "60 clients sent Inhibit and left" test "$(grep -c '^sent' "$work/race.out")" -eq 60
+sleep 3
+check "no inhibitor of a departed client is kept (inhibited false, count 0)" await '.inhibited == false and .count == 0'
+status_inhibitors() {
+  DBUS_SESSION_BUS_ADDRESS="$bus" python3 -I -c 'import gi; gi.require_version("Gio", "2.0"); from gi.repository import Gio, GLib
+c = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+v = c.call_sync("org.grassfield.MenuBridge1", "/org/grassfield/MenuBridge1", "org.grassfield.MenuBridge1", "Status", None, GLib.VariantType.new("(a{sv})"), Gio.DBusCallFlags.NONE, 3000, None)
+print(v.unpack()[0].get("inhibitors"))' 2>/dev/null
+}
+check "the bridge's own count is 0 too (Status inhibitors)" test "$(status_inhibitors)" = 0
 
 say ""
 say "[7] limits"

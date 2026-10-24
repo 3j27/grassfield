@@ -107,7 +107,12 @@ namespace gf::menubridge::screensaver {
         }
 
       private:
+        static constexpr int kConfirmTimeoutMs = 2000;
+
         void report();
+        // Asks the bus whether `sender` still owns its unique name (after its watch was added); drops it when not.
+        void confirmPresent(const QDBusConnection& connection, const QString& sender);
+        void dropSender(const QString& sender);
 
         Book                 m_book;
         Changed              m_changed;

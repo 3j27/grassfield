@@ -185,7 +185,10 @@ top-level menus (Left/Right).
   `Inhibit(s application, s reason) -> u cookie` and `UnInhibit(u cookie)` only (`src/ScreenSaver.h`):
     - cookies are kept per sender (unique bus name): at most 16 per sender and 64 senders (`LimitsExceeded` past it);
       a cookie is released only by the sender that took it (another sender's or an unknown cookie is answered and
-      changes nothing); every cookie of a sender is dropped when it leaves the bus (`QDBusServiceWatcher`);
+      changes nothing); every cookie of a sender is dropped when it leaves the bus (`QDBusServiceWatcher`). A new holder
+      is watched first and then checked with `NameHasOwner` (the bus handles the AddMatch before the question): a sender
+      that left before its watch existed is dropped by the answer, and no answer within 2 s also drops it (review of
+      4b8592d: 11 of 60 clients that sent Inhibit and exited at once kept their cookies for the session);
     - every other member (`Lock`, `SetActive`, `GetActive`, `SimulateUserActivity`, …) answers `NotSupported`, a wrong
       signature `InvalidArgs`; other interfaces on the paths are dropped, as on the registrar;
     - the shell gets `{"type":"screensaver","inhibited":bool,"count":N}` on every change and when it connects; the log

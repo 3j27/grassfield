@@ -5,6 +5,7 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
 #include <QRandomGenerator>
 
@@ -138,11 +139,7 @@ namespace gf::menubridge::screensaver {
         m_watcher = new QDBusServiceWatcher(this);
         m_watcher->setConnection(connection);
         m_watcher->setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
-        QObject::connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this](const QString& name) {
-            m_watcher->removeWatchedService(name);
-            if (m_book.senderGone(name))
-                report();
-        });
+        QObject::connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this](const QString& name) { dropSender(name); });
     }
 
     QString ScreenSaverObject::introspect(const QString& /*path*/) const {
@@ -162,15 +159,44 @@ namespace gf::menubridge::screensaver {
             return true;
         const bool   watchedBefore = m_book.holds(sender);
         const Answer a             = handle(m_book, message.member(), message.signature(), message.arguments(), sender);
+        // A new holder: watch it, THEN ask the bus whether it is still there. A sender that left before the watch existed
+        // never sends a NameOwnerChanged this bridge could see (review of 4b8592d: cookies of clients that sent Inhibit
+        // and exited at once were kept for the whole session, holding the idle lock off). The bus daemon handles one
+        // connection's messages in order, so the AddMatch of the watch precedes the NameHasOwner: either the answer
+        // says the name is gone, or the name's later departure is a NameOwnerChanged the watch receives.
+        if (m_watcher && !watchedBefore && m_book.holds(sender)) {
+            m_watcher->addWatchedService(sender);
+            confirmPresent(connection, sender);
+        }
         if (a.kind == Answer::Kind::Reply)
             connection.send(message.createReply(a.values));
         else
             connection.send(message.createErrorReply(a.error, a.message));
-        if (m_watcher && !watchedBefore && m_book.holds(sender))
-            m_watcher->addWatchedService(sender);
         if (a.changed)
             report();
         return true;
+    }
+
+    void ScreenSaverObject::confirmPresent(const QDBusConnection& connection, const QString& sender) {
+        QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"),
+                                                           QStringLiteral("NameHasOwner"));
+        call << sender;
+        auto* w = new QDBusPendingCallWatcher(connection.asyncCall(call, kConfirmTimeoutMs), this);
+        QObject::connect(w, &QDBusPendingCallWatcher::finished, this, [this, sender](QDBusPendingCallWatcher* reply) {
+            reply->deleteLater();
+            const QDBusMessage m       = reply->reply();
+            const bool         present = m.type() == QDBusMessage::ReplyMessage && !m.arguments().isEmpty() && m.arguments().at(0).toBool();
+            // Gone, or no answer (fail closed: an inhibitor nobody can be shown to hold is dropped; idle locking stays on).
+            if (!present)
+                dropSender(sender);
+        });
+    }
+
+    void ScreenSaverObject::dropSender(const QString& sender) {
+        if (m_watcher)
+            m_watcher->removeWatchedService(sender);
+        if (m_book.senderGone(sender))
+            report();
     }
 
     void ScreenSaverObject::report() {

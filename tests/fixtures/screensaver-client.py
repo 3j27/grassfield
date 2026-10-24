@@ -8,6 +8,8 @@ line per call to --out, then touches --done and (with --hold) keeps its bus conn
 
     inhibit <app> <reason>        Inhibit(s, s) on /org/freedesktop/ScreenSaver; result "cookie <n>" or "error <name>"
     inhibit-legacy <app> <reason> the same on /ScreenSaver
+    inhibit-noreply <app> <reason> Inhibit with NO_REPLY_EXPECTED, not waiting (with no --hold: leave at once)
+    inhibit-async <app> <reason>  Inhibit expecting a reply that is never read (with no --hold: leave at once)
     uninhibit <index>             UnInhibit(u) with the cookie of the <index>-th successful inhibit (0-based)
     uninhibit-raw <n>             UnInhibit(u) with the number n (another client's cookie, an unknown one)
     call <method>                 a method without arguments (Lock, GetActive, SetActive...): "ok" or "error <name>"
@@ -56,7 +58,23 @@ def main():
         steps = [line.rstrip("\n") for line in f if line.strip() and not line.startswith("#")]
     for step in steps:
         verb, _, rest = step.partition(" ")
-        if verb in ("inhibit", "inhibit-legacy"):
+        if verb == "inhibit-noreply":
+            # Sent without waiting for (or wanting) the reply: with no --hold the client leaves at once, usually before
+            # the bridge has handled the call (the race of the 4b8592d review).
+            app, _, reason = rest.partition(" ")
+            msg = Gio.DBusMessage.new_method_call(NAME, "/ScreenSaver", IFACE, "Inhibit")
+            msg.set_body(GLib.Variant("(ss)", (app, reason)))
+            msg.set_flags(Gio.DBusMessageFlags.NO_REPLY_EXPECTED)
+            conn.send_message(msg, Gio.DBusSendMessageFlags.NONE)
+            out.write("sent\n")
+        elif verb == "inhibit-async":
+            # Sent expecting a reply, but the client leaves without reading it.
+            app, _, reason = rest.partition(" ")
+            msg = Gio.DBusMessage.new_method_call(NAME, "/org/freedesktop/ScreenSaver", IFACE, "Inhibit")
+            msg.set_body(GLib.Variant("(ss)", (app, reason)))
+            conn.send_message(msg, Gio.DBusSendMessageFlags.NONE)
+            out.write("sent\n")
+        elif verb in ("inhibit", "inhibit-legacy"):
             app, _, reason = rest.partition(" ")
             path = "/org/freedesktop/ScreenSaver" if verb == "inhibit" else "/ScreenSaver"
             kind, v = call(path, "Inhibit", GLib.Variant("(ss)", (app, reason)), "(u)")
