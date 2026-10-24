@@ -5,7 +5,8 @@
 # before the action:
 #   1. Preview opens an image of a folder of three generated images (the title names the file);
 #   2. zoom in (the "=" / "+" key) enlarges the image: the window content changes; Fit (Ctrl+9) brings back the first view;
-#   3. rotate (Ctrl+R) turns the picture: the content changes; four turns bring back the first view;
+#   3. rotate (Ctrl+R) turns the picture: turns 1, 2 and 3 are three different pictures, the fourth is the first view again
+#      (a lost key press is re-sent once and noted);
 #   4. Right moves to the next image of the folder (the title follows) and Left back.
 # Keys: typed into the focused app window through scripts/dev/keys.sh (plain keys and Ctrl shortcuts, as preview-browse.sh does).
 # Captures: $VS_SHOTS/flow-preview-*.en.png.
@@ -43,30 +44,34 @@ fit=$(fl_shot fit)
 n=$(vs_px_diff "$first" "$fit")
 fl_check "Fit (Ctrl+9) brings back the first view ($n px differ, need < 600)" test "$n" -lt 600
 
-# 3. rotate
-fl_appkey ctrl r
-vs_sleep 1
-rot=$(fl_shot rotated)
-n=$(vs_px_diff "$fit" "$rot")
-fl_check "Ctrl+R turns the picture ($n px differ, need >= 5000)" test "$n" -ge 5000
-# Three more turns, each given time to land (the rotation is a plain binding, no animation, and `turns` is taken mod 4 in
-# ImageView.rotate). A key lost under load would leave the picture turned, so after the fourth turn up to three more are
-# tried: the flow then says how many presses it took, and fails when no multiple of four brings the first view back.
-presses=1
-n=999999
-for _ in 1 2 3 4 5 6 7; do
-  if (( presses >= 4 )); then
-    vs_sleep 1
-    full=$(fl_shot "turns-$presses")
-    n=$(vs_px_diff "$fit" "$full")
-    (( n < 600 )) && break
-  fi
+# 3. rotate: four effective turns. After each press the capture must have changed from the one before (a press that changed
+# nothing was lost under load: it is re-sent ONCE and noted). Turns 1, 2 and 3 must each differ from the start and from every
+# earlier turn (90, 180 and 270 degrees are three different pictures), and the fourth must be the start again.
+prev=$fit
+caps=("$fit")
+for k in 1 2 3 4; do
   fl_appkey ctrl r
-  vs_sleep 0.5
-  presses=$((presses + 1))
+  vs_sleep 1
+  cap=$(fl_shot "turn-$k")
+  d=$(vs_px_diff "$prev" "$cap")
+  if [[ $d =~ ^[0-9]+$ ]] && (( d < 600 )); then
+    fl_note "turn $k: the view did not change after Ctrl+R ($d px): the key press was lost, sent once more"
+    fl_appkey ctrl r
+    vs_sleep 1
+    cap=$(fl_shot "turn-$k-resent")
+  fi
+  if (( k < 4 )); then
+    for j in "${!caps[@]}"; do
+      n=$(vs_px_diff "${caps[$j]}" "$cap")
+      fl_check "turn $k differs from $( ((j == 0)) && echo "the start" || echo "turn $j") ($n px differ, need >= 5000)" test "$n" -ge 5000
+    done
+  else
+    n=$(vs_px_diff "$fit" "$cap")
+    fl_check "the fourth turn is the start again ($n px differ, need < 600)" test "$n" -lt 600
+  fi
+  caps+=("$cap")
+  prev=$cap
 done
-fl_check "the first view is back after $presses turns ($n px differ, need < 600)" test "$n" -lt 600
-(( presses == 4 )) || fl_note "Ctrl+R needed $presses presses for four turns: a key press was lost or doubled under load"
 
 # 4. next and previous image
 fl_key -k Right
