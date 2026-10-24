@@ -11,7 +11,8 @@
 #                                                       .dev/gate-runs/ into docs/testing/runs/ for the repository
 #
 # Report: .dev/gate-runs/<UTC stamp>-<name>.md (git-ignored, survives `git clean`-free worktree life) with
-#   gate, date (UTC), result (PASS exit 0, FAIL otherwise; a log line with "NOT VERIFIED" or "SKIP" is counted and
+#   gate, date (UTC), result (PASS exit 0; NOT JUDGED exit 3, the tests' convention for cases not judged or skipped,
+#   e.g. tests/compositor/overview_focus.sh, never a pass; FAIL otherwise; a log line with "NOT VERIFIED" or "SKIP" is counted and
 #   named, never hidden), exit code, commit (+dirty), branch, build id (VERSION file, built plugin and its hash), log
 #   path and its sha256, counts of PASS/FAIL/SKIP/NOT VERIFIED/PROXY lines, and the core dumps made during the run
 #   (scripts/dev/coredump-summary.py, read-only coredumpctl).
@@ -58,7 +59,11 @@ write_report() { # NAME EXIT LOG
   # Untracked files count: a clean tracked tree with a stray new file did not run from the commit alone.
   if [[ -z $(git -C "$root" status --porcelain 2>/dev/null) ]]; then dirty=clean; else dirty="dirty: tracked changes or untracked files"; fi
   branch=$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-  [[ $rc == 0 ]] && result=PASS || result=FAIL
+  case $rc in
+    0) result=PASS ;;
+    3) result="NOT JUDGED" ;;
+    *) result=FAIL ;;
+  esac
   local logsum=n/a pass=0 fail=0 skip=0 nv=0 proxy=0
   if [[ -f $log ]]; then
     logsum=$(sha256sum "$log" | cut -d' ' -f1)
@@ -81,7 +86,9 @@ write_report() { # NAME EXIT LOG
       echo "- coredumps: $(head -n1 "${log%.log}.coredumps") (details: ${log%.log}.coredumps)"
     fi
     # "result" is the exit status; "verdict" says what that is worth.
-    if [[ $rc != 0 ]]; then
+    if [[ $rc == 3 ]]; then
+      echo "- verdict: NOT JUDGED (exit 3: the test judged only part of its cases, or skipped; not a pass, read the log)"
+    elif [[ $rc != 0 ]]; then
       echo "- verdict: FAIL (exit $rc)"
     elif ((fail > 0)); then
       echo "- verdict: FAIL ($fail FAIL line(s) in the log although the exit code is 0: any FAIL line means FAIL)"
