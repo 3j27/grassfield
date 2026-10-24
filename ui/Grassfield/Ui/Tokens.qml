@@ -1528,6 +1528,43 @@ QtObject {
     // estimate: space between the toolbar's trailing edge and its last item
     readonly property int windowItemsInset: 14
 
+    // estimate (macOS model: small live thumbnails in a left-edge strip): tile box the plugin fits a stage's windows into
+    readonly property int stagesTileWidth: 160
+    // estimate: tile box height (4:3), the plugin never enlarges a window past it
+    readonly property int stagesTileHeight: 120
+    // estimate: space between two tiles (room for the stacked windows' 8 px steps)
+    readonly property int stagesTileGap: 24
+    // estimate: strip surface margin around the tiles, and gap below the menu bar
+    readonly property int stagesEdgeMargin: 12
+    // docs/specs/stages.md contract item 3: at most 8 tiles per strip
+    readonly property int stagesMaxTiles: 8
+    // estimate (menubar.revealZone model): width of the left-edge strip that reveals a hidden strip
+    readonly property int stagesRevealZone: 6
+    // estimate: pointer rests at the edge this long (ms) before the strip comes back
+    readonly property int stagesRevealDwell: 150
+    // estimate: pointer outside the revealed strip this long (ms) before it hides again
+    readonly property int stagesHideGrace: 400
+    // estimate: geometry changes are sent to the plugin once after this quiet time; also lets the surface's input region reach the compositor before op:on
+    readonly property int stagesResendDebounceMs: 80
+    // estimate: op:on refused with no-strip (the surface was not mapped yet) is sent again after this long
+    readonly property int stagesRetryMs: 250
+    // estimate: no-strip retries before the strip waits for the next change
+    readonly property int stagesRetryMax: 6
+    // estimate: frosted app icon badge at the bottom-left corner of a tile
+    readonly property int stagesBadgeSize: 32
+    // estimate: app icon inside the badge
+    readonly property int stagesBadgeIconSize: 22
+    // estimate: badge distance from the tile corner
+    readonly property int stagesBadgeInset: 6
+    // estimate: hover and drop-target outline of a tile
+    readonly property int stagesRingWidth: 3
+    // estimate: outline radius, close to the window corner radius
+    readonly property int stagesRingRadius: 12
+    // estimate: pointer travel (px) before a press on a tile becomes a drag
+    readonly property int stagesDragThreshold: 6
+    // estimate: opacity of the badge ghost following a dragged tile
+    readonly property real stagesDragOpacity: 0.5
+
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120
 

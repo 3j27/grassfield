@@ -1079,6 +1079,26 @@
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
     <message>
+        <source>Bring Stage 1 forward</source>
+        <translation>Mettre le Stage 1 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 2 forward</source>
+        <translation>Mettre le Stage 2 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 3 forward</source>
+        <translation>Mettre le Stage 3 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 4 forward</source>
+        <translation>Mettre le Stage 4 au premier plan</translation>
+    </message>
+    <message>
+        <source>Move the window to a stage of its own</source>
+        <translation>Placer la fenêtre dans un Stage à part</translation>
+    </message>
+    <message>
         <source>Keyboard brightness up</source>
         <translation>Luminosité du clavier +</translation>
     </message>
@@ -2250,6 +2270,18 @@
     <message>
         <source>Window titlebars, minimize and global menus need it. After an update of Hyprland, Grassfield builds it again in the background.</source>
         <translation>Les barres de titre, la réduction des fenêtres et les menus globaux en dépendent. Après une mise à jour de Hyprland, Grassfield la recompile en arrière-plan.</translation>
+    </message>
+    <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.</source>
+        <translation>Nécessite l’extension de compositeur Grassfield. L’interrupteur Stages est aussi dans les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.</source>
+        <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
     </message>
     <message>
         <source>Screen Corners</source>
@@ -4980,6 +5012,36 @@
     <message>
         <source>Back to %1</source>
         <translation>Retour à %1</translation>
+    </message>
+</context>
+<context>
+    <name>Stages</name>
+    <message>
+        <source>Stage</source>
+        <translation>Stage</translation>
+    </message>
+    <message>
+        <source>1 window</source>
+        <translation>1 fenêtre</translation>
+    </message>
+    <message>
+        <source>%1 windows</source>
+        <translation>%1 fenêtres</translation>
+    </message>
+</context>
+<context>
+    <name>StagesToggle</name>
+    <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
     </message>
 </context>
 <context>
