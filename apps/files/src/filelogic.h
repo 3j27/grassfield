@@ -62,6 +62,10 @@ bool sameName(const QString &a, const QString &b);
 // Copying, moving or dropping an item next to such a twin would make two entries that look alike (GF-105).
 QString equivalentName(const QStringList &names, const QString &name);
 
+// The original path of a trashed item from its .trashinfo (the `Path=` line of the [Trash Info] group, percent-decoded), or ""
+// (no such line, or a relative path: a trash outside the home volume, left to the system).
+QString trashInfoOriginalPath(const QByteArray &trashinfo);
+
 // Match text for the folder filter: canonically decomposed, combining marks dropped, case folded ("resume" finds
 // "Résumé.txt" in either normalization form).
 QString foldForMatch(const QString &text);

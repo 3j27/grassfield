@@ -21,6 +21,16 @@ TestCase {
         compare(Logic.cycle({}, "", false), "");
     }
 
+    // GF-105: a drop never creates an NFC/NFD twin on the desktop.
+    function test_uniqueNameTreatsATwinAsTaken() {
+        const nfc = "R\u00e9sum\u00e9.txt";
+        const nfd = "Re\u0301sume\u0301.txt";
+        compare(Logic.uniqueName(nfd, [nfc]), "Re\u0301sume\u0301 2.txt");
+        compare(Logic.uniqueName(nfc, [nfd, "R\u00e9sum\u00e9 2.txt"]), "R\u00e9sum\u00e9 3.txt");
+        compare(Logic.uniqueName("other.txt", [nfc]), "other.txt");
+        compare(Logic.copyName(nfd, [nfc.replace(".txt", " copy.txt")], false), "Re\u0301sume\u0301 copy 2.txt");
+    }
+
     function test_gridSize() {
         compare(Logic.gridSize(1000, 500, 100, 100).cols, 10);
         compare(Logic.gridSize(1000, 500, 100, 100).rows, 5);

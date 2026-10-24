@@ -12,6 +12,7 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -22,6 +23,7 @@
 #include <QPair>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStandardPaths>
 #include <QStorageInfo>
 
 #include <memory>
@@ -614,6 +616,19 @@ void FilesApp::restore(const QList<QUrl> &urls)
     }
     if (trashed.isEmpty())
         return;
+    // Put Back also refuses to land next to an NFC/NFD twin of the original name (the home trash keeps the original path).
+    const QString infoDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Trash/info/");
+    for (const QUrl &u : std::as_const(trashed)) {
+        QFile info(infoDir + u.fileName() + QStringLiteral(".trashinfo"));
+        if (!info.open(QIODevice::ReadOnly))
+            continue;
+        const QString original = FileLogic::trashInfoOriginalPath(info.read(4096));
+        if (original.isEmpty())
+            continue;
+        const QUrl parent = QUrl::fromLocalFile(QFileInfo(original).absolutePath());
+        if (refuseTwin(this, parent, {QUrl::fromLocalFile(original)}))
+            return;
+    }
     KIO::RestoreJob *job = KIO::restoreFromTrash(trashed, KIO::HideProgressInfo);
     attachDelegate(job);
     track(job, countText(tr("Putting back 1 item…"), tr("Putting back %1 items…"), trashed.size()));

@@ -242,14 +242,22 @@ function splitExt(name) {
     return i > 0 ? {base: name.substring(0, i), ext: name.substring(i)} : {base: name, ext: ""};
 }
 
-// `name`, or "base 2.ext", "base 3.ext", ... when it is taken.
+// `name`, or "base 2.ext", "base 3.ext", ... when it is taken. Taken includes a twin of the name that differs only by Unicode
+// normalization (NFC "e acute" and NFD "e" + accent): a drop never makes two entries that look alike (GF-105).
+function taken(existing, name) {
+    if (existing.indexOf(name) >= 0)
+        return true;
+    const n = name.normalize("NFC");
+    return existing.some(e => e.normalize("NFC") === n);
+}
+
 function uniqueName(name, existing) {
-    if (existing.indexOf(name) < 0)
+    if (!taken(existing, name))
         return name;
     const p = splitExt(name);
     for (let i = 2; i < 10000; i++) {
         const candidate = p.base + " " + i + p.ext;
-        if (existing.indexOf(candidate) < 0)
+        if (!taken(existing, candidate))
             return candidate;
     }
     return name;
@@ -259,7 +267,7 @@ function uniqueName(name, existing) {
 function copyName(name, existing, isDir) {
     const p = isDir ? {base: name, ext: ""} : splitExt(name);
     let candidate = p.base + " copy" + p.ext;
-    for (let i = 2; existing.indexOf(candidate) >= 0 && i < 10000; i++)
+    for (let i = 2; taken(existing, candidate) && i < 10000; i++)
         candidate = p.base + " copy " + i + p.ext;
     return candidate;
 }

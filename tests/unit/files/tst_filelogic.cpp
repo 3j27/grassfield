@@ -263,10 +263,19 @@ TEST(UnicodeNames, EquivalentNameFindsOnlyTheTwin)
     EXPECT_TRUE(equivalentName({QStringLiteral("Resume.txt")}, nfc).isEmpty());
 }
 
+TEST(UnicodeNames, TrashInfoGivesTheOriginalPath)
+{
+    EXPECT_EQ(trashInfoOriginalPath("[Trash Info]\nPath=/home/u/R%C3%A9sum%C3%A9.txt\nDeletionDate=2026-10-24T10:00:00\n"), QString::fromUtf8("/home/u/R\xc3\xa9sum\xc3\xa9.txt"));
+    EXPECT_TRUE(trashInfoOriginalPath("[Trash Info]\nPath=relative/name\n").isEmpty());
+    EXPECT_TRUE(trashInfoOriginalPath("[Other]\nPath=/x\n").isEmpty());
+    EXPECT_TRUE(trashInfoOriginalPath("").isEmpty());
+}
+
 TEST(UnicodeNames, DisplayNameWritesOutBidiControlsAndBreaks)
 {
     EXPECT_EQ(displayName(QString::fromUtf8("evil\xe2\x80\xaa" "fdp.exe")), QStringLiteral("evil<U+202A>fdp.exe"));
     EXPECT_EQ(displayName(QString(QChar(0x202E))), QStringLiteral("<U+202E>"));
+    EXPECT_EQ(displayName(QStringLiteral("a") + QChar(0x2028) + QStringLiteral("b") + QChar(0x2029)), QStringLiteral("a<U+2028>b<U+2029>"));
     EXPECT_EQ(displayName(QString(QChar(0x2066)) + QChar(0x2069)), QStringLiteral("<U+2066><U+2069>"));
     EXPECT_EQ(displayName(QStringLiteral("two\r\nlines")), QString(QStringLiteral("two") + QChar(0x23CE) + QStringLiteral("lines")));
     EXPECT_EQ(displayName(QString(QChar(0x200E)) + QStringLiteral("kept")), QString(QChar(0x200E)) + QStringLiteral("kept"));
