@@ -5,6 +5,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "../platform/ScreenChoice.js" as ScreenChoice
 import "../search/Ranking.js" as Ranking
 import "Model.js" as Model
 
@@ -103,6 +104,15 @@ Scope {
     readonly property string usagePath: stateDir + "/search-usage.json"
 
     // ---- state changes -------------------------------------------------------------------
+
+    // The screen the Apps panel is on went away (a display unplugged): the panel moves to a live screen.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+        }
+    }
 
     function show(): void {
         // Nothing opens over the lock screen (GF-116): XF86LaunchA, the Dock, a screen corner, the pinch and IPC alike.

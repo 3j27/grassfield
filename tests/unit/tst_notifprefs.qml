@@ -108,4 +108,35 @@ TestCase {
         compare(NotificationPrefs.appsToList(undefined, []), []);
         compare(NotificationPrefs.appsToList(["", 4], []), []);
     }
+
+    // GF-107: alert style per app.
+    function test_alertStyles() {
+        const l = [{app: "Signal", style: "alerts"}, {app: "Mail", style: "none"}];
+        compare(NotificationPrefs.problemStyles(l), "");
+        verify(NotificationPrefs.problemStyles([{app: "A", style: "loud"}]) !== "");
+        verify(NotificationPrefs.problemStyles([{app: "A", style: "none"}, {app: "a", style: "alerts"}]) !== "");
+        verify(NotificationPrefs.problemStyles("x") !== "");
+        compare(NotificationPrefs.styleFor(l, "signal "), "alerts");
+        compare(NotificationPrefs.styleFor(l, "Other"), "banners");
+        const a = NotificationPrefs.withStyle(l, "Signal", "banners");
+        compare(NotificationPrefs.styleFor(a, "Signal"), "banners");
+        compare(a.length, 1);
+        compare(NotificationPrefs.normalizeStyles([{app: "A", style: "x"}, null, {app: "B", style: "none"}]).length, 1);
+    }
+
+    function test_bannerTimeoutByStyle() {
+        compare(NotificationPrefs.bannerTimeoutFor("banners", 5000), 5000);
+        compare(NotificationPrefs.bannerTimeoutFor("alerts", 5000), 0);
+        compare(NotificationPrefs.bannerTimeoutFor("none", 5000), null);
+    }
+
+    // GF-113: history retention.
+    function test_historyRetention() {
+        compare(NotificationPrefs.historyMaxAge("week"), 7 * 24 * 3600 * 1000);
+        compare(NotificationPrefs.historyMaxAge("day"), 24 * 3600 * 1000);
+        compare(NotificationPrefs.historyMaxAge("never"), 0);
+        compare(NotificationPrefs.historyMaxAge("bogus"), 7 * 24 * 3600 * 1000);
+        verify(NotificationPrefs.validHistory("day"));
+        verify(!NotificationPrefs.validHistory("month"));
+    }
 }

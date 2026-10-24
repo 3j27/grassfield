@@ -22,3 +22,19 @@ function centered(popupOpen, popupScreen, activeScreen, requested) {
         return requested;
     return popupOpen && popupScreen !== "" ? popupScreen : activeScreen;
 }
+
+// True when `name` is non-empty and no existing output has it any more (an output unplugged while something was open on it):
+// the owner of that state moves it to `Compositor.activeScreenName`.
+function gone(name, names) {
+    return typeof name === "string" && name !== "" && (Array.isArray(names) ? names : []).indexOf(name) < 0;
+}
+
+// The output a piece of state moves to when its own output (`current`) went away: the output with the focus if it still exists,
+// else the first one; `current` itself when it is still there (nothing to move) or empty. Everything is read from the arguments:
+// a handler of "the outputs changed" gets the live names and the focus at that moment, never `Compositor.activeScreenName`
+// (a binding of the same change, which Qt may not have re-evaluated yet: the handler saw the removed output's name).
+function replacement(current, focused, names) {
+    if (!gone(current, names))
+        return current;
+    return pick("", typeof focused === "string" ? focused : "", Array.isArray(names) ? names : []);
+}

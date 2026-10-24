@@ -1,0 +1,258 @@
+.pragma library
+
+// Show Desktop bookkeeping (pure, unit-tested; GF-106). macOS model: Show Desktop moves the windows of the current
+// display aside; switching Space, activating a window, opening an app or pressing it again ends it and brings every window
+// back exactly where it was (same Space, same tiling order, same focus). The record below is what makes "exactly" possible:
+// it is kept in memory and in the state dir, so a restarted shell puts the windows back at start (nothing stays parked).
+//
+// Record: {screen, workspace, focus, windows: [{address, x, y}]}; addresses are Hyprland's, lower-case hex without 0x.
+
+const VERSION = 1;
+const MAX_WINDOWS = 256;
+// Where the windows wait: a special workspace nobody toggles (never special:hidden: "Hide app" lists that one).
+const PARKING = "special:desktop";
+
+// Hides the parking workspace again (Lua for Hyprland's dispatch; a constant, nothing from outside in it).
+function hideParkingRequest() {
+    return "hl.dsp.workspace.toggle_special(\"" + PARKING.substring("special:".length) + "\")";
+}
+
+function address(value) {
+    const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(value));
+    return m ? m[1].toLowerCase() : "";
+}
+
+function workspaceId(value) {
+    const s = String(value);
+    return /^[1-9][0-9]{0,8}$/.test(s) ? parseInt(s, 10) : 0;
+}
+
+function num(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+// The windows Show Desktop moves: those on workspace `workspace` that are neither minimized nor hidden. `windows`:
+// [{address, workspace, x, y, minimized, hidden}]. Null when nothing qualifies, when the workspace is not a regular one,
+// or when Stages is on (a stage cannot be restored window by window: docs/specs/stages.md ST8/ST9, the call does nothing).
+function capture(windows, screen, workspace, focus, stagesOn) {
+    if (stagesOn === true || workspaceId(workspace) === 0 || !Array.isArray(windows))
+        return null;
+    const mine = [];
+    for (const w of windows) {
+        if (!w || workspaceId(w.workspace) !== workspaceId(workspace) || w.minimized === true || w.hidden === true)
+            continue;
+        const a = address(w.address);
+        if (a === "" || mine.some(x => x.address === a))
+            continue;
+        mine.push({address: a, x: num(w.x), y: num(w.y)});
+        if (mine.length >= MAX_WINDOWS)
+            break;
+    }
+    if (mine.length === 0)
+        return null;
+    const f = address(focus);
+    return {screen: typeof screen === "string" ? screen : "", workspace: workspaceId(workspace), focus: mine.some(x => x.address === f) ? f : "", windows: mine};
+}
+
+// Order in which the windows go back: top to bottom, then left to right, so a tiled layout rebuilds as it was.
+function restoreOrder(record) {
+    if (!record || !Array.isArray(record.windows))
+        return [];
+    return record.windows.slice().sort((a, b) => a.y - b.y || a.x - b.x).map(w => w.address);
+}
+
+// The windows of `record` to send back: those that are on the parking workspace now (`windows`: the toplevel data,
+// [{address, parked, ...}]), in restoreOrder. One rule for the ending, the verify and the crash recovery: a window that closed
+// is skipped, and a window the user moved by hand out of the parking workspace stays where the user put it.
+function toRestore(record, windows) {
+    const parked = {};
+    for (const w of Array.isArray(windows) ? windows : []) {
+        if (w && w.parked === true)
+            parked[address(w.address)] = true;
+    }
+    return restoreOrder(record).filter(a => parked[a] === true);
+}
+
+function sameAddress(a, b) {
+    return address(a) !== "" && address(a) === address(b);
+}
+
+// The addresses of the record that are still parked (`parked`: addresses now on the parking workspace): a window that
+// closed or was moved by hand is left alone.
+function survivors(record, parked) {
+    const set = {};
+    for (const p of Array.isArray(parked) ? parked : [])
+        set[address(p)] = true;
+    return restoreOrder(record).filter(a => set[a] === true);
+}
+
+// One record per display, all displays at once (macOS Show Desktop clears every display). `monitors`: [{name, workspace}]
+// with the Space each display shows; the focused window belongs to the record of the display that shows it. [] when nothing
+// qualifies anywhere or when Stages is on.
+function captureAll(windows, monitors, focus, stagesOn) {
+    if (!Array.isArray(monitors))
+        return [];
+    const out = [];
+    for (const m of monitors) {
+        const r = m ? capture(windows, m.name, m.workspace, focus, stagesOn) : null;
+        if (r)
+            out.push(r);
+    }
+    return out;
+}
+
+// A window opening ends Show Desktop (a window the records parked, or one opening on the parking workspace, is our own move
+// and does not). `data` is the openwindow text "addr,workspace,class,title"; `records` the records now on.
+function endsOn(eventName, data, records) {
+    const text = typeof data === "string" ? data : "";
+    const list = Array.isArray(records) ? records : [];
+    const parkedWindow = a => list.some(r => r.windows.some(w => w.address === a));
+    if (eventName === "openwindow") {
+        const parts = text.split(",");
+        return parts[1] !== PARKING && !parkedWindow(address(parts[0]));
+    }
+    // An app activating a parked window (focus_on_activate): Hyprland focuses it and SHOWS the special workspace over the
+    // screen, the parked windows as an overlay: that is the event "activespecial" (data "name,monitor", the name is empty when
+    // it is hidden again) or "activespecialv2" ("id,name,monitor"). Show Desktop is over then (macOS: an app activating a
+    // window ends it). Our own parking never shows the workspace (the moves are silent), and the focus is no evidence: a
+    // window moved to the parking workspace can keep the focus without being shown.
+    if (eventName === "activespecial")
+        return text.split(",")[0] === PARKING;
+    if (eventName === "activespecialv2")
+        return text.split(",")[1] === PARKING;
+    return false;
+}
+
+// Events after which the Spaces the displays show may have changed. They cannot be read as "the user switched Space": when
+// only the focus moves to another display Hyprland reports a workspace event too (the Space that display already shows), so
+// the events only trigger a look at what each display shows now (spaceChanged).
+function checksSpaces(eventName) {
+    return ["workspace", "workspacev2", "focusedmon", "focusedmonv2", "moveworkspace", "moveworkspacev2", "monitoradded",
+        "monitoraddedv2", "monitorremoved", "monitorremovedv2"].indexOf(eventName) >= 0;
+}
+
+// True when a display now shows another Space than the one Show Desktop was pressed on, on either display, or when a display
+// of the records is gone. `shown`: [{name, workspace}] from the monitor list. A record without a display name is not compared.
+// The focus or the pointer moving to the other display changes nothing here: its Space is the one it showed.
+function spaceChanged(records, shown) {
+    const list = Array.isArray(shown) ? shown : [];
+    for (const r of Array.isArray(records) ? records : []) {
+        if (r.screen === "")
+            continue;
+        const m = list.find(x => x && x.name === r.screen);
+        if (!m || workspaceId(m.workspace) !== r.workspace)
+            return true;
+    }
+    return false;
+}
+
+// The record whose focused window should get the focus back when Show Desktop is pressed again: the one shown on the same
+// Space now (`shown`: [{name, workspace}]); an ending for any other reason never asks for focus (the window that ended it,
+// or the Space the user went to, already has it).
+function focusTarget(records, shown) {
+    for (const r of Array.isArray(records) ? records : []) {
+        const m = (Array.isArray(shown) ? shown : []).find(x => x && x.name === r.screen);
+        if (r.focus !== "" && m && workspaceId(m.workspace) === r.workspace)
+            return r.focus;
+    }
+    return "";
+}
+
+function serialize(records) {
+    if (!Array.isArray(records) || records.length === 0)
+        return "";
+    return JSON.stringify({version: VERSION, records: records}) + "\n";
+}
+
+function parseRecord(r) {
+    if (!r || !Array.isArray(r.windows))
+        return null;
+    const windows = [];
+    for (const w of r.windows.slice(0, MAX_WINDOWS)) {
+        const a = w ? address(w.address) : "";
+        if (a !== "" && !windows.some(x => x.address === a))
+            windows.push({address: a, x: num(w.x), y: num(w.y)});
+    }
+    if (windows.length === 0 || workspaceId(r.workspace) === 0)
+        return null;
+    return {screen: typeof r.screen === "string" ? r.screen : "", workspace: workspaceId(r.workspace), focus: address(r.focus), windows: windows};
+}
+
+// "" or damaged text gives []; anything that does not validate is dropped, never trusted. A file of the first format (one
+// `record`) reads as one record.
+function parse(text) {
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        return [];
+    }
+    if (!data || data.version !== VERSION)
+        return [];
+    const list = Array.isArray(data.records) ? data.records.slice(0, 16) : (data.record ? [data.record] : []);
+    return list.map(parseRecord).filter(r => r !== null);
+}
+
+// One step of the crash recovery (a shell that starts with a record on disk): `windows` is the toplevel data, `loaded` whether
+// the window list has arrived at all, `tries` the steps taken so far, `maxTries` the bound. Returns {moves, retry, clear}:
+//  - nothing is decided before the list has loaded; if it never loads (bound) there are no windows to bring back: clear;
+//  - the parked windows of the record are sent back ({address, workspace}); no parked window left: clear;
+//  - parked windows left: retry while below the bound, and at the bound the record STAYS (on disk too): a window that is still
+//    parked never has no record, the next press of Show Desktop or the next start sends it back again.
+function recoverStep(records, windows, loaded, tries, maxTries) {
+    const last = tries + 1 >= maxTries;
+    if (!loaded)
+        return last ? {moves: [], retry: false, clear: true} : {moves: [], retry: true, clear: false};
+    const moves = [];
+    for (const r of Array.isArray(records) ? records : []) {
+        for (const a of toRestore(r, windows))
+            moves.push({address: a, workspace: r.workspace});
+    }
+    if (moves.length === 0)
+        return {moves: moves, retry: false, clear: true};
+    return {moves: moves, retry: !last, clear: false};
+}
+
+// The windows of `records` that are still parked (`parked`: addresses now on the parking workspace) as records of their own
+// (same display and Space, no focus): what the next ending must send back when an earlier restore did not finish.
+function stragglerRecords(records, parked) {
+    const set = {};
+    for (const p of Array.isArray(parked) ? parked : [])
+        set[address(p)] = true;
+    const out = [];
+    for (const r of Array.isArray(records) ? records : []) {
+        const windows = r.windows.filter(w => set[w.address] === true);
+        if (windows.length > 0)
+            out.push({screen: r.screen, workspace: r.workspace, focus: "", windows: windows});
+    }
+    return out;
+}
+
+// The parking workspace shown per display, from the events "activespecial" (data "name,monitor"; the name is empty when the
+// special workspace is hidden again) and "activespecialv2" ("id,name,monitor"). `shown`: {monitor: true}. Hiding it is decided
+// by this state and never by toggling blindly: a toggle on a workspace that is already hidden would open it.
+function parkingShownAfter(shown, eventName, data) {
+    const out = Object.assign({}, shown || {});
+    const parts = (typeof data === "string" ? data : "").split(",");
+    let name = "";
+    let monitor = "";
+    if (eventName === "activespecial") {
+        name = parts[0];
+        monitor = parts.slice(1).join(",");
+    } else if (eventName === "activespecialv2") {
+        name = parts[1];
+        monitor = parts.slice(2).join(",");
+    } else {
+        return out;
+    }
+    if (name === PARKING)
+        out[monitor] = true;
+    else
+        delete out[monitor];
+    return out;
+}
+
+function parkingVisible(shown) {
+    return Object.keys(shown || {}).some(k => shown[k] === true);
+}

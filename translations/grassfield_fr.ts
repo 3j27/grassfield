@@ -170,6 +170,10 @@
         <translation>Vert</translation>
     </message>
     <message>
+        <source>%1×</source>
+        <translation>%1×</translation>
+    </message>
+    <message>
         <source>Display</source>
         <translation>Affichage</translation>
     </message>
@@ -224,6 +228,42 @@
     <message>
         <source>130%</source>
         <translation>130&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.</source>
+        <translation>Super + Alt + 8 active ou désactive le zoom, Super + Alt + = et Super + Alt + - changent le niveau. L’écran est agrandi autour du pointeur.</translation>
+    </message>
+    <message>
+        <source>Magnify the screen.</source>
+        <translation>Agrandir l’écran.</translation>
+    </message>
+    <message>
+        <source>Zoom level</source>
+        <translation>Niveau de zoom</translation>
+    </message>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+    <message>
+        <source>Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.</source>
+        <translation>Les touches rémanentes et les touches lentes demandent une prise en charge par le compositeur, que Hyprland n’a pas encore.</translation>
+    </message>
+    <message>
+        <source>Sticky Keys</source>
+        <translation>Touches rémanentes</translation>
+    </message>
+    <message>
+        <source>Not available</source>
+        <translation>Indisponible</translation>
+    </message>
+    <message>
+        <source>Slow Keys</source>
+        <translation>Touches lentes</translation>
     </message>
     <message>
         <source>Applying the new pointer colours…</source>
@@ -987,6 +1027,18 @@
         <translation>Touche au-dessus de Tab</translation>
     </message>
     <message>
+        <source>8</source>
+        <translation>8</translation>
+    </message>
+    <message>
+        <source>=</source>
+        <translation>=</translation>
+    </message>
+    <message>
+        <source>-</source>
+        <translation>-</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -1077,6 +1129,42 @@
     <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
+    </message>
+    <message>
+        <source>Show Desktop</source>
+        <translation>Afficher le bureau</translation>
+    </message>
+    <message>
+        <source>Turn screen zoom on or off</source>
+        <translation>Activer ou désactiver le zoom de l’écran</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Zoom avant</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Zoom arrière</translation>
+    </message>
+    <message>
+        <source>Bring Stage 1 forward</source>
+        <translation>Mettre le Stage 1 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 2 forward</source>
+        <translation>Mettre le Stage 2 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 3 forward</source>
+        <translation>Mettre le Stage 3 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 4 forward</source>
+        <translation>Mettre le Stage 4 au premier plan</translation>
+    </message>
+    <message>
+        <source>Move the window to a stage of its own</source>
+        <translation>Placer la fenêtre dans un Stage à part</translation>
     </message>
     <message>
         <source>Keyboard brightness up</source>
@@ -1671,8 +1759,16 @@
 <context>
     <name>Clock</name>
     <message>
+        <source>dddd, MMMM d</source>
+        <translation>dddd d MMMM</translation>
+    </message>
+    <message>
         <source>Clock, %1, %2</source>
         <translation>Horloge, %1, %2</translation>
+    </message>
+    <message>
+        <source>MMMM d</source>
+        <translation>d MMMM</translation>
     </message>
 </context>
 <context>
@@ -2252,6 +2348,18 @@
         <translation>Les barres de titre, la réduction des fenêtres et les menus globaux en dépendent. Après une mise à jour de Hyprland, Grassfield la recompile en arrière-plan.</translation>
     </message>
     <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.</source>
+        <translation>Nécessite l’extension de compositeur Grassfield. L’interrupteur Stages est aussi dans les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.</source>
+        <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
+    </message>
+    <message>
         <source>Screen Corners</source>
         <translation>Coins de l’écran</translation>
     </message>
@@ -2784,6 +2892,10 @@
         <translation>«&#xa0;%1&#xa0;» n’existe plus.</translation>
     </message>
     <message>
+        <source>“%1” can’t be copied or moved here: the folder has “%2”, which has the same name once accents are composed. Rename one of them first.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être copié ou déplacé ici&#xa0;: le dossier contient «&#xa0;%2&#xa0;», qui a le même nom une fois les accents composés. Renommez l’un des deux d’abord.</translation>
+    </message>
+    <message>
         <source>Links can’t carry tags.</source>
         <translation>Les liens ne peuvent pas recevoir de tags.</translation>
     </message>
@@ -2984,6 +3096,10 @@
     <message>
         <source>Close Tab</source>
         <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
     </message>
     <message>
         <source>Get Info</source>
@@ -4028,6 +4144,18 @@
         <translation>Notifications</translation>
     </message>
     <message>
+        <source>Banners</source>
+        <translation>Bannières</translation>
+    </message>
+    <message>
+        <source>Alerts</source>
+        <translation>Alertes</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
         <source>Default</source>
         <translation>Par défaut</translation>
     </message>
@@ -4044,6 +4172,22 @@
         <translation>Jamais masque le texte des notifications. Si déverrouillé le masque tant que l’écran est verrouillé. Chaque app ci-dessous peut avoir son propre réglage.</translation>
     </message>
     <message>
+        <source>How long the Notifications panel keeps notifications after a restart. The text of notifications from apps whose previews are Never is not kept.</source>
+        <translation>Durée pendant laquelle le panneau Notifications conserve les notifications après un redémarrage. Le texte des notifications des apps dont les aperçus sont réglés sur Jamais n’est pas conservé.</translation>
+    </message>
+    <message>
+        <source>Keep history</source>
+        <translation>Conserver l’historique</translation>
+    </message>
+    <message>
+        <source>1 Week</source>
+        <translation>1 semaine</translation>
+    </message>
+    <message>
+        <source>1 Day</source>
+        <translation>1 jour</translation>
+    </message>
+    <message>
         <source>Application Notifications</source>
         <translation>Notifications des applications</translation>
     </message>
@@ -4052,8 +4196,12 @@
         <translation>Les apps apparaissent ici après avoir envoyé une notification.</translation>
     </message>
     <message>
-        <source>Default follows the Show previews setting above.</source>
-        <translation>Par défaut suit le réglage « Afficher les aperçus » ci-dessus.</translation>
+        <source>Alerts stay on screen until you dismiss them; None shows no banner. Default follows the Show previews setting above.</source>
+        <translation>Les alertes restent à l’écran jusqu’à ce que vous les fermiez ; Aucune n’affiche pas de bannière. Par défaut suit le réglage Afficher les aperçus ci-dessus.</translation>
+    </message>
+    <message>
+        <source>Alert style for %1</source>
+        <translation>Style d’alerte pour %1</translation>
     </message>
     <message>
         <source>Show previews for %1</source>
@@ -4807,6 +4955,17 @@
     </message>
 </context>
 <context>
+    <name>SearchField</name>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Clear search</source>
+        <translation>Effacer la recherche</translation>
+    </message>
+</context>
+<context>
     <name>SearchPanel</name>
     <message>
         <source>Search</source>
@@ -4865,6 +5024,10 @@
     <message>
         <source>Eject %1</source>
         <translation>Éjecter %1</translation>
+    </message>
+    <message>
+        <source>Eject</source>
+        <translation>Éjecter</translation>
     </message>
     <message>
         <source>Remove from Sidebar</source>
@@ -4980,6 +5143,36 @@
     <message>
         <source>Back to %1</source>
         <translation>Retour à %1</translation>
+    </message>
+</context>
+<context>
+    <name>Stages</name>
+    <message>
+        <source>Stage</source>
+        <translation>Stage</translation>
+    </message>
+    <message>
+        <source>1 window</source>
+        <translation>1 fenêtre</translation>
+    </message>
+    <message>
+        <source>%1 windows</source>
+        <translation>%1 fenêtres</translation>
+    </message>
+</context>
+<context>
+    <name>StagesToggle</name>
+    <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
     </message>
 </context>
 <context>
@@ -5815,6 +6008,22 @@
     <message>
         <source>Widget menu</source>
         <translation>Menu du widget</translation>
+    </message>
+    <message>
+        <source>Move Left</source>
+        <translation>Déplacer à gauche</translation>
+    </message>
+    <message>
+        <source>Move Right</source>
+        <translation>Déplacer à droite</translation>
+    </message>
+    <message>
+        <source>Move Up</source>
+        <translation>Déplacer vers le haut</translation>
+    </message>
+    <message>
+        <source>Move Down</source>
+        <translation>Déplacer vers le bas</translation>
     </message>
     <message>
         <source>Remove Widget</source>

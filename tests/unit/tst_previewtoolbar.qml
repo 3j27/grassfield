@@ -23,12 +23,20 @@ TestCase {
             ToolbarGroup {
                 id: group
                 ToolButton {
-                    glyph: "zoomOut"
-                    label: "Zoom Out"
+                    capsule: true
+                    accessibleName: "Zoom Out"
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "zoomOut"
+                    }
                 }
                 ToolButton {
-                    glyph: "zoomIn"
-                    label: "Zoom In"
+                    capsule: true
+                    accessibleName: "Zoom In"
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "zoomIn"
+                    }
                 }
             }
             Glyph {

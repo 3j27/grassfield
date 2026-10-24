@@ -32,6 +32,8 @@ Singleton {
     readonly property bool reduceMotion: store.data.accessibility.reduceMotion
     readonly property bool increaseContrast: store.data.accessibility.increaseContrast === true
     readonly property real textSize: store.textSize
+    readonly property bool zoomOn: store.zoomOn
+    readonly property real zoomLevel: store.zoomLevel
     readonly property var dockPinned: store.dockPinned
     readonly property int dockSize: store.dockSize
     // Metrics of the Dock at the stored tile size (what the others reserve around it; the Dock itself follows a live resize).
@@ -80,6 +82,8 @@ Singleton {
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
     readonly property var notificationsAppPreviews: store.notificationsAppPreviews
+    readonly property var notificationsAppStyles: store.notificationsAppStyles
+    readonly property string notificationsHistory: store.notificationsHistory
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
@@ -101,6 +105,10 @@ Singleton {
 
     function setHotCorner(corner: string, action: string): void {
         store.setHotCorner(corner, action);
+    }
+
+    function setStagesEnabled(value: bool): void {
+        store.setStagesEnabled(value);
     }
 
     function setDesktopShowIcons(value: bool): void {
@@ -133,6 +141,14 @@ Singleton {
 
     function setIncreaseContrast(value: bool): void {
         store.setIncreaseContrast(value);
+    }
+
+    function setZoom(value: bool): void {
+        store.setZoom(value);
+    }
+
+    function setZoomLevel(value: real): void {
+        store.setZoomLevel(value);
     }
 
     function setTextSize(value: real): void {

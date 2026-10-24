@@ -21,7 +21,7 @@ Variants {
         required property ShellScreen modelData
 
         // The OSD shows on the active display (macOS), like Banners offsets for it.
-        readonly property bool primary: modelData.name === Compositor.activeScreenName
+        readonly property bool primary: modelData !== null && modelData.name === Compositor.activeScreenName
         readonly property int pad: Tokens.spacingLg
 
         screen: modelData

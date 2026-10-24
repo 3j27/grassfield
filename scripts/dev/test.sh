@@ -255,6 +255,17 @@ if want logic; then
   python3 -I tests/ci/qmldir_types.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/qmldir_types.py "$rc" PASS
+  # Symbolic glyph stroke width (ADR-0003, audit GF-124): the scanner on samples, then every shipped glyph.
+  rc=0
+  python3 -I tests/ci/icon_strokes.py --selftest || rc=1
+  python3 -I tests/ci/icon_strokes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/icon_strokes.py "$rc" PASS
+  # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
+  rc=0
+  python3 -I tests/ci/token_sources.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/token_sources.py "$rc" PASS
   # Contract drift (docs vs code vs shell, qmldir vs changelog): the extractors on fixtures; the tree is `just check-contracts`.
   rc=0
   python3 -I tests/ci/gfc_parity.py --selftest || rc=1

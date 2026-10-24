@@ -6,33 +6,33 @@
 #include <cstdint>
 
 namespace gf::theme::tokens {
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh)
+    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarBackgroundDark = 0x28282C;
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value)
+    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarBackgroundLight = 0xECECEE;
-    // window title on the dark titlebar, drawn at titleOpacity
+    // window title on the dark titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarTitleDark = 0xECECEE;
-    // window title on the light titlebar, drawn at titleOpacity
+    // window title on the light titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarTitleLight = 0x28282C;
-    // estimate: the title a little softer than full ink, both appearances
+    // estimate: the title a little softer than full ink, both appearances [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr double kTitlebarTitleOpacity = 0.85;
-    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them)
+    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarInactiveButtonDark = 0x5A5A5E;
-    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar
+    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarInactiveButtonLight = 0xD1D1D3;
-    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS)
+    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarPreviewTintDark = 0x1D1F24;
-    // the same, light appearance (color.light.materialTint)
+    // the same, light appearance (color.light.materialTint) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarPreviewTintLight = 0xF3F4F6;
-    // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review)
+    // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr double kTitlebarPreviewTintAlpha = 0.45;
-    // the preview's edge, dark appearance (color.dark.materialBorder)
+    // the preview's edge, dark appearance (color.dark.materialBorder) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarPreviewRimDark = 0xFFFFFF;
-    // the preview's edge, light appearance (color.light.materialBorder)
+    // the preview's edge, light appearance (color.light.materialBorder) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarPreviewRimLight = 0x000000;
-    // estimate: the edge readable over light and dark windows (pending F1 review)
+    // estimate: the edge readable over light and dark windows (pending F1 review) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr double kTitlebarPreviewRimOpacity = 0.22;
-    // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8)
+    // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr int kTitlebarPreviewRimWidth = 2;
     // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
     inline constexpr int kWindowLightDiameter = 14;
@@ -46,25 +46,25 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowTitlebarHeight = 32;
     // ADR-0015: titlebar style, left edge to the first light's edge (plugin kButtonInsetLeft); the centre is then at (16, 16)
     inline constexpr int kWindowTitlebarLightInset = 9;
-    // plugin kButtonHitSlop = diameter / 6: extra hit radius around a light, the gaps between lights stay drag area
+    // plugin kButtonHitSlop = diameter / 6: extra hit radius around a light, the gaps between lights stay drag area [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr double kWindowLightHitSlop = 2.3333;
-    // plugin kTitlePadding: least gap between the lights and the title
+    // plugin kTitlePadding: least gap between the lights and the title [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr int kWindowTitleGap = 8;
-    // plugin kGlyphRatio, measured on the 2x reference: glyph box side over light diameter
+    // plugin kGlyphRatio, measured on the 2x reference: glyph box side over light diameter [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr double kWindowGlyphRatio = 0.55;
-    // plugin kGlyphStroke, measured: stroke width over light diameter
+    // plugin kGlyphStroke, measured: stroke width over light diameter [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr double kWindowGlyphStroke = 0.12;
-    // plugin kGlyphColor alpha: the glyph darkens the light under it by this much
+    // plugin kGlyphColor alpha: the glyph darkens the light under it by this much [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr double kWindowGlyphOpacity = 0.5;
-    // plugin kCloseColor: own value, not copied
+    // plugin kCloseColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowCloseColor = 0xE5534B;
-    // plugin kMinimizeColor: own value, not copied
+    // plugin kMinimizeColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowMinimizeColor = 0xD9A93B;
-    // plugin kZoomColor: own value, not copied
+    // plugin kZoomColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowZoomColor = 0x4FA64F;
-    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance
+    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowInactiveLightDark = 0x5A5A5E;
-    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance
+    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowInactiveLightLight = 0xD1D1D3;
     // estimate: hairline around a light (darkening, drawn in the glyph colour), keeps the grey light visible on a same-grey toolbar
     inline constexpr double kWindowLightBorderOpacity = 0.18;

@@ -18,6 +18,7 @@ import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
 import qs.services
+import qs.stages
 import qs.switcher
 import "platform/ExtensionStatus.js" as ExtensionStatus
 
@@ -108,6 +109,13 @@ ShellRoot {
         target: Appearance
         property: "folderColorSetting"
         value: Settings.folderColor
+    }
+
+    // Screen magnification (Settings > Accessibility > Zoom): sent to the compositor once the settings are read, then on change.
+    Binding {
+        target: Zoom
+        property: "ready"
+        value: Settings.validRead
     }
 
     // Pointer size (Settings > Accessibility > Pointer): the compositor is asked for the new size live.
@@ -292,6 +300,7 @@ ShellRoot {
         onAppsRequested: appsSurface.toggle()
     }
     Overlay {}
+    Stages {}
     Banners {}
     NotificationCenter {}
     OsdWindow {}

@@ -65,6 +65,9 @@ public:
 
     // {ok, error, kind, name, url, size(Text), width, height, frames, animated, text, type, modified, folder}
     Q_INVOKABLE QVariantMap inspect(int index) const;
+    // The first lines of a text file for its sidebar thumbnail (at most 12 lines of 40 characters, control characters
+    // replaced); "" for any other kind, an unreadable file or an empty one.
+    Q_INVOKABLE QString textSnippet(int index) const;
     // The same for the file that was opened first (stays that file when the folder list replaces the files).
     Q_INVOKABLE QVariantMap inspectFirst() const;
     // Start the full viewer (Glance "Open with Preview"); detached. When the list is the folder of one file (browsing)

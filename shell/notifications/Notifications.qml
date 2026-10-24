@@ -8,6 +8,7 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "History.js" as History
+import "../platform/ScreenChoice.js" as ScreenChoice
 import "Sanitizer.js" as Sanitizer
 
 // The session's org.freedesktop.Notifications server, banner queue, history (ADR-0004) and
@@ -278,6 +279,15 @@ Singleton {
         galleryWanted = true;
         if (!centerOpen)
             toggleCenter(screen);
+    }
+
+    // The screen the Notifications panel is on went away (a display unplugged): the panel moves to a live screen.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            root.centerScreen = ScreenChoice.replacement(root.centerScreen, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+        }
     }
 
     function toggleCenter(screen: string): void {
@@ -587,7 +597,7 @@ Singleton {
 
     function addEntry(entry: var): void {
         const before = history;
-        history = History.pushNewest(history, entry, Date.now());
+        history = History.pushNewest(history, entry, Date.now(), keepMs);
         count = history.length;
         saveTimer.restart();
         // Only the tail can fall out: drop exactly those rows, without scanning the whole model.
@@ -1029,7 +1039,11 @@ Singleton {
             updateEntry(key, entry);
         if (!dnd || entry.urgency === 2) {
             // Notification.expireTimeout is in milliseconds (see History.bannerTimeout).
-            showBanner(entry, History.bannerTimeout(entry.urgency, n.expireTimeout, Tokens.notificationBannerTimeout));
+            // Alert style of the sender (GF-107): None shows no banner, Alerts stay until dismissed.
+            const timeout = NotificationPrefs.bannerTimeoutFor(NotificationPrefs.styleFor(Settings.notificationsAppStyles, entry.appName),
+                History.bannerTimeout(entry.urgency, n.expireTimeout, Tokens.notificationBannerTimeout));
+            if (timeout !== null)
+                showBanner(entry, timeout);
         }
     }
 
@@ -1074,14 +1088,51 @@ Singleton {
 
     // ---- persistence ----
 
+    // How long the panel keeps notifications: a day with "1 Day", else a week (the "never" setting only means nothing is
+    // written to disk; the session's notifications stay in the panel).
+    readonly property real keepMs: Settings.notificationsHistory === "day" ? 24 * 3600 * 1000 : 0
+
+    // False once a file written by a newer version was found: it is never rewritten (read only).
+    property bool historyWritable: true
+
     function loadHistory(text: string): void {
         // Entries received before the file was read stay on top.
-        const restored = History.parse(text, Date.now());
-        restored.forEach(e => e.bodyHtml = Sanitizer.sanitize(e.body));
-        history = History.prune(history.concat(restored), Date.now());
+        const found = History.inspect(text, Date.now(), keepMs);
+        if (found.status === "future") {
+            historyWritable = false;
+            console.warn("notifications: " + historyPath + " was written by a newer version; it is left as it is and not rewritten");
+        } else if (found.status === "corrupt") {
+            // Moved aside (0600), a fresh file is written from here on; the notification history stays usable.
+            console.warn("notifications: " + historyPath + " is damaged; moving it aside as notifications.json.corrupt-<time>");
+            quarantine.running = true;
+        }
+        found.entries.forEach(e => e.bodyHtml = Sanitizer.sanitize(e.body));
+        history = History.prune(history.concat(found.entries), Date.now(), keepMs);
         count = history.length;
         rebuildCenter();
-        historyReady = true;
+        if (found.status !== "corrupt")
+            historyReady = true;
+        // Entries saved by an earlier version (bodies of an app whose previews are Never, entries past the retention) leave the
+        // file at the first write after the load.
+        if (found.status === "ok")
+            saveTimer.restart();
+    }
+
+    // A damaged history file is kept for inspection, never silently overwritten.
+    Process {
+        id: quarantine
+        // The fresh file is created only when the damaged one was really moved aside (quarantine-history.sh).
+        command: ["sh", Quickshell.shellPath("notifications/quarantine-history.sh"), root.historyPath, String(Date.now())]
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => {
+            // qmllint enable signal-handler-parameters
+            if (exitCode !== 0) {
+                root.historyWritable = false;
+                console.warn("notifications: the damaged history file could not be moved aside; it is left as it is and not rewritten");
+            }
+            root.historyReady = true;
+        }
     }
 
     function checkOwner(output: string): void {
@@ -1122,12 +1173,33 @@ Singleton {
         onLoadFailed: root.historyReady = true
     }
 
+    // A change of the retention or of a previews policy rewrites the file at once (bodies of an app set to Never leave it).
+    Connections {
+        target: Settings
+
+        function onNotificationsHistoryChanged(): void {
+            saveTimer.restart();
+        }
+
+        function onNotificationsPreviewsChanged(): void {
+            saveTimer.restart();
+        }
+
+        function onNotificationsAppPreviewsChanged(): void {
+            saveTimer.restart();
+        }
+    }
+
     Timer {
         id: saveTimer
         interval: 400
         onTriggered: {
-            if (root.historyReady && root.serverState !== "external")
-                file.setText(History.serialize(root.history, Date.now()));
+            if (root.historyReady && root.historyWritable && root.serverState !== "external")
+                file.setText(History.serialize(root.history, Date.now(), {
+                    keep: Settings.notificationsHistory !== "never",
+                    maxAgeMs: NotificationPrefs.historyMaxAge(Settings.notificationsHistory),
+                    textKept: app => NotificationPrefs.effective(Settings.notificationsAppPreviews, app, Settings.notificationsPreviews) !== "never"
+                }));
         }
     }
 
@@ -1137,7 +1209,7 @@ Singleton {
         repeat: true
         onTriggered: {
             root.nowMs = Date.now();
-            const kept = History.prune(root.history, root.nowMs);
+            const kept = History.prune(root.history, root.nowMs, root.keepMs);
             if (kept.length !== root.history.length) {
                 root.setHistory(kept);
                 root.pruneLive();

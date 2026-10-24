@@ -97,15 +97,23 @@ NavItem {
                 text: root.title
                 // The title is the emphasized line, the state is regular (macOS model).
                 font.weight: Tokens.typographyMenuBoldWeight
-                // Long module titles wrap to a second line inside the tile (no font shrink).
+                // Long module titles wrap to a second line inside the tile (GF-097, macOS: Control Center wraps). A single
+                // word wider than the capsule ("Appearance" in a narrow language) shrinks down to the caption size
+                // before it would be elided.
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: Tokens.typographyCaptionSize
             }
 
             Caption {
                 width: parent.width
                 text: root.subtitle
                 visible: text !== ""
+                // Fixed states wrap to two lines; only a device or network name that
+                // is longer still ends in an ellipsis.
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
             }
         }
 

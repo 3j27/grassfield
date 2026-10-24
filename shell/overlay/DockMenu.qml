@@ -96,7 +96,7 @@ PopupMenu {
         if (recentDocs.length > 0) {
             items.push({id: "recentHeader", text: qsTr("Recent Documents"), enabled: false});
             for (const d of recentDocs)
-                items.push({id: "recentDocument", path: d.path, text: Stacks.baseName(d.path), enabled: entry !== null});
+                items.push({id: "recentDocument", path: d.path, text: DisplayName.text(Stacks.baseName(d.path)), enabled: entry !== null});
             items.push({separator: true});
         }
         items.push(info.running ? {id: "new", text: qsTr("New Window"), enabled: entry !== null} : {id: "open", text: qsTr("Open"), enabled: entry !== null});

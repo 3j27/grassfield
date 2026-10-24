@@ -17,6 +17,13 @@ SettingsPage {
     readonly property var overrides: root.store.value("notifications.appPreviews")
     // Seen apps and apps with an own setting, once each, by name.
     readonly property var apps: NotificationPrefs.appsToList(root.seenApps, root.overrides)
+    readonly property var styles: root.store.value("notifications.appStyles")
+    // macOS: Banners go away by themselves, Alerts stay until dismissed, None shows nothing (the Notifications panel still collects).
+    readonly property var styleChoices: [
+        {id: "banners", text: qsTr("Banners")},
+        {id: "alerts", text: qsTr("Alerts")},
+        {id: "none", text: qsTr("None")}
+    ]
     readonly property var choices: [
         {id: "default", text: qsTr("Default")},
         {id: "always", text: qsTr("Always")},
@@ -69,7 +76,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Show previews")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Show previews")
                 model: [{id: "always", text: qsTr("Always")}, {id: "unlocked", text: qsTr("When Unlocked")}, {id: "never", text: qsTr("Never")}]
                 value: root.store.value("notifications.previews")
@@ -79,9 +86,23 @@ SettingsPage {
     }
 
     SettingsGroup {
+        footnote: qsTr("How long the Notifications panel keeps notifications after a restart. The text of notifications from apps whose previews are Never is not kept.")
+
+        SettingsRow {
+            title: qsTr("Keep history")
+            SegmentedControl {
+                accessibleName: qsTr("Keep history")
+                model: [{id: "week", text: qsTr("1 Week")}, {id: "day", text: qsTr("1 Day")}, {id: "never", text: qsTr("Never")}]
+                value: root.store.value("notifications.history")
+                onPicked: id => root.store.set("notifications.history", id)
+            }
+        }
+    }
+
+    SettingsGroup {
         id: perApp
         caption: qsTr("Application Notifications")
-        footnote: root.apps.length === 0 ? qsTr("Apps appear here after they send a notification.") : qsTr("Default follows the Show previews setting above.")
+        footnote: root.apps.length === 0 ? qsTr("Apps appear here after they send a notification.") : qsTr("Alerts stay on screen until you dismiss them; None shows no banner. Default follows the Show previews setting above.")
 
         Repeater {
             model: root.apps
@@ -92,11 +113,22 @@ SettingsPage {
                 required property string modelData
 
                 title: modelData
-                Picker {
-                    accessibleName: qsTr("Show previews for %1").arg(appRow.modelData)
-                    model: root.choices
-                    value: NotificationPrefs.valueFor(root.overrides, appRow.modelData)
-                    onPicked: id => root.store.set("notifications.appPreviews", NotificationPrefs.withValue(root.overrides, appRow.modelData, id))
+                Row {
+                    spacing: Tokens.spacingSm
+
+                    ComboBox {
+                        accessibleName: qsTr("Alert style for %1").arg(appRow.modelData)
+                        model: root.styleChoices
+                        value: NotificationPrefs.styleFor(root.styles, appRow.modelData)
+                        onPicked: id => root.store.set("notifications.appStyles", NotificationPrefs.withStyle(root.styles, appRow.modelData, id))
+                    }
+
+                    ComboBox {
+                        accessibleName: qsTr("Show previews for %1").arg(appRow.modelData)
+                        model: root.choices
+                        value: NotificationPrefs.valueFor(root.overrides, appRow.modelData)
+                        onPicked: id => root.store.set("notifications.appPreviews", NotificationPrefs.withValue(root.overrides, appRow.modelData, id))
+                    }
                 }
             }
         }

@@ -111,6 +111,7 @@ hl.animation({ leaf = "border", enabled = true, speed = 2, bezier = "gfStandard"
 hl.animation({ leaf = "windowsIn", enabled = true, speed = 2, bezier = "gfDecelerate", style = "popin 94%" })
 hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.2, bezier = "gfAccelerate", style = "popin 96%" })
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 3, bezier = "gfDecelerate" })
+hl.animation({ leaf = "zoomFactor", enabled = true, speed = 3, bezier = "gfDecelerate" })
 hl.animation({ leaf = "fadeIn", enabled = true, speed = 2, bezier = "gfDecelerate" })
 hl.animation({ leaf = "fadeOut", enabled = true, speed = 1.2, bezier = "gfAccelerate" })
 hl.animation({ leaf = "layersIn", enabled = true, speed = 2, bezier = "gfDecelerate", style = "fade" })

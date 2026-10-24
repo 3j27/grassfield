@@ -713,7 +713,7 @@ bool FolderModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParen
         return false;
     if (m_filterText.isEmpty())
         return true;
-    return item.text().contains(m_filterText, Qt::CaseInsensitive);
+    return FileLogic::nameMatchesFilter(item.text(), m_filterText);
 }
 
 void FolderModel::select(int row, int modifiers)

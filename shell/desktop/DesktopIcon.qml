@@ -189,7 +189,7 @@ Item {
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 maximumLineCount: Tokens.desktopIconLabelMaxLines
                 elide: Text.ElideRight
-                text: root.label
+                text: DisplayName.text(root.label)
                 textFormat: Text.PlainText
                 // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
                 // on material); the selected label is drawn on the accent highlight with the accent text colour (gate A2).

@@ -102,7 +102,7 @@ WidgetBase {
             width: (parent.width - parent.spacing) / 2
             label: qsTr("Memory")
             value: root.memory
-            detail: root.memTotalGb > 0 ? qsTr("%1 of %2 GB").arg(root.memUsedGb.toFixed(1)).arg(root.memTotalGb.toFixed(1)) : ""
+            detail: root.memTotalGb > 0 ? qsTr("%1 of %2 GB").arg(Qt.locale().toString(root.memUsedGb, "f", 1)).arg(Qt.locale().toString(root.memTotalGb, "f", 1)) : ""
         }
     }
 }

@@ -200,6 +200,14 @@ QVariantMap PreviewApp::inspect(int index) const
     return inspectPath(pathAt(index));
 }
 
+QString PreviewApp::textSnippet(int index) const
+{
+    const QString path = pathAt(index);
+    if (path.isEmpty() || preview::classify(path) != preview::Kind::Text)
+        return {};
+    return preview::textSnippetOf(path);
+}
+
 QVariantMap PreviewApp::inspectFirst() const
 {
     return inspectPath(m_firstPath);

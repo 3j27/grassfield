@@ -12,7 +12,7 @@ WidgetBase {
     readonly property bool analog: !isSmall
     readonly property date now: FixedTime.date(clock.date)
     readonly property string timeText: Qt.locale().toString(now, Qt.locale().timeFormat(Locale.ShortFormat))
-    readonly property string dateText: Qt.locale().toString(now, "dddd d MMMM")
+    readonly property string dateText: Qt.locale().toString(now, qsTr("dddd, MMMM d"))
 
     SystemClock {
         id: clock
@@ -145,7 +145,7 @@ WidgetBase {
 
         WidgetLabel {
             width: parent.width
-            text: root.isSmall ? Qt.locale().toString(root.now, "d MMMM") : root.dateText
+            text: root.isSmall ? Qt.locale().toString(root.now, qsTr("MMMM d")) : root.dateText
             color: Appearance.colors.textSecondary
             horizontalAlignment: root.isLarge ? Text.AlignHCenter : Text.AlignLeft
         }

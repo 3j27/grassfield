@@ -26,7 +26,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool shown: root.controller.open && root.controller.screenName === modelData.name
+        readonly property bool shown: root.controller.open && root.controller.screenName === (modelData ? modelData.name : "")
         // 0 = hidden, 1 = fully shown (fade and slight scale; Reduce Motion: fade only).
         property real progress: shown ? 1 : 0
 

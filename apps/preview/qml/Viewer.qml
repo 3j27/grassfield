@@ -42,7 +42,7 @@ Window {
         return parts.join("  ·  ");
     }
 
-    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "⏎") : qsTr("Preview")
+    title: content.info.name ? DisplayName.text(content.info.name) : qsTr("Preview")
     width: Tokens.previewWindowWidth
     height: Tokens.previewWindowHeight
     minimumWidth: Tokens.previewWindowMinWidth
@@ -263,11 +263,16 @@ Window {
             visible: win.hasSidebar
 
             ToolButton {
-                glyph: "sidebar"
-                label: qsTr("Thumbnails")
+                capsule: true
+                accessibleName: qsTr("Thumbnails")
                 checkable: true
                 checked: win.showSidebar
                 onClicked: win.sidebarOpen = !win.sidebarOpen
+
+                Glyph {
+                    anchors.centerIn: parent
+                    kind: "sidebar"
+                }
             }
         }
 
@@ -323,21 +328,36 @@ Window {
                 visible: win.fileCount > 1
 
                 ToolButton {
-                    glyph: "chevronLeft"
-                    label: qsTr("Previous")
+                    capsule: true
+                    accessibleName: qsTr("Previous")
                     enabled: win.canGoPrevious
                     onClicked: win.go(-1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "chevronLeft"
+                    }
                 }
                 ToolButton {
-                    glyph: "chevronRight"
-                    label: qsTr("Next")
+                    capsule: true
+                    accessibleName: qsTr("Next")
                     enabled: win.canGoNext
                     onClicked: win.go(1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "chevronRight"
+                    }
                 }
                 ToolButton {
-                    glyph: "play"
-                    label: qsTr("Slideshow")
+                    capsule: true
+                    accessibleName: qsTr("Slideshow")
                     onClicked: win.toggleSlideshow()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "play"
+                    }
                 }
             }
 
@@ -345,19 +365,34 @@ Window {
                 visible: win.view?.canZoom ?? false
 
                 ToolButton {
-                    glyph: "zoomOut"
-                    label: qsTr("Zoom Out")
+                    capsule: true
+                    accessibleName: qsTr("Zoom Out")
                     onClicked: win.view.zoomOut()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "zoomOut"
+                    }
                 }
                 ToolButton {
-                    glyph: "fit"
-                    label: qsTr("Zoom to Fit")
+                    capsule: true
+                    accessibleName: qsTr("Zoom to Fit")
                     onClicked: win.view.fit()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "fit"
+                    }
                 }
                 ToolButton {
-                    glyph: "zoomIn"
-                    label: qsTr("Zoom In")
+                    capsule: true
+                    accessibleName: qsTr("Zoom In")
                     onClicked: win.view.zoomIn()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "zoomIn"
+                    }
                 }
             }
 
@@ -365,24 +400,39 @@ Window {
                 visible: win.view?.canRotate ?? false
 
                 ToolButton {
-                    glyph: "rotateLeft"
-                    label: qsTr("Rotate Left")
+                    capsule: true
+                    accessibleName: qsTr("Rotate Left")
                     onClicked: win.view.rotate(-1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "rotateLeft"
+                    }
                 }
                 ToolButton {
-                    glyph: "rotateRight"
-                    label: qsTr("Rotate Right")
+                    capsule: true
+                    accessibleName: qsTr("Rotate Right")
                     onClicked: win.view.rotate(1)
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "rotateRight"
+                    }
                 }
             }
 
             ToolbarGroup {
                 ToolButton {
-                    glyph: "info"
-                    label: qsTr("Info")
+                    capsule: true
+                    accessibleName: qsTr("Info")
                     checkable: true
                     checked: win.infoOpen
                     onClicked: win.infoOpen = !win.infoOpen
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "info"
+                    }
                 }
             }
 
@@ -401,9 +451,14 @@ Window {
                 ToolButton {
                     anchors.centerIn: parent
                     visible: !win.searchOpen
-                    glyph: "search"
-                    label: qsTr("Search in document")
+                    capsule: true
+                    accessibleName: qsTr("Search in document")
                     onClicked: win.openSearch()
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        kind: "search"
+                    }
                 }
 
                 Glyph {
@@ -500,7 +555,7 @@ Window {
             Repeater {
                 model: {
                     const i = content.info;
-                    const rows = [[qsTr("Name"), i.name ?? ""], [qsTr("Kind"), i.type ?? ""]];
+                    const rows = [[qsTr("Name"), DisplayName.text(i.name)], [qsTr("Kind"), i.type ?? ""]];
                     if (i.width !== undefined && i.height !== undefined)
                         rows.push([qsTr("Dimensions"), qsTr("%1 × %2 pixels").arg(i.width).arg(i.height)]);
                     rows.push([qsTr("Size"), i.size ?? ""], [qsTr("Modified"), i.modified ?? ""], [qsTr("Where"), i.folder ?? ""]);
@@ -537,7 +592,7 @@ Window {
                         }
                         elide: Text.ElideMiddle
                         textFormat: Text.PlainText
-                        text: infoRow.modelData[1].replace(/[\r\n]+/g, "⏎")
+                        text: DisplayName.text(infoRow.modelData[1])
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
@@ -611,14 +666,17 @@ Window {
                     width: fileList.width
                     height: fileList.compact ? Tokens.previewSidebarItemHeight : row.cellHeight + labelText.implicitHeight + 3 * Tokens.spacingSm
                     Accessible.role: Accessible.ListItem
-                    Accessible.name: row.modelData.name
+                    Accessible.name: DisplayName.text(row.modelData.name)
                     Accessible.selected: row.selected
 
-                    // Selection: a rounded accent plate around thumbnail and name (compact: the row).
+                    // Selection (macOS Preview): a ring in the accent colour around the thumbnail, never a solid plate over
+                    // it (compact: around the row); a light plate under the hovered one.
                     Rectangle {
                         anchors.fill: parent
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
-                        color: row.selected ? Appearance.colors.accent : (rowMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                        color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
+                        border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
+                        border.color: Appearance.colors.accent
                     }
 
                     Item {
@@ -641,11 +699,46 @@ Window {
                             smooth: true
                             mipmap: true
                         }
+                        // Text file: its first lines on a sheet of paper, as the page it stands for.
                         Rectangle {
                             anchors.fill: parent
-                            visible: row.modelData.kind !== "image"
+                            visible: row.modelData.kind === "text" && snippet.text !== ""
+                            color: Tokens.previewPaper
+                            clip: true
+
+                            Text {
+                                id: snippet
+                                anchors {
+                                    fill: parent
+                                    margins: Tokens.spacingXs
+                                }
+                                textFormat: Text.PlainText
+                                text: row.modelData.kind === "text" && !fileList.compact ? win.backend.textSnippet(row.index) : ""
+                                color: Tokens.previewPaperInk
+                                font.family: Tokens.typographyMonoFamily
+                                font.pixelSize: Tokens.previewThumbnailTextSize
+                                wrapMode: Text.NoWrap
+                                elide: Text.ElideRight
+                            }
+                        }
+                        // Other kinds without a picture: a plain tile.
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: row.modelData.kind !== "image" && !(row.modelData.kind === "text" && snippet.text !== "")
                             radius: Tokens.radiusControl
                             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                        }
+                        // The ring of the current file around its thumbnail.
+                        Rectangle {
+                            anchors {
+                                fill: parent
+                                margins: -Tokens.controlFocusOutline
+                            }
+                            visible: row.selected
+                            color: "transparent"
+                            radius: Tokens.radiusControl
+                            border.width: Tokens.controlFocusOutline
+                            border.color: Appearance.colors.accent
                         }
                     }
 
@@ -665,8 +758,8 @@ Window {
                         textFormat: Text.PlainText
                         maximumLineCount: 1
                         // A file name may contain line breaks: keep one line, shown as the return symbol.
-                        text: row.modelData.name.replace(/[\r\n]+/g, "⏎")
-                        color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                        text: DisplayName.text(row.modelData.name)
+                        color: Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: fileList.compact ? Tokens.typographyMenuSize : Tokens.typographyCaptionSize
                     }

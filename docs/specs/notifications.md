@@ -56,7 +56,7 @@ Grassfield sound (later), cross-device sync.
 | N9 | unit test of the sanitizer (QML TestCase) | L0 |
 
 ## Interfaces
-D-Bus `org.freedesktop.Notifications` 1.2 (spec). Settings keys `notifications.dnd`, `notifications.previews` (the default) and `notifications.appPreviews` (per-app overrides).
+D-Bus `org.freedesktop.Notifications` 1.2 (spec). Settings keys `notifications.dnd`, `notifications.previews` (the default) and `notifications.appPreviews` (per-app overrides). Alert style per app: `notifications.appStyles` (`{app, style}`, `banners` default | `alerts` stay until dismissed | `none` no banner; macOS model, GF-107). History retention: `notifications.history` (`week` default | `day` | `never`), and the body of an app whose previews are Never is never written to disk (GF-113).
 IPC target `notifications`: `toggleCenter()`, `dnd(on)`.
 
 ## Degraded behavior

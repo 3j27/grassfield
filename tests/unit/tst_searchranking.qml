@@ -57,6 +57,37 @@ TestCase {
         verify(Ranking.usageBoost(usage["files"]) <= 20);
     }
 
+    function test_accentsFoldBothWays() {
+        const list = [
+            {id: "settings", name: "R\u00e9glages", genericName: "", comment: "", keywords: []},
+            {id: "settings-nfd", name: "Re\u0301glages bis", genericName: "", comment: "", keywords: []},
+            {id: "other", name: "Terminal", genericName: "", comment: "", keywords: []}
+        ];
+        const hits = q => Ranking.rank(list, q, Ranking.newUsage()).map(r => r.app.id);
+        compare(hits("reglages").length, 2);
+        compare(hits("R\u00e9glages").length, 2);
+        compare(hits("re\u0301glages").length, 2);
+        compare(hits("reglages")[0], "settings");
+        compare(Ranking.norm("\u00c9COLE"), "ecole");
+        compare(Ranking.norm("Re\u0301glages"), Ranking.norm("R\u00e9glages"));
+        compare(Ranking.norm("plain"), "plain");
+    }
+
+    function test_foldedTiesUseCollator() {
+        const list = [
+            {id: "b", name: "caf\u00e9", genericName: "", comment: "", keywords: []},
+            {id: "a", name: "cafe", genericName: "", comment: "", keywords: []}
+        ];
+        const r = Ranking.rank(list, "cafe", Ranking.newUsage());
+        compare(r.length, 2);
+        compare(r[0].app.id, "a");
+    }
+
+    function test_plocateFoldsAccents() {
+        const out = Files.parsePlocate("/h/u/R\u00e9sum\u00e9.txt\n/h/u/other.txt\n", "resume", "/h/u", 5);
+        compare(out[0], "/h/u/R\u00e9sum\u00e9.txt");
+    }
+
     function test_usageBoostNeverCreatesMatch() {
         const usage = Ranking.newUsage();
         for (let i = 0; i < 50; i++)

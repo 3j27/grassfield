@@ -778,7 +778,7 @@ Scope {
             // Gate P5: the first frame of this Dock counts toward "grassfield-shell: usable" (platform/Usable.qml).
             UsableProbe {
                 kind: "dock"
-                screenName: win.modelData.name
+                screenName: win.modelData ? win.modelData.name : ""
                 active: win.visible
             }
 
@@ -1173,7 +1173,7 @@ Scope {
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.keyboardFocus: root.keyboardMode && win.screen.name === root.keyboardScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: root.keyboardMode && win.screen && win.screen.name === root.keyboardScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-dock"
             // Only the dock itself (or the reveal strip while hidden) takes input.
             // qmllint disable missing-type
@@ -1446,7 +1446,7 @@ Scope {
                                 readonly property bool isFolder: modelData.kind === "folder"
                                 readonly property var folderOptions: isFolder ? Stacks.optionsFor(Settings.dockStackOptions, modelData.path) : ({sort: "dateAdded", view: "automatic", display: "stack"})
                                 readonly property bool running: isApp && modelData.windows.length > 0
-                                readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized || isFolder ? modelData.name : "")
+                                readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized || isFolder ? DisplayName.text(modelData.name) : "")
                                 readonly property real iconPx: win.iconSize * tileScale
                                 // The icon's place in the tile (it grows away from the screen edge) and the way out (bounce, hover rise).
                                 readonly property var iconPos: Geometry.iconOrigin(win.edge, win.iconSize, iconPx, win.indicatorArea)

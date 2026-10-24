@@ -43,6 +43,15 @@ rm -rf -- "$scenario" "$busdir" "$iso" "$sandbox/.scenario-env"
 mkdir -p "$scenario/src" "$scenario/dest" "$busdir" "$iso"/{home,config,cache,state,data}
 printf 'alpha\n' >"$scenario/src/alpha.txt"
 printf 'beta\n' >"$scenario/src/beta.txt"
+# GF-105: names a person reads as equal or that must not disturb the display. NFC and NFD "resume" are two files to the file
+# system and one name to the user; a bidi override must be shown escaped; quotes and backslashes are plain characters.
+mkdir -p "$scenario/uni"
+printf 'x\n' >"$scenario/uni/$(printf 'R\303\251sum\303\251.txt')"
+printf 'x\n' >"$scenario/uni/$(printf 'Re\314\201sume\314\201 2.txt')"
+printf 'x\n' >"$scenario/uni/$(printf 'evil\342\200\256fdp.exe')"
+printf 'x\n' >"$scenario/uni/say \"hi\".txt"
+printf 'x\n' >"$scenario/uni/back\\slash.txt"
+mkdir -p "$scenario/uni/quote\"dir" "$scenario/uni/back\\dir"
 trash=$iso/data/Trash
 
 # Private session bus (same configuration as dbus-run-session and scripts/dev/shell-run.sh: socket in /tmp, as libdbus
@@ -179,6 +188,16 @@ actual_src=$(cd "$scenario/src" && ls -A | LC_ALL=C sort | paste -sd, -)
 [[ $actual_src == "alpha.txt,beta.txt" ]] && pass "src unchanged ($actual_src)" || fail "src changed: $actual_src"
 expected="Projects,gamma copy.txt,gamma.txt"
 [[ $actual == "$expected" ]] && pass "dest is exactly: $actual" || fail "dest is '$actual', expected '$expected'"
+
+# 7b. GF-105: open the folder of Unicode, bidi, quote and backslash names; it lists without a QML error (checked at the end)
+# and the names are shown through Nav.displayName (the screenshot shows "evil<U+202E>fdp.exe", not a reordered label).
+ctrl_shift -k g
+type_keys "$scenario/uni"
+type_keys -k Return
+sleep 1.5
+shot 5-unicode
+count=$(find "$scenario/uni" -mindepth 1 -maxdepth 1 | wc -l)
+[[ $count == 7 ]] && pass "the Unicode folder holds its 7 seeded entries" || fail "the Unicode folder holds $count entries, expected 7"
 
 # 8. Close the window (Ctrl+W on the last tab quits the app).
 ctrl -k w

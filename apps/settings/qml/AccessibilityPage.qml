@@ -33,6 +33,14 @@ SettingsPage {
 
     title: qsTr("Accessibility")
 
+    // The same steps as the keys (Super + Alt + = and -): 1.5 to 5 in halves.
+    readonly property var zoomLevels: {
+        const out = [];
+        for (let n = 3; n <= 10; n++)
+            out.push({id: String(n / 2), text: qsTr("%1×").arg(Qt.locale().toString(n / 2, "f", n % 2 === 0 ? 0 : 1))});
+        return out;
+    }
+
     // Why the colours could not be applied, in the user's language; the tool's own message (English, technical) follows
     // on a line of its own.
     function failureText(): string {
@@ -87,12 +95,55 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Text Size")
             subtitle: qsTr("The size of the text in the shell's panels and in Settings.")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Text Size")
                 model: [{id: "1", text: qsTr("100%")}, {id: "1.1", text: qsTr("110%")}, {id: "1.2", text: qsTr("120%")}, {id: "1.3", text: qsTr("130%")}]
                 value: String(root.store.value("accessibility.textSize"))
                 onPicked: id => root.store.set("accessibility.textSize", Number(id))
             }
+        }
+    }
+
+    // Accessibility > Zoom (macOS): the compositor magnifies the screen around the pointer (Hyprland cursor:zoom_factor).
+    SettingsGroup {
+        caption: qsTr("Zoom")
+        footnote: qsTr("Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.")
+
+        SettingsRow {
+            title: qsTr("Zoom")
+            subtitle: qsTr("Magnify the screen.")
+            Toggle {
+                accessibleName: qsTr("Zoom")
+                checked: root.store.value("accessibility.zoom")
+                onToggled: c => root.store.set("accessibility.zoom", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Zoom level")
+            SegmentedControl {
+                accessibleName: qsTr("Zoom level")
+                model: root.zoomLevels
+                value: String(root.store.value("accessibility.zoomLevel"))
+                onPicked: id => root.store.set("accessibility.zoomLevel", Number(id))
+            }
+        }
+    }
+
+    // Accessibility > Keyboard (macOS): Sticky Keys and Slow Keys are not offered: the Wayland compositor has no filter for
+    // them (no Hyprland option, no xkb equivalent outside X11), and a toggle that does nothing would mislead.
+    SettingsGroup {
+        caption: qsTr("Keyboard")
+        footnote: qsTr("Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.")
+
+        SettingsRow {
+            title: qsTr("Sticky Keys")
+            valueText: qsTr("Not available")
+        }
+
+        SettingsRow {
+            title: qsTr("Slow Keys")
+            valueText: qsTr("Not available")
         }
     }
 
@@ -168,7 +219,6 @@ SettingsPage {
             Button {
                 text: qsTr("Reset Colour")
                 enabled: root.customColors
-                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
                 onClicked: {
                     root.store.set("pointer.outlineColor", PointerColors.DEFAULT_OUTLINE);
                     root.store.set("pointer.fillColor", PointerColors.DEFAULT_FILL);

@@ -69,6 +69,12 @@ TestCase {
         property var folder: folder
         property var tabs: []
         property int currentIndex: 0
+        property bool canEject: false
+        property int ejected: 0
+        function ejectVolume(): bool {
+            fakeWin.ejected++;
+            return true;
+        }
     }
 
     Component {
@@ -105,5 +111,26 @@ TestCase {
         compare(bar.customizeEnabled, true, "two folders");
         select([], {});
         compare(bar.customizeEnabled, false, "nothing again");
+    }
+
+    // File > Eject (Ctrl+E) follows the window's canEject and ejects through the window: the keyboard path to the sidebar's
+    // eject button, which is out of the Tab chain.
+    function test_fileMenuHasEject() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        let item = null;
+        const file = bar.menus[0];
+        for (let i = 0; i < file.items.length; i++) {
+            if (file.items[i].text === "Eject")
+                item = file.items[i];
+        }
+        verify(item !== null, "File has an Eject item");
+        compare(item.shortcut.toString(), "Ctrl+E");
+        compare(item.enabled, false, "nothing to eject");
+        fakeWin.canEject = true;
+        compare(item.enabled, true);
+        item.triggered();
+        compare(fakeWin.ejected, 1);
+        fakeWin.canEject = false;
     }
 }

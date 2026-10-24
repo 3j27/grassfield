@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../shell/platform/Minimized.js" as Minimized
 import "../../shell/dock/DockModel.js" as DockModel
 
@@ -9,6 +10,32 @@ TestCase {
 
     function rec(top, appId, address) {
         return {toplevel: top, address: address ? address : "1a", appId: appId, title: "T " + top};
+    }
+
+    function test_blurCallIsBuiltFromIntegersInRange() {
+        compare(Minimized.blurCall(18, 3), "function() hl.config({ decoration = { blur = { size = 18, passes = 3 } } }) end");
+        compare(Minimized.blurCall(0, 3), "");
+        compare(Minimized.blurCall(18, 9), "");
+        compare(Minimized.blurCall(18.5, 3), "");
+        compare(Minimized.blurCall("18) end; os.exit() --", 3), "");
+        compare(Minimized.blurCall(NaN, 3), "");
+    }
+
+    // The answers are captured from Hyprland 0.56.2 (tests/compositor/blur_events.sh, request socket, `dispatch <function>`):
+    // "ok" for a valid hl.config call, "error: ...: unknown config key '...'" for an unknown key.
+    function test_blurAnswerReadsWhatHyprlandAnswered() {
+        compare(Minimized.blurAnswer("ok"), "ok");
+        compare(Minimized.blurAnswer("ok\n"), "ok");
+        compare(Minimized.blurAnswer("error: =[C]:-1: unknown config key 'decoration.blur.no_such'"), "rejected");
+        compare(Minimized.blurAnswer("error: return hl.dispatch(function() hl.config({ decoration = { blur = { no_such_key_gf = 1 } } }) end):1: unknown config key 'decoration.blur.no_such_key_gf'"), "rejected");
+        // The answer may arrive in pieces: the shell adds them up before judging (the whole text, not the first chunk).
+        compare(Minimized.blurAnswer("er"), "unknown");
+        compare(Minimized.blurAnswer("er" + "ror: =[C]:-1: unknown config key 'decoration.blur.x'"), "rejected");
+        compare(Minimized.blurAnswer("o"), "unknown");
+        compare(Minimized.blurAnswer("o" + "k"), "ok");
+        compare(Minimized.blurAnswer(""), "unknown");
+        compare(Minimized.blurAnswer("okay then"), "unknown");
+        compare(Minimized.blurAnswer(undefined), "unknown");
     }
 
     function test_windowCallIsBuiltFromValidatedPieces() {
@@ -359,6 +386,24 @@ TestCase {
             verify(l.speed <= 1, l.leaf + " is at most 100 ms");
         compare(Minimized.motionCall(false).indexOf("slide") >= 0, true, "normal restores the Spaces slide");
         compare(Minimized.motionCall(false).indexOf("popin 94%") >= 0, true);
+    }
+
+    // GF-064: Reduce Motion also stops the compositor's screen zoom from gliding.
+    function test_reduceMotionStopsTheZoomAnimation() {
+        verify(Minimized.motionCall(true).indexOf("leaf = \"zoomFactor\", enabled = false") >= 0);
+        verify(Minimized.motionCall(false).indexOf("leaf = \"zoomFactor\", enabled = true") >= 0);
+    }
+
+    // GF-125: the blur the shell asks for at the default transparency is the one the config ships (a config reload then
+    // restores a value that is already right).
+    function test_blurAtTheDefaultTransparencyIsTheConfigsOwn() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/looknfeel.lua"), false);
+        xhr.send();
+        const lua = xhr.responseText;
+        const t = Tokens.materialDefaultTransparency;
+        verify(new RegExp("blur = \\{[^}]*size = " + Appearance.blurSize(t) + ",").test(lua), "size " + Appearance.blurSize(t));
+        verify(new RegExp("blur = \\{[^}]*passes = " + Appearance.blurPasses(t) + ",").test(lua), "passes " + Appearance.blurPasses(t));
     }
 
     function test_isZoomed() {

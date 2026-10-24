@@ -38,6 +38,8 @@ Scope {
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     // Text size multiplier of the shell's text (Settings > Accessibility > Display), 1 to 1.3; a hand-edited value is clamped.
     readonly property real textSize: clampNumber(config.accessibility.textSize, 1, 1.3, 1)
+    readonly property bool zoomOn: config.accessibility.zoom === true
+    readonly property real zoomLevel: clampNumber(config.accessibility.zoomLevel, 1.5, 5, 2)
     // Tile size of the Dock in px (Settings > Size); a hand-edited value is clamped to the slider range.
     readonly property int dockSize: tileSize(config.dock.size)
     // Screen edge of the Dock (Settings > Position on screen); anything but left/right is the bottom.
@@ -56,6 +58,8 @@ Scope {
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
     readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
+    readonly property var notificationsAppStyles: NotificationPrefs.normalizeStyles(config.notifications.appStyles)
+    readonly property string notificationsHistory: NotificationPrefs.validHistory(config.notifications.history) ? config.notifications.history : "week"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
@@ -130,6 +134,9 @@ Scope {
         property bool reduceMotion: false
         property bool increaseContrast: false
         property real textSize: 1
+        // Screen magnification (Hyprland cursor:zoom_factor): on or off, and the factor while on, 1.5 to 5.
+        property bool zoom: false
+        property real zoomLevel: 2
     }
 
     component DockConfig: JsonObject {
@@ -240,6 +247,10 @@ Scope {
         property string previews: "unlocked"
         // Per-app overrides [{app, previews}] (NotificationPrefs.js).
         property var appPreviews: []
+        // Per-app alert style overrides [{app, style}] (banners | alerts | none, NotificationPrefs.js).
+        property var appStyles: []
+        // How long the history stays on disk: week | day | never.
+        property string history: "week"
     }
 
     function setAppearance(value: string): void {
@@ -260,6 +271,14 @@ Scope {
 
     function setIncreaseContrast(value: bool): void {
         change("accessibility.increaseContrast", value);
+    }
+
+    function setZoom(value: bool): void {
+        change("accessibility.zoom", value);
+    }
+
+    function setZoomLevel(value: real): void {
+        change("accessibility.zoomLevel", clampNumber(Math.round(value * 2) / 2, 1.5, 5, 2));
     }
 
     function setTextSize(value: real): void {
@@ -305,6 +324,10 @@ Scope {
         if (["topLeft", "topRight", "bottomLeft", "bottomRight"].indexOf(corner) < 0)
             return;
         change("hotCorners." + corner, cornerAction(action));
+    }
+
+    function setStagesEnabled(value: bool): void {
+        change("windows.stages", value);
     }
 
     function setDesktopShowIcons(value: bool): void {
@@ -496,6 +519,10 @@ Scope {
         const notif = parsed.notifications !== null && typeof parsed.notifications === "object" && !Array.isArray(parsed.notifications) ? parsed.notifications : {};
         if (!("appPreviews" in notif))
             config.notifications.appPreviews = [];
+        if (!("appStyles" in notif))
+            config.notifications.appStyles = [];
+        if (!("history" in notif))
+            config.notifications.history = "week";
         // Same for the wallpaper group (ADR-0016): removing a key, or the whole object, reads as the defaults.
         const wp = parsed.wallpaper !== null && typeof parsed.wallpaper === "object" && !Array.isArray(parsed.wallpaper) ? parsed.wallpaper : {};
         const d = WallpaperConfig.WALLPAPER_DEFAULTS;
