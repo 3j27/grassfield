@@ -45,6 +45,31 @@ function rebuilds(status, settingOn, tried) {
     return settingOn === true && tried !== true && (kind === "mismatch" || kind === "stale");
 }
 
+// Which degraded notice the shell posts (shell.qml maps each key to its text): "absent" (the plain notice),
+// "stale-rebuilding" | "stale-manual" (an update to finish: never names the Hyprland version), "mismatch-rebuilding" |
+// "mismatch-manual" (not built for the installed Hyprland, named). `-rebuilding`: the opt-in rebuild starts now.
+function degradedNotice(status, settingOn, tried) {
+    const kind = notice(status);
+    if (kind === "absent")
+        return "absent";
+    return kind + (rebuilds(status, settingOn, tried) ? "-rebuilding" : "-manual");
+}
+
+// Which notice reports the outcome of `--session` (`stale`: the rebuild finishes an update): "updated-loaded" |
+// "updated-built" (an update finished: no Hyprland version), "rebuilt-loaded" | "rebuilt-built" (named), "cannot-build",
+// "failed".
+function resultNotice(status, stale) {
+    const out = outcome(status);
+    if (out === "loaded" || out === "built")
+        return (stale === true ? "updated-" : "rebuilt-") + out;
+    return out;
+}
+
+// The notice keys whose text names the Hyprland version (the cause of a mismatch); a stale build's never do.
+function namesHyprland(key) {
+    return ["mismatch-rebuilding", "mismatch-manual", "rebuilt-loaded", "rebuilt-built"].indexOf(key) >= 0;
+}
+
 // The outcome of `--session`: "loaded" (built if needed and loaded into the running Hyprland), "built" (log out and back
 // in), "cannot-build" (tools, sources, cache or another build), "failed" (the build failed, or no answer).
 function outcome(status) {

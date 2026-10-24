@@ -26,6 +26,27 @@ TestCase {
         compare(ExtensionStatus.notice(ExtensionStatus.parse("state=match\nreason=stale-build\n")), "absent");
     }
 
+    // Re-review of b60bc3a..85aaab9: shell.qml posts the notice ExtensionStatus.degradedNotice names; for a stale build
+    // that is never one of the texts that say "not built for <Hyprland>" (namesHyprland), with or without the rebuild,
+    // and the rebuild's outcome is "updated", never "rebuilt for <Hyprland>".
+    function test_aStaleBuildNeverGetsTheHyprlandMismatchText() {
+        const stale = ExtensionStatus.parse("state=mismatch\nversion=v0.56.2\nreason=stale-build\n");
+        compare(ExtensionStatus.degradedNotice(stale, true, false), "stale-rebuilding");
+        compare(ExtensionStatus.degradedNotice(stale, false, false), "stale-manual");
+        compare(ExtensionStatus.degradedNotice(stale, true, true), "stale-manual");
+        for (const key of ["stale-rebuilding", "stale-manual", "updated-loaded", "updated-built"])
+            verify(!ExtensionStatus.namesHyprland(key), key);
+        compare(ExtensionStatus.resultNotice(ExtensionStatus.parse("result=loaded\npath=/x\n"), true), "updated-loaded");
+        compare(ExtensionStatus.resultNotice(ExtensionStatus.parse("result=built\npath=/x\n"), true), "updated-built");
+        compare(ExtensionStatus.resultNotice(ExtensionStatus.parse("result=failed\nreason=build-failed\n"), true), "failed");
+        // A real Hyprland mismatch still names it.
+        const mismatch = ExtensionStatus.parse("state=mismatch\nversion=v0.56.3\n");
+        compare(ExtensionStatus.degradedNotice(mismatch, false, false), "mismatch-manual");
+        verify(ExtensionStatus.namesHyprland(ExtensionStatus.degradedNotice(mismatch, true, false)));
+        compare(ExtensionStatus.resultNotice(ExtensionStatus.parse("result=built\n"), false), "rebuilt-built");
+        compare(ExtensionStatus.degradedNotice(ExtensionStatus.parse(""), true, false), "absent");
+    }
+
     function test_aMatchingBuildThatIsNotLoadedGetsThePlainNotice() {
         compare(ExtensionStatus.notice(ExtensionStatus.parse("state=match\nversion=v0.56.2\npath=/usr/lib/grassfield/grassfield-compositor.so\n")), "absent");
     }
