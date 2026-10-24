@@ -7,12 +7,16 @@ import Grassfield.Ui
 // and gave a hover exit + re-enter with a pointer that never moved) does not fire it again.
 //
 // The corner window never grows (it must not cover controls), so leaving is proven by either
-//  - `pointerSeen(distance)`: another surface under the pointer (menu bar, wallpaper, Dock, through PointerTracker)
-//    reported a position more than `leaveDistance` px from the corner, or
+//  - `pointerSeen(distance)`: a position more than `leaveDistance` px from the corner, reported by another surface under
+//    the pointer (menu bar, wallpaper, Dock, through PointerTracker) or by the compositor when the gate asks for it
+//    (`positionWanted`: HotCorner reads the pointer from Hyprland, so it works over full-screen windows too), or
 //  - a hover exit while nothing `covered` the window: no full-attention shell surface (Apps, Overview, Search, a menu,
-//    the switcher, the Notification Center) and no session lock was up, so the pointer itself moved out. A hover exit
-//    while one was up is that surface covering the window, however long it took to appear (no timing involved).
-// No firing while `blocked` (the target surface is open).
+//    the switcher, the Notification Center) and no session lock was up, so the pointer itself moved out.
+// While one is up a hover exit may be that surface covering the window (however late it appears) or a real leave (the
+// Notification Center and Search leave the menu-bar strip, and so the top corners, uncovered): the gate asks where the
+// pointer is. It asks again when the last one closes while the corner window is not hovered (the pointer moved on while
+// the surface covered it). No timing is involved.
+// No firing while `blocked` (the target surface is open, or the session is locked).
 QtObject {
     id: root
 
@@ -26,6 +30,8 @@ QtObject {
     property bool latched: false
 
     signal triggered
+    // The gate needs the pointer's position: answer with pointerSeen(distance from the corner).
+    signal positionWanted
 
     // A position reported by a surface other than the corner window: distance from the corner in px.
     function pointerSeen(distance: real): void {
@@ -41,7 +47,14 @@ QtObject {
             timer.stop();
             if (latched && !covered)
                 latched = false;
+            else if (latched)
+                positionWanted();
         }
+    }
+
+    onCoveredChanged: {
+        if (!covered && latched && !hovering)
+            positionWanted();
     }
 
     onBlockedChanged: {

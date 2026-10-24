@@ -10,13 +10,16 @@ TestCase {
 
     property var gate: null
     property int fires: 0
+    property int asked: 0
 
     function init() {
         const comp = Qt.createComponent(Qt.resolvedUrl("../../shell/desktop/DwellGate.qml"));
         compare(comp.status, Component.Ready, comp.errorString());
         gate = comp.createObject(testCase, {interval: 40});
         fires = 0;
+        asked = 0;
         gate.triggered.connect(() => testCase.fires++);
+        gate.positionWanted.connect(() => testCase.asked++);
     }
 
     function cleanup() {
@@ -117,15 +120,104 @@ TestCase {
         tryCompare(testCase, "fires", 2, 1000);
     }
 
+    // Re-review of e186bd9: the Notification Center and Search leave the menu-bar strip, and so the top corners,
+    // uncovered: a hover exit while one is up may be a real leave. The gate asks where the pointer is (HotCorner reads it
+    // from the compositor) and re-arms when it is away; resting in the corner (a cover) it stays latched.
+    function test_anExitWhileASurfaceIsUpAsksWhereThePointerIs() {
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 1, 1000);
+        gate.covered = true;
+        gate.hovering = false;
+        compare(asked, 1, "a hover exit while a surface is up asks for the position");
+        gate.pointerSeen(2);   // the compositor says: still in the corner (the surface covered it)
+        verify(gate.latched);
+        gate.hovering = true;
+        gate.hovering = false;
+        compare(asked, 2);
+        gate.pointerSeen(400); // a real leave (e.g. from a top corner while the Notification Center is open)
+        verify(!gate.latched);
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 2, 1000);
+    }
+
+    // A display with a full-screen window: no shell surface ever reports the pointer. The corner opened Overview, the
+    // pointer moved on while Overview covered the corner, Overview closed: the gate asks once, and the corner is live again.
+    function test_aCoverClosingWithThePointerElsewhereAsksAndRearms() {
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 1, 1000);
+        gate.covered = true;
+        gate.hovering = false;
+        gate.pointerSeen(3);   // covered, pointer still there
+        verify(gate.latched);
+        asked = 0;
+        gate.covered = false;  // the surface closed; the corner window is not hovered: the pointer is elsewhere?
+        compare(asked, 1);
+        gate.pointerSeen(900);
+        verify(!gate.latched);
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 2, 1000);
+    }
+
+    function test_aCoverClosingOverARestingPointerAsksNothingAndStaysLatched() {
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 1, 1000);
+        gate.covered = true;
+        gate.hovering = false;
+        gate.pointerSeen(1);
+        gate.hovering = true;  // uncovered first (the pointer rests there) ...
+        asked = 0;
+        gate.covered = false;  // ... then the holder ends
+        compare(asked, 0);
+        verify(gate.latched);
+        wait(150);
+        compare(fires, 1);
+    }
+
+    function test_noQuestionWhenNothingIsUpOrWhenNotLatched() {
+        gate.hovering = true;
+        wait(10);
+        gate.hovering = false; // not latched yet
+        compare(asked, 0);
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 1, 1000);
+        gate.hovering = false; // nothing up: a leave, no question
+        compare(asked, 0);
+        verify(!gate.latched);
+    }
+
+    function test_thePointerPositionFromTheCompositor() {
+        compare(JSON.stringify(Actions.cursorPosition('{"x": 1919, "y": 0}')), JSON.stringify({x: 1919, y: 0}));
+        compare(Actions.cursorPosition("not json"), null);
+        compare(Actions.cursorPosition('{"x": "a", "y": 1}'), null);
+        const s = {x: 1920, y: 0, width: 1440, height: 900};
+        compare(Actions.cornerDistance("topLeft", s, 1920, 0), 0);
+        compare(Actions.cornerDistance("topLeft", s, 1925, 3), 5);
+        compare(Actions.cornerDistance("topRight", s, 3359, 0), 0);
+        compare(Actions.cornerDistance("bottomRight", s, 3359 - 4, 899 - 9), 9);
+        compare(Actions.cornerDistance("bottomLeft", s, 1920 + 700, 899), 700);
+        compare(Actions.cornerDistance("topLeft", s, 100, 0), Infinity, "on another screen");
+    }
+
+    // Re-review nit: the session lock blocks every corner (the gate does not even fire); the Notification Center blocks
+    // the corner that toggles it.
+    function test_theLockBlocksEveryCorner() {
+        verify(Actions.isBlocked("overview", false, true));
+        verify(Actions.isBlocked("lock", false, true));
+        verify(!Actions.isBlocked("overview", true, false));
+        verify(Actions.isBlocked("notifications", true, false));
+        verify(!Actions.isBlocked("notifications", false, false));
+    }
+
     // The session lock (the `lock` action) covers the corner too: after the unlock with the pointer resting, no new lock.
     function test_theSessionLockCountsAsACover() {
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
         gate.covered = true;
         gate.hovering = false;
+        gate.pointerSeen(0);
         wait(1000);
-        gate.covered = false;
         gate.hovering = true;
+        gate.covered = false;
         wait(150);
         compare(fires, 1);
     }
