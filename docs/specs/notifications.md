@@ -201,25 +201,33 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   `iconSource`; with previews hidden `NotificationPrefs.appIconShown` keeps only a name that passes the same test, so the
   sender's image and an app icon path (its private copy included) give way to the app's theme icon or the generic one.
   A name that passes reaches Qt only through `ThemeIcons.source` (shell/services, shared with the polkit sheet; reviews of
-  2dfd992 and eee45cc): Qt reads the theme's `index.theme` and `icon-theme.cache` (on the GUI thread, in
-  `hasThemeIcon`) and then the icon file it picks, so a helper first checks, in the icon theme directories the user owns
-  or can write: those two files (any FIFO, device or oversized one there refuses every name), and the candidate files
-  for the name (`.png`, `.svg`, `.svgz`, `.xpm` in each `Directories=` entry of the theme's index.theme, the pixmaps
-  directories, the dash-shortened names), each a regular file of at most 8 MiB, symlinks resolved; no recursive walk.
-  `hasThemeIcon` runs only for a checked name. Until the verdict (about 0.1 s, 0.15 s more per name for a user theme of
-  100k files) the generic icon shows; a new notification naming the name hides it again until its new verdict; a
-  signature of those directories is taken every 20 s and a change drops every verdict. A file swapped after its check
-  can still be read until that signature (residual). `tests/security/theme_icon_files.sh`: the shell offscreen (FIFO,
-  symlinks to a FIFO, /dev/zero and /dev/null, FIFO .svg, FIFO under ~/.icons/hicolor, a swap with and without a new
-  notification) and Qt's own lookup with real-session search paths (FIFO index.theme and icon-theme.cache, FIFO icons in
-  the theme, the inherited hicolor, a symlinked directory, ~/.icons and pixmaps; Qt alone stalls on each; the cost of
-  99k files); mutants without the theme-file check, the candidate walk, the hide-on-recheck or the signature fail it.
-  The same helper serves applications' icons: `ThemeIcons.appIcon(Icon=, fallback)` (Dock tiles, Launchpad cells, the Apps
-  prewarm list; review of eee45cc: a FIFO `Icon=` in a user .desktop file stalled the loader) checks a theme name as above
-  and an absolute path as a regular file of at most 8 MiB, re-checked with each signature, then loads it by a file: URL;
-  until then, and when refused, the checked fallback icon shows (theme_icon_files.sh part 3: real Launchpad cells with a
-  FIFO path and a FIFO theme name in a scratch applications directory). Search, the Switcher, the Overview, Force Quit and
-  About still call Quickshell.iconPath for Icon= (follow-up).
+  2dfd992, eee45cc and 100692f): Qt reads the index.theme and icon-theme.cache of the theme and of every theme it
+  inherits (on the GUI thread, in `hasThemeIcon`) and then the icon file it picks, so a helper first checks, in every
+  icon theme directory the user owns or can write (dot-named ones included): those two files (a FIFO, a device or an
+  oversized one, or an `Inherits=` holding a "/", refuses every name), and the candidate files for the name and its
+  dash-shortened forms (`.png`, `.svg`, `.svgz`, `.xpm` in EVERY folder of those directories, symlinks followed, and in
+  every folder their index.theme names in any form Qt 6.11 uses: each `[section]`, `Directories=`/`ScaledDirectories=`
+  split, unquoted and whole, also inside root-owned directories of that theme since a `../` section leads anywhere;
+  plus the pixmaps directories), each a regular file of at most 8 MiB, symlinks resolved. `hasThemeIcon` runs only for a
+  checked name. Until the verdict the fallback shows; a new notification naming the name hides it until its new verdict.
+  Every 20 s a signature of those folders, theme files and pixmaps directories, plus the folders holding the targets of
+  symlinked candidates and icon paths, is taken; when it changed, each shown key's own signature (its present
+  candidates, lstat and resolved) is taken again in batches and only the keys whose files changed are hidden and checked
+  again; the others stay on screen. A file swapped after its check can still be read until then (residual). Cost:
+  listing the folders reads every entry of the user's theme directories (about 0.4 s for a theme of 99k files, once per
+  batch of 24 keys). `tests/security/theme_icon_files.sh`: the shell offscreen (FIFO, symlinks to a FIFO, /dev/zero and
+  /dev/null, FIFO .svg, FIFO under ~/.icons/hicolor, a swap with and without a new notification, a swapped symlink target
+  outside every icon folder; an unchanged icon stays shown meanwhile) and Qt's own lookup with real-session search paths
+  (FIFO index.theme and icon-theme.cache, FIFO icons in the theme, the inherited hicolor, a symlinked folder, ~/.icons,
+  pixmaps, a section missing from Directories=, a quoted Directories=, a dot-named inherited theme, a 7-part
+  dash-shortened name, a `../` section, a `../` Inherits=; Qt alone stalls on each); mutants without the theme-file
+  check, the dot-named themes, the Inherits= check, the section parsing, the folder listing or the full dash fallback
+  fail it.
+  The same helper serves icons from desktop entries, applications and files: `ThemeIcons.appIcon(Icon=, fallback)`
+  (review of eee45cc: a FIFO `Icon=` in a user .desktop file stalled the loader) checks a theme name as above and an
+  absolute path as a regular file of at most 8 MiB, then loads it by a file: URL; until then, and when refused, the
+  checked fallback icon shows (theme_icon_files.sh part 3: real Launchpad cells with a FIFO path and a FIFO theme name in
+  a scratch applications directory).
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the

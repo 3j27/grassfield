@@ -12,7 +12,10 @@ import qs.services
 // Ready when the one image loader never stalled. Two kinds start from a regular evil.png that is shown, then replace it
 // with a FIFO:
 //   swap    a new notification names "evil" at once: the name is hidden ("pending") from that moment, then refused;
-//   change  nothing names it again: the next signature (lowered to 1 s here) drops the verdict, and the name is refused.
+//   change  nothing names it again: the next signature (lowered to 1 s here) sees the folder change, the name's own
+//           files changed, so it alone is checked again and refused; "ctl", checked before, stays shown throughout;
+//   linkswap evil.png is a symlink to a file outside every icon folder; that target is replaced by a FIFO: the signature
+//           covers the target's folder, so the name is refused too, "ctl" again staying shown.
 // Prints one "probe:" line and exits.
 ShellRoot {
     id: root
@@ -26,16 +29,19 @@ ShellRoot {
     property string polkitSource: ""
     property string before: ""
     property string atSwap: ""
+    // "ctl" left "ok" at some point after the swap (it must not: its files did not change).
+    property bool ctlBlanked: false
 
     Component.onCompleted: {
         ThemeIcons.signatureIntervalMs = 1000;
         Notifications.checkedAppIcon("evil", "Probe");
+        ThemeIcons.check("ctl", false);
         poll.start();
     }
 
     Process {
         id: swapper
-        command: ["sh", "-c", "rm -f \"$1/evil.png\" && mkfifo \"$1/evil.png\"", "sh", root.pixmaps]
+        command: ["sh", "-c", "if [ -L \"$1/evil.png\" ]; then t=$(readlink \"$1/evil.png\"); rm -f \"$t\" && mkfifo \"$t\"; else rm -f \"$1/evil.png\" && mkfifo \"$1/evil.png\"; fi", "sh", root.pixmaps]
         // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
         // qmllint disable signal-handler-parameters
         onExited: code => {
@@ -92,10 +98,13 @@ ShellRoot {
                 // As a binding would, ask again: after a dropped verdict this requests the new check.
                 Notifications.iconSource("", "evil");
                 const v = ThemeIcons.verdicts["evil"];
-                const waiting = v === undefined || v === "pending" || (root.before !== "" && root.kind === "change" && v === "ok");
+                const watching = root.before !== "" && (root.kind === "change" || root.kind === "linkswap");
+                if (watching && ThemeIcons.verdicts["ctl"] !== "ok")
+                    root.ctlBlanked = true;
+                const waiting = v === undefined || v === "pending" || (watching && v === "ok") || (!watching && ThemeIcons.verdicts["ctl"] !== "ok" && root.before === "" && (root.kind === "change" || root.kind === "linkswap"));
                 if (waiting && root.waited < 10000)
                     return;
-                if ((root.kind === "swap" || root.kind === "change") && root.before === "") {
+                if ((root.kind === "swap" || root.kind === "change" || root.kind === "linkswap") && root.before === "") {
                     // First round on the regular file: shown; then the swap.
                     root.before = String(v) + ":" + Notifications.iconSource("", "evil");
                     stop();
@@ -122,7 +131,7 @@ ShellRoot {
                 if (control.status !== Image.Ready && root.waited < 5000)
                     return;
                 stop();
-                console.log("probe: kind=" + root.kind + " before=" + root.before + " atswap=" + root.atSwap + " verdict=" + root.verdict + " notif=" + root.notifSource
+                console.log("probe: kind=" + root.kind + " before=" + root.before + " atswap=" + root.atSwap + " ctlblanked=" + root.ctlBlanked + " verdict=" + root.verdict + " notif=" + root.notifSource
                     + " polkit=" + root.polkitSource + " evil=" + viaNotification.status + " ctl=" + control.status);
                 Qt.exit(0);
             }
