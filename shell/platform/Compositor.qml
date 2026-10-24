@@ -347,7 +347,7 @@ Singleton {
                 if (sock.judged)
                     return;
                 sock.judged = true;
-                answerTimeout.stop();
+                sock.answerTimeout.stop();
                 if (Minimized.blurAnswer(sock.reply) === "rejected" && !root.blurRejected) {
                     root.blurRejected = true;
                     console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
@@ -365,14 +365,14 @@ Singleton {
                 if (connected) {
                     write(sock.line);
                     flush();
-                    answerTimeout.start();
+                    sock.answerTimeout.start();
                 } else {
                     sock.finish();
                 }
             }
 
-            Timer {
-                id: answerTimeout
+            // A request nobody answers is judged (as unanswered) after this long.
+            readonly property Timer answerTimeout: Timer {
                 interval: Tokens.settingsPointerAnswerMs
                 onTriggered: sock.finish()
             }

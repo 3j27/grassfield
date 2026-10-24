@@ -285,9 +285,9 @@ TestCase {
         const at = combo.popup.contentItem.mapToItem(null, 0, 0);
         verify(at.x >= Tokens.spacingSm - 0.5, "left edge " + at.x);
         verify(at.x + combo.popup.width <= tc.width - Tokens.spacingSm + 0.5, "right edge " + (at.x + combo.popup.width) + " of " + tc.width);
-        const shown = combo.list.model[0].text;
+        const shown = (combo.list as PopupMenu).model[0].text;
         verify(shown.length < long.length && shown.endsWith("\u2026"), "elided: " + shown);
-        compare(combo.list.model[1].text, "Short");
+        compare((combo.list as PopupMenu).model[1].text, "Short");
         combo.popup.close();
         tryCompare(combo, "open", false);
         combo.model = [{id: "x", text: "Ex"}, {id: "y", text: "Why"}];
