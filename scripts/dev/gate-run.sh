@@ -55,7 +55,8 @@ write_report() { # NAME EXIT LOG
   local report=$runs/$stamp-$name.md
   local commit dirty branch result
   commit=$(git -C "$root" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
-  git -C "$root" diff --quiet HEAD -- 2>/dev/null && dirty=clean || dirty=dirty
+  # Untracked files count: a clean tracked tree with a stray new file did not run from the commit alone.
+  if [[ -z $(git -C "$root" status --porcelain 2>/dev/null) ]]; then dirty=clean; else dirty="dirty: tracked changes or untracked files"; fi
   branch=$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
   [[ $rc == 0 ]] && result=PASS || result=FAIL
   local logsum=n/a pass=0 fail=0 skip=0 nv=0 proxy=0
@@ -82,6 +83,8 @@ write_report() { # NAME EXIT LOG
     # "result" is the exit status; "verdict" says what that is worth.
     if [[ $rc != 0 ]]; then
       echo "- verdict: FAIL (exit $rc)"
+    elif ((fail > 0)); then
+      echo "- verdict: FAIL ($fail FAIL line(s) in the log although the exit code is 0: any FAIL line means FAIL)"
     elif ((skip + nv + proxy > 0)); then
       echo "- verdict: exit 0 with caveats (SKIP $skip, NOT VERIFIED $nv, PROXY $proxy): not a measured pass of the gate"
     elif ((pass == 0)); then

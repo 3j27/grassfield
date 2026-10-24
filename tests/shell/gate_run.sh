@@ -22,7 +22,7 @@ check test "$rc" = 0 -a -f "$report" -a -f "$tmp/runs/20261023T120000Z-demo-pass
 desc="the command's output still reaches the caller"
 check grep -qx "PASS: one" "$tmp/out.txt"
 desc="the report has the result, the exit code, the commit, the build id and the log path"
-check bash -c 'grep -qx -- "- result: PASS" "$1" && grep -qx -- "- exit code: 0" "$1" && grep -qE -- "^- commit: [0-9a-f]{12} \((clean|dirty)\) on " "$1" && grep -q -- "^- build id: " "$1" && grep -qx -- "- log: $2/runs/20261023T120000Z-demo-pass.log" "$1"' _ "$report" "$tmp"
+check bash -c 'grep -qx -- "- result: PASS" "$1" && grep -qx -- "- exit code: 0" "$1" && grep -qE -- "^- commit: [0-9a-f]{12} \((clean|dirty[^)]*)\) on " "$1" && grep -q -- "^- build id: " "$1" && grep -qx -- "- log: $2/runs/20261023T120000Z-demo-pass.log" "$1"' _ "$report" "$tmp"
 desc="the report counts PASS and SKIP lines and warns that a run with SKIP lines is not a plain pass"
 check bash -c 'grep -qx -- "- lines: PASS 2, FAIL 0, SKIP 1, NOT VERIFIED 0, PROXY 0" "$1" && grep -q -- "^- note: this run is not a plain pass" "$1"' _ "$report"
 desc="the log hash in the report is the log's sha256"
@@ -119,4 +119,20 @@ check grep -q "^- verdict: measured pass" "$tmp/runs/20261023T130600Z-demo-measu
 GATE_STAMP=20261023T130000Z COREDUMPCTL="$tmp/coredumpctl" bash "$gr" demo-dump -- true >/dev/null 2>&1
 desc="a gate run's report names the dumps made during the run and keeps the details next to the log"
 check bash -c 'grep -q -- "^- coredumps: coredumps since .*: 2" "$1" && grep -q "GRASSFIELD pid 4242" "$2"' _ "$tmp/runs/20261023T130000Z-demo-dump.md" "$tmp/runs/20261023T130000Z-demo-dump.coredumps"
+# Review: any FAIL line means FAIL even when the exit code is 0; an untracked file makes the tree dirty.
+printf '#!/bin/sh\necho "PASS: a"\necho "FAIL: b"\n' >"$tmp/mixed.sh"; chmod +x "$tmp/mixed.sh"
+GATE_STAMP=20261023T131500Z bash "$gr" demo-mixed -- "$tmp/mixed.sh" >/dev/null 2>&1
+desc="a log with PASS and FAIL lines that exits 0 is a FAIL, not a measured pass"
+check grep -q "^- verdict: FAIL (1 FAIL line(s)" "$tmp/runs/20261023T131500Z-demo-mixed.md"
+mkdir -p "$tmp/repo/scripts/dev"
+cp "$root/scripts/dev/gate-run.sh" "$tmp/repo/scripts/dev/"
+cp "$root/scripts/dev/coredump-summary.py" "$tmp/repo/scripts/dev/"
+git -C "$tmp/repo" init -q 2>/dev/null
+git -C "$tmp/repo" add -A 2>/dev/null
+git -C "$tmp/repo" -c user.name=t -c user.email=t@example.org commit -q -m init 2>/dev/null
+GATE_RUNS_DIR="$tmp/r2" GATE_STAMP=20261023T131600Z bash "$tmp/repo/scripts/dev/gate-run.sh" demo-clean -- "$tmp/measures.sh" >/dev/null 2>&1
+: >"$tmp/repo/stray-file"
+GATE_RUNS_DIR="$tmp/r2" GATE_STAMP=20261023T131700Z bash "$tmp/repo/scripts/dev/gate-run.sh" demo-stray -- "$tmp/measures.sh" >/dev/null 2>&1
+desc="a clean tree is 'clean'; a tree with only an untracked file is dirty"
+check bash -c 'grep -q "^- commit: [0-9a-f]* (clean) on" "$1/r2/20261023T131600Z-demo-clean.md" && grep -q "^- commit: [0-9a-f]* (dirty: " "$1/r2/20261023T131700Z-demo-stray.md"' _ "$tmp"
 exit "$fail"

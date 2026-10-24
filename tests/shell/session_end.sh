@@ -175,6 +175,12 @@ SESSION_END_TIMEOUT=0 SEQ="$A [] []" run "$A" logout
 check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
 SESSION_END_TIMEOUT=0 SEQ="$A [] $SAVE" run "$A" logout
 check bash -c '! grep -q "uwsm stop" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="GF-025 review: timeout 0 with A, [], [], Save: the second empty list confirms, the last look after the grace sees the Save sheet (a revert of the deadline fix ends the session here)"
+SESSION_END_TIMEOUT=0 SEQ="$A [] [] $SAVE" run "$A" logout
+check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*editor" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="GF-025 review: the list is known at first, then unknown for the whole wait, then the user chooses Anyway: one notice saying the list could not be read, the session ends"
+FAKE_NOTIFY_ANSWER=force FAKE_NOTIFY_ONCE=1 FAKE_FAIL_CALLS="2 3 4 5 6 7 8 9 10 11 12 13 14" run "$A" logout
+check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $(grep -c "^notify-send" "$1/calls.log") == 1 ]] && grep -q "^notify-send .*could not be read" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
 desc="GF-025 review minor 5: a window with a non-text address, class or title is an unknown list: a notice, no crash, nothing ended"
 for bad in '[{"address":5,"class":"x","title":"y"}]' '[{"address":"0x1","class":["a"],"title":"y"}]' '[{"address":"0x1","class":"x","title":{"a":1}}]'; do
   SEQ="$bad" run "$bad" logout
