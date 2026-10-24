@@ -281,6 +281,12 @@ vs_px_diff() {
     echo ERR
     return 0
   fi
+  # (compare may pad a smaller image or fail, depending on the ImageMagick build: sizes must be equal)
+  if [[ $(magick identify -format '%wx%h' "$1" 2>/dev/null) != "$(magick identify -format '%wx%h' "$2" 2>/dev/null)" ]]; then
+    echo "vs_px_diff: captures differ in size or cannot be read: '$1' '$2'" >&2
+    echo ERR
+    return 0
+  fi
   out=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1) || rc=$?
   if (( rc > 1 )) || [[ ! ${out%% *} =~ ^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$ ]]; then
     echo "vs_px_diff: compare failed (exit $rc): $out" >&2
