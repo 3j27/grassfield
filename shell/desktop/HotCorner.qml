@@ -1,8 +1,10 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
+import "HotCornerActions.js" as Actions
 
 // One hot corner trigger: a tiny transparent layer-shell window in a screen corner
 // (namespace grassfield-hotcorner, no exclusive zone, no keyboard). Not mapped while its
@@ -52,6 +54,25 @@ PanelWindow {
         blocked: win.blocked
         covered: win.covered
         onTriggered: win.fire()
+        onPositionWanted: {
+            if (!cursorQuery.running)
+                cursorQuery.running = true;
+        }
+    }
+
+    // Where the pointer is, from the compositor (also over full-screen windows, where no shell surface reports it): asked
+    // only by a latched gate, after a hover exit or a close of a covering surface.
+    Process {
+        id: cursorQuery
+        command: ["hyprctl", "cursorpos", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = Actions.cursorPosition(text);
+                const s = win.screen;
+                if (p && s)
+                    dwell.pointerSeen(Actions.cornerDistance(win.corner, {x: s.x, y: s.y, width: s.width, height: s.height}, p.x, p.y));
+            }
+        }
     }
 
     // Pointer positions seen by other surfaces on this screen prove the pointer left the corner.

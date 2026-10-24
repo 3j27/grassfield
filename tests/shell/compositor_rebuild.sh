@@ -482,6 +482,25 @@ expect "real build path, sources unchanged: installed and stamped with their ver
 cp "$tmp/cmake-stub" "$tools/cmake"
 rm -rf "$cache"
 
+# R5b (re-review of e186bd9): an install stopped between the plugin and its stamp (a kill, a crash). The previous build in
+# the cache came from 0.6.0-1; the owner went back to 0.5.0-1 and rebuilds; the install stops after the plugin. The old
+# stamp must not stay next to the new plugin: after a re-upgrade to 0.6.0-1, --vetted would vouch for a 0.5.0-1 plugin.
+echo "0.6.0-1" >"$src/VERSION"
+run "$script"; rc=$?
+expect "R5b: a build from 0.6.0-1 in the cache" "$rc $(sed -n 2p "$dest/grassfield-compositor.abi")" "0 source 0.6.0-1"
+echo "0.5.0-1" >"$src/VERSION"
+run GF_TEST_INTERRUPT=after-plugin "$script"; rc=$?
+expect "R5b: the install stops after the plugin" "$rc $([[ -f $so ]] && echo plugin) $([[ -e $dest/grassfield-compositor.abi ]] && echo stamp || echo no-stamp)" "1 plugin no-stamp"
+echo "0.6.0-1" >"$src/VERSION"
+run "$script" --vetted; rc=$?
+expect "R5b: re-upgraded to 0.6.0-1, the half install is not vouched for" "$rc [$(cat "$tmp/out")] $(grep -c 'grassfield-compositor.abi is missing' "$tmp/err")" "1 [] 1"
+run "$script" --status
+expect "R5b: --status says mismatch (a rebuild fixes it)" "$(head -n 1 "$tmp/out")" "state=mismatch"
+run "$script"; rc=$?
+expect "R5b: the rebuild completes it" "$rc $(sed -n 2p "$dest/grassfield-compositor.abi")" "0 source 0.6.0-1"
+echo "0.8.0-1" >"$src/VERSION"
+rm -rf "$cache"
+
 # --session (the shell, opt-in setting): build when needed, load into the running Hyprland on an exact "ok".
 rm -rf "$cache" "$tmp/hyprctl.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?

@@ -73,7 +73,7 @@ Scope {
                     screen: perScreen.modelData
                     corner: modelData
                     action: root.actionFor(modelData)
-                    blocked: action === "notifications" && Notifications.centerOpen
+                    blocked: Actions.isBlocked(action, Notifications.centerOpen, FocusReturn.locked)
                     // Every full-attention shell surface reports to FocusReturn (Apps, Overview, Search, menus, the
                     // switcher, the Notification Center); FocusReturn.locked follows the session lock.
                     covered: FocusReturn.locked || Object.keys(FocusReturn.holders).length > 0

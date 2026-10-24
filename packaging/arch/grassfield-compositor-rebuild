@@ -33,7 +33,8 @@
 # Refuses to build as root (--check, --status, --vetted and --print-abi only read). Environment, for tests only:
 # GF_VERSION_H, GF_LIB_DIR, GF_SRC_DIR, GF_TOOLS_PATH, GF_TEST_UID (0: behave as root; it can never lift the refusal),
 # GF_TEST_FAKE_BUILD (1: a placeholder plugin and stamp instead of CMake; symlink: a symlink as the build's result; stale:
-# a stamp for another ABI), GF_HYPRCTL (the hyprctl that loads the result).
+# a stamp for another ABI), GF_TEST_INTERRUPT (after-plugin: the install stops once the plugin is in place, as a kill
+# there would), GF_HYPRCTL (the hyprctl that loads the result).
 set -uo pipefail
 
 version_h=${GF_VERSION_H:-/usr/include/hyprland/src/version.h}
@@ -206,9 +207,10 @@ build_into() { # <dir> <log>
     cmake --build "$out/work" --parallel "$jobs" >>"$log" 2>&1
 }
 
-# Builds for <abi> and installs the result as the user's build: the plugin first, its stamp (the build's own) last, each
-# through a new file renamed into place (a session that has the previous build mapped keeps it); then checks it as the
-# session will. The Grassfield version is read once, before the build: the stamp names the sources the build started
+# Builds for <abi> and installs the result as the user's build: the previous stamp is removed first, then the plugin and
+# its stamp (the build's own) last, each through a new file renamed into place (a session that has the previous build
+# mapped keeps it); an install stopped half way leaves a plugin without a stamp, which never matches (never a new plugin
+# under the old stamp). Then it checks it as the session will. The Grassfield version is read once, before the build: the stamp names the sources the build started
 # from, and a result whose sources were replaced meanwhile (a system upgrade during the build) is refused, never stamped
 # with the new version. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build
 # failed or its sources changed.
@@ -242,7 +244,9 @@ build_and_install() { # <abi>
   stamp=$(first_line "$work/grassfield-compositor.abi")
   [[ $stamp == "$abi" ]] || { say "refusing the build's result: built for '$stamp', not '$abi'"; return 3; }
   tmp=$(mktemp "$dest/.plugin.XXXXXX") || return 2
-  cat "$so" >"$tmp" && chmod 0700 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.so" || { rm -f "$tmp"; return 2; }
+  cat "$so" >"$tmp" && chmod 0700 "$tmp" || { rm -f "$tmp"; return 2; }
+  rm -f "$dest/grassfield-compositor.abi" && mv -f "$tmp" "$dest/grassfield-compositor.so" || { rm -f "$tmp"; return 2; }
+  [[ ${GF_TEST_INTERRUPT:-} == after-plugin ]] && exit 9
   tmp=$(mktemp "$dest/.stamp.XXXXXX") || return 2
   printf '%s\nsource %s\n' "$stamp" "$src" >"$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 2; }
   vetted_user_build "$abi"
