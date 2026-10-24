@@ -807,10 +807,14 @@ Singleton {
     // A damaged history file is kept for inspection, never silently overwritten.
     Process {
         id: quarantine
-        command: ["sh", "-c", "umask 077; mv -f -- \"$1\" \"$1.corrupt-$2\" && chmod 600 \"$1.corrupt-$2\"; install -m 600 /dev/null \"$1\"", "sh", root.historyPath, String(Date.now())]
-        onRunningChanged: {
-            if (!running)
-                root.historyReady = true;
+        // The fresh file is created only when the damaged one was really moved aside (quarantine-history.sh).
+        command: ["sh", Quickshell.shellPath("notifications/quarantine-history.sh"), root.historyPath, String(Date.now())]
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                root.historyWritable = false;
+                console.warn("notifications: the damaged history file could not be moved aside; it is left as it is and not rewritten");
+            }
+            root.historyReady = true;
         }
     }
 
