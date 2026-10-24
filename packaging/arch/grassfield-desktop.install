@@ -11,7 +11,12 @@ post_upgrade() {
   # GF-115: since this version the shell is started from /usr/share/grassfield/shell by path. A shell still running from the
   # earlier unit was started by name (through /etc/xdg/quickshell) and Quickshell matches instances by the path they were
   # started with, so the key bindings, lid handler and sleep lock cannot reach it until it restarts. Restarting is safe while
-  # locked (the compositor keeps the lock, ADR-0010).
-  echo "grassfield: after this upgrade restart the shell once: systemctl --user restart grassfield-shell (or log out and in)"
+  # locked (the compositor keeps the lock, ADR-0010). Said only when upgrading from a version older than the first one that
+  # loads by path (pacman passes the new version as $1 and the old one as $2); later upgrades stay quiet. Keep
+  # FIRST_PATH_LOADED equal to the release that ships this scriptlet.
+  FIRST_PATH_LOADED=1.0.0rc1-1
+  if [ -n "${2:-}" ] && [ "$(vercmp "$2" "$FIRST_PATH_LOADED" 2>/dev/null || echo 0)" -lt 0 ]; then
+    echo "grassfield: after this upgrade restart the shell once: systemctl --user restart grassfield-shell (or log out and in)"
+  fi
   /usr/lib/grassfield/grassfield-login-check 2>&1 | sed 's/^/grassfield: /' || true
 }
