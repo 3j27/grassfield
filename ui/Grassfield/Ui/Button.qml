@@ -45,7 +45,7 @@ T.Button {
         radius: root.capsule ? height / 2 : Tokens.radiusControl
         color: root.primary ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
         // Increase Contrast: the border token carries a stronger value then.
-        border.width: Appearance.increaseContrast ? 1 : 0
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         Rectangle {

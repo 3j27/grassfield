@@ -57,7 +57,7 @@ T.ToolButton {
         color: root.checked ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * Tokens.materialHoverActiveFactor)
              : (root.enabled && root.down ? Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
              : (root.enabled && root.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"))
-        border.width: Appearance.increaseContrast && root.checked ? 1 : 0
+        border.width: Appearance.increaseContrast && root.checked ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
     }
 

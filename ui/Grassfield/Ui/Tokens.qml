@@ -517,6 +517,14 @@ QtObject {
     readonly property int controlSheetWidth: 420
     // GF-085: extra fill over a pressed control (the hover colour at this opacity) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property real controlPressedOpacity: 0.18
+    // GF-085: hairline border of a control (Increase Contrast, unchecked box) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlBorderWidth: 1
+    // GF-085: check mark inset inside the 14 px box, both sides [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlCheckMarkInset: 2
+    // GF-085: Page Up / Page Down step of a spin box, in steps [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlPageStepFactor: 10
+    // GF-085: inset of the stepper arrow highlight [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlStepperInset: 1
 
     // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelControlCenterWidth: 291

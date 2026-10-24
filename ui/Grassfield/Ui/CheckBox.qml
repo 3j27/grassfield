@@ -29,7 +29,7 @@ T.CheckBox {
         height: Tokens.controlCheckSize
         radius: Tokens.controlCheckRadius
         color: root.checkState !== Qt.Unchecked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Appearance.increaseContrast || root.checkState === Qt.Unchecked ? 1 : 0
+        border.width: Appearance.increaseContrast || root.checkState === Qt.Unchecked ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
 
@@ -49,7 +49,7 @@ T.CheckBox {
         Icon {
             anchors.centerIn: parent
             name: root.checkState === Qt.PartiallyChecked ? "minimize-glyph" : "checkmark"
-            size: parent.width - 2
+            size: parent.width - 2 * Tokens.controlCheckMarkInset
             color: Appearance.colors.accentText
             visible: root.checkState !== Qt.Unchecked
         }

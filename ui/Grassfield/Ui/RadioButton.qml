@@ -54,7 +54,7 @@ T.RadioButton {
         height: Tokens.controlCheckSize
         radius: width / 2
         color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Appearance.increaseContrast || !root.checked ? 1 : 0
+        border.width: Appearance.increaseContrast || !root.checked ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
 

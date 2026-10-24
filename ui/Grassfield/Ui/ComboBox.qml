@@ -53,7 +53,7 @@ T.ComboBox {
     background: Rectangle {
         radius: Tokens.radiusControl
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Appearance.increaseContrast ? 1 : 0
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
 

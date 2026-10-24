@@ -24,7 +24,7 @@ T.SpinBox {
     Keys.onPressed: event => {
         if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
             const direction = event.key === Qt.Key_PageUp ? 1 : -1;
-            root.value = Math.max(root.from, Math.min(root.to, root.value + 10 * direction * root.stepSize));
+            root.value = Math.max(root.from, Math.min(root.to, root.value + Tokens.controlPageStepFactor * direction * root.stepSize));
             root.valueModified();
             event.accepted = true;
         }
@@ -63,7 +63,7 @@ T.SpinBox {
 
         Rectangle {
             anchors.fill: parent
-            anchors.margins: 1
+            anchors.margins: Tokens.controlStepperInset
             radius: Tokens.radiusControl / 2
             color: Appearance.withAlpha(Appearance.colors.hover, root.up.pressed ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
             visible: root.up.hovered || root.up.pressed
@@ -87,7 +87,7 @@ T.SpinBox {
 
         Rectangle {
             anchors.fill: parent
-            anchors.margins: 1
+            anchors.margins: Tokens.controlStepperInset
             radius: Tokens.radiusControl / 2
             color: Appearance.withAlpha(Appearance.colors.hover, root.down.pressed ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
             visible: root.down.hovered || root.down.pressed
@@ -104,7 +104,7 @@ T.SpinBox {
     background: Rectangle {
         radius: Tokens.radiusControl
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Appearance.increaseContrast ? 1 : 0
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         FocusRing {
