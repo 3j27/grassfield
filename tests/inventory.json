@@ -251,6 +251,8 @@
  {"path": "tests/visual/test_contrast.py", "layer": "logic"},
  {"path": "tests/visual/test_contrast_tokens.py", "layer": "logic"},
  {"path": "tests/visual/test_frame_stats.py", "layer": "logic"},
+ {"path": "tests/ci/gfc_parity.py", "layer": "logic"},
+ {"path": "tests/ci/ui_api.py", "layer": "logic"},
  {"path": "tests/ci/inventory.py", "layer": "logic"},
  {"path": "tests/ci/qml_warnings.py", "layer": "logic"},
  {"path": "tests/ci/qmldir_types.py", "layer": "logic"},
