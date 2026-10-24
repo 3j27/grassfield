@@ -396,8 +396,9 @@ identity, and now the action's `iconName` (from the root-installed `.policy` fil
 That icon describes the action, not the program that asked: polkit does not tell the agent which process requested it
 through this API (`AuthDialogModel.iconName`: plain theme names only, by the one rule notification icons use,
 `NotificationPrefs.safeIconName`, review of 2dfd992; `AuthAgent` shows it through `ThemeIcons.source`, only when the
-theme has it and every file Qt could read for the name is a regular file of bounded size, no FIFO or device:
-`tests/security/theme_icon_files.sh`; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
+theme has it and the user-writable theme files Qt reads for it (index.theme, icon-theme.cache, the candidate icon files)
+are regular files of bounded size, no FIFO or device, `hasThemeIcon` included (reviews of 2dfd992 and eee45cc; see
+notifications.md): `tests/security/theme_icon_files.sh`; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
 
 ## L5 polkit (owner, real session)

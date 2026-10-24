@@ -200,12 +200,20 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   missing); it applies at intake (`checkedAppIcon`, `History.keptAppIcon`), on history load (`History.parse`) and in
   `iconSource`; with previews hidden `NotificationPrefs.appIconShown` keeps only a name that passes the same test, so the
   sender's image and an app icon path (its private copy included) give way to the app's theme icon or the generic one.
-  A name that passes reaches an Image only through `ThemeIcons.source` (shell/services, shared with the polkit sheet;
-  review of 2dfd992): a helper first checks every file Qt could read for it (`<name>`, `.png`, `.svg`, `.svgz`, `.xpm`
-  under the icon search paths the user owns or can write, symlinks followed) and refuses the name unless each is a
-  regular file of at most 8 MiB; until the verdict (well under a second) and after a refusal the generic icon shows.
-  `tests/security/theme_icon_files.sh` (FIFO, symlink to a FIFO, symlinks to /dev/zero and /dev/null, FIFO .svg, FIFO
-  under ~/.icons; a regular icon still shows; the mutant without the verdict stalls the loader).
+  A name that passes reaches Qt only through `ThemeIcons.source` (shell/services, shared with the polkit sheet; reviews of
+  2dfd992 and eee45cc): Qt reads the theme's `index.theme` and `icon-theme.cache` (on the GUI thread, in
+  `hasThemeIcon`) and then the icon file it picks, so a helper first checks, in the icon theme directories the user owns
+  or can write: those two files (any FIFO, device or oversized one there refuses every name), and the candidate files
+  for the name (`.png`, `.svg`, `.svgz`, `.xpm` in each `Directories=` entry of the theme's index.theme, the pixmaps
+  directories, the dash-shortened names), each a regular file of at most 8 MiB, symlinks resolved; no recursive walk.
+  `hasThemeIcon` runs only for a checked name. Until the verdict (about 0.1 s, 0.15 s more per name for a user theme of
+  100k files) the generic icon shows; a new notification naming the name hides it again until its new verdict; a
+  signature of those directories is taken every 20 s and a change drops every verdict. A file swapped after its check
+  can still be read until that signature (residual). `tests/security/theme_icon_files.sh`: the shell offscreen (FIFO,
+  symlinks to a FIFO, /dev/zero and /dev/null, FIFO .svg, FIFO under ~/.icons/hicolor, a swap with and without a new
+  notification) and Qt's own lookup with real-session search paths (FIFO index.theme and icon-theme.cache, FIFO icons in
+  the theme, the inherited hicolor, a symlinked directory, ~/.icons and pixmaps; Qt alone stalls on each; the cost of
+  99k files); mutants without the theme-file check, the candidate walk, the hide-on-recheck or the signature fail it.
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the
