@@ -336,8 +336,8 @@ ExitCode listFolder(const QString &folder, const QStringList &supported, int max
 
 bool isCacheName(const QString &name)
 {
-    // <32 hex digits>.jpg|png|json; thumbnails start with "t" instead of the first hex digit.
-    static const QRegularExpression re(QStringLiteral("\\A[0-9a-ft][0-9a-f]{31}\\.(jpg|png|json)\\z"));
+    // <32 hex digits>.jpg|png|json|mp4 (video cache); thumbnails start with "t" instead of the first hex digit.
+    static const QRegularExpression re(QStringLiteral("\\A[0-9a-ft][0-9a-f]{31}\\.(jpg|png|json|mp4)\\z"));
     return re.match(name).hasMatch();
 }
 

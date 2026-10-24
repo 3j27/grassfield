@@ -159,6 +159,12 @@ into the `grassfield-preview` process (MIT code). needs legal review: effect on 
 alone (add-on) and together with ffmpeg (ISO); options include an LGPL-only ffmpeg build on the ISO or another
 multimedia backend (engineering options, no conclusion).
 
+Extended 2026-10-23 (ADR-0016 W7, video wallpapers): the shell process (MIT code, which also holds the lock screen and the
+polkit agent) now loads the same plugin and the GPL-3.0 ffmpeg libraries when a video wallpaper plays; the `ffmpeg` and
+`ffprobe` programs are also run by `grassfield-wallpaper` as separate processes (argument vectors, no linking; `ffmpeg`
+is a declared dependency of `grassfield-desktop`). The decision of ADR-0016 (owner, 2026-10-20) accepts this; needs legal
+review, and the revisit option is V2 (a second Quickshell instance for video). Nothing here is a legal conclusion.
+
 ### 4.7 Quickshell (row 7)
 
 VERIFIED: `pacman -Qi quickshell` → 0.3.1-1, LGPL-3.0-only; licence text in `/usr/share/licenses/quickshell/LICENSE`.
@@ -256,7 +262,7 @@ needs legal review: confirmation that executing separately distributed programs 
 | G6 | SPDX headers missing in most files | add `SPDX-License-Identifier: MIT` across the code base after ADR-0005 is accepted |
 | G7 | ADR mismatches | ADR-0005 KIO licence; ADR-0003 JetBrains Mono; ADR-0009 missing the header licence check; README "pending" vs PKGBUILD MIT |
 | G8 | libnotify dependency without use | drop it, or document why it is needed |
-| G9 | FFmpeg GPL-3.0 at run time in Preview | ask counsel; engineering options: other backend, LGPL build of ffmpeg on the ISO |
+| G9 | FFmpeg GPL-3.0 at run time in Preview and, since ADR-0016 W7 (video wallpapers), in the shell process (QtMultimedia plays the file that the `ffmpeg` program transcoded); the `ffmpeg` and `ffprobe` programs also run as separate processes of `grassfield-wallpaper` | ask counsel; engineering options: other backend, LGPL build of ffmpeg on the ISO, a separate wallpaper process (ADR-0016 option V2, which keeps FFmpeg out of the shell) |
 | G10 | No in-app notices | optional "Acknowledgements"/licences page in Settings › About |
 | G11 | Test-only protocol XML without notice | add the MIT notice to `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml` before publishing the repository |
 | G12 | Closed 2026-10-21: no GPL-3.0 icon data is packaged any more (WhiteSur dropped, ADR-0017 amendment) | Breeze and Adwaita are runtime dependencies installed by pacman (row 24). needs legal review |

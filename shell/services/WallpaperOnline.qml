@@ -61,6 +61,13 @@ Singleton {
         }
     }
     onReadyChanged: evaluate()
+    // Another provider: its own cache and accounting. What was cached for the previous one is not shown for this one.
+    onProviderChanged: {
+        entry = null;
+        entryLoaded = false;
+        if (wanted)
+            loadLatest();
+    }
     onEntryChanged: publish()
     onPhaseChanged: publish()
 
@@ -201,8 +208,8 @@ Singleton {
         if (!ready || fetchProc.running || meteredProc.running)
             return;
         const now = clock();
-        const r = WallpaperConfig.onlineSchedule(sched, now, entry !== null, devOffsetMs !== 0 ? 0 : Math.random());
-        if (r.state.slotDate !== sched.slotDate || r.state.slotAt !== sched.slotAt)
+        const r = WallpaperConfig.onlineSchedule(sched, now, entry !== null, devOffsetMs !== 0 ? 0 : Math.random(), provider);
+        if (r.state.slotDate !== sched.slotDate || r.state.slotAt !== sched.slotAt || r.state.provider !== sched.provider)
             saveState(r.state);
         if (r.due) {
             tryFetch(r.date);
@@ -216,6 +223,8 @@ Singleton {
 
     // The date of the fetch under way.
     property string fetchDate: ""
+    // The provider of the fetch under way (a change of provider in Settings does not redirect a running fetch).
+    property string fetchProvider: "commons"
 
     // Dev only, and only with the loopback test server: the scheduler's clock runs this many hours ahead (the visual test cannot
     // wait for a new UTC day). The date, the day's slot (at 00:10 while shifted), the backoff and the fetch all follow it, so the
@@ -253,6 +262,7 @@ Singleton {
             return;
         }
         fetchDate = date;
+        fetchProvider = provider;
         if (WallpaperState.dev) {
             runFetch();
             return;
@@ -323,7 +333,7 @@ Singleton {
     }
 
     function runFetch(): void {
-        const args = root.fetchCommandOverride.length > 0 ? root.fetchCommandOverride : WallpaperConfig.fetchArgs(WallpaperState.tool, root.provider, fetchDate, root.outDir, root.lang, root.devBaseUrl);
+        const args = root.fetchCommandOverride.length > 0 ? root.fetchCommandOverride : WallpaperConfig.fetchArgs(WallpaperState.tool, root.fetchProvider, fetchDate, WallpaperState.cacheDir + "/online/" + root.fetchProvider, root.lang, root.devBaseUrl);
         if (args === null) {
             console.warn("wallpaper online: no valid fetch command");
             return;
@@ -378,7 +388,7 @@ Singleton {
         else
             console.info("wallpaper online: fetched " + fetchDate + (o.cached ? " (already cached)" : ""));
         fetchTimedOut = false;
-        saveState(WallpaperConfig.onlineAfter(sched, now, fetchDate, outcome));
+        saveState(WallpaperConfig.onlineAfter(sched, now, fetchDate, outcome, fetchProvider));
         phase = "scheduled";
         publish();
         evaluate();
