@@ -4,7 +4,8 @@
   python3 -I scripts/dev/coredump-summary.py [--since TIME] [--max N]
 
 For every dump `coredumpctl list` reports since TIME (default: today 00:00; anything coredumpctl --since accepts), runs
-`coredumpctl info` (read-only) and prints: time, pid, signal, executable, unit, session, command line and a class:
+`coredumpctl info` (read-only) and prints: class, pid, signal, executable BASENAME and time (never the command line, arguments
+or environment: they can hold tokens, and gate reports are archived into the repository). The class:
   GRASSFIELD   the installed session: /usr/share/grassfield or /usr/lib/grassfield in the command, a grassfield-* unit
   DEV-SHELL    a quickshell/qs started with -p <path> (a development shell)
   DEV          a nested dev Hyprland or any program run from a checkout
@@ -98,8 +99,10 @@ def main():
         info.setdefault("exe", clean(str(d.get("exe", ""))))
         kind = classify(info)
         counts[kind] = counts.get(kind, 0) + 1
-        print(f"  {kind:10s} pid {pid} sig {clean(str(d.get('sig', info.get('signal', '?'))))} exe {info.get('exe', '?')} "
-              f"unit {info.get('unit', '-')} session {info.get('session', '-')} cmd {info.get('cmdline', '-')} time {info.get('time', '-')}")
+        # Only the class, pid, signal, executable BASENAME and time are printed. The command line and the environment are read
+        # for the class and dropped: arguments carry tokens ("Bearer ..."), and gate-archive copies this into the repository.
+        exe = os.path.basename(info.get("exe", "")) or "?"
+        print(f"  {kind:10s} pid {pid} sig {clean(str(d.get('sig', info.get('signal', '?'))))} exe {exe} time {info.get('time', '-')}")
     if counts:
         print("  classes: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
     return 0

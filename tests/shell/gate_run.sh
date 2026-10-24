@@ -76,8 +76,26 @@ esac
 FAKE
 chmod +x "$tmp/coredumpctl"
 out=$(COREDUMPCTL="$tmp/coredumpctl" python3 -I "$root/scripts/dev/coredump-summary.py" --since today)
-desc="coredump-summary: one attributed line per dump (class, pid, signal, executable, unit, session, command line)"
-check bash -c 'grep -q "^  GRASSFIELD pid 4242 sig 11 exe /usr/bin/quickshell unit grassfield-shell.service session 2 cmd qs -n -p /usr/share/grassfield/shell" <<<"$1" && grep -q "^  OTHER      pid 4343 sig 6 " <<<"$1" && grep -q "classes: GRASSFIELD 1, OTHER 1" <<<"$1"' _ "$out"
+desc="coredump-summary: one attributed line per dump (class, pid, signal, executable basename, time; no command line)"
+check bash -c 'grep -q "^  GRASSFIELD pid 4242 sig 11 exe quickshell time " <<<"$1" && grep -q "^  OTHER      pid 4343 sig 6 exe xdg-desktop-portal-hyprland" <<<"$1" && grep -q "classes: GRASSFIELD 1, OTHER 1" <<<"$1" && ! grep -q "/usr/share/grassfield\|Command Line\|unit " <<<"$1"' _ "$out"
+# GF-082 review M3: a crashed program with a token in its arguments must never reach the report (nor the archive).
+cat >"$tmp/coredumpctl-secret" <<'FAKE'
+#!/usr/bin/env bash
+case " $* " in
+  *" list "*) echo '[{"time":1,"pid":777,"sig":11,"exe":"/usr/bin/curl"}]' ;;
+  *" info 777 "*) printf '           PID: 777\n        Signal: 11 (SEGV)\n    Executable: /usr/bin/curl\n  Command Line: curl -H Authorization:\\ Bearer\\ abc123SECRET https://api.example.org/?token=abc123SECRET\n   Environment: API_KEY=abc123SECRET\n' ;;
+  *) exit 9 ;;
+esac
+FAKE
+chmod +x "$tmp/coredumpctl-secret"
+out=$(COREDUMPCTL="$tmp/coredumpctl-secret" python3 -I "$root/scripts/dev/coredump-summary.py")
+desc="coredump-summary: the token in a crashed program's arguments or environment never appears in the summary"
+check bash -c 'grep -q "pid 777 sig 11 exe curl" <<<"$1" && ! grep -q "abc123SECRET\|Bearer\|token=\|API_KEY" <<<"$1"' _ "$out"
+GATE_STAMP=20261023T131000Z COREDUMPCTL="$tmp/coredumpctl-secret" bash "$gr" demo-secret -- true >/dev/null 2>&1
+rm -rf "$tmp/archive"
+bash "$gr" --archive 2>/dev/null
+desc="...nor in the gate report or the archive copied from it"
+check bash -c '! grep -rq "abc123SECRET\|Bearer" "$1/runs" "$1/archive"' _ "$tmp"
 out=$(COREDUMPCTL="$tmp/does-not-exist" python3 -I "$root/scripts/dev/coredump-summary.py")
 desc="coredump-summary: without coredumpctl it says so and exits 0"
 check grep -q "^coredumps: coredumpctl unavailable" <<<"$out"
