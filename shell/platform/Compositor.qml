@@ -490,8 +490,9 @@ Singleton {
     // The record is kept in the state dir, so a restarted shell (or one that crashed) puts the windows back at start.
     // Does nothing with Stages on (a stage cannot be rebuilt window by window, docs/specs/stages.md ST8/ST9), and minimized
     // or hidden windows are left alone.
-    property var desktopRecord: null
-    property real desktopHiddenAt: 0
+    property var desktopRecords: []
+    // A press waits for the window positions to be read (see showDesktop).
+    property bool desktopPending: false
     readonly property string desktopStateDir: {
         const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
         if (dev)
@@ -517,51 +518,68 @@ Singleton {
         });
     }
 
-    function persistDesktopRecord(): void {
+    // [{name, workspace}]: the Space each display shows now.
+    function shownSpaces(): var {
+        const all = Hyprland.monitors ? Hyprland.monitors.values : [];
+        return all.filter(m => m.activeWorkspace).map(m => ({name: m.name, workspace: m.activeWorkspace.id}));
+    }
+
+    function persistDesktopRecords(): void {
         if (desktopFile.path !== "")
-            desktopFile.setText(ShowDesktop.serialize(root.desktopRecord));
+            desktopFile.setText(ShowDesktop.serialize(root.desktopRecords));
     }
 
-    // Brings back the windows of `record` that still wait on the parking workspace, then the focus.
-    function restoreDesktop(record: var): void {
-        if (!record)
-            return;
-        const parked = toplevelData().filter(w => w.parked).map(w => w.address);
-        const back = ShowDesktop.survivors(record, parked);
-        back.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
-        if (record.focus !== "" && back.indexOf(record.focus) >= 0)
-            dispatchRequest(Minimized.focusWindowRequest(record.focus));
-    }
-
-    // Ends Show Desktop (if on): the record is gone before the windows move, so that nothing can end it twice.
-    function endShowDesktop(): bool {
-        const record = root.desktopRecord;
-        if (!record)
+    // Ends Show Desktop (if on): the records are gone before the windows move, so that nothing can end it twice. Every window
+    // goes back to the Space it came from; `refocus` (only the second press of Show Desktop, on the Space it was pressed on)
+    // gives the focus back to the window that had it. Every other ending (Space switch, new window, activation, restart)
+    // issues no focus request at all: Hyprland would switch to the old window's Space.
+    function endShowDesktop(refocus: bool): bool {
+        const records = root.desktopRecords;
+        if (records.length === 0)
             return false;
-        root.desktopRecord = null;
-        persistDesktopRecord();
-        restoreDesktop(record);
+        root.desktopRecords = [];
+        persistDesktopRecords();
+        const parked = toplevelData().filter(w => w.parked).map(w => w.address);
+        const focus = refocus ? ShowDesktop.focusTarget(records, shownSpaces()) : "";
+        for (const record of records)
+            ShowDesktop.survivors(record, parked).forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
+        if (focus !== "" && parked.indexOf(focus) >= 0)
+            dispatchRequest(Minimized.focusWindowRequest(focus));
         return true;
     }
 
+    // Super+F3. The window positions come from Hyprland's window data, which is read again first (the model may be stale):
+    // the press waits for the answer, at most Tokens.showDesktopRefreshMs.
     function showDesktop(): void {
-        if (endShowDesktop())
+        if (Settings.windowsStages)
             return;
-        const monitor = Hyprland.focusedMonitor;
-        const space = monitor ? monitor.activeWorkspace : null;
-        if (!space)
+        if (endShowDesktop(true))
             return;
+        if (root.desktopPending)
+            return;
+        root.desktopPending = true;
+        Hyprland.refreshToplevels();
+        desktopRefresh.restart();
+    }
+
+    function captureDesktop(): void {
+        root.desktopPending = false;
         const focused = root.focusedToplevel ? hyprlandToplevel(root.focusedToplevel) : null;
-        const record = ShowDesktop.capture(toplevelData(), monitor.name, space.id, focused ? focused.address : "", Settings.windowsStages);
-        if (!record) {
+        const records = ShowDesktop.captureAll(toplevelData(), shownSpaces(), focused ? focused.address : "", Settings.windowsStages);
+        if (records.length === 0) {
             DesktopState.focusRequested();
             return;
         }
-        root.desktopRecord = record;
-        root.desktopHiddenAt = Date.now();
-        persistDesktopRecord();
-        record.windows.forEach(w => dispatchRequest(moveRequest(w.address, ShowDesktop.PARKING)));
+        root.desktopRecords = records;
+        persistDesktopRecords();
+        records.forEach(r => r.windows.forEach(w => dispatchRequest(moveRequest(w.address, ShowDesktop.PARKING))));
         DesktopState.focusRequested();
+    }
+
+    Timer {
+        id: desktopRefresh
+        interval: Tokens.showDesktopRefreshMs
+        onTriggered: root.captureDesktop()
     }
 
     // The windows still parked by a Show Desktop of a previous run (the shell restarted or crashed): back at start, once
@@ -569,14 +587,7 @@ Singleton {
     Timer {
         id: desktopRecover
         interval: Tokens.showDesktopRecoverMs
-        onTriggered: {
-            const record = root.desktopRecord;
-            if (record) {
-                root.desktopRecord = null;
-                root.persistDesktopRecord();
-                root.restoreDesktop(record);
-            }
-        }
+        onTriggered: root.endShowDesktop(false)
     }
 
     Process {
@@ -594,9 +605,9 @@ Singleton {
         printErrors: false
         atomicWrites: true
         onLoaded: {
-            const record = ShowDesktop.parse(desktopFile.text());
-            if (record && !root.desktopRecord) {
-                root.desktopRecord = record;
+            const records = ShowDesktop.parse(desktopFile.text());
+            if (records.length > 0 && root.desktopRecords.length === 0) {
+                root.desktopRecords = records;
                 desktopRecover.restart();
             }
         }

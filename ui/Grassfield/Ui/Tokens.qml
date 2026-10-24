@@ -1125,8 +1125,8 @@ QtObject {
     // minimum width of the list Name column (was filesColumnWidth)
     readonly property int filesListNameMinWidth: 230
 
-    // estimate: ms after Show Desktop moved the windows during which compositor events are not taken as the user switching Space or opening a window
-    readonly property int showDesktopGuardMs: 400
+    // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
+    readonly property int showDesktopRefreshMs: 150
     // estimate: ms after start before the windows a previous run left parked by Show Desktop are brought back (the window list must be known)
     readonly property int showDesktopRecoverMs: 1500
 

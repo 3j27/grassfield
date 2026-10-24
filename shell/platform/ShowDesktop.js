@@ -66,29 +66,67 @@ function survivors(record, parked) {
     return restoreOrder(record).filter(a => set[a] === true);
 }
 
-// Compositor events that end Show Desktop (switching Space, opening a window); everything else, our own moves included,
-// does not.
-function endsOn(eventName) {
-    return eventName === "workspace" || eventName === "workspacev2" || eventName === "openwindow";
-}
-
-function serialize(record) {
-    if (!record)
-        return "";
-    return JSON.stringify({version: VERSION, record: record}) + "\n";
-}
-
-// "" or damaged text gives null; anything that does not validate is dropped, never trusted.
-function parse(text) {
-    let data;
-    try {
-        data = JSON.parse(text);
-    } catch (e) {
-        return null;
+// One record per display, all displays at once (macOS Show Desktop clears every display). `monitors`: [{name, workspace}]
+// with the Space each display shows; the focused window belongs to the record of the display that shows it. [] when nothing
+// qualifies anywhere or when Stages is on.
+function captureAll(windows, monitors, focus, stagesOn) {
+    if (!Array.isArray(monitors))
+        return [];
+    const out = [];
+    for (const m of monitors) {
+        const r = m ? capture(windows, m.name, m.workspace, focus, stagesOn) : null;
+        if (r)
+            out.push(r);
     }
-    if (!data || data.version !== VERSION || !data.record || !Array.isArray(data.record.windows))
+    return out;
+}
+
+// What a compositor event means for Show Desktop: true when it ends it. Switching Space and opening a window do, except the
+// events our own moves raise, which are told apart by what they name and not by when they came: a Space event for the
+// parking workspace, a window event for a window the records parked (or one that opens on the parking workspace).
+// `data` is the event's text (Hyprland: "addr,workspace,class,title" for openwindow, "id,name" for workspacev2, "name" for
+// workspace); `records` the records now on.
+function endsOn(eventName, data, records) {
+    const text = typeof data === "string" ? data : "";
+    if (eventName === "workspace")
+        return text !== PARKING;
+    if (eventName === "workspacev2")
+        return text.split(",").slice(1).join(",") !== PARKING;
+    if (eventName === "openwindow") {
+        const parts = text.split(",");
+        const a = address(parts[0]);
+        if (parts[1] === PARKING)
+            return false;
+        for (const r of Array.isArray(records) ? records : []) {
+            if (r.windows.some(w => w.address === a))
+                return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+// The record whose focused window should get the focus back when Show Desktop is pressed again: the one shown on the same
+// Space now (`shown`: [{name, workspace}]); an ending for any other reason never asks for focus (the window that ended it,
+// or the Space the user went to, already has it).
+function focusTarget(records, shown) {
+    for (const r of Array.isArray(records) ? records : []) {
+        const m = (Array.isArray(shown) ? shown : []).find(x => x && x.name === r.screen);
+        if (r.focus !== "" && m && workspaceId(m.workspace) === r.workspace)
+            return r.focus;
+    }
+    return "";
+}
+
+function serialize(records) {
+    if (!Array.isArray(records) || records.length === 0)
+        return "";
+    return JSON.stringify({version: VERSION, records: records}) + "\n";
+}
+
+function parseRecord(r) {
+    if (!r || !Array.isArray(r.windows))
         return null;
-    const r = data.record;
     const windows = [];
     for (const w of r.windows.slice(0, MAX_WINDOWS)) {
         const a = w ? address(w.address) : "";
@@ -98,4 +136,19 @@ function parse(text) {
     if (windows.length === 0 || workspaceId(r.workspace) === 0)
         return null;
     return {screen: typeof r.screen === "string" ? r.screen : "", workspace: workspaceId(r.workspace), focus: address(r.focus), windows: windows};
+}
+
+// "" or damaged text gives []; anything that does not validate is dropped, never trusted. A file of the first format (one
+// `record`) reads as one record.
+function parse(text) {
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        return [];
+    }
+    if (!data || data.version !== VERSION)
+        return [];
+    const list = Array.isArray(data.records) ? data.records.slice(0, 16) : (data.record ? [data.record] : []);
+    return list.map(parseRecord).filter(r => r !== null);
 }
