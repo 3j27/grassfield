@@ -7,7 +7,8 @@ import "Ranking.js" as Ranking
 // first rendered frame ("open"), and from a query change (ranking + model update) to the next rendered
 // frame ("keystroke"), over a typing and erasing sequence. Run by scripts/dev/test.sh:
 // `qs -p tests/shell/apps_panel_perf` (offscreen); prints the numbers and "apps-panel-perf: PASS" or FAIL.
-// AppsGrid.qml, AppsCell.qml and Ranking.js are symlinks to shell/. The budgets are the spec's: open <= 300 ms (P3),
+// AppsGrid.qml, AppsCell.qml and Ranking.js are symlinks to shell/, next to links to the shell modules (AppsCell loads its
+// icon through qs.services ThemeIcons). The budgets are the spec's: open <= 300 ms (P3),
 // keystroke p95 and first keystroke <= 50 ms (P4); the numbers are the evidence.
 ShellRoot {
     id: root

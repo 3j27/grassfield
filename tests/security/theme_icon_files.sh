@@ -22,7 +22,9 @@
 # name it passes is then looked up by Qt (hasThemeIcon on the "GUI thread", then a pixmap) and must not stall. For the
 # refused cases Qt alone must stall (or the case proves nothing): a FIFO index.theme or icon-theme.cache of the current
 # theme, a FIFO icon in the theme, in the inherited hicolor theme, behind a symlinked directory, in ~/.icons, in pixmaps.
-# Plus the cost bound: a user theme of 300 directories with 99k files, 8 names (one helper batch) in under 10 s.
+# Plus the cost bound: a user theme of 300 directories with 99k files, 8 names in under 10 s.
+#
+# Part 3, application icons (Dock, Launchpad): see below.
 # Plain shell test: PASS/FAIL lines, non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -86,6 +88,48 @@ run reg ok
 for kind in fifo link zero null svgfifo homefifo swap change; do
   run "$kind" no
 done
+
+# ---- Part 3: applications whose Icon= is a FIFO (review of eee45cc) ----
+# The Dock and the Launchpad load an application's Icon= through ThemeIcons.appIcon. Real Launchpad cells and the Apps
+# prewarm list, for four entries in a scratch applications directory: a FIFO path, a theme name whose file is a FIFO, a
+# regular path, a regular theme name. The FIFOs are refused (no source), the regular ones shown, and a control icon loads
+# afterwards (the loader never stalled).
+dcfg=$tmp/dcfg
+mkdir -p "$dcfg"
+for entry in shell/*; do
+  [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$dcfg/$(basename "$entry")"
+done
+cp tests/security/theme_icon_files.d/desktop_probe.qml "$dcfg/shell.qml"
+s=$tmp/desktop
+mkdir -p -m 700 "$s/runtime" "$s/cache"
+mkdir -p "$s/home/.local/share/applications" "$s/data/pixmaps" "$s/elsewhere" "$s/state" "$s/config"
+printf '%s' "$png" | base64 -d >"$s/data/pixmaps/ctl.png"
+cp "$s/data/pixmaps/ctl.png" "$s/elsewhere/good.png"
+mkfifo "$s/elsewhere/evil-path.png" "$s/data/pixmaps/evilname.png"
+desk() { printf '[Desktop Entry]\nType=Application\nName=%s\nExec=true\nIcon=%s\n' "$1" "$2" >"$s/home/.local/share/applications/$1.desktop"; }
+desk gf-fifo-path "$s/elsewhere/evil-path.png"
+desk gf-fifo-name evilname
+desk gf-ok-path "$s/elsewhere/good.png"
+desk gf-ok-name ctl
+rc=0
+out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION \
+  GRASSFIELD_DEV=1 HOME="$s/home" XDG_DATA_HOME="$s/home/.local/share" XDG_DATA_DIRS="$s/data:/usr/local/share:/usr/share" \
+  XDG_CONFIG_HOME="$s/home/.config" XDG_STATE_HOME="$s/home/.local/state" GRASSFIELD_STATE_HOME="$s/state" GRASSFIELD_CONFIG_HOME="$s/config" \
+  GRASSFIELD_TEST_TMP="$s" XDG_RUNTIME_DIR="$s/runtime" XDG_CACHE_HOME="$s/cache" \
+  QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_LANG=en GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" \
+  timeout -k 3 60 qs -p "$dcfg" --no-color 2>&1) || rc=$?
+dline() { grep -o "probe: $1 .*" <<<"$out" | head -n 1 || true; }
+dcheck() { # <label> <ok>
+  if [[ $2 == 1 ]]; then echo "PASS: theme icon files, application icons: $1"; else echo "FAIL: theme icon files, application icons: $1 (rc $rc; $(grep -o 'probe: .*' <<<"$out" | tr '\n' '|' | cut -c1-400))"; fail=1; fi
+}
+l=$(dline gf-fifo-path); dcheck "a FIFO Icon= path is refused" "$([[ $l == *" verdict=no source= "* ]] && echo 1)"
+l=$(dline gf-fifo-name); dcheck "an Icon= theme name whose file is a FIFO is refused" "$([[ $l == *" verdict=no source= "* ]] && echo 1)"
+l=$(dline gf-ok-path); dcheck "a regular Icon= path is shown and prewarmed" "$([[ $l == *" verdict=ok source=file://$s/elsewhere/good.png prewarmed=true"* ]] && echo 1)"
+l=$(dline gf-ok-name); dcheck "a regular Icon= theme name is shown and prewarmed" "$([[ $l == *" verdict=ok source=image://icon/ctl prewarmed=true"* ]] && echo 1)"
+dcheck "the image loader never stalled" "$([[ $rc == 0 && $(dline done) == "probe: done ctl=1" ]] && echo 1)"
+# The Dock's two application icon sites use the same call (its window is not made offscreen).
+dock_ok=$( [[ $(grep -c 'ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable")' shell/dock/Dock.qml) == 2 ]] && ! grep -q 'Quickshell.iconPath(tile.modelData.icon' shell/dock/Dock.qml && echo 1)
+dcheck "the Dock loads application icons through ThemeIcons.appIcon" "$dock_ok"
 
 # ---- Part 2: Qt with real-session search paths ----
 probe=$tmp/qt_icon_lookup

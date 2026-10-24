@@ -27,12 +27,15 @@ import Grassfield.Ui
 // files (inode, mtime, size) is taken again: when it changed (a theme installed or switched, an icon added, a file swapped)
 // every verdict is dropped and names are checked again when next shown. Defence in depth: whoever can plant such a file
 // runs as the user already; a file swapped after its check is caught at the next signature, not before.
+// Application icons (appIcon): a desktop entry's Icon= is a theme name (the rules above) or an absolute path, which must
+// be a regular file of at most maxFileBytes (symlinks resolved), checked again with each signature, and is then loaded
+// by a file: URL with every segment encoded.
 Singleton {
     id: root
 
     readonly property real maxFileBytes: 8 * 1024 * 1024
     readonly property real maxThemeFileBytes: 64 * 1024 * 1024
-    readonly property int batchSize: 8
+    readonly property int batchSize: 24
     // A test may lower it.
     property int signatureIntervalMs: 20000
     // Name -> "pending" | "ok" | "no"; reassigned on every change so bindings that called source() re-evaluate.
@@ -41,14 +44,14 @@ Singleton {
     property var batch: []
     // The signature the current verdicts were checked against ("" before the first check).
     property string signature: ""
-    // POSIX sh: the two size caps, the mode ("check": a "sig <n>" line, then one "ok <name>" or "no <name>" line per name;
-    // "sig": the signature line only), then the names as arguments (never interpolated). A name without a line (the helper
-    // failed or timed out) is refused. The signature is taken before the verdicts, so a change during a check shows at the
+    // POSIX sh: the two size caps, the mode ("check": a "sig <n>" line, then one "ok <key>" or "no <key>" line per theme name
+    // or icon path; "sig": the signature line and the icon paths' lines only), then the names and paths as arguments (never
+    // interpolated). A key without a line (the helper failed or timed out) is refused. The signature is taken before the verdicts, so a change during a check shows at the
     // next signature.
-    readonly property string script: "cap=$1; tcap=$2; mode=$3; shift 3; set -f; names=\n"
+    readonly property string script: "cap=$1; tcap=$2; mode=$3; shift 3; set -f; names=; paths=\n"
         + "nl='\n"
         + "'\n"
-        + "for n in \"$@\"; do case $n in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*|*..*) echo \"no $n\" ;; *) names=\"$names$nl$n\" ;; esac; done\n"
+        + "for n in \"$@\"; do case $n in /*\"$nl\"*) ;; /*) paths=\"$paths$nl$n\" ;; ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*|*..*) printf 'no %s\\n' \"$n\" ;; *) names=\"$names$nl$n\" ;; esac; done\n"
         + "mine() { [ -O \"$1\" ] || [ -w \"$1\" ]; }\n"
         + "okf() { if [ -e \"$1\" ] || [ -L \"$1\" ]; then [ -f \"$1\" ] && z=$(stat -L -c %s -- \"$1\" 2>/dev/null) && [ \"$z\" -le \"$2\" ]; fi; }\n"
         + "dh=${XDG_DATA_HOME:-$HOME/.local/share}; sp=\"$HOME/.icons\"; fb=\"$dh/pixmaps$nl/usr/share/pixmaps\"\n"
@@ -81,6 +84,7 @@ Singleton {
         + "set -- $(printf '%s\\n' $sig $cdirs $fdirs | sort -u)\n"
         + "s=$(stat -L -c '%n %i %Y %s' -- \"$@\" 2>/dev/null | cksum)\n"
         + "echo \"sig ${s%% *}\"\n"
+        + "for q in $paths; do [ -n \"$q\" ] || continue; if [ -e \"$q\" ] && okf \"$q\" \"$cap\"; then printf 'ok %s\\n' \"$q\"; else printf 'no %s\\n' \"$q\"; fi; done\n"
         + "[ \"$mode\" = check ] || exit 0\n"
         + "gen() { w=$1; k=0; while [ -n \"$w\" ] && [ \"$k\" -lt 6 ]; do for x in $cdirs; do for e in .png .svg .svgz .xpm; do printf '%s\\n' \"$x/$w$e\"; done; done\n"
         + "  for x in $fdirs; do for e in \"\" .png .svg .svgz .xpm; do printf '%s\\n' \"$x/$w$e\"; done; done; case $w in *-*) w=${w%-*} ;; *) w= ;; esac; k=$((k + 1)); done; }\n"
@@ -91,6 +95,26 @@ Singleton {
         + "  g=$(gen \"$n\" | xargs -r -d '\\n' stat -L -c '%F %s' -- 2>/dev/null | awk -v c=\"$cap\" '$1 == \"regular\" && $NF + 0 <= c + 0 { g++ } END { print g + 0 }')\n"
         + "  if [ \"$a\" = \"$g\" ]; then echo \"ok $n\"; else echo \"no $n\"; fi\n"
         + "done\n"
+
+    // An absolute icon path (an application's Icon=/path, file:///path) as a plain path, or "": no control character, at
+    // most 4096 characters.
+    function plainIconPath(icon: string): string {
+        let path = String(icon || "");
+        if (path.toLowerCase().startsWith("file://")) {
+            try {
+                path = decodeURIComponent(path.slice(7));
+            } catch (e) {
+                return "";
+            }
+        }
+        return path.startsWith("/") && path.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(path) ? path : "";
+    }
+
+    // The verdict key of a theme name or an icon path ("" when it is neither).
+    function keyOf(icon: string): string {
+        const path = plainIconPath(icon);
+        return path !== "" ? path : NotificationPrefs.safeIconName(icon);
+    }
 
     // The image URL for theme icon `name`, or "" (not a plain theme name: NotificationPrefs.safeIconName; not checked yet:
     // a check is requested; refused; or the theme lacks it, so Qt never paints a checkerboard). Quickshell.hasThemeIcon
@@ -107,19 +131,43 @@ Singleton {
         return verdict === "ok" && Quickshell.hasThemeIcon(safe) ? Quickshell.iconPath(safe) : "";
     }
 
-    // Asks for a check of `name`; `fresh`: also when it has a verdict (a new notification naming it). The name is then
-    // "pending" (nothing shown) until the new verdict: a file swapped in after the last check never reaches Qt (review of
-    // eee45cc).
+    // The file: URL of icon file `icon` (an absolute path or file: URL), every segment encoded, once it was found to be a
+    // regular file of at most maxFileBytes; else "" (not a path, not checked yet: a check is requested, or refused).
+    function fileSource(icon: string): string {
+        const path = plainIconPath(icon);
+        if (path === "")
+            return "";
+        const verdict = verdicts[path];
+        if (verdict === undefined) {
+            Qt.callLater(root.check, path, false);
+            return "";
+        }
+        return verdict === "ok" ? "file://" + path.split("/").map(encodeURIComponent).join("/") : "";
+    }
+
+    // An application's icon (its desktop entry's Icon=: a theme name or an absolute path), as Quickshell.iconPath(icon,
+    // fallback) gave it, but only once checked: the Dock and the Launchpad call this (review of eee45cc: a FIFO Icon= in a
+    // user .desktop file stalled the image loader). Until the icon's verdict, and when it is refused or missing, the
+    // (checked) fallback theme icon.
+    function appIcon(icon: string, fallback: string): string {
+        const value = String(icon || "");
+        const own = plainIconPath(value) !== "" ? fileSource(value) : (value !== "" ? source(value) : "");
+        return own !== "" ? own : (fallback !== "" ? source(fallback) : "");
+    }
+
+    // Asks for a check of `name` (a theme name or an icon path); `fresh`: also when it has a verdict (a new notification
+    // naming it). It is then "pending" (nothing shown) until the new verdict: a file swapped in after the last check never
+    // reaches Qt (review of eee45cc).
     function check(name: string, fresh: bool): void {
-        const safe = NotificationPrefs.safeIconName(name);
-        if (safe === "" || queue.indexOf(safe) >= 0 || batch.indexOf(safe) >= 0)
+        const key = keyOf(name);
+        if (key === "" || queue.indexOf(key) >= 0 || batch.indexOf(key) >= 0)
             return;
-        if (!fresh && verdicts[safe] !== undefined)
+        if (!fresh && verdicts[key] !== undefined)
             return;
-        queue = queue.concat([safe]);
-        if (verdicts[safe] !== "pending") {
+        queue = queue.concat([key]);
+        if (verdicts[key] !== "pending") {
             const next = Object.assign({}, verdicts);
-            next[safe] = "pending";
+            next[key] = "pending";
             verdicts = next;
         }
         run();
@@ -130,7 +178,7 @@ Singleton {
             return;
         batch = queue.slice(0, batchSize);
         queue = queue.slice(batchSize);
-        checker.command = ["timeout", "-k", "2", "20", "sh", "-c", script, "gf-icon-check", String(maxFileBytes), String(maxThemeFileBytes), "check"].concat(batch);
+        checker.command = ["timeout", "-k", "2", "30", "sh", "-c", script, "gf-icon-check", String(maxFileBytes), String(maxThemeFileBytes), "check"].concat(batch);
         checker.running = true;
     }
 
@@ -139,38 +187,61 @@ Singleton {
         return m ? m[1] : "";
     }
 
-    function done(output: string): void {
+    // "ok <key>" / "no <key>" lines of the helper's output, as {key: "ok" | "no"}.
+    function verdictsOf(output: string): var {
         const said = {};
         for (const line of String(output || "").split("\n")) {
-            const m = /^(ok|no) ([A-Za-z0-9._-]+)$/.exec(line);
+            const m = /^(ok|no) (.+)$/.exec(line);
             if (m)
                 said[m[2]] = m[1];
         }
+        return said;
+    }
+
+    function done(output: string): void {
+        const said = verdictsOf(output);
         const sig = signatureOf(output);
         // The directories changed since the other verdicts were taken (or this check failed): they go.
-        const stale = sig === "" || (signature !== "" && sig !== signature) || Object.keys(verdicts).length > 512;
+        const stale = sig === "" || (signature !== "" && sig !== signature) || Object.keys(verdicts).length > 2048;
         const next = stale ? {} : Object.assign({}, verdicts);
-        for (const name of batch) {
-            next[name] = sig !== "" && said[name] === "ok" ? "ok" : "no";
-            if (next[name] !== "ok")
-                console.info("grassfield-icons: theme icon \"" + name + "\" refused: a file Qt could read for it is not a regular file of bounded size (or the check failed)");
+        for (const key of batch) {
+            next[key] = sig !== "" && said[key] === "ok" ? "ok" : "no";
+            if (next[key] !== "ok")
+                console.info("grassfield-icons: icon \"" + key + "\" refused: a file Qt could read for it is not a regular file of bounded size (or the check failed)");
         }
         if (stale && sig !== signature)
-            console.info("grassfield-icons: icon directories changed; theme icons are checked again");
+            console.info("grassfield-icons: icon directories changed; icons are checked again");
         signature = sig;
         batch = [];
         verdicts = next;
         Qt.callLater(run);
     }
 
-    // A changed signature (or a failed one) drops every verdict: names are checked again when next shown.
+    // The icon paths shown now, checked again with each signature.
+    function okPaths(): var {
+        return Object.keys(verdicts).filter(key => key.startsWith("/") && verdicts[key] === "ok");
+    }
+
+    // A changed signature (or a failed one) drops every verdict: icons are checked again when next shown. An icon path that
+    // is no longer a regular file of bounded size (or got no answer) is refused at once.
     function signatureDone(output: string): void {
         const sig = signatureOf(output);
         if (signature !== "" && sig !== signature) {
-            console.info("grassfield-icons: icon directories changed; theme icons are checked again");
+            console.info("grassfield-icons: icon directories changed; icons are checked again");
             signature = "";
             verdicts = ({});
+            return;
         }
+        const said = verdictsOf(output);
+        const changed = signatureCheck.paths.filter(path => verdicts[path] === "ok" && said[path] !== "ok");
+        if (changed.length === 0)
+            return;
+        const next = Object.assign({}, verdicts);
+        for (const path of changed) {
+            next[path] = "no";
+            console.info("grassfield-icons: icon \"" + path + "\" refused: it is no longer a regular file of bounded size");
+        }
+        verdicts = next;
     }
 
     Process {
@@ -182,7 +253,8 @@ Singleton {
 
     Process {
         id: signatureCheck
-        command: ["timeout", "-k", "2", "20", "sh", "-c", root.script, "gf-icon-check", String(root.maxFileBytes), String(root.maxThemeFileBytes), "sig"]
+        property var paths: []
+        command: ["timeout", "-k", "2", "30", "sh", "-c", root.script, "gf-icon-check", String(root.maxFileBytes), String(root.maxThemeFileBytes), "sig"].concat(paths)
         stdout: StdioCollector {
             onStreamFinished: root.signatureDone(text)
         }
@@ -193,8 +265,10 @@ Singleton {
         repeat: true
         running: root.signature !== ""
         onTriggered: {
-            if (!signatureCheck.running && !checker.running)
-                signatureCheck.running = true;
+            if (signatureCheck.running || checker.running)
+                return;
+            signatureCheck.paths = root.okPaths();
+            signatureCheck.running = true;
         }
     }
 }

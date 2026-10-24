@@ -214,6 +214,12 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   notification) and Qt's own lookup with real-session search paths (FIFO index.theme and icon-theme.cache, FIFO icons in
   the theme, the inherited hicolor, a symlinked directory, ~/.icons and pixmaps; Qt alone stalls on each; the cost of
   99k files); mutants without the theme-file check, the candidate walk, the hide-on-recheck or the signature fail it.
+  The same helper serves applications' icons: `ThemeIcons.appIcon(Icon=, fallback)` (Dock tiles, Launchpad cells, the Apps
+  prewarm list; review of eee45cc: a FIFO `Icon=` in a user .desktop file stalled the loader) checks a theme name as above
+  and an absolute path as a regular file of at most 8 MiB, re-checked with each signature, then loads it by a file: URL;
+  until then, and when refused, the checked fallback icon shows (theme_icon_files.sh part 3: real Launchpad cells with a
+  FIFO path and a FIFO theme name in a scratch applications directory). Search, the Switcher, the Overview, Force Quit and
+  About still call Quickshell.iconPath for Icon= (follow-up).
   Anything else shows the generic notification icon (macOS: a notification shows its app's icon, never a file the sender
   names). Tests: `tst_notifhistory` (`test_safeIconName`, `test_keptAppIconAndHistoryLoad`), `tst_notifprefs`
   (`test_safeIconNameIsTheHiddenPreviewRule`), `notif_image_files` (traversal names to a FIFO and to a regular file, the

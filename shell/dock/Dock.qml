@@ -1645,7 +1645,7 @@ Scope {
                                     height: tile.iconPx
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
-                                    source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
+                                    source: tile.isApp ? ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable") : ""
 
                                     // Held button: darker by Tokens.dockPressDim (an offscreen layer only while pressed).
                                     layer.enabled: tile.pressedDown
@@ -1800,7 +1800,7 @@ Scope {
                                     y: tile.iconPos.y
 
                                     readonly property bool live: Settings.materialProfile === "full"
-                                    readonly property string iconSource: tile.isMinimized ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
+                                    readonly property string iconSource: tile.isMinimized ? ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable") : ""
 
                                     Rectangle {
                                         visible: minimizedTile.live
