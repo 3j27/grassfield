@@ -122,8 +122,10 @@ if command -v vercmp >/dev/null; then
   up() { bash -c '. "$1"; post_upgrade "$2" "$3"' _ "$pk/arch/grassfield-desktop.install" "$1" "$2" 2>&1; }
   desc="the .install restart note is printed when upgrading from a version before the by-path shell (0.4.0-12 to 1.0.0rc1-1)"
   check grep -q "restart the shell once" <<<"$(up 1.0.0rc1-1 0.4.0-12)"
+  desc="...and on every upgrade from the 0.4.0 series that started the shell by name (0.4.0-12 and older, whatever the new version)"
+  check bash -c 'grep -q "restart the shell once" <<<"$1" && grep -q "restart the shell once" <<<"$2"' _ "$(up 0.4.0-13 0.4.0-12)" "$(up 0.4.0-13 0.3.9-1)"
   desc="...and not on later upgrades (1.0.0rc1-1 to 1.0.0rc1-2, 1.0.0 to 1.0.1) nor on a fresh upgrade call without an old version"
-  check bash -c '! grep -q "restart the shell once" <<<"$1$2$3"' _ "$(up 1.0.0rc1-2 1.0.0rc1-1)" "$(up 1.0.1-1 1.0.0-1)" "$(up 1.0.1-1 "")"
+  check bash -c '! grep -q "restart the shell once" <<<"$1$2$3$4"' _ "$(up 1.0.0rc1-2 1.0.0rc1-1)" "$(up 0.4.0-14 0.4.0-13)" "$(up 1.0.1-1 1.0.0-1)" "$(up 1.0.1-1 "")"
 else
   echo "SKIP: vercmp not installed (the .install upgrade note)"
 fi
