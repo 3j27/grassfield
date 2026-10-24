@@ -20,7 +20,7 @@ ShellRoot {
     property string polkitSource: ""
 
     Component.onCompleted: {
-        Notifications.checkedAppIcon("evil");
+        Notifications.checkedAppIcon("evil", "Probe");
         poll.start();
     }
 

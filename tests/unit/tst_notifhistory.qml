@@ -285,12 +285,16 @@ TestCase {
     }
 
     function test_copySource() {
-        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12), "file:///run/user/1000/grassfield-notification-images/12.img");
-        compare(History.copySource("/tmp/my dir", 3), "file:///tmp/my%20dir/3.img", "every segment encoded");
-        compare(History.copySource("/tmp/a?b", 3), "", "an odd directory name");
-        compare(History.copySource("relative", 3), "");
-        compare(History.copySource("/tmp", 0), "");
-        compare(History.copySource("/tmp", 1.5), "");
+        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12, 0), "file:///run/user/1000/grassfield-notification-images/12.0.img");
+        compare(History.copySource("/run/user/1000/grassfield-notification-images", 12, 7), "file:///run/user/1000/grassfield-notification-images/12.7.img", "the sender number is part of the name");
+        compare(History.copySource("/tmp/my dir", 3, 1), "file:///tmp/my%20dir/3.1.img", "every segment encoded");
+        compare(History.copySource("/tmp/a?b", 3, 1), "", "an odd directory name");
+        compare(History.copySource("relative", 3, 1), "");
+        compare(History.copySource("/tmp", 0, 1), "");
+        compare(History.copySource("/tmp", 1.5, 1), "");
+        compare(History.copySource("/tmp", 3, -1), "", "a negative sender");
+        compare(History.copySource("/tmp", 3, 0.5), "", "a fractional sender");
+        compare(History.copySource("/tmp", 3), "", "no sender");
         verify(History.MAX_IMAGE_FILE_BYTES > 0 && History.MAX_IMAGE_FILE_BYTES <= 64 * 1024 * 1024);
     }
 
