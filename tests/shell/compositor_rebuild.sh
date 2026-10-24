@@ -423,6 +423,65 @@ run GF_TEST_FAKE_BUILD=stale "$script"; rc=$?
 expect "build: its own stamp is another ABI -> refused" "$rc $(grep -c "built for 'stale'" "$tmp/err")" "1 1"
 [[ ! -e $so ]] && pass "build: a stale result installs nothing" || bad "build: a stale result installs nothing"
 
+# The sources replaced during the build (a system upgrade while the opt-in background build runs; re-review of
+# b60bc3a..85aaab9, the reviewer's fake-cmake repro): the real build path with a fake cmake that "compiles" from the
+# sources' VERSION, writes the build's stamp, and installs newer sources meanwhile. The result is refused, never stamped
+# with the new version; an empty VERSION is refused before anything is built.
+cp "$tools/cmake" "$tmp/cmake-stub"
+cat >"$tools/cmake" <<EOF
+#!/bin/sh
+# fake cmake (shell builtins only: the rebuild runs it with PATH=<tools> alone)
+if [ "\$1" = "--build" ]; then
+  out=\${2%/work}
+  read -r src <"\$out/.fake-src"
+  read -r ver <"\$src/VERSION"
+  printf 'plugin compiled from %s\n' "\$ver" >"\$out/grassfield-compositor.so"
+  printf '%s\n' "$want" >"\$out/grassfield-compositor.abi"
+  printf '0.9.0-1\n' >"\$src/VERSION"
+  exit 0
+fi
+src="" out=""
+while [ \$# -gt 0 ]; do
+  case \$1 in
+    -S) src=\$2; shift ;;
+    -DGRASSFIELD_OUTPUT_DIR=*) out=\${1#*=} ;;
+  esac
+  shift
+done
+printf '%s\n' "\$src" >"\$out/.fake-src"
+printf 'configured\n' >>"$tmp/fake-cmake.log"
+EOF
+chmod +x "$tools/cmake"
+echo "0.8.0-1" >"$src/VERSION"
+rm -rf "$cache" "$tmp/fake-cmake.log"
+run GF_TEST_FAKE_BUILD= "$script"; rc=$?
+expect "sources replaced during the build -> the result is refused" "$rc $(grep -c 'the installed sources changed during the build (from 0.8.0-1 to 0.9.0-1)' "$tmp/err")" "1 1"
+[[ ! -e $so && ! -e $dest/grassfield-compositor.abi ]] && pass "sources replaced during the build: nothing installed, no stamp" \
+  || bad "sources replaced during the build: nothing installed, no stamp ($(cat "$dest/grassfield-compositor.abi" 2>/dev/null))"
+echo "0.8.0-1" >"$src/VERSION"
+rm -rf "$cache"
+mv "$src/VERSION" "$tmp/VERSION.away"
+run GF_TEST_FAKE_BUILD= "$script"; rc=$?
+expect "no VERSION: refused before building" "$rc $(grep -c 'the sources have no VERSION' "$tmp/err") $(grep -c configured "$tmp/fake-cmake.log" 2>/dev/null || echo 0)" "1 1 1"
+mv "$tmp/VERSION.away" "$src/VERSION"
+rm -rf "$cache"
+# The same fake build with sources that stay put: installed, stamped with the version it was built from.
+cat >"$tools/cmake" <<EOF
+#!/bin/sh
+if [ "\$1" = "--build" ]; then
+  out=\${2%/work}
+  printf 'plugin\n' >"\$out/grassfield-compositor.so"
+  printf '%s\n' "$want" >"\$out/grassfield-compositor.abi"
+  exit 0
+fi
+exit 0
+EOF
+chmod +x "$tools/cmake"
+run GF_TEST_FAKE_BUILD= "$script"; rc=$?
+expect "real build path, sources unchanged: installed and stamped with their version" "$rc $(sed -n 2p "$dest/grassfield-compositor.abi" 2>/dev/null)" "0 source 0.8.0-1"
+cp "$tmp/cmake-stub" "$tools/cmake"
+rm -rf "$cache"
+
 # --session (the shell, opt-in setting): build when needed, load into the running Hyprland on an exact "ok".
 rm -rf "$cache" "$tmp/hyprctl.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?

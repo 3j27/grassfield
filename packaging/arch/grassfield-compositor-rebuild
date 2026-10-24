@@ -208,9 +208,12 @@ build_into() { # <dir> <log>
 
 # Builds for <abi> and installs the result as the user's build: the plugin first, its stamp (the build's own) last, each
 # through a new file renamed into place (a session that has the previous build mapped keeps it); then checks it as the
-# session will. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build failed.
+# session will. The Grassfield version is read once, before the build: the stamp names the sources the build started
+# from, and a result whose sources were replaced meanwhile (a system upgrade during the build) is refused, never stamped
+# with the new version. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build
+# failed or its sources changed.
 build_and_install() { # <abi>
-  local abi=$1 dest work so stamp tmp log why
+  local abi=$1 dest work so stamp tmp log why src
   why=$(cache_root_ok) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
   mkdir -p "$cache_root" 2>/dev/null
   why=$(cache_root_ok) && why=$(private_entry "$cache_root" d) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
@@ -229,16 +232,19 @@ build_and_install() { # <abi>
   trap "rm -rf '$work'" EXIT
   [[ -z $(missing_tools) ]] || { say "cannot build: missing $(missing_tools) (install them: pacman -S --needed cmake gcc make pkgconf)"; return 2; }
   [[ -r $src_dir/CMakeLists.txt ]] || { say "cannot build: no sources in $src_dir"; return 2; }
+  src=$(source_id)
+  [[ -n $src ]] || { say "cannot build: the sources have no VERSION ($src_dir/VERSION)"; return 2; }
   build_into "$work" "$log" || { say "the build failed (log: $log)"; return 3; }
+  why=$(source_id)
+  [[ $why == "$src" ]] || { say "refusing the build's result: the installed sources changed during the build (from $src to ${why:-none}): run it again"; return 3; }
   so=$work/grassfield-compositor.so
   plain_file "$so" || { say "refusing the build's result: not a regular file ($so)"; return 3; }
   stamp=$(first_line "$work/grassfield-compositor.abi")
   [[ $stamp == "$abi" ]] || { say "refusing the build's result: built for '$stamp', not '$abi'"; return 3; }
-  [[ -n $(source_id) ]] || { say "cannot build: the sources have no VERSION ($src_dir/VERSION)"; return 2; }
   tmp=$(mktemp "$dest/.plugin.XXXXXX") || return 2
   cat "$so" >"$tmp" && chmod 0700 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.so" || { rm -f "$tmp"; return 2; }
   tmp=$(mktemp "$dest/.stamp.XXXXXX") || return 2
-  printf '%s\nsource %s\n' "$stamp" "$(source_id)" >"$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 2; }
+  printf '%s\nsource %s\n' "$stamp" "$src" >"$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 2; }
   vetted_user_build "$abi"
 }
 
