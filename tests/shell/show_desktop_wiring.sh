@@ -15,6 +15,9 @@ f=shell/platform/Compositor.qml
 desc="the raw-event handler ends Show Desktop with the event data and the records"
 check grep -q 'ShowDesktop.endsOn(event.name, event.data, root.desktopRecords)' "$f"
 
+desc="a workspace or monitor event only schedules a look at what each display shows (a focus move raises one too)"
+check bash -c 'grep -q "ShowDesktop.checksSpaces(event.name)" "$1" && grep -q "ShowDesktop.spaceChanged(root.desktopRecords, root.shownSpaces())" "$1"' _ "$f"
+
 desc="no removed name is left (desktopRecord, desktopHiddenAt, a timing guard)"
 check bash -c '! grep -nE "desktopRecord\b|desktopHiddenAt|showDesktopGuardMs" "$1"' _ "$f"
 

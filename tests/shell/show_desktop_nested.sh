@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
 # Nested scenario (L1) for Show Desktop (GF-106, reviews of the shell UX batch). Bare command, nested session only.
 #
-# Windows: A and B (foot, app id gf-sd-main) and C (foot, app id gf-sd-other) on Space 1; D on Space 2. Every way Show
-# Desktop ends is checked for what it must leave behind: every window on its own Space, and the Space and the focus the
-# user ended it with (never the old Space or the old focused window, except for the second press):
+# Part 1, ONE display. Whatever the nested session has (only GF-REF, or GF-REF with WAYLAND-1 beside it), the scenario runs on
+# one output: the pointer is warped onto it (so focus-follows-mouse cannot move the focus to another output) and it uses two
+# Spaces that no other output shows. The output used and the number of outputs are printed. Windows: A and B (foot, app id
+# gf-sd-main) and C (foot, app id gf-sd-other) on Space S1; D on Space S2. Every way Show Desktop ends is checked for what it
+# must leave behind: every window on its own Space, and the Space and the focus the user ended it with (never the old Space or
+# the old focused window, except for the second press):
 #   1 show: A, B, C parked on special:desktop, D untouched, record file written;
-#   2 second press on the same Space: A, B, C back on Space 1, the Space is 1, the window that had the focus (C) has it;
-#   3 Space switch: show, then Space 2: A, B, C back on Space 1, the active Space stays 2, the focus is D (never an old window);
-#   4 new window: show, then a new foot E opens: A, B, C back on Space 1, the focus is E;
+#   2 second press on the same Space: A, B, C back on S1, the Space is S1, the window that had the focus (C) has it;
+#   3 Space switch: show, then S2: A, B, C back on S1, the active Space stays S2, the focus is D (never an old window);
+#   4 new window: show, then a new foot E opens: A, B, C back, the focus is E;
 #   5 activation (the switcher's next/release goes through Compositor.activate, as a Dock click does): show, switcher
-#     next + release: every window back, the active window is the one the switcher chose and the Space is its Space.
-# 6 (manual) crash recovery: with Show Desktop on, restart the shell (scripts/dev/shell-run.sh): the windows listed in the
+#     next + release: every window back, the focus is the window of the other app (C), on its Space.
+# Part 2, TWO displays (macOS: Show Desktop clears every display). A second headless output GF-SD2 is created (and removed at
+# the end): P on the first display, Q on GF-SD2 (focused). Checks:
+#   6 show: both windows parked, on both displays;
+#   7 the pointer and the focus move to the other display: Show Desktop stays on (nothing comes back during 2 s);
+#   8 a Space switch on GF-SD2: both windows back on their own Spaces, GF-SD2 keeps the new Space, nothing left parked;
+#   9 show, the second press: both back, the focus is the window of the focused display (Q).
+# 10 (manual) crash recovery: with Show Desktop on, restart the shell (scripts/dev/shell-run.sh): the windows listed in the
 #   record file come back to their Space within about two seconds, and nothing is focused by it.
-# Only this tree's nested instance (scripts/dev/pidfile.sh); hyprctl is read-only; clients get the nested socket only.
+# The test closes every window it opened and removes GF-SD2, also when it fails or is interrupted (EXIT trap), and at the start
+# it closes windows of an earlier run (app ids gf-sd-*). Only this tree's nested instance (scripts/dev/pidfile.sh); hyprctl is
+# read-only except through scripts/nestctl; clients get the nested socket only.
 # Expected: "show_desktop: 0 failure(s)" after PASS lines for every check. Exit 0 PASS, 1 FAIL, 2 environment error.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -25,85 +36,121 @@ main=$(cat "$dev/main.instance" 2>/dev/null || true)
 [[ $sig != "$main" && $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "show_desktop: refusing the main session"; exit 2; }
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
 [[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null || { echo "show_desktop: grassfield-shell is not running (scripts/dev/shell-run.sh)"; exit 2; }
+# The dev shell keeps its state under .dev/state (shell-run.sh sets GRASSFIELD_STATE_HOME): never the owner's home.
+state=$dev/state/show-desktop.json
+case $state in "$HOME"/.local/*) echo "show_desktop: the state file would be under $HOME/.local: refusing"; exit 2 ;; esac
 
 fails=0
 pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; fails=$((fails + 1)); }
 hq() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$@"; }
+nest() { "$root/scripts/nestctl" "$@"; }
 space_of() { hq clients | jq -r --argjson p "$1" '.[] | select(.pid == $p) | .workspace.name'; }
 active_pid() { hq activewindow | jq -r '.pid'; }
 active_space() { hq activeworkspace | jq -r '.name'; }
+parked_count() { hq clients | jq '[.[] | select(.workspace.name == "special:desktop")] | length'; }
+shown_space() { hq monitors | jq -r --arg m "$1" '.[] | select(.name == $m) | .activeWorkspace.name'; }
 ipc() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 qs ipc --pid "$shell_pid" call "$@" >/dev/null 2>&1; }
+warp() { "$root/scripts/dev/pointer.sh" output "$1" abs 200 200 >/dev/null 2>&1; sleep 0.6; }
 show_desktop() { ipc windows showDesktop; sleep 1.2; }
-space() { "$root/scripts/nestctl" dispatch "hl.dsp.focus({ workspace = \"$1\" })" >/dev/null 2>&1; sleep 1; }
+focus_space() { nest dispatch "hl.dsp.focus({ workspace = \"$1\" })" >/dev/null 2>&1; sleep 1; }
+
+# Windows of this test: recorded without a subshell, closed by the EXIT trap and by the next run's start.
 pids=()
-open_foot() { # <app id> -> PID of the new window, which also has the focus
+NEWPID=""
+open_foot() { # <app id> [output]: opens a foot with the pointer on the output; sets NEWPID to the window that has the focus
+  [[ -n ${2:-} ]] && warp "$2"
   WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot --app-id "$1" >/dev/null 2>&1 </dev/null &
   pids+=($!)
-  sleep 1.5
-  active_pid
+  sleep 1.8
+  NEWPID=$(active_pid)
 }
-cleanup() { for p in "${pids[@]}"; do kill -- "-$p" 2>/dev/null; done; space 1; }
+close_test_windows() {
+  local p pid
+  for p in "${pids[@]}"; do kill -- "-$p" 2>/dev/null; done
+  for pid in $(hq clients | jq -r '.[] | select(.class | startswith("gf-sd-")) | .pid'); do kill "$pid" 2>/dev/null; done
+}
+created_output=""
+cleanup() {
+  close_test_windows
+  if [[ -n $created_output ]]; then nest output remove "$created_output" >/dev/null 2>&1; fi
+  [[ -n ${S1:-} ]] && focus_space "$S1"
+}
 trap cleanup EXIT
-# check <what> <window> <wanted Space name>
+close_test_windows
+sleep 1
+
 # Every check waits at most 6 s for the state to arrive (the shell restores from events), then reports what it saw.
 wait_for() { local n; for n in $(seq 1 30); do "$@" && return 0; sleep 0.2; done; return 1; }
 is_on_space() { [[ $(space_of "$1") == "$2" ]]; }
 is_focus() { [[ $(active_pid) == "$1" ]]; }
 is_space() { [[ $(active_space) == "$1" ]]; }
+is_shown() { [[ $(shown_space "$1") == "$2" ]]; }
+none_parked() { [[ $(parked_count) == 0 ]]; }
 on_space() { wait_for is_on_space "$2" "$3" && pass "$1" || fail "$1: window $2 is on $(space_of "$2"), wanted $3"; }
 focus_is() { wait_for is_focus "$2" && pass "$1" || fail "$1: focus is $(active_pid), wanted $2"; }
 space_is() { wait_for is_space "$2" && pass "$1" || fail "$1: Space is $(active_space), wanted $2"; }
-all_home() { # <label>
-  on_space "$1: A on Space 1" "$a" 1
-  on_space "$1: B on Space 1" "$b" 1
-  on_space "$1: C on Space 1" "$c" 1
-  on_space "$1: D still on Space 2" "$d" 2
-}
+shown_is() { wait_for is_shown "$2" "$3" && pass "$1" || fail "$1: $2 shows $(shown_space "$2"), wanted $3"; }
+nothing_parked() { wait_for none_parked && pass "$1" || fail "$1: $(parked_count) window(s) still on special:desktop"; }
+has_record() { [[ -s $state ]] && grep -q '"records"' "$state"; }
 
-space 1
-a=$(open_foot gf-sd-main)
-b=$(open_foot gf-sd-main)
-c=$(open_foot gf-sd-other)
-space 2
-d=$(open_foot gf-sd-main)
-space 1
-focus_is "setup: C has the focus on Space 1" "$c"
+# ---- the output for part 1 ---------------------------------------------------------------------------------------------
+outputs=$(hq monitors | jq -r '.[].name' | paste -sd' ')
+count=$(hq monitors | jq 'length')
+if hq monitors | jq -e 'any(.[]; .name == "GF-REF")' >/dev/null; then OUT=GF-REF; else OUT=$(hq monitors | jq -r '.[0].name'); fi
+echo "show_desktop: $count output(s) ($outputs); part 1 runs on $OUT only"
+warp "$OUT"
+S1=$(shown_space "$OUT")
+maxid=$(hq monitors | jq '[.[].activeWorkspace.id] | max')
+S2=$((maxid + 10))
+[[ -n $S1 && $S1 != null ]] || { echo "show_desktop: no Space on $OUT"; exit 2; }
+
+# ---- part 1: one display -----------------------------------------------------------------------------------------------
+open_foot gf-sd-main "$OUT"; a=$NEWPID
+open_foot gf-sd-main "$OUT"; b=$NEWPID
+open_foot gf-sd-other "$OUT"; c=$NEWPID
+focus_space "$S2"
+open_foot gf-sd-main "$OUT"; d=$NEWPID
+focus_space "$S1"
 for p in "$a" "$b" "$c" "$d"; do [[ -n $p && $p != null ]] || { echo "show_desktop: could not open the windows"; exit 2; }; done
-# The dev shell keeps its state under .dev/state (shell-run.sh sets GRASSFIELD_STATE_HOME): never the owner's home.
-state=$dev/state/show-desktop.json
-case $state in "$HOME"/.local/*) echo "show_desktop: the state file would be under $HOME/.local: refusing"; exit 2 ;; esac
+all_home() { # <label>
+  on_space "$1: A on Space $S1" "$a" "$S1"
+  on_space "$1: B on Space $S1" "$b" "$S1"
+  on_space "$1: C on Space $S1" "$c" "$S1"
+  on_space "$1: D still on Space $S2" "$d" "$S2"
+  nothing_parked "$1: nothing left on special:desktop"
+}
+focus_is "setup: C has the focus on Space $S1" "$c"
 
 # 1 show
 show_desktop
 for w in "$a" "$b" "$c"; do on_space "1: window $w parked" "$w" special:desktop; done
-on_space "1: D on Space 2 is not touched" "$d" 2
-has_record() { [[ -s $state ]] && grep -q '"records"' "$state"; }
+on_space "1: D on Space $S2 is not touched" "$d" "$S2"
 wait_for has_record && pass "1: the record is in the state dir ($state)" || fail "1: no record in $state"
 
 # 2 second press on the same Space
 show_desktop
 all_home "2"
-space_is "2: the Space is 1" 1
+space_is "2: the Space is $S1" "$S1"
 focus_is "2: the window that had the focus (C) has it again" "$c"
 
 # 3 Space switch
 show_desktop
-space 2
+focus_space "$S2"
 all_home "3"
-space_is "3: the Space stays 2 (the user is not pulled back)" 2
-focus_is "3: the focus is the Space 2 window" "$d"
-space 1
+space_is "3: the Space stays $S2 (the user is not pulled back)" "$S2"
+focus_is "3: the focus is the Space $S2 window" "$d"
+focus_space "$S1"
 
 # 4 new window
 show_desktop
-e=$(open_foot gf-sd-main)
+open_foot gf-sd-main "$OUT"; e=$NEWPID
 all_home "4"
-on_space "4: E stays where it opened" "$e" 1
+on_space "4: E stays where it opened" "$e" "$S1"
 focus_is "4: the new window keeps the focus" "$e"
 
 # 5 activation (switcher next + release)
-space 1
+focus_space "$S1"
 show_desktop
 ipc switcher next 7000001
 sleep 0.5
@@ -111,7 +158,65 @@ ipc switcher release 7000001
 all_home "5"
 # The front app is gf-sd-main (E); the switcher's next app is gf-sd-other, whose only window is C: C must have the focus.
 focus_is "5: the switcher's choice (C, the other app) has the focus, not the old window E" "$c"
-space_is "5: the Space is C's Space" 1
+space_is "5: the Space is C's Space" "$S1"
+
+# ---- part 2: two displays ----------------------------------------------------------------------------------------------
+close_test_windows
+sleep 1
+if hq monitors | jq -e 'any(.[]; .name == "GF-SD2")' >/dev/null; then
+  echo "show_desktop: GF-SD2 exists already; not creating it"
+else
+  nest output create headless GF-SD2 >/dev/null 2>&1
+  created_output=GF-SD2
+  sleep 2.5
+fi
+hq monitors | jq -e 'any(.[]; .name == "GF-SD2")' >/dev/null || { echo "show_desktop: could not create the second output (GF-SD2)"; exit 2; }
+echo "show_desktop: part 2 uses $OUT and GF-SD2"
+warp "$OUT"
+T1=$(shown_space "$OUT")
+warp GF-SD2
+T2=$(shown_space GF-SD2)
+[[ -n $T1 && -n $T2 && $T1 != "$T2" ]] || { echo "show_desktop: the two outputs show '$T1' and '$T2'"; exit 2; }
+open_foot gf-sd-main "$OUT"; p=$NEWPID
+open_foot gf-sd-other GF-SD2; q=$NEWPID
+for w in "$p" "$q"; do [[ -n $w && $w != null ]] || { echo "show_desktop: could not open the two-display windows"; exit 2; }; done
+on_space "setup: P is on $OUT's Space $T1" "$p" "$T1"
+on_space "setup: Q is on GF-SD2's Space $T2" "$q" "$T2"
+focus_is "setup: Q has the focus" "$q"
+
+# 6 show
+show_desktop
+on_space "6: P (first display) parked" "$p" special:desktop
+on_space "6: Q (second display) parked" "$q" special:desktop
+wait_for has_record && pass "6: one record file for both displays" || fail "6: no record in $state"
+
+# 7 pointer and focus move to the other display: Show Desktop stays on
+warp "$OUT"
+sleep 2
+[[ $(space_of "$p") == special:desktop && $(space_of "$q") == special:desktop ]] && pass "7: moving the pointer and the focus to the other display ends nothing" || fail "7: P is on $(space_of "$p"), Q on $(space_of "$q")"
+warp GF-SD2
+sleep 1.5
+[[ $(parked_count) == 2 ]] && pass "7: and back to the second display: both windows still parked" || fail "7: $(parked_count) window(s) parked, wanted 2"
+
+# 8 a Space switch on the second display
+other=$((S2 + 10))
+focus_space "$other"
+on_space "8: P back on its Space $T1" "$p" "$T1"
+on_space "8: Q back on its Space $T2" "$q" "$T2"
+shown_is "8: GF-SD2 keeps the new Space" GF-SD2 "$other"
+nothing_parked "8: nothing left on special:desktop"
+focus_space "$T2"
+
+# 9 show and the second press: everything back, the focus is the focused display's window
+warp GF-SD2
+focus_is "9: setup: Q has the focus" "$q"
+show_desktop
+on_space "9: Q parked" "$q" special:desktop
+show_desktop
+on_space "9: P back" "$p" "$T1"
+on_space "9: Q back" "$q" "$T2"
+nothing_parked "9: nothing left on special:desktop"
+focus_is "9: the focus is the focused display's window (Q)" "$q"
 
 echo "show_desktop: $fails failure(s)"
 exit $((fails > 0))

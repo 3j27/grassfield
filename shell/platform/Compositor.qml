@@ -308,10 +308,16 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "configreloaded" && root.reduceMotion)
                 root.pushMotion();
-            // Switching Space or opening a window ends Show Desktop; the events of our own moves are recognised by what they
-            // name (ShowDesktop.endsOn), not by timing, and an ending never asks for focus: the user's new Space or window has it.
-            if (root.desktopRecords.length > 0 && ShowDesktop.endsOn(event.name, event.data, root.desktopRecords))
-                root.endShowDesktop(false);
+            // A new window ends Show Desktop (our own parked windows are recognised by address, not by timing). A Space
+            // switch on either display ends it too, but a workspace event is also what a focus move to the other display
+            // raises: those events only schedule a look at what each display shows (desktopCheck). An ending never asks for
+            // focus: the user's new Space or window has it.
+            if (root.desktopRecords.length > 0) {
+                if (ShowDesktop.endsOn(event.name, event.data, root.desktopRecords))
+                    root.endShowDesktop(false);
+                else if (ShowDesktop.checksSpaces(event.name))
+                    desktopCheck.restart();
+            }
         }
     }
 
@@ -560,6 +566,15 @@ Singleton {
         desktopVerify.tries = 0;
         desktopVerify.restart();
         return true;
+    }
+
+    Timer {
+        id: desktopCheck
+        interval: Tokens.showDesktopCheckMs
+        onTriggered: {
+            if (root.desktopRecords.length > 0 && ShowDesktop.spaceChanged(root.desktopRecords, root.shownSpaces()))
+                root.endShowDesktop(false);
+        }
     }
 
     Timer {

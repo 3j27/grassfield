@@ -86,24 +86,38 @@ TestCase {
         compare(SD.captureAll(wins, "x", "", false), []);
     }
 
-    function test_aSpaceSwitchOrANewWindowEndsIt() {
+    function test_aNewWindowEndsItButOurOwnParkedOnesDoNot() {
         const records = SD.captureAll(all, [{name: "DP-1", workspace: 1}], "", false);
-        verify(SD.endsOn("workspace", "2", records));
-        verify(SD.endsOn("workspacev2", "2,2", records));
-        verify(SD.endsOn("workspace", "1", records), "back to the same Space is a switch too");
         verify(SD.endsOn("openwindow", "c9,2,foot,foot", records));
-        verify(!SD.endsOn("movewindow", "a1,special:desktop", records));
-        verify(!SD.endsOn("activewindow", "foot,foot", records));
-        verify(!SD.endsOn("configreloaded", "", records));
-    }
-
-    function test_ourOwnMovesAreRecognisedByNameNotByTime() {
-        const records = SD.captureAll(all, [{name: "DP-1", workspace: 1}], "", false);
-        verify(!SD.endsOn("workspace", "special:desktop", records));
-        verify(!SD.endsOn("workspacev2", "-98,special:desktop", records));
         verify(!SD.endsOn("openwindow", "0xa1,1,foot,foot", records), "a window the record parked");
         verify(!SD.endsOn("openwindow", "c9,special:desktop,foot,foot", records));
-        verify(SD.endsOn("workspacev2", "-98,special:other", records));
+        verify(!SD.endsOn("movewindow", "a1,special:desktop", records));
+        verify(!SD.endsOn("activewindow", "foot,foot", records));
+        verify(!SD.endsOn("workspace", "2", records), "a Space event only schedules a look");
+        verify(!SD.endsOn("focusedmon", "DP-2,4", records));
+    }
+
+    function test_theseEventsTriggerALookAtTheSpaces() {
+        for (const e of ["workspace", "workspacev2", "focusedmon", "focusedmonv2", "moveworkspace", "monitorremoved"])
+            verify(SD.checksSpaces(e), e);
+        for (const e of ["openwindow", "movewindow", "activewindow", "configreloaded"])
+            verify(!SD.checksSpaces(e), e);
+    }
+
+    function test_twoDisplays() {
+        const wins = [win("0xa1", 1, 0, 0), win("0xe5", 4, 0, 0)];
+        const records = SD.captureAll(wins, [{name: "DP-1", workspace: 1}, {name: "DP-2", workspace: 4}], "0xe5", false);
+        // The focus or the pointer moving to the other display: each display still shows its own Space.
+        verify(!SD.spaceChanged(records, [{name: "DP-1", workspace: 1}, {name: "DP-2", workspace: 4}]));
+        // A Space switch on either display ends it.
+        verify(SD.spaceChanged(records, [{name: "DP-1", workspace: 2}, {name: "DP-2", workspace: 4}]));
+        verify(SD.spaceChanged(records, [{name: "DP-1", workspace: 1}, {name: "DP-2", workspace: 5}]));
+        // A display that went away ends it too.
+        verify(SD.spaceChanged(records, [{name: "DP-1", workspace: 1}]));
+        // A record without a display name is not compared; nothing to compare is no change.
+        verify(!SD.spaceChanged([{screen: "", workspace: 1, focus: "", windows: []}], []));
+        verify(!SD.spaceChanged([], [{name: "DP-1", workspace: 3}]));
+        verify(!SD.spaceChanged(null, undefined));
     }
 
     function test_onlyThePressOnTheSameSpaceAsksForFocus() {

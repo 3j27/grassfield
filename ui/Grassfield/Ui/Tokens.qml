@@ -1127,6 +1127,8 @@ QtObject {
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150
+    // estimate: ms after a workspace or monitor event before the shell compares the Space each display shows with the Space Show Desktop was pressed on (the monitor list has caught up by then)
+    readonly property int showDesktopCheckMs: 120
     // estimate: ms after Show Desktop ended before the shell checks that no window is left on the parking workspace and sends a straggler back (at most three checks)
     readonly property int showDesktopVerifyMs: 500
     // estimate: ms after start before the windows a previous run left parked by Show Desktop are brought back (the window list must be known)

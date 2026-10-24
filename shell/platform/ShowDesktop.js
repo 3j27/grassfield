@@ -95,27 +95,41 @@ function captureAll(windows, monitors, focus, stagesOn) {
     return out;
 }
 
-// What a compositor event means for Show Desktop: true when it ends it. Switching Space and opening a window do, except the
-// events our own moves raise, which are told apart by what they name and not by when they came: a Space event for the
-// parking workspace, a window event for a window the records parked (or one that opens on the parking workspace).
-// `data` is the event's text (Hyprland: "addr,workspace,class,title" for openwindow, "id,name" for workspacev2, "name" for
-// workspace); `records` the records now on.
+// A window opening ends Show Desktop (a window the records parked, or one opening on the parking workspace, is our own move
+// and does not). `data` is the openwindow text "addr,workspace,class,title"; `records` the records now on.
 function endsOn(eventName, data, records) {
-    const text = typeof data === "string" ? data : "";
-    if (eventName === "workspace")
-        return text !== PARKING;
-    if (eventName === "workspacev2")
-        return text.split(",").slice(1).join(",") !== PARKING;
-    if (eventName === "openwindow") {
-        const parts = text.split(",");
-        const a = address(parts[0]);
-        if (parts[1] === PARKING)
+    if (eventName !== "openwindow")
+        return false;
+    const parts = (typeof data === "string" ? data : "").split(",");
+    const a = address(parts[0]);
+    if (parts[1] === PARKING)
+        return false;
+    for (const r of Array.isArray(records) ? records : []) {
+        if (r.windows.some(w => w.address === a))
             return false;
-        for (const r of Array.isArray(records) ? records : []) {
-            if (r.windows.some(w => w.address === a))
-                return false;
-        }
-        return true;
+    }
+    return true;
+}
+
+// Events after which the Spaces the displays show may have changed. They cannot be read as "the user switched Space": when
+// only the focus moves to another display Hyprland reports a workspace event too (the Space that display already shows), so
+// the events only trigger a look at what each display shows now (spaceChanged).
+function checksSpaces(eventName) {
+    return ["workspace", "workspacev2", "focusedmon", "focusedmonv2", "moveworkspace", "moveworkspacev2", "monitoradded",
+        "monitoraddedv2", "monitorremoved", "monitorremovedv2"].indexOf(eventName) >= 0;
+}
+
+// True when a display now shows another Space than the one Show Desktop was pressed on, on either display, or when a display
+// of the records is gone. `shown`: [{name, workspace}] from the monitor list. A record without a display name is not compared.
+// The focus or the pointer moving to the other display changes nothing here: its Space is the one it showed.
+function spaceChanged(records, shown) {
+    const list = Array.isArray(shown) ? shown : [];
+    for (const r of Array.isArray(records) ? records : []) {
+        if (r.screen === "")
+            continue;
+        const m = list.find(x => x && x.name === r.screen);
+        if (!m || workspaceId(m.workspace) !== r.workspace)
+            return true;
     }
     return false;
 }
