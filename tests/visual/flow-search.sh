@@ -34,15 +34,17 @@ is() { [[ $(st "$1") == "$2" ]]; } # is FIELD VALUE: a field of `search status` 
 index_of() {
   fl_json search status | jq -r --arg k "$1" --arg re "$2" '[.groups[].items[]] | to_entries | map(select(.value.kind == $k and (.value.title | test($re; "i")))) | (.[0].key // -1)'
 }
-have_item() { [[ $(index_of "$1" "$2") != -1 ]]; }
+# (a reply that is not the JSON status, "refused" or nothing, and an empty index give no number: not "found")
+have_item() { [[ $(index_of "$1" "$2") =~ ^[0-9]+$ ]]; }
 # Move the selection to the item with the arrows (at most 15 presses), the way a user would.
 select_item() {
   local want cur n
   want=$(index_of "$1" "$2")
-  [[ $want != -1 ]] || return 1
+  [[ $want =~ ^[0-9]+$ ]] || return 1
   for n in $(seq 1 15); do
     cur=$(st .selected)
     [[ $cur == "$want" ]] && return 0
+    [[ $cur =~ ^-?[0-9]+$ ]] || return 1
     if [[ $cur -lt $want ]]; then fl_tap Down; else fl_tap Up; fi
   done
   [[ $(st .selected) == "$want" ]]
