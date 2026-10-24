@@ -1,5 +1,6 @@
 #include "Overview.hpp"
 
+#include "FrameProbe.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "Surfaces.hpp"
@@ -209,6 +210,7 @@ namespace {
     void finishClosed(ov::Reason reason) {
         detachAll();
         st().phase = ov::Phase::Closed;
+        gf::guarded("overview mark", [] { gf::frameProbe::mark("overview-closed"); });
         post(ov::Phase::Closed, 0, reason);
     }
 
@@ -259,6 +261,7 @@ namespace {
             return;
         if (s.phase == ov::Phase::Opening) {
             s.phase = ov::Phase::Open;
+            gf::guarded("overview mark", [] { gf::frameProbe::mark("overview-open"); });
             post(ov::Phase::Open, s.entries.size());
         } else
             finishClosed(s.closeReason);
@@ -303,6 +306,7 @@ namespace {
         s.start      = Time::steadyNow();
         s.durationMs = durationMs;
         s.curve      = curve;
+        gf::guarded("overview mark", [phase] { gf::frameProbe::mark(phase == ov::Phase::Closing ? "overview-closing" : "overview-opening"); });
         for (auto& e : s.entries) {
             if (const auto w = e.window.lock()) {
                 e.rect = ov::interpolate(e.from, e.to, surfaceBox(w), 0.0);

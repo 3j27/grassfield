@@ -19,15 +19,20 @@ namespace gf::frameProbe {
         // The ring before the listener that writes into it: members are destroyed in reverse order, so the listener goes
         // first.
         struct SMonitor {
-            PHLMONITORREF                  monitor;
-            std::unique_ptr<frames::CRing> ring = std::make_unique<frames::CRing>();
-            CHyprSignalListener            presented;
+            PHLMONITORREF                      monitor;
+            std::unique_ptr<frames::CRing>     ring    = std::make_unique<frames::CRing>();
+            std::unique_ptr<frames::CSpanRing> renders = std::make_unique<frames::CSpanRing>();
+            CHyprSignalListener                presented;
         };
 
         struct SState {
-            std::vector<CHyprSignalListener> listeners; // monitors added / removed
+            std::vector<CHyprSignalListener> listeners; // monitors added / removed, render begin and end
             std::vector<SMonitor>            monitors;
-            bool                             ready = false;
+            frames::CMarkRing                marks;
+            PHLMONITORREF                    rendering;    // the monitor of the latest render.preChecks
+            uint64_t                         renderBegin = 0;
+            bool                             inRender    = false;
+            bool                             ready       = false;
         };
 
         // Constructed on first use inside a guarded call (R13).
@@ -61,6 +66,33 @@ namespace gf::frameProbe {
                 return !mine || mine == m;
             });
         }
+
+        // render.preChecks: a frame of `m` may be rendered now (Hyprland skips it when nothing is damaged; then no
+        // RENDER_POST follows and the next preChecks starts over).
+        void renderBegins(const PHLMONITOR& m) {
+            auto& s       = st();
+            s.rendering   = m;
+            s.renderBegin = microseconds(Time::steadyNow());
+            s.inRender    = m != nullptr;
+        }
+
+        // RENDER_POST: the frame begun at the latest preChecks is rendered and submitted.
+        void renderEnds() {
+            auto& s = st();
+            if (!s.inRender)
+                return;
+            s.inRender     = false;
+            const auto mon = s.rendering.lock();
+            if (!mon)
+                return;
+            const uint64_t now = microseconds(Time::steadyNow());
+            for (auto& e : s.monitors) {
+                if (e.renders && e.monitor.lock() == mon) {
+                    e.renders->push(frames::RenderSpan{.beginUs = s.renderBegin, .cpuUs = now >= s.renderBegin ? now - s.renderBegin : 0});
+                    return;
+                }
+            }
+        }
     } // namespace
 
     bool start() {
@@ -74,6 +106,12 @@ namespace gf::frameProbe {
         s.listeners.push_back(ev.added.listen([](const PHLMONITOR& m) { guarded("frame probe monitor.added", [&] { attach(m); }); }));
         s.listeners.push_back(ev.removed.listen([](const PHLMONITOR& m) { guarded("frame probe monitor.removed", [&] { detach(m); }); }));
         s.listeners.push_back(ev.destroyMon.listen([](const PHLMONITOR& m) { guarded("frame probe monitor.destroy", [&] { detach(m); }); }));
+        auto& render = bus->m_events.render;
+        s.listeners.push_back(render.preChecks.listen([](const PHLMONITOR& m) { guarded("frame probe render begin", [&] { renderBegins(m); }); }));
+        s.listeners.push_back(render.stage.listen([](eRenderStage stage) {
+            if (stage == RENDER_POST)
+                guarded("frame probe render end", [] { renderEnds(); });
+        }));
         if (State::monitorState()) {
             for (const auto& m : State::monitorState()->monitors())
                 attach(m);
@@ -86,7 +124,10 @@ namespace gf::frameProbe {
         auto& s = st();
         s.monitors.clear(); // the presented listeners first: they point into the rings
         s.listeners.clear();
-        s.ready = false;
+        s.marks     = {};
+        s.rendering = {};
+        s.inRender  = false;
+        s.ready     = false;
     }
 
     bool ready() {
@@ -99,9 +140,20 @@ namespace gf::frameProbe {
             const auto m = e.monitor.lock();
             if (!m || !e.ring)
                 continue;
-            out.push_back(frames::MonitorFrames{.name = m->m_name, .refreshHz = m->m_refreshRate, .total = e.ring->total(), .presentedUs = e.ring->snapshot()});
+            out.push_back(frames::MonitorFrames{.name        = m->m_name,
+                                                .refreshHz   = m->m_refreshRate,
+                                                .total       = e.ring->total(),
+                                                .presentedUs = e.ring->snapshot(),
+                                                .renders     = e.renders ? e.renders->snapshot() : std::vector<frames::RenderSpan>{}});
         }
-        return frames::framesJson(out);
+        const auto marks = st().marks.snapshot();
+        return frames::framesJson(out, marks);
+    }
+
+    void mark(std::string_view what) {
+        auto& s = st();
+        if (s.ready)
+            s.marks.push(microseconds(Time::steadyNow()), what);
     }
 
 } // namespace gf::frameProbe

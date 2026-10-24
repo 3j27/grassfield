@@ -3,9 +3,11 @@
 // Presentation-time probe (ADR-0006 gate P3; core/FrameLog.hpp): every monitor's presented frames (CMonitor::
 // m_events.presented, the output's presentation feedback) go into a per-monitor ring of CLOCK_MONOTONIC microseconds,
 // returned by `hyprctl grassfield-frames` (registered in Ipc.cpp; feature "frame-times"). One timestamp per presented
-// frame: no allocation once a monitor's ring exists, nothing else done on the compositor thread.
+// frame: no allocation once a monitor's ring exists, nothing else done on the compositor thread. For attribution, also the
+// CPU span of each rendered frame (render.preChecks to RENDER_POST) and the phase marks of the plugin's animations.
 
 #include <string>
+#include <string_view>
 
 namespace gf::frameProbe {
 
@@ -19,5 +21,8 @@ namespace gf::frameProbe {
 
     // The JSON `hyprctl grassfield-frames` returns (core framesJson), monitors in Hyprland's order.
     std::string json();
+
+    // A phase of one of the plugin's animations ("overview-opening", ...), now. Nothing when the probe is not running.
+    void mark(std::string_view what);
 
 } // namespace gf::frameProbe

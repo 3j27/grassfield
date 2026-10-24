@@ -5,6 +5,9 @@
 // the time of every presented frame of each monitor (Hyprland's CMonitor::m_events.presented, the output's presentation
 // feedback) in a ring; `hyprctl grassfield-frames` returns them; tests/visual/presented-frames.sh turns them into frame
 // pacing over the window of a real shell animation. Pure (no Hyprland include): unit-tested in compositor/tests/FrameLogTest.cpp.
+// For attribution, each monitor also keeps the CPU span of every frame Hyprland rendered (a long interval with a long render
+// is the compositor's cost; a long interval with a late render is a client that committed late), and the plugin marks the
+// phases of its own animations (the Overview's opening, open, closing, closed) on the same clock.
 
 #include <cstddef>
 #include <cstdint>
@@ -53,16 +56,69 @@ namespace gf::frames {
         uint64_t              m_last  = 0;
     };
 
+    // One frame Hyprland rendered for a monitor: when it began (render.preChecks) and the CPU time to RENDER_POST (the
+    // frame's whole render, the plugin's draws included; the GPU's own time is not in it).
+    struct RenderSpan {
+        uint64_t beginUs = 0;
+        uint64_t cpuUs   = 0;
+
+        bool     operator==(const RenderSpan&) const = default;
+    };
+
+    // The last kCapacity render spans in time order: a span that does not begin after the newest is refused.
+    class CSpanRing {
+      public:
+        bool                    push(const RenderSpan& span);
+        std::vector<RenderSpan> snapshot() const;
+
+        size_t size() const {
+            return m_size;
+        }
+
+      private:
+        std::vector<RenderSpan> m_slots = std::vector<RenderSpan>(kCapacity);
+        size_t                  m_next  = 0;
+        size_t                  m_size  = 0;
+        uint64_t                m_last  = 0;
+        bool                    m_any   = false;
+    };
+
+    // Phase marks of the plugin's animations ("overview-opening", ...): the last kMaxMarks, in time order (a mark older
+    // than the newest is refused), each name cut at kMaxMarkBytes.
+    inline constexpr size_t kMaxMarks     = 64;
+    inline constexpr size_t kMaxMarkBytes = 32;
+
+    struct Mark {
+        uint64_t    us = 0;
+        std::string what;
+
+        bool        operator==(const Mark&) const = default;
+    };
+
+    class CMarkRing {
+      public:
+        bool              push(uint64_t us, std::string_view what);
+        std::vector<Mark> snapshot() const;
+
+      private:
+        std::vector<Mark> m_slots = std::vector<Mark>(kMaxMarks);
+        size_t            m_next  = 0;
+        size_t            m_size  = 0;
+        uint64_t          m_last  = 0;
+    };
+
     struct MonitorFrames {
-        std::string           name;
-        double                refreshHz = 0; // the mode's refresh rate (0 when unknown)
-        uint64_t              total     = 0;
-        std::vector<uint64_t> presentedUs;
+        std::string             name;
+        double                  refreshHz = 0; // the mode's refresh rate (0 when unknown)
+        uint64_t                total     = 0;
+        std::vector<uint64_t>   presentedUs;
+        std::vector<RenderSpan> renders;
     };
 
     // {"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name":"GF-REF","refreshHz":60,
-    //  "total":1234,"presented":[...]}]}. Names are JSON-escaped and cut at kMaxNameBytes (on a UTF-8 boundary); at most
-    // kMaxMonitors monitors; a refresh rate that is not finite and positive is written as 0.
-    std::string framesJson(std::span<const MonitorFrames> monitors);
+    //  "total":1234,"presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t":us,"what":"overview-opening"}]}.
+    // Names are JSON-escaped and cut at kMaxNameBytes (on a UTF-8 boundary); at most kMaxMonitors monitors; a refresh rate
+    // that is not finite and positive is written as 0.
+    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks = {});
 
 } // namespace gf::frames

@@ -122,16 +122,24 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `CMonitor::m_events.presented`, the presentation feedback) go into a ring of 1024 CLOCK_MONOTONIC microsecond stamps per
   output (`core/FrameLog.*`, `FrameProbe.*`; a stamp not newer than the last is refused). `hyprctl grassfield-frames`
   (exact, read-only, no argument) returns `{"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name",
-  "refreshHz","total","presented":[...]}]}` (at most 16 outputs, names escaped and cut at 64 bytes). One push per presented
-  frame on the compositor thread, nothing else. `tests/visual/presented-frames.sh` measures real shell animations with it
-  (Overview open/close, Launchpad open, Dock magnification) through `tests/visual/frame-stats.py`.
+  "refreshHz","total","presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t","what"}]}` (at most 16 outputs,
+  names escaped and cut at 64 bytes). One push per presented frame on the compositor thread, nothing else. For attribution
+  (review 2026-10-24: whose cost were the Overview's missed frames?) each output also keeps the CPU span of every frame
+  Hyprland rendered (render.preChecks to RENDER_POST, the plugin's draws included, the GPU's time not; 1024 per output),
+  and the Overview marks its phases (`overview-opening`, `overview-open`, `overview-closing`, `overview-closed`; the last
+  64, names cut at 32 bytes). `tests/visual/presented-frames.sh` measures real shell animations with it (Overview
+  open/close, Launchpad open, Dock magnification) through `tests/visual/frame-stats.py`, and `tests/visual/
+  frame-attribution.py` classes each interval over 1.2 periods: `compositor` (its frame took more than 0.8 period of CPU),
+  `client` (the render began more than 0.5 period after the previous presentation: nothing new to draw until then), `other`.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
   their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
 - **FR13** Input consistency: the plugin never cancels a pointer button event, so Hyprland's held-button
   state always matches the device and the click after any titlebar gesture reaches the window under the
-  pointer. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  pointer. One exception, P6 (the revealed titlebar of a full-screen window): a press on it and the release of that press
+  are cancelled together; Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it
+  was. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
   press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
   a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
   The release of a press that went to a client is never consumed, even over a titlebar.

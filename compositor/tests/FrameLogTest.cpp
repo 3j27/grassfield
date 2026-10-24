@@ -44,28 +44,66 @@ TEST(FrameLog, OnlyTheLastCapacityFramesAreKept) {
 }
 
 TEST(FrameLog, JsonNamesTheClockAndEachMonitor) {
-    const std::vector<MonitorFrames> m{{.name = "GF-REF", .refreshHz = 60, .total = 2, .presentedUs = {10, 26}},
-                                       {.name = "WAYLAND-1", .refreshHz = 59.951, .total = 0, .presentedUs = {}}};
+    const std::vector<MonitorFrames> m{{.name = "GF-REF", .refreshHz = 60, .total = 2, .presentedUs = {10, 26}, .renders = {}},
+                                       {.name = "WAYLAND-1", .refreshHz = 59.951, .total = 0, .presentedUs = {}, .renders = {}}};
     EXPECT_EQ(framesJson(m), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)"
-                             R"({"name":"GF-REF","refreshHz":60.000,"total":2,"presented":[10,26]},)"
-                             R"({"name":"WAYLAND-1","refreshHz":59.951,"total":0,"presented":[]}]})");
-    EXPECT_EQ(framesJson({}), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[]})");
+                             R"({"name":"GF-REF","refreshHz":60.000,"total":2,"presented":[10,26],"renders":[]},)"
+                             R"({"name":"WAYLAND-1","refreshHz":59.951,"total":0,"presented":[],"renders":[]}],"marks":[]})");
+    EXPECT_EQ(framesJson({}), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[],"marks":[]})");
 }
 
 TEST(FrameLog, JsonIsSafeWithOddMonitorData) {
-    const std::vector<MonitorFrames> odd{{.name = "a\"b\\c\n", .refreshHz = std::nan(""), .total = 0, .presentedUs = {}}};
+    const std::vector<MonitorFrames> odd{{.name = "a\"b\\c\n", .refreshHz = std::nan(""), .total = 0, .presentedUs = {}, .renders = {}}};
     EXPECT_EQ(framesJson(odd), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)"
-                               R"({"name":"a\"b\\c\n","refreshHz":0.000,"total":0,"presented":[]}]})");
+                               R"({"name":"a\"b\\c\n","refreshHz":0.000,"total":0,"presented":[],"renders":[]}],"marks":[]})");
     // A long name is cut on a UTF-8 boundary: 63 ASCII bytes then a 2-byte character that would straddle byte 64.
     const std::string                longName = std::string(63, 'x') + "\xc3\xa9" + "tail";
-    const std::vector<MonitorFrames> named{{.name = longName, .refreshHz = 60, .total = 0, .presentedUs = {}}};
+    const std::vector<MonitorFrames> named{{.name = longName, .refreshHz = 60, .total = 0, .presentedUs = {}, .renders = {}}};
     EXPECT_NE(framesJson(named).find("\"name\":\"" + std::string(63, 'x') + "\""), std::string::npos);
-    std::vector<MonitorFrames> many(kMaxMonitors + 3, MonitorFrames{.name = "M", .refreshHz = 60, .total = 0, .presentedUs = {}});
+    std::vector<MonitorFrames> many(kMaxMonitors + 3, MonitorFrames{.name = "M", .refreshHz = 60, .total = 0, .presentedUs = {}, .renders = {}});
     const auto                 json  = framesJson(many);
     size_t                     count = 0;
     for (size_t at = json.find("\"name\""); at != std::string::npos; at = json.find("\"name\"", at + 1))
         ++count;
     EXPECT_EQ(count, kMaxMonitors);
+}
+
+// Attribution (integrator run 2026-10-24: the Overview missed its frames; whose cost was it?): each rendered frame's CPU span
+// and the plugin's animation phases, on the presentation clock.
+TEST(FrameLog, RenderSpansAreKeptInTimeOrder) {
+    CSpanRing ring;
+    EXPECT_TRUE(ring.push({.beginUs = 100, .cpuUs = 4000}));
+    EXPECT_FALSE(ring.push({.beginUs = 100, .cpuUs = 1})) << "not after the newest";
+    EXPECT_TRUE(ring.push({.beginUs = 16800, .cpuUs = 21000}));
+    EXPECT_EQ(ring.snapshot(), (std::vector<RenderSpan>{{.beginUs = 100, .cpuUs = 4000}, {.beginUs = 16800, .cpuUs = 21000}}));
+    for (uint64_t i = 1; i <= kCapacity + 5; ++i)
+        ASSERT_TRUE(ring.push({.beginUs = 20000 + i, .cpuUs = i}));
+    const auto s = ring.snapshot();
+    ASSERT_EQ(s.size(), kCapacity);
+    EXPECT_EQ(s.front().beginUs, 20000U + 6U) << "the oldest overwritten";
+}
+
+TEST(FrameLog, MarksAreCutAndOrdered) {
+    CMarkRing marks;
+    EXPECT_TRUE(marks.push(500, "overview-opening"));
+    EXPECT_TRUE(marks.push(500, "overview-open")) << "the same instant is allowed";
+    EXPECT_FALSE(marks.push(499, "late")) << "older than the newest";
+    EXPECT_TRUE(marks.push(900, std::string(40, 'x')));
+    const auto s = marks.snapshot();
+    ASSERT_EQ(s.size(), 3U);
+    EXPECT_EQ(s[2].what, std::string(kMaxMarkBytes, 'x'));
+    for (uint64_t i = 0; i < kMaxMarks + 2; ++i)
+        ASSERT_TRUE(marks.push(1000 + i, "m"));
+    EXPECT_EQ(marks.snapshot().size(), kMaxMarks);
+    EXPECT_EQ(marks.snapshot().front().us, 1002U);
+}
+
+TEST(FrameLog, JsonCarriesRendersAndMarks) {
+    const std::vector<MonitorFrames> m{{.name = "GF-REF", .refreshHz = 60, .total = 1, .presentedUs = {10}, .renders = {{.beginUs = 3, .cpuUs = 7}, {.beginUs = 20, .cpuUs = 18000}}}};
+    const std::vector<Mark>          marks{{.us = 5, .what = "overview-opening"}, {.us = 9, .what = "a\"b"}};
+    EXPECT_EQ(framesJson(m, marks), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)"
+                                    R"({"name":"GF-REF","refreshHz":60.000,"total":1,"presented":[10],"renders":[[3,7],[20,18000]]}],)"
+                                    R"("marks":[{"t":5,"what":"overview-opening"},{"t":9,"what":"a\"b"}]})");
 }
 
 TEST(FrameLog, FeatureName) {

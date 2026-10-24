@@ -79,8 +79,9 @@ else
   gx0="" gx1="" gy=""
 fi
 
-# The frames presented since the last collection, appended as "<monotonic us> <interval us>".
-last=0
+# The frames presented since the last collection, appended as "<monotonic us> <interval us>"; for the attribution, the
+# render spans of the output ("<begin us> <cpu us>") and the plugin's phase marks ("<us> <name>") since then too.
+last=0 last_render=0 last_mark=0
 collect() {
   local answer=$out/frames-$(date +%s%N).json
   nestctl -j grassfield-frames >"$answer" 2>/dev/null || return 0
@@ -89,6 +90,11 @@ collect() {
     | range(1; $p | length) | select($p[.] > $last) | "\($p[.]) \($p[.] - $p[. - 1])"' \
     "$answer" >>"$out/frames.all"
   last=$(jq -r --arg o "$VS_OUTPUT" '[.monitors[] | select(.name == $o) | .presented[-1]][0] // 0' "$answer")
+  jq -r --arg o "$VS_OUTPUT" --argjson last "$last_render" '
+    .monitors[] | select(.name == $o) | (.renders // [])[] | select(.[0] > $last) | "\(.[0]) \(.[1])"' "$answer" >>"$out/renders.all"
+  last_render=$(jq -r --arg o "$VS_OUTPUT" '[.monitors[] | select(.name == $o) | (.renders // [])[-1][0]][0] // 0' "$answer")
+  jq -r --argjson last "$last_mark" '(.marks // [])[] | select(.t > $last) | "\(.t) \(.what)"' "$answer" >>"$out/marks.all"
+  last_mark=$(jq -r '[(.marks // [])[-1].t][0] // 0' "$answer")
 }
 # The intervals that span a request (the previous frame before it, this one after it) are left out: the wait for the
 # request is not a frame of the animation. <frames.all> <events.txt> -> frames.txt
@@ -151,4 +157,8 @@ vs_ipc controlcenter reduceTransparency false >/dev/null
 drop_spanning "$out/frames.all" "$out/events.txt" >"$out/frames.txt"
 echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, window $window ms"
 python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.txt" "$hz" "$window" | tee "$out/stats.txt"
-exit "${PIPESTATUS[0]}"
+rc=${PIPESTATUS[0]}
+# Whose cost each long interval was (compositor render, a client's late frame, other), the render CPU, the plugin's phases.
+python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.txt" "$hz" "$window" \
+  | tee "$out/attribution.txt"
+exit "$rc"
