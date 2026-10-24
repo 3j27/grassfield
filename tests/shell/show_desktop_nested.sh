@@ -18,6 +18,8 @@
 #     comes back, no special workspace stays shown over a screen, the activated window has the focus;
 #   8 a REAL xdg-activation (tests/tools/xdgact: a window that gets an xdg_activation_v1 token and activates itself while parked;
 #     Hyprland focuses it FIRST, which shows the parking workspace): the same, in the other event order;
+#   O a parked window with no record (a corrupt or lost record file), parked by hand, activating itself through xdg-activation:
+#     it comes back to the Space the user is on and is in front, the workspace hidden;
 #   R crash recovery: show, then the shell is restarted (scripts/dev/shell-run.sh) with the windows parked: within the bound
 #     (Tokens showDesktopRecoverMs + tries, 25 s here) every window is back on its Space, nothing was focused by the recovery
 #     (the focus is what it was), nothing stays shown over a screen and the record file is gone.
@@ -224,6 +226,18 @@ nothing_parked "8: nothing left on special:desktop"
 wait_for no_special && pass "8: the parking workspace is not shown over a screen" || fail "8: a special workspace is still shown"
 focus_is "8: the window that activated itself (X) has the focus" "$x"
 space_is "8: the Space is X's Space" "$S3"
+focus_space "$S1"
+
+# O a parked window that no record owns (the record file was corrupt or could not be written): an app activating it brings it back
+# to the Space the user is on, in front. Show Desktop is not on; X is parked by hand, as a lost record leaves it.
+addr_x=$(hq clients | jq -r --argjson p "$x" '.[] | select(.pid == $p) | .address')
+nest dispatch "hl.dsp.window.move({ workspace = \"special:desktop\", follow = false, window = \"address:$addr_x\" })" >/dev/null 2>&1
+on_space "O: setup: X is parked with no record" "$x" special:desktop
+[[ $(active_pid) != "$x" ]] && pass "O: setup: X does not have the focus" || fail "O: setup: X has the focus"
+kill -USR1 "$x"
+on_space "O: X came back to the Space the user is on ($S1)" "$x" "$S1"
+wait_for no_special && pass "O: the parking workspace is not shown over a screen" || fail "O: a special workspace is still shown"
+focus_is "O: X is in front" "$x"
 focus_space "$S1"
 
 # R crash recovery: the shell dies with the windows parked; the one that starts finds the record and sends them back

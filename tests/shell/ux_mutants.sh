@@ -259,6 +259,7 @@ try "the verify bound duplicates the windows of a live record" $F "s.records = s
 try "the verify bound does not persist" $F "        s.records = s.records.concat(strandedOnly(s.verify.records, parked, s.records));
         r.persist = true;" "        s.records = s.records.concat(strandedOnly(s.verify.records, parked, s.records));"
 try "capture does not stop the verify" $F "    s.verify = {records: [], tries: 0};
+    s.ended = [];
     r.timers.verify = \"stop\";
     const records = SD.captureAll" "    const records = SD.captureAll"
 try "R2 the stragglers are read after the verify records are cleared" $F "    let stragglers = [];
@@ -268,6 +269,8 @@ try "R2 the stragglers are read after the verify records are cleared" $F "    le
 try "the stragglers are moved back at the capture (visible during the new Show Desktop)" $F "        stragglers = SD.stragglerRecords(s.verify.records, parkedNow);" "        stragglers = SD.stragglerRecords(s.verify.records, parkedNow);
         stragglers.forEach(rec => rec.windows.forEach(w => send(r, Minimized.moveRequest(w.address, String(rec.workspace)))));"
 try "the stragglers are not merged into the new records" $F "    s.records = records.concat(stragglers);" "    s.records = records;"
+try "the verify's end keeps the windows it sent back as ours (a window parked later is waited for, never focused)" $F "    s.verify = {records: [], tries: 0};
+    s.ended = [];   // the windows are back" "    s.verify = {records: [], tries: 0};   // the windows are back"
 try "the capture does not park the windows" $F "    records.forEach(rec => rec.windows.forEach(w => send(r, Minimized.moveRequest(w.address, SD.PARKING))));" "    records.forEach(rec => rec.windows.forEach(w => w));"
 
 # ---- crash recovery ------------------------------------------------------------------------------------------------------------------------

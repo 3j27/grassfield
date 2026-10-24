@@ -1,31 +1,28 @@
 {
   "scenario": "dispatcher",
-  "focusBefore": "0x5e4dc8a7ff60",
-  "window": "0x5e4dc9061fb0",
+  "focusBefore": "0x5701f48ec760",
+  "window": "0x5701f45c76b0",
   "windows": [
     {
-      "address": "0x5e4dc9061fb0",
+      "address": "0x5701f45c76b0",
       "workspace": 2,
       "x": 2050,
       "y": 302,
-      "class": "gf-sd-main",
-      "pid": 2192108
+      "class": "gf-sd-main"
     },
     {
-      "address": "0x5e4dc8f380d0",
+      "address": "0x5701f48d4380",
       "workspace": 2,
       "x": 2050,
       "y": 261,
-      "class": "gf-sd-main",
-      "pid": 2192294
+      "class": "gf-sd-main"
     },
     {
-      "address": "0x5e4dc8a7ff60",
+      "address": "0x5701f48ec760",
       "workspace": 2,
       "x": 2050,
       "y": 261,
-      "class": "gf-sd-other",
-      "pid": 2192343
+      "class": "gf-sd-other"
     }
   ],
   "events": [
@@ -42,47 +39,47 @@
     {
       "t": 0,
       "name": "activewindow",
-      "data": "gf-sd-main,user@gf-host:/home/user/workspace/grassfieldos/.claude/worktrees/agent-ad39980283bf69619"
+      "data": "gf-sd-main,"
     },
     {
       "t": 0,
       "name": "activewindowv2",
-      "data": "5e4dc9061fb0"
+      "data": "5701f45c76b0"
     },
     {
-      "t": 3,
+      "t": 5,
       "name": "activespecial",
       "data": ",GF-REF"
     },
     {
-      "t": 3,
+      "t": 5,
       "name": "activespecialv2",
       "data": ",,GF-REF"
     },
     {
-      "t": 4,
+      "t": 6,
       "name": "movewindowv2",
-      "data": "5e4dc9061fb0,2,2"
+      "data": "5701f45c76b0,2,2"
     },
     {
-      "t": 5,
+      "t": 7,
       "name": "movewindowv2",
-      "data": "5e4dc8f380d0,2,2"
+      "data": "5701f48d4380,2,2"
     },
     {
-      "t": 5,
+      "t": 8,
       "name": "movewindowv2",
-      "data": "5e4dc8a7ff60,2,2"
+      "data": "5701f48ec760,2,2"
     },
     {
-      "t": 137,
+      "t": 139,
       "name": "activewindow",
-      "data": "gf-sd-main,user@gf-host:/home/user/workspace/grassfieldos/.claude/worktrees/agent-ad39980283bf69619"
+      "data": "gf-sd-main,"
     },
     {
-      "t": 137,
+      "t": 139,
       "name": "activewindowv2",
-      "data": "5e4dc9061fb0"
+      "data": "5701f45c76b0"
     }
   ]
 }

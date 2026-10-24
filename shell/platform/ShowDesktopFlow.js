@@ -278,6 +278,7 @@ function verify(s, ctx, r) {
         r.persist = true;
     }
     s.verify = {records: [], tries: 0};
+    s.ended = [];   // the windows are back (or kept in a record): "sent back by us" is over, a window parked later is an orphan
 }
 
 // The stragglers of `records` that no record in `live` lists already.
@@ -344,6 +345,7 @@ function onCapture(state, ctx) {
         stragglers = SD.stragglerRecords(s.verify.records, parkedNow);
     }
     s.verify = {records: [], tries: 0};
+    s.ended = [];
     r.timers.verify = "stop";
     const records = SD.captureAll(ctx.windows, ctx.shown, ctx.focused, ctx.stages);
     if (records.length === 0 && stragglers.length === 0) {

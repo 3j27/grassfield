@@ -527,6 +527,20 @@ TestCase {
         compare(special, false);
     }
 
+    function test_aWindowParkedByHandAfterAnEndingIsAnOrphanNotOneWeSentBack() {
+        park();
+        press();
+        advance(1500);                  // the ending and its verify are long over
+        compare(parkedAddresses(), []);
+        wins[0].parked = true;          // parked again by something else, no record
+        sent = [];
+        realActivation("a1");
+        advance(400);
+        compare(wins[0].parked, false, "it comes back, it is not waited for as a window the flow is still moving");
+        compare(hfocus, "a1");
+        compare(special, false);
+    }
+
     function test_aRecordFileThatCouldNotBeWrittenIsLostAtTheRestartButNotTheWindows() {
         park();
         // the shell restarts: the flow starts empty, the windows are still parked, no file to read

@@ -1,56 +1,52 @@
 {
   "scenario": "xdgact",
-  "focusBefore": "0x5e4dc900d9a0",
-  "window": "0x5e4dc8a7ff60",
+  "focusBefore": "0x5701f4924c30",
+  "window": "0x5701f48aef60",
   "windows": [
     {
-      "address": "0x5e4dc8a7ff60",
+      "address": "0x5701f48aef60",
       "workspace": 2,
       "x": 2280,
       "y": 441,
-      "class": "gf-sd-act",
-      "pid": 2192746
+      "class": "gf-sd-act"
     },
     {
-      "address": "0x5e4dc9061fb0",
+      "address": "0x5701f49091f0",
       "workspace": 2,
       "x": 2050,
       "y": 261,
-      "class": "gf-sd-main",
-      "pid": 2192873
+      "class": "gf-sd-main"
     },
     {
-      "address": "0x5e4dc8f380d0",
+      "address": "0x5701f45d3890",
       "workspace": 2,
       "x": 2050,
       "y": 261,
-      "class": "gf-sd-main",
-      "pid": 2192918
+      "class": "gf-sd-main"
     },
     {
-      "address": "0x5e4dc900d9a0",
+      "address": "0x5701f4924c30",
       "workspace": 2,
       "x": 2050,
       "y": 261,
-      "class": "gf-sd-other",
-      "pid": 2193017
+      "class": "gf-sd-other"
     }
   ],
   "events": [
     {
       "t": 0,
       "name": "urgent",
-      "data": "5e4dc8a7ff60"
+      "data": "5701f48aef60"
     },
     {
       "t": 1,
       "name": "activewindow",
-      "data": "gf-sd-act,gf-sd-act"
+      "data": "gf-sd-act,"
     },
     {
       "t": 1,
       "name": "activewindowv2",
-      "data": "5e4dc8a7ff60"
+      "data": "5701f48aef60"
     },
     {
       "t": 1,
@@ -63,54 +59,54 @@
       "data": "-98,special:desktop,GF-REF"
     },
     {
-      "t": 17,
+      "t": 14,
       "name": "activespecial",
       "data": ",GF-REF"
     },
     {
-      "t": 17,
+      "t": 14,
       "name": "activespecialv2",
       "data": ",,GF-REF"
     },
     {
+      "t": 15,
+      "name": "movewindowv2",
+      "data": "5701f4924c30,2,2"
+    },
+    {
+      "t": 16,
+      "name": "movewindowv2",
+      "data": "5701f45d3890,2,2"
+    },
+    {
       "t": 18,
       "name": "movewindowv2",
-      "data": "5e4dc900d9a0,2,2"
+      "data": "5701f48aef60,2,2"
     },
     {
-      "t": 21,
-      "name": "movewindowv2",
-      "data": "5e4dc8f380d0,2,2"
-    },
-    {
-      "t": 27,
-      "name": "movewindowv2",
-      "data": "5e4dc8a7ff60,2,2"
-    },
-    {
-      "t": 28,
+      "t": 19,
       "name": "activewindow",
-      "data": "gf-sd-other,user@gf-host:/home/user/workspace/grassfieldos/.claude/worktrees/agent-ad39980283bf69619"
+      "data": "gf-sd-other,"
     },
     {
-      "t": 28,
+      "t": 19,
       "name": "activewindowv2",
-      "data": "5e4dc900d9a0"
+      "data": "5701f4924c30"
     },
     {
-      "t": 29,
+      "t": 20,
       "name": "movewindowv2",
-      "data": "5e4dc9061fb0,2,2"
+      "data": "5701f49091f0,2,2"
     },
     {
-      "t": 178,
+      "t": 163,
       "name": "activewindow",
-      "data": "gf-sd-act,gf-sd-act"
+      "data": "gf-sd-act,"
     },
     {
-      "t": 178,
+      "t": 163,
       "name": "activewindowv2",
-      "data": "5e4dc8a7ff60"
+      "data": "5701f48aef60"
     }
   ]
 }
