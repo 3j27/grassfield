@@ -246,6 +246,19 @@ ShellRoot {
         }
     }
 
+    // GF-083: a package update leaves the old shell and compositor plugin running until the next login (macOS: "Restart to
+    // finish installing"). One notice per run; nothing is shown while the versions are unknown.
+    UpdateNotice {
+        id: updateNotice
+        property bool announced: false
+        onUpdatePendingChanged: {
+            if (updatePending && !announced) {
+                announced = true;
+                Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version."));
+            }
+        }
+    }
+
     Connections {
         target: SettingsApp
 

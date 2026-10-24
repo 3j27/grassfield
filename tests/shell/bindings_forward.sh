@@ -110,4 +110,7 @@ check bash -c 'grep -q "forwarding.lua" "$1/apps/settings/qml/KeyboardPage.qml" 
 desc="GF-106 / GF-064: Show Desktop on Super+F3 and the zoom keys (Super+Alt+8, =, -) reach the shell, and none of them clashes with another bind"
 check bash -c 'f="$1/config/hypr/grassfield/bindings.lua"; for k in "SUPER + F3" "SUPER + ALT + code:17" "SUPER + ALT + code:21" "SUPER + ALT + code:20"; do [ "$(grep -c "^bind(\"$k\"" "$f")" = 1 ] || exit 1; done; grep -q "shell(\"windows\", \"showDesktop\")" "$f" && grep -q "shell(\"zoom\", \"toggle\")" "$f"' _ "$root"
 
+desc="WezTerm (class org.wezfurlong.wezterm) is a terminal that keeps its Alt+arrows, with the other terminals of Omarchy's list"
+check bash -c 'for c in alacritty kitty com.mitchellh.ghostty foot org.codeberg.dnkl.foot wezterm org.wezfurlong.wezterm; do grep -q "TERMINAL_CLASSES = {.*\"$c\"" "$1/config/hypr/grassfield/forwarding.lua" || exit 1; done' _ "$root"
+
 exit $fail

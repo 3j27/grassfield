@@ -1,9 +1,10 @@
 -- Grassfield keyboard and pointer bindings (ADR-0002). SUPER plays the role of Command.
 -- Shell actions go through `qs ipc` into the running grassfield-shell instance.
 
--- The dev session runs the shell from the repository (-p); the installed session by name (-c).
+-- The dev session runs the shell from the repository (-p $GRASSFIELD_SHELL_DIR); the installed session always from the
+-- system location, never by name (`-c` would also search the user-writable ~/.config/quickshell, GF-115).
 local shell_dir = os.getenv("GRASSFIELD_SHELL_DIR")
-local shell_selector = (shell_dir and shell_dir ~= "") and ("-p '" .. shell_dir .. "'") or "-c grassfield"
+local shell_selector = (shell_dir and shell_dir ~= "") and ("-p '" .. shell_dir .. "'") or "-p '/usr/share/grassfield/shell'"
 
 local function shell(target, fn)
   return hl.dsp.exec_cmd("qs ipc " .. shell_selector .. " call " .. target .. " " .. fn)

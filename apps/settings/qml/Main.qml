@@ -26,6 +26,7 @@ Window {
         {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
+        {id: "mouse", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
         {id: "keyboard", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "about", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
     ]
@@ -427,6 +428,8 @@ Window {
                     return notificationsPage;
                 case "lock":
                     return lockPage;
+                case "mouse":
+                    return mousePage;
                 case "keyboard":
                     return keyboardPage;
                 case "about":
@@ -509,6 +512,13 @@ Window {
         id: lockPage
         LockPage {
             store: cfg
+        }
+    }
+
+    Component {
+        id: mousePage
+        MousePage {
+            backend: root.backend
         }
     }
 
