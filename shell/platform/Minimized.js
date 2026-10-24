@@ -179,16 +179,18 @@ function motionCall(reduced) {
 }
 
 // Compositor blur size and passes (GF-125, docs/specs/ui.md "Material blur"): one value for every surface, chosen by the
-// shell from the transparency. Core Hyprland config, no plugin needed. pcall only catches a Lua error (no hl.config at all):
-// hl.config does NOT raise for a key Hyprland does not know, it returns normally and Hyprland then reports a config error
-// (a "notify" event), see blurRejected(). "" for anything but integers in range (callers must not dispatch it).
+// shell from the transparency. Core Hyprland config, no plugin needed. Captured from Hyprland 0.56.2 (nested,
+// tests/compositor/blur_events.sh): the request socket answers a dispatch with "ok", or with "error: ...: unknown config key
+// '...'" when hl.config does not know a key (also when the call is wrapped in pcall); Hyprland emits NO socket2 event for a
+// push, and exactly one "configreloaded" for a config reload (the push that follows it emits none). blurAnswer() reads that
+// answer. "" for anything but integers in range (callers must not dispatch it).
 var blurLimits = {sizeMin: 1, sizeMax: 64, passesMin: 1, passesMax: 6};
 
 function blurCall(size, passes) {
     const ok = (v, lo, hi) => typeof v === "number" && isFinite(v) && Math.floor(v) === v && v >= lo && v <= hi;
     if (!ok(size, blurLimits.sizeMin, blurLimits.sizeMax) || !ok(passes, blurLimits.passesMin, blurLimits.passesMax))
         return "";
-    return "function() pcall(hl.config, { decoration = { blur = { size = " + size + ", passes = " + passes + " } } }) end";
+    return "function() hl.config({ decoration = { blur = { size = " + size + ", passes = " + passes + " } } }) end";
 }
 
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
@@ -361,20 +363,13 @@ function minimizeRequestAddress(data) {
     return normalizeAddress(msg.address);
 }
 
-// Hyprland answered a blur push with a config error: a "notify" event that names the blur or a config error, within
-// blurErrorWindowMs of the push. The shell then stops pushing (the config's own 18 / 3 stays) instead of repeating a request
-// that fails.
-var blurErrorWindowMs = 2000;
-
-function blurRejected(eventName, eventData, msSincePush) {
-    if (eventName !== "notify" || typeof eventData !== "string")
-        return false;
-    if (typeof msSincePush !== "number" || msSincePush < 0 || msSincePush > blurErrorWindowMs)
-        return false;
-    return /blur|config error|config:/i.test(eventData);
-}
-
-// A config reload that follows our own push closely is Hyprland answering it, not a user reload: not pushed again (no loop).
-function blurRepushAllowed(msSincePush) {
-    return typeof msSincePush !== "number" || msSincePush > blurErrorWindowMs;
+// The answer of the request socket to the blur push: "ok", "rejected" (an error answer: the shell stops pushing, the config's
+// own 18 / 3 stays) or "unknown" (nothing readable).
+function blurAnswer(reply) {
+    if (typeof reply !== "string")
+        return "unknown";
+    const text = reply.trim();
+    if (text === "ok")
+        return "ok";
+    return /^error\b/i.test(text) ? "rejected" : "unknown";
 }

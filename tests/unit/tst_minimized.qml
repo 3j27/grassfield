@@ -13,7 +13,7 @@ TestCase {
     }
 
     function test_blurCallIsBuiltFromIntegersInRange() {
-        compare(Minimized.blurCall(18, 3), "function() pcall(hl.config, { decoration = { blur = { size = 18, passes = 3 } } }) end");
+        compare(Minimized.blurCall(18, 3), "function() hl.config({ decoration = { blur = { size = 18, passes = 3 } } }) end");
         compare(Minimized.blurCall(0, 3), "");
         compare(Minimized.blurCall(18, 9), "");
         compare(Minimized.blurCall(18.5, 3), "");
@@ -21,15 +21,16 @@ TestCase {
         compare(Minimized.blurCall(NaN, 3), "");
     }
 
-    function test_blurErrorFromHyprlandIsDetectedAndAReloadAfterOurPushDoesNotLoop() {
-        verify(Minimized.blurRejected("notify", "0,5000,ff0000,Config error in decoration:blur:size: no such option", 300));
-        verify(!Minimized.blurRejected("notify", "0,5000,ff0000,Config error in decoration:blur:size", 5000), "too late: not ours");
-        verify(!Minimized.blurRejected("notify", "volume changed", 300), "an unrelated notification");
-        verify(!Minimized.blurRejected("configreloaded", "", 300));
-        verify(!Minimized.blurRejected("notify", "Config error", -1));
-        verify(!Minimized.blurRepushAllowed(100), "a reload right after our push is its echo");
-        verify(Minimized.blurRepushAllowed(60000), "a later reload: push again");
-        verify(Minimized.blurRepushAllowed(Date.now()), "no push yet (a huge age): allowed");
+    // The answers are captured from Hyprland 0.56.2 (tests/compositor/blur_events.sh, request socket, `dispatch <function>`):
+    // "ok" for a valid hl.config call, "error: ...: unknown config key '...'" for an unknown key.
+    function test_blurAnswerReadsWhatHyprlandAnswered() {
+        compare(Minimized.blurAnswer("ok"), "ok");
+        compare(Minimized.blurAnswer("ok\n"), "ok");
+        compare(Minimized.blurAnswer("error: =[C]:-1: unknown config key 'decoration.blur.no_such'"), "rejected");
+        compare(Minimized.blurAnswer("error: return hl.dispatch(function() hl.config({ decoration = { blur = { no_such_key_gf = 1 } } }) end):1: unknown config key 'decoration.blur.no_such_key_gf'"), "rejected");
+        compare(Minimized.blurAnswer(""), "unknown");
+        compare(Minimized.blurAnswer("okay then"), "unknown");
+        compare(Minimized.blurAnswer(undefined), "unknown");
     }
 
     function test_windowCallIsBuiltFromValidatedPieces() {
