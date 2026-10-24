@@ -24,7 +24,8 @@ constexpr double kMaxFps = 30.0;
 constexpr int kToneFrames = 8;                             // frames sampled for the menu bar tone, besides the poster
 constexpr int kTranscodeTimeoutSeconds = 1800;             // one run of ffmpeg (the shell kills the helper earlier)
 constexpr int kProbeTimeoutSeconds = 30;
-constexpr int kFrameTimeoutSeconds = 30;
+// A frame grab of a transcoded file is a fraction of a second; the bound is for a loaded machine (a niced 4K grab took 23-42 s at load 25-40).
+constexpr int kFrameTimeoutSeconds = 120;
 constexpr qint64 kMaxProbeJsonBytes = 1024 * 1024;
 // The only container formats ffmpeg may open (the demuxers behind the suffixes of videoSuffixes): a playlist (HLS, ffconcat, a
 // text file naming other files) is refused whatever its name.

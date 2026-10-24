@@ -9,7 +9,7 @@
 # (OnFailure=) when the shell has failed for good. This stand-in answers those two calls with Grassfield's own lock
 # (WlSessionLock + PamContext("omarchy-lock-password") in grassfield-shell), never with another locker:
 #   lock lock     when grassfield-shell is not running, starts it again (reset-failed first: a shell at its start limit
-#                 is tried once more before sleep), waits for its IPC, then `qs ipc -c grassfield call lock lock`
+#                 is tried once more before sleep), waits for its IPC, then `qs ipc -p /usr/share/grassfield/shell call lock lock`
 #   lock status   {"secure": <Hyprland reports LOCK on every monitor>, "requested": <grassfield-shell's crash-recovery
 #                 marker says "locked">} (read-only: hyprctl -j monitors, the marker file)
 # Every other call fails as Omarchy's wrapper does when its shell is not running ("-q": silent success). Nothing here
@@ -44,7 +44,7 @@ lock_lock() {
   # The caller bounds this with its own timeout (omarchy-system-sleep-lock: what is left of logind's window).
   tries=0
   while [ "$tries" -lt 100 ]; do
-    out=$(qs ipc -c grassfield call lock lock 2>/dev/null) && case $out in
+    out=$(qs ipc -p /usr/share/grassfield/shell call lock lock 2>/dev/null) && case $out in
       ok | already-locked | refused:*)
         echo "$out"
         exit 0

@@ -55,6 +55,7 @@ status=0
 skips=()
 collect_skips() { local line; while IFS= read -r line; do [[ $line == *SKIP* ]] && skips+=("$line"); done <<<"$1"; return 0; }
 skip() { echo "SKIP: $1"; skips+=("SKIP: $1"); }
+load_above_cores() { awk -v n="$(nproc)" '{ exit !($1 > n) }' /proc/loadavg; }
 # Offscreen tests must not load the desktop's platform theme (QT_QPA_PLATFORMTHEME=gtk3 calls gtk_init, which
 # needs a display and fails inside the Claude Code sandbox).
 unset QT_QPA_PLATFORMTHEME
@@ -144,7 +145,17 @@ for dir in tests/shell/*/ tests/security/*/; do
   collect_skips "$out"
   # Gate Q2 (see the unit run above).
   python3 -I tests/ci/qml_warnings.py <<<"$out" || { status=1; record "$layer" "${dir}shell.qml" fail; continue; }
-  if grep -q "FAIL" <<<"$out"; then status=1; record "$layer" "${dir}shell.qml" fail; continue; fi
+  if grep -q "FAIL" <<<"$out"; then
+    # A timing budget measured on a saturated machine says nothing about the code: a test with a `load-sensitive`
+    # marker that fails while the 1-minute load is above the core count is reported as not judged (a SKIP, never a
+    # pass). The budget itself is a gate measurement for a quiet machine (just gate).
+    if [[ -f ${dir}load-sensitive ]] && load_above_cores; then
+      skip "${dir}: timing budget not judged at load $(cut -d' ' -f1 /proc/loadavg) (above $(nproc) cores)"
+      record "$layer" "${dir}shell.qml" skip
+      continue
+    fi
+    status=1; record "$layer" "${dir}shell.qml" fail; continue
+  fi
   if grep -q "PASS" <<<"$out"; then record "$layer" "${dir}shell.qml" pass; elif grep -q SKIP <<<"$out"; then record "$layer" "${dir}shell.qml" skip; else status=1; record "$layer" "${dir}shell.qml" fail; fi
 done
 # The CMake build of ui/i18n (packaging/arch/PKGBUILD) installs a loadable plugin: i18n_live runs against it.

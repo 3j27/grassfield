@@ -369,15 +369,18 @@ TEST(VideoTool, A4kAnd8kSourceTranscodeUnderTheRealHeapCapWithForcedThreads)
 
 TEST(VideoTool, TheHeapCapStopsARunawayDecode)
 {
+    // A small input and a small cap, so that the test does not depend on how loaded the machine is (a niced 4K frame grab took
+    // 23-42 s at load 25-40): a 720p encode needs far more than 48 MiB of heap, so it must fail, fast; the same file passes under the
+    // real cap.
     if (!haveFfmpeg())
         GTEST_SKIP() << "ffmpeg is not installed";
     QTemporaryDir dir;
-    const QString k4 = makeClip(dir, QStringLiteral("k4.mp4"), 1, QStringLiteral("3840x2160"), 30, QStringLiteral("-preset ultrafast"));
+    const QString clip = makeClip(dir, QStringLiteral("hd.mp4"), 1, QStringLiteral("1280x720"), 10, QStringLiteral("-preset ultrafast"));
     TranscodeOptions o;
-    o.src = k4;
+    o.src = clip;
     o.out = videoDir(dir);
-    o.limit = QSize(3840, 2160);
-    o.dataLimit = qint64(160) << 20; // far below what a 4K encode needs
+    o.limit = QSize(1280, 720);
+    o.dataLimit = qint64(48) << 20; // far below what an encode of this size needs
     QJsonObject r;
     QString why;
     EXPECT_EQ(transcode(o, nullptr, &r, &why), TranscodeFailed) << why.toStdString();
@@ -462,4 +465,45 @@ TEST(VideoToolHeavy, EightKSourcesInThreeCodecsTranscodeTo4kUnderTheRealCap)
         const QString thumb = dir.filePath(QStringLiteral("t-%1.jpg").arg(QString::fromLatin1(src.name)));
         EXPECT_EQ(thumbnail(path, thumb, 320, &why), Ok) << src.name << ": " << why.toStdString();
     }
+}
+
+TEST(VideoTool, ASidecarThatDoesNotNameTheseFilesIsNotACacheHit)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString clip = makeClip(dir, QStringLiteral("clip.mp4"), 1, QStringLiteral("160x90"), 10);
+    TranscodeOptions o;
+    o.src = clip;
+    o.out = videoDir(dir);
+    o.limit = QSize(160, 90);
+    QJsonObject r;
+    QString why;
+    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << why.toStdString();
+    EXPECT_FALSE(r.value(QStringLiteral("cached")).toBool());
+    const QString mp4 = r.value(QStringLiteral("video")).toString();
+    const QString poster = r.value(QStringLiteral("file")).toString();
+    const QString sidecar = poster.left(poster.size() - 4) + QStringLiteral(".json");
+    ASSERT_TRUE(QFileInfo(sidecar).isFile());
+    QJsonObject again;
+    ASSERT_EQ(transcode(o, nullptr, &again, &why), Ok);
+    EXPECT_TRUE(again.value(QStringLiteral("cached")).toBool()) << "an untouched sidecar is a hit";
+    // A sidecar whose video (or picture) is another file, with the right key, is rebuilt, not trusted.
+    for (const char *field : {"video", "file"}) {
+        QFile f(sidecar);
+        ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+        QJsonObject side = QJsonDocument::fromJson(f.readAll()).object();
+        f.close();
+        side.insert(QString::fromLatin1(field), QStringLiteral("/somewhere/else/x.bin"));
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(QJsonDocument(side).toJson(QJsonDocument::Compact));
+        f.close();
+        QJsonObject third;
+        ASSERT_EQ(transcode(o, nullptr, &third, &why), Ok) << field << ": " << why.toStdString();
+        EXPECT_FALSE(third.value(QStringLiteral("cached")).toBool()) << field << ": a sidecar naming other files is not a hit";
+        EXPECT_EQ(third.value(QStringLiteral("video")).toString(), mp4);
+        EXPECT_EQ(third.value(QStringLiteral("file")).toString(), poster);
+    }
+    // The key changed with the tag: the same inputs give a name different from the one the previous tag gave.
+    EXPECT_NE(videoKey(QStringLiteral("/v/a.mp4"), 10, 20, QSize(160, 90)), QString());
 }

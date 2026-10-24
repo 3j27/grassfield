@@ -1,5 +1,5 @@
 # ADR-0013: Stages (stage manager equivalent): model in the plugin, live transforms with input blocking, feature flag
-Status: Proposed (spike positive, plugin prototype behind a flag; applied provisionally) · Date: 2026-10-18 · Decider: owner
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (spike positive, plugin prototype behind a flag; applied provisionally)) · Date: 2026-10-18 · Decider: owner
 
 ## Context
 M5 asks for "Stage Manager (plugin layout + shell strip), behind a feature flag", UI name **Stages** (master-prompt

@@ -40,8 +40,9 @@ SettingsPage {
         })
     // The settings that apply to the chosen display (the top level for All Displays).
     readonly property var eff: root.currentDisplay ? WallpaperConfig.resolve(root.stored, root.currentDisplay) : WallpaperConfig.resolve(root.stored, {name: "", model: "", serial: ""})
-    // The chosen display has an override of its own.
-    readonly property bool overridden: root.currentDisplay !== null && WallpaperConfig.normalize(root.stored).outputs.some(e => WallpaperConfig.sameDisplay(e.display, root.currentDisplay))
+    // The chosen display has a wallpaper of its own (an entry that chooses a picture, a video, a colour or the artwork; an entry
+    // that only sets Fit does not count).
+    readonly property bool overridden: root.currentDisplay !== null && WallpaperConfig.sourceOverridden(root.stored.outputs, root.currentDisplay)
 
     readonly property string source: root.eff.source
     readonly property string path: root.eff.path
@@ -322,7 +323,8 @@ SettingsPage {
         root.previousBy = plan.map;
         const entries = plan.fields ? {"wallpaper.source": plan.fields.source, "wallpaper.path": plan.fields.path} : null;
         if (plan.action === "follow-all")
-            root.useAllDisplays();
+            // The display had no wallpaper of its own before the video: only its source and path go, what else it set (Fit...) stays.
+            root.store.set("wallpaper.outputs", WallpaperConfig.withoutSource(root.stored.outputs, root.currentDisplay));
         else if (plan.action === "restore" && plan.scope === "all")
             // The choice was made for All Displays: undone there (the top level), whatever display the picker shows.
             root.store.setMany(entries);

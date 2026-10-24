@@ -9,6 +9,10 @@ local omarchy = require("grassfield.omarchy")
 if not omarchy.ok then
   print("grassfield: Omarchy include skipped: " .. tostring(omarchy.reason))
 end
+-- GF-066: the pointer defaults normally went in before the user's input.lua (omarchy.lua); without that include they apply here.
+if not omarchy.input_applied then
+  require("grassfield.input")
+end
 if not omarchy.ok or not omarchy.monitors then
   hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 end

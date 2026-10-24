@@ -10,8 +10,8 @@
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
 #define GRASSFIELD_SETTINGS_QML_DIR "/usr/share/grassfield/settings/qml"
 #endif
-#ifndef GRASSFIELD_SETTINGS_VERSION
-#define GRASSFIELD_SETTINGS_VERSION "0.1.0"
+#ifndef GRASSFIELD_VERSION
+#define GRASSFIELD_VERSION "unknown" // the real one comes from VERSION (cmake/GrassfieldVersion.cmake, build-direct.sh)
 #endif
 
 int main(int argc, char *argv[])
@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("Grassfield Settings"));
-    app.setApplicationVersion(QStringLiteral(GRASSFIELD_SETTINGS_VERSION));
+    app.setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));
     // Wayland app_id: matches org.grassfield.Settings.desktop.
     app.setDesktopFileName(QStringLiteral("org.grassfield.Settings"));

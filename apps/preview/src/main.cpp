@@ -20,8 +20,8 @@
 #ifndef GRASSFIELD_PREVIEW_QML_DIR
 #define GRASSFIELD_PREVIEW_QML_DIR "/usr/share/grassfield/preview/qml"
 #endif
-#ifndef GRASSFIELD_PREVIEW_VERSION
-#define GRASSFIELD_PREVIEW_VERSION "0.1.0"
+#ifndef GRASSFIELD_VERSION
+#define GRASSFIELD_VERSION "unknown" // the real one comes from VERSION (cmake/GrassfieldVersion.cmake, build-direct.sh)
 #endif
 
 int main(int argc, char *argv[])
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("grassfield-preview"));
-    app.setApplicationVersion(QStringLiteral(GRASSFIELD_PREVIEW_VERSION));
+    app.setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));
 
     QCommandLineParser parser;

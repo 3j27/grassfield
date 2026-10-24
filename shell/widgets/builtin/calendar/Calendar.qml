@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Grassfield.Ui
+import qs.services
 import qs.widgets
 import "../../Calendar.js" as CalendarMath
 
@@ -10,7 +11,7 @@ import "../../Calendar.js" as CalendarMath
 WidgetBase {
     id: root
 
-    readonly property date now: clock.date
+    readonly property date now: FixedTime.date(clock.date)
     readonly property int firstDay: Qt.locale().firstDayOfWeek
     readonly property var weeks: CalendarMath.monthGrid(now.getFullYear(), now.getMonth(), firstDay)
     readonly property var order: CalendarMath.weekdayOrder(firstDay)

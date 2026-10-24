@@ -50,12 +50,14 @@ print("other-user", m.interesting(e(_UID=str(uid + 1)), uid, last, 1000.0))
 print("bad-pid", m.interesting(e(COREDUMP_PID="x; rm"), uid, last, 1000.0))
 last["firefox"] = 1000.0
 print("deduped", m.interesting(e(), uid, last, 1030.0))
-print("after-window", m.interesting(e(), uid, last, 1061.0))
+print("deduped-9min", m.interesting(e(), uid, last, 1000.0 + 540))
+print("after-window", m.interesting(e(), uid, last, 1000.0 + 601))
+print("cap", m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 100.0), m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 3700.0), m.under_cap([0.0] * 5, 100.0))
 print("own", m.interesting(e(COREDUMP_EXE="/usr/lib/grassfield/grassfield-crash-watch"), uid, last, 5000.0))
 PY
 out=$(python3 -I "$tmp/crash.py" "$root")
-desc="crash notifications: this user's crashes only, named by the executable, one per program per minute, never our own"
-check bash -c 'grep -qx "name firefox" <<<"$1" && grep -qx "comm-fallback thing" <<<"$1" && grep -qx "other-user None" <<<"$1" && grep -qx "bad-pid None" <<<"$1" && grep -qx "deduped None" <<<"$1" && grep -qx "after-window firefox" <<<"$1" && grep -qx "own None" <<<"$1"' _ "$out"
+desc="crash notifications: this user's crashes only, named by the executable, one per program per 10 minutes, at most 6 an hour, never our own"
+check bash -c 'grep -qx "name firefox" <<<"$1" && grep -qx "comm-fallback thing" <<<"$1" && grep -qx "other-user None" <<<"$1" && grep -qx "bad-pid None" <<<"$1" && grep -qx "deduped None" <<<"$1" && grep -qx "deduped-9min None" <<<"$1" && grep -qx "after-window firefox" <<<"$1" && grep -qx "cap False True True" <<<"$1" && grep -qx "own None" <<<"$1"' _ "$out"
 
 # --- migrations notice (clickable) -------------------------------------------------------------------------------------
 mkdir -p "$tmp/bin"
@@ -116,6 +118,17 @@ desc="the install lines skip a directory in packaging/bin (an ignored __pycache_
 check bash -c 'w=$(mktemp -d) && mkdir -p "$w/packaging/bin/__pycache__" "$w/out" && printf "x\n" >"$w/packaging/bin/tool" && root=$w pkgdir=$w/pkg && mkdir -p "$pkgdir/usr/lib/grassfield" && eval "$(grep -F "find \"\$root/packaging/bin\" -maxdepth 1 -type f" "$1/arch/PKGBUILD")" && [[ -x $pkgdir/usr/lib/grassfield/tool && ! -e $pkgdir/usr/lib/grassfield/__pycache__ ]]; rc=$?; rm -rf "$w"; exit $rc' _ "$pk"
 desc="the .install scriptlet runs the login check and is declared by the PKGBUILD"
 check bash -c 'grep -q "grassfield-login-check" "$1/arch/grassfield-desktop.install" && grep -q "^  install=grassfield-desktop.install" "$1/arch/PKGBUILD" && grep -q "^  backup=(etc/sddm.conf.d/grassfield.conf)" "$1/arch/PKGBUILD"' _ "$pk"
+if command -v vercmp >/dev/null; then
+  up() { bash -c '. "$1"; post_upgrade "$2" "$3"' _ "$pk/arch/grassfield-desktop.install" "$1" "$2" 2>&1; }
+  desc="the .install restart note is printed when upgrading from a version before the by-path shell (0.4.0-12 to 1.0.0rc1-1)"
+  check grep -q "restart the shell once" <<<"$(up 1.0.0rc1-1 0.4.0-12)"
+  desc="...and on every upgrade from the 0.4.0 series that started the shell by name (0.4.0-12 and older, whatever the new version)"
+  check bash -c 'grep -q "restart the shell once" <<<"$1" && grep -q "restart the shell once" <<<"$2"' _ "$(up 0.4.0-13 0.4.0-12)" "$(up 0.4.0-13 0.3.9-1)"
+  desc="...and not on later upgrades (1.0.0rc1-1 to 1.0.0rc1-2, 1.0.0 to 1.0.1) nor on a fresh upgrade call without an old version"
+  check bash -c '! grep -q "restart the shell once" <<<"$1$2$3$4"' _ "$(up 1.0.0rc1-2 1.0.0rc1-1)" "$(up 0.4.0-14 0.4.0-13)" "$(up 1.0.1-1 1.0.0-1)" "$(up 1.0.1-1 "")"
+else
+  echo "SKIP: vercmp not installed (the .install upgrade note)"
+fi
 desc="autostart runs the Omarchy post-boot hooks, the power profile and the lid reconcile (what Omarchy's autostart did)"
 check bash -c 'grep -q "omarchy-hook post-boot" "$1" && grep -q "omarchy-powerprofiles-init" "$1" && grep -q "grassfield-lid reconcile" "$1"' _ "$auto"
 

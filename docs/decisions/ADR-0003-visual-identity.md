@@ -1,5 +1,5 @@
 # ADR-0003: Visual identity, fonts and reference-measurement method
-Status: Proposed (applied provisionally) · Date: 2026-10-17 · Decider: owner · Needs legal review before any public release (§14)
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed (applied provisionally)) · Date: 2026-10-17 · Decider: owner · Needs legal review before any public release (§14)
 
 ## Context
 D5: near-identical macOS 27 layout, proportions, typography scale, spacing and motion, with a frosted,

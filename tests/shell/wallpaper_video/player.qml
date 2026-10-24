@@ -34,6 +34,36 @@ ShellRoot {
         readonly property bool playing: video.videoPlaying
     }
 
+    // The marker window of a bare WallpaperVideo: the marker is live from the first play() but its 10 s window opens only when the
+    // player is really playing (a start that succeeds late is protected for the whole window). Sampled every 20 ms.
+    property string latePolicy: "pause"
+    WallpaperVideo {
+        id: late
+        width: 160
+        height: 90
+        source: "file://" + Quickshell.env("GRASSFIELD_TEST_CLIP")
+        policy: root.latePolicy
+        markerOwner: "L"
+        markerPath: Quickshell.env("GRASSFIELD_TEST_CLIP")
+    }
+    property bool sawLiveBeforePlaying: false
+    property bool sawWindowBeforePlaying: false
+    property bool sawWindowWhilePlaying: false
+    Timer {
+        interval: 20
+        repeat: true
+        running: true
+        onTriggered: {
+            if (late.markerLive && !late.playing) {
+                root.sawLiveBeforePlaying = true;
+                if (late.markerWindowOpen)
+                    root.sawWindowBeforePlaying = true;
+            }
+            if (late.playing && late.markerWindowOpen)
+                root.sawWindowWhilePlaying = true;
+        }
+    }
+
     property string policy: "pause"
 
     // Each step sets the policy, then (later) says what the player must be doing.
@@ -55,12 +85,17 @@ ShellRoot {
         step++;
         waited = 0;
         if (step >= steps.length) {
+            check(sawWindowWhilePlaying, "the marker window never opened while the video played");
+            check(!sawWindowBeforePlaying, "the marker window was open before the video played");
+            check(WallpaperState.videoStartingBy["L"] === undefined || late.markerLive, "a marker of a dead video stayed");
             console.log(failure === "" ? "wallpaper-video-player: PASS" : "wallpaper-video-player: FAIL " + failure);
             Qt.quit();
             return;
         }
         console.log("wallpaper-video-player: step " + step + " " + steps[step].what);
         policy = steps[step].policy;
+        if (step === 0)
+            latePolicy = "play";
     }
 
     Component.onCompleted: Qt.callLater(advance)
