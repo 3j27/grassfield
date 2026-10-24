@@ -1,12 +1,15 @@
 import QtQuick
 import Grassfield.Ui
 
-// Context menu of a placed widget: its sizes (current one checked) and Remove Widget.
-// `action` carries "size:<size>" or "remove".
+// Context menu of a placed widget: its sizes (current one checked), the keyboard moves and Remove Widget.
+// `action` carries "size:<size>", "move:<left|right|up|down>" or "remove". `moves` ({direction: enabled}) lists the moves
+// this place offers: the four directions on the desktop grid, up and down in the Notifications panel (GF-106: a widget can
+// be moved without the pointer); empty offers none.
 PopupMenu {
     id: root
 
     required property var entry
+    property var moves: ({})
 
     signal choose(string action)
 
@@ -23,6 +26,15 @@ PopupMenu {
                 text: Registry.sizeLabel(sizes[i]),
                 checked: sizes[i] === entry.size
             });
+        const labels = {left: qsTr("Move Left"), right: qsTr("Move Right"), up: qsTr("Move Up"), down: qsTr("Move Down")};
+        const dirs = Object.keys(labels).filter(d => d in moves);
+        if (dirs.length > 0) {
+            items.push({
+                separator: true
+            });
+            for (const d of dirs)
+                items.push({id: "move:" + d, text: labels[d], enabled: moves[d] === true});
+        }
         items.push({
             separator: true
         });

@@ -172,6 +172,77 @@ QList<Segment> pathSegments(const QUrl &url, const QString &homePath, const QStr
     return out;
 }
 
+QString displayName(const QString &name)
+{
+    QString out;
+    out.reserve(name.size());
+    bool inBreak = false;
+    for (const QChar c : name) {
+        const ushort u = c.unicode();
+        if (u == '\r' || u == '\n') {
+            if (!inBreak)
+                out += QChar(0x23CE);
+            inBreak = true;
+            continue;
+        }
+        inBreak = false;
+        if ((u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069) || u == 0x2028 || u == 0x2029)
+            out += QStringLiteral("<U+%1>").arg(u, 4, 16, QLatin1Char('0')).toUpper();
+        else
+            out += c;
+    }
+    return out;
+}
+
+bool sameName(const QString &a, const QString &b)
+{
+    return a == b || a.normalized(QString::NormalizationForm_C) == b.normalized(QString::NormalizationForm_C);
+}
+
+QString equivalentName(const QStringList &names, const QString &name)
+{
+    for (const QString &n : names) {
+        if (n != name && sameName(n, name))
+            return n;
+    }
+    return {};
+}
+
+QString trashInfoOriginalPath(const QByteArray &trashinfo)
+{
+    bool inGroup = false;
+    for (const QByteArray &raw : trashinfo.split('\n')) {
+        const QByteArray line = raw.trimmed();
+        if (line.startsWith('[')) {
+            inGroup = line == "[Trash Info]";
+            continue;
+        }
+        if (inGroup && line.startsWith("Path=")) {
+            const QString path = QUrl::fromPercentEncoding(line.mid(5));
+            return path.startsWith(QLatin1Char('/')) ? path : QString();
+        }
+    }
+    return {};
+}
+
+QString foldForMatch(const QString &text)
+{
+    const QString decomposed = text.normalized(QString::NormalizationForm_D);
+    QString out;
+    out.reserve(decomposed.size());
+    for (const QChar c : decomposed) {
+        const QChar::Category cat = c.category();
+        if (cat != QChar::Mark_NonSpacing && cat != QChar::Mark_SpacingCombining && cat != QChar::Mark_Enclosing)
+            out.append(c);
+    }
+    return out.toCaseFolded().normalized(QString::NormalizationForm_C);
+}
+
+bool nameMatchesFilter(const QString &name, const QString &filter)
+{
+    return foldForMatch(name).contains(foldForMatch(filter));
+}
+
 bool isValidFileName(const QString &name)
 {
     if (name.isEmpty() || name == QLatin1String(".") || name == QLatin1String(".."))

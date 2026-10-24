@@ -78,7 +78,7 @@ Singleton {
         if (SessionState.refuses("popup " + popupKind))
             return;
         data = payload ? payload : {};
-        screenName = screen;
+        screenName = ScreenChoice.pick(screen, Compositor.activeScreenName, Quickshell.screens.map(s => s.name));
         anchorX = x;
         anchorY = y;
         align = alignment;
@@ -90,6 +90,15 @@ Singleton {
     function openCentered(popupKind: string, payload: var, screen: string): void {
         const name = ScreenChoice.centered(active, screenName, Compositor.activeScreenName, screen);
         open(popupKind, name, 0, 0, "center", payload);
+    }
+
+    // The screen of the open popup went away (a display unplugged): the popup moves to a live screen.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+        }
     }
 
     // Toggle: the same kind at the same screen closes it.

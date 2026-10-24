@@ -36,7 +36,7 @@ ListView {
         Rectangle {
             anchors.fill: parent
             radius: Tokens.radiusMenu
-            color: cell.selected ? Appearance.colors.accent : (cellMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+            color: cellMouse.containsMouse && !cell.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
         }
 
         Rectangle {
@@ -58,6 +58,19 @@ ListView {
             sourceSize.height: height
         }
 
+        // The current page: a ring in the accent colour around its thumbnail (macOS Preview), not a solid plate.
+        Rectangle {
+            anchors {
+                fill: thumb
+                margins: -Tokens.controlFocusOutline
+            }
+            visible: cell.selected
+            color: "transparent"
+            radius: Tokens.radiusControl
+            border.width: Tokens.controlFocusOutline
+            border.color: Appearance.colors.accent
+        }
+
         Text {
             id: label
             anchors {
@@ -67,7 +80,7 @@ ListView {
             }
             textFormat: Text.PlainText
             text: cell.index + 1
-            color: cell.selected ? Appearance.colors.accentText : Appearance.colors.textSecondary
+            color: cell.selected ? Appearance.colors.text : Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }

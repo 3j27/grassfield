@@ -140,3 +140,12 @@ devices behind the Quick Settings toggles (the dev guard answers; the flow asser
 ALREADY up: compositor lists, shell IPC and unlocked, plugin handshake, Quick Settings state and a menu, Search, Apps (and their
 mutual exclusion), the notification server and Center, and no QML error in `.dev/shell.log`. It starts nothing and opens no window,
 and it SKIPs without a session, so `scripts/dev/test.sh` (nested layer) carries it whenever a session happens to be up.
+
+## Test-only tools and their build dependencies
+
+Two small C tools drive the NESTED compositor from tests, built on first use into `.dev/` (never installed, never in the package):
+
+- `tests/tools/vkbd` (scripted keyboard): `wayland-scanner`, libwayland-client, libxkbcommon.
+- `tests/tools/xdgact` (a window that activates itself through `xdg_activation_v1`, for the real activation order of Show Desktop): `wayland-scanner`, libwayland-client and `wayland-protocols` (the `xdg-shell` and `xdg-activation` XML files).
+
+All of them are installed as dependencies of Hyprland and Quickshell, so they are build-time requirements of the tests only: they do not belong in the PKGBUILD `depends` (runtime) array. A machine without a C toolchain runs the offline layers; the nested scripts that need a tool say so and stop with exit 2. `tests/tools/hypr-events.py` (python3 standard library) reads Hyprland's event socket for `tests/shell/show_desktop_record.sh`.

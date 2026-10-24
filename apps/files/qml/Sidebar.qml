@@ -227,7 +227,7 @@ FocusScope {
         width: ListView.view.width
         height: Tokens.filesSidebarItemHeight
         Accessible.role: Accessible.ListItem
-        Accessible.name: entry.name
+        Accessible.name: DisplayName.text(entry.name)
         Accessible.selectable: true
         Accessible.selected: entry.current
         Accessible.onPressAction: root.openEntry(entry)
@@ -270,7 +270,7 @@ FocusScope {
             anchors.right: eject.visible ? eject.left : parent.right
             anchors.rightMargin: Tokens.spacingXs
             anchors.verticalCenter: parent.verticalCenter
-            text: entry.name
+            text: DisplayName.text(entry.name)
             elide: Text.ElideRight
             color: entry.mounted ? Appearance.colors.text : Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
@@ -285,7 +285,7 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             width: Tokens.filesSidebarItemHeight
             height: Tokens.filesSidebarItemHeight
-            accessibleName: qsTr("Eject %1").arg(entry.name)
+            accessibleName: qsTr("Eject %1").arg(DisplayName.text(entry.name))
             onClicked: root.places.eject(entry.index)
 
             ThemeIcon {

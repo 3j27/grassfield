@@ -23,7 +23,7 @@ FocusScope {
     property string failure: ""
 
     Accessible.role: Accessible.Window
-    Accessible.name: root.isVideo ? qsTr("Video %1").arg(root.info.name ?? "") : qsTr("Audio %1").arg(root.info.name ?? "")
+    Accessible.name: root.isVideo ? qsTr("Video %1").arg(DisplayName.text(root.info.name)) : qsTr("Audio %1").arg(DisplayName.text(root.info.name))
 
     function zoomIn(): void {
     }
@@ -80,7 +80,7 @@ FocusScope {
             bottom: bar.top
         }
         visible: !video.visible
-        title: root.failure === "" ? (root.info.name ?? "") : qsTr("This file cannot be played")
+        title: root.failure === "" ? DisplayName.text(root.info.name) : qsTr("This file cannot be played")
         text: root.failure === "" ? root.info.size ?? "" : root.failure
     }
 

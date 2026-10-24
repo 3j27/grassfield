@@ -9,7 +9,9 @@
     "reduceTransparency": false,
     "reduceMotion": false,
     "increaseContrast": false,
-    "textSize": 1
+    "textSize": 1,
+    "zoom": false,
+    "zoomLevel": 2
   },
   "dock": {
     "pinned": [
@@ -43,7 +45,8 @@
   },
   "notifications": {
     "dnd": false,
-    "previews": "unlocked"
+    "previews": "unlocked",
+    "history": "week"
   },
   "lock": {
     "idleMinutes": 5

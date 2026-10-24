@@ -214,6 +214,23 @@ TestCase {
         verify(Focus.kicking(s), "no policy argument means no policy");
     }
 
+    // GF-106: Show Desktop hands the keyboard to the desktop; no click will come, so the kicker runs even with the policy.
+    function test_keyboardRequestKicksEvenWithThePolicy() {
+        const s = runP([{type: "request"}]);
+        compare(s.mode, "armed");
+        compare(Focus.interactivity(s), "ondemand");
+        verify(Focus.kicking(s, true));
+        verify(Focus.kicking(s, false));
+        const held = runP([{type: "request"}, granted]);
+        compare(held.mode, "held");
+        verify(Focus.keysActive(held));
+    }
+
+    function test_keyboardRequestGivesUpAndChangesNothingWhenHeld() {
+        compare(runP([{type: "request"}, {type: "armTimeout"}]).mode, "idle");
+        compare(runP([press, granted, {type: "request"}]).mode, "held");
+    }
+
     function test_policyStillGivesUpWhenTheKeyboardIsNotGranted() {
         compare(runP([press, {type: "armTimeout"}]).mode, "idle");
     }

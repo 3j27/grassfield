@@ -388,6 +388,12 @@ TestCase {
         compare(Minimized.motionCall(false).indexOf("popin 94%") >= 0, true);
     }
 
+    // GF-064: Reduce Motion also stops the compositor's screen zoom from gliding.
+    function test_reduceMotionStopsTheZoomAnimation() {
+        verify(Minimized.motionCall(true).indexOf("leaf = \"zoomFactor\", enabled = false") >= 0);
+        verify(Minimized.motionCall(false).indexOf("leaf = \"zoomFactor\", enabled = true") >= 0);
+    }
+
     // GF-125: the blur the shell asks for at the default transparency is the one the config ships (a config reload then
     // restores a value that is already right).
     function test_blurAtTheDefaultTransparencyIsTheConfigsOwn() {

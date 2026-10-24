@@ -18,6 +18,8 @@ const DEFAULTS = {
     "accessibility.reduceMotion": false,
     "accessibility.increaseContrast": false,
     "accessibility.textSize": 1,
+    "accessibility.zoom": false,
+    "accessibility.zoomLevel": 2,
     "dock.size": 48,
     "dock.position": "bottom",
     "dock.magnification": 1.6,
@@ -43,6 +45,8 @@ const DEFAULTS = {
     "notifications.dnd": false,
     "notifications.previews": "unlocked",
     "notifications.appPreviews": [],
+    "notifications.appStyles": [],
+    "notifications.history": "week",
     "lock.idleMinutes": 5,
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
@@ -77,6 +81,8 @@ const RULES = {
     "accessibility.reduceMotion": {type: "boolean"},
     "accessibility.increaseContrast": {type: "boolean"},
     "accessibility.textSize": {type: "number", min: 1, max: 1.3},
+    "accessibility.zoom": {type: "boolean"},
+    "accessibility.zoomLevel": {type: "number", min: 1.5, max: 5},
     "dock.size": {type: "integer", min: 32, max: 96},
     "dock.position": {type: "enum", values: ["left", "bottom", "right"]},
     "dock.magnification": {type: "number", min: 1, max: 2.5},
@@ -103,6 +109,9 @@ const RULES = {
     "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
     // Per-app override of the previews setting (ui/Grassfield/Ui/NotificationPrefs.js, one copy of the rules).
     "notifications.appPreviews": {type: "notificationApps"},
+    // Per-app alert style (banners | alerts | none) and how long the history stays on disk.
+    "notifications.appStyles": {type: "notificationStyles"},
+    "notifications.history": {type: "enum", values: ["week", "day", "never"]},
     "lock.idleMinutes": {type: "integer", min: 0, max: 240},
     "hotCorners.topLeft": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
@@ -155,6 +164,10 @@ function validate(path, value) {
     }
     case "notificationApps": {
         const why = Tree.NotificationPrefs.problem(value);
+        return why === "" ? "" : path + ": " + why;
+    }
+    case "notificationStyles": {
+        const why = Tree.NotificationPrefs.problemStyles(value);
         return why === "" ? "" : path + ": " + why;
     }
     case "pathList": {

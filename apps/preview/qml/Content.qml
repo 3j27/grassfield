@@ -1,4 +1,5 @@
 import QtQuick
+import Grassfield.Ui
 
 // The view of one file: picks the viewer by kind (loaded on demand, so QtPdf and QtMultimedia are
 // only loaded when needed) or shows why there is nothing to show.
@@ -84,7 +85,7 @@ Item {
     Message {
         anchors.fill: parent
         visible: root.info.ok !== true
-        title: root.info.name ?? qsTr("Nothing to show")
+        title: root.info.name ? DisplayName.text(root.info.name) : qsTr("Nothing to show")
         text: root.backend.files.length === 0 && root.backend.errors.length > 0 ? root.backend.errors.join("\n") : (root.info.error ?? "")
     }
 }

@@ -111,6 +111,13 @@ ShellRoot {
         value: Settings.folderColor
     }
 
+    // Screen magnification (Settings > Accessibility > Zoom): sent to the compositor once the settings are read, then on change.
+    Binding {
+        target: Zoom
+        property: "ready"
+        value: Settings.validRead
+    }
+
     // Pointer size (Settings > Accessibility > Pointer): the compositor is asked for the new size live.
     Binding {
         target: Pointer

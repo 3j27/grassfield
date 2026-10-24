@@ -266,6 +266,24 @@ function moveDesktop(state, uid, spot, cols, rows) {
     return s;
 }
 
+// The cell one step from the widget in `dir` (left | right | up | down), or null when that cell is off the grid or
+// taken: the keyboard move of GF-106 moves one cell and never hops over a neighbour.
+function stepSpot(state, uid, dir, cols, rows) {
+    const e = state.desktop.find(x => x.uid === uid);
+    const d = {left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1]}[dir];
+    if (!e || !d)
+        return null;
+    const spot = {col: e.col + d[0], row: e.row + d[1]};
+    const others = state.desktop.filter(x => x.screen === e.screen && x.uid !== uid);
+    return isFree(others, e.size, spot, cols, rows) ? spot : null;
+}
+
+// Moves a desktop widget one cell in `dir`; unchanged when stepSpot finds no room.
+function stepDesktop(state, uid, dir, cols, rows) {
+    const spot = stepSpot(state, uid, dir, cols, rows);
+    return spot ? moveDesktop(state, uid, spot, cols, rows) : clone(state);
+}
+
 // Re-places the desktop entries of one screen into a cols x rows grid: an entry keeps its cell
 // when it fits and is free, else it moves to the nearest free cell (clamped first); an entry that
 // finds no room is dropped. Entries of other screens are untouched. Returns {state, changed}.

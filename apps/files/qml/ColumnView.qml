@@ -169,7 +169,7 @@ FocusScope {
                         textFormat: Text.PlainText
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? root.previewInfo.name : ""
+                        text: root.previewInfo ? DisplayName.text(root.previewInfo.name) : ""
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
@@ -337,7 +337,7 @@ FocusScope {
                 height: Tokens.filesColumnRowHeight
                 opacity: entry.hidden ? Tokens.filesHiddenOpacity : 1
                 Accessible.role: Accessible.ListItem
-                Accessible.name: entry.name
+                Accessible.name: DisplayName.text(entry.name)
                 Accessible.selectable: true
                 Accessible.selected: entry.selected
 
@@ -373,7 +373,7 @@ FocusScope {
                     anchors.right: entryDots.visible ? entryDots.left : chevron.left
                     anchors.rightMargin: Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
-                    text: entry.name.replace(/[\r\n]+/g, "\u23CE")
+                    text: DisplayName.text(entry.name)
                     elide: Text.ElideMiddle
                     color: entry.emphasized ? Appearance.colors.accentText : Appearance.colors.text
                     font.family: Appearance.fontFamily

@@ -40,7 +40,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool open: Notifications.centerOpen && Notifications.centerScreen === modelData.name
+        readonly property bool open: Notifications.centerOpen && Notifications.centerScreen === (modelData ? modelData.name : "")
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -186,7 +186,7 @@ Variants {
             onKeyboardHeldChanged: host.report(keyboardHeld)
             Component.onDestruction: host.report(false)
             function report(held: bool): void {
-                const name = win.modelData.name;
+                const name = (win.modelData ? win.modelData.name : "");
                 if (held)
                     Notifications.centerKeyboardScreen = name;
                 else if (Notifications.centerKeyboardScreen === name)
@@ -383,6 +383,10 @@ Variants {
                         Widgets.remove(entry.uid);
                     else if (action.startsWith("size:"))
                         Widgets.setSize(entry.uid, action.substring(5));
+                    else if (action === "move:up")
+                        Widgets.stepCenter(entry.uid, -1);
+                    else if (action === "move:down")
+                        Widgets.stepCenter(entry.uid, 1);
                 }
 
                 // Only the slide animates (macOS: the column comes in from the right edge). The column's place follows
@@ -571,6 +575,10 @@ Variants {
                     y: Math.max(Tokens.spacingSm, Math.min(panel.menuY, panel.height - height - Tokens.spacingSm))
                     sourceComponent: WidgetMenu {
                         entry: panel.menuEntry
+                        moves: {
+                            const at = Widgets.center.findIndex(e => e.uid === panel.menuEntry.uid);
+                            return {up: at > 0, down: at >= 0 && at < Widgets.center.length - 1};
+                        }
                         onChoose: action => panel.applyWidgetMenu(action)
                         onCloseRequested: panel.closeWidgetMenu()
                         Component.onCompleted: forceActiveFocus()
@@ -587,7 +595,7 @@ Variants {
                 height: Math.min(Tokens.widgetGalleryMaxHeight, (host.height - Tokens.menubarHeight) * Tokens.widgetGalleryHeightFraction)
                 active: panel.galleryOpen
                 sourceComponent: WidgetGallery {
-                    screenName: win.modelData.name
+                    screenName: (win.modelData ? win.modelData.name : "")
                     surfaceHost: host
                     onClosed: {
                         panel.galleryOpen = false;

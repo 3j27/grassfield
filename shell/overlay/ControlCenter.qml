@@ -587,6 +587,8 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - lowPowerToggle.width - Tokens.spacingSm
                         text: qsTr("Low Power Mode")
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                     }
 
                     Toggle {

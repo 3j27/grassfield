@@ -1,0 +1,112 @@
+{
+  "scenario": "xdgact",
+  "focusBefore": "0x5701f4924c30",
+  "window": "0x5701f48aef60",
+  "windows": [
+    {
+      "address": "0x5701f48aef60",
+      "workspace": 2,
+      "x": 2280,
+      "y": 441,
+      "class": "gf-sd-act"
+    },
+    {
+      "address": "0x5701f49091f0",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-main"
+    },
+    {
+      "address": "0x5701f45d3890",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-main"
+    },
+    {
+      "address": "0x5701f4924c30",
+      "workspace": 2,
+      "x": 2050,
+      "y": 261,
+      "class": "gf-sd-other"
+    }
+  ],
+  "events": [
+    {
+      "t": 0,
+      "name": "urgent",
+      "data": "5701f48aef60"
+    },
+    {
+      "t": 1,
+      "name": "activewindow",
+      "data": "gf-sd-act,"
+    },
+    {
+      "t": 1,
+      "name": "activewindowv2",
+      "data": "5701f48aef60"
+    },
+    {
+      "t": 1,
+      "name": "activespecial",
+      "data": "special:desktop,GF-REF"
+    },
+    {
+      "t": 1,
+      "name": "activespecialv2",
+      "data": "-98,special:desktop,GF-REF"
+    },
+    {
+      "t": 14,
+      "name": "activespecial",
+      "data": ",GF-REF"
+    },
+    {
+      "t": 14,
+      "name": "activespecialv2",
+      "data": ",,GF-REF"
+    },
+    {
+      "t": 15,
+      "name": "movewindowv2",
+      "data": "5701f4924c30,2,2"
+    },
+    {
+      "t": 16,
+      "name": "movewindowv2",
+      "data": "5701f45d3890,2,2"
+    },
+    {
+      "t": 18,
+      "name": "movewindowv2",
+      "data": "5701f48aef60,2,2"
+    },
+    {
+      "t": 19,
+      "name": "activewindow",
+      "data": "gf-sd-other,"
+    },
+    {
+      "t": 19,
+      "name": "activewindowv2",
+      "data": "5701f4924c30"
+    },
+    {
+      "t": 20,
+      "name": "movewindowv2",
+      "data": "5701f49091f0,2,2"
+    },
+    {
+      "t": 163,
+      "name": "activewindow",
+      "data": "gf-sd-act,"
+    },
+    {
+      "t": 163,
+      "name": "activewindowv2",
+      "data": "5701f48aef60"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "../platform/ScreenChoice.js" as ScreenChoice
 import "../dock/DockModel.js" as DockModel
 import "SwitcherModel.js" as Model
 
@@ -143,6 +144,15 @@ Scope {
         if (name === "")
             name = Compositor.focusedScreenName;
         return name !== "" ? name : Compositor.activeScreenName;
+    }
+
+    // The screen the session is shown on went away (a display unplugged): the session continues on the active one.
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+        }
     }
 
     // The modifier was released. `id`: hold id from the compositor config, "" from the surface's own key event.
