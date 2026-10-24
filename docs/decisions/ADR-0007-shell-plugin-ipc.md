@@ -93,6 +93,35 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
 
+## Contract table (`gfc/1`, machine-checked)
+
+The block below is the contract of record for event types, their fields, closed value sets, features and verbs; the
+prose above gives the reasons. `tests/ci/gfc_parity.py` (`just check-contracts`) fails when it differs from
+`compositor/src` (the JSON builders and `core/Protocol.hpp`) or when the shell reads something the plugin never sends.
+Every event also carries `v` and `type`. Nested fields are flattened. `version` is only in the `hyprctl grassfield` reply;
+`error` is that reply's failure form. Change the block in the same commit as the code.
+
+```gfc1
+event capabilities: features version
+event minimize-request: address
+event minimized: address
+event restored: address
+event appmenu: address service path pid
+event overview: state windows reason
+event overview-focus: outcome target id address workspace reason
+event stages: on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+event error:
+enum overview.state: opening open closing closed
+enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
+enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
+enum overview-focus.target: window workspace remembered none press
+enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid
+enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
+feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
+feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile
+```
+
 ## Evidence
 Spike S2 (2026-10-17, nested Hyprland 0.56.2, Quickshell 0.3.1):
 - `Hyprland.dispatch("grassfield:hello")` with an `addDispatcherV2` dispatcher FAILS under the Lua config:
