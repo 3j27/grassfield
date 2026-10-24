@@ -5,6 +5,7 @@
 #include <QJsonParseError>
 #include <QJsonValue>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -212,6 +213,14 @@ namespace gf::menubridge {
             {QStringLiteral("count"), count ? QJsonValue(*count) : QJsonValue(QJsonValue::Null)},
             {QStringLiteral("progress"), progress ? QJsonValue(*progress) : QJsonValue(QJsonValue::Null)},
             {QStringLiteral("urgent"), urgent ? QJsonValue(*urgent) : QJsonValue(QJsonValue::Null)},
+        });
+    }
+
+    QByteArray screensaverMessage(bool inhibited, int count) {
+        return line(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("screensaver")},
+            {QStringLiteral("inhibited"), inhibited},
+            {QStringLiteral("count"), std::clamp(count, 0, 1024)},
         });
     }
 

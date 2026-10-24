@@ -12,7 +12,7 @@ mkdir -p "$out/menu-bridge-moc"
 
 # GCC 16 warns inside Qt headers (-Wsfinae-incomplete); keep our own warnings visible.
 cxxflags=(-std=c++20 -O2 -g -Wall -Wextra -Wno-sfinae-incomplete -fPIC)
-logic=("$here/src/Protocol.cpp" "$here/src/Layout.cpp" "$here/src/Safety.cpp" "$here/src/Penalties.cpp" "$here/src/DBusObjects.cpp" "$here/src/Launcher.cpp")
+logic=("$here/src/Protocol.cpp" "$here/src/Layout.cpp" "$here/src/Safety.cpp" "$here/src/Penalties.cpp" "$here/src/DBusObjects.cpp" "$here/src/Launcher.cpp" "$here/src/ScreenSaver.cpp")
 
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
@@ -29,7 +29,7 @@ if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${extra[@]}" -I"$here/src" -DGRASSFIELD_MENU_BRIDGE_DBUS_XML="\"$here/dbus/org.grassfield.MenuBridge1.xml\"" \
     $(pkg-config --cflags Qt6Core Qt6DBus) \
-    "$root/tests/unit/menu-bridge/tst_menubridge.cpp" "$here/src/MenuClient.cpp" "$out/menu-bridge-moc/moc_MenuClient.cpp" "${logic[@]}" \
+    "$root/tests/unit/menu-bridge/tst_menubridge.cpp" "$root/tests/unit/menu-bridge/tst_screensaver.cpp" "$here/src/MenuClient.cpp" "$out/menu-bridge-moc/moc_MenuClient.cpp" "${logic[@]}" \
     $(pkg-config --libs Qt6Core Qt6DBus) -lgtest -pthread \
     -o "$out/menu-bridge-unit-tests$suffix"
   echo "built $out/menu-bridge-unit-tests$suffix"

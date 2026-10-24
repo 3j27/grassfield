@@ -18,7 +18,8 @@ var limits = {
     code: 64,              // characters of an error code
     message: 256,          // characters of an error message
     launcherCount: 99999,  // largest badge count of a launcher message
-    launcherApps: 64       // apps whose launcher state is kept
+    launcherApps: 64,      // apps whose launcher state is kept
+    inhibitors: 1024       // largest cookie count of a screensaver message
 };
 
 // Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
@@ -149,7 +150,8 @@ function sanitizeItems(items, depth, budget) {
 }
 
 // One bridge line -> {type: "status", state, registrar} | {type: "menu", window, revision, items}
-// | {type: "launcher", app, count, progress, urgent} | {type: "error", window, code, message}, or null.
+// | {type: "launcher", app, count, progress, urgent} | {type: "screensaver", inhibited, count}
+// | {type: "error", window, code, message}, or null.
 function parseBridgeLine(line) {
     if (typeof line !== "string" || line.length === 0 || line.length > limits.line)
         return null;
@@ -187,6 +189,11 @@ function parseBridgeLine(line) {
             return null;
         return {type: "launcher", app: msg.app, count: count, progress: progress, urgent: urgent};
     }
+    case "screensaver":
+        // GF-016: applications hold org.freedesktop.ScreenSaver idle inhibitors (the idle lock waits while true).
+        if (typeof msg.inhibited !== "boolean" || !Number.isInteger(msg.count) || msg.count < 0 || msg.count > limits.inhibitors)
+            return null;
+        return {type: "screensaver", inhibited: msg.inhibited, count: msg.count};
     case "error":
         return {
             type: "error",

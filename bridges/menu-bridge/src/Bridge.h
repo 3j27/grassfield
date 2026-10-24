@@ -15,12 +15,16 @@
 // - LauncherEntry (ADR-0018): while it runs, applications' com.canonical.Unity.LauncherEntry.Update signals are
 //   validated and forwarded to the shell as "launcher" lines (LauncherWatcher.h); the current state is replayed when
 //   a shell connects.
+// - ScreenSaver (GF-016, ScreenSaver.h): while it runs, org.freedesktop.ScreenSaver Inhibit/UnInhibit are served (the
+//   name is owned when free, never taken from another owner) and the shell gets one "screensaver" boolean; replayed
+//   when a shell connects.
 
 #include "DBusObjects.h"
 #include "LauncherWatcher.h"
 #include "MenuClient.h"
 #include "Penalties.h"
 #include "Protocol.h"
+#include "ScreenSaver.h"
 
 #include <QByteArray>
 #include <QDBusConnection>
@@ -107,6 +111,9 @@ namespace gf::menubridge {
 
         PenaltyBook                 m_penalties;
         LauncherWatcher             m_launcher; // ADR-0018: applications' own Dock badges (needs m_penalties and m_bus)
+        screensaver::ScreenSaverObject m_screensaver; // GF-016: idle inhibitors
+        bool                        m_screensaverOwned = false;
+        void                        setScreenSaver(bool wanted);
         struct Calls {
             int     count     = 0;
             qint64  startedMs = 0; // monotonic clock, start of the oldest call in flight

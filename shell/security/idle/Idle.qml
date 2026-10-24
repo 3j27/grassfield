@@ -66,9 +66,15 @@ Scope {
     // every timeout change so the new value applies.
     property bool rearming: false
 
+    // Applications hold org.freedesktop.ScreenSaver idle inhibitors (GF-016; set from shell.qml, the menu bridge's
+    // screensaver lines; false without a bridge). While true the screen neither dims nor locks on idle, as on macOS
+    // while a video plays; a manual lock, the lid and the lock before sleep are unaffected.
+    property bool busInhibited: false
+    onBusInhibitedChanged: console.info("grassfield-idle: " + (busInhibited ? "idle inhibited by an application (org.freedesktop.ScreenSaver)" : "no application inhibits idle (org.freedesktop.ScreenSaver)"))
+
     IdleMonitor {
         id: monitor
-        enabled: root.timing.enabled && !Lock.locked && !root.rearming
+        enabled: IdleModel.idleArmed(root.timing.enabled, Lock.locked, root.rearming, root.busInhibited)
         timeout: root.timing.dimSeconds
         respectInhibitors: true
         onIsIdleChanged: root.update()
@@ -168,7 +174,8 @@ Scope {
                 sleepDegraded: sleepInhibitor.degraded,
                 sleepBudgetMs: sleepInhibitor.budgetMs,
                 displayOffSeconds: root.displayOffSeconds,
-                displayOff: root.displayOff
+                displayOff: root.displayOff,
+                busInhibited: root.busInhibited
             });
         }
 

@@ -326,13 +326,21 @@ VERIFIED until run).
   `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
   dies meanwhile cannot leave the screen dark. Off in the nested dev session unless `idle devDisplayOff <s>` sets it
   (`lock_privacy.sh display-off`). NOT VERIFIED on hardware (L2†).
-- `org.freedesktop.ScreenSaver` inhibitors: **not implemented**, and not implementable inside the security modules'
-  building blocks: Quickshell 0.3.1 cannot own a D-Bus name or serve methods (only its Notifications, StatusNotifier
-  and MPRIS services do). Wayland-native players (mpv, Firefox, Chromium on Wayland) use the idle-inhibit protocol,
-  which `IdleMonitor { respectInhibitors: true }` honours (DT-16). Proposed (owner/integrator decision, cross-module):
-  the menu bridge (Qt D-Bus, already a session-bus service) implements `org.freedesktop.ScreenSaver.Inhibit/UnInhibit`
-  (cookies tracked per sender, dropped when the sender leaves the bus) and reports "inhibited" to the shell, which then
-  holds a Quickshell `IdleInhibitor`; an ADR is needed.
+- `org.freedesktop.ScreenSaver` inhibitors (GF-016 residual, done 2026-10-24; ADR-0008 and ADR-0010 amendments):
+  Quickshell 0.3.1 cannot own a D-Bus name or serve methods (verified in its qmltypes: no D-Bus server type, only the
+  DBusMenu client, the StatusNotifier, MPRIS and Notifications services and the Wayland `IdleInhibitor`), so the menu
+  bridge serves `Inhibit`/`UnInhibit` (only those; `Lock`, `SetActive`… answer NotSupported), keeps cookies per sender
+  (released by their owner or when it leaves the bus; 16 per sender, 64 senders) and sends the shell one boolean
+  (`docs/specs/menu-bridge.md` MB16). `Idle.busInhibited` (from `MenuBridge.screenSaverInhibited`) then disarms the idle
+  dim and idle lock only (`IdleModel.idleArmed`), as a macOS power assertion does while a video plays; a manual lock, the
+  lid, the lock before sleep and the display power-off on the lock screen are unaffected. Fail closed: no bridge, a dead
+  bridge or anything but an explicit `true` leaves idle locking on. Wayland-native players (mpv, Firefox, Chromium on
+  Wayland) keep using the idle-inhibit protocol that `IdleMonitor { respectInhibitors: true }` honours (DT-16). Tests:
+  `tests/unit/menu-bridge/tst_screensaver.cpp`, `tests/security/tst_idlemodel.qml` `test_idleArmed`,
+  `tests/unit/tst_menubridge.qml` `test_screensaverLines`; `tests/integration/screensaver_inhibit.sh` (bare, private bus)
+  NOT VERIFIED here (needs Unix sockets). Nested check (bare): with the nested session up, `gdbus call --address $(cat
+  .dev/bus.address) …` cannot hold a cookie (it disconnects at once); use the integration test, then `qs ipc -p shell
+  call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
@@ -623,8 +631,9 @@ Decisions:
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
 puts the program in `message`, which is shown, and the action's icon is shown (see "Polkit details"). Caps Lock is
-inferred from typed letters (no lock-key state in Quickshell). D-Bus `org.freedesktop.ScreenSaver` inhibitors are not
-handled (see D-4: not possible with the security modules' building blocks; proposal there). Display power-off on the
+inferred from typed letters (no lock-key state in Quickshell). D-Bus `org.freedesktop.ScreenSaver` inhibitors are served
+by the menu bridge and hold the idle lock only (see D-4); the GTK/KDE portal `Inhibit` reaches them only when its backend
+forwards to that interface (not verified). Display power-off on the
 lock screen is done (30 s), not yet seen on hardware (L2†). When grassfield-shell has failed for good, the fail-safe
 restarts it before sleep; a shell that cannot start at all leaves the machine to sleep unlocked (no second locker, by
 the security rules; see "Lock coverage").

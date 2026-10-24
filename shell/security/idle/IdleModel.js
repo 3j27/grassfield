@@ -23,6 +23,15 @@ function timings(minutes) {
     };
 }
 
+// The idle monitor (dim, then lock) is armed: idle locking is on (lock.idleMinutes > 0), the session is not locked, the
+// monitor is not being re-armed, and no application holds an org.freedesktop.ScreenSaver idle inhibitor (GF-016,
+// reported by the menu bridge; Wayland idle inhibitors are honoured by the compositor's idle-notify protocol). Anything
+// but an explicit `true` for the inhibitor counts as not inhibited (fail closed: the idle lock works). A lock request
+// (manual, lid, before sleep) never asks this.
+function idleArmed(enabled, locked, rearming, busInhibited) {
+    return enabled === true && locked !== true && rearming !== true && busInhibited !== true;
+}
+
 // Display power-off on the lock screen (D-4, macOS turns the display off soon after locking): seconds without input
 // while locked before the displays go off (Hyprland DPMS); any input switches them on again.
 var DISPLAY_OFF_SECONDS = 30;

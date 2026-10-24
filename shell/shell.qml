@@ -283,7 +283,10 @@ ShellRoot {
         id: searchSurface
     }
     AuthAgent {}
-    Idle {}
+    Idle {
+        // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
+        busInhibited: MenuBridge.screenSaverInhibited
+    }
     Overview {
         id: overviewSurface
         // The session lock owns the screen and the keyboard: the overview closes and focuses nothing.

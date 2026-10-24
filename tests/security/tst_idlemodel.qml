@@ -13,6 +13,19 @@ TestCase {
         compare(t.lockDelayMs, 10000);
     }
 
+    // GF-016: an application's org.freedesktop.ScreenSaver inhibitor holds the idle dim and lock; nothing else changes.
+    function test_idleArmed() {
+        verify(IdleModel.idleArmed(true, false, false, false));
+        verify(!IdleModel.idleArmed(true, false, false, true), "inhibited over D-Bus");
+        verify(!IdleModel.idleArmed(false, false, false, false), "idle lock off");
+        verify(!IdleModel.idleArmed(true, true, false, false), "already locked");
+        verify(!IdleModel.idleArmed(true, false, true, false), "re-arming");
+        // Only an explicit true inhibits (a missing or odd value never disarms the idle lock).
+        verify(IdleModel.idleArmed(true, false, false, undefined));
+        verify(IdleModel.idleArmed(true, false, false, "true"));
+        verify(IdleModel.idleArmed(true, false, false, 1));
+    }
+
     function test_zeroDisables() {
         verify(!IdleModel.timings(0).enabled);
     }

@@ -179,6 +179,21 @@ top-level menus (Left/Right).
       line is validated again (app charset and length, count 0..99999, progress -1..1, urgent boolean), the latest state
       per lower-case app id is kept (at most 64), and cleared when the bridge disconnects. The Dock uses it
       (docs/specs/dock.md requirements 14 and 21).
+- **MB16 ScreenSaver inhibitors** (GF-016 residual; ADR-0008 and ADR-0010 amendments 2026-10-24; macOS power assertions:
+  a playing video keeps the screen awake). While it runs, the bridge owns `org.freedesktop.ScreenSaver` when nobody else
+  does (never replaced, never queued; logged when taken) and serves, on `/org/freedesktop/ScreenSaver` and `/ScreenSaver`,
+  `Inhibit(s application, s reason) -> u cookie` and `UnInhibit(u cookie)` only (`src/ScreenSaver.h`):
+    - cookies are kept per sender (unique bus name): at most 16 per sender and 64 senders (`LimitsExceeded` past it);
+      a cookie is released only by the sender that took it (another sender's or an unknown cookie is answered and
+      changes nothing); every cookie of a sender is dropped when it leaves the bus (`QDBusServiceWatcher`);
+    - every other member (`Lock`, `SetActive`, `GetActive`, `SimulateUserActivity`, …) answers `NotSupported`, a wrong
+      signature `InvalidArgs`; other interfaces on the paths are dropped, as on the registrar;
+    - the shell gets `{"type":"screensaver","inhibited":bool,"count":N}` on every change and when it connects; the log
+      names the applications (printable, 64 characters at most) on each change, never the reasons;
+    - shell side: `MenuBridge.js` validates it (boolean, integer 0..1024), `MenuBridge.screenSaverInhibited` follows it
+      and is false while no bridge is connected; `shell.qml` feeds `Idle.busInhibited`, which disarms only the idle dim
+      and idle lock (`IdleModel.idleArmed`). A manual lock, the lid, the lock before sleep and the display power-off on the
+      lock screen ignore it.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 | Req | Test | Level | Status |
@@ -190,6 +205,8 @@ top-level menus (Left/Right).
 | MB14 | `tests/integration/menu_bridge_memory.sh` (private bus, hostile fixture; cases B A C D E F G H I J: memory incl. RssAnon, oversized, kill on first fetch, kill on a re-read with new pids, forged state files, second instance, unsolicited 100 MB message until the bridge gives up, huge LayoutUpdated, slow victim plus attacker, 7 rotating copies ending degraded; the memory limit is emulated by a watcher) | L1 | see STATE.md |
 | MB15 (logic) | `tests/unit/menu-bridge/tst_menubridge.cpp` `LauncherUri`, `LauncherParse`, `LauncherBook`, `LauncherProtocol` (17 cases: uri and id charset, count clamp, finite progress, wrong types, 64 apps and senders, 20 per second and coalescing, sender gone, replay, message shape), plain and ASan/UBSan builds (`scripts/dev/test.sh`); shell parser and state: `tests/unit/tst_menubridge.qml` `test_launcher*` | L0 | 2026-10-22: 64 passed, 4 skipped (no Unix sockets in the sandbox), plain and ASan |
 | MB15 (D-Bus) | `tests/integration/launcher_entry.sh` (bare; private bus, bridge, socket tap as the shell, `tests/fixtures/launcher-entry.py` as applications): count and clamp, count-visible, progress and clamp, progress-visible, urgent, flood (21 lines for 300 updates, last state arrives), sender disconnect, replay to a new shell, invalid uri and wrong signature (penalty logged, sender refused then served again). Fails on the bridge before ADR-0018 | L1 | 2026-10-22: PASS (and every behaviour check FAILs against the previous bridge) |
+| MB16 (logic) | `tests/unit/menu-bridge/tst_screensaver.cpp` (cookies distinct and non-zero, owner-only release, sender gone, limits, clean names, only two methods served, `SetActive` refused, wrong signatures, the line and its clamp, introspection); shell: `tests/unit/tst_menubridge.qml` `test_screensaverLines`, `tests/security/tst_idlemodel.qml` `test_idleArmed` | L0 | 2026-10-24: see the security report |
+| MB16 (D-Bus) | `tests/integration/screensaver_inhibit.sh` (bare; private bus, bridge, socket tap, `tests/fixtures/screensaver-client.py`): name owned, first state, Inhibit on both paths, other/unknown cookies, owner release, sender leaving, NotSupported members, 16-cookie limit, replay to a new shell, bridge exit | L1 | NOT VERIFIED (needs Unix sockets: bare, outside the sandbox) |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
 | Unit hardening | `systemd-analyze --user verify packaging/systemd/grassfield-menu-bridge.service` | L0 | only finding: `/usr/bin/grassfield-menu-bridge` not installed; runtime under systemd NOT VERIFIED (owner L2) |
@@ -209,8 +226,10 @@ top-level menus (Left/Right).
 - **menu/1 `launcher`** (bridge → shell, additive, MB15): `{"type":"launcher","app":"<desktop id>","count":N|null,
   "progress":P|null,"urgent":bool|null}`; `count` 0 hides the badge, `progress` -1 hides the bar, all three `null`
   forgets the app. Input: the `com.canonical.Unity.LauncherEntry` `Update(s, a{sv})` signal on the bridge's bus.
+- **menu/1 `screensaver`** (bridge → shell, additive, MB16): `{"type":"screensaver","inhibited":bool,"count":N}`.
 - **gfc/1 `appmenu`** gains the additive field `"pid":N` (0 for clears; consumers that ignore it are unaffected).
-- **D-Bus**: `org.grassfield.MenuBridge1` (MB9), `com.canonical.AppMenu.Registrar` (MB1, MB2).
+- **D-Bus**: `org.grassfield.MenuBridge1` (MB9; `Status` also reports `screensaver` (name owned) and `inhibitors`),
+  `com.canonical.AppMenu.Registrar` (MB1, MB2), `org.freedesktop.ScreenSaver` (MB16).
 - **Test hook**: `qs ipc call menubar bridgeState <output>` → JSON (shown window, bridge state, left titles and the
   open bridge menu's rows in output coordinates).
 

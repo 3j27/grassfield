@@ -53,8 +53,16 @@ namespace gf::menubridge {
                                  log(QStringLiteral("malformed LauncherEntry update from \"%1\"").arg(displayIdentity(identity)));
                              },
                      },
-                     this) {
+                     this),
+          m_screensaver([this](bool active, int count, const QStringList& applications) {
+              if (active)
+                  log(QStringLiteral("idle inhibited over org.freedesktop.ScreenSaver: %1 cookie(s) from %2").arg(count).arg(applications.join(QStringLiteral(", "))));
+              else
+                  log(QStringLiteral("idle no longer inhibited over org.freedesktop.ScreenSaver"));
+              send(screensaverMessage(active, count));
+          }) {
         connect(&m_launcher, &LauncherWatcher::line, this, [this](const QByteArray& line) { send(line); });
+        m_screensaver.setConnection(m_bus);
         m_server.setSocketOptions(QLocalServer::UserAccessOption);
         m_server.setMaxPendingConnections(2);
         connect(&m_server, &QLocalServer::newConnection, this, [this] { onNewConnection(); });
@@ -98,12 +106,14 @@ namespace gf::menubridge {
         }
         ::chmod(local.constData(), 0600);
         m_launcher.start();
+        setScreenSaver(true);
         log(QStringLiteral("listening on %1 (standby until the shell says hello with appmenu)").arg(m_socketPath));
         return true;
     }
 
     void Bridge::stop() {
         m_launcher.stop();
+        setScreenSaver(false);
         setRegistrar(false);
         dropAll();
         m_calls.clear(); // a clean stop leaves nothing in flight
@@ -128,6 +138,8 @@ namespace gf::menubridge {
             {QStringLiteral("degraded"), m_degraded},
             {QStringLiteral("shell"), !m_client.isNull()},
             {QStringLiteral("menus"), static_cast<uint>(m_menus.size())},
+            {QStringLiteral("screensaver"), m_screensaverOwned},
+            {QStringLiteral("inhibitors"), static_cast<uint>(m_screensaver.book().count())},
         };
     }
 
@@ -161,6 +173,7 @@ namespace gf::menubridge {
             sendStatus();
             for (const QByteArray& launcherLine : m_launcher.snapshot())
                 send(launcherLine); // applications' badges set before this shell connected
+            send(screensaverMessage(m_screensaver.book().active(), m_screensaver.book().count())); // idle inhibitors taken meanwhile
         }
     }
 
@@ -483,6 +496,41 @@ namespace gf::menubridge {
         m_registrar     = true;
         m_registrarBusy = false;
         log(QStringLiteral("owning %1 (the shell reported the appmenu feature)").arg(service));
+    }
+
+    // org.freedesktop.ScreenSaver (GF-016): owned while the bridge runs when nobody else owns it; never taken over.
+    void Bridge::setScreenSaver(bool wanted) {
+        if (wanted == m_screensaverOwned)
+            return;
+        const QString service = QLatin1String(screensaver::kService);
+        const QString paths[] = {QLatin1String(screensaver::kPath), QLatin1String(screensaver::kLegacyPath)};
+        if (!wanted) {
+            if (m_bus.interface())
+                m_bus.interface()->unregisterService(service);
+            for (const QString& path : paths)
+                m_bus.unregisterObject(path);
+            m_screensaverOwned = false;
+            return;
+        }
+        if (!m_bus.interface())
+            return;
+        for (const QString& path : paths) {
+            if (!m_bus.registerVirtualObject(path, &m_screensaver, QDBusConnection::SingleNode)) {
+                for (const QString& p : paths)
+                    m_bus.unregisterObject(p);
+                log(QStringLiteral("cannot export %1: idle inhibitors over D-Bus are not served").arg(path));
+                return;
+            }
+        }
+        const auto reply = m_bus.interface()->registerService(service, QDBusConnectionInterface::DontQueueService, QDBusConnectionInterface::DontAllowReplacement);
+        if (!reply.isValid() || reply.value() != QDBusConnectionInterface::ServiceRegistered) {
+            for (const QString& path : paths)
+                m_bus.unregisterObject(path);
+            log(QStringLiteral("%1 is owned by another process: its idle inhibitors are not seen by the shell").arg(service));
+            return;
+        }
+        m_screensaverOwned = true;
+        log(QStringLiteral("owning %1 (Inhibit/UnInhibit only)").arg(service));
     }
 
     void Bridge::send(const QByteArray& line) {

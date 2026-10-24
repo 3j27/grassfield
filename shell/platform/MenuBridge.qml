@@ -66,6 +66,9 @@ Singleton {
     property var launcher: ({})
     // A launcher line was applied (msg: the parsed line); the Dock turns urgent into its attention bounce.
     signal launcherUpdate(var msg)
+    // Applications hold org.freedesktop.ScreenSaver idle inhibitors (GF-016, the bridge's screensaver lines): the idle
+    // module neither dims nor locks on idle while true. False without a bridge (the idle lock always works then).
+    property bool screenSaverInhibited: false
     // The open bridge menu popup (BridgeMenu registers itself; read by the menubar test hook), null if none.
     property Item popup: null
 
@@ -197,6 +200,9 @@ Singleton {
             root.launcher = Logic.applyLauncher(root.launcher, msg);
             root.launcherUpdate(msg);
             break;
+        case "screensaver":
+            root.screenSaverInhibited = msg.inhibited;
+            break;
         case "error":
             console.info("grassfield: menu bridge:", msg.code, msg.window, msg.message);
             // The window's menu is unusable (spoofed name, app gone, unreadable, oversized or refused layout, also
@@ -250,6 +256,8 @@ Singleton {
             root.registrar = false;
             // The bridge is gone: what the applications set is unknown (it is replayed when a bridge connects).
             root.launcher = {};
+            // ... and their idle inhibitors no longer count: the idle lock works again (fail closed).
+            root.screenSaverInhibited = false;
             root.openedWindow = "";
             root.openedRegistration = null;
             root.items = [];
