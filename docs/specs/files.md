@@ -243,6 +243,11 @@ installed (not built here).
   operation; untrusted text (file names, KIO messages) is `Text.PlainText`.
 - i18n: every visible string is `qsTr()` / `tr()`; plurals use singular/plural pairs (no catalogs with numerus forms).
 
+## Names, Unicode and case (GF-105)
+- Grassfield Files follows the file system: Linux is case-sensitive, so `Report.txt` and `report.txt` are two items and renaming `a` to `A` is a real rename (macOS's default volume is case-insensitive; the Sort and the folder filter ignore case, collisions do not).
+- Names that differ only by Unicode normalization (NFC "e acute" and NFD "e" + combining accent) are the same name to a person, like on macOS: the folder filter folds case and accents in both forms (`FileLogic::nameMatchesFilter`), and rename, new folder, duplicate, copy, move and drop refuse to create a second entry that is an NFC/NFD twin of an existing one (`FileLogic::sameName`, `equivalentName`; an exact match is left to the conflict handling of the file operation). The file system keeps both forms apart; Files never renames an existing file to normalise it.
+- Every file name shown (views, titles, Info, menus, messages, Preview, desktop icons, Dock stacks) goes through `DisplayName.text` (QML) or `FileLogic::displayName` (C++): line breaks become the return symbol and the bidi override, embedding and isolate controls (U+202A-U+202E, U+2066-U+2069) are written out as `<U+202E>`, as Finder shows them; the marks LRM and RLM stay. `tests/shell/display_names.sh` fails when a view shows a raw name (`raw-name-ok` marks one that is never shown).
+
 ## Known limitations (honest, user-visible gaps vs macOS)
 - Thumbnails come from KIO's thumbnail plugins (kio-extras, installed 2026-10-17: images, PDF, video); a type without
   a plugin keeps its MIME icon. The Network place (kio-extras smb/sftp workers) lists MTP devices and SMB shares; the

@@ -235,8 +235,10 @@
                   "none"
                 ]
               }
-            }
-          }
+            },
+            "required": ["app", "style"]
+          },
+          "maxItems": 200
         },
         "appPreviews": {
           "type": "array",
@@ -257,8 +259,10 @@
                   "never"
                 ]
               }
-            }
-          }
+            },
+            "required": ["app", "previews"]
+          },
+          "maxItems": 200
         }
       }
     },
