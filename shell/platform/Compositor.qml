@@ -92,8 +92,13 @@ Singleton {
     function activate(toplevel: var): void {
         if (!toplevel)
             return;
-        // Show Desktop ends: every window is back before the chosen one is raised.
-        root.endShowDesktop();
+        // Show Desktop ends: every window goes back first, then the chosen one gets the focus (both requests go through the
+        // same dispatch channel, in this order, so the focus is not lost to the windows that are still moving).
+        if (root.endShowDesktop(false)) {
+            const chosen = hyprlandToplevel(toplevel);
+            if (chosen)
+                dispatchRequest(Minimized.focusWindowRequest(chosen.address));
+        }
         if (isMinimized(toplevel)) {
             unminimize(toplevel);
             return;
@@ -303,9 +308,10 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "configreloaded" && root.reduceMotion)
                 root.pushMotion();
-            // Switching Space or opening a window ends Show Desktop (our own moves raise neither).
-            if (ShowDesktop.endsOn(event.name) && root.desktopRecord && Date.now() - root.desktopHiddenAt > Tokens.showDesktopGuardMs)
-                root.endShowDesktop();
+            // Switching Space or opening a window ends Show Desktop; the events of our own moves are recognised by what they
+            // name (ShowDesktop.endsOn), not by timing, and an ending never asks for focus: the user's new Space or window has it.
+            if (root.desktopRecords.length > 0 && ShowDesktop.endsOn(event.name, event.data, root.desktopRecords))
+                root.endShowDesktop(false);
         }
     }
 
@@ -539,13 +545,39 @@ Singleton {
             return false;
         root.desktopRecords = [];
         persistDesktopRecords();
-        const parked = toplevelData().filter(w => w.parked).map(w => w.address);
+        const windows = toplevelData();
         const focus = refocus ? ShowDesktop.focusTarget(records, shownSpaces()) : "";
-        for (const record of records)
-            ShowDesktop.survivors(record, parked).forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
-        if (focus !== "" && parked.indexOf(focus) >= 0)
+        let back = [];
+        for (const record of records) {
+            const mine = ShowDesktop.toRestore(record, windows);
+            back = back.concat(mine);
+            mine.forEach(a => dispatchRequest(moveRequest(a, String(record.workspace))));
+        }
+        if (focus !== "" && back.indexOf(focus) >= 0)
             dispatchRequest(Minimized.focusWindowRequest(focus));
+        // Nothing may stay hidden: a window still on the parking workspace a moment later is sent back again.
+        desktopVerify.records = records;
+        desktopVerify.tries = 0;
+        desktopVerify.restart();
         return true;
+    }
+
+    Timer {
+        id: desktopVerify
+        property var records: []
+        property int tries: 0
+        interval: Tokens.showDesktopVerifyMs
+        onTriggered: {
+            const parked = root.toplevelData().filter(w => w.parked).map(w => w.address);
+            let again = 0;
+            for (const record of records) {
+                const stuck = ShowDesktop.survivors(record, parked);
+                again += stuck.length;
+                stuck.forEach(a => root.dispatchRequest(root.moveRequest(a, String(record.workspace))));
+            }
+            if (again > 0 && ++tries < 3)
+                restart();
+        }
     }
 
     // Super+F3. The window positions come from Hyprland's window data, which is read again first (the model may be stale):

@@ -46,9 +46,14 @@ open_foot() { # <app id> -> PID of the new window, which also has the focus
 cleanup() { for p in "${pids[@]}"; do kill -- "-$p" 2>/dev/null; done; space 1; }
 trap cleanup EXIT
 # check <what> <window> <wanted Space name>
-on_space() { [[ $(space_of "$2") == "$3" ]] && pass "$1" || fail "$1: window $2 is on $(space_of "$2"), wanted $3"; }
-focus_is() { [[ $(active_pid) == "$2" ]] && pass "$1" || fail "$1: focus is $(active_pid), wanted $2"; }
-space_is() { [[ $(active_space) == "$2" ]] && pass "$1" || fail "$1: Space is $(active_space), wanted $2"; }
+# Every check waits at most 6 s for the state to arrive (the shell restores from events), then reports what it saw.
+wait_for() { local n; for n in $(seq 1 30); do "$@" && return 0; sleep 0.2; done; return 1; }
+is_on_space() { [[ $(space_of "$1") == "$2" ]]; }
+is_focus() { [[ $(active_pid) == "$1" ]]; }
+is_space() { [[ $(active_space) == "$1" ]]; }
+on_space() { wait_for is_on_space "$2" "$3" && pass "$1" || fail "$1: window $2 is on $(space_of "$2"), wanted $3"; }
+focus_is() { wait_for is_focus "$2" && pass "$1" || fail "$1: focus is $(active_pid), wanted $2"; }
+space_is() { wait_for is_space "$2" && pass "$1" || fail "$1: Space is $(active_space), wanted $2"; }
 all_home() { # <label>
   on_space "$1: A on Space 1" "$a" 1
   on_space "$1: B on Space 1" "$b" 1
@@ -65,13 +70,16 @@ d=$(open_foot gf-sd-main)
 space 1
 focus_is "setup: C has the focus on Space 1" "$c"
 for p in "$a" "$b" "$c" "$d"; do [[ -n $p && $p != null ]] || { echo "show_desktop: could not open the windows"; exit 2; }; done
-state=${GRASSFIELD_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/grassfield}/show-desktop.json
+# The dev shell keeps its state under .dev/state (shell-run.sh sets GRASSFIELD_STATE_HOME): never the owner's home.
+state=$dev/state/show-desktop.json
+case $state in "$HOME"/.local/*) echo "show_desktop: the state file would be under $HOME/.local: refusing"; exit 2 ;; esac
 
 # 1 show
 show_desktop
 for w in "$a" "$b" "$c"; do on_space "1: window $w parked" "$w" special:desktop; done
 on_space "1: D on Space 2 is not touched" "$d" 2
-[[ -s $state ]] && grep -q '"records"' "$state" && pass "1: the record is in the state dir" || fail "1: no record in $state"
+has_record() { [[ -s $state ]] && grep -q '"records"' "$state"; }
+wait_for has_record && pass "1: the record is in the state dir ($state)" || fail "1: no record in $state"
 
 # 2 second press on the same Space
 show_desktop
@@ -82,7 +90,6 @@ focus_is "2: the window that had the focus (C) has it again" "$c"
 # 3 Space switch
 show_desktop
 space 2
-sleep 0.5
 all_home "3"
 space_is "3: the Space stays 2 (the user is not pulled back)" 2
 focus_is "3: the focus is the Space 2 window" "$d"
@@ -91,7 +98,6 @@ space 1
 # 4 new window
 show_desktop
 e=$(open_foot gf-sd-main)
-sleep 0.5
 all_home "4"
 on_space "4: E stays where it opened" "$e" 1
 focus_is "4: the new window keeps the focus" "$e"
@@ -102,11 +108,10 @@ show_desktop
 ipc switcher next 7000001
 sleep 0.5
 ipc switcher release 7000001
-sleep 1.2
 all_home "5"
-chosen=$(active_pid)
-[[ -n $chosen && $chosen != null && $chosen != "$e" ]] && pass "5: the switcher's choice ($chosen) has the focus, not the old window" || fail "5: focus is $chosen"
-on_space "5: the chosen window is on the Space shown" "$chosen" "$(active_space)"
+# The front app is gf-sd-main (E); the switcher's next app is gf-sd-other, whose only window is C: C must have the focus.
+focus_is "5: the switcher's choice (C, the other app) has the focus, not the old window E" "$c"
+space_is "5: the Space is C's Space" 1
 
 echo "show_desktop: $fails failure(s)"
 exit $((fails > 0))

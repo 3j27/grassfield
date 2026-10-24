@@ -50,6 +50,19 @@ TestCase {
         compare(SD.restoreOrder(null), []);
     }
 
+    function test_toRestoreSendsBackWhatExistsAndIsNotHome() {
+        const r = SD.capture(all, "DP-1", 1, "", false);
+        // Both parked (model says special workspace, id negative): both go back, in order.
+        compare(SD.toRestore(r, [win("0xa1", -98, 0, 0), win("0xb2", -98, 0, 0)]), ["a1", "b2"]);
+        // One closed, one already home: neither is moved.
+        compare(SD.toRestore(r, [win("0xa1", 1, 0, 0)]), []);
+        compare(SD.toRestore(r, []), []);
+        compare(SD.toRestore(r, undefined), []);
+        compare(SD.toRestore(null, [win("0xa1", -98, 0, 0)]), []);
+        verify(SD.sameAddress("0xA1", "a1"));
+        verify(!SD.sameAddress("", ""));
+    }
+
     function test_survivorsSkipWindowsThatClosedOrMoved() {
         const r = SD.capture(all, "DP-1", 1, "", false);
         compare(SD.survivors(r, ["b2"]), ["b2"]);

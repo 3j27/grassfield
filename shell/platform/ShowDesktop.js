@@ -57,6 +57,20 @@ function restoreOrder(record) {
     return record.windows.slice().sort((a, b) => a.y - b.y || a.x - b.x).map(w => w.address);
 }
 
+// The windows of `record` to send back: those that still exist (`windows`: the toplevel data, [{address, workspace, ...}])
+// and are not on the recorded Space already, in restoreOrder. A window that closed is skipped. (The check is on where the
+// window is, not on whether the model says "parked": a model that has not caught up with the park must not leave a window hidden.)
+function toRestore(record, windows) {
+    const where = {};
+    for (const w of Array.isArray(windows) ? windows : [])
+        where[address(w.address)] = workspaceId(w.workspace);
+    return restoreOrder(record).filter(a => a in where && where[a] !== record.workspace);
+}
+
+function sameAddress(a, b) {
+    return address(a) !== "" && address(a) === address(b);
+}
+
 // The addresses of the record that are still parked (`parked`: addresses now on the parking workspace): a window that
 // closed or was moved by hand is left alone.
 function survivors(record, parked) {
