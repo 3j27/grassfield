@@ -29,30 +29,29 @@ The 60 s sample is not a 10-minute idle run (P1 needs an owner-run idle measurem
 - P2 is measured in the nested session (L1) since memory does not depend on DRM.
 - Thresholds are revisited at each milestone gate with new measurements.
 
-## Amendment 2026-10-23 (owner delegation D-5, GF-017): governance record
-Decider: owner, through the standing delegation recorded in docs/STATE.md ("Owner decisions", D-1 to D-13). Rule used for
-every choice: how macOS does it.
+## Amendment 2026-10-23 (GF-017): governance record
+Items 1 and 2 restate owner decisions (docs/STATE.md "Owner decisions", D-1 to D-13: the owner's delegation, rule used for
+every choice: how macOS does it). Items 3 to 5 are **PROPOSED by the integrator, owner sign-off pending**: none of them is in
+D-1 to D-13 (D-5 covers the acceptance of ADRs only), so they are not recorded as decided.
 
-1. **ADR acceptance (D-5).** All ADRs that were Proposed are Accepted on the owner's delegation; line 2 of each file
+1. **ADR acceptance (D-5, decided).** All ADRs that were Proposed are Accepted on the owner's delegation; line 2 of each file
    says so and keeps the earlier status and every amendment. A later amendment still follows the usual rule: it is
    written at the end of the ADR with its date and decider.
-2. **R3 and A1 amended** in docs/master-prompt.md section 10 (the gate table holds them as editable requirements).
+2. **R3 and A1 (D-1 and D-7, decided; restated in docs/master-prompt.md section 10).**
    D-1: menu bar on every display, one Dock that follows the display whose bottom edge the pointer touches, a window
    restored from the Dock returns to the display and frame it was minimized from. D-7: keyboard access to Minimize,
    Zoom and Close through the Window menu for every window; Grassfield's own apps draw their controls; compositor-drawn
    controls of third-party windows are accepted given those equivalents.
-3. **`docs/specs/alpha.md` is waived (written waiver).** The M2 alpha acceptance list was replaced in practice by the
-   per-surface specs in docs/specs/, their nested scenarios and the final audit (docs/audits/final-1.0/). The 1.0
-   release candidate is judged against those specs and the gate table, not against a separate alpha list. No file is
-   created for it.
-4. **M5 defect threshold (Q-18).** Zero open P0 and zero open P1 defects in docs/audits/final-1.0/13-defects-and-risks.md
-   unless the owner waives the item in writing in docs/STATE.md; P2 defects are listed with an owner-visible workaround.
-   This is the conservative reading the audit proposed.
-5. **Milestone approvals.** M0 (ADRs 0001 to 0003, 0006, 0007, 0009, 0010 accepted by item 1), M1 and M2 (alpha waived
-   by item 3): approved by the owner's delegation on 2026-10-23. M3 and M4: approved once the remediation programme
-   (docs/audits/final-1.0/15-remediation-plan.md) closes, with the F1 sign-off per surface still owner-only. M5 and M6
-   are not approved: they keep the owner-only items (L2 gates, R2, R3, C1 7 days, 30-day dogfood, hardware matrix,
-   legal review).
+3. **`docs/specs/alpha.md` waiver (PROPOSED, owner sign-off pending).** The M2 alpha acceptance list was replaced in
+   practice by the per-surface specs in docs/specs/, their nested scenarios and the final audit (docs/audits/final-1.0/).
+   Proposal: judge the 1.0 release candidate against those specs and the gate table, with no separate alpha list.
+4. **M5 defect threshold, Q-18 (PROPOSED, owner sign-off pending).** Zero open P0 and zero open P1 defects in
+   docs/audits/final-1.0/13-defects-and-risks.md unless the owner waives the item in writing; P2 defects listed with an
+   owner-visible workaround. This is the conservative reading the audit proposed.
+5. **Milestone approvals (PROPOSED, owner sign-off pending).** M0 to M2 (with item 3), then M3 and M4 once the remediation
+   programme (docs/audits/final-1.0/15-remediation-plan.md) closes and F1 is signed per surface; M5 and M6 keep the
+   owner-only items (L2 gates, R2, R3, C1 7 days, 30-day dogfood, hardware matrix, legal review). No milestone is approved
+   until the owner signs it off.
 
 ## Amendment 2026-10-23 (GF-040): resource guard of grassfield-shell.service
 Measured: idle CPU 0.25 to 0.33 % of one core, RSS 530 MB growing about 6 MB/h (566 MB after 6 h), other real sessions up to
