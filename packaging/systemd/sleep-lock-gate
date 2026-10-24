@@ -11,22 +11,61 @@
 # stand-in it only ever asks grassfield-shell to lock).
 [ "${GRASSFIELD_SESSION:-}" = 1 ] || exit 0
 # A session that is ending (GF-081): grassfield-shell exits 255 when the compositor goes away first, which is every logout, and
-# that failure starts this unit through OnFailure=. A logout must never arm the sleep lock, and the only signal that the session
-# is ending is "the compositor is gone": the session's Wayland socket no longer exists, or its Hyprland instance directory is
-# gone. The graphical-session.target state is NOT used: this unit starts before the target is reached, at login, when it still
-# reads inactive, and D-12 must hold from login until the shell takes its own inhibitor. At login the socket is live (runs); after
-# a crash mid-session it is live (runs); at logout the compositor goes first (skipped). Anything that cannot be decided (no
-# WAYLAND_DISPLAY, no runtime directory, a failing test) arms the lock: fail closed.
+# that failure starts this unit through OnFailure=. A logout should not arm the sleep lock, and the only signal that the session
+# is ending is "the compositor is gone": the session's own Wayland socket, or its own Hyprland instance directory (never "some
+# instance directory exists": stale ones from earlier sessions pile up in $XDG_RUNTIME_DIR/hypr), is definitely absent. The
+# graphical-session.target state is NOT used: this unit starts before the target is reached, at login, when it still reads
+# inactive, and D-12 must hold from login until the shell takes its own inhibitor. At login the socket is live (runs); after a
+# crash mid-session it is live (runs); at logout the compositor goes first (skipped).
+#
+# "Definitely absent" is decided by absent() below: an absolute, well-formed path of sane length whose parent directory is
+# searchable and which does not exist (not even as a dangling link). Anything else (an unreadable runtime directory, a path that
+# is too long or odd, an error other than "does not exist", a missing variable, a failing test) cannot be decided and arms the
+# lock: fail closed. The race at logout is accepted on the safe side: if the compositor has not yet removed its socket when this
+# runs, the lock is armed at logout, which is harmless; the opposite error (skipping while the session lives) is what this avoids.
+absent() { # absent PATH: exit 0 only when ENOENT is certain
+  p=$1
+  [ "${#p}" -le 4096 ] || return 1
+  case $p in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  case $p in
+    *..* | *"
+"*) return 1 ;;
+  esac
+  set -f
+  old=$IFS
+  IFS=/
+  for c in $p; do
+    if [ "${#c}" -gt 255 ]; then
+      IFS=$old
+      return 1
+    fi
+  done
+  IFS=$old
+  parent=${p%/*}
+  [ -n "$parent" ] || parent=/
+  [ -d "$parent" ] || return 1
+  [ -x "$parent" ] || return 1
+  if [ -e "$p" ] || [ -L "$p" ]; then
+    return 1
+  fi
+  return 0
+}
 if [ -n "${WAYLAND_DISPLAY:-}" ]; then
   case $WAYLAND_DISPLAY in
     /*) sock=$WAYLAND_DISPLAY ;;
-    *) [ -n "${XDG_RUNTIME_DIR:-}" ] && sock=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY || sock= ;;
+    */* | .* ) sock= ;;
+    *) if [ -n "${XDG_RUNTIME_DIR:-}" ]; then sock=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY; else sock=; fi ;;
   esac
-  # A path that is definitely absent means the compositor is gone; any other answer, or none, goes on.
-  [ -n "$sock" ] && [ ! -e "$sock" ] && exit 1
+  if [ -n "$sock" ] && absent "$sock"; then exit 1; fi
 fi
 if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
-  [ ! -d "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE" ] && exit 1
+  case $HYPRLAND_INSTANCE_SIGNATURE in
+    *[!A-Za-z0-9_.-]* | .*) ;;
+    *) if absent "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE"; then exit 1; fi ;;
+  esac
 fi
 state=$(systemctl --user show --property=ActiveState --value grassfield-shell.service 2>/dev/null) || exit 0
 sub=$(systemctl --user show --property=SubState --value grassfield-shell.service 2>/dev/null) || exit 0
