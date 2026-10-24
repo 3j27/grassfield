@@ -234,6 +234,7 @@
  {"path": "tests/compositor/overview.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/overview_focus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/forward_keys.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/compositor/fullscreen_reveal.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/soak.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/stages.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/window_placement.sh", "layer": "nested", "runner": "bare"},

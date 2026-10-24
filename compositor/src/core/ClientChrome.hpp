@@ -93,7 +93,9 @@ namespace gf::chrome {
     // The presses on a revealed titlebar are the plugin's alone: they are cancelled on Hyprland's event bus with their
     // releases. Hyprland 0.56.2 returns from CInputManager::onMouseButton right after the bus when an event is cancelled,
     // before it records the button as held or released (read from the binary), so a cancelled press and its cancelled
-    // release leave its held-button state as it was. This tracks the releases owed.
+    // release leave its held-button state as it was. This tracks the releases owed, per button: the bus event names no
+    // device, so the caller takes a press on the bar only while no button is held anywhere (no other device's release of
+    // the same button can then be mistaken for the bar's).
     class CRevealPresses {
       public:
         // A press, on the revealed bar or not. A release still owed for the same button was lost (its device went away):

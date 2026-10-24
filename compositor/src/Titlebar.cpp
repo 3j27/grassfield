@@ -21,6 +21,7 @@
 #include <hyprland/src/desktop/view/WLSurface.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/layout/supplementary/DragController.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -29,6 +30,7 @@
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/protocols/XDGShell.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
+#include <hyprland/src/protocols/core/DataDevice.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
@@ -425,12 +427,28 @@ bool CGrassfieldTitlebar::shouldShow() const {
 
 bool CGrassfieldTitlebar::revealable() const {
     const auto w = window();
-    if (!w || !w->m_workspace || !w->m_workspace->isVisible() || !drawnInPlace(w) || !titlebarAllowed())
+    if (!w || !w->m_workspace || !w->m_workspace->isVisible())
+        return false;
+    const auto& fs = Fullscreen::controller();
+    if (!fs || fs->getFullscreenModes(w).internal != Fullscreen::FSMODE_FULLSCREEN)
         return false;
     if (g_pSessionLockManager && g_pSessionLockManager->isSessionLocked())
         return false; // every press is the lock screen's
-    const auto& fs = Fullscreen::controller();
-    return fs && fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_FULLSCREEN;
+    // The pointer belongs to the client (review of part B, major 2): a pointer it confines or locks (a game that scrolls at
+    // the screen's edge: pushing up there and clicking the corner hit a working close light), a move or resize it started
+    // (or a key binding's), a drag and drop.
+    if (g_pInputManager && g_pInputManager->isConstrained())
+        return false;
+    if (g_layoutManager) {
+        if (const auto& drag = g_layoutManager->dragController(); drag && drag->mode() != MBIND_INVALID)
+            return false;
+    }
+    if (PROTO::data && PROTO::data->dndActive())
+        return false;
+    // A special workspace shown on the monitor is drawn above the full-screen window: the bar would be under its windows.
+    if (const auto mon = w->m_monitor.lock(); mon && mon->m_activeSpecialWorkspace && mon->m_activeSpecialWorkspace != w->m_workspace)
+        return false;
+    return drawnInPlace(w) && titlebarAllowed();
 }
 
 bool CGrassfieldTitlebar::revealed() const {
@@ -988,16 +1006,19 @@ void CGrassfieldTitlebar::updateReveal() {
     const bool     pressing = pointerInput().revealPresses.pressing();
     for (auto* deco : gf::state().titlebars) {
         gf::chrome::RevealInput in;
-        in.fullscreen = deco->revealable();
-        if (!in.fullscreen && !deco->m_revealed)
-            continue; // the common case: no full-screen window, nothing to compute
-        const auto w   = deco->window();
-        const auto mon = w ? w->m_monitor.lock() : nullptr;
+        const auto              w   = deco->window();
+        const auto              mon = w ? w->m_monitor.lock() : nullptr;
         if (mon) {
             in.onMonitor = pos.x >= mon->m_position.x && pos.x < mon->m_position.x + mon->m_size.x && pos.y >= mon->m_position.y && pos.y < mon->m_position.y + mon->m_size.y;
             in.pointerY  = pos.y - mon->m_position.y;
-            in.barTop    = menubarInset(mon);
         }
+        // The cheap test first, on every pointer motion: away and the pointer not at its monitor's top edge, nothing changes.
+        if (!deco->m_revealed && (!in.onMonitor || in.pointerY > gf::chrome::kRevealEdge))
+            continue;
+        in.fullscreen = deco->revealable();
+        if (!in.fullscreen && !deco->m_revealed)
+            continue;
+        in.barTop       = menubarInset(mon);
         in.pressing     = pressing;
         const bool next = gf::chrome::nextRevealed(deco->m_revealed, in);
         if (next == deco->m_revealed)
@@ -1063,6 +1084,12 @@ bool CGrassfieldTitlebar::onRevealedBarButton(const IPointer::SButtonEvent& e) {
                 break;
             }
         }
+        // Only while no button is held anywhere: Hyprland's held buttons are per button, and the bus event names no device
+        // (IPointer::SButtonEvent), so a release could not be told apart from another device's release of the same button
+        // (review of part B: B holds LEFT, A presses LEFT on the bar, B's release must reach Hyprland). Such a press goes to
+        // the window, as without the bar.
+        if (deco && g_pInputManager->hasHeldButtons())
+            deco = nullptr;
         if (deco)
             cancel = true; // first: whatever follows, the press never reaches Hyprland without its release owed
         input.revealPresses.onPress(e.button, deco != nullptr);
