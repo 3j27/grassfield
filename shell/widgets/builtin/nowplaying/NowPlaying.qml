@@ -44,8 +44,8 @@ WidgetBase {
 
         Image {
             anchors.fill: parent
-            // Never the player's URL: a PNG the shell made from its local file (Media.artPath, ThemeIcons).
-            source: root.hasTrack ? ThemeIcons.fileSource(Media.artPath) : ""
+            // Never the player's URL: a PNG the shell made from its file or https resource (ThemeIcons.artSource).
+            source: root.hasTrack ? ThemeIcons.artSource(Media.artShown) : ""
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             visible: status === Image.Ready

@@ -27,8 +27,8 @@ Module {
 
         Image {
             anchors.fill: parent
-            // Never the player's URL: a PNG the shell made from its local file (Media.artPath, ThemeIcons).
-            source: ThemeIcons.fileSource(Media.artPath)
+            // Never the player's URL: a PNG the shell made from its file or https resource (ThemeIcons.artSource).
+            source: ThemeIcons.artSource(Media.artShown)
             sourceSize: Qt.size(Tokens.panelCcArtSize * 2, Tokens.panelCcArtSize * 2)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true

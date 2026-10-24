@@ -43,6 +43,13 @@
 # file named by path, an SVG naming a FIFO in the app's folder, a regular icon in it, a pixmap, a plain user name); then
 # the same items as real StatusNotifierItems on a PRIVATE bus (dbus-daemon in the scratch directory, every process under
 # `env -i` with only that address, a guard refusing any other bus; SKIP where Unix sockets cannot be created).
+# Part 6, media art over https (coordinator, after the review of 80f0f19: macOS shows the artwork apps provide), offline:
+# a local HTTPS server on 127.0.0.1 with a throwaway CA (theme_icon_files.d/fake_https.py; no proxy variable, no other
+# host). The helper fetches a PNG and an SVG naming a FIFO (rendered, the FIFO untouched), refuses text/html, a redirect to
+# http or file:, a fourth redirect, more than 5 MiB (announced or chunked), a response slower than 5 s, an http URL and
+# a URL with credentials (no request made), and sends no cookie, no credentials and only its fixed user agent. The shell
+# (ThemeIcons.artSource) shows the art as a PNG it made, fetches nothing while the session is locked (the art already made
+# still shows), fetches the held URL after unlocking, and of three URLs asked in one turn fetches only the newest.
 # Plain shell test: PASS/FAIL lines, non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -295,8 +302,8 @@ for site in 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(Apps.lookup(ti
   'shell/dock/Dock.qml:ThemeIcons.appIcon(tile.modelData.icon, "application-x-executable")' 'shell/dock/StackIcon.qml:ThemeIcons.fileSource(root.path)' \
   'shell/dock/StackIcon.qml:ThemeIcons.appIcon(names.length > 0 ? names[0] : ""' 'shell/stages/Stages.qml:ThemeIcons.appIcon(tile.entry ? tile.entry.icon' \
   'shell/desktop/DesktopIcon.qml:ThemeIcons.fileSource(root.filePath)' \
-  'shell/widgets/builtin/nowplaying/NowPlaying.qml:source: root.hasTrack ? ThemeIcons.fileSource(Media.artPath) : ""' \
-  'shell/overlay/controlcenter/NowPlaying.qml:source: ThemeIcons.fileSource(Media.artPath)' 'shell/services/Media.qml:readonly property string artPath: ArtUrl.localPath(artUrl)' \
+  'shell/widgets/builtin/nowplaying/NowPlaying.qml:source: root.hasTrack ? ThemeIcons.artSource(Media.artShown) : ""' \
+  'shell/overlay/controlcenter/NowPlaying.qml:source: ThemeIcons.artSource(Media.artShown)' 'shell/services/Media.qml:onTriggered: root.artShown = root.artUrl' \
   'shell/security/lock/Lock.qml:Machine.avatarSource(facePath, Machine.accountsIconPath(loginName), path => ThemeIcons.fileSource(path), path => ThemeIcons.fileState(path))' \
   'shell/menubar/TrayButton.qml:readonly property string own: ThemeIcons.trayIcon(root.item ? root.item.icon : "")'; do
   grep -qF -- "${site#*:}" "${site%%:*}" || { echo "missing: $site"; site_ok=0; }
@@ -538,5 +545,86 @@ else
   done
   tcheck "private bus: the image loader and the GUI thread never stalled" "$([[ $rc == 0 && $(grep -o 'probe: done .*' <<<"$out") == "probe: done ctl=1" ]] && echo 1)"
   note=$(fifos_untouched "$s") && tcheck "private bus: no FIFO was opened" 1 || tcheck "private bus: no FIFO was opened: $note" 0
+fi
+
+# ---- Part 6: media art over https (offline: a local HTTPS server on 127.0.0.1, a throwaway CA; no network) ----
+if ! command -v openssl >/dev/null || ! command -v curl >/dev/null; then
+  echo "SKIP: theme icon files, part 6 media art over https: openssl or curl missing: NOT VERIFIED"
+else
+  h=$tmp/https
+  mkdir -p "$h"
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$h/key.pem" -out "$h/cert.pem" -days 1 -subj "/CN=127.0.0.1" \
+    -addext "subjectAltName=IP:127.0.0.1" >/dev/null 2>&1
+  s=$tmp/art
+  scratch "$s"
+  mkfifo "$s/outside/art-ref.fifo"
+  watch_fifos "$s" "$s/outside/art-ref.fifo"
+  env -i PATH=/usr/bin:/bin python3 -I tests/security/theme_icon_files.d/fake_https.py "$h/cert.pem" "$h/key.pem" "$h/requests.log" \
+    "$s/outside/art-ref.fifo" >"$h/port" 2>"$h/server.err" &
+  watchers+=($!)
+  for _ in $(seq 1 50); do [[ -s $h/port ]] && break; sleep 0.1; done
+  port=$(head -n 1 "$h/port" 2>/dev/null || true)
+  if [[ ! $port =~ ^[0-9]+$ ]]; then
+    echo "SKIP: theme icon files, part 6 media art over https: no local HTTPS server here ($(head -c 200 "$h/server.err")): NOT VERIFIED"
+  else
+    B=https://127.0.0.1:$port
+    # The helper alone, as ThemeIcons runs it: no variable but the CA bundle of the throwaway CA (no proxy: offline).
+    helper_url() { # <n> <url>...: one batch of "url" items; prints its answer lines
+      local -a a=()
+      local n=0 u
+      for u in "$@"; do n=$((n + 1)); a+=(url "$n" "$u"); done
+      rm -rf "$s/fetch-out" && mkdir -m 700 "$s/fetch-out"
+      env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" CURL_CA_BUNDLE="$h/cert.pem" \
+        timeout -k 2 90 python3 -I shell/services/image-copy.py batch "$s/fetch-out" 8388608 16777216 134217728 "${a[@]}"
+    }
+    answer() { grep -F -- "$2" <<<"$1" | grep -E "^(ok|no)	url:" | head -n 1 | cut -f1; }
+    out=$(helper_url "$B/ok.png" "$B/svgref.svg" "$B/html" "$B/redir-http" "$B/redir-file" "$B/redir/3" "$B/redir/4" "$B/cookie" \
+      "$B/big-length" "$B/big-chunked" "http://127.0.0.1:$port/ok.png" "https://user:pw@127.0.0.1:$port/a.png")
+    acheck() { # <label> <ok>
+      if [[ $2 == 1 ]]; then pass "https art: $1"; else bad "https art: $1 ($(tr '\n' '|' <<<"$out" | sed "s|$B|\$B|g" | cut -c1-600))"; fi
+    }
+    acheck "a PNG is fetched and re-encoded" "$([[ $(answer "$out" "url:$B/ok.png	") == ok ]] && echo 1)"
+    acheck "an SVG naming a FIFO is fetched and rendered (the FIFO is never opened)" "$([[ $(answer "$out" "url:$B/svgref.svg") == ok ]] && fifos_untouched "$s" >/dev/null && echo 1)"
+    acheck "text/html is refused (not an image)" "$([[ $(answer "$out" "url:$B/html") == no ]] && echo 1)"
+    acheck "a redirect to http is refused (its plain-HTTP target, which would answer, is never asked)" \
+      "$([[ $(answer "$out" "url:$B/redir-http") == no ]] && ! grep -q '"scheme": "http"' "$h/requests.log" && echo 1)"
+    acheck "a redirect to file: is refused" "$([[ $(answer "$out" "url:$B/redir-file") == no ]] && echo 1)"
+    acheck "three redirects are followed, a fourth is refused" "$([[ $(answer "$out" "url:$B/redir/3") == ok && $(answer "$out" "url:$B/redir/4") == no ]] && echo 1)"
+    acheck "a response over 5 MiB is refused, announced or chunked" "$([[ $(answer "$out" "url:$B/big-length") == no && $(answer "$out" "url:$B/big-chunked") == no ]] && echo 1)"
+    acheck "an http URL and a URL with credentials are refused before any request" \
+      "$([[ $(answer "$out" "url:http://127.0.0.1:$port/ok.png") == no && $(answer "$out" "url:https://user:pw@") == no ]] && ! grep -q '"/a.png"' "$h/requests.log" && echo 1)"
+    acheck "every copy is a PNG the shell made" "$(python3 -I - "$s/fetch-out" <<'PY' && echo 1
+import os, sys
+d = sys.argv[1]
+ok = all(open(os.path.join(d, f), "rb").read(8) == b"\x89PNG\r\n\x1a\n" for f in os.listdir(d))
+sys.exit(0 if ok and os.listdir(d) else 1)
+PY
+)"
+    # No cookie (the /cookie redirect set one), no credentials, the fixed user agent, on every request.
+    acheck "requests carry no cookie, no credentials and only the fixed user agent" "$(python3 -I - "$h/requests.log" <<'PY' && echo 1
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1])]
+sys.exit(0 if rows and all(r["cookie"] is None and r["auth"] is None and r["agent"] == "Grassfield-NowPlaying/1.0" for r in rows) else 1)
+PY
+)"
+    start=$(date +%s%N)
+    out=$(helper_url "$B/slow")
+    ms=$((($(date +%s%N) - start) / 1000000))
+    acheck "a response that does not come within 5 s is refused (${ms} ms)" "$([[ $(answer "$out" "url:$B/slow") == no ]] && ((ms < 8000)) && echo 1)"
+
+    # The shell: ThemeIcons.artSource as the Now Playing views use it (no proxy variable: offline).
+    mkcfg "$tmp/acfg" art_probe.qml
+    mapfile -t e < <(shellenv "$s")
+    rc=0
+    out=$(env -u https_proxy -u HTTPS_PROXY -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY "${e[@]}" CURL_CA_BUNDLE="$h/cert.pem" PROBE_BASE="$B" \
+      timeout -k 3 90 qs -p "$tmp/acfg" --no-color 2>&1) || rc=$?
+    acheck "the shell shows https art as a PNG it made" "$(grep -q 'probe: unlocked class=copy status=1' <<<"$out" && echo 1)"
+    acheck "while locked nothing is fetched (no request, no entry) and only art already made shows" \
+      "$(grep -q 'probe: locked source=none entry=none cached=copy' <<<"$out" && echo 1)"
+    acheck "after unlocking the held art is fetched once" "$(grep -q 'probe: after-unlock class=copy status=1' <<<"$out" && [[ $(grep -c '"/locked.png"' "$h/requests.log") == 1 ]] && echo 1)"
+    acheck "three URLs asked in one turn: only the newest is fetched" \
+      "$(grep -q 'probe: newest a=none b=none c=ok' <<<"$out" && ! grep -q '"/a.png"\|"/b.png"' "$h/requests.log" && echo 1)"
+    acheck "the shell never stalled" "$([[ $rc == 0 ]] && grep -q 'probe: done' <<<"$out" && echo 1)"
+  fi
 fi
 exit $fail

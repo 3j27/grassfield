@@ -18,8 +18,8 @@ import "widgets/ArtUrl.js" as ArtUrl
 //    Force Quit) for both FIFO applications;
 //  - review of 423766f: a flatpak user export (a symlink into the user's flatpak tree) is shown as a copy; a user icon
 //    that is a symlink to an image outside the allowed roots is refused; media art (the player's file: URL through
-//    ArtUrl.localPath and ThemeIcons.fileSource, as Media.artPath and both Now Playing views do) naming a FIFO is
-//    refused and naming an SVG that references a FIFO becomes a PNG; the lock screen's account picture
+//    ThemeIcons.artSource, as both Now Playing views show Media.artShown) naming a FIFO is refused and naming an SVG that
+//    references a FIFO becomes a PNG; the lock screen's account picture
 //    (LockMachine.avatarSource over ThemeIcons, as Lock.qml binds it) likewise.
 // Then a control icon is loaded: its Image only becomes Ready when the one image loader never stalled, and the probe
 // exits only when the GUI thread never blocked. Prints "probe:" lines and "probe: done", then exits.
@@ -30,6 +30,7 @@ ShellRoot {
     readonly property var ids: ["gf-fifo-path", "gf-fifo-name", "gf-ok-path", "gf-ok-name", "gf-flatpak", "gf-outside"]
     readonly property string artFifo: ArtUrl.localPath("file://" + Quickshell.env("PROBE_ART_FIFO"))
     readonly property string artSvg: ArtUrl.localPath("file://" + Quickshell.env("PROBE_ART_SVG"))
+    readonly property string artSvgUrl: "file://" + Quickshell.env("PROBE_ART_SVG")
     readonly property string faceSvg: Quickshell.env("PROBE_FACE_SVG")
     readonly property string faceFifo: Quickshell.env("PROBE_FACE_FIFO")
 
@@ -120,7 +121,7 @@ ShellRoot {
                 width: 16
                 height: 16
                 asynchronous: true
-                source: ThemeIcons.fileSource(root.artFifo)
+                source: ThemeIcons.artSource("file://" + root.artFifo)
             }
 
             Image {
@@ -128,7 +129,7 @@ ShellRoot {
                 width: 16
                 height: 16
                 asynchronous: true
-                source: ThemeIcons.fileSource(root.artSvg)
+                source: ThemeIcons.artSource(root.artSvgUrl)
             }
 
             Image {

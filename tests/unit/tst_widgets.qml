@@ -384,6 +384,16 @@ TestCase {
          null, undefined, 5, {}].forEach(u => compare(ArtUrl.localPath(u), "", "rejected: " + u));
     }
 
+    // The https art the helper may fetch (services/image-copy.py checks the same pattern).
+    function test_artRemoteUrl() {
+        ["https://i.scdn.co/image/ab67616d0000b273", "https://example.com:8443/a.png?size=640&x=1", "https://127.0.0.1:4433/ok.png",
+         "https://cdn.example.org"].forEach(u => compare(ArtUrl.remoteUrl(u), u, "accepted: " + u));
+        ["http://example.com/a.png", "HTTPS://example.com/a.png", "https://user:pw@example.com/a.png", "https://user@example.com/a.png",
+         "https://[::1]/a.png", "https://example.com/a b.png", "https://example.com/a\\b.png", "https://example.com/a\n.png",
+         "https://exa_mple.com/a.png", "https:///a.png", "ftp://example.com/a.png", "file:///tmp/a.png", "data:image/png;base64,AAAA",
+         " https://example.com/a.png", "https://example.com/" + "a".repeat(2100), "", null, undefined, 5, {}].forEach(u => compare(ArtUrl.remoteUrl(u), "", "refused: " + u));
+    }
+
     // ---- calendar in a zone with DST at midnight ------------------------------------------------------
 
     function test_daysInMonthIgnoresLocalTime() {

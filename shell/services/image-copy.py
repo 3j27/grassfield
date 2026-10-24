@@ -17,9 +17,16 @@
 # rsvg-convert runs with an address-space limit, a CPU-time limit and a wall-clock timeout; its output must be a PNG
 # within OUT_CAP. The shell then loads only that PNG, which it made, by its .png name.
 #
+# Media art an app names by an https URL (Spotify, browsers; macOS shows the artwork apps provide) is fetched by curl
+# into memory, then re-encoded the same way: https only (also for every redirect, at most FETCH_REDIRECTS), no
+# user, password or whitespace in the URL, at most FETCH_BYTES, at most FETCH_SECONDS in all, no cookies, no
+# credentials (no HOME, no .curlrc or .netrc: `-q` first), no URL globbing, a fixed user agent with nothing personal.
+# Only the proxy and CA variables of the session reach curl.
+#
 #   image-copy.py batch <out dir> <icon cap> <picture cap> <budget> [<kind> <n> <value>]...
 #       ThemeIcons. Kinds: "name" (a plain theme name: looked up in the user-changeable icon folders), "icon" and
 #       "picture" (an absolute path), "tray" ("<plain name>|<IconThemePath>": the app's folder, then like "name"),
+#       "url" (an https URL: media art, fetched as above),
 #       "drop" (delete copy <value> now), "lru" (copy <value> may be deleted to make room, least recently used first).
 #       One line per item: "ok<TAB><kind>:<value><TAB><out dir>/<n>.png" or "no<TAB><kind>:<value>"; "gone<TAB><file>"
 #       for each copy deleted to make room. The copies stay within <budget> bytes in all. Past SOFT_SECONDS the items not
@@ -38,6 +45,15 @@ RSVG_SECONDS = 8
 RSVG_MEMORY = 1 << 30
 SOFT_SECONDS = 20
 NAME_ATTEMPTS = 3
+FETCH_BYTES = 5 * 1024 * 1024
+FETCH_SECONDS = 5
+FETCH_REDIRECTS = 3
+FETCH_AGENT = "Grassfield-NowPlaying/1.0"
+# https://host[:port][/path]: host of letters, digits, "." and "-" (no user or password, no IP v6 literal), the path of
+# printable ASCII without spaces or backslashes.
+FETCH_URL = re.compile(r"https://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[!-\[\]-~]*)?")
+FETCH_ENV = ("https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY", "CURL_CA_BUNDLE", "SSL_CERT_FILE",
+             "SSL_CERT_DIR")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 SIZES = ["scalable", "512x512", "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48", "36x36", "32x32",
          "24x24", "22x22", "16x16"]
@@ -193,6 +209,41 @@ def rsvg(document, args):
     return out
 
 
+def fetch_limits():
+    resource.setrlimit(resource.RLIMIT_CPU, (FETCH_SECONDS + 2, FETCH_SECONDS + 3))
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
+def fetch(url):
+    """The body of https `url` (at most FETCH_BYTES), or None."""
+    if len(url) > 2048 or not FETCH_URL.fullmatch(url):
+        return None
+    env = {"PATH": "/usr/bin:/bin"}
+    env.update({k: os.environ[k] for k in FETCH_ENV if k in os.environ})
+    cmd = ["curl", "-q", "--silent", "--fail", "--globoff", "--location", "--max-redirs", str(FETCH_REDIRECTS),
+           "--proto", "=https", "--proto-redir", "=https", "--max-filesize", str(FETCH_BYTES), "--max-time", str(FETCH_SECONDS),
+           "--connect-timeout", str(FETCH_SECONDS), "--user-agent", FETCH_AGENT, "--output", "-", "--", url]
+    try:
+        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+                             close_fds=True, preexec_fn=fetch_limits)
+    except OSError:
+        return None
+    try:
+        data = p.stdout.read(FETCH_BYTES + 1)
+        if len(data) > FETCH_BYTES:
+            p.kill()
+            p.wait()
+            return None
+        rc = p.wait(timeout=FETCH_SECONDS + 3)
+    except (OSError, subprocess.SubprocessError):
+        p.kill()
+        p.wait()
+        return None
+    finally:
+        p.stdout.close()
+    return data if rc == 0 and data else None
+
+
 def normalize(data):
     """`data` re-encoded as a PNG of at most BOX x BOX pixels (aspect kept), or None."""
     kind = raster(data)
@@ -309,6 +360,9 @@ def batch(argv):
                             break
             elif kind in ("icon", "picture"):
                 data = read_source(value, iconcap if kind == "icon" else piccap)
+                png = normalize(data) if data else None
+            elif kind == "url":
+                data = fetch(value)
                 png = normalize(data) if data else None
             if png:
                 while used(out) + len(png) > budget and lru:

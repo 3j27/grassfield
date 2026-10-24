@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.I18n
 import Grassfield.Ui
+import "../widgets/ArtUrl.js" as ArtUrl
 
 // The one way an icon or picture the shell does not own reaches an Image: named by a notification, the polkit sheet, a
 // desktop entry, an application, a tray item (StatusNotifierItem) or a file (Notifications, AuthAgent, the Dock, the
@@ -25,6 +26,10 @@ import Grassfield.Ui
 //    $XDG_RUNTIME_DIR/grassfield-icons-<display>/<n>.png (0700, emptied at start, maxCopyBytes in all, the least
 //    recently used copies deleted to make room). The Image loads only that PNG, asynchronously. Anything else (refused,
 //    not made yet): the caller's generic icon.
+// Media art named by an https URL (macOS shows the artwork apps provide; Spotify and browsers name https URLs) is fetched
+// by the same helper (curl, https only, 5 MiB, 5 s, no cookies or credentials) and re-encoded like a file; one URL key
+// per address, in the same budget and least-recently-used order. Only the newest asked URL is fetched (older queued ones
+// are forgotten, asked again if still shown), and none while the session is locked: then only art already made shows.
 // The copy directory belongs to the user, like every file of the session: a process of the same user can replace a copy,
 // as it could the shell's own QML. The copies protect against what applications NAME (a path, a theme file, a FIFO, an
 // SVG with references), not against code already running as the user.
@@ -61,6 +66,9 @@ Singleton {
     property var dropped: []
     property int counter: 0
     property var activeRun: null
+    // Keys asked by bindings during this event-loop turn, requested together by flushAsks (Qt.callLater runs a function
+    // once per turn with the last arguments, so asking per key would request only the last). Mutated in place.
+    readonly property var asks: ({list: []})
 
     // An absolute icon path (Icon=/path, file:///path) as a plain path, or "": no control character, at most 4096 characters.
     function plainIconPath(icon: string): string {
@@ -142,6 +150,18 @@ Singleton {
         return copyOf("name", name);
     }
 
+    // Media art (Media.artShown): a local file: URL as fileSource, an https URL fetched and re-encoded (ArtUrl.remoteUrl),
+    // anything else "". While the session is locked nothing is fetched: only art already made shows.
+    function artSource(url: string): string {
+        const path = ArtUrl.localPath(url);
+        if (path !== "")
+            return fileSource(path);
+        const remote = ArtUrl.remoteUrl(url);
+        if (remote === "" || (SessionState.locked && copies["url:" + remote] === undefined))
+            return "";
+        return copyOf("url", remote);
+    }
+
     // A new notification names `name`: a user icon of that name is copied again (it may have changed); the current copy
     // shows until then.
     function check(name: string, fresh: bool): void {
@@ -155,7 +175,8 @@ Singleton {
         const key = kind + ":" + value;
         const entry = copies[key];
         if (entry === undefined) {
-            Qt.callLater(root.request, kind, value, false);
+            asks.list.push([kind, value]);
+            Qt.callLater(root.flushAsks);
             return "";
         }
         if (entry.state !== "ok")
@@ -165,21 +186,42 @@ Singleton {
         return entry.url;
     }
 
+    function flushAsks(): void {
+        const list = asks.list;
+        asks.list = [];
+        requestAll(list, false);
+    }
+
     function request(kind: string, value: string, fresh: bool): void {
-        const key = kind + ":" + value;
-        if (copyDir === "" || queue.some(q => q.key === key) || batch.some(q => q.key === key))
+        requestAll([[kind, value]], fresh);
+    }
+
+    // Queues [kind, value] pairs not queued yet (`fresh`: also when already answered), with one change of `copies`.
+    function requestAll(pairs: var, fresh: bool): void {
+        if (copyDir === "")
             return;
-        const entry = copies[key];
-        if (!fresh && entry !== undefined)
-            return;
-        counter++;
-        queue = queue.concat([{key: key, kind: kind, value: value, n: counter}]);
-        // A copy already made stays shown until its replacement is made (or refused): done() drops it then.
-        if (entry === undefined || entry.state !== "ok") {
-            const next = Object.assign({}, copies);
-            next[key] = {state: "pending", url: "", file: ""};
-            copies = Object.keys(next).length > maxKeys ? forget(next) : next;
+        const added = [];
+        let next = null;
+        for (const [kind, value] of pairs) {
+            const key = kind + ":" + value;
+            if (queue.some(q => q.key === key) || batch.some(q => q.key === key) || added.some(q => q.key === key))
+                continue;
+            const entry = (next || copies)[key];
+            if (!fresh && entry !== undefined)
+                continue;
+            counter++;
+            added.push({key: key, kind: kind, value: value, n: counter});
+            // A copy already made stays shown until its replacement is made (or refused): done() drops it then.
+            if (entry === undefined || entry.state !== "ok") {
+                next = next || Object.assign({}, copies);
+                next[key] = {state: "pending", url: "", file: ""};
+            }
         }
+        if (added.length === 0)
+            return;
+        queue = queue.concat(added);
+        if (next !== null)
+            copies = Object.keys(next).length > maxKeys ? forget(next) : next;
         run();
     }
 
@@ -211,8 +253,24 @@ Singleton {
     function run(): void {
         if (activeRun !== null || !copyDirReady || queue.length === 0)
             return;
-        batch = queue.slice(0, batchSize);
-        queue = queue.slice(batchSize);
+        // Media art over https: only the newest asked URL is fetched; older queued ones are forgotten (asked again while
+        // shown). While the session is locked, URLs wait in the queue.
+        const urls = queue.filter(q => q.kind === "url");
+        if (urls.length > 1) {
+            const stale = urls.slice(0, -1);
+            queue = queue.filter(q => stale.indexOf(q) < 0);
+            const next = Object.assign({}, copies);
+            for (const q of stale) {
+                if (next[q.key] !== undefined && next[q.key].state === "pending")
+                    delete next[q.key];
+            }
+            copies = next;
+        }
+        const ready = SessionState.locked ? queue.filter(q => q.kind !== "url") : queue;
+        if (ready.length === 0)
+            return;
+        batch = ready.slice(0, batchSize);
+        queue = queue.filter(q => batch.indexOf(q) < 0);
         const args = [];
         for (const file of dropped)
             args.push("drop", "0", file);
@@ -324,6 +382,16 @@ Singleton {
             if (proc !== null && proc.running)
                 proc.signal(9);
             proc = null;
+        }
+    }
+
+    // Media art URLs held while the session was locked are fetched once it is unlocked.
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (!SessionState.locked)
+                root.run();
         }
     }
 

@@ -15,13 +15,14 @@ followed `<image xlink:href>` to a FIFO and blocked the one image loader thread 
   - an `Icon=` path;
   - a tray icon from the app's `IconThemePath`;
   - notification image and app-icon files;
-  - MPRIS media art (`file://` only);
+  - MPRIS media art: a `file://` file, or an `https://` resource fetched by the helper (see "Media art over
+    https");
   - desktop thumbnails and stack previews;
   - the lock screen's `~/.face` and AccountsService picture.
 
   All of them go through `shell/services/image-copy.py`, which runs as `python3 -I`, in a process of its own. The Image
   then loads that `.png` asynchronously. Anything refused shows the caller's generic icon, or the initials on the lock.
-- **Never.** No http(s) or `data:` media art. No tray `IconName` holding `/` or `..`. No URL built from an
+- **Never.** No http, `data:` or other media art URL. No tray `IconName` holding `/` or `..`. No URL built from an
   application's string, except the two pixel providers above.
 
 ## The helper
@@ -59,6 +60,26 @@ than being killed with every item refused. A theme name re-encodes at most 3 rea
 (70 s) sends TERM, then KILL, and refuses the batch's keys. `timeout` signals its whole process group, which includes
 rsvg-convert. Each notification file runs under `timeout -k 2 12`.
 
+## Media art over https
+macOS shows the artwork apps provide; Spotify, browsers and others name it by an `https` URL. The coordinator asked for
+this after the review of 80f0f19. `ThemeIcons.artSource(url)` is what both Now Playing views show, for
+`Media.artShown`: the player's URL, applied 300 ms after its last change, so skipping through tracks fetches only where
+it stops.
+- **URL check.** It must match `https://host[:port][/path]`, both in `ArtUrl.remoteUrl` and in the helper:
+  - the host is made of letters, digits, `.` and `-`; no user or password, no IPv6 literal;
+  - the path is printable ASCII without spaces or backslashes;
+  - at most 2048 characters.
+- **Fetch.** The helper runs curl with `-q` first (no `.curlrc`), no `HOME` (no `.netrc`), `--globoff`,
+  `--proto =https --proto-redir =https`, `--max-redirs 3`, `--max-filesize` 5 MiB (and a 5 MiB read cap of its own),
+  `--max-time 5` and a CPU limit. There is no cookie engine and no credential, and the user agent is fixed:
+  `Grassfield-NowPlaying/1.0`. Only the session's proxy and CA variables reach curl. The body stays in memory and is
+  re-encoded like any file into a PNG of at most 256 px. curl is a runtime dependency (packaging/arch/PKGBUILD).
+- **Cache and order.** There is one key per URL (`url:<url>`), in the same 128 MiB budget and the same
+  least-recently-used order. One helper run at a time, and only the newest queued URL is fetched; older ones are
+  forgotten and asked again while shown.
+- **Locked.** Nothing is fetched while the session is locked (`SessionState.locked`): only art already made shows, and
+  queued URLs wait for the unlock. The lock screen itself shows no media art.
+
 **The copy directory belongs to the user,** like every file of the session, the shell's own QML included. A process
 running as the user can replace a copy. The design protects against what applications *name*: a path, a theme file, a
 FIFO, a device, an SVG with references, or a hostile image for Qt's decoders. It does not protect against code already
@@ -75,6 +96,17 @@ running as the user.
   pixmaps icon is found and opened by the same probe without Grassfield.I18n (a positive control), and neither found
   nor opened with it. Offscreen, Qt searches no theme folder even without the policy, so user theme folders are
   reported NOT VERIFIED there; part 2 covers them.
+- **Part 6:** https media art, offline, against a local HTTPS server on 127.0.0.1 with a throwaway CA and a plain
+  HTTP twin. Fetched: a PNG, and an SVG naming a FIFO (the FIFO untouched). Refused:
+  - text/html;
+  - a redirect to http (its target is never asked) or to `file:`;
+  - a fourth redirect;
+  - more than 5 MiB, announced or chunked;
+  - a response slower than 5 s;
+  - an http URL, and a URL with credentials.
+
+  No request carries a cookie or credentials. In the shell, nothing is fetched while locked, the held art is fetched
+  after the unlock, and of three URLs asked in one turn only the newest is fetched. Seven mutants each fail it.
 - **Part 5:** the tray: the real `TrayButton` with fake items (IconThemePath FIFO, absolute and traversal `IconName`,
   pixmap and plain name). There is also a private-bus StatusNotifierItem run (`env -i`, a private
   `DBUS_SESSION_BUS_ADDRESS` and a guard refusing the session bus). It is skipped where Unix sockets are blocked.
