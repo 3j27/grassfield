@@ -215,7 +215,7 @@ expect("lock ownership check: the grace window after a confirmed lock is a singl
 # one restart() and the two `running` reads.
 grace_uses = re.findall(r"\bsecureGrace\b(?:\s*\.\s*\w+(?:\s*\(\s*\))?)?", lock)
 expect("lock ownership check: the grace is 500 ms and only restart() and `running` touch its Timer (" + ", ".join(grace_uses) + ")",
-       re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?readonly property int verifyGraceMs:\s*500\s*$", lock, re.S | re.M) is not None
+       re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?^\s*readonly property int verifyGraceMs: 500[ \t]*\n\s*(\}|[A-Za-z_][\w.]*\s*:|readonly\s|property\s|function\s)", lock, re.S | re.M) is not None
        and len(re.findall(r"\bverifyGraceMs\s*:", lock)) == 1
        and sorted(re.sub(r"\s+", "", u) for u in grace_uses) == sorted(["secureGrace", "secureGrace.restart()", "secureGrace.running", "secureGrace.running"]))
 sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
@@ -224,7 +224,9 @@ idle = code(read("shell/security/idle/IdleModel.js"))
 # progress (the inhibitor's "held", the watcher's first line); one without progress within PROGRESS_BUDGET_MS is stopped
 # and counted as a failure.
 expect("sleep inhibitor: a child is healthy only after FAST_EXIT_MS with progress; a hung one is a failure",
-       re.search(r"^var PROGRESS_BUDGET_MS = 10000;$", idle, re.M) is not None
+       re.search(r"^var PROGRESS_BUDGET_MS = 35000;$", idle, re.M) is not None
+       and re.search(r'if\s*\(!watcher\.progressed && IdleModel\.watcherSubscribed\(line\)\)', sleep) is not None
+       and re.search(r'return typeof line === "string" && line\.indexOf\("The name org\.freedesktop\.login1 is owned by "\) === 0;', code(function(idle, "watcherSubscribed") or "")) is not None
        and re.search(r"return ranLong === true \? 0 : n \+ 1;", code(function(idle, "failuresAfterRun") or "")) is not None
        and '"systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "sh", "-c", "echo held; exec cat"]' in sleep
        and re.search(r'if\s*\(line === "held" && !inhibitor\.progressed\)', sleep) is not None
@@ -285,7 +287,9 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/idle/SleepInhibitor.qml#            if (watcher.running && watcher.progressed) {#            if (watcher.running) {' \
   'shell/security/idle/SleepInhibitor.qml#            if (inhibitor.running && !inhibitor.progressed) {#            if (false) {' \
   'shell/security/idle/SleepInhibitor.qml#"sh", "-c", "echo held; exec cat"#"cat"' \
-  'shell/security/idle/IdleModel.js#var PROGRESS_BUDGET_MS = 10000;#var PROGRESS_BUDGET_MS = 3600000;' \
+  'shell/security/idle/IdleModel.js#var PROGRESS_BUDGET_MS = 35000;#var PROGRESS_BUDGET_MS = 10000;' \
+  'shell/security/idle/SleepInhibitor.qml#if (!watcher.progressed && IdleModel.watcherSubscribed(line)) {#if (!watcher.progressed) {' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 500\n            * 7200' \
   'shell/security/lock/LockView.qml#            text: Qt.formatTime(FixedTime.date(clock.date), #            visible: clock.minutes >= 0; text: Qt.formatTime(FixedTime.date(clock.date), ' \
   'shell/security/idle/IdleModel.js#var FAST_RETRY_MS = 5000;#var FAST_RETRY_MS = 5000; var WALL = SystemClock;' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
@@ -302,7 +306,7 @@ import sys
 p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
 s = open(p).read()
 assert a in s, a
-open(p, "w").write(s.replace(a, b, 1))
+open(p, "w").write(s.replace(a, b.replace("\\n", "\n"), 1))
 PY
   if python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1; then bad "mutation: removing '$from' in $file is not caught"; else pass "mutation: removing '$from' in $file is caught"; fi
   cp "$root/$file" "$mut/$file"

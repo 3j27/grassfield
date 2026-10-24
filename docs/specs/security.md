@@ -180,8 +180,12 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   `watcherHealthy`: a monotonic clock), never by `Date.now()` (review of 2dfd992: a wall-clock step forward made an early
   exit look long and hid the failure); a child that never started counts as a failure. A run counts only with progress
   (review of eee45cc: a hung child looked healthy): the inhibitor's command is `sh -c 'echo held; exec cat'`, which
-  systemd-inhibit starts only once it holds the lock, so "held" proves it; the watcher's progress is gdbus' first line
-  (printed once it is connected and subscribed). A child without progress within 10 s (`IdleModel.PROGRESS_BUDGET_MS`,
+  systemd-inhibit starts only once it holds the lock, so "held" proves it; the watcher's progress is gdbus' "The name
+  org.freedesktop.login1 is owned by" line (`IdleModel.watcherSubscribed`): GLib prints it from the name watcher it
+  starts after sending the signal subscription, and the bus answers a connection in order, so the match is then in
+  place; gdbus' first line comes before subscribing and proves nothing (review of 100692f; from GLib's source order).
+  A child without progress within 35 s (above the 25 s default D-Bus call timeout of sd-bus and GDBus, so a slow but
+  healthy logind is not killed on every retry; `IdleModel.PROGRESS_BUDGET_MS`,
   `inhibitorProgress`, `watcherProgress` Timers) is stopped and counted as a failure, so a hung child leads to the
   degraded notice too. Pure logic in `IdleModel.js` (`failuresAfterRun`, `retryDelayMs`, `degraded`), unit-tested in
   `tst_idlemodel.qml`; the wiring is checked by `tests/security/lock_surfaces.sh` (with mutants). Real-session

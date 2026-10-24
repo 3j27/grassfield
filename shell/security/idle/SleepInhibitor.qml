@@ -22,7 +22,7 @@ import "../../services/DevGate.js" as DevGate
 //   - watcher: `gdbus monitor` on /org/freedesktop/login1 (signal subscription, no privileges).
 // Both run under `setpriv --pdeathsig TERM` (util-linux): the kernel sends them SIGTERM when the
 // shell dies, even by SIGKILL, so a crash leaves no orphan behind.
-// A child that shows no progress within IdleModel.PROGRESS_BUDGET_MS (no "held", no gdbus line) is hung: it is stopped
+// A child that shows no progress within IdleModel.PROGRESS_BUDGET_MS (no "held", no subscription) is hung: it is stopped
 // and counted as a failure like an early exit (review of eee45cc).
 // Neither is ever given up (GF-AUDIT-001 SEC-02/GF-030): after IdleModel.MAX_FAST_FAILURES early exits in a row the
 // user gets a notice (Notifications, "The screen may not lock before sleep") and the child is retried every minute;
@@ -202,14 +202,14 @@ Scope {
 
         // Set once this run lasted FAST_EXIT_MS and gdbus printed a line; false from each start (and before any).
         property bool ranLong: false
-        // gdbus printed its first line: connected to the system bus and subscribed.
+        // gdbus reported login1's owner, which it does only after subscribing (IdleModel.watcherSubscribed).
         property bool progressed: false
 
         running: true
         command: root.dieWithShell.concat(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"])
         stdout: SplitParser {
             onRead: line => {
-                if (!watcher.progressed) {
+                if (!watcher.progressed && IdleModel.watcherSubscribed(line)) {
                     watcher.progressed = true;
                     watcherProgress.stop();
                     if (watcher.running && !watcherHealthy.running) {
