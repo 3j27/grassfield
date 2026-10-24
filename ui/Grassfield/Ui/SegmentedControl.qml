@@ -79,7 +79,8 @@ T.Control {
                 Accessible.name: segment.modelData.text
                 Accessible.checkable: true
                 Accessible.checked: segment.selected
-                Accessible.onPressAction: root.picked(segment.modelData.id)
+                Accessible.onPressAction: if (root.visible && root.enabled)
+                    root.picked(segment.modelData.id)
                 onClicked: {
                     root.forceActiveFocus();
                     root.picked(segment.modelData.id);

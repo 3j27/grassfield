@@ -37,8 +37,10 @@ T.Control {
     Accessible.role: Accessible.Slider
     Accessible.name: root.accessibleName
     Accessible.focusable: true
-    Accessible.onIncreaseAction: root.nudge(1)
-    Accessible.onDecreaseAction: root.nudge(-1)
+    Accessible.onIncreaseAction: if (root.visible && root.enabled)
+        root.nudge(1)
+    Accessible.onDecreaseAction: if (root.visible && root.enabled)
+        root.nudge(-1)
 
     function clampValue(v: real): real {
         return Math.max(from, Math.min(to, v));

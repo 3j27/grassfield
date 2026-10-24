@@ -36,7 +36,8 @@ T.ComboBox {
     Accessible.role: Accessible.ComboBox
     Accessible.name: root.accessibleName
     Accessible.description: root.displayText
-    Accessible.onPressAction: root.popup.open()
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.popup.open()
 
     onModelChanged: root.currentIndex = Qt.binding(() => root.valueIndex)
 

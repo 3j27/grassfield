@@ -246,6 +246,42 @@ TestCase {
         compare(toggle.Accessible.role, Accessible.CheckBox);
     }
 
+    // A disabled or hidden control ignores every activation path, assistive technology included (R12).
+    function test_accessibilityActivationIsGuarded() {
+        const controls = [check, radio2, sw];
+        for (const c of controls) {
+            c.checked = false;
+            c.Accessible.pressAction();
+            verify(c.checked, c.Accessible.name + ": a shown, enabled control acts on press");
+            c.checked = false;
+            c.Accessible.toggleAction();
+            verify(c.checked, c.Accessible.name + ": and on toggle");
+            c.checked = false;
+            c.enabled = false;
+            c.Accessible.pressAction();
+            c.Accessible.toggleAction();
+            verify(!c.checked, c.Accessible.name + ": disabled ignores press and toggle");
+            c.enabled = true;
+            c.visible = false;
+            c.Accessible.pressAction();
+            c.Accessible.toggleAction();
+            verify(!c.checked, c.Accessible.name + ": hidden ignores press and toggle");
+            c.visible = true;
+        }
+        tc.toggles = 0;
+        toggle.visible = false;
+        toggle.Accessible.toggleAction();
+        toggle.Accessible.pressAction();
+        compare(tc.toggles, 0, "a hidden Toggle never reports");
+        toggle.visible = true;
+        toggle.enabled = false;
+        toggle.Accessible.toggleAction();
+        compare(tc.toggles, 0, "a disabled Toggle never reports");
+        toggle.enabled = true;
+        toggle.Accessible.toggleAction();
+        compare(tc.toggles, 1);
+    }
+
     function test_reduceMotionCapsTheSwitchAnimation() {
         Appearance.reduceMotion = true;
         verify(Appearance.duration(Tokens.motionSlow) <= Tokens.motionReducedMax);

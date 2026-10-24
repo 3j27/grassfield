@@ -14,6 +14,11 @@ T.Switch {
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.accessibleName !== "" ? root.accessibleName : root.text
+    // A hidden or disabled control ignores every activation path, assistive technology included.
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.click()
+    Accessible.onToggleAction: if (root.visible && root.enabled)
+        root.click()
 
     indicator: Item {
         width: root.width

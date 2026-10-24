@@ -20,8 +20,11 @@ T.Control {
     Accessible.checkable: true
     Accessible.checked: root.checked
     Accessible.focusable: true
-    Accessible.onToggleAction: root.toggled(!root.checked)
-    Accessible.onPressAction: root.toggled(!root.checked)
+    // A hidden or disabled Toggle ignores every activation path, assistive technology included.
+    Accessible.onToggleAction: if (root.visible && root.enabled)
+        root.toggled(!root.checked)
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.toggled(!root.checked)
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {

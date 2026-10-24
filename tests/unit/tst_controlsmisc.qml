@@ -115,6 +115,36 @@ TestCase {
         compare(tc.picks, ["a"]);
     }
 
+    function test_accessibilityPressIsGuarded() {
+        const seg0 = seg.contentItem.children[0];
+        seg.enabled = false;
+        seg0.Accessible.pressAction();
+        compare(tc.picks, [], "a disabled SegmentedControl never picks on an accessibility press");
+        seg.enabled = true;
+        seg.visible = false;
+        seg0.Accessible.pressAction();
+        compare(tc.picks, [], "a hidden one neither");
+        seg.visible = true;
+        combo.enabled = false;
+        combo.Accessible.pressAction();
+        verify(!combo.open, "a disabled ComboBox does not open on an accessibility press");
+        combo.enabled = true;
+        combo.visible = false;
+        combo.Accessible.pressAction();
+        verify(!combo.open, "a hidden one neither");
+        combo.visible = true;
+        combo.Accessible.pressAction();
+        tryCompare(combo, "open", true);
+        combo.popup.close();
+        tryCompare(combo, "open", false);
+        slider.enabled = false;
+        slider.Accessible.increaseAction();
+        compare(tc.moves, 0, "a disabled Slider ignores an accessibility increase");
+        slider.enabled = true;
+        slider.Accessible.increaseAction();
+        compare(tc.moves, 1);
+    }
+
     function test_segmentedClickPicks() {
         const row = seg.contentItem;
         mouseClick(row.children[2]);
