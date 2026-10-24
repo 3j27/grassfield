@@ -34,7 +34,8 @@ Scope {
     readonly property bool dev: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
     readonly property bool inhibiting: inhibitor.running
     property bool sleeping: false
-    // Consecutive early exits of a child (IdleModel.failuresAfterExit); reset once it has run FAST_EXIT_MS.
+    // Consecutive early exits of a child (IdleModel.failuresAfterRun); reset once it has run FAST_EXIT_MS, which the
+    // inhibitorHealthy/watcherHealthy Timers measure (monotonic; never the wall clock, review of 2dfd992).
     property int inhibitorFailures: 0
     property int watcherFailures: 0
     // Lock before sleep cannot be guaranteed: the user is told (notice) until both children run again.
@@ -123,12 +124,13 @@ Scope {
     Process {
         id: inhibitor
 
-        property double startedAt: 0
+        // Set by inhibitorHealthy once this run lasted FAST_EXIT_MS; false from each start (and before any).
+        property bool ranLong: false
 
         command: root.dieWithShell.concat(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "cat"])
         stdinEnabled: true
         onStarted: {
-            startedAt = Date.now();
+            ranLong = false;
             inhibitorHealthy.restart();
             console.info("grassfield-idle: sleep inhibitor taken");
         }
@@ -136,7 +138,8 @@ Scope {
             if (running || root.sleeping || root.dev)
                 return;
             inhibitorHealthy.stop();
-            root.inhibitorFailures = IdleModel.failuresAfterExit(root.inhibitorFailures, Date.now() - startedAt);
+            root.inhibitorFailures = IdleModel.failuresAfterRun(root.inhibitorFailures, ranLong);
+            ranLong = false;
             inhibitorRestart.interval = IdleModel.retryDelayMs(root.inhibitorFailures);
             if (root.inhibitorFailures > 0)
                 console.warn("grassfield-idle: sleep inhibitor exited early (" + root.inhibitorFailures + " in a row); retrying in " + inhibitorRestart.interval / 1000 + " s");
@@ -149,8 +152,10 @@ Scope {
         id: inhibitorHealthy
         interval: IdleModel.FAST_EXIT_MS
         onTriggered: {
-            if (inhibitor.running)
+            if (inhibitor.running) {
+                inhibitor.ranLong = true;
                 root.inhibitorFailures = 0;
+            }
         }
     }
 
@@ -163,7 +168,8 @@ Scope {
     Process {
         id: watcher
 
-        property double startedAt: 0
+        // Set by watcherHealthy once this run lasted FAST_EXIT_MS; false from each start (and before any).
+        property bool ranLong: false
 
         running: true
         command: root.dieWithShell.concat(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"])
@@ -171,14 +177,15 @@ Scope {
             onRead: line => root.handleLine(line)
         }
         onStarted: {
-            startedAt = Date.now();
+            ranLong = false;
             watcherHealthy.restart();
         }
         onRunningChanged: {
             if (running)
                 return;
             watcherHealthy.stop();
-            root.watcherFailures = IdleModel.failuresAfterExit(root.watcherFailures, Date.now() - startedAt);
+            root.watcherFailures = IdleModel.failuresAfterRun(root.watcherFailures, ranLong);
+            ranLong = false;
             watcherRestart.interval = IdleModel.retryDelayMs(root.watcherFailures);
             if (root.watcherFailures > 0)
                 console.warn("grassfield-idle: PrepareForSleep watcher exited early (" + root.watcherFailures + " in a row); retrying in " + watcherRestart.interval / 1000 + " s");
@@ -190,8 +197,10 @@ Scope {
         id: watcherHealthy
         interval: IdleModel.FAST_EXIT_MS
         onTriggered: {
-            if (watcher.running)
+            if (watcher.running) {
+                watcher.ranLong = true;
                 root.watcherFailures = 0;
+            }
         }
     }
 

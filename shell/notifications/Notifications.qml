@@ -186,9 +186,13 @@ Singleton {
             if (copy !== "")
                 return copy;
         }
-        // Quickshell reports a themed app_icon name as image://icon/<name>.
-        if (ref.kind === "themed" && Quickshell.hasThemeIcon(ref.name))
-            return ref.source;
+        // Quickshell reports a themed app_icon name as image://icon/<name>. A theme name reaches an Image only through
+        // ThemeIcons (every file Qt could read for it checked first: review of 2dfd992).
+        if (ref.kind === "themed") {
+            const themed = ThemeIcons.source(ref.name);
+            if (themed !== "")
+                return themed;
+        }
         // No usable image (none, refused, not copied yet, or a name the theme lacks): the app icon.
         const icon = appIcon;
         if (!icon)
@@ -200,9 +204,9 @@ Singleton {
         const name = History.safeIconName(icon);
         if (name === "")
             return "";
-        // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
-        // and paints a checkerboard), so ask the theme first.
-        return Quickshell.hasThemeIcon(name) ? Quickshell.iconPath(name) : "";
+        // ThemeIcons: shown once every file Qt could read for the name is a regular file of bounded size, and only when the
+        // theme has it (no checkerboard).
+        return ThemeIcons.source(name);
     }
 
     // "now", "5m ago", "3h ago", "2d ago" (translatable).
@@ -735,8 +739,9 @@ Singleton {
     // private directory ($XDG_RUNTIME_DIR/grassfield-notification-images, 0700, emptied at start). The Image loads that
     // copy, by a URL built from its number with every segment encoded (History.copySource): a file nobody else writes.
     // Opening a FIFO blocks the helper, never the shell: each file has `timeout 3`. Each intake makes a fresh copy (an app
-    // may reuse a path for new content); at most copyWindow copies and copyBudgetBytes bytes are kept, the oldest copies
-    // not on a banner are evicted first, and an image that does not fit falls back to the app icon.
+    // may reuse a path for new content); at most copyWindow copies and copyBudgetBytes bytes are kept, half of it at most
+    // for one sender; the oldest copies not on screen are evicted first, and an image that does not fit falls back to the
+    // app icon.
     // Without XDG_RUNTIME_DIR no local file is shown. Path -> {state: "pending"|"ok"|"no"|"gone", n}; reassigned on every
     // change so bindings that called iconSource() re-evaluate.
     // One directory per Wayland display: a nested dev shell never empties the real session's directory.
@@ -752,29 +757,40 @@ Singleton {
     property bool copyDirReady: false
     readonly property int copyWindow: 48
     // At most copyWindow copies and copyBudgetBytes bytes in the directory, across all senders (review of 6e24d36: 60
-    // notifications naming one 8 MiB file filled 384 MiB of the session's tmpfs). A test may lower the budget.
+    // notifications naming one 8 MiB file filled 384 MiB of the session's tmpfs), and at most half of the budget for one
+    // sender (review of 2dfd992: eight critical banners of one sender held the whole budget). A test may lower the budget.
     property real copyBudgetBytes: 64 * 1024 * 1024
-    // POSIX sh; the directory, the size cap, the copy window, the byte budget, the numbers of the copies to keep (the
-    // banners on screen; comma list), then "<n> <path>" pairs as arguments (never interpolated). One line per pair: "ok"
-    // when "<dir>/<n>.img" now holds the copy, else "no", followed by the numbers of the copies evicted to make room. The
-    // one-file step runs under `timeout 3` (a FIFO named or swapped in blocks only that step), opens the path once and
-    // decides on the opened descriptor. It then deletes the oldest copies (lowest number) not in the keep list while the
-    // directory would hold more than the window or the budget with this file; when even that would not be enough (a file
-    // larger than the budget, or the kept copies fill it) it refuses the file before evicting anything. It copies at most
-    // the size it checked.
-    readonly property string copyScript: "dir=$1; cap=$2; win=$3; budget=$4; keep=\",$5,\"; shift 5; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
-        + "one='src=$1; dst=$2; cap=$3; dir=$4; win=$5; budget=$6; keep=$7; [ -f \"$src\" ] || exit 1; exec 3<\"$src\" || exit 1; "
+    readonly property real copyShareBytes: Math.floor(copyBudgetBytes / 2)
+    // Sender (NotificationPrefs.keyOf(appName)) -> small number, part of each copy's file name ("<n>.<sender>.img") so the
+    // helper can count a sender's copies. 0: no name. A sender that changes its name each time counts as several.
+    property var senderIds: ({})
+    property int senderCount: 0
+    // POSIX sh; the directory, the size cap, the copy window, the byte budget, one sender's share, the numbers of the copies
+    // to keep (comma list: those a banner on screen or an open Notification Center row shows, the batch's own included),
+    // then "<n> <sender> <path>" triples as arguments (never interpolated). One line per triple: "ok" when
+    // "<dir>/<n>.<sender>.img" now holds the copy, else "no", followed by the numbers of the copies evicted to make room.
+    // The one-file step runs under `timeout 3` (a FIFO named or swapped in blocks only that step), opens the path once and
+    // decides on the opened descriptor. A file larger than a sender's share is refused. Otherwise, while the sender's
+    // copies with this file would exceed its share, it deletes that sender's oldest copy not kept; then, while the
+    // directory would hold more than the window or the budget, the oldest copy not kept. When even that would not be
+    // enough (the kept copies fill the budget or the sender's share) it refuses the file before evicting anything. It
+    // copies at most the size it checked.
+    readonly property string copyScript: "dir=$1; cap=$2; win=$3; budget=$4; share=$5; keep=\",$6,\"; shift 6; [ -d \"$dir\" ] && [ ! -L \"$dir\" ] || exit 1; "
+        + "one='src=$1; dst=$2; cap=$3; dir=$4; win=$5; budget=$6; share=$7; keep=$8; sid=$9; [ -f \"$src\" ] || exit 1; exec 3<\"$src\" || exit 1; "
         + "[ -f /proc/self/fd/3 ] || exit 1; s=$(stat -L -c %s /proc/self/fd/3) || exit 1; "
-        + "[ \"$s\" -le \"$cap\" ] && [ \"$s\" -le \"$budget\" ] || exit 1; "
-        + "while :; do count=0; total=0; kc=0; kt=0; oldest=; for f in \"$dir\"/*.img; do [ -f \"$f\" ] || continue; t=$(stat -c %s \"$f\") || exit 1; "
-        + "count=$((count + 1)); total=$((total + t)); b=${f##*/}; b=${b%.img}; case $keep in *\",$b,\"*) kc=$((kc + 1)); kt=$((kt + t)); continue ;; esac; "
-        + "if [ -z \"$oldest\" ] || [ \"$b\" -lt \"$oldest\" ]; then oldest=$b; fi; done; "
-        + "[ \"$kc\" -lt \"$win\" ] && [ $((kt + s)) -le \"$budget\" ] || exit 1; [ \"$count\" -lt \"$win\" ] && [ $((total + s)) -le \"$budget\" ] && break; "
-        + "[ -n \"$oldest\" ] || exit 1; rm -f \"$dir/$oldest.img\" || exit 1; printf \" %s\" \"$oldest\"; done; "
+        + "[ \"$s\" -le \"$cap\" ] && [ \"$s\" -le \"$share\" ] || exit 1; "
+        + "while :; do count=0; total=0; kc=0; kt=0; own=0; kown=0; oldest=; oldown=; for f in \"$dir\"/*.img; do [ -f \"$f\" ] || continue; t=$(stat -c %s \"$f\") || exit 1; "
+        + "b=${f##*/}; b=${b%.img}; num=${b%%.*}; fs=${b#*.}; count=$((count + 1)); total=$((total + t)); [ \"$fs\" = \"$sid\" ] && own=$((own + t)); "
+        + "case $keep in *\",$num,\"*) kc=$((kc + 1)); kt=$((kt + t)); [ \"$fs\" = \"$sid\" ] && kown=$((kown + t)); continue ;; esac; "
+        + "if [ -z \"$oldest\" ] || [ \"$num\" -lt \"$oldest\" ]; then oldest=$num; fi; "
+        + "if [ \"$fs\" = \"$sid\" ] && { [ -z \"$oldown\" ] || [ \"$num\" -lt \"$oldown\" ]; }; then oldown=$num; fi; done; "
+        + "[ \"$kc\" -lt \"$win\" ] && [ $((kt + s)) -le \"$budget\" ] && [ $((kown + s)) -le \"$share\" ] || exit 1; "
+        + "if [ $((own + s)) -gt \"$share\" ]; then v=$oldown; elif [ \"$count\" -ge \"$win\" ] || [ $((total + s)) -gt \"$budget\" ]; then v=$oldest; else break; fi; "
+        + "[ -n \"$v\" ] || exit 1; rm -f \"$dir/$v\".*.img || exit 1; printf \" %s\" \"$v\"; done; "
         + "umask 077; head -c \"$s\" <&3 >\"$dst.tmp\" && mv -f \"$dst.tmp\" \"$dst\" && printf \" ok\"'; "
-        + "while [ $# -ge 2 ]; do n=$1; p=$2; shift 2; rm -f \"$dir/$n.img.tmp\"; "
-        + "out=$(timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.img\" \"$cap\" \"$dir\" \"$win\" \"$budget\" \"$keep\" 2>/dev/null); "
-        + "case $out in *' ok') echo \"ok${out% ok}\" ;; *) rm -f \"$dir/$n.img.tmp\"; echo \"no$out\" ;; esac; done"
+        + "while [ $# -ge 3 ]; do n=$1; sid=$2; p=$3; shift 3; rm -f \"$dir/$n.$sid.img.tmp\"; "
+        + "out=$(timeout 3 sh -c \"$one\" one \"$p\" \"$dir/$n.$sid.img\" \"$cap\" \"$dir\" \"$win\" \"$budget\" \"$share\" \"$keep\" \"$sid\" 2>/dev/null); "
+        + "case $out in *' ok') echo \"ok${out% ok}\" ;; *) rm -f \"$dir/$n.$sid.img.tmp\"; echo \"no$out\" ;; esac; done"
 
     // The URL of the private copy of `path`, or "" (not copied yet: a copy is requested; refused; or evicted).
     function copySourceOf(path: string): string {
@@ -782,42 +798,82 @@ Singleton {
             return "";
         const entry = localCopies[path];
         if (entry === undefined) {
-            Qt.callLater(root.requestCopy, path, false);
+            Qt.callLater(root.requestCopy, path, false, root.senderOfPath(path));
             return "";
         }
-        return entry.state === "ok" ? History.copySource(copyDir, entry.n) : "";
+        return entry.state === "ok" ? History.copySource(copyDir, entry.n, entry.sid) : "";
     }
 
-    // Asks for a copy of `path`; `fresh`: also when the path was already copied, refused or evicted (a new notification
-    // naming it). Without `fresh` (shown, e.g. a history row after a restart) only a path never seen in this run is copied:
-    // an evicted copy is not re-made on use, so copies never evict each other in a loop; the app icon shows instead. The
-    // current copy stays shown until the new one is made.
-    function requestCopy(path: string, fresh: bool): void {
+    function senderIdOf(appName: string): int {
+        const key = NotificationPrefs.keyOf(appName);
+        if (key === "")
+            return 0;
+        if (senderIds[key] === undefined) {
+            senderCount++;
+            senderIds[key] = senderCount;
+        }
+        return senderIds[key];
+    }
+
+    // The app name of the notification that shows `path` (a history row after a restart), else "".
+    function senderOfPath(path: string): string {
+        for (const e of history) {
+            const ref = History.imageRef(e.image || "");
+            if ((ref.kind === "file" && History.localPathOf(ref.source) === path) || History.localPathOf(e.appIcon || "") === path)
+                return e.appName || "";
+        }
+        return "";
+    }
+
+    // Asks for a copy of `path` for the notification of `sender` (its app name); `fresh`: also when the path was already
+    // copied, refused or evicted (a new notification naming it). Without `fresh` (shown, e.g. a history row after a
+    // restart) only a path never seen in this run is copied: an evicted copy is not re-made on use, so copies never evict
+    // each other in a loop; the app icon shows instead. The current copy stays shown until the new one is made. The batch
+    // starts later in this event-loop turn, once the notification's banner is on screen (so its copy is kept).
+    function requestCopy(path: string, fresh: bool, sender: string): void {
         if (path === "" || copyDir === "" || copyQueue.some(q => q.path === path) || copyBatch.some(q => q.path === path))
             return;
         const entry = localCopies[path];
         if (!fresh && entry !== undefined)
             return;
         copyCounter++;
-        copyQueue = copyQueue.concat([{path: path, n: copyCounter}]);
+        copyQueue = copyQueue.concat([{path: path, n: copyCounter, sid: senderIdOf(sender)}]);
         if (entry === undefined || entry.state !== "ok") {
             const next = Object.assign({}, localCopies);
-            next[path] = {state: "pending", n: -1};
+            next[path] = {state: "pending", n: -1, sid: 0};
             localCopies = next;
         }
-        runCopies();
+        Qt.callLater(root.runCopies);
     }
 
-    // The numbers of the copies the banners on screen show: never evicted.
-    function bannerCopyNumbers(): var {
+    // The numbers of the copies shown on screen: the banners displayed (the first notificationBannerMaxVisible) and, while
+    // it is open, the Notification Center's rows. Their made copies and their copies in the batch about to run are never
+    // evicted (review of 2dfd992: copies made in the same batch were not protected).
+    function keptCopyNumbers(): var {
+        const paths = [];
+        const add = row => {
+            const ref = History.imageRef(row.image || "");
+            if (ref.kind === "file")
+                paths.push(History.localPathOf(ref.source));
+            const icon = History.localPathOf(row.appIcon || "");
+            if (icon !== "")
+                paths.push(icon);
+        };
+        const banners = Math.min(bannerStore.count, Tokens.notificationBannerMaxVisible);
+        for (let i = 0; i < banners; i++)
+            add(bannerStore.get(i));
+        if (centerOpen) {
+            for (let i = 0; i < centerStore.count; i++)
+                add(centerStore.get(i));
+        }
         const kept = [];
-        for (let i = 0; i < bannerStore.count; i++) {
-            const row = bannerStore.get(i);
-            const ref = History.imageRef(row.image);
-            for (const path of [ref.kind === "file" ? History.localPathOf(ref.source) : "", History.localPathOf(row.appIcon || "")]) {
-                const entry = path === "" ? undefined : localCopies[path];
-                if (entry !== undefined && entry.state === "ok")
-                    kept.push(entry.n);
+        for (const path of paths) {
+            const entry = localCopies[path];
+            if (entry !== undefined && entry.state === "ok")
+                kept.push(entry.n);
+            for (const q of copyBatch) {
+                if (q.path === path)
+                    kept.push(q.n);
             }
         }
         return kept;
@@ -830,9 +886,9 @@ Singleton {
         copyQueue = copyQueue.slice(16);
         const args = [];
         for (const q of copyBatch)
-            args.push(String(q.n), q.path);
+            args.push(String(q.n), String(q.sid), q.path);
         copier.command = ["sh", "-c", copyScript, "gf-image-copy", copyDir, String(History.MAX_IMAGE_FILE_BYTES), String(copyWindow),
-            String(Math.max(0, Math.floor(copyBudgetBytes))), bannerCopyNumbers().join(",")].concat(args);
+            String(Math.max(0, Math.floor(copyBudgetBytes))), String(Math.max(0, copyShareBytes)), keptCopyNumbers().join(",")].concat(args);
         copier.running = true;
     }
 
@@ -846,16 +902,16 @@ Singleton {
             const q = copyBatch[i];
             const words = String(lines[i] || "").split(" ");
             if (words[0] === "ok") {
-                next[q.path] = {state: "ok", n: q.n};
+                next[q.path] = {state: "ok", n: q.n, sid: q.sid};
             } else {
-                next[q.path] = {state: "no", n: -1};
-                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes, or does not fit the " + copyBudgetBytes + "-byte budget of copies; not shown");
+                next[q.path] = {state: "no", n: -1, sid: 0};
+                console.info("grassfield-notifications: a notification image is not a regular file of at most " + History.MAX_IMAGE_FILE_BYTES + " bytes, or does not fit the " + copyBudgetBytes + "-byte budget of copies or its sender's half of it; not shown");
             }
             for (const word of words.slice(1)) {
                 const evicted = Number(word);
                 for (const path in next) {
                     if (next[path].state === "ok" && next[path].n === evicted)
-                        next[path] = {state: "gone", n: -1};
+                        next[path] = {state: "gone", n: -1, sid: 0};
                 }
             }
         }
@@ -889,10 +945,12 @@ Singleton {
 
     // The notification's image hint as kept: "" when it is not a local file, image data the app sent or a theme name
     // (History.imageRef, GF-114: a URL is never fetched). Logged with its scheme only, never the reference.
-    function keptImage(image: string): string {
+    function keptImage(image: string, sender: string): string {
         const ref = History.imageRef(image);
         if (ref.kind === "file")
-            requestCopy(History.localPathOf(ref.source), true); // shown as a private copy once made (copySourceOf)
+            requestCopy(History.localPathOf(ref.source), true, sender); // shown as a private copy once made (copySourceOf)
+        else if (ref.kind === "themed")
+            ThemeIcons.check(ref.name, true); // its files are checked again for each new notification
         if (ref.kind !== "refused")
             return image;
         console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");
@@ -901,12 +959,14 @@ Singleton {
 
     // An app icon path is shown like an image file, as a private copy (copySourceOf); a name is kept only when it is a
     // plain theme name (History.keptAppIcon, review of 6e24d36); anything else is dropped at intake (the generic icon).
-    function checkedAppIcon(icon: string): string {
+    function checkedAppIcon(icon: string, sender: string): string {
         const kept = History.keptAppIcon(icon);
         if (kept !== icon)
             console.info("grassfield-notifications: a notification app icon was refused: only plain theme names and local image files are shown");
         if (kept.startsWith("/") || kept.toLowerCase().startsWith("file:"))
-            requestCopy(History.localPathOf(kept), true);
+            requestCopy(History.localPathOf(kept), true, sender);
+        else if (kept !== "")
+            ThemeIcons.check(kept, true);
         return kept;
     }
 
@@ -915,8 +975,8 @@ Singleton {
             key: key,
             nid: n.id,
             appName: n.appName,
-            appIcon: checkedAppIcon(n.appIcon),
-            image: keptImage(n.image),
+            appIcon: checkedAppIcon(n.appIcon, n.appName),
+            image: keptImage(n.image, n.appName),
             summary: n.summary,
             body: n.body,
             bodyHtml: Sanitizer.sanitize(n.body),
