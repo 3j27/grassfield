@@ -113,7 +113,7 @@ package_grassfield-desktop() {
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
   # networkmanager (nmcli), bluez-utils (bluetoothctl), wireplumber (wpctl) and wl-clipboard (wl-copy) are run by Settings
   # and the shell (GF-049, ARCH-08): declared, not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
@@ -124,6 +124,7 @@ package_grassfield-desktop() {
     'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
     'udiskie: mounts removable media when they are connected'
     'hyprsunset: Night Shift (grassfield-nightshift)'
+    'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
   )
   # Login screen entry and a login-path check after install and upgrade (GF-015); the SDDM drop-in is a config file.
   install=grassfield-desktop.install
@@ -145,7 +146,8 @@ package_grassfield-desktop() {
   # Grassfield.I18n -> /usr/lib/qt6/qml/Grassfield/I18n; grassfield_<lang>.qm -> /usr/share/grassfield/translations.
   DESTDIR="$pkgdir" cmake --install "$srcdir/i18n-build"
 
-  # `qs -c grassfield` resolves configs under $XDG_CONFIG_DIRS/quickshell/<name>.
+  # Compatibility only: the unit loads by path (-p /usr/share/grassfield/shell). Keep this symlink for one release so an old
+  # unit still loaded by the user manager can restart; remove it after.
   install -d "$pkgdir/etc/xdg/quickshell"
   ln -s /usr/share/grassfield/shell "$pkgdir/etc/xdg/quickshell/grassfield"
 

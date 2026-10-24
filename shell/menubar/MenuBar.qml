@@ -193,7 +193,7 @@ Scope {
         function volumeLevel(): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            return Audio.ready ? Audio.volume.toFixed(2) : "none";
+            return Audio.sink !== null && Audio.sink.audio !== null ? Audio.deviceVolume.toFixed(2) : "none";
         }
 
         function brightnessLevel(): string {

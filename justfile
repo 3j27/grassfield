@@ -126,9 +126,9 @@ visual *args:
 contrast *args:
     tests/visual/contrast.sh {{args}}
 
-# Scripted nested scenario → tests/scenarios/<name>.sh (ask).
+# Scripted nested scenario → tests/visual/scenarios/<name>.sh (ask).
 scenario name:
-    tests/scenarios/{{name}}.sh
+    tests/visual/scenarios/{{name}}.sh
 
 # Scripted pointer in the nested instance, e.g. `just pointer output GF-REF abs 960 1050 click` (ask).
 pointer *args:

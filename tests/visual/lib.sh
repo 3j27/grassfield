@@ -93,6 +93,18 @@ vs_canonical_workspaces() {
     sleep 2
     ws=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .activeWorkspace.id' 2>/dev/null || true)
     [[ $ws == 2 ]] && return 0
+    # The usual race: GF-REF came first and holds Space 1 while the nested window's output holds 2. Swapping the two
+    # outputs' Spaces gives the reference state at once; a restart only re-runs the race.
+    if [[ $ws == 1 ]]; then
+      local other
+      other=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name != $n and .activeWorkspace.id == 2) | .name' 2>/dev/null | head -n 1)
+      if [[ -n $other ]]; then
+        "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.workspace.swap_monitors({ monitor1 = \"$VS_OUTPUT\", monitor2 = \"$other\" })" >/dev/null 2>&1 || true
+        sleep 1
+        ws=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .activeWorkspace.id' 2>/dev/null || true)
+        [[ $ws == 2 ]] && { echo "visual: $VS_OUTPUT had Space 1: swapped with $other" >&2; return 0; }
+      fi
+    fi
     echo "visual: $VS_OUTPUT is on Space '${ws:-?}', not 2: restarting the nested session ($n/4)" >&2
     "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
     "$VS_ROOT/scripts/dev/nested-up.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop" || return 1

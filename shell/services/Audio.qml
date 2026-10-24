@@ -5,14 +5,18 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 
-// Default output (PipeWire through Quickshell). volume is 0..1 (values above 1 are not offered).
+// Default output (PipeWire through Quickshell). volume is 0..1 on the cubic scale of wpctl, pavucontrol and the volume
+// keys: Quickshell's PwNodeAudio.volume already speaks it (measured nested 2026-10-24: raw channelVolumes 0.007994,
+// `wpctl get-volume` 0.20, PwNodeAudio.volume 0.20), so the shell reads and writes it as is (tests/shell/cc_sliders_ipc.sh).
 Singleton {
     id: root
 
     readonly property var sink: sinkOverride !== null ? sinkOverride : Pipewire.defaultAudioSink
     // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): an output at 50 percent, not muted.
     readonly property bool ready: VisualFixtures.active || (sink !== null && sink.audio !== null)
-    readonly property real volume: VisualFixtures.active ? 0.5 : (ready ? sink.audio.volume : 0)
+    // The real default sink on the shown scale (0 without one), whatever the fixtures say: what `wpctl get-volume` prints.
+    readonly property real deviceVolume: sink !== null && sink.audio !== null ? sink.audio.volume : 0
+    readonly property real volume: VisualFixtures.active ? 0.5 : deviceVolume
     readonly property bool muted: VisualFixtures.active ? false : (ready ? sink.audio.muted : false)
     readonly property string iconName: !ready || muted || volume <= 0 ? "volume-mute"
         : volume < 0.34 ? "volume-1"
@@ -69,7 +73,7 @@ Singleton {
     function setVolume(value: real): bool {
         return backendWrite("volume", () => {
             if (ready && !VisualFixtures.active)
-                sink.audio.volume = Math.max(0, Math.min(1, value));
+                sink.audio.volume = value;
         });
     }
 
