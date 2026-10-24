@@ -314,6 +314,48 @@ namespace gf::stages {
     // stage's front window takes it (`hasFront`), otherwise nothing holds it.
     KeyboardTarget keyboardAfterLeave(const KeyboardHolder& holder, bool hasFront);
 
+    // Before every key (keepKeyboardFocus in Stages.cpp; integrator decision 2026-10-24, by the macOS model: a modal system
+    // prompt always gets the keyboard, and there is always a key window). wlr-layer-shell: a Top or Overlay surface with
+    // Exclusive keyboard interactivity gets every key; on Bottom and Background ones the compositor's normal focus stays.
+    // Hyprland drops a keyboard focus change while the session has no keyboard device (CSeatManager::setKeyboardFocus:
+    // "BUG THIS: setKeyboardFocus without a valid keyboard set") and gives a keyboard device that appears only its own
+    // focus surface (CInputManager::setupKeyboard), both read from the 0.56.2 binary. In a session whose keyboards come and
+    // go (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) the seat's keyboard could stay
+    // off a dialog, or on nothing after it, and every key was lost (stages.sh 8c, 8f, 8g, 8h, 8i(e): the three nested runs
+    // without a keyboard device of their own lost them all, the thirteen with one lost none).
+    enum class KeyFocusAction : uint8_t {
+        None,     // the seat's keyboard focus stands
+        ToLayer,  // the frontmost Exclusive Top or Overlay layer gets the keyboard
+        ToWindow, // Hyprland's active window gets the keyboard back
+    };
+    inline constexpr uint32_t kLayerTop = 2; // zwlr_layer_shell_v1 layers: 0 background, 1 bottom, 2 top, 3 overlay
+
+    struct KeyFocusFacts {
+        bool     locked            = true;  // the session is locked, or that is not known (failures stay locked)
+        bool     inputMethodGrab   = false; // an input method grabs the keyboard: its keys and surfaces are left alone
+        bool     exclusive         = false; // a mapped layer surface has Exclusive keyboard interactivity (any layer)
+        uint32_t frontmostLevel    = 0;     // the frontmost such layer's level (replacesFrontmost)
+        bool     seatOnFrontmost   = false; // the seat's keyboard is on it (or one of its popups)
+        bool     grabRejectsLayer  = false; // a seat grab is set and does not accept it
+        bool     seatFocusNone     = false; // the seat's keyboard is on no surface
+        bool     activeWindow      = false; // Hyprland has an active window that may take the keyboard (mapped, shown, takes input)
+        bool     grabRejectsWindow = false; // a seat grab is set and does not accept that window's surface
+        bool     keyArriving       = true;  // checked before a key; false: from the event loop after a focus change, a layer
+                                            // mapped or unmapped, or a keyboard device that appeared
+    };
+
+    // ToLayer: an Exclusive layer is up, the frontmost is on Top or Overlay and the seat's keyboard is not on it. ToWindow:
+    // no Exclusive layer, the seat's keyboard on nothing, an active window that may take it, and a key arriving (from the
+    // event loop the plugin's other focus rules and Hyprland's refocus may still give the keyboard elsewhere: the overview's
+    // "no window is key", a deferred focus). Never while locked, under an input method's keyboard grab, or against a seat
+    // grab that rejects the surface. While an Exclusive layer is up no window gets the keyboard (Hyprland refuses every
+    // window focus then).
+    KeyFocusAction keyFocusAction(const KeyFocusFacts& facts);
+
+    // Walking Hyprland's Exclusive-layer list in order: a layer on `level` replaces the frontmost found so far (on
+    // `bestLevel`, if any) unless its level is lower (the latest to become Exclusive wins among equals).
+    bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel);
+
     // Hyprland's active window (CFocusState::window()) is what window key bindings (close, full screen, floating), window
     // dispatchers without an explicit window and the shell's menu bar (foreign-toplevel "activated") act on. It can differ
     // from the keyboard holder: while a layer surface holds the keyboard (an Exclusive one: Search, the overview chrome,
@@ -322,19 +364,6 @@ namespace gf::stages {
     // window (R13 counter-review of 17208af). The plugin never works around Hyprland's refusal (R13 counter-review #3 of
     // e9ebc7f: setting Hyprland's Exclusive-layer list aside let the keyboard leave an Exclusive layer through Hyprland's
     // side paths: a special workspace closing, a Desktop switch).
-    // Before a key, after the plugin cleared Hyprland's active window under an Exclusive layer (keepKeysOnLayer in
-    // Stages.cpp): the keys go to the frontmost mapped Exclusive layer (the frontmost modal gets the keys, macOS) when
-    // the seat's keyboard is on no Exclusive layer, unless the session is locked (or its state is unknown: failures stay
-    // locked) or a seat grab would reject that layer (Hyprland logs a line per key then; review of part B, 2026-10-24).
-    struct KeysOnLayerFacts {
-        bool cleared         = false; // the plugin cleared the active window while an Exclusive layer held the keyboard
-        bool target          = false; // a mapped Exclusive layer is there (the frontmost one is the target)
-        bool locked          = true;  // the session is locked, or that is not known
-        bool seatOnExclusive = false; // the seat's keyboard is on an Exclusive layer (or one of its popups)
-        bool grabRejects     = false; // a seat grab is set and does not accept the target
-    };
-    bool giveKeysToLayer(const KeysOnLayerFacts& facts);
-
     struct ActiveWindowState {
         bool hidden        = false; // Hyprland's active window is a strip window (or is about to be blocked as one)
         bool locked        = false; // the session is locked (nothing is focused until the unlock; the lock is not touched)

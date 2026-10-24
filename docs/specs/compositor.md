@@ -385,17 +385,33 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
   monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
   keyboard, checked again then. `resetWindowFocus` also forgets Hyprland's focus surface, which `rawSurfaceFocus` cannot
-  set again while the seat's keyboard is on that layer (it returns at once; read from the binary), and Hyprland gives a
-  new keyboard device only its focus surface (`CInputManager::setupKeyboard`, nothing when it is empty): so after such a
-  clear, while an Exclusive layer stays mapped, before every key the plugin gives the keys to the frontmost mapped
-  Exclusive layer (the highest layer level, the latest among equals: the frontmost modal gets the keys, macOS) when the
-  seat's keyboard is on no Exclusive layer (`keepKeysOnLayer`, core `giveKeysToLayer`; stages.sh 8c, 8f, 8g, 8h failed on
-  2026-10-24, timing dependent: whether the nested session's transient keyboard device was replaced in between). Never
-  under a seat grab that rejects that layer (Hyprland would log a line per key), never while the session is locked or
-  its state is unknown (the plugin's lock checks treat a missing lock manager as locked: failures stay locked). On
-  unload, Hyprland's focus surface is set again to the Exclusive layer that holds the seat's keyboard (the seat leaves it
-  for an instant), so a new keyboard device keeps the keys there without the plugin. Decision logic pure:
-  `activeWindowAction`, `pendingFocusAction`, `focusOrigin`, `giveKeysToLayer`.
+  set again while the seat's keyboard is on that layer (it returns at once; read from the binary).
+  Keyboard focus before every key (integrator decision 2026-10-24, by the macOS model: a modal system prompt always gets
+  the keyboard and there is always a key window; wlr-layer-shell: an Exclusive Top or Overlay surface gets every key).
+  Hyprland 0.56.2 drops a keyboard focus change while the session has no keyboard device (`CSeatManager::
+  setKeyboardFocus`: "BUG THIS: setKeyboardFocus without a valid keyboard set") and gives a keyboard device that appears
+  only its own focus surface (`CInputManager::setupKeyboard`), both read from the binary; in a session whose keyboards
+  come and go (a keyboard plugged in, a Bluetooth keyboard reconnecting, an on-screen keyboard) every key was lost after
+  a swap under a dialog and after it (stages.sh 8c, 8f, 8g, 8h, 8i(e): the three nested runs whose session had no
+  keyboard device of its own failed, the thirteen with one passed). So before every key, Stages on or off
+  (`keepKeyboardFocus`, core `keyFocusAction`): the frontmost mapped Exclusive layer (Hyprland's list; the highest
+  layer, the latest among equals) on Top or Overlay gets the keyboard when the seat's keyboard is not on it or one of its
+  popups; with no Exclusive layer, Hyprland's active window (mapped, shown, taking input, not a strip window) gets it back
+  when the seat's keyboard is on nothing. The layer rule also runs from the event loop after Hyprland changed the
+  keyboard focus, a layer surface mapped, or a keyboard device appeared (its layout set): Hyprland 0.56.2 gives a surface
+  that takes the keyboard on demand the keyboard when it maps, even over an Exclusive dialog, and a key that arrives right
+  after `wl_keyboard.enter` can be lost by the client, so the keyboard goes back before the next key (stages.sh 8j: with
+  the check before keys only, the first key after such a banner mapped was lost). Through Hyprland's own
+  `rawSurfaceFocus`; Hyprland's focus event for the plugin's own move is not taken as a new cause. Never while the session is locked or
+  its state is unknown (a missing lock manager counts as locked: failures stay locked), never under an input method's
+  keyboard grab, never against a seat grab that rejects the surface (checked first: Hyprland would log a refusal per
+  key); a Bottom or Background Exclusive layer keeps Hyprland's normal focus, and no window gets the keyboard while an
+  Exclusive layer is mapped. Only while the plugin is loaded (the key listener goes with it); nothing allocated, nothing
+  logged per key (the common case returns after two reads). On unload, Hyprland's focus surface is set again to the
+  Exclusive layer that holds the seat's keyboard after the plugin cleared it (the seat leaves it for an instant), so a new
+  keyboard device keeps the keys there without the plugin. stages.sh 8j: a keyboard device that appears under the layer
+  after a swap. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`, `keyFocusAction`,
+  `replacesFrontmost`.
   R13 counter-review #4 of 0.6.3-stages (ST10 clicks, ST23, ST24): Hyprland reports `FOCUS_REASON_CLICK` for every
   refocus at the cursor (`CInputManager::refocus`, also when a layer unmaps with no active window), so a `CLICK` focus
   is a user choice only when a press caused it: the plugin records pointer button presses (its first button listener),

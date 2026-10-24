@@ -3,7 +3,9 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <vector>
@@ -703,27 +705,129 @@ TEST(StagesInput, AScrollOnABlockedFocusRefreshesIt) {
     EXPECT_EQ(beforePointerEvent(PointerEvent::Axis, {.onBlocked = false, .hasFocus = true, .parked = false}), PointerAction::None);
 }
 
-// Review of part B, 2026-10-24: keys go back to the frontmost Exclusive layer only when the seat is on no Exclusive layer,
-// never under a seat grab that rejects it (Hyprland would log a line per key), never while locked or not known.
-TEST(StagesKeysOnLayer, KeysGoBackToTheLayerOnlyWhenNothingElseDecides) {
-    using gf::stages::giveKeysToLayer;
-    using gf::stages::KeysOnLayerFacts;
-    const KeysOnLayerFacts base{.cleared = true, .target = true, .locked = false, .seatOnExclusive = false, .grabRejects = false};
-    EXPECT_TRUE(giveKeysToLayer(base)) << "the seat is on nothing (or a window): the keys go to the layer";
-    auto f = base;
-    f.grabRejects = true;
-    EXPECT_FALSE(giveKeysToLayer(f)) << "a seat grab rejects the layer: no refocus attempted";
-    f        = base;
+// Integrator decision 2026-10-24 (macOS: a modal system prompt always gets the keyboard, and there is always a key window;
+// wlr-layer-shell: an Exclusive Top or Overlay surface gets every key). One test per condition.
+namespace {
+    using gf::stages::KeyFocusAction;
+    using gf::stages::KeyFocusFacts;
+    using gf::stages::keyFocusAction;
+    using gf::stages::replacesFrontmost;
+
+    // An Overlay dialog with Exclusive keyboard interactivity is up, the seat's keyboard is elsewhere.
+    KeyFocusFacts dialogUp() {
+        return {.locked = false, .inputMethodGrab = false, .exclusive = true, .frontmostLevel = 3, .seatOnFrontmost = false, .grabRejectsLayer = false,
+                .seatFocusNone = true, .activeWindow = false, .grabRejectsWindow = false};
+    }
+    // No Exclusive layer, the seat's keyboard on nothing, Hyprland has an active window that may take it.
+    KeyFocusFacts windowLeftWithoutKeys() {
+        return {.locked = false, .inputMethodGrab = false, .exclusive = false, .frontmostLevel = 0, .seatOnFrontmost = false, .grabRejectsLayer = false,
+                .seatFocusNone = true, .activeWindow = true, .grabRejectsWindow = false};
+    }
+} // namespace
+
+TEST(StagesKeyFocus, TheFrontmostExclusiveTopOrOverlayLayerGetsTheKeys) {
+    EXPECT_EQ(keyFocusAction(dialogUp()), KeyFocusAction::ToLayer) << "seat on nothing";
+    auto f          = dialogUp();
+    f.seatFocusNone = false; // on a window or another surface
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::ToLayer) << "seat elsewhere";
+    f.frontmostLevel = 2;
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::ToLayer) << "a Top layer counts as an Overlay one";
+    f.seatOnFrontmost = true;
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None) << "the seat is already on it (or one of its popups)";
+}
+
+TEST(StagesKeyFocus, NothingWhileLocked) {
+    auto f   = dialogUp();
     f.locked = true;
-    EXPECT_FALSE(giveKeysToLayer(f)) << "locked";
-    EXPECT_FALSE(giveKeysToLayer(KeysOnLayerFacts{.cleared = true, .target = true})) << "the lock state not known: locked";
-    f                 = base;
-    f.seatOnExclusive = true;
-    EXPECT_FALSE(giveKeysToLayer(f)) << "an Exclusive layer already has the keys";
-    f         = base;
-    f.cleared = false;
-    EXPECT_FALSE(giveKeysToLayer(f)) << "the plugin cleared nothing: Hyprland's own path";
-    f        = base;
-    f.target = false;
-    EXPECT_FALSE(giveKeysToLayer(f)) << "no mapped Exclusive layer";
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None);
+    auto w   = windowLeftWithoutKeys();
+    w.locked = true;
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None);
+}
+
+TEST(StagesKeyFocus, AnUnknownLockStateCountsAsLocked) {
+    KeyFocusFacts f{.exclusive = true, .frontmostLevel = 3, .seatFocusNone = true};
+    EXPECT_TRUE(f.locked) << "the default: a missing lock manager is reported as locked";
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None);
+    EXPECT_EQ(keyFocusAction(KeyFocusFacts{.seatFocusNone = true, .activeWindow = true}), KeyFocusAction::None);
+}
+
+TEST(StagesKeyFocus, NeverAgainstASeatGrabThatRejectsTheSurface) {
+    auto f             = dialogUp();
+    f.grabRejectsLayer = true;
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None) << "Hyprland would refuse and log a line per key";
+    auto w              = windowLeftWithoutKeys();
+    w.grabRejectsWindow = true;
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None);
+}
+
+TEST(StagesKeyFocus, AnInputMethodGrabIsLeftAlone) {
+    auto f            = dialogUp();
+    f.inputMethodGrab = true;
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None);
+    auto w            = windowLeftWithoutKeys();
+    w.inputMethodGrab = true;
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None);
+}
+
+TEST(StagesKeyFocus, ABottomOrBackgroundExclusiveLayerChangesNothing) {
+    for (const uint32_t level : {0U, 1U}) {
+        auto f           = dialogUp();
+        f.frontmostLevel = level;
+        EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None) << "level " << level << ": the normal focus stays";
+        f.activeWindow = true; // and no window is given the keyboard either while an Exclusive layer is mapped
+        EXPECT_EQ(keyFocusAction(f), KeyFocusAction::None) << "level " << level;
+    }
+}
+
+TEST(StagesKeyFocus, OfTwoExclusiveLayersTheFrontmostWins) {
+    // Walk Hyprland's list in order, as frontmostExclusiveLayer does: {level, order}.
+    const auto frontmost = [](std::initializer_list<uint32_t> levels) {
+        std::optional<uint32_t> best;
+        size_t                  index = 0, picked = 0;
+        for (const auto level : levels) {
+            if (replacesFrontmost(level, best)) {
+                best   = level;
+                picked = index;
+            }
+            ++index;
+        }
+        return picked;
+    };
+    EXPECT_EQ(frontmost({3, 2}), 0U) << "an Overlay dialog stays in front of a later Top one";
+    EXPECT_EQ(frontmost({2, 3}), 1U) << "a later Overlay one is in front";
+    EXPECT_EQ(frontmost({3, 3}), 1U) << "the latest among equals";
+    EXPECT_EQ(frontmost({1, 2, 0}), 1U);
+    // The seat on the other (older or lower) Exclusive layer: the keys go to the frontmost.
+    auto f            = dialogUp();
+    f.seatFocusNone   = false;
+    f.seatOnFrontmost = false;
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::ToLayer);
+}
+
+TEST(StagesKeyFocus, NoLayerANullFocusAndAnActiveWindowGiveItTheKeys) {
+    EXPECT_EQ(keyFocusAction(windowLeftWithoutKeys()), KeyFocusAction::ToWindow);
+    auto w          = windowLeftWithoutKeys();
+    w.seatFocusNone = false; // the seat's keyboard on a surface: Hyprland's choice stands (the desktop, a layer, a window)
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None);
+    w           = windowLeftWithoutKeys();
+    w.exclusive = true; // an Exclusive layer is up: no window gets the keyboard
+    w.frontmostLevel = 3;
+    w.seatOnFrontmost = true;
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None);
+}
+
+TEST(StagesKeyFocus, FromTheEventLoopOnlyTheLayerIsKept) {
+    auto f        = dialogUp();
+    f.keyArriving = false;
+    EXPECT_EQ(keyFocusAction(f), KeyFocusAction::ToLayer) << "a banner that took the keyboard over the dialog: moved back before the next key";
+    auto w        = windowLeftWithoutKeys();
+    w.keyArriving = false;
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None) << "the overview's no-key-window and a deferred focus may still decide";
+}
+
+TEST(StagesKeyFocus, NoLayerAndNoWindowLeaveTheKeyboardOnNothing) {
+    auto w         = windowLeftWithoutKeys();
+    w.activeWindow = false; // no active window, or one that may not take the keyboard (hidden, a strip window, input blocked)
+    EXPECT_EQ(keyFocusAction(w), KeyFocusAction::None);
 }

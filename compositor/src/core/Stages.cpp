@@ -692,8 +692,16 @@ namespace gf::stages {
         return KeyboardTarget::Nothing;
     }
 
-    bool giveKeysToLayer(const KeysOnLayerFacts& facts) {
-        return facts.cleared && facts.target && !facts.locked && !facts.seatOnExclusive && !facts.grabRejects;
+    KeyFocusAction keyFocusAction(const KeyFocusFacts& facts) {
+        if (facts.locked || facts.inputMethodGrab)
+            return KeyFocusAction::None;
+        if (facts.exclusive)
+            return facts.frontmostLevel >= kLayerTop && !facts.seatOnFrontmost && !facts.grabRejectsLayer ? KeyFocusAction::ToLayer : KeyFocusAction::None;
+        return facts.keyArriving && facts.seatFocusNone && facts.activeWindow && !facts.grabRejectsWindow ? KeyFocusAction::ToWindow : KeyFocusAction::None;
+    }
+
+    bool replacesFrontmost(uint32_t level, std::optional<uint32_t> bestLevel) {
+        return !bestLevel || level >= *bestLevel;
     }
 
     ActiveWindowAction activeWindowAction(const ActiveWindowState& state) {
