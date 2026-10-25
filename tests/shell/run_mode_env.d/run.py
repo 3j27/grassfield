@@ -21,7 +21,8 @@ Two checks, because each alone has a hole:
        python3 -I tests/shell/run_mode_env.d/run.py --print-runmode      (then paste into `runmode` of run-mode-vectors.json)
 
   tests/shell/run_mode_env.sh                      run both against shell/lib
-  GF_RUN_MODE_LIB=<dir> tests/shell/run_mode_env.sh  against another copy of the lib module (the mutation checks)
+  GF_RUN_MODE_LIB=<dir> tests/shell/run_mode_env.sh  against another copy of the lib module (the mutation suite does this)
+  GF_RUN_MODE_ONLY=structure|behaviour ...          one layer alone
 """
 import json
 import os
@@ -404,15 +405,20 @@ def iter_tag(node, tag):
 def main():
     work = ROOT / ".dev"
     work.mkdir(exist_ok=True)
+    only = os.environ.get("GF_RUN_MODE_ONLY", "")  # "structure" or "behaviour": one layer alone (the mutation suite proves each on its own)
     names = plumbing_names()
-    tmp_root = Path(tempfile.mkdtemp(prefix="run-mode-env-", dir=work))
-    try:
-        all_jobs = jobs(names)
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            results = list(pool.map(lambda j: probe(j, names, tmp_root), all_jobs))
-    finally:
-        shutil.rmtree(tmp_root, ignore_errors=True)
-    failures = [p for r in results for p in r] + qmldir_problems(LIB) + structure_problems(LIB / "Mode.qml") + runmode_problems(LIB / "RunMode.js")
+    all_jobs = jobs(names)
+    results = []
+    if only != "structure":
+        tmp_root = Path(tempfile.mkdtemp(prefix="run-mode-env-", dir=work))
+        try:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                results = list(pool.map(lambda j: probe(j, names, tmp_root), all_jobs))
+        finally:
+            shutil.rmtree(tmp_root, ignore_errors=True)
+    failures = [p for r in results for p in r]
+    if only != "behaviour":
+        failures += qmldir_problems(LIB) + structure_problems(LIB / "Mode.qml") + runmode_problems(LIB / "RunMode.js")
     for f in failures:
         print("FAIL: run_mode_env " + f)
     if failures:
