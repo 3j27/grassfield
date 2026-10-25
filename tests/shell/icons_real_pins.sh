@@ -19,7 +19,7 @@ fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 out=$tmp/icons/grassfield-icons
 desc="the upstream checkouts are at the pinned commits"
-check bash -ec '[ "$(git -C "$1/MacTahoe-icon-theme" rev-parse HEAD)" = 839848b9a8a38a92a6936e30c4abe35cc6f2546d ] && [ "$(git -C "$1/Pebble-Icon-Theme" rev-parse HEAD)" = 185da58c2f4caf3c2a038aa0869fd2772acc0933 ]' _ "$tp"
+check bash -ec 'source "$2/packaging/arch/icon-pins.sh"; [ "$(git -C "$1/MacTahoe-icon-theme" rev-parse HEAD)" = "$MT_PIN" ] && [ "$(git -C "$1/Pebble-Icon-Theme" rev-parse HEAD)" = "$PB_PIN" ]' _ "$tp" "$root"
 log=$(python3 -I "$root/packaging/arch/icons-compose.py" --mactahoe "$tp/MacTahoe-icon-theme" --pebble "$tp/Pebble-Icon-Theme" \
   --branding "$root/branding/icons/theme" --list "$root/packaging/arch/icons-apple-logos.txt" --out "$out" 2>&1) && rc=0 || rc=$?
 echo "$log" | sed 's/^/    /'

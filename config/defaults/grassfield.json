@@ -22,8 +22,8 @@
     "size": 48,
     "position": "bottom",
     "magnification": 1.6,
-    "magnificationEnabled": false,
     "autohide": false,
+    "magnificationEnabled": false,
     "recent": [],
     "showRecents": true,
     "folders": [
@@ -46,7 +46,9 @@
   "notifications": {
     "dnd": false,
     "previews": "unlocked",
-    "history": "week"
+    "history": "week",
+    "appStyles": [],
+    "appPreviews": []
   },
   "lock": {
     "idleMinutes": 5

@@ -35,11 +35,13 @@ options=(!debug)
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
 # bag; Apple logos removed per packaging/arch/icons-apple-logos.txt). Integrity: the commit id (makepkg checks it out by
 # id) and the SHA-256 of the `git archive` of that commit (pacman 7.1 calc_checksum_git). No upstream script runs: the
-# composer reads src/, links/ and Pebble/ only. Same pins as scripts/dev/icons.sh: update both together.
-_mactahoe_commit=839848b9a8a38a92a6936e30c4abe35cc6f2546d
-_pebble_commit=185da58c2f4caf3c2a038aa0869fd2772acc0933
-source=("mactahoe-icon-theme::git+https://github.com/vinceliuice/MacTahoe-icon-theme.git#commit=${_mactahoe_commit}"
-        "pebble-icon-theme::git+https://github.com/a-shewale/Pebble-Icon-Theme.git#commit=${_pebble_commit}")
+# composer reads src/, links/ and Pebble/ only. The pins live in icon-pins.sh, which scripts/dev/icons.sh sources too
+# (one definition); only the sha256sums below are written here, because makepkg's updpkgsums rewrites them in place.
+source "${startdir:-$(dirname "${BASH_SOURCE[0]}")}/icon-pins.sh"
+_mactahoe_commit=$MT_PIN
+_pebble_commit=$PB_PIN
+source=("mactahoe-icon-theme::git+${MT_REPO}.git#commit=${_mactahoe_commit}"
+        "pebble-icon-theme::git+${PB_REPO}.git#commit=${_pebble_commit}")
 sha256sums=('4d91771b305c25b6a81e8a24e7c3d4ae49cce9754db199437191fa30cb9c60b0'
             '7bd4b12ca3914542857a159aed149d44e5d2b82a787c9d56f830da80fa0b9840')
 

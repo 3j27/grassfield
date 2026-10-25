@@ -14,12 +14,10 @@
 # back to the plain wrapper theme (Breeze, Adwaita, hicolor) when this has not run.
 set -euo pipefail
 
-MT_PIN=839848b9a8a38a92a6936e30c4abe35cc6f2546d
-MT_REPO=https://github.com/vinceliuice/MacTahoe-icon-theme
-PB_PIN=185da58c2f4caf3c2a038aa0869fd2772acc0933
-PB_REPO=https://github.com/a-shewale/Pebble-Icon-Theme
-
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+# The pins (MT_PIN, MT_REPO, PB_PIN, PB_REPO) are defined once, in packaging/arch/icon-pins.sh, which the PKGBUILD sources too.
+# shellcheck source=packaging/arch/icon-pins.sh
+source "$root/packaging/arch/icon-pins.sh"
 dev=$root/.dev
 tp=$dev/third_party
 icons=$dev/share/icons

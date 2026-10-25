@@ -13,7 +13,11 @@
       "type": "integer",
       "enum": [
         1
-      ]
+      ],
+      "default": 1,
+      "x-grassfield": {
+        "settable": false
+      }
     },
     "appearance": {
       "type": "string",
@@ -21,7 +25,8 @@
         "dark",
         "light",
         "auto"
-      ]
+      ],
+      "default": "dark"
     },
     "material": {
       "type": "object",
@@ -30,7 +35,8 @@
         "transparency": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "default": 0.25
         },
         "profile": {
           "type": "string",
@@ -38,7 +44,8 @@
             "full",
             "balanced",
             "reduced"
-          ]
+          ],
+          "default": "balanced"
         }
       }
     },
@@ -47,28 +54,34 @@
       "additionalProperties": false,
       "properties": {
         "reduceTransparency": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "reduceMotion": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "increaseContrast": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "textSize": {
           "type": "number",
           "minimum": 1,
-          "maximum": 1.3
+          "maximum": 1.3,
+          "default": 1
         },
         "zoom": {
           "type": "boolean",
-          "description": "Screen magnification on (Hyprland cursor:zoom_factor); toggled by Super+Alt+8."
+          "description": "Screen magnification on (Hyprland cursor:zoom_factor); toggled by Super+Alt+8.",
+          "default": false
         },
         "zoomLevel": {
           "type": "number",
           "minimum": 1.5,
           "maximum": 5,
-          "description": "Magnification factor while zoom is on."
+          "description": "Magnification factor while zoom is on.",
+          "default": 2
         }
       }
     },
@@ -81,12 +94,21 @@
           "items": {
             "type": "string",
             "minLength": 1
+          },
+          "default": [
+            "chromium",
+            "foot",
+            "org.grassfield.Settings"
+          ],
+          "x-grassfield": {
+            "settable": false
           }
         },
         "size": {
           "type": "integer",
           "minimum": 32,
-          "maximum": 96
+          "maximum": 96,
+          "default": 48
         },
         "position": {
           "type": "string",
@@ -94,34 +116,49 @@
             "left",
             "bottom",
             "right"
-          ]
+          ],
+          "default": "bottom"
         },
         "magnification": {
           "type": "number",
           "minimum": 1,
-          "maximum": 2.5
+          "maximum": 2.5,
+          "default": 1.6
         },
         "autohide": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "magnificationEnabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "recent": {
           "type": "array",
           "items": {
             "type": "string",
             "minLength": 1
+          },
+          "default": [],
+          "x-grassfield": {
+            "settable": false
           }
         },
         "showRecents": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "folders": {
           "type": "array",
           "items": {
             "type": "string",
             "minLength": 1
+          },
+          "default": [
+            "~/Downloads"
+          ],
+          "x-grassfield": {
+            "rule": "pathList"
           }
         },
         "stackOptions": {
@@ -132,34 +169,56 @@
             "properties": {
               "sort": {
                 "type": "string",
-                "enum": ["name", "dateAdded", "dateModified", "dateCreated", "kind"]
+                "enum": [
+                  "name",
+                  "dateAdded",
+                  "dateModified",
+                  "dateCreated",
+                  "kind"
+                ]
               },
               "view": {
                 "type": "string",
-                "enum": ["automatic", "fan", "grid", "list"]
+                "enum": [
+                  "automatic",
+                  "fan",
+                  "grid",
+                  "list"
+                ]
               },
               "display": {
                 "type": "string",
-                "enum": ["stack", "folder"]
+                "enum": [
+                  "stack",
+                  "folder"
+                ]
               }
             }
+          },
+          "default": {},
+          "x-grassfield": {
+            "settable": false
           }
         },
         "minimizeIntoApp": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "animateOpening": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "showIndicators": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "minimizeEffect": {
           "type": "string",
           "enum": [
             "funnel",
             "shrink"
-          ]
+          ],
+          "default": "funnel"
         }
       }
     },
@@ -173,22 +232,28 @@
             "zoom",
             "minimize",
             "none"
-          ]
+          ],
+          "default": "zoom"
         },
         "tilingEdges": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "tilingMenuBar": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "tilingMargins": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "stages": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "rebuildExtension": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -197,7 +262,8 @@
       "additionalProperties": false,
       "properties": {
         "dnd": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "previews": {
           "type": "string",
@@ -205,7 +271,8 @@
             "always",
             "unlocked",
             "never"
-          ]
+          ],
+          "default": "unlocked"
         },
         "history": {
           "type": "string",
@@ -214,7 +281,8 @@
             "week",
             "day",
             "never"
-          ]
+          ],
+          "default": "week"
         },
         "appStyles": {
           "type": "array",
@@ -236,9 +304,16 @@
                 ]
               }
             },
-            "required": ["app", "style"]
+            "required": [
+              "app",
+              "style"
+            ]
           },
-          "maxItems": 200
+          "maxItems": 200,
+          "default": [],
+          "x-grassfield": {
+            "rule": "notificationStyles"
+          }
         },
         "appPreviews": {
           "type": "array",
@@ -260,9 +335,16 @@
                 ]
               }
             },
-            "required": ["app", "previews"]
+            "required": [
+              "app",
+              "previews"
+            ]
           },
-          "maxItems": 200
+          "maxItems": 200,
+          "default": [],
+          "x-grassfield": {
+            "rule": "notificationApps"
+          }
         }
       }
     },
@@ -273,7 +355,8 @@
         "idleMinutes": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 240
+          "maximum": 240,
+          "default": 5
         }
       }
     },
@@ -289,7 +372,8 @@
             "notifications",
             "apps",
             "lock"
-          ]
+          ],
+          "default": "none"
         },
         "topRight": {
           "type": "string",
@@ -299,7 +383,8 @@
             "notifications",
             "apps",
             "lock"
-          ]
+          ],
+          "default": "none"
         },
         "bottomLeft": {
           "type": "string",
@@ -309,7 +394,8 @@
             "notifications",
             "apps",
             "lock"
-          ]
+          ],
+          "default": "none"
         },
         "bottomRight": {
           "type": "string",
@@ -319,7 +405,8 @@
             "notifications",
             "apps",
             "lock"
-          ]
+          ],
+          "default": "none"
         }
       }
     },
@@ -328,7 +415,8 @@
       "additionalProperties": false,
       "properties": {
         "showIcons": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         }
       }
     },
@@ -337,7 +425,8 @@
       "additionalProperties": false,
       "properties": {
         "showBackground": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "autoHide": {
           "type": "string",
@@ -347,15 +436,18 @@
             "fullscreen",
             "never"
           ],
-          "description": "Automatically hide and show the menu bar (Settings > Desktop & Dock > Menu Bar): \"always\" hides it on the desktop and in full screen, \"desktop\" on the desktop only, \"fullscreen\" (default) in full screen only, \"never\" keeps it in view. A hidden bar slides in over the window when the pointer reaches the top edge. Only \"fullscreen\" and \"never\" reserve space for the bar."
+          "description": "Automatically hide and show the menu bar (Settings > Desktop & Dock > Menu Bar): \"always\" hides it on the desktop and in full screen, \"desktop\" on the desktop only, \"fullscreen\" (default) in full screen only, \"never\" keeps it in view. A hidden bar slides in over the window when the pointer reaches the top edge. Only \"fullscreen\" and \"never\" reserve space for the bar.",
+          "default": "fullscreen"
         },
         "showNowPlaying": {
           "type": "boolean",
-          "description": "Show the Now Playing item in the menu bar while a media player has a session (playing, or paused with a track loaded). Default true."
+          "description": "Show the Now Playing item in the menu bar while a media player has a session (playing, or paused with a track loaded). Default true.",
+          "default": true
         },
         "showSearch": {
           "type": "boolean",
-          "description": "Show the Search item (magnifier) in the menu bar. Default true."
+          "description": "Show the Search item (magnifier) in the menu bar. Default true.",
+          "default": true
         }
       }
     },
@@ -377,7 +469,8 @@
             "green",
             "graphite"
           ],
-          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent."
+          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent.",
+          "default": "multicolor"
         }
       }
     },
@@ -393,19 +486,28 @@
             "dark",
             "clear",
             "tinted"
-          ]
+          ],
+          "default": "default"
         },
         "tint": {
           "type": "string",
           "minLength": 1,
           "pattern": "^(accent|#[0-9a-fA-F]{6})$",
-          "description": "\"accent\" follows the accent colour, else a #rrggbb colour used by the tinted mode."
+          "description": "\"accent\" follows the accent colour, else a #rrggbb colour used by the tinted mode.",
+          "default": "accent",
+          "x-grassfield": {
+            "rule": "tint"
+          }
         },
         "folderColor": {
           "type": "string",
           "minLength": 1,
           "pattern": "^(theme|accent|#[0-9a-fA-F]{6})$",
-          "description": "Colour of every folder icon: \"theme\" keeps the icon theme's own colour, \"accent\" follows the accent colour, else a #rrggbb colour. A folder's own colour (Customize Folder) wins."
+          "description": "Colour of every folder icon: \"theme\" keeps the icon theme's own colour, \"accent\" follows the accent colour, else a #rrggbb colour. A folder's own colour (Customize Folder) wins.",
+          "default": "theme",
+          "x-grassfield": {
+            "rule": "folderColor"
+          }
         }
       }
     },
@@ -418,17 +520,26 @@
           "type": "integer",
           "minimum": 24,
           "maximum": 96,
-          "description": "Cursor size in pixels (the macOS slider Normal to Large). Applied live by the shell; the XCursor fallback uses the nearest of 24, 32, 48, 64, 96."
+          "description": "Cursor size in pixels (the macOS slider Normal to Large). Applied live by the shell; the XCursor fallback uses the nearest of 24, 32, 48, 64, 96.",
+          "default": 24
         },
         "outlineColor": {
           "type": "string",
           "pattern": "^#[0-9a-fA-F]{6}$",
-          "description": "Pointer outline colour (#rrggbb). The default #ffffff is the packaged cursor theme; any other pair makes the shell regenerate the theme grassfield-cursors-custom."
+          "description": "Pointer outline colour (#rrggbb). The default #ffffff is the packaged cursor theme; any other pair makes the shell regenerate the theme grassfield-cursors-custom.",
+          "default": "#ffffff",
+          "x-grassfield": {
+            "rule": "pointerColor"
+          }
         },
         "fillColor": {
           "type": "string",
           "pattern": "^#[0-9a-fA-F]{6}$",
-          "description": "Pointer fill colour (#rrggbb). The default #000000 is the packaged cursor theme."
+          "description": "Pointer fill colour (#rrggbb). The default #000000 is the packaged cursor theme.",
+          "default": "#000000",
+          "x-grassfield": {
+            "rule": "pointerColor"
+          }
         }
       }
     },
@@ -447,16 +558,25 @@
             "video",
             "online"
           ],
-          "description": "builtin = the Grassfield artwork; color = a plain colour; file = one picture; folder = a carousel of the pictures of one folder; video = a looping video (played only while the pause rules allow it); online = the daily picture of wallpaper.online.provider (off by default: it contacts the network once a day, ADR-0016 step 2)."
+          "description": "builtin = the Grassfield artwork; color = a plain colour; file = one picture; folder = a carousel of the pictures of one folder; video = a looping video (played only while the pause rules allow it); online = the daily picture of wallpaper.online.provider (off by default: it contacts the network once a day, ADR-0016 step 2).",
+          "default": "builtin"
         },
         "path": {
           "type": "string",
-          "description": "Absolute path (no control characters, at most 4096 bytes) of the picture, folder or video; checked by the stores, not by the schema."
+          "description": "Absolute path (no control characters, at most 4096 bytes) of the picture, folder or video; checked by the stores, not by the schema.",
+          "default": "",
+          "x-grassfield": {
+            "rule": "wallpaperPath"
+          }
         },
         "color": {
           "type": "string",
           "pattern": "^#[0-9a-fA-F]{6}$",
-          "description": "#rrggbb: the plain colour, and the backdrop of fit, centre and tile."
+          "description": "#rrggbb: the plain colour, and the backdrop of fit, centre and tile.",
+          "default": "#000000",
+          "x-grassfield": {
+            "rule": "pointerColor"
+          }
         },
         "fit": {
           "type": "string",
@@ -467,7 +587,8 @@
             "center",
             "tile"
           ],
-          "description": "How a picture fills the screen (a video uses fill or fit only)."
+          "description": "How a picture fills the screen (a video uses fill or fit only).",
+          "default": "fill"
         },
         "interval": {
           "type": "string",
@@ -481,15 +602,18 @@
             "1h",
             "1d"
           ],
-          "description": "Folder only: when the picture changes (login = once, when the shell starts)."
+          "description": "Folder only: when the picture changes (login = once, when the shell starts).",
+          "default": "1h"
         },
         "shuffle": {
           "type": "boolean",
-          "description": "Folder only: random order, no repeat until every picture was shown; false = name order."
+          "description": "Folder only: random order, no repeat until every picture was shown; false = name order.",
+          "default": true
         },
         "videoOnBattery": {
           "type": "boolean",
-          "description": "Video only: keep playing on battery power."
+          "description": "Video only: keep playing on battery power.",
+          "default": false
         },
         "online": {
           "type": "object",
@@ -502,7 +626,8 @@
                 "commons",
                 "apod"
               ],
-              "description": "commons = the Wikimedia Commons Picture of the Day (commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, once a day). apod = NASA Astronomy Picture of the Day (api.nasa.gov and apod.nasa.gov, once a day; copyrighted days are shown with their credit)."
+              "description": "commons = the Wikimedia Commons Picture of the Day (commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, once a day). apod = NASA Astronomy Picture of the Day (api.nasa.gov and apod.nasa.gov, once a day; copyrighted days are shown with their credit).",
+              "default": "commons"
             }
           }
         },
@@ -577,6 +702,10 @@
             "required": [
               "display"
             ]
+          },
+          "default": [],
+          "x-grassfield": {
+            "rule": "wallpaperOutputs"
           }
         }
       }
