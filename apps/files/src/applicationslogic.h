@@ -6,26 +6,38 @@
 #include <QStringList>
 #include <QUrl>
 
-#include <functional>
-
-// The Applications location of Files (macOS: the Applications folder in the Finder sidebar): the desktop entries the user
-// sees, with the same rules as the shell's Apps grid (shell/launchpad/hidden-entries.sh, held to it by
-// tests/unit/files/tst_applications.cpp). Qt Core only. The location is virtual and read-only: its items are never files
-// to rename, move or delete, and opening one starts the application (FilesApp::launchApplication).
+// The Applications location of Files (macOS: the Applications folder in the Finder sidebar): the applications the shell's Apps
+// grid lists, by the grid's own behaviour. Qt Core only. The location is virtual and read-only: its items are never files to
+// rename, move or delete, and opening one starts the application (FilesApp::launchApplication).
 //
-// Rules, per desktop entry id (the file name without ".desktop", subfolders joined with "-"; the highest-priority
-// applications directory wins, also when it hides the entry):
-//   - only Type=Application, and not NoDisplay=true or Hidden=true;
-//   - OnlyShowIn / NotShowIn against XDG_CURRENT_DESKTOP;
-//   - a TryExec that names a program that is not installed hides it;
-//   - helper launchers are not applications to the user: the helper ids below, and terminal emulators' server and client
-//     launchers (a TerminalEmulator entry whose Exec runs "--server" or "--daemon", or whose program ends in "client").
+// "The grid's behaviour" is three things, each reproduced here and checked against the real ones on the same fixture tree by
+// tests/unit/files/apps_grid_vs_files.sh (Quickshell's DesktopEntries run offscreen, hidden-entries.sh, Model.disambiguate):
+//   1. Quickshell 0.3.1's DesktopEntries (what AppsController.qml iterates). Measured, not the desktop entry specification:
+//      - applications directories of XDG_DATA_HOME, then XDG_DATA_DIRS; the first one that has an id wins, and an id whose
+//        winning file is not listed (Hidden=true, NoDisplay=true, not an application, no Name) is not listed from a later one;
+//      - every *.desktop file below them, symlinked folders followed, any depth, never dot files or dot folders; the id is
+//        the path below the directory with "/" written "-"; when two files give one id (kde/foo.desktop and kde-foo.desktop)
+//        the one that comes last in a case-insensitive name sort of the folder wins;
+//      - the file is read as written: no trimming of keys, values or the "[Desktop Entry]" line (a CRLF file, "Type = Application",
+//        "  NoDisplay=true" and "Name = x" are therefore not understood), a UTF-8 byte order mark is skipped, only the first
+//        [Desktop Entry] group counts, a key given twice takes its last value;
+//      - listed: Type=Application exactly, a Name (localized by Name[fr_FR] then Name[fr]; else Name; else the first Name[...]
+//        of the file), not NoDisplay=true, not Hidden=true. TryExec is NOT read (the grid lists an entry whose TryExec program is
+//        missing; the desktop entry specification says to hide it. Not changed here: the grid is the reference).
+//   2. shell/launchpad/hidden-entries.sh, which reads OnlyShowIn, NotShowIn, Categories and Exec by its own lenient rules (a
+//      trailing blank and CR are cut, "Key = value" is accepted, the last of a repeated key wins, every [Desktop Entry] group
+//      counts) and hides: OnlyShowIn / NotShowIn against XDG_CURRENT_DESKTOP, the helper ids (below), and terminal emulators'
+//      server and client launchers (Categories listing TerminalEmulator with a ';' after it, and an Exec whose program ends in
+//      "client" or that has "--server" or "--daemon" as an argument).
+//   3. Model.disambiguate (shell/launchpad/Model.js): two apps with one Name (case-insensitive) are told apart, "Files (GNOME)";
+//      Grassfield's own (id org.grassfield.*) keeps the plain name.
 namespace ApplicationsLogic
 {
 
 struct Entry {
     QString id;          // "org.gnome.Calculator", "kde-foo"
-    QString name;        // localized Name, else Name
+    QString name;        // localized Name, told apart from an app of the same name (disambiguate)
+    QString baseName;    // localized Name as the entry has it
     QString genericName; // localized GenericName
     QString comment;     // localized Comment
     QString icon;        // Icon= as written: a theme icon name or an absolute path
@@ -43,25 +55,26 @@ struct Environment {
     QStringList locales;
     // Ids that are helpers.
     QSet<QString> helperIds;
-    // Whether a TryExec program is installed (absolute path: executable file; else looked up on PATH).
-    std::function<bool(const QString &)> programExists;
 };
 
 // The ids the shell's hidden-entries.sh hides as helpers by default (GRASSFIELD_HELPER_IDS replaces them there).
 QStringList defaultHelperIds();
 
-// The environment of this process: XDG_DATA_HOME / XDG_DATA_DIRS, XDG_CURRENT_DESKTOP, the UI locale, the default helper
-// ids and the PATH lookup.
+// The environment of this process: XDG_DATA_HOME / XDG_DATA_DIRS, XDG_CURRENT_DESKTOP, the UI locale and the default helper
+// ids.
 Environment processEnvironment();
 
 // Locale suffixes for a locale name such as "fr_FR.UTF-8" or "fr": {"fr_FR", "fr"}.
 QStringList localeCandidates(const QString &localeName);
 
-// One desktop entry's text -> an entry, or false when it is not shown (the rules above, except the id-based helper rule).
-// `id` and `path` are copied into the entry.
+// One desktop entry's text -> an entry, or false when the grid does not list it (the rules above, except the id-based helper
+// rule and the names being told apart). `id` and `path` are copied into the entry.
 bool parseEntry(const QByteArray &text, const QString &id, const QString &path, const Environment &env, Entry *out);
 
-// Every shown application, sorted by name (case-insensitive, numbers by value), then by id.
+// Model.disambiguate on a list: `name` is replaced where two entries share a Name; `baseName` keeps the entry's own.
+void disambiguate(QList<Entry> &entries);
+
+// Every application the grid lists, sorted by name (case-insensitive, numbers by value), then by id.
 QList<Entry> listApplications(const Environment &env);
 
 // The url of the Applications location and of one application in it: grassfield-apps:/ and grassfield-app:/<id>.

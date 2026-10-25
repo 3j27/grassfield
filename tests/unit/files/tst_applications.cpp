@@ -1,6 +1,7 @@
 // Unit tests for apps/files/src/applicationslogic.h (the Applications location of Files). Fixture desktop entries in a
-// temporary tree; nothing is launched. The shell's hidden-entries.sh is the reference of the visibility rules: the same tree
-// goes through it and through ApplicationsLogic, and both must agree on every entry.
+// temporary tree; nothing is launched. These tests pin the rules one by one, with hidden-entries.sh as the reference for the
+// ones it owns. The claim that Files lists what the Apps grid lists is held by tests/shell/apps_grid_vs_files.sh, which runs
+// Quickshell's own DesktopEntries, hidden-entries.sh and Model.disambiguate on ~130 fixture entries and compares the lists.
 #include <gtest/gtest.h>
 
 #include <QDir>
@@ -75,9 +76,11 @@ TEST(Applications, AgreesWithTheShellsHiddenEntriesScript)
     put(ha, QStringLiteral("shadow-b"), app(QStringLiteral("NotShowIn=Hyprland;")), false);
     write(sa + QStringLiteral("crlf-kde.desktop"), "[Desktop Entry]\r\nType=Application\r\nName=x\r\nOnlyShowIn=KDE;\r\n");
     write(sa + QStringLiteral("crlf-hypr.desktop"), "[Desktop Entry]\r\nType=Application\r\nName=x\r\nOnlyShowIn=Hyprland;\r\n");
-    write(sa + QStringLiteral("spaced-kde.desktop"), "[Desktop Entry]\nType=Application\nName = x\nOnlyShowIn = KDE;\n");
-    write(sa + QStringLiteral("spaced-not.desktop"), "[Desktop Entry]\nType=Application\nName = x\nNotShowIn\t=\tHyprland;\n");
-    all << QStringLiteral("crlf-kde") << QStringLiteral("crlf-hypr") << QStringLiteral("spaced-kde") << QStringLiteral("spaced-not");
+    // The script reads CRLF files; Quickshell does not (such a file is not an application with a Name), so the grid does not list
+    // them whatever the script says: the script's verdict only counts for entries Quickshell reads.
+    write(sa + QStringLiteral("spaced-kde.desktop"), "[Desktop Entry]\nType=Application\nName=x\nOnlyShowIn = KDE;\n");
+    write(sa + QStringLiteral("spaced-not.desktop"), "[Desktop Entry]\nType=Application\nName=x\nNotShowIn\t=\tHyprland;\n");
+    all << QStringLiteral("spaced-kde") << QStringLiteral("spaced-not");
     write(tmp.filePath(QStringLiteral("linked/deep/x.desktop")), app(QStringLiteral("OnlyShowIn=KDE;")));
     ASSERT_TRUE(QFile::link(tmp.filePath(QStringLiteral("linked")), sa + QStringLiteral("link")));
     all << QStringLiteral("link-deep-x");
@@ -111,9 +114,10 @@ TEST(Applications, AgreesWithTheShellsHiddenEntriesScript)
     for (const QString &id : std::as_const(all)) {
         EXPECT_EQ(listed.contains(id), !hidden.contains(id)) << id.toStdString() << (hidden.contains(id) ? " (hidden by the script)" : " (shown by the script)");
     }
-    // Nothing is listed that the fixture does not hold.
+    // Nothing is listed that the fixture does not hold, and a CRLF file is not read (Quickshell).
     for (const QString &id : listed)
         EXPECT_TRUE(all.contains(id)) << id.toStdString();
+    EXPECT_FALSE(listed.contains(QStringLiteral("crlf-hypr")));
 }
 
 TEST(Applications, DefaultHelperIdsAreTheScriptsDefaults)
@@ -130,7 +134,7 @@ TEST(Applications, DefaultHelperIdsAreTheScriptsDefaults)
     EXPECT_EQ(ours, fromScript);
 }
 
-TEST(Applications, OnlyApplicationsThatAreShownAndInstalledAreListed)
+TEST(Applications, OnlyApplicationsThatAreShownAreListedAndTryExecIsNotRead)
 {
     QTemporaryDir tmp;
     ASSERT_TRUE(tmp.isValid());
@@ -150,8 +154,11 @@ TEST(Applications, OnlyApplicationsThatAreShownAndInstalledAreListed)
     write(sa + QStringLiteral("action-only.desktop"), "[Desktop Entry]\nType=Application\nName=y\n[Desktop Action x]\nNoDisplay=true\nType=Link\n");
     write(sa + QStringLiteral("readme.txt"), "not a desktop entry");
     const QSet<QString> got = ids(listApplications(envFor(home, sys)));
-    const QSet<QString> want = {QStringLiteral("ok"), QStringLiteral("nodisplay-false"), QStringLiteral("tryexec-present"),
-                                QStringLiteral("tryexec-path"), QStringLiteral("action-only")};
+    // Quickshell does not read TryExec, so the grid lists an entry whose program is missing and so does Files (the desktop entry
+    // specification says to hide it: a difference in the grid, reported, not copied away here).
+    const QSet<QString> want = {QStringLiteral("ok"), QStringLiteral("nodisplay-false"), QStringLiteral("tryexec-missing"),
+                                QStringLiteral("tryexec-present"), QStringLiteral("tryexec-path"),
+                                QStringLiteral("tryexec-path-missing"), QStringLiteral("action-only")};
     EXPECT_EQ(got, want);
 }
 
@@ -204,9 +211,9 @@ TEST(Applications, NamesAndDetailsFollowTheLocale)
     EXPECT_EQ(c.comment, QStringLiteral("Faire des calculs"));
     env.locales = localeCandidates(QStringLiteral("fr_CA"));
     EXPECT_EQ(find(listApplications(env), QStringLiteral("calc")).name, QStringLiteral("Calculatrice canadienne"));
-    // An absolute icon path is kept as written; a name-less entry shows its id.
+    // An absolute icon path is kept as written; an entry without a Name is not an application of the grid.
     EXPECT_EQ(find(listApplications(env), QStringLiteral("pic")).icon, QStringLiteral("/usr/share/pixmaps/pic.png"));
-    EXPECT_EQ(find(listApplications(env), QStringLiteral("noname")).name, QStringLiteral("noname"));
+    EXPECT_TRUE(find(listApplications(env), QStringLiteral("noname")).id.isEmpty());
     EXPECT_TRUE(localeCandidates(QStringLiteral("C")).isEmpty());
     EXPECT_EQ(localeCandidates(QStringLiteral("de_DE@euro")), (QStringList{QStringLiteral("de_DE"), QStringLiteral("de")}));
 }
@@ -221,6 +228,68 @@ TEST(Applications, TheUserDirectoryShadowsTheSystemOne)
     ASSERT_EQ(list.size(), 1);
     EXPECT_EQ(list.first().name, QStringLiteral("My tool"));
     EXPECT_EQ(list.first().path, tmp.filePath(QStringLiteral("home/applications/tool.desktop")));
+}
+
+// Model.disambiguate: Grassfield's own keeps the plain name, a reverse-DNS id names its vendor, else the generic name, else the id.
+TEST(Applications, AppsOfOneNameAreToldApartLikeTheGrid)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString sa = tmp.filePath(QStringLiteral("sys/applications/"));
+    write(sa + QStringLiteral("org.grassfield.Files.desktop"), app(QString(), QStringLiteral("Files")));
+    write(sa + QStringLiteral("org.gnome.Nautilus.desktop"), app(QString(), QStringLiteral("Files")));
+    write(sa + QStringLiteral("viewer.desktop"), app(QStringLiteral("GenericName=File viewer"), QStringLiteral("files")));
+    write(sa + QStringLiteral("plain-a.desktop"), app(QString(), QStringLiteral("Twin")));
+    write(sa + QStringLiteral("plain-b.desktop"), app(QString(), QStringLiteral("Twin")));
+    write(sa + QStringLiteral("alone.desktop"), app(QString(), QStringLiteral("Alone")));
+    QHash<QString, QString> names;
+    for (const Entry &e : listApplications(envFor(tmp.filePath(QStringLiteral("home")), tmp.filePath(QStringLiteral("sys")))))
+        names.insert(e.id, e.name);
+    EXPECT_EQ(names.value(QStringLiteral("org.grassfield.Files")), QStringLiteral("Files"));
+    EXPECT_EQ(names.value(QStringLiteral("org.gnome.Nautilus")), QStringLiteral("Files (GNOME)"));
+    EXPECT_EQ(names.value(QStringLiteral("viewer")), QStringLiteral("files (File viewer)"));
+    EXPECT_EQ(names.value(QStringLiteral("plain-a")), QStringLiteral("Twin (plain-a)"));
+    EXPECT_EQ(names.value(QStringLiteral("plain-b")), QStringLiteral("Twin (plain-b)"));
+    EXPECT_EQ(names.value(QStringLiteral("alone")), QStringLiteral("Alone"));
+}
+
+// The file is read the way Quickshell reads it (measured): nothing trimmed, the first [Desktop Entry] group, an invalid file
+// masks nothing, a valid one masks the lower directory even when it is not listed.
+TEST(Applications, TheFileIsReadAsQuickshellReadsIt)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString sa = tmp.filePath(QStringLiteral("sys/applications/")), ha = tmp.filePath(QStringLiteral("home/applications/"));
+    write(sa + QStringLiteral("spaced-name.desktop"), "[Desktop Entry]\nType=Application\nName = x\nExec=x\n");
+    write(sa + QStringLiteral("spaced-type.desktop"), "[Desktop Entry]\nType = Application\nName=x\nExec=x\n");
+    write(sa + QStringLiteral("lead-nodisplay.desktop"), "[Desktop Entry]\nType=Application\nName=x\nExec=x\n  NoDisplay=true\n");
+    write(sa + QStringLiteral("crlf.desktop"), "[Desktop Entry]\r\nType=Application\r\nName=x\r\nExec=x\r\n");
+    write(sa + QStringLiteral("bom.desktop"), "\xEF\xBB\xBF[Desktop Entry]\nType=Application\nName=Bom\nExec=x\n");
+    write(sa + QStringLiteral("twice.desktop"), "[Desktop Entry]\nType=Application\nName=Twice\n[Desktop Entry]\nNoDisplay=true\n");
+    write(sa + QStringLiteral("last-wins.desktop"), "[Desktop Entry]\nType=Link\nType=Application\nName=First\nName=Second\nNoDisplay=true\nNoDisplay=false\n");
+    write(sa + QStringLiteral("only-localized.desktop"), "[Desktop Entry]\nType=Application\nName[fr]=Un\nName[de]=Zwei\n");
+    write(sa + QStringLiteral("trail.desktop"), "[Desktop Entry]\nType=Application\nName=Trail  \n");
+    write(sa + QStringLiteral("masked.desktop"), app(QString(), QStringLiteral("System")));
+    write(ha + QStringLiteral("masked.desktop"), "[Desktop Entry]\nType=Link\nName=Not an app\n");
+    write(sa + QStringLiteral("hidden-mask.desktop"), app(QString(), QStringLiteral("System")));
+    write(ha + QStringLiteral("hidden-mask.desktop"), app(QStringLiteral("Hidden=true")));
+    write(sa + QStringLiteral(".dot.desktop"), app());
+    write(sa + QStringLiteral("UPPER.DESKTOP"), app());
+    write(sa + QStringLiteral("kde/foo.desktop"), app(QString(), QStringLiteral("nested")));
+    write(sa + QStringLiteral("kde-foo.desktop"), app(QString(), QStringLiteral("flat")));
+    QHash<QString, QString> names;
+    for (const Entry &e : listApplications(envFor(tmp.filePath(QStringLiteral("home")), tmp.filePath(QStringLiteral("sys")))))
+        names.insert(e.id, e.name);
+    for (const char *absent : {"spaced-name", "spaced-type", "crlf", ".dot", "UPPER", "hidden-mask"})
+        EXPECT_FALSE(names.contains(QString::fromLatin1(absent))) << absent;
+    EXPECT_TRUE(names.contains(QStringLiteral("lead-nodisplay"))); // the key with a blank before it is not understood
+    EXPECT_EQ(names.value(QStringLiteral("bom")), QStringLiteral("Bom"));
+    EXPECT_EQ(names.value(QStringLiteral("twice")), QStringLiteral("Twice"));
+    EXPECT_EQ(names.value(QStringLiteral("last-wins")), QStringLiteral("Second"));
+    EXPECT_EQ(names.value(QStringLiteral("only-localized")), QStringLiteral("Un"));
+    EXPECT_EQ(names.value(QStringLiteral("trail")), QStringLiteral("Trail  "));
+    EXPECT_EQ(names.value(QStringLiteral("masked")), QStringLiteral("System"));
+    EXPECT_EQ(names.value(QStringLiteral("kde-foo")), QStringLiteral("flat"));
 }
 
 TEST(Applications, UrlsRoundTrip)

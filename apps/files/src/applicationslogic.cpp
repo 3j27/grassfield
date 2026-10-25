@@ -17,7 +17,7 @@ namespace ApplicationsLogic
 namespace
 {
 constexpr qint64 kMaxEntryBytes = 256 * 1024;
-constexpr int kMaxDepth = 8;
+constexpr int kMaxDepth = 32; // Quickshell has no limit; loops are cut by the visited set, this only bounds a hostile tree
 constexpr int kMaxEntries = 20000;
 
 bool hasDesktop(const QString &list, const QStringList &current)
@@ -29,11 +29,13 @@ bool hasDesktop(const QString &list, const QStringList &current)
     return false;
 }
 
-bool terminalHelper(const QStringList &categories, const QString &exec)
+// hidden-entries.sh's terminalHelper(): the Categories value is searched as ";value" for ";TerminalEmulator;" (so a list that
+// ends without ';' after it does not count), the Exec value is split on blanks.
+bool terminalHelper(const QString &categories, const QString &exec)
 {
-    if (!categories.contains(QLatin1String("TerminalEmulator")))
+    if (!(QLatin1Char(';') + categories).contains(QLatin1String(";TerminalEmulator;")))
         return false;
-    const QStringList words = exec.split(QRegularExpression(QStringLiteral("[ \t]+")), Qt::SkipEmptyParts);
+    const QStringList words = exec.split(QRegularExpression(QStringLiteral("[ \t]+")));
     if (words.isEmpty())
         return false;
     QString program = words.first();
@@ -47,52 +49,50 @@ bool terminalHelper(const QStringList &categories, const QString &exec)
     return false;
 }
 
+// What Quickshell's DesktopEntries reads. See applicationslogic.h: nothing is trimmed, the first [Desktop Entry] group only.
 struct Fields {
-    QString type, tryExec, exec, icon, onlyShowIn, notShowIn, categories;
-    QString noDisplay, hidden;
+    QString type, icon, exec, categories, noDisplay, hidden;
     QString name, genericName, comment;
     QHash<QString, QString> names, genericNames, comments; // by locale suffix
+    QStringList nameOrder;                                  // the Name[...] suffixes in file order
 };
 
-// The [Desktop Entry] group, one "Key=value" per line; CR, spaces around "=" and a trailing blank are tolerated; a key
-// given twice takes the last value (the same as hidden-entries.sh).
-Fields readFields(const QByteArray &text)
+Fields readFields(QByteArray text)
 {
     Fields f;
-    bool inEntry = false;
-    for (QByteArray raw : text.split('\n')) {
-        QString line = QString::fromUtf8(raw);
-        while (line.endsWith(QLatin1Char('\r')) || line.endsWith(QLatin1Char(' ')) || line.endsWith(QLatin1Char('\t')))
-            line.chop(1);
+    if (text.startsWith("\xEF\xBB\xBF"))
+        text.remove(0, 3);
+    bool inEntry = false, seen = false;
+    for (const QByteArray &raw : text.split('\n')) {
+        const QString line = QString::fromUtf8(raw);
         if (line.startsWith(QLatin1Char('['))) {
-            inEntry = line == QLatin1String("[Desktop Entry]");
+            inEntry = !seen && line == QLatin1String("[Desktop Entry]");
+            seen = seen || inEntry;
             continue;
         }
-        if (!inEntry || line.startsWith(QLatin1Char('#')))
+        if (!inEntry || line.isEmpty() || line.startsWith(QLatin1Char('#')))
             continue;
         const int eq = line.indexOf(QLatin1Char('='));
         if (eq <= 0)
             continue;
-        const QString key = line.left(eq).trimmed();
-        const QString value = line.mid(eq + 1).trimmed();
-        auto localized = [&](const QString &base, QString &plain, QHash<QString, QString> &byLocale) {
-            if (key == base)
+        const QString key = line.left(eq);
+        const QString value = line.mid(eq + 1);
+        auto localized = [&](const QString &base, QString &plain, QHash<QString, QString> &byLocale, QStringList *order) {
+            if (key == base) {
                 plain = value;
-            else if (key.startsWith(base + QLatin1Char('[')) && key.endsWith(QLatin1Char(']')))
-                byLocale.insert(key.mid(base.size() + 1, key.size() - base.size() - 2), value);
+            } else if (key.startsWith(base + QLatin1Char('[')) && key.endsWith(QLatin1Char(']'))) {
+                const QString suffix = key.mid(base.size() + 1, key.size() - base.size() - 2);
+                if (order && !byLocale.contains(suffix))
+                    order->append(suffix);
+                byLocale.insert(suffix, value);
+            }
         };
         if (key == QLatin1String("Type"))
             f.type = value;
-        else if (key == QLatin1String("TryExec"))
-            f.tryExec = value;
-        else if (key == QLatin1String("Exec"))
-            f.exec = value;
         else if (key == QLatin1String("Icon"))
             f.icon = value;
-        else if (key == QLatin1String("OnlyShowIn"))
-            f.onlyShowIn = value;
-        else if (key == QLatin1String("NotShowIn"))
-            f.notShowIn = value;
+        else if (key == QLatin1String("Exec"))
+            f.exec = value;
         else if (key == QLatin1String("Categories"))
             f.categories = value;
         else if (key == QLatin1String("NoDisplay"))
@@ -100,12 +100,50 @@ Fields readFields(const QByteArray &text)
         else if (key == QLatin1String("Hidden"))
             f.hidden = value;
         else {
-            localized(QStringLiteral("Name"), f.name, f.names);
-            localized(QStringLiteral("GenericName"), f.genericName, f.genericNames);
-            localized(QStringLiteral("Comment"), f.comment, f.comments);
+            localized(QStringLiteral("Name"), f.name, f.names, &f.nameOrder);
+            localized(QStringLiteral("GenericName"), f.genericName, f.genericNames, nullptr);
+            localized(QStringLiteral("Comment"), f.comment, f.comments, nullptr);
         }
     }
     return f;
+}
+
+// What hidden-entries.sh reads, with its own rules: a trailing blank and CR cut, "Key = value" accepted (but no blank before the
+// key), the last of a repeated key wins, every [Desktop Entry] group counts.
+struct ScriptFields {
+    QString onlyShowIn, notShowIn, categories, exec;
+};
+
+ScriptFields readScriptFields(const QByteArray &text)
+{
+    ScriptFields s;
+    static const QRegularExpression only(QStringLiteral("^OnlyShowIn[ \t]*="));
+    static const QRegularExpression notIn(QStringLiteral("^NotShowIn[ \t]*="));
+    static const QRegularExpression cats(QStringLiteral("^Categories[ \t]*="));
+    static const QRegularExpression exec(QStringLiteral("^Exec[ \t]*="));
+    static const QRegularExpression afterEquals(QStringLiteral("^[^=]*=[ \t]*"));
+    QString group;
+    for (const QByteArray &raw : text.split('\n')) {
+        QString line = QString::fromUtf8(raw);
+        while (line.endsWith(QLatin1Char(' ')) || line.endsWith(QLatin1Char('\t')) || line.endsWith(QLatin1Char('\r')))
+            line.chop(1);
+        if (line.startsWith(QLatin1Char('['))) {
+            group = line;
+            continue;
+        }
+        if (group != QLatin1String("[Desktop Entry]"))
+            continue;
+        const QString value = QString(line).remove(afterEquals);
+        if (only.match(line).hasMatch())
+            s.onlyShowIn = value;
+        else if (notIn.match(line).hasMatch())
+            s.notShowIn = value;
+        else if (cats.match(line).hasMatch())
+            s.categories = value;
+        else if (exec.match(line).hasMatch())
+            s.exec = value;
+    }
+    return s;
 }
 
 QString pick(const QString &plain, const QHash<QString, QString> &byLocale, const QStringList &locales)
@@ -118,7 +156,21 @@ QString pick(const QString &plain, const QHash<QString, QString> &byLocale, cons
     return plain;
 }
 
-// The ids and paths of every desktop file below `dir` (symlinked folders followed, loops cut), in a stable order.
+// The Name the grid shows: Name[fr_FR], Name[fr], Name, else the first Name[...] of the file; empty when there is none.
+QString nameOf(const Fields &f, const QStringList &locales)
+{
+    QString name = pick(f.name, f.names, locales);
+    if (name.isEmpty()) {
+        for (const QString &suffix : f.nameOrder) {
+            if (!f.names.value(suffix).isEmpty())
+                return f.names.value(suffix);
+        }
+    }
+    return name;
+}
+
+// The ids and paths of every desktop file below `dir` (symlinked folders followed, loops cut), in Quickshell's order: each
+// folder's entries sorted by name, case-insensitively, files and folders mixed.
 void collect(const QDir &base, const QDir &dir, int depth, QSet<QString> &visited, QList<QPair<QString, QString>> &out)
 {
     if (depth > kMaxDepth || out.size() >= kMaxEntries)
@@ -127,7 +179,8 @@ void collect(const QDir &base, const QDir &dir, int depth, QSet<QString> &visite
     if (canonical.isEmpty() || visited.contains(canonical))
         return;
     visited.insert(canonical);
-    const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name);
+    const QFileInfoList entries =
+        dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name | QDir::IgnoreCase);
     for (const QFileInfo &info : entries) {
         if (info.fileName().contains(QLatin1Char('\n')))
             continue;
@@ -141,6 +194,22 @@ void collect(const QDir &base, const QDir &dir, int depth, QSet<QString> &visite
         }
     }
     visited.remove(canonical);
+}
+
+// Model.vendorOf: a reverse-DNS id names its vendor in its second label.
+QString vendorOf(const QString &id)
+{
+    static const QRegularExpression re(QStringLiteral("^[a-z]+\\.([A-Za-z0-9_-]+)\\.[A-Za-z0-9_.-]+$"));
+    const QRegularExpressionMatch m = re.match(id);
+    if (!m.hasMatch())
+        return {};
+    static const QHash<QString, QString> known = {{QStringLiteral("gnome"), QStringLiteral("GNOME")}, {QStringLiteral("kde"), QStringLiteral("KDE")},
+                                                  {QStringLiteral("xfce"), QStringLiteral("Xfce")}, {QStringLiteral("gimp"), QStringLiteral("GIMP")},
+                                                  {QStringLiteral("mozilla"), QStringLiteral("Mozilla")},
+                                                  {QStringLiteral("libreoffice"), QStringLiteral("LibreOffice")}};
+    const QString v = m.captured(1);
+    const auto it = known.constFind(v.toLower());
+    return it != known.cend() ? *it : v.left(1).toUpper() + v.mid(1);
 }
 } // namespace
 
@@ -185,11 +254,6 @@ Environment processEnvironment()
     env.locales = localeCandidates(QLocale().name());
     const QStringList helpers = defaultHelperIds();
     env.helperIds = QSet<QString>(helpers.cbegin(), helpers.cend());
-    env.programExists = [](const QString &program) {
-        if (program.startsWith(QLatin1Char('/')))
-            return QFileInfo(program).isExecutable() && QFileInfo(program).isFile();
-        return !QStandardPaths::findExecutable(program).isEmpty();
-    };
     return env;
 }
 
@@ -200,28 +264,56 @@ bool parseEntry(const QByteArray &text, const QString &id, const QString &path, 
         return false;
     if (f.noDisplay == QLatin1String("true") || f.hidden == QLatin1String("true"))
         return false;
-    if (!f.onlyShowIn.isEmpty() && !hasDesktop(f.onlyShowIn, env.currentDesktop))
+    const QString name = nameOf(f, env.locales);
+    if (name.isEmpty())
         return false;
-    if (!f.notShowIn.isEmpty() && hasDesktop(f.notShowIn, env.currentDesktop))
+    const ScriptFields s = readScriptFields(text);
+    if (!s.onlyShowIn.isEmpty() && !hasDesktop(s.onlyShowIn, env.currentDesktop))
         return false;
-    if (!f.tryExec.isEmpty() && env.programExists && !env.programExists(f.tryExec))
+    if (!s.notShowIn.isEmpty() && hasDesktop(s.notShowIn, env.currentDesktop))
         return false;
-    const QStringList categories = f.categories.split(QLatin1Char(';'), Qt::SkipEmptyParts);
-    if (terminalHelper(categories, f.exec))
+    if (terminalHelper(s.categories, s.exec))
         return false;
     Entry e;
     e.id = id;
     e.path = path;
-    e.name = pick(f.name, f.names, env.locales);
-    if (e.name.isEmpty())
-        e.name = id;
+    e.name = e.baseName = name;
     e.genericName = pick(f.genericName, f.genericNames, env.locales);
     e.comment = pick(f.comment, f.comments, env.locales);
     e.icon = f.icon;
     e.exec = f.exec;
-    e.categories = categories;
+    e.categories = f.categories.split(QLatin1Char(';'), Qt::SkipEmptyParts);
     *out = e;
     return true;
+}
+
+void disambiguate(QList<Entry> &entries)
+{
+    QHash<QString, QList<int>> groups;
+    for (int i = 0; i < entries.size(); ++i) {
+        entries[i].baseName = entries.at(i).name;
+        groups[entries.at(i).name.trimmed().toLower()].append(i);
+    }
+    for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
+        if (it.key().isEmpty() || it.value().size() < 2)
+            continue;
+        for (const int i : it.value()) {
+            Entry &e = entries[i];
+            if (e.id.startsWith(QLatin1String("org.grassfield.")))
+                continue;
+            const QString vendor = vendorOf(e.id);
+            const QString generic = e.genericName.trimmed();
+            const QString qualifier = !vendor.isEmpty() ? vendor : (!generic.isEmpty() && generic.toLower() != it.key() ? generic : e.id);
+            e.name = e.baseName + QStringLiteral(" (") + qualifier + QLatin1Char(')');
+        }
+        QHash<QString, int> counts;
+        for (const int i : it.value())
+            counts[entries.at(i).name]++;
+        for (const int i : it.value()) {
+            if (counts.value(entries.at(i).name) > 1)
+                entries[i].name = entries.at(i).baseName + QStringLiteral(" (") + entries.at(i).id + QLatin1Char(')');
+        }
+    }
 }
 
 QList<Entry> listApplications(const Environment &env)
@@ -235,22 +327,40 @@ QList<Entry> listApplications(const Environment &env)
         QList<QPair<QString, QString>> files;
         QSet<QString> visited;
         collect(dir, dir, 0, visited, files);
+        // A file that is not an application with a Name (a Link, a Directory, no Name) does not exist for Quickshell: it masks
+        // nothing. A valid one does, also when it is then not listed (Hidden=true, NoDisplay=true, OnlyShowIn elsewhere), and
+        // of two valid files of one id in this directory the later one in the sorted walk wins.
+        struct Candidate {
+            QString path;
+            QByteArray text;
+        };
+        QHash<QString, Candidate> winner;
+        QStringList order;
         for (const auto &file : std::as_const(files)) {
-            // The highest-priority file of an id counts, also when it hides the entry.
             if (seen.contains(file.first))
-                continue;
-            seen.insert(file.first);
-            if (env.helperIds.contains(file.first))
                 continue;
             QFile f(file.second);
             if (!f.open(QIODevice::ReadOnly))
                 continue;
             const QByteArray text = f.read(kMaxEntryBytes);
+            const Fields fields = readFields(text);
+            if (fields.type != QLatin1String("Application") || nameOf(fields, env.locales).isEmpty())
+                continue;
+            if (!winner.contains(file.first))
+                order << file.first;
+            winner.insert(file.first, {file.second, text});
+        }
+        for (const QString &id : std::as_const(order)) {
+            // The highest-priority directory that has an id counts.
+            seen.insert(id);
+            if (env.helperIds.contains(id))
+                continue;
             Entry entry;
-            if (parseEntry(text, file.first, file.second, env, &entry))
+            if (parseEntry(winner.value(id).text, id, winner.value(id).path, env, &entry))
                 result.append(entry);
         }
     }
+    disambiguate(result);
     QCollator collator;
     collator.setCaseSensitivity(Qt::CaseInsensitive);
     collator.setNumericMode(true);

@@ -48,10 +48,14 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    `FileLogic::hiddenNetworkEntry`),
    Trash (`trash:/`, full/empty icon from a KIO listing). Items accept drops.
    **Applications** (`grassfield-apps:/`, macOS: Finder's Applications): a virtual, read-only location listing the desktop
-   entries the user sees with the rules of the shell's Apps grid (`ApplicationsLogic`, held to
-   `shell/launchpad/hidden-entries.sh` by `tests/unit/files/tst_applications.cpp`): Type=Application, not NoDisplay or
-   Hidden, OnlyShowIn/NotShowIn for `XDG_CURRENT_DESKTOP`, an installed TryExec, no helper launchers; localized names, theme
-   icons through the same provider as the rest of Files, sorted by name. Search filters it by name. Double-click, Return and
+   applications the shell's Apps grid lists, by the grid's own behaviour (`ApplicationsLogic`: Quickshell 0.3.1's
+   DesktopEntries as measured, `shell/launchpad/hidden-entries.sh`, `Model.disambiguate`; the header of
+   `applicationslogic.h` lists the rules). Not the desktop entry specification: Quickshell does not read TryExec, so an entry
+   whose program is missing is listed here as in the grid, and it reads the file as written (a CRLF file, `Name = x` and a
+   `Categories` list that ends without `;` behave as in the grid). Two apps of one name are told apart as in the grid
+   ("Files" and "Files (GNOME)"). `tests/shell/apps_grid_vs_files.sh` runs the real Quickshell DesktopEntries, the script
+   and Model.js and the Files logic on ~130 fixture entries and requires equal lists, in English and French; localized names,
+   theme icons through the same provider as the rest of Files, sorted by name. Search filters it by name. Double-click, Return and
    Ctrl+Down start the application (`FilesApp::launchApplication`: KIO's ApplicationLauncherJob, in a scope of its own like
    Open With); Get Info shows what the desktop entry says. Nothing can be renamed, copied, moved, trashed or created in it,
    nothing can be dropped into it or dragged out of it; the refusal reads as Finder's (no permission to access some of the
