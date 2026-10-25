@@ -13,7 +13,12 @@ Two checks, because each alone has a hole:
    read from Qt's syntax tree (qmldom --dump-ast) and must be exactly the allowlist of `members` in the vectors: the pragma, the
    imports, one root object with only `id: root`, the expected readonly properties with the expected expression each (rendered
    canonically from the tree: only calls, member accesses, identifiers, string literals and `+` are known), and the expected function.
-   A timer, a binding, a signal, a second object, an unknown node or any other expression fails.
+   A timer, a binding, a signal, a second object, an unknown node or any other expression fails. The lib qmldir must map
+   Mode to Mode.qml exactly (a decoy `singleton` line would point the singleton at another file). RunMode.js, which holds the rule
+   itself, is pinned the same way: qmldom reads no .js, so its body is wrapped in a function of a scratch QML file and read from
+   that tree; the allowlist of functions and their canonical bodies is `runmode` in the vectors. Any change to RunMode.js,
+   comments and layout apart, fails until that table is updated on purpose:
+       python3 -I tests/shell/run_mode_env.d/run.py --print-runmode      (then paste into `runmode` of run-mode-vectors.json)
 
   tests/shell/run_mode_env.sh                      run both against shell/lib
   GF_RUN_MODE_LIB=<dir> tests/shell/run_mode_env.sh  against another copy of the lib module (the mutation checks)
@@ -184,6 +189,24 @@ def render(node):
         return f"{render(kids[0])}({', '.join(render(a) for a in kids[1].children)})"
     if node.tag == "BinaryExpression" and len(kids) == 2:
         return f"({render(kids[0])} op{node.attrs.get('op', '?')} {render(kids[1])})"
+    if node.tag == "NotExpression" and len(kids) == 1:
+        return "!" + render(kids[0])
+    if node.tag == "NestedExpression" and len(kids) == 1:
+        return "(" + render(kids[0]) + ")"
+    if node.tag == "NullExpression" and not kids:
+        return "null"
+    if node.tag == "ConditionalExpression" and len(kids) == 3:
+        return f"({render(kids[0])} ? {render(kids[1])} : {render(kids[2])})"
+    if node.tag == "IfStatement" and len(kids) in (2, 3):
+        return f"if ({render(kids[0])}) {render(kids[1])}" + (f" else {render(kids[2])}" if len(kids) == 3 else "")
+    if node.tag == "VariableStatement" and len(kids) == 1:
+        return render(kids[0])
+    if node.tag == "VariableDeclarationList" and kids:
+        return "; ".join(render(k) for k in kids)
+    if node.tag == "PatternElement":
+        return f"var {node.attrs.get('bindingIdentifier', '?')}" + (f" = {render(kids[0])}" if len(kids) == 1 else "")
+    if node.tag == "StatementList":
+        return " ; ".join(render(k) for k in kids)
     return f"<{node.tag}?>"
 
 
@@ -193,6 +216,14 @@ def members_of(node):
             yield from members_of(child)
         else:
             yield child
+
+
+def params_of(fn):
+    """The parameter names of a function declaration: its parameters come as several sibling FormalParameterList nodes."""
+    out = []
+    for lst in (c for c in fn.children if c.tag == "FormalParameterList"):
+        out += [p.attrs.get("bindingIdentifier", "?") + (" = ..." if p.children else "") for p in iter_tag(lst, "PatternElement")]
+    return out
 
 
 def first(node, tag):
@@ -256,7 +287,7 @@ def structure_problems(path):
             if fn is None:
                 out.append("structure: a source element that is not a function")
                 continue
-            params = [f"{p.attrs.get('bindingIdentifier', '?')}" + (" = ..." if p.children else "") for p in iter_tag(first(fn, "FormalParameterList"), "PatternElement")]
+            params = params_of(fn)
             stmts = first(fn, "StatementList")
             body = " ; ".join(render(s) for s in (stmts.children if stmts is not None else []))
             seen_funcs[fn.attrs.get("name", "?")] = (params, body)
@@ -282,6 +313,72 @@ def structure_problems(path):
             out.append(f"structure: function {name} is not in the table")
     if not seen_id:
         out.append("structure: `id: root` is missing")
+    return out
+
+
+def runmode_snapshot(path):
+    """RunMode.js as {"functions": {name: [params, canonical body]}, "vars": {name: canonical init}}, read from Qt's tree through a
+    scratch QML file that holds the body (minus its leading `.pragma library`) in a function; anything else is `<unknown>`."""
+    text = Path(path).read_text(encoding="utf-8")
+    m = re.match(r"\A(?:\s|//[^\n]*\n|/\*.*?\*/)*(\.pragma\s+library\b)", text, re.S)
+    if m is None:
+        raise ValueError("RunMode.js does not start with `.pragma library`")
+    body = text[:m.start(1)] + text[m.end(1):]
+    with tempfile.TemporaryDirectory(dir=ROOT / ".dev") as t:
+        f = Path(t) / "Wrap.qml"
+        f.write_text("import QtQuick\nItem {\n function __all() {\n" + body + "\n}\n}\n", encoding="utf-8")
+        tree = dom_tree(f)
+    snap = {"functions": {}, "vars": {}}
+    wrapper = next((n for n in iter_tag(tree, "FunctionDeclaration") if n.attrs.get("name") == "__all"), None)
+    stmts = first(wrapper, "StatementList") if wrapper is not None else None
+    if stmts is None:
+        raise ValueError("RunMode.js does not parse inside the scratch function")
+    for st in stmts.children:
+        if st.tag == "FunctionDeclaration":
+            params = params_of(st)
+            snap["functions"][st.attrs.get("name", "?")] = [params, render(first(st, "StatementList")) if first(st, "StatementList") is not None else ""]
+        elif st.tag == "VariableStatement":
+            decl = [d for d in iter_tag(st, "PatternElement")]
+            if len(decl) == 1 and len(decl[0].children) == 1:
+                snap["vars"][decl[0].attrs.get("bindingIdentifier", "?")] = render(decl[0].children[0])
+            else:
+                snap["vars"][f"<unknown {len(decl)}>"] = "?"
+        else:
+            snap["functions"][f"<{st.tag}?>"] = [[], "?"]
+    return snap
+
+
+def runmode_problems(path):
+    try:
+        got = runmode_snapshot(path)
+    except (ValueError, OSError, subprocess.TimeoutExpired) as e:
+        return [f"runmode: {e}"]
+    want = VECTORS["runmode"]
+    out = []
+    for kind in ("functions", "vars"):
+        for name in sorted(set(got[kind]) | set(want[kind])):
+            if name not in want[kind]:
+                out.append(f"runmode: {kind[:-1]} {name} is not in the table")
+            elif name not in got[kind]:
+                out.append(f"runmode: {kind[:-1]} {name} is missing")
+            elif got[kind][name] != want[kind][name]:
+                out.append(f"runmode: {kind[:-1]} {name} is `{got[kind][name]}`, expected `{want[kind][name]}`")
+    return out
+
+
+def qmldir_problems(lib):
+    """The lib qmldir must map Mode to Mode.qml exactly: one entry named Mode, `singleton Mode <version> Mode.qml`."""
+    out = []
+    entries = []
+    for n, raw in enumerate((Path(lib) / "qmldir").read_text(encoding="utf-8").split("\n"), 1):
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            entries.append(line.split())
+    modes = [e for e in entries if "Mode" in e[:2]]
+    if len(modes) != 1 or not (len(modes[0]) == 4 and modes[0][0] == "singleton" and modes[0][1] == "Mode" and modes[0][3] == "Mode.qml"):
+        out.append(f"qmldir: Mode must map to Mode.qml by exactly one `singleton Mode <version> Mode.qml` line, found {[' '.join(e) for e in modes]}")
+    if not any(e == ["module", "qs.lib"] for e in entries):
+        out.append("qmldir: `module qs.lib` is missing")
     return out
 
 
@@ -315,15 +412,18 @@ def main():
             results = list(pool.map(lambda j: probe(j, names, tmp_root), all_jobs))
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
-    failures = [p for r in results for p in r] + structure_problems(LIB / "Mode.qml")
+    failures = [p for r in results for p in r] + qmldir_problems(LIB) + structure_problems(LIB / "Mode.qml") + runmode_problems(LIB / "RunMode.js")
     for f in failures:
         print("FAIL: run_mode_env " + f)
     if failures:
         return 1
     print(f"PASS: run_mode_env the real Mode answers every vector ({len(all_jobs)} environments, {len(names)} dev-plumbing names each, "
-          "packaged and leaked-dev sessions included, stable for 1.2 s) and Mode.qml is exactly the allowlist")
+          "packaged and leaked-dev sessions included, stable for 1.2 s); the lib qmldir, Mode.qml and RunMode.js are exactly the allowlist")
     return 0
 
 
 if __name__ == "__main__":
+    if "--print-runmode" in sys.argv[1:]:
+        print(json.dumps(runmode_snapshot(LIB / "RunMode.js"), indent=1, ensure_ascii=False))
+        sys.exit(0)
     sys.exit(main())

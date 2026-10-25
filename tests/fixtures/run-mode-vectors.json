@@ -32,6 +32,20 @@
   "HOME": "Quickshell.env(\"HOME\")"
  }
 },
+"runmode": {
+ "comment": "RunMode.js as Qt's syntax tree reads it (checked by tests/shell/run_mode_env.sh; qmldom reads no .js, so the body is wrapped in a scratch QML function). Comments and layout may change, nothing else: update on purpose with `python3 -I tests/shell/run_mode_env.d/run.py --print-runmode` after a review of the rule.",
+ "functions": {
+  "dev": [["devValue", "sessionValue"], "return ((devValue op1f \"1\") op1 (sessionValue op20 \"1\"))"],
+  "session": [["sessionValue"], "return (sessionValue op1f \"1\")"],
+  "fixtures": [["devValue", "sessionValue", "fixturesValue"], "return (dev(devValue, sessionValue) op1 (fixturesValue op1f \"1\"))"],
+  "ownBus": [["devValue", "sessionValue", "privateBusValue"], "return (!dev(devValue, sessionValue) op1b (privateBusValue op1f \"1\"))"],
+  "updateNotices": [["sessionValue"], "return session(sessionValue)"],
+  "devPlumbing": [["devValue", "sessionValue", "value"], "if (!dev(devValue, sessionValue)) return \"\" ; return (((value op1f undefined) op1b (value op1f null)) ? \"\" : String(value))"],
+  "configDir": [["configHome", "xdgConfigHome", "home"], "if (configHome) return configHome ; return (((xdgConfigHome ? xdgConfigHome : (home op0 \"/.config\"))) op0 \"/grassfield\")"],
+  "stateDir": [["stateHome", "xdgStateHome", "home"], "if (stateHome) return stateHome ; return (((xdgStateHome ? xdgStateHome : (home op0 \"/.local/state\"))) op0 \"/grassfield\")"]
+ },
+ "vars": {"REFUSED": "\"refused\""}
+},
 "modes": [
  {"name": "nothing set", "env": {}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
  {"name": "dev session", "env": {"GRASSFIELD_DEV": "1"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},
