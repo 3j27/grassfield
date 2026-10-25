@@ -70,14 +70,16 @@ GF050_TARGET = "notifications"
 
 
 MULTI = "multi-import line"
-QT_INCLUDE = re.compile(r"""\bQt\s*(?:\.\s*include\b|\[\s*["']include["']\s*\])""")
+GAP = r"(?:\s|/\*.*?\*/|//[^\n]*(?:\n|$))*"  # whitespace and comments
+QT_INCLUDE = re.compile(r"\bQt" + GAP + r"(?:\." + GAP + r"include\b|\[" + GAP + r"[\"']include[\"']" + GAP + r"\])", re.S)
 QMLDIR_ENTRY = re.compile(r"^(?:internal\s+[A-Z]\w*\s+|(?:singleton\s+)?[A-Z]\w*\s+\d+(?:\.\d+)?\s+)([A-Za-z0-9_]+\.(?:qml|js))$")
 QMLDIR_MODULE = re.compile(r"^module\s+[A-Za-z_][\w.]*$")
 IMPORT_SCANNER = "/usr/lib/qt6/qmlimportscanner"
 QMLDOM = "/usr/lib/qt6/bin/qmldom"
 QT_QML = "/usr/lib/qt6/qml"
-# A sound prefilter for the raw event rule: an identifier is spelled in the file as it is named, except for \u escapes.
-RAW_PREFILTER = re.compile(r"rawevent|\\u", re.I)
+# A sound prefilter for the raw event rule: an identifier is spelled in the file as it is named, and a string can spell a name only
+# with a backslash (\u, \x, octal, a line continuation), so a file with neither is never read from its tree.
+RAW_PREFILTER = re.compile(r"rawevent|\\", re.I)
 RAW_TEXT = re.compile(r"rawevent|hyprland", re.I)
 RAW_JS = re.compile(r"[rR]awEvent")
 RAW_NAMES = {"rawEvent", "onRawEvent"}
@@ -376,7 +378,7 @@ def imports_overlapping(path, a, b):
 
 def needs_tree(path):
     """Whether raw_event_line must read the syntax tree of a .qml file: it imports Quickshell.Hyprland (Qt's import scanner says
-    so) or its text holds a name that could be rawEvent (a sound prefilter: identifiers are spelled as named, except for unicode escapes)."""
+    so) or its text holds a name that could be rawEvent (a sound prefilter: identifiers are spelled as named and strings need a backslash to spell another name)."""
     if path.suffix != ".qml":
         return False
     try:
@@ -643,6 +645,12 @@ def selftest():
     run("Qt.include in a JS file is refused", {**clean, "services/X.js": '.pragma library\nQt.include("../dock/DockModel.js");\n'}, "Qt.include")
     run("Qt.include in a QML file is refused", svc('Item { Component.onCompleted: Qt.include("x.js") }\n'), "Qt.include")
     run("Qt[\"include\"] is refused", svc('Item { Component.onCompleted: Qt["include"]("x.js") }\n'), "Qt.include")
+    run("Qt with a comment before .include is refused", {**clean, "services/X.js": '.pragma library\nQt/**/.include("../dock/DockModel.js");\n'}, "Qt.include")
+    run("Qt with a comment and a line break before .include is refused", {**clean, "services/X.js": '.pragma library\nQt // x\n  /* y */ .include("../dock/DockModel.js");\n'}, "Qt.include")
+    run("Qt[ comment \"include\" ] is refused", svc('Item { Component.onCompleted: Qt[/**/"include"/**/]("x.js") }\n'), "Qt.include")
+    run("a \\x escape spelling rawEvent is seen", {**clean, "search/S.qml": 'Item { function f(o) { return o["\\x72awEvent"]; } }\n'}, raw)
+    run("an octal escape does not parse (so it cannot spell rawEvent)", {**clean, "search/S.qml": 'Item { function f(o) { return o["\\162awEvent"]; } }\n'}, "does not parse")
+    run("a line continuation spelling rawEvent is seen", {**clean, "search/S.qml": 'Item { function f(o) { return o["raw\\\nEvent"]; } }\n'}, raw)
     run("a bare `import qs` is refused", svc("import qs\nItem {}\n"), "bare `import qs`")
     run("a root: import is refused even when such a directory exists",
         {**clean, "services/root:/X.js": ".pragma library\n", "services/Apps.qml": 'import "root:/X.js" as X\nItem {}\n'}, "unresolvable import")
