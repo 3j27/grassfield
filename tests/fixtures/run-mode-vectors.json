@@ -2,9 +2,35 @@
 "comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
 "refused": "refused",
 "members": {
- "comment": "Every member of shell/lib/Mode.qml (checked on the real singleton by tests/shell/run_mode_env.sh: a member that is not here fails, whatever its spelling). `properties` are readonly properties, each with its Changed signal; the C++ side lists the same names in apps/runmode.h from M6.",
- "properties": ["dev", "session", "fixtures", "ownBus", "updateNotices", "refused", "configDir", "stateDir", "shellDir"],
- "functions": ["devValue"]
+ "comment": "Every member of shell/lib/Mode.qml, exactly: its type and the canonical form of its expression, as Qt's syntax tree reads it (checked by tests/shell/run_mode_env.sh, which also runs the real singleton in every environment below). A member that is not here, a second root child, a timer or any other expression fails. The C++ side lists the same names in apps/runmode.h from M6.",
+ "root": "Singleton",
+ "pragmas": ["Singleton"],
+ "imports": ["QtQuick", "Quickshell", "\"RunMode.js\" as RunMode"],
+ "properties": {
+  "dev": ["bool", "RunMode.dev(%(DEV)s, %(SESSION)s)"],
+  "session": ["bool", "RunMode.session(%(SESSION)s)"],
+  "fixtures": ["bool", "RunMode.fixtures(%(DEV)s, %(SESSION)s, %(VISUAL_FIXTURES)s)"],
+  "ownBus": ["bool", "RunMode.ownBus(%(DEV)s, %(SESSION)s, %(PRIVATE_BUS)s)"],
+  "updateNotices": ["bool", "RunMode.updateNotices(%(SESSION)s)"],
+  "refused": ["string", "RunMode.REFUSED"],
+  "configDir": ["string", "RunMode.configDir(%(CONFIG_HOME)s, %(XDG_CONFIG_HOME)s, %(HOME)s)"],
+  "stateDir": ["string", "RunMode.stateDir(%(STATE_HOME)s, %(XDG_STATE_HOME)s, %(HOME)s)"],
+  "shellDir": ["string", "Quickshell.shellDir"]
+ },
+ "functions": {
+  "devValue": [["name"], "return RunMode.devPlumbing(%(DEV)s, %(SESSION)s, Quickshell.env((\"GRASSFIELD_\" op0 name)))"]
+ },
+ "env": {
+  "DEV": "Quickshell.env(\"GRASSFIELD_DEV\")",
+  "SESSION": "Quickshell.env(\"GRASSFIELD_SESSION\")",
+  "VISUAL_FIXTURES": "Quickshell.env(\"GRASSFIELD_VISUAL_FIXTURES\")",
+  "PRIVATE_BUS": "Quickshell.env(\"GRASSFIELD_PRIVATE_BUS\")",
+  "CONFIG_HOME": "Quickshell.env(\"GRASSFIELD_CONFIG_HOME\")",
+  "STATE_HOME": "Quickshell.env(\"GRASSFIELD_STATE_HOME\")",
+  "XDG_CONFIG_HOME": "Quickshell.env(\"XDG_CONFIG_HOME\")",
+  "XDG_STATE_HOME": "Quickshell.env(\"XDG_STATE_HOME\")",
+  "HOME": "Quickshell.env(\"HOME\")"
+ }
 },
 "modes": [
  {"name": "nothing set", "env": {}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
