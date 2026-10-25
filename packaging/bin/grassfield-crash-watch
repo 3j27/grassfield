@@ -1,48 +1,235 @@
 #!/usr/bin/python3 -I
-"""Announce crashes of the user's programs with a notification (Grassfield's replacement of omarchy-crash-watch).
+"""Announce the crash of an application with a notification (Grassfield's replacement of omarchy-crash-watch).
 
 Omarchy's watcher (omarchy-crash-watch.service) waits for the Omarchy shell's notification IPC and so can never notify in a
 Grassfield session; packaging/systemd/omarchy-crash-watch.service.d/10-grassfield.conf keeps it off there. This one follows
-the journal for systemd-coredump entries of this user and sends one notification per program per 10 minutes (and at most 6 an hour in all) through the
-freedesktop notification service (Grassfield's own). It offers no AI diagnosis: the notification names the program and
-where the report is (coredumpctl).
+the journal for systemd-coredump entries of this user.
 
-Run by grassfield-crash-watch.service. Standard library only.
+The macOS model: "<App> quit unexpectedly" appears only when an application the user runs quit by crashing. A tool crashing in
+a terminal (the shell prints "Aborted"), a helper process of an application (GPU process, renderer), a background service
+and the shell itself (systemd restarts it) give no notice; the journal and coredumpctl keep every dump. So an entry is
+announced only when the crashed process is the top process of an application scope of this user:
+  - its cgroup is a systemd app scope under app.slice (app-<launcher>-<application id>-<random>.scope; the Dock, the launcher
+    and uwsm start every application that way, ADR-0011), and
+  - its parent (PPid in COREDUMP_PROC_STATUS, the state at the time of the crash) is not alive in the same scope. A parent
+    that is alive in the scope means the crashed process is a child: a command run from a terminal (the terminal's scope), a
+    helper of the application. A parent that is gone, or outside the scope (uwsm, the shell, systemd), means the top process.
+    Flatpak scopes (app-flatpak-...) hold bwrap above the application: a bwrap parent does not count there.
+No wait is needed: the parent is read once, when the entry arrives (the kernel keeps a crashed process, and so the scope,
+until the dump is written, which is before the journal entry). A parent that died with the child is a top process whose own
+entry follows (deduped by application). A reused parent PID inside the same scope can only make a notice silent.
+
+The notice names the application by its desktop entry Name (localized) when the application id of the scope maps to an entry,
+else the executable's name, and offers Reopen when the entry is known. Reopen runs `uwsm-app -- <id>.desktop` in a transient
+unit of the user manager (outside this unit's sandbox, in a proper app scope), like the shell's own launch path. Each notice is
+handled in its own thread: the watcher's loop never waits for a click. One notice per application per 10 minutes, at most 6 an
+hour in all. Run by grassfield-crash-watch.service. Standard library only.
 """
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
+import threading
 import time
 
 COREDUMP_MESSAGE_ID = "fc2e22bc6ee647b6b90729ab34a250b1"  # systemd.journal-fields(7)
-# One program that keeps crashing (Xwayland aborting every two minutes) is one notice per 10 minutes, and a bad hour is never
-# more than HOURLY_CAP notices in all: the journal keeps every dump, the notices only say that something is wrong.
+# One program that keeps crashing is one notice per 10 minutes, and a bad hour is never more than HOURLY_CAP notices in all:
+# the journal keeps every dump, the notices only say that something is wrong.
 DEDUPE_SECONDS = float(os.environ.get("GRASSFIELD_CRASH_DEDUPE_SECONDS", "600"))
 HOURLY_CAP = int(os.environ.get("GRASSFIELD_CRASH_HOURLY_CAP", "6"))
 SEND_ATTEMPTS = int(os.environ.get("GRASSFIELD_CRASH_SEND_ATTEMPTS", "20"))
+WAIT_SECONDS = float(os.environ.get("GRASSFIELD_CRASH_WAIT_SECONDS", "600"))  # how long a notice waits for a click
+
+# --- strings: English is the source, CATALOG the translations (tests/shell/crash_watch.sh keeps them complete).
+# The helpers cannot load Qt's .qm catalogs (standard library only), so this table is this helper's. A no-break space
+# (U+00A0) goes inside the guillemets and before ":" as in translations/grassfield_fr.ts.
+TITLE = "%s quit unexpectedly"
+BODY = "It stopped unexpectedly (%s). The report is kept by the system: coredumpctl list."
+REOPEN = "Reopen"
+CATALOG = {
+    "fr": {
+        TITLE: "« %s » a quitté de façon inattendue",
+        BODY: "L’app s’est arrêtée de façon inattendue (%s). Le rapport est conservé par le système : coredumpctl list.",
+        REOPEN: "Rouvrir",
+    },
+}
 
 
-def interesting(entry, uid, last, now):
-    """The name to announce for a journal entry, or None. `last` maps names to the time of their last announcement."""
+def locale_names(env=None):
+    """Locale names to try, most specific first, from GRASSFIELD_LANG (dev override) else LC_ALL, LC_MESSAGES, LANG, as the
+    shell's Translator does. "fr_FR.UTF-8@euro" gives fr_FR@euro, fr_FR, fr@euro, fr (desktop entry spec order). C/POSIX: none."""
+    env = os.environ if env is None else env
+    raw = ""
+    for var in ("GRASSFIELD_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
+        if env.get(var):
+            raw = env[var]
+            break
+    raw = raw.split(":")[0]
+    modifier = raw.partition("@")[2]
+    base = raw.partition("@")[0].partition(".")[0]
+    if not base or base in ("C", "POSIX"):
+        return []
+    lang, _, country = base.partition("_")
+    names = []
+    if country and modifier:
+        names.append("%s_%s@%s" % (lang, country, modifier))
+    if country:
+        names.append("%s_%s" % (lang, country))
+    if modifier:
+        names.append("%s@%s" % (lang, modifier))
+    names.append(lang)
+    return names
+
+
+def tr(text, names):
+    """The translation of `text` for the first language of `names` that has a catalog, else the English source."""
+    for name in names:
+        table = CATALOG.get(name.partition("_")[0].partition("@")[0])
+        if table is not None:
+            return table.get(text, text)
+    return text
+
+
+def text_of(value):
+    """A journal field as text: journalctl -o json gives a string, or a list of byte values for non-text data."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list) and all(isinstance(b, int) and 0 <= b < 256 for b in value):
+        return bytes(value).decode("utf-8", "replace")
+    return ""
+
+
+SCOPE = re.compile(r"^app-(?:(?P<launcher>[^-]+)-)?(?P<appid>[^-]+)-(?P<rand>[^-]+)\.scope$")
+
+
+def unescape_unit(text):
+    """systemd unit-name escaping: \\xNN for characters such as '-' inside one component."""
+    return re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), text)
+
+
+def app_scope(entry):
+    """(launcher, application id, cgroup path) when the crashed process lives in a systemd app scope of a user manager
+    (.../user@<uid>.service/app.slice/.../app-[<launcher>-]<id>-<random>.scope), else None. The application id is '' when
+    the name does not follow the pattern (the scope is still an application's)."""
+    cgroup = text_of(entry.get("COREDUMP_CGROUP")).strip()
+    if not cgroup.startswith("/") or "/user@" not in cgroup or "/app.slice/" not in cgroup:
+        return None
+    unit = cgroup.rsplit("/", 1)[1]
+    if not (unit.startswith("app-") and unit.endswith(".scope")):
+        return None
+    if text_of(entry.get("COREDUMP_USER_UNIT")).strip() not in ("", unit):
+        return None
+    match = SCOPE.match(unit)
+    if not match:
+        return "", "", cgroup
+    return match.group("launcher") or "", unescape_unit(match.group("appid")), cgroup
+
+
+def parent_pid(entry):
+    """PPid of the crashed process from COREDUMP_PROC_STATUS, or None."""
+    for line in text_of(entry.get("COREDUMP_PROC_STATUS")).splitlines():
+        if line.startswith("PPid:"):
+            value = line.split(":", 1)[1].strip()
+            return int(value) if value.isdigit() else None
+    return None
+
+
+def parent_in_scope(ppid, cgroup, launcher, proc="/proc"):
+    """True when process `ppid` is alive in the scope `cgroup` (or below it): the crashed process is its child."""
+    if ppid <= 1:
+        return False
     try:
-        entry_uid = int(entry.get("_UID", "-"))
-    except (TypeError, ValueError):
+        with open("%s/%d/cgroup" % (proc, ppid), encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return False  # gone (or not ours): the crashed process is the top one
+    path = next((line[3:] for line in lines if line.startswith("0::")), None)
+    if path is None or not (path == cgroup or path.startswith(cgroup + "/")):
+        return False
+    if launcher == "flatpak":  # bwrap sits above the application in a Flatpak scope
+        try:
+            with open("%s/%d/comm" % (proc, ppid), encoding="utf-8", errors="replace") as f:
+                if f.read().strip() in ("bwrap", "flatpak-bwrap"):
+                    return False
+        except OSError:
+            return False
+    return True
+
+
+def data_dirs(env):
+    home = env.get("XDG_DATA_HOME") or os.path.join(env.get("HOME", ""), ".local/share")
+    dirs = (env.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    return [d for d in [home] + dirs if d]
+
+
+def desktop_entry(appid, env):
+    """(desktop file id, localized Name) of the entry for an application id, or None. The id must be a plain file name."""
+    if not appid or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", appid) or ".." in appid:
+        return None
+    names = locale_names(env)
+    for base in data_dirs(env):
+        directory = os.path.join(base, "applications")
+        for candidate in (appid, appid.replace("-", "/")):  # a/b-c.desktop has the id a-b-c.desktop
+            path = os.path.join(directory, candidate + ".desktop")
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    lines = f.read().splitlines()
+            except OSError:
+                continue
+            keys, inside = {}, False
+            for line in lines:
+                line = line.strip()
+                if line.startswith("["):
+                    inside = line == "[Desktop Entry]"
+                elif inside and "=" in line and not line.startswith("#"):
+                    key, _, value = line.partition("=")
+                    keys[key.strip()] = value.strip()
+            if keys.get("Type") != "Application" or keys.get("Hidden", "").lower() == "true":
+                continue
+            for name in names:
+                if keys.get("Name[%s]" % name):
+                    return appid + ".desktop", keys["Name[%s]" % name]
+            if keys.get("Name"):
+                return appid + ".desktop", keys["Name"]
+    return None
+
+
+def interesting(entry, uid, last, now, proc="/proc", env=None):
+    """What to announce for a journal entry: {"name", "key", "desktop_id"}, or None. `last` maps keys to the time of their
+    last announcement. Anything unclear is not announced."""
+    env = os.environ if env is None else env
+    if not isinstance(entry, dict):
+        return None
+    try:
+        entry_uid = int(text_of(entry.get("_UID")) or "-")
+    except ValueError:
         return None
     if entry_uid != uid:  # a daemon dumping core is a sysadmin's problem
         return None
-    pid = str(entry.get("COREDUMP_PID", ""))
+    pid = text_of(entry.get("COREDUMP_PID"))
     if not pid.isdigit():
         return None
-    exe = entry.get("COREDUMP_EXE") or ""
-    comm = entry.get("COREDUMP_COMM") or ""
+    scope = app_scope(entry)
+    if scope is None:  # a user service (the shell, the portals), Xwayland, a login-session process: no notice
+        return None
+    launcher, appid, cgroup = scope
+    ppid = parent_pid(entry)
+    if ppid is None or parent_in_scope(ppid, cgroup, launcher, proc):  # unknown, or a child of the application's top process
+        return None
+    exe = text_of(entry.get("COREDUMP_EXE"))
+    comm = text_of(entry.get("COREDUMP_COMM"))
     # comm is truncated to 15 characters: prefer the executable's name.
-    name = os.path.basename(exe) if exe.startswith("/") else comm
-    if not name or name.startswith("grassfield-crash-"):
+    exe_name = os.path.basename(exe) if exe.startswith("/") else comm
+    if not exe_name or exe_name.startswith("grassfield-crash-"):
         return None
-    if now - last.get(name, -DEDUPE_SECONDS) < DEDUPE_SECONDS:
+    found = desktop_entry(appid, env)
+    name = found[1] if found else exe_name
+    key = appid or exe_name
+    if now - last.get(key, -DEDUPE_SECONDS) < DEDUPE_SECONDS:
         return None
-    return name
+    return {"name": name, "key": key, "desktop_id": found[0] if found else None}
 
 
 def under_cap(sent, now):
@@ -50,25 +237,85 @@ def under_cap(sent, now):
     return sum(1 for t in sent if now - t < 3600) < HOURLY_CAP
 
 
-def announce(name, signal):
-    body = "It stopped unexpectedly (%s). The report is kept by the system: coredumpctl list." % (signal or "crash")
-    # The notification service may still be starting (or restarting after a shell crash): retry for a while.
+def reopen(desktop_id):
+    """Start the application again like the Dock does (uwsm-app: its own app scope), from a transient unit of the user manager
+    so that the application does not inherit this unit's sandbox."""
+    launcher = shutil.which("uwsm-app")
+    if not launcher:
+        return False
+    try:
+        r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", "--", launcher, "--", desktop_id],
+                           capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0
+
+
+def announce(notice, signal, env=None, wait=None):
+    """Show one notice, retrying while the notification service starts; on Reopen start the application. Blocks until the
+    notice is answered (or WAIT_SECONDS): call it from a thread. True once a notice was shown."""
+    names = locale_names(env)
+    argv = ["notify-send", "-a", "Grassfield", "-u", "critical"]
+    can_reopen = bool(notice.get("desktop_id")) and shutil.which("uwsm-app") is not None
+    if can_reopen:
+        argv += ["-w", "-A", "reopen=" + tr(REOPEN, names)]
+    argv += ["--", tr(TITLE, names) % notice["name"], tr(BODY, names) % (signal or "crash")]
     for _ in range(SEND_ATTEMPTS):
         try:
-            r = subprocess.run(["notify-send", "-a", "Grassfield", "-u", "critical", "--", "%s quit unexpectedly" % name, body],
-                               capture_output=True, timeout=10)
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=WAIT_SECONDS if wait is None else wait)
+        except subprocess.TimeoutExpired:
+            return True  # shown, never answered
         except (OSError, subprocess.SubprocessError):
             r = None
         if r is not None and r.returncode == 0:
+            if can_reopen and r.stdout.strip() == "reopen":
+                reopen(notice["desktop_id"])
             return True
         time.sleep(1)
     return False
 
 
+class Ledger:
+    """The dedupe window and the hourly cap, shared by the loop and the notice threads."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.last = {}
+        self.sent = []
+
+    def reserve(self, entry, uid, now, proc="/proc", env=None):
+        """The notice to announce for `entry` (its slot is taken now), or None."""
+        with self.lock:
+            if not under_cap(self.sent, now):
+                return None
+            snapshot = dict(self.last)
+        notice = interesting(entry, uid, snapshot, now, proc, env)
+        if notice is None:
+            return None
+        with self.lock:
+            if not under_cap(self.sent, now) or now - self.last.get(notice["key"], -DEDUPE_SECONDS) < DEDUPE_SECONDS:
+                return None
+            self.last[notice["key"]] = now
+            self.sent.append(now)
+        notice["at"] = now
+        return notice
+
+    def release(self, notice):
+        """A notice that could not be shown must not hide the rest of a crash loop."""
+        with self.lock:
+            self.last.pop(notice["key"], None)
+            if notice["at"] in self.sent:
+                self.sent.remove(notice["at"])
+
+
+def deliver(ledger, notice, signal):
+    if not announce(notice, signal):
+        ledger.release(notice)
+
+
 def main():
     uid = os.getuid()
-    last = {}
-    sent = []
+    ledger = Ledger()
     cmd = ["journalctl", "-f", "-n", "0", "-o", "json", "MESSAGE_ID=" + COREDUMP_MESSAGE_ID]
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True) as proc:
         for line in proc.stdout:
@@ -76,14 +323,9 @@ def main():
                 entry = json.loads(line)
             except ValueError:
                 continue
-            if not isinstance(entry, dict):
-                continue
-            now = time.monotonic()
-            name = interesting(entry, uid, last, now) if under_cap(sent, now) else None
-            # Only a delivered notification starts the dedupe window (a failed one must not hide the rest of a crash loop).
-            if name and announce(name, entry.get("COREDUMP_SIGNAL_NAME")):
-                last[name] = time.monotonic()
-                sent.append(last[name])
+            notice = ledger.reserve(entry, uid, time.monotonic()) if isinstance(entry, dict) else None
+            if notice:
+                threading.Thread(target=deliver, args=(ledger, notice, text_of(entry.get("COREDUMP_SIGNAL_NAME"))), daemon=True).start()
     return 1
 
 

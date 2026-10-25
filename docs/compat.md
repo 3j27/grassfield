@@ -51,7 +51,9 @@ presence of the modules in the first rows.
 | Hyprland Lua API `hl.{bind,on,dispatch,timer,exec_cmd,send_key_state,get_active_window,get_layers,monitor,env,config,gesture}` (stub `/usr/share/hypr/stubs/hl.meta.lua`) | `config/hypr/grassfield/*.lua` | check fails; `just check-config` also parses the config |
 
 What Grassfield provides itself where Omarchy's version needs the Omarchy shell (audit 02 §5.3): crash notifications
-(`grassfield-crash-watch.service`), low battery at 20/10/5 % (`grassfield-battery-watch.service`), a clickable migrations notice
+(`grassfield-crash-watch.service`: the macOS model, "<App> quit unexpectedly" with Reopen only when the top process of an
+application scope crashed; a tool crashing in a terminal, a helper process, a service and the shell give no notice, the journal
+keeps every dump; rules in the header of `packaging/bin/grassfield-crash-watch`, tests in `tests/shell/crash_watch.sh`), low battery at 20/10/5 % (`grassfield-battery-watch.service`), a clickable migrations notice
 (`grassfield-migrate-notify.service`; Omarchy's click command travels in a private hint, `omarchy-exec-argv`, that Grassfield's
 server does not run, on purpose: any program could otherwise name a command), removable media (`grassfield-automount.service`,
 udiskie), Night Shift (`grassfield-nightshift on|off|toggle|status`, hyprsunset; the Control Center switch is shell work),
