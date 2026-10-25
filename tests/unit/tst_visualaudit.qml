@@ -19,8 +19,8 @@ TestCase {
     function test_searchRowMetrics() {
         compare(Tokens.searchTitleSize, 17);
         compare(Tokens.searchSubtitleSize, 15);
-        // The text box starts 70.5 in; the ink of the 17-pt glyphs about 2 further, macOS ink at 72.5.
-        compare(Tokens.searchTextInset, 70.5);
+        // The text box starts 71 in (a whole number); the ink of the 17-pt glyphs about 1.5 further, macOS ink at 72.5.
+        compare(Tokens.searchTextInset, 71);
         compare(Tokens.searchQueryInset, 61);
         compare(Tokens.searchRowRadius, 18);
         compare(Tokens.searchRowInset, 10);

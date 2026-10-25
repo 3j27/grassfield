@@ -221,7 +221,7 @@ QtObject {
 
     // task spec / macOS convention, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarHeight: 24
-    // Title padding 10 per side (ink to ink 20; macOS 22.5 measured, audit 25 before); with menubar.insetLeft 19 the app name starts at 55 and the mark is centred at 27, as macOS; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    // Title padding 10 per side (ink to ink 20; macOS 22.5 measured, audit 25 before); with menubar.insetLeft 19 the app name starts at 55 and the mark is centred at 27, as macOS; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
     readonly property int menubarItemPadding: 10
     // Status glyphs 16 (macOS ink 12-13.5 tall; was 14); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarIconSize: 16
@@ -231,7 +231,7 @@ QtObject {
     readonly property int menubarHoverInsetBottom: 1
     // Status glyphs 18.5-20 apart in macOS; with the 16-pt glyph a pitch of 33; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarStatusItemPadding: 8.5
-    // Screen edge to the system mark: 19 with itemPadding 10 puts the mark's centre at 27 and the app name at 55 (macOS); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    // Screen edge to the system mark: 19 with itemPadding 10 puts the mark's centre at 27 and the app name at 55 (macOS); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
     readonly property int menubarInsetLeft: 19
     // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetRight: 18.5
@@ -269,9 +269,9 @@ QtObject {
     readonly property int menubarRevealDuration: 200
     // The Wi-Fi glyph is wider than the others: 16 x 1.3 gives an ink about 16.5 wide, macOS 17; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarWifiIconScale: 1.3
-    // The speaker glyph is drawn 1.25 x the status size: its ink is about 12.5 tall, macOS 12-13.5 (was 10); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    // The speaker glyph is drawn 1.25 x the status size: its ink is about 12.5 tall, macOS 12-13.5 (was 10); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
     readonly property real menubarVolumeIconScale: 1.25
-    // Between the clock's date and time: an en space and a space, about 10 pt against 5 before (macOS 9.5); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    // Between the clock's date and time: an en space and a space, about 10 pt against 5 before (macOS 9.5); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
     readonly property string menubarClockGap: "\u2002 "
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
@@ -637,7 +637,7 @@ QtObject {
     readonly property int quicksettingsAirplaneSettleMs: 3000
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
-    // Quick Settings slider track: the shadow colour at this opacity, so the white fill holds 3:1 (WCAG 1.4.11) against it over the lightest module, light and dark, tested; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    // Quick Settings slider track: the shadow colour at this opacity, (light appearance) so the white fill holds 3:1 (WCAG 1.4.11) against it over the lightest module, tested (the dark appearance uses sliderTrackOpacityDark); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
     readonly property real quicksettingsSliderTrackOpacity: 0.42
     // Glyph at the low end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
     readonly property int quicksettingsEndGlyphSmall: 12
@@ -759,8 +759,8 @@ QtObject {
     readonly property int searchTitleSize: Math.round(17 * Appearance.textScale)
     // Result row subtitle, macOS ~15 +-1 against 11 before; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
     readonly property int searchSubtitleSize: Math.round(15 * Appearance.textScale)
-    // Result row text box left inset from the panel edge: the ink of the 17-pt text starts about 2 further (side bearing), macOS ink at 72.5; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
-    readonly property real searchTextInset: 70.5
+    // Result row text box left inset from the panel edge, a whole number: the ink of the 17-pt text starts about 1.5 further (measured on the capture: ink at 72 from the panel edge with 70.5), so 71 lands the ink on macOS 72.5; visual-audit-3 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
+    readonly property int searchTextInset: 71
     // Query text left inset from the panel edge, macOS 61; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
     readonly property int searchQueryInset: 61
     // Magnifier and hairline inset from the panel edge, macOS 19.4-20.4; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
