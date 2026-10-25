@@ -54,11 +54,14 @@ MULTI = "multi-import line"
 
 
 REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
-REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.])(?:return|typeof|case|in|of|delete|void|throw|new|else|do|yield|await)\s*$")
+REGEX_KEYWORDS = {"return", "typeof", "case", "in", "of", "delete", "void", "throw", "new", "else", "do", "yield", "await"}
+IDENT = re.compile(r"[\w$]")
 
 
 def regex_end(text, i):
-    """Index just past the regex literal that starts at text[i] (a `/`), or -1 when the line holds no closing `/`."""
+    """Index just past the regex literal that starts at text[i] (a `/`), or -1 when it is not one: the literal is a single
+    line (no closing `/` before the newline: -1), a backslash escapes the next character, a `/` inside `[...]` does not close it,
+    and it must be followed (after its flags) by something other than a quote, a name or a number (`a++ / 2 + "/"`)."""
     j, in_class, n = i + 1, False, len(text)
     while j < n and text[j] != "\n":
         c = text[j]
@@ -70,59 +73,171 @@ def regex_end(text, i):
         elif c == "]":
             in_class = False
         elif c == "/" and not in_class:
+            k = j + 1
+            while k < n and text[k].isalpha():
+                k += 1
+            if k < n and (text[k] in "\"'`" or text[k].isdigit() or text[k] in "$_"):
+                return -1
             return j + 1
         j += 1
     return -1
 
 
+CODE_SPECIAL = re.compile(r"[\"'`/{}]")
+STRING_SPECIAL = {'"': re.compile(r'[\\\n"]'), "'": re.compile(r"[\\\n']")}
+TEMPLATE_SPECIAL = re.compile(r"[\\`$]")
+TRAILING_WORD = re.compile(r"([\w$]+)\s*$")
+
+
 def strip_comments(text):
-    """The text without block and line comments (strings and regex literals respected), line structure unchanged: a
-    commented import is no import, and `/* x */ import qs.desktop` is one. A `/` starts a regex literal when it follows an
-    operator, an opening bracket, a separator, a regex-introducing keyword or the start of the text (the usual heuristic);
-    after a name, a number, `)`, `]` or a string it is a division. `p.replace(/\\/*$/, "")` holds no comment."""
-    out, i, n, quote, last = [], 0, len(text), None, None
+    """The text without block and line comments (strings, template literals and regex literals respected), line
+    structure unchanged: a commented import is no import, and `/* x */ import qs.desktop` is one.
+
+    A `/` starts a regex literal when the last token is an operator, an opening bracket, a separator or a
+    regex-introducing keyword (`return`, `typeof`, ...), or when it is the first token; after a name, a number, `)`, `]`, a
+    string or a postfix `++`/`--` it is a division. Known limit: `if (ok) /re/.test(s)` reads the `/` after `)` as a division.
+    When the text is ambiguous nothing is stripped (a missed comment only causes a false positive, never a missed violation):
+    a `/*` or `//` right after a backslash, and a `/*` with no closing `*/`, are not comments. `p.replace(/\\/*$/, "")` holds none.
+
+    Template literals nest: `${...}` is code again, and a backtick inside it opens a template of its own. Plain runs of
+    code and string text are copied in one piece, so the cost is that of a few regex searches per file."""
+    out, i, n = [], 0, len(text)
+    modes = []  # innermost last: ("s", quote) string, ("t",) template literal, ("e", depth) code inside `${ }`
+    last = prev = None  # the last two significant characters of code
+    word, in_word = "", False  # the identifier that ends the code so far (survives spaces and comments)
     while i < n:
-        c = text[i]
-        if quote:
-            out.append(c)
+        top = modes[-1] if modes else None
+        if top is not None and top[0] == "s":
+            m = STRING_SPECIAL[top[1]].search(text, i)
+            j = n if m is None else m.start()
+            if j > i:
+                out.append(text[i:j])
+                i = j
+                continue
+            c = text[i]
             if c == "\\" and i + 1 < n:
-                out.append(text[i + 1])
-                i += 1
-            elif c == quote or (c == "\n" and quote != "`"):
-                quote = None
-        elif c in "\"'`":
-            quote = c
+                out.append(text[i:i + 2])
+                i += 2
+                continue
             out.append(c)
-            last = c
-        elif text.startswith("//", i):
+            if c != "\\":
+                modes.pop()  # the closing quote, or a newline (an unterminated string ends with its line)
+            i += 1
+            continue
+        if top is not None and top[0] == "t":
+            m = TEMPLATE_SPECIAL.search(text, i)
+            j = n if m is None else m.start()
+            if j > i:
+                out.append(text[i:j])
+                i = j
+                continue
+            c = text[i]
+            if c == "\\" and i + 1 < n:
+                out.append(text[i:i + 2])
+                i += 2
+            elif text.startswith("${", i):
+                out.append("${")
+                modes.append(("e", 0))
+                last = prev = None
+                in_word = False
+                i += 2
+            else:
+                out.append(c)
+                if c == "`":
+                    modes.pop()
+                    last, prev, in_word = c, last, False
+                i += 1
+            continue
+        # code (top level or inside `${ }`): copy the run up to the next character that can change the state
+        m = CODE_SPECIAL.search(text, i)
+        j = n if m is None else m.start()
+        if j > i:
+            chunk = text[i:j]
+            out.append(chunk)
+            t = TRAILING_WORD.search(chunk)
+            body = chunk.rstrip()
+            if body:
+                ps = _prev_sig(body)
+                prev = ps if ps is not None else last
+                last = body[-1]
+            if t:
+                run = t.group(1)
+                word = word + run if (in_word and t.start(1) == 0) else run
+                in_word = t.end(1) == len(chunk)
+            else:
+                in_word = False
+            i = j
+            continue
+        c = text[i]
+        if top is not None and c in "{}":
+            if c == "{":
+                modes[-1] = ("e", top[1] + 1)
+            elif top[1] == 0:
+                modes.pop()
+                out.append(c)
+                last, prev, in_word = '"', last, False  # the template goes on; a value just ended
+                i += 1
+                continue
+            else:
+                modes[-1] = ("e", top[1] - 1)
+        if c in "\"'":
+            modes.append(("s", c))
+            out.append(c)
+            last, prev, in_word = c, last, False
+        elif c == "`":
+            modes.append(("t",))
+            out.append(c)
+            last, prev, in_word = c, last, False
+        elif c in "{}":
+            out.append(c)
+            last, prev, in_word = c, last, False
+        elif text.startswith("//", i) and text[i - 1:i] != "\\":
             while i < n and text[i] != "\n":
                 i += 1
             continue
-        elif text.startswith("/*", i):
-            j = text.find("*/", i + 2)
-            j = n if j < 0 else j + 2
+        elif text.startswith("/*", i) and text[i - 1:i] != "\\" and text.find("*/", i + 2) >= 0:
+            j = text.find("*/", i + 2) + 2
             out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
             i = j
             continue
-        elif c == "/" and (last is None or last in REGEX_AFTER or REGEX_AFTER_WORD.search("".join(out)[-24:])):
+        elif last is None or (last in REGEX_AFTER and not (last in "+-" and prev == last)) or (IDENT.match(last) and word in REGEX_KEYWORDS):
             j = regex_end(text, i)
             if j > 0:
                 out.append(text[i:j])
-                last = ")"
+                last, prev, in_word = ")", last, False
                 i = j
                 continue
             out.append(c)
-            last = c
+            last, prev, in_word = c, last, False
         else:
-            out.append(c)
-            if not c.isspace():
-                last = c
+            out.append(c)  # a division
+            last, prev, in_word = c, last, False
         i += 1
     return "".join(out)
 
 
+def _prev_sig(body):
+    """The significant character before the last one of `body` (which ends in a significant character)."""
+    k = len(body) - 2
+    while k >= 0 and body[k].isspace():
+        k -= 1
+    return body[k] if k >= 0 else None
+
+
+_STRIPPED = {}
+
+
+def stripped_lines(path):
+    """The comment-stripped lines of a file, tokenised once per version of the file (path, mtime, size)."""
+    st = os.stat(path)
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if key not in _STRIPPED:
+        _STRIPPED[key] = strip_comments(path.read_text(encoding="utf-8")).splitlines()
+    return _STRIPPED[key]
+
+
 def code_lines(path):
-    return strip_comments(path.read_text(encoding="utf-8")).splitlines()
+    return stripped_lines(path)
 
 
 def line_text(path, n):
@@ -452,6 +567,17 @@ def selftest():
     run("a division is not a regex start", {**clean, "services/Apps.qml": "Item { property real x: (a) / 2 / 3 }\nimport qs.dock\n"}, low)
     run("a string holding /* is no comment", {**clean, "services/Apps.qml": 'Item { property string s: "/*" }\nimport qs.dock\n'}, low)
     run("a string holding // is no comment", {**clean, "services/Apps.qml": "Item { property string s: 'http://x' }\nimport qs.dock\n"}, low)
+    run("a keyword before a long comment still introduces a regex",
+        {**clean, "search/S.qml": 'Item { function f(p) { return /* a comment longer than 24 chars */ /\\/*/.test(p); }\n function onRawEvent() {} }\n'},
+        "raw Hyprland events go through qs.platform")
+    run("a postfix ++ before a division, strings holding / and /*", {**clean, "services/Apps.qml": 'Item { property var x: a++ / 2 + "/" + "/*" }\nimport qs.dock\n'}, low)
+    run("a nested template literal holding /* is no comment",
+        {**clean, "services/Apps.qml": 'Item { property string s: `a ${ `b/*c` } d` }\nimport qs.dock\n'}, low)
+    run("after ) a regex is read as a division (known limit): a backslash before /* keeps the text",
+        {**clean, "services/Apps.qml": 'Item { function f() { if (ok) /\\/*/.test(s); } }\nimport qs.dock\n'}, low)
+    run("a backslash before /* keeps the text even when a later comment closes it",
+        {**clean, "services/Apps.qml": 'Item { function f() { if (ok) /\\/*/.test(s); } }\nimport qs.dock\n/* later */\n'}, low)
+    run("a /* with no closing */ is no comment", {**clean, "services/Apps.qml": "Item { property int x: 1 /* }\nimport qs.dock\n"}, low)
     run("rawEvent in a comment is not a use", {**clean, "search/S.qml": "// onRawEvent\n/* onRawEvent */\nItem {}\n"}, None)
     run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
     run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
@@ -503,6 +629,35 @@ def selftest():
         got = strip_comments(src)
         if got != want:
             failures.append(f"strip_comments {name}: {got!r} != {want!r}")
+
+    # The regex rules, pinned on regex_end: a single line, a backslash escape, a `/` inside a character class.
+    for name, src, want in [
+        ("character class holds /", "/[/]/x", 5),
+        ("escaped slash", "/a\\/b/", 6),
+        ("escaped bracket keeps the class open", "/[\\]/]/", 7),
+        ("single line", "/a\nb/", -1),
+        ("no closing slash", "/abc", -1),
+        ("followed by a string", '/ 2 + "/"', -1),
+        ("followed by a number", "/a/2", -1),
+    ]:
+        got = regex_end(src, 0)
+        if got != want:
+            failures.append(f"regex_end {name}: {got} != {want}")
+    sample = strip_comments("a++ / 2 /* c */")
+    if sample != "a++ / 2 " + " " * 7:
+        failures.append(f"a postfix ++ is followed by a division: {sample!r}")
+    sample = strip_comments("return /* long comment text here */ /a*/ + 1 /* z */")
+    if "/a*/" not in sample or "long comment" in sample or " z " in sample:
+        failures.append(f"a regex after return and a comment: {sample!r}")
+    sample = strip_comments("`a ${ `b` + /* c */ 1 } d /* kept */`")
+    if "kept" not in sample or " c " in sample:
+        failures.append(f"a template keeps its text and strips the code inside ${{}}: {sample!r}")
+    sample = strip_comments("x = 1 /* open")
+    if sample != "x = 1 /* open":
+        failures.append(f"an unterminated block comment is kept: {sample!r}")
+    sample = strip_comments("a = `x` / 2 /* c */")
+    if "/* c */" in sample:
+        failures.append(f"a division after a template: {sample!r}")
 
     # Test trees: a tree that links a shell module directory links lib too.
     with tempfile.TemporaryDirectory() as t:
