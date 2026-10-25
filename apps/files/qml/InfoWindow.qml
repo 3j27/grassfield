@@ -49,7 +49,11 @@ Window {
     onClosing: Qt.callLater(root.destroy)
 
     Component.onCompleted: {
-        if (root.info.isDir) {
+        if (root.info.isDir && String(root.info.url).startsWith("grassfield-apps:")) {
+            // The Applications location is no folder on disk: its size is the number of applications (the grid's list).
+            const n = root.app.applicationsCount();
+            root.folderSize = n === 1 ? qsTr("1 item") : qsTr("%1 items").arg(n);
+        } else if (root.info.isDir) {
             root.folderSize = qsTr("Calculating…");
             root.app.directorySize(root.info.url, (bytes, files, folders) => {
                 const n = files + folders;

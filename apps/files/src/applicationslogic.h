@@ -77,6 +77,14 @@ void disambiguate(QList<Entry> &entries);
 // Every application the grid lists, sorted by name (case-insensitive, numbers by value), then by id.
 QList<Entry> listApplications(const Environment &env);
 
+// An Icon= that is an absolute path is handed to the image provider only when it is what the shell's ThemeIcons accepts
+// (shell/services/image-copy.py read_source): at most 4096 characters, no control character, its real path under one of
+// `roots` (iconRoots(): the user's home and data folders, the system's, flatpak's, /tmp, removable media; never /proc, /sys or
+// /dev), a regular non-empty file of at most `cap` bytes, opened without following a link and without blocking (a FIFO or a
+// device planted as an icon froze the GUI thread). Returns the real path, or "" for anything else.
+QStringList iconRoots();
+QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap = 8 * 1024 * 1024);
+
 // The url of the Applications location and of one application in it: grassfield-apps:/ and grassfield-app:/<id>.
 QUrl locationUrl();
 bool isLocationUrl(const QUrl &url);

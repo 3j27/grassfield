@@ -11,6 +11,10 @@
 
 #include <algorithm>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 namespace ApplicationsLogic
 {
 
@@ -369,6 +373,58 @@ QList<Entry> listApplications(const Environment &env)
         return c != 0 ? c < 0 : a.id < b.id;
     });
     return result;
+}
+
+QStringList iconRoots()
+{
+    QStringList candidates = {qEnvironmentVariable("HOME"), QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)};
+    candidates << QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    candidates << QStringLiteral("/usr") << QStringLiteral("/opt") << QStringLiteral("/var/lib/flatpak") << QStringLiteral("/var/lib/snapd/desktop")
+               << QStringLiteral("/var/lib/AccountsService/icons") << QStringLiteral("/tmp") << QStringLiteral("/var/tmp")
+               << qEnvironmentVariable("XDG_RUNTIME_DIR") << QStringLiteral("/media") << QStringLiteral("/mnt") << QStringLiteral("/run/media")
+               << QStringLiteral("/srv");
+    QStringList roots;
+    for (const QString &c : std::as_const(candidates)) {
+        if (!c.startsWith(QLatin1Char('/')))
+            continue;
+        const QString real = QFileInfo(c).canonicalFilePath();
+        if (!real.isEmpty() && real != QLatin1String("/") && !roots.contains(real))
+            roots << real;
+    }
+    return roots;
+}
+
+QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap)
+{
+    auto under = [&roots](const QString &p) {
+        for (const QString &r : roots) {
+            if (p == r || p.startsWith(r + QLatin1Char('/')))
+                return true;
+        }
+        return false;
+    };
+    static const QRegularExpression control(QStringLiteral("[\\x00-\\x1f\\x7f]"));
+    if (!path.startsWith(QLatin1Char('/')) || path.size() > 4096 || path.contains(control))
+        return {};
+    const QString real = QFileInfo(path).canonicalFilePath();
+    if (real.isEmpty() || !under(real))
+        return {};
+    const QByteArray native = QFile::encodeName(real);
+    struct stat info;
+    if (::lstat(native.constData(), &info) != 0 || !S_ISREG(info.st_mode))
+        return {};
+    const int fd = ::open(native.constData(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+    if (fd < 0)
+        return {};
+    bool ok = ::fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && info.st_size > 0 && info.st_size <= cap;
+    if (ok) {
+        char link[4097];
+        const QByteArray self = "/proc/self/fd/" + QByteArray::number(fd);
+        const ssize_t n = ::readlink(self.constData(), link, sizeof(link) - 1);
+        ok = n > 0 && under(QString::fromLocal8Bit(link, static_cast<int>(n)));
+    }
+    ::close(fd);
+    return ok ? real : QString();
 }
 
 QUrl locationUrl()

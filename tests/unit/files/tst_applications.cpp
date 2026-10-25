@@ -12,6 +12,8 @@
 #include <QSet>
 #include <QTemporaryDir>
 
+#include <sys/stat.h>
+
 #include "applicationslogic.h"
 
 using namespace ApplicationsLogic;
@@ -290,6 +292,32 @@ TEST(Applications, TheFileIsReadAsQuickshellReadsIt)
     EXPECT_EQ(names.value(QStringLiteral("trail")), QStringLiteral("Trail  "));
     EXPECT_EQ(names.value(QStringLiteral("masked")), QStringLiteral("System"));
     EXPECT_EQ(names.value(QStringLiteral("kde-foo")), QStringLiteral("flat"));
+}
+
+// An absolute Icon= goes to the image provider only through the shell's rules: a FIFO planted as an icon hung the GUI thread.
+TEST(Applications, AnIconFileMustBeASmallRegularFileUnderTheAllowedRoots)
+{
+    QTemporaryDir tmp, outside;
+    ASSERT_TRUE(tmp.isValid() && outside.isValid());
+    const QString root = QFileInfo(tmp.path()).canonicalFilePath();
+    const QStringList roots = {root};
+    write(tmp.filePath(QStringLiteral("ok.png")), "x");
+    write(tmp.filePath(QStringLiteral("empty.png")), "");
+    write(tmp.filePath(QStringLiteral("big.png")), QByteArray(2000, 'x'));
+    write(outside.filePath(QStringLiteral("elsewhere.png")), "x");
+    ASSERT_EQ(::mkfifo(QFile::encodeName(tmp.filePath(QStringLiteral("fifo.png"))).constData(), 0600), 0);
+    ASSERT_TRUE(QFile::link(outside.filePath(QStringLiteral("elsewhere.png")), tmp.filePath(QStringLiteral("link-out.png"))));
+    ASSERT_TRUE(QFile::link(tmp.filePath(QStringLiteral("ok.png")), tmp.filePath(QStringLiteral("link-in.png"))));
+    EXPECT_EQ(safeIconFile(tmp.filePath(QStringLiteral("ok.png")), roots, 1000), root + QStringLiteral("/ok.png"));
+    EXPECT_EQ(safeIconFile(tmp.filePath(QStringLiteral("link-in.png")), roots, 1000), root + QStringLiteral("/ok.png"));
+    for (const char *refused : {"empty.png", "big.png", "fifo.png", "link-out.png", "missing.png"})
+        EXPECT_EQ(safeIconFile(tmp.filePath(QString::fromLatin1(refused)), roots, 1000), QString()) << refused;
+    EXPECT_EQ(safeIconFile(QStringLiteral("relative.png"), roots), QString());
+    EXPECT_EQ(safeIconFile(tmp.filePath(QStringLiteral("ok.png")) + QStringLiteral("\n"), roots), QString());
+    EXPECT_EQ(safeIconFile(QStringLiteral("/proc/self/environ"), roots), QString());
+    EXPECT_EQ(safeIconFile(QStringLiteral("/dev/zero"), QStringList{QStringLiteral("/dev")}), QString()); // a device is no regular file
+    EXPECT_TRUE(iconRoots().contains(QFileInfo(QStringLiteral("/usr")).canonicalFilePath()));
+    EXPECT_FALSE(iconRoots().contains(QStringLiteral("/proc")));
 }
 
 TEST(Applications, UrlsRoundTrip)

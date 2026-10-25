@@ -2815,6 +2815,10 @@
         <translation>Le lien web n’a pas été ouvert&#xa0;: aucun navigateur web par défaut n’est défini.</translation>
     </message>
     <message>
+        <source>An application is not a file: it cannot be opened with another application.</source>
+        <translation>Une application n’est pas un fichier&#xa0;: elle ne peut pas être ouverte avec une autre application.</translation>
+    </message>
+    <message>
         <source>The application is no longer installed.</source>
         <translation>L’application n’est plus installée.</translation>
     </message>
@@ -3582,6 +3586,14 @@
     <message>
         <source>%1 Info</source>
         <translation>Informations sur %1</translation>
+    </message>
+    <message>
+        <source>1 item</source>
+        <translation>1 élément</translation>
+    </message>
+    <message>
+        <source>%1 items</source>
+        <translation>%1 éléments</translation>
     </message>
     <message>
         <source>Calculating…</source>

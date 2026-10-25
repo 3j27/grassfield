@@ -248,7 +248,13 @@ FocusScope {
 
     function copySelection(cut: bool): void {
         const urls = root.selection();
-        if (urls.length > 0 && !root.activeFolder.isApplications && !(cut && !root.itemsEditable(root.activeFolder)))
+        if (urls.length > 0 && root.activeFolder.isApplications) {
+            // Copy puts the applications' desktop entries on the clipboard; Cut is refused with the permission message
+            // (FilesApp.copyToClipboard), as Finder refuses to move an app of a folder you cannot write.
+            root.app.copyToClipboard(urls, cut);
+            return;
+        }
+        if (urls.length > 0 && !(cut && !root.itemsEditable(root.activeFolder)))
             root.app.copyToClipboard(urls, cut);
     }
 
@@ -307,6 +313,11 @@ FocusScope {
     }
 
     function renameSelection(): void {
+        if (root.activeFolder && root.activeFolder.isApplications && root.activeFolder.selectedCount === 1) {
+            // F2 on an application: the refusal Finder gives for an item you cannot rename, not silence.
+            root.app.rename(root.activeFolder.urlAt(root.activeFolder.selectedRows()[0]), "", root.activeFolder);
+            return;
+        }
         if (!root.canRename())
             return;
         root.startRename(root.activeFolder, root.activeFolder.selectedRows()[0]);
@@ -515,6 +526,7 @@ FocusScope {
                 {id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: false},
                 {separator: true},
                 {id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")},
+                {id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")},
                 {id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: false}
             ];
         }

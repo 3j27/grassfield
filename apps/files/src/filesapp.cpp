@@ -553,6 +553,8 @@ QVariantList FilesApp::applicationsFor(const QList<QUrl> &urls) const
     if (urls.isEmpty())
         return out;
     const QUrl &first = urls.first();
+    if (first.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(first))
+        return out; // an application of the Applications location is no file: nothing opens it "with"
     QMimeDatabase db;
     const QMimeType type = first.isLocalFile() ? db.mimeTypeForFile(first.toLocalFile()) : db.mimeTypeForUrl(first);
     const KService::List services = KApplicationTrader::queryByMimeType(type.name());
@@ -566,6 +568,12 @@ QVariantList FilesApp::applicationsFor(const QList<QUrl> &urls) const
 
 void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
 {
+    for (const QUrl &u : urls) {
+        if (u.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(u)) {
+            emit operationFailed(tr("An application is not a file: it cannot be opened with another application."));
+            return;
+        }
+    }
     const KService::Ptr service = KService::serviceByStorageId(storageId);
     if (!service) {
         emit operationFailed(tr("The application is no longer installed."));
@@ -588,6 +596,11 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
 QUrl FilesApp::applicationsUrl() const
 {
     return ApplicationsLogic::locationUrl();
+}
+
+int FilesApp::applicationsCount() const
+{
+    return ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment()).size();
 }
 
 bool FilesApp::isApplicationUrl(const QUrl &url) const
@@ -658,10 +671,33 @@ bool FilesApp::refuseApplicationItems(const QList<QUrl> &urls)
     return false;
 }
 
-void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
+// Copy of an application: the Finder copies the app, and pasting elsewhere makes a copy of it. Here the application is its desktop
+// entry, so Copy puts the entry's file on the clipboard (a launcher to paste somewhere); Cut is refused like a move.
+QList<QUrl> FilesApp::applicationFiles(const QList<QUrl> &urls) const
 {
-    if (refuseApplicationItems(urls))
+    QHash<QString, QString> paths;
+    for (const ApplicationsLogic::Entry &e : ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment()))
+        paths.insert(e.id, e.path);
+    QList<QUrl> files;
+    for (const QUrl &u : urls) {
+        const QString id = ApplicationsLogic::entryId(u);
+        if (id.isEmpty() || !paths.contains(id))
+            return {};
+        files << QUrl::fromLocalFile(paths.value(id));
+    }
+    return files;
+}
+
+void FilesApp::copyToClipboard(const QList<QUrl> &urlsIn, bool cut)
+{
+    QList<QUrl> urls = urlsIn;
+    if (!cut && !urls.isEmpty() && ApplicationsLogic::entryId(urls.first()).size() > 0) {
+        urls = applicationFiles(urlsIn);
+        if (urls.isEmpty())
+            return;
+    } else if (refuseApplicationItems(urls)) {
         return;
+    }
     if (urls.isEmpty())
         return;
     auto *data = new QMimeData;

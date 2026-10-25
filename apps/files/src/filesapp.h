@@ -138,7 +138,10 @@ public:
     // True (and operationFailed with the permission message) when `urls` hold an item of the Applications location or the
     // location itself: nothing can be done to them but opening.
     bool refuseApplicationItems(const QList<QUrl> &urls);
+    QList<QUrl> applicationFiles(const QList<QUrl> &urls) const;
     Q_INVOKABLE bool isApplicationUrl(const QUrl &url) const;
+    // How many applications the Applications location lists (Get Info on the location: macOS shows the size of the folder).
+    Q_INVOKABLE int applicationsCount() const;
     Q_INVOKABLE void launchApplication(const QUrl &url);
     // Glance: starts `grassfield-preview --glance` (detached) for the local regular files among `urls`.
     Q_INVOKABLE void glance(const QList<QUrl> &urls);

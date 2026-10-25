@@ -326,6 +326,18 @@ gets (Return, double-click, File > Open, the context menu), before the scripted-
   `grassfield-files: open refused (<kind>)`. No "Open Anyway" in Files, on purpose: Grassfield has no signed-app notion to
   base it on, apps start from the Dock, Apps and Search, and a program the user trusts runs from a terminal. "Open With"
   is unchanged: it opens the item WITH the chosen app (a launcher in a text editor), it never runs the item.
+- The Applications location (`grassfield-apps:/`, macOS: Finder's Applications) is the one place where Files starts an
+  application, and it is not an exception to the rule above: its items are not files and have no path. They are the virtual
+  urls `grassfield-app:/<id>` of the apps the shell's Apps grid lists (`ApplicationsLogic`); Return, double-click and
+  File > Open call `FilesApp::launchApplication` instead of `FilesApp::open` (`BrowserTab.activate`/`openSelection`), so
+  no `.desktop` file of a folder is ever handed to KIO and `LaunchGuard` is not bypassed for one. The id must resolve to an
+  INSTALLED service in KDE's database (`KService::serviceByStorageId`); the job is `KIO::ApplicationLauncherJob` with no URL
+  argument, which KIO runs in a systemd unit of its own, like Open With. `GRASSFIELD_FILES_NO_LAUNCH` blocks it. Open With
+  is not offered for these items and `FilesApp::openWith`/`applicationsFor` refuse them (a desktop entry is not a file to
+  open with another app: Kdenlive was offered for `*.kdenlive`). An absolute `Icon=` of an entry reaches the image provider
+  only if it is a regular file within 8 MiB under the shell's allowed roots (`ApplicationsLogic::safeIconFile`; a FIFO
+  hung the GUI thread). Copy puts the entry's file on the clipboard; Cut, Rename, Trash, Paste into it and drops are refused
+  with the permission message.
 - The desktop already never runs `.desktop` files (`DesktopFiles.qml`, DT-11). The shell's `gio open` / `xdg-open` paths
   (Search results, Dock stacks) hand files to their MIME handler; not changed here.
 Tests: `tests/unit/files/tst_launchguard.cpp` (verdicts; DT-10 on real files: `t.desktop` executable and not,

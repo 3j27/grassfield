@@ -120,14 +120,20 @@ constexpr int kPreviewBatchSize = 32;
 // An expected item that has not appeared by then (failed or slow job) no longer steers the selection.
 constexpr int kExpectationLifetimeMs = 10000;
 
-// An application's icon: a theme icon name as is, an absolute path as is, anything else (a missing or unknown icon) the
-// generic application icon.
+// An application's icon: a theme icon name as is; an absolute path only when it passes the shell's rules for an Icon= file
+// (ApplicationsLogic::safeIconFile: a regular file within the size cap under the allowed roots, never a FIFO or a device,
+// which the image provider would block the GUI thread on); anything else (a missing or unknown icon) the generic application
+// icon.
 QString applicationIconName(const QString &name)
 {
-    if (name.startsWith(QLatin1Char('/')) && QFileInfo::exists(name))
+    static const QStringList roots = ApplicationsLogic::iconRoots();
+    if (name.startsWith(QLatin1Char('/'))) {
+        const QString file = ApplicationsLogic::safeIconFile(name, roots);
+        if (!file.isEmpty())
+            return file;
+    } else if (!name.isEmpty() && QIcon::hasThemeIcon(name)) {
         return name;
-    if (!name.isEmpty() && !name.startsWith(QLatin1Char('/')) && QIcon::hasThemeIcon(name))
-        return name;
+    }
     return QIcon::hasThemeIcon(QStringLiteral("application-x-executable")) ? QStringLiteral("application-x-executable") : QStringLiteral("text-x-generic");
 }
 

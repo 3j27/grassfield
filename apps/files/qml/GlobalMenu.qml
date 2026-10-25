@@ -42,7 +42,9 @@ Platform.MenuBar {
     // Open With: the applications for a selection of files (re-read when the selection changes).
     readonly property var openWithApps: {
         const f = bar.folder;
-        if (!f || f.selectedCount === 0 || f.isTrash)
+        // Not in Applications: an item there is an application (the desktop entry is not a file to open with another one:
+        // Kdenlive offered itself for "*.kdenlive" and was started with a grassfield-app: URL).
+        if (!f || f.selectedCount === 0 || f.isTrash || f.isApplications)
             return [];
         const rows = f.selectedRows();
         if (!rows.every(r => !f.isDirAt(r)))
@@ -228,7 +230,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Copy %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Copy “%1”").arg(bar.firstName) : qsTr("Copy")
             shortcut: "Ctrl+C"
-            enabled: bar.count > 0 && !bar.inApplications
+            enabled: bar.count > 0
             onTriggered: bar.tab.copySelection(false)
         }
         Platform.MenuItem {
