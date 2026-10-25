@@ -29,6 +29,8 @@ ShellRoot {
             "appearance": "appearance",
             "notifications.history": "notificationsHistory",
             "menubar.autoHide": "menubarAutoHide",
+            "menubar.recentItems": "menubarRecentItems",
+            "menubar.clockDate": "menubarClockDate",
             "menubar.showNowPlaying": "data.menubar.showNowPlaying",
             "pointer.outlineColor": "pointerOutlineColor",
             "dock.folders": "dockFolders"

@@ -6,7 +6,8 @@
 # Prints one line per check, "ok:" or "WARN:". Exit status 0 unless --strict and a check warned. The package runs it after
 # install and upgrade (grassfield-desktop.install); the owner can run it any time, for example after an Omarchy update.
 #
-# Test hook: GRASSFIELD_LOGIN_ROOT (prefix of /usr and /etc).
+# Test hooks: GRASSFIELD_LOGIN_ROOT (prefix of /usr and /etc), GRASSFIELD_LOGIN_SDDM_START (epoch seconds when the SDDM daemon
+# started, instead of asking the process table; empty or 0 means no daemon to compare).
 
 root=${GRASSFIELD_LOGIN_ROOT:-}
 warned=0
@@ -42,10 +43,23 @@ if [ -r "$dropin" ]; then
     *) warn "another SDDM file overrides SessionDir ($last_dir): the login screen may not start Grassfield" ;;
   esac
   if [ -n "$user" ]; then
-    [ "$last_session" = grassfield-login.desktop ] && ok "autologin starts Grassfield" ||
+    [ "$last_session" = grassfield-login.desktop ] && ok "a boot (autologin) starts Grassfield" ||
       warn "autologin starts '$last_session', not grassfield-login.desktop (a file sorted after grassfield.conf sets it)"
   else
-    ok "no autologin configured"
+    ok "no autologin: a boot shows the login screen, which starts the session described below"
+  fi
+  # SDDM reads its configuration once, when the daemon starts: a daemon older than the drop-in still starts the old session
+  # (autologin) and lists the old session directories. Only a restart of the computer applies it (never restart SDDM from
+  # inside a session: it ends the session).
+  start=${GRASSFIELD_LOGIN_SDDM_START-}
+  if [ -z "${GRASSFIELD_LOGIN_SDDM_START+x}" ]; then
+    pid=$(pgrep -xo sddm 2>/dev/null)
+    [ -n "$pid" ] && start=$(( $(date +%s) - $(ps -o etimes= -p "$pid" 2>/dev/null | tr -d ' ' || echo 0) ))
+  fi
+  # The change time, not the modification time: pacman keeps the package's build mtime, the install moves ctime.
+  mtime=$(stat -c %Z "$dropin" 2>/dev/null || echo 0)
+  if [ -n "$start" ] && [ "$start" != 0 ] && [ "$start" -lt "$mtime" ]; then
+    warn "SDDM has been running since before the drop-in was installed: restart the computer once to apply it (until then the login screen still starts the previous session)"
   fi
 else
   warn "/etc/sddm.conf.d/grassfield.conf is missing: the login screen starts Omarchy (run: grassfield-login set grassfield after restoring it)"
@@ -62,7 +76,9 @@ qml=$root/usr/share/sddm/themes/$theme/Main.qml
 if [ -z "$theme" ] || [ ! -r "$qml" ]; then
   ok "SDDM theme '${theme:-default}' has no readable Main.qml here (nothing to check)"
 elif grep -q 'indexOf("uwsm")' "$qml"; then
-  ok "theme '$theme' picks the first session named '*uwsm*' (Grassfield (uwsm) is first)"
+  # Main.qml: sessionIndex is the first session whose name contains "uwsm"; only without such a session does it fall back to
+  # sessionModel.lastIndex, the remembered one (SDDM RememberLastSession=true by default). The list order is SessionDir's.
+  ok "login screen (logout): theme '$theme' starts the first listed session named '*uwsm*', 'Grassfield (uwsm)' once SDDM applies the drop-in; the remembered session only when no name has uwsm"
 elif grep -q 'sessionModel' "$qml" && grep -qi 'ComboBox\|ListView\|session.*select' "$qml"; then
   ok "theme '$theme' offers a session picker: choose 'Grassfield (uwsm)'"
 else

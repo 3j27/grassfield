@@ -200,7 +200,7 @@ plugin_lines "$l0"
 say "5 the session locked"
 l0=$(log_at)
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 \
-  setsid "$root/scripts/dev/isolated.sh" --name reveal-locker qs -p "$foreign" --no-color >>"$work/locker.log" 2>&1 </dev/null &
+  setsid "$root/scripts/dev/isolated.sh" --name reveal-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$work/locker.log" 2>&1 </dev/null &
 locker_pid=$!
 locked=""
 for _ in $(seq 1 60); do

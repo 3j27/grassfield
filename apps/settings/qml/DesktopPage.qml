@@ -215,51 +215,6 @@ SettingsPage {
     }
 
     SettingsGroup {
-        caption: qsTr("Menu Bar")
-
-        SettingsRow {
-            title: qsTr("Show menu bar background")
-            subtitle: qsTr("Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.")
-            Toggle {
-                accessibleName: qsTr("Show menu bar background")
-                checked: root.store.value("menubar.showBackground")
-                onToggled: c => root.store.set("menubar.showBackground", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Automatically hide and show the menu bar")
-            subtitle: qsTr("A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.")
-            ComboBox {
-                accessibleName: qsTr("Automatically hide and show the menu bar")
-                model: [{id: "always", text: qsTr("Always")}, {id: "desktop", text: qsTr("On Desktop Only")}, {id: "fullscreen", text: qsTr("In Full Screen Only")}, {id: "never", text: qsTr("Never")}]
-                value: root.store.value("menubar.autoHide")
-                onPicked: id => root.store.set("menubar.autoHide", id)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Show Now Playing in the menu bar")
-            subtitle: qsTr("While a media player has a track, a button in the menu bar opens its controls.")
-            Toggle {
-                accessibleName: qsTr("Show Now Playing in the menu bar")
-                checked: root.store.value("menubar.showNowPlaying")
-                onToggled: c => root.store.set("menubar.showNowPlaying", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Show Search in the menu bar")
-            subtitle: qsTr("A magnifier button in the menu bar opens Search.")
-            Toggle {
-                accessibleName: qsTr("Show Search in the menu bar")
-                checked: root.store.value("menubar.showSearch")
-                onToggled: c => root.store.set("menubar.showSearch", c)
-            }
-        }
-    }
-
-    SettingsGroup {
         caption: qsTr("Desktop")
 
         SettingsRow {

@@ -450,6 +450,15 @@ TestCase {
         compare(WallpaperConfig.picturesRoot(Object.assign({}, prod, {picturesDir: "/home/u/Bilder"})), "/home/u/Bilder");
     }
 
+    function test_toolLocale() {
+        const none = {lcAll: "", lcCtype: "", lang: ""};
+        compare(WallpaperConfig.toolEnvironment(none).LC_ALL, "C.UTF-8");
+        compare(WallpaperConfig.toolEnvironment({lcAll: "", lcCtype: "", lang: "C"}).LC_ALL, "C.UTF-8");
+        compare(WallpaperConfig.toolEnvironment({lcAll: "C", lcCtype: "", lang: "fr_FR.UTF-8"}).LC_ALL, "C.UTF-8");
+        compare(Object.keys(WallpaperConfig.toolEnvironment({lcAll: "", lcCtype: "", lang: "fr_FR.UTF-8"})).length, 0);
+        compare(Object.keys(WallpaperConfig.toolEnvironment({lcAll: "en_US.utf8", lcCtype: "", lang: "C"})).length, 0);
+    }
+
     function test_stripContrast() {
         const black = WallpaperConfig.stripContrast(0, 0);
         fuzzyCompare(black.white, 21, 1e-9);

@@ -3,7 +3,10 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Mpris
+import Grassfield.Ui
+import qs.platform
 import "../widgets/ArtUrl.js" as ArtUrl // layering-exception: GF-087
+import "MediaLogic.js" as Logic
 
 // Active MPRIS player: the first one that is playing, else the first one. null when none runs.
 Singleton {
@@ -72,5 +75,79 @@ Singleton {
             return;
         if (available && player.canGoPrevious)
             player.previous();
+    }
+
+    // macOS: a click on the Now Playing artwork or title opens the app that plays (MediaLogic.openPlan: the player's
+    // Raise() when it can, the app's window when it is minimized or Raise() is missing, else the desktop entry).
+    // `fromOverlay`: the click came from a panel of the overlay window, which holds the keyboard exclusively until it is
+    // gone; Hyprland refuses to focus a window meanwhile, so the focus waits for `closelayer` of `grassfield-overlay`
+    // (the Dock menu's mechanism, Compositor.layerClosed, at most Tokens.dockMenuLayerWait ms).
+    function openPlayerApp(fromOverlay: bool): void {
+        if (!available || SessionState.locked)
+            return;
+        const id = Logic.appIdOf(player.desktopEntry);
+        const entry = Apps.lookup(id !== "" ? id : player.identity);
+        // The windows the Dock groups under this entry (the same lookup: StartupWMClass and Flatpak ids included).
+        const all = Compositor.toplevels ? Compositor.toplevels.values : [];
+        const wins = entry ? all.filter(t => {
+            const e = Apps.lookup(t.appId);
+            return e && e.id === entry.id;
+        }) : (id !== "" ? Compositor.toplevelsFor(id) : []);
+        const plan = Logic.openPlan(player.canRaise, entry !== null && entry !== undefined, wins.map(t => ({minimized: Compositor.isMinimized(t)})));
+        const run = () => {
+            if (plan === "raise") {
+                if (!devGuarded("raise"))
+                    player.raise();
+            } else if (plan === "activate") {
+                Compositor.activate(Compositor.mostRecent(wins));
+            } else if (plan === "launch") {
+                Apps.launch(entry);
+            }
+        };
+        if (Logic.skipsFocusReturn(fromOverlay, plan))
+            FocusReturn.skip();
+        if (fromOverlay === true && (plan === "raise" || plan === "activate")) {
+            deferred = run;
+            layerWait.restart();
+        } else {
+            run();
+        }
+    }
+
+    property var deferred: null
+
+    function runDeferred(): void {
+        const f = deferred;
+        deferred = null;
+        layerWait.stop();
+        // A session that locked meanwhile is never acted on.
+        if (f && !SessionState.locked)
+            f();
+    }
+
+    Timer {
+        id: layerWait
+        interval: Tokens.dockMenuLayerWait
+        onTriggered: root.runDeferred()
+    }
+
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (SessionState.locked) {
+                root.deferred = null;
+                layerWait.stop();
+            }
+        }
+    }
+
+    Connections {
+        target: Compositor
+
+        function onLayerClosed(namespace: string): void {
+            if (root.deferred && namespace === "grassfield-overlay")
+                root.runDeferred();
+        }
     }
 }

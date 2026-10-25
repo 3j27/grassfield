@@ -131,9 +131,12 @@ def number(value):
 
 
 def trusted(entry):
-    """True for an entry written by systemd-coredump itself. _EXE and _SYSTEMD_UNIT are trusted fields (journald takes them
-    from the sender's credentials): a process of the user that logs the same MESSAGE_ID has its own _EXE."""
-    return (text_of(entry.get("_EXE")) in COREDUMP_EXES and text_of(entry.get("_SYSTEMD_UNIT")).startswith("systemd-coredump@")
+    """True for an entry written by systemd-coredump itself. _SYSTEMD_UNIT and _EXE are trusted fields (journald takes them from
+    the sender's credentials): the unit must be systemd-coredump@*, a unit a process of the user cannot be in, and _EXE, when
+    journald recorded one (2 of 127 real entries have none), must be systemd-coredump's. A user-manager unit (user@1000.service,
+    app scopes, services) is refused whatever _EXE says."""
+    exe = text_of(entry.get("_EXE"))
+    return (text_of(entry.get("_SYSTEMD_UNIT")).startswith("systemd-coredump@") and (exe == "" or exe in COREDUMP_EXES)
             and text_of(entry.get("MESSAGE_ID")) == COREDUMP_MESSAGE_ID)
 
 
@@ -173,7 +176,8 @@ def app_scope(entry, uid):
 
 def scope_state(cgroup, root=None):
     """"gone" (no such cgroup), "empty" (populated 0), "populated" or "unknown" (not readable): the application quit only for
-    gone and empty."""
+    gone and empty. A cgroup that is missing only counts as gone when the cgroup2 tree itself is there (cgroup.controllers):
+    no tree (an unmounted or hidden /sys/fs/cgroup) is unknown, never "everything quit"."""
     base = (root or CGROUP_ROOT) + cgroup
     try:
         with open(base + "/cgroup.events", encoding="utf-8") as f:
@@ -182,7 +186,9 @@ def scope_state(cgroup, root=None):
                     return {"0": "empty", "1": "populated"}.get(line.split()[1], "unknown")
         return "unknown"
     except FileNotFoundError:
-        return "unknown" if os.path.isdir(base) else "gone"
+        if os.path.isdir(base) or not os.path.isfile((root or CGROUP_ROOT) + "/cgroup.controllers"):
+            return "unknown"
+        return "gone"
     except OSError:
         return "unknown"
 
@@ -192,7 +198,7 @@ def scope_state(cgroup, root=None):
 def data_dirs(env):
     home = env.get("XDG_DATA_HOME") or os.path.join(env.get("HOME", ""), ".local/share")
     dirs = (env.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
-    flatpak = [os.path.join(home, "../flatpak/exports/share"), "/var/lib/flatpak/exports/share"]
+    flatpak = [os.path.join(home, "flatpak/exports/share"), "/var/lib/flatpak/exports/share"]
     return [d for d in [home] + dirs + flatpak if d]
 
 
@@ -302,6 +308,10 @@ def candidate(entry, uid):
 def describe(cand, env):
     """What to show for a candidate: {"name", "key", "desktop_id", "signal"}. Without a unique entry: the executable's name."""
     found = desktop_entry(cand["appid"], env)
+    if found is None and cand["exe"] != cand["appid"]:
+        # Chromium-based apps (Chromium, Chrome, Electron apps, Spotify) move the browser process into a scope of their own named
+        # after their application id (org.chromium.Chromium), which is not a desktop file id: the crashed binary is the key.
+        found = desktop_entry(cand["exe"], env)
     return {"name": found[1] if found else cand["exe"], "key": found[0] if found else cand["exe"],
             "desktop_id": found[0] if found else None, "signal": cand["signal"]}
 
@@ -346,9 +356,23 @@ def reopen(desktop_id):
     return r.returncode == 0
 
 
-def close_notice(notice_id):
-    """Close a notification by id: our server never expires critical notices, and a Reopen button must not outlive its wait."""
-    if notice_id:
+def server_owner():
+    """The bus name that owns org.freedesktop.Notifications (":1.42"), or None. Notification ids belong to one server process."""
+    try:
+        r = subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path", "/org/freedesktop/DBus",
+                            "--method", "org.freedesktop.DBus.GetNameOwner", "org.freedesktop.Notifications"],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"':?([0-9.:A-Za-z_-]+)'", r.stdout) if r.returncode == 0 else None
+    return found.group(1) if found else None
+
+
+def close_notice(notice_id, owner=None):
+    """Close a notification by id: our server never expires critical notices, and a Reopen button must not outlive its wait. Ids
+    are the server's: when it restarted since the notice was shown (another owner of the name, or an unknown one) the id may be
+    another notice's, so nothing is closed."""
+    if notice_id and owner and server_owner() == owner:
         try:
             subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
                             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.CloseNotification",
@@ -362,6 +386,7 @@ class Waiting:
 
     def __init__(self, proc, job, now):
         self.proc, self.job, self.started = proc, job, now
+        self.owner = server_owner()  # who showed it: ids are only good for that server
         self.buf = b""
         os.set_blocking(proc.stdout.fileno(), False)
 
@@ -458,7 +483,7 @@ class Watcher:
                 w.proc.wait()
                 w.proc.stdout.close()
                 self.waiting.remove(w)
-                close_notice(notice_id)
+                close_notice(notice_id, w.owner)
             return
         w.proc.stdout.close()
         self.waiting.remove(w)

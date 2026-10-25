@@ -103,8 +103,10 @@ must be unchanged. In the Grassfield session, changing the icon theme with `gset
 
 ## 4. Log out, enter Grassfield, come back
 
-**Normal route (after section 3 with the SDDM drop-in): log out of Omarchy and log in.** The greeter (or the autologin after a
-reboot) now starts Grassfield. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
+**Normal route (after section 3 with the SDDM drop-in): restart the computer once after the first install.** SDDM reads its
+configuration only when its daemon starts, so a daemon that ran before the install still starts your previous session (this
+happened on the first 1.0.0-rc1 install). After that one reboot the greeter (and the autologin) starts Grassfield; later
+logouts and logins need nothing. `grassfield-login-check` says "restart the computer once" while SDDM is older than the drop-in. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
 Check once, read-only, in either session:
 ```bash
 grassfield-login-check ; grassfield-login get
@@ -202,7 +204,7 @@ grassfield-compositor-0.4.0-10-x86_64.pkg.tar.zst` from `packaging/arch`, then l
       Windows has the three switches.
 - [ ] Menu bar: the icons of your apps (Spotify, Discord, Steam...) with their menus; Now Playing while music plays
       (artwork and controls); the Search magnifier; it reveals over a full-screen window at the top edge; Settings >
-      Desktop & Dock > Menu Bar > "Automatically hide and show the menu bar".
+      Menu Bar > "Automatically hide and show the menu bar".
 - [ ] Menu bar: a second click on an open menu title closes it even without moving the mouse.
 - [ ] Grassfield menu > Recent Items: the apps you launched and your recent documents; Clear Menu.
 - [ ] Dock: its menu lists the app's windows; Option (Alt) shows Force Quit and Hide Others; Trash > Empty Trash…;

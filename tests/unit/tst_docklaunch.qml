@@ -88,6 +88,61 @@ TestCase {
     }
 
     // Window list at the top of an app's Dock menu (macOS): most recent first, a check on the most recent visible window.
+    function test_menuWindowsSameTitleIsNumberedInWindowOrder() {
+        Launch.resetNumbers();
+        const rows = Launch.menuWindows([wi("a", "foot", 1, false), wi("b", "foot", 9, false), wi("c", "", 5, false), wi("d", "App", 2, false)], 40, "App");
+        compare(rows.map(r => r.ref).join(","), "b,c,d,a");
+        compare(rows.map(r => r.title).join("|"), "foot (2)|App|App (2)|foot");
+        compare(rows[0].checked, true);
+        compare(rows.filter(r => r.checked).length, 1);
+    }
+
+    function test_menuWindowsLongSameTitlesStayDistinct() {
+        Launch.resetNumbers();
+        const long1 = "chapdel@archlinux: ~/workspace/grassfield-a";
+        const long2 = "chapdel@archlinux: ~/workspace/grassfield-b";
+        const rows = Launch.menuWindows([wi("p", long1, 2, false), wi("q", long2, 1, false)], 40, "App");
+        // Elided to the same 40 characters: the number follows the cut and every row is told apart.
+        compare(rows.length, 2);
+        verify(rows[0].title !== rows[1].title);
+        verify(rows.some(r => /\(2\)$/.test(r.title)));
+        verify(rows.every(r => r.title.length <= 44));
+    }
+
+    function test_menuWindowsNumberStaysWithItsWindow() {
+        Launch.resetNumbers();
+        const all = [wi("x", "foot", 3, false), wi("y", "foot", 2, false), wi("z", "foot", 1, false)];
+        let rows = Launch.menuWindows(all, 40, "App");
+        compare(rows.map(r => r.title).join("|"), "foot|foot (2)|foot (3)");
+        // The first window closes: the others keep their numbers.
+        rows = Launch.menuWindows(all.slice(1), 40, "App");
+        compare(rows.map(r => r.title).join("|"), "foot (2)|foot (3)");
+        // Only one left: no number at all.
+        rows = Launch.menuWindows([all[2]], 40, "App");
+        compare(rows[0].title, "foot");
+        Launch.resetNumbers();
+    }
+
+    function test_menuWindowsOtherAppsDoNotRenumber() {
+        Launch.resetNumbers();
+        const a = [wi("a1", "foot", 2, false), wi("a2", "foot", 1, false)];
+        compare(Launch.menuWindows(a, 40, "Foot", "foot").map(r => r.title).join("|"), "foot|foot (2)");
+        // Another app's menu, with a window of the same title.
+        compare(Launch.menuWindows([wi("b1", "foot", 3, false), wi("b2", "foot", 2, false), wi("b3", "foot", 1, false)], 40, "Kitty", "kitty").map(r => r.title).join("|"), "foot|foot (2)|foot (3)");
+        compare(Launch.menuWindows(a, 40, "Foot", "foot").map(r => r.title).join("|"), "foot|foot (2)");
+        Launch.resetNumbers();
+    }
+
+    function test_menuWindowsLiteralLabelIsNotDuplicated() {
+        Launch.resetNumbers();
+        const rows = Launch.menuWindows([wi("p", "foot", 3, false), wi("q", "foot", 2, false), wi("r", "foot (2)", 1, false)], 40, "App", "t");
+        compare(rows.length, 3);
+        const titles = rows.map(r => r.title);
+        compare(new Set(titles).size, 3, titles.join("|"));
+        verify(titles.indexOf("foot (2)") >= 0);
+        Launch.resetNumbers();
+    }
+
     function test_menuWindowsRecentFirstWithCheck() {
         const rows = Launch.menuWindows([wi("a", "Old", 1, false), wi("b", "New", 9, false), wi("c", "Mid", 5, false)], 40, "App");
         compare(rows.map(r => r.ref).join(","), "b,c,a");

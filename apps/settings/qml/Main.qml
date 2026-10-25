@@ -36,7 +36,8 @@ Window {
         {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
         {id: "wallpaper", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
         {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
-        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent")},
+        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
+        {id: "menubar", title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "mouse", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
@@ -475,6 +476,8 @@ Window {
                     return accessibilityPage;
                 case "desktop":
                     return desktopPage;
+                case "menubar":
+                    return menuBarPage;
                 case "notifications":
                     return notificationsPage;
                 case "lock":
@@ -552,6 +555,14 @@ Window {
     }
 
     Component {
+        id: menuBarPage
+        MenuBarPage {
+            store: cfg
+            onClockOptionsRequested: clockSheet.open()
+        }
+    }
+
+    Component {
         id: notificationsPage
         NotificationsPage {
             store: cfg
@@ -585,5 +596,11 @@ Window {
         AboutPage {
             backend: root.backend
         }
+    }
+
+    // Menu Bar > Clock Options…: a sheet over the whole window.
+    ClockOptionsSheet {
+        id: clockSheet
+        store: cfg
     }
 }
