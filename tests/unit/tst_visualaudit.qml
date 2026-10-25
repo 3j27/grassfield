@@ -76,6 +76,16 @@ TestCase {
         verify(Tokens.quicksettingsCell > 0);
     }
 
+    // Priority 9: Apps header row. A borderless 56-pt row, 24-pt glyph and type; the first icon row about 30 under the chips.
+    function test_appsHeaderMetrics() {
+        compare(Tokens.launcherHeaderHeight, 56);
+        compare(Tokens.launcherGlassSize, 24);
+        compare(Tokens.launcherQueryFontSize, 24);
+        // chips, their hairline gap, the gap to the grid and the grid's own top margin (spacing.sm): about 30 to the first icon.
+        const toIcons = Tokens.launcherChipHairlineGap + 1 + Tokens.launcherChipToGrid + Tokens.spacingSm;
+        verify(toIcons >= 30 && toIcons <= 42, String(toIcons));
+    }
+
     function readFile(url) {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, false);

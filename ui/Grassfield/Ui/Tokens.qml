@@ -913,8 +913,6 @@ QtObject {
     readonly property int settingsSidebarItemHeight: 30
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSidebarIconSize: 14
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSearchHeight: 28
     // Settings content width, macOS 460 (was 520); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int settingsContentMaxWidth: 460
     // Plain Settings row, macOS 36 (was 40); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -1347,10 +1345,6 @@ QtObject {
     readonly property real launcherLabelLineHeight: 1.2
     // estimate: icon to label [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherLabelGap: 6
-    // estimate: pill search field (Search uses a 48-pt field; F1 low confidence) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
-    readonly property int launcherSearchHeight: 36
-    // A2: dark appearance only. The search field keeps the light translucent fill (macOS model, docs/specs/apps.md) but at 0.10 instead of material.fillOpacity 0.14: the lighter backdrop under the light placeholder (textSecondary) gave 4.30:1 on a white wallpaper at transparency 0.6; the light appearance keeps material.fillOpacity
-    readonly property real launcherSearchFillOpacityDark: 0.1
     // F1 reference: category chips about 23-24 tall [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipHeight: 24
     // F1 reference: chip gap about 7.6 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
@@ -1373,6 +1367,16 @@ QtObject {
     readonly property real launcherEmptyOffsetFraction: 0.33
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherOpenScale: 0.96
+    // Borderless header row with the glass glyph and the title that the query replaces, hairline below, macOS 56 (was a 36-pt capsule field with an accent ring); audit 2026-10-25 priority 9 (Apps header row; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/apps.md]
+    readonly property int launcherHeaderHeight: 56
+    // Magnifier glyph of the header row, macOS 24; audit 2026-10-25 priority 9 (Apps header row; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/apps.md]
+    readonly property int launcherGlassSize: 24
+    // Title and query type of the header row, macOS ~24-25 regular; audit 2026-10-25 priority 9 (Apps header row; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/apps.md]
+    readonly property int launcherQueryFontSize: Math.round(24 * Appearance.textScale)
+    // Gap between the chips and the hairline under them; audit 2026-10-25 priority 9 (Apps header row; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/apps.md]
+    readonly property int launcherChipHairlineGap: 10
+    // Gap between that hairline and the grid: the first icon row ends up about 30 under the chips (macOS 30, was 7.5); audit 2026-10-25 priority 9 (Apps header row; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/apps.md]
+    readonly property int launcherChipToGrid: 22
 
     // ADR-0014 (integrator decision 2026-10-22, the macOS model: small icons stay legible): icon edge in logical pixels below which the icon appearance modes do not apply and the Default artwork is drawn in every mode (list rows, menus, the sidebar: a plate and a recolour made json, cpp, txt, sh and csv the same tile at 16 px)
     readonly property int iconModeMinSize: 24
