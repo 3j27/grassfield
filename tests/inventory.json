@@ -196,6 +196,7 @@
  {"path": "tests/shell/menubridge_heartbeat/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_delivery/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_store/shell.qml", "layer": "headless"},
+ {"path": "tests/shell/settings_vectors/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_theme/shell.qml", "layer": "headless"},
  {"path": "tests/shell/usable/shell.qml", "layer": "headless"},
  {"path": "tests/shell/search_chips/shell.qml", "layer": "headless"},

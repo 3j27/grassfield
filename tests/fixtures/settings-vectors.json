@@ -1,10 +1,10 @@
 {
-  "about": "Shared vectors of the settings contract (ui/Grassfield/Ui/SettingsContract.js, generated from config/schema/grassfield.schema.json): what a reader makes of a stored value. `stored` is the JSON value in grassfield.json (`absent` true = the key is missing), `read` what every reader uses (a number out of range is clamped, an integer rounded first, any other invalid value is the schema default; `default` true = the key's default), `valid` whether a write of that value is accepted. Read by tests/unit/tst_settingscontract.qml; the shell's SettingsStore can read the same file once it uses the contract (GF-084 C3).",
+  "about": "Shared vectors of the settings contract (ui/Grassfield/Ui/SettingsContract.js, generated from config/schema/grassfield.schema.json): what a reader makes of a stored value. `stored` is the JSON value in grassfield.json (`absent` true = the key is missing), `read` what every reader uses (a number out of range is clamped, an integer rounded first, any other invalid value is the schema default; `default` true = the key's default), `valid` whether a write of that value is accepted, `shell` C3 marks a vector the shell's SettingsStore still reads differently (coerces a numeric string; slice C3 fixes it; tests/shell/settings_vectors skips it). Read by tests/unit/tst_settingscontract.qml; the shell's SettingsStore can read the same file once it uses the contract (GF-084 C3).",
   "vectors": [
     {"name": "transparency in range", "path": "material.transparency", "stored": 0.5, "read": 0.5, "valid": true},
     {"name": "transparency above range is clamped", "path": "material.transparency", "stored": 9, "read": 1, "valid": false},
     {"name": "transparency below range is clamped", "path": "material.transparency", "stored": -1, "read": 0, "valid": false},
-    {"name": "transparency of the wrong type is the default", "path": "material.transparency", "stored": "0.5", "default": true, "valid": false},
+    {"name": "transparency of the wrong type is the default", "path": "material.transparency", "stored": "0.5", "default": true, "valid": false, "shell": "C3"},
     {"name": "transparency null is the default", "path": "material.transparency", "stored": null, "default": true, "valid": false},
     {"name": "transparency absent is the default", "path": "material.transparency", "absent": true, "default": true},
     {"name": "text size above range is clamped", "path": "accessibility.textSize", "stored": 2, "read": 1.3, "valid": false},
