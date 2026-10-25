@@ -119,6 +119,7 @@
  {"path": "tests/unit/tst_rfkill.qml", "layer": "headless"},
  {"path": "tests/unit/tst_runmode.qml", "layer": "headless"},
  {"path": "tests/shell/run_mode_import/shell.qml", "layer": "headless"},
+ {"path": "tests/shell/run_mode_env.sh", "layer": "headless"},
  {"path": "tests/unit/tst_screenchoice.qml", "layer": "headless"},
  {"path": "tests/unit/tst_sanitizer.qml", "layer": "headless"},
  {"path": "tests/unit/tst_searchcalc.qml", "layer": "headless"},

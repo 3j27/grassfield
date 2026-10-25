@@ -1,15 +1,10 @@
 {
 "comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
-"modeReads": {
- "comment": "What each shell/lib/Mode.qml member calls and the environment variables it reads, in argument order (checked statically by tests/unit/tst_runmode.qml: the runtime tests run with most variables unset, so a misspelled name or a wrong RunMode function would not show there). devValue's last argument is the dynamic GRASSFIELD_<name>. The C++ side lists the same names in apps/runmode.h from M6.",
- "dev": {"call": "dev", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION"]},
- "session": {"call": "session", "reads": ["GRASSFIELD_SESSION"]},
- "fixtures": {"call": "fixtures", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_VISUAL_FIXTURES"]},
- "ownBus": {"call": "ownBus", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_PRIVATE_BUS"]},
- "updateNotices": {"call": "updateNotices", "reads": ["GRASSFIELD_SESSION"]},
- "configDir": {"call": "configDir", "reads": ["GRASSFIELD_CONFIG_HOME", "XDG_CONFIG_HOME", "HOME"]},
- "stateDir": {"call": "stateDir", "reads": ["GRASSFIELD_STATE_HOME", "XDG_STATE_HOME", "HOME"]},
- "devValue": {"call": "devPlumbing", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION"], "function": true}
+"refused": "refused",
+"members": {
+ "comment": "Every member of shell/lib/Mode.qml (checked on the real singleton by tests/shell/run_mode_env.sh: a member that is not here fails, whatever its spelling). `properties` are readonly properties, each with its Changed signal; the C++ side lists the same names in apps/runmode.h from M6.",
+ "properties": ["dev", "session", "fixtures", "ownBus", "updateNotices", "refused", "configDir", "stateDir", "shellDir"],
+ "functions": ["devValue"]
 },
 "modes": [
  {"name": "nothing set", "env": {}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
