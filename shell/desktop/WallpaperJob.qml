@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.services
 
 // One run of grassfield-wallpaper (ADR-0016): a single Process with an argument vector (no shell), its output collected,
 // killed when it runs longer than `timeoutMs`. The feed that created it calls `callback(token, kind, code, out, timedOut)`
