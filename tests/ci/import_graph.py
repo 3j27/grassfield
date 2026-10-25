@@ -23,7 +23,11 @@ Ratchet: a violating import line passes only with a trailing `// layering-except
 only on the `import qs.notifications` line of shell/security/idle/SleepInhibitor.qml), `ADR-0021 security` (permanent,
 accepted only in shell/security/lock and shell/security/idle, only on a raw Hyprland event line: the lock and idle modules).
 An unknown tag, a tag where it is not accepted, and a marker on a line that is not a violation are failures, so no marker
-outlives its violation.
+outlives its violation. A marker covers exactly one import: a violating line that holds another import is a failure.
+Comments (block and line) are stripped before matching, so a commented import is no import.
+
+Limit: a test tree whose module is made of file links plus a `qmldir` link (no directory link, like tests/security/lock_surfaces/launchpad)
+is not covered by the test-tree `lib` check; only a link to a module directory is.
 """
 import os
 import re
@@ -45,8 +49,49 @@ GF050_FILE = "security/idle/SleepInhibitor.qml"
 GF050_IMPORT = "qs.notifications"
 
 
+GENERIC_IMPORT = re.compile(r"^\s*\.?import\s+\S")
+MULTI = "multi-import line"
+
+
+def strip_comments(text):
+    """The text without block and line comments (strings respected), line structure unchanged: a commented import is no
+    import, and `/* x */ import qs.desktop` is one."""
+    out, i, n, quote = [], 0, len(text), None
+    while i < n:
+        c = text[i]
+        if quote:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 1
+            elif c == quote or (c == "\n" and quote != "`"):
+                quote = None
+        elif c in "\"'`":
+            quote = c
+            out.append(c)
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
+            i = j
+            continue
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def code_lines(path):
+    return strip_comments(path.read_text(encoding="utf-8")).splitlines()
+
+
 def line_text(path, n):
-    return path.read_text(encoding="utf-8").splitlines()[n - 1]
+    """The code of line n of a file (comments stripped)."""
+    return code_lines(path)[n - 1]
 
 
 def listing(root, sub):
@@ -101,34 +146,36 @@ def module_of_path(shell, mods, path):
 
 
 def scan(shell):
-    """Every import of every .qml/.js file of shell/: (file, line number, line text, source module, kind, target)."""
+    """Every import of every .qml/.js file of shell/: (file, line number, line text, source module, kind, target, imports on the line)."""
     mods = modules_of(shell)
     out = []
     for path in shell_sources(shell):
         src = module_of_path(shell, mods, path)
         raw = []  # one raw-event record per file: the Hyprland import line, else the first use
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if line.lstrip().startswith("//"):
-                continue
-            statements = [IMPORT.match(seg) for seg in line.split(";")]
+        originals = path.read_text(encoding="utf-8").splitlines()
+        for n, code in enumerate(code_lines(path), 1):
+            line = originals[n - 1]
+            segments = code.split(";")
+            count = sum(1 for seg in segments if GENERIC_IMPORT.match(seg))
+            statements = [IMPORT.match(seg) for seg in segments]
             statements = [m for m in statements if m]
             for m in statements:
                 rel_target, qs_target, hypr = m.groups()
                 if hypr:
-                    raw.insert(0, (path, n, line, src, "hyprland", "Quickshell.Hyprland"))
+                    raw.insert(0, (path, n, line, src, "hyprland", "Quickshell.Hyprland", count))
                 elif qs_target:
                     name = qs_target[3:]
                     if name.replace(".", "/") not in mods:
-                        out.append((path, n, line, src, "unknown", qs_target))
+                        out.append((path, n, line, src, "unknown", qs_target, count))
                     else:
-                        out.append((path, n, line, src, "module", name))
+                        out.append((path, n, line, src, "module", name, count))
                 else:
                     tgt = (path.parent / rel_target)
                     dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
                     if dst is not None:
-                        out.append((path, n, line, src, "module", dst))
-            if not statements and RAW_EVENT.search(line):
-                raw.append((path, n, line, src, "rawevent", "rawEvent"))
+                        out.append((path, n, line, src, "module", dst, count))
+            if count == 0 and RAW_EVENT.search(code):
+                raw.append((path, n, line, src, "rawevent", "rawEvent", 0))
         out.extend(raw[:1])
     return out
 
@@ -171,7 +218,7 @@ def analyze(shell):
     """Returns (violations, graph): violations are (file, line number, reason, marker tag or None); graph is (nodes, edges)."""
     imports = scan(shell)
     nodes, edges = set(), {}
-    for _, _, _, src, kind, tgt in imports:
+    for _, _, _, src, kind, tgt, _ in imports:
         nodes.add(src)
         if kind == "module" and tgt != src:
             nodes.add(tgt)
@@ -187,28 +234,26 @@ def analyze(shell):
     kept = {s: {t for t in ts if not upward(s, t)} for s, ts in edges.items()}
     in_cycle = {frozenset((s, t)) for comp in tarjan(nodes, kept) for s in comp for t in kept.get(s, ()) if t in comp}
 
-    found = []  # (path, line number, text, reason)
-    for path, n, text, src, kind, tgt in imports:
+    found = []  # (path, line number, text, reason, imports on the line)
+    for path, n, text, src, kind, tgt, count in imports:
         if kind == "unknown":
-            found.append((path, n, text, f"{tgt} is not a module of shell/ (no qmldir)"))
+            found.append((path, n, text, f"{tgt} is not a module of shell/ (no qmldir)", count))
         elif kind == "module" and tgt != src:
             if upward(src, tgt):
                 why = ("a security module may import only lib, services and security" if is_security(src) and not is_security(tgt)
                        else f"{src} (layer {layer_of(src)}) imports {tgt} (layer {layer_of(tgt)}): imports go to a lower layer only")
-                found.append((path, n, text, why))
+                found.append((path, n, text, why, count))
             elif frozenset((src, tgt)) in in_cycle:
-                found.append((path, n, text, f"{src} and {tgt} import each other through a cycle of feature modules"))
+                found.append((path, n, text, f"{src} and {tgt} import each other through a cycle of feature modules", count))
         elif kind in ("hyprland", "rawevent") and src != "platform":
-            found.append((path, n, text, f"{tgt} outside platform: raw Hyprland events go through qs.platform"))
-    flagged = {(p, n): (reason) for p, n, _, reason in found}
-
+            found.append((path, n, text, f"{tgt} outside platform: raw Hyprland events go through qs.platform", count))
+    flagged = {(p, n) for p, n, _, _, _ in found}
     violations = []
-    lines = {}
-    for path, n, text, _ in found:
-        lines[(path, n)] = text
-    for (path, n), reason in sorted(flagged.items(), key=lambda kv: (str(kv[0][0]), kv[0][1])):
-        m = MARKER.search(lines[(path, n)])
+    for path, n, text, reason, count in sorted(found, key=lambda f: (str(f[0]), f[1], f[3])):
+        m = MARKER.search(text)
         tag = m.group(1) if m else None
+        if tag is not None and count > 1:
+            reason, tag = f"{reason}; a marker covers exactly one import and this line holds {count}", MULTI
         violations.append((path, n, reason, tag))
     # Markers on lines that are not violations (stale), checked over every line of every file.
     for path in shell_sources(shell):
@@ -229,6 +274,8 @@ def problems(shell, root=None):
         stale = reason.startswith("stale marker")
         if tag is None:
             out.append(f"{where}: {reason}; fix the import or mark the line `// layering-exception: GF-087`")
+        elif tag == MULTI:
+            out.append(f"{where}: {reason}; put each import on its own line")
         elif tag not in TAGS:
             out.append(f"{where}: unknown layering-exception tag {tag!r} (known: {', '.join(TAGS)})")
         elif stale:
@@ -339,7 +386,26 @@ def selftest():
     run("a stale marker fails", {**clean, "services/Apps.qml": "import qs.platform // layering-exception: GF-087\nItem {}\n"}, "stale marker")
     run("an unknown module fails", {**clean, "services/Apps.qml": "import qs.nothing\nItem {}\n"}, "is not a module")
     run("a second import on the same line counts", {**clean, "services/Apps.qml": "import QtQuick; import qs.dock\nItem {}\n"}, "imports go to a lower layer only")
-    run("a second import on the same line, marked, passes", {**clean, "services/Apps.qml": "import QtQuick; import qs.dock // layering-exception: GF-087\nItem {}\n"}, None)
+    run("a marker covers exactly one import (another import on the line)",
+        {**clean, "services/Apps.qml": "import QtQuick; import qs.dock // layering-exception: GF-087\nItem {}\n"}, "a marker covers exactly one import")
+    run("a marker on a line of one import passes", {**clean, "services/Apps.qml": "import qs.dock // layering-exception: GF-087\nItem {}\n"}, None)
+    run("two violations on a marked line fail",
+        {**clean, "services/Apps.qml": "import qs.dock; import qs.desktop // layering-exception: GF-087\nItem {}\n"}, "a marker covers exactly one import")
+    run("the permanent marker does not cover a second import on the line",
+        {**clean, "security/lock/Lock.qml": "import Quickshell.Hyprland; import qs.desktop // layering-exception: ADR-0021 security\nItem {}\n"},
+        "a marker covers exactly one import")
+    run("GF-050 does not cover a second import on the line",
+        {**clean, "security/idle/SleepInhibitor.qml": "import qs.notifications; import qs.search // layering-exception: GF-050\nItem {}\n"},
+        "a marker covers exactly one import")
+    run("GF-050 needs the import in code, not in a comment",
+        {**clean, "security/idle/SleepInhibitor.qml": "import qs.search /* qs.notifications */ // layering-exception: GF-050\nItem {}\n"}, "`GF-050` marker is for the")
+    run("a block comment before an import does not hide it", {**clean, "services/Apps.qml": "/* x */ import qs.dock\nItem {}\n"}, "imports go to a lower layer only")
+    run("a block comment around an import hides it", {**clean, "services/Apps.qml": "/* import qs.dock */\nItem {}\n"}, None)
+    run("a multi-line block comment hides its imports", {**clean, "services/Apps.qml": "/*\nimport qs.dock\n*/\nItem {}\n"}, None)
+    run("a line comment after an import hides a second one", {**clean, "services/Apps.qml": "import qs.platform // import qs.dock\nItem {}\n"}, None)
+    run("a path with two slashes in a string is no comment", {**clean, "services/Apps.qml": "import qs.platform\nItem { property string u: \"http://x\" }\nimport qs.dock\n"},
+        "imports go to a lower layer only")
+    run("rawEvent in a comment is not a use", {**clean, "search/S.qml": "// onRawEvent\n/* onRawEvent */\nItem {}\n"}, None)
     run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
     run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
     run("Hyprland as a second import counts", {**clean, "search/S.qml": "import QtQuick; import Quickshell.Hyprland\nItem {}\n"}, "raw Hyprland events go through qs.platform")
