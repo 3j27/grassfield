@@ -30,6 +30,7 @@ add_executable(grassfield-files
     src/tagstore.cpp src/tagstore.h
     src/tagsearch.cpp src/tagsearch.h
     src/applicationslogic.cpp src/applicationslogic.h
+    src/appicons.cpp src/appicons.h
     src/folderstylelogic.cpp src/folderstylelogic.h
     src/folderstylestore.cpp src/folderstylestore.h)
 target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)

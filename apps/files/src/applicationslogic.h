@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -30,7 +31,15 @@
 //      server and client launchers (Categories listing TerminalEmulator with a ';' after it, and an Exec whose program ends in
 //      "client" or that has "--server" or "--daemon" as an argument).
 //   3. Model.disambiguate (shell/launchpad/Model.js): two apps with one Name (case-insensitive) are told apart, "Files (GNOME)";
-//      Grassfield's own (id org.grassfield.*) keeps the plain name.
+//      Grassfield's own (id org.grassfield.*) keeps the plain name. The grid compares names with JS String.trim (jsTrim here:
+//      a Name that ends in U+FEFF collides with the same name without it, as in the grid).
+//
+// Known differences from the grid, on purpose and not fixed:
+//   - A symbolic link loop inside an applications directory: Quickshell follows it about 28 levels deep and lists a ghost id
+//     for each level (866 ids on the review fixture); Files cuts the loop (visited set) and lists each entry once.
+//   - Icons: the grid draws them through the shell's ThemeIcons (image-copy.py, out of process); Files uses the icon theme and
+//     appicons.h for an absolute Icon= path (PNG, and SVG without any reference to another file; other formats and an SVG
+//     with a reference show the generic application icon).
 namespace ApplicationsLogic
 {
 
@@ -84,6 +93,9 @@ QList<Entry> listApplications(const Environment &env);
 // device planted as an icon froze the GUI thread). Returns the real path, or "" for anything else.
 QStringList iconRoots();
 QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap = 8 * 1024 * 1024);
+// The same checks, then the bytes of the file read from the very descriptor that was checked (no second open of the path).
+// Empty for anything refused. Decoding is appicons.h's job.
+QByteArray readIconFile(const QString &path, const QStringList &roots, qint64 cap = 8 * 1024 * 1024);
 
 // The url of the Applications location and of one application in it: grassfield-apps:/ and grassfield-app:/<id>.
 QUrl locationUrl();

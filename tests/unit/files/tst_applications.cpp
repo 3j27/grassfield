@@ -255,6 +255,25 @@ TEST(Applications, AppsOfOneNameAreToldApartLikeTheGrid)
     EXPECT_EQ(names.value(QStringLiteral("alone")), QStringLiteral("Alone"));
 }
 
+// The grid compares names with String.trim: U+FEFF is white space there (not for QString::trimmed), U+0085 is not.
+TEST(Applications, NamesAreComparedWithTheGridsTrim)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString sa = tmp.filePath(QStringLiteral("sys/applications/"));
+    write(sa + QStringLiteral("bom-a.desktop"), app(QString(), QStringLiteral("Twin")));
+    write(sa + QStringLiteral("bom-b.desktop"), app(QString(), QString(QStringLiteral("Twin")) + QChar(0xFEFF)));
+    write(sa + QStringLiteral("nel-a.desktop"), app(QString(), QStringLiteral("Pair")));
+    write(sa + QStringLiteral("nel-b.desktop"), app(QString(), QString(QStringLiteral("Pair")) + QChar(0x85)));
+    QHash<QString, QString> names;
+    for (const Entry &e : listApplications(envFor(tmp.filePath(QStringLiteral("home")), tmp.filePath(QStringLiteral("sys")))))
+        names.insert(e.id, e.name);
+    EXPECT_EQ(names.value(QStringLiteral("bom-a")), QStringLiteral("Twin (bom-a)"));
+    EXPECT_TRUE(names.value(QStringLiteral("bom-b")).endsWith(QStringLiteral(" (bom-b)")));
+    EXPECT_EQ(names.value(QStringLiteral("nel-a")), QStringLiteral("Pair"));
+    EXPECT_EQ(names.value(QStringLiteral("nel-b")), QString(QStringLiteral("Pair")) + QChar(0x85));
+}
+
 // The file is read the way Quickshell reads it (measured): nothing trimmed, the first [Desktop Entry] group, an invalid file
 // masks nothing, a valid one masks the lower directory even when it is not listed.
 TEST(Applications, TheFileIsReadAsQuickshellReadsIt)

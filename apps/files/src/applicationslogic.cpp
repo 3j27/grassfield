@@ -291,12 +291,25 @@ bool parseEntry(const QByteArray &text, const QString &id, const QString &path, 
     return true;
 }
 
+// String.prototype.trim of the grid: the white space of ECMAScript (U+FEFF is one; U+0085 is not) instead of QString::trimmed's.
+static QString jsTrim(const QString &text)
+{
+    auto space = [](QChar c) { return c.unicode() == 0xFEFF || (c.isSpace() && c.unicode() != 0x85); };
+    int from = 0;
+    int to = int(text.size());
+    while (from < to && space(text.at(from)))
+        ++from;
+    while (to > from && space(text.at(to - 1)))
+        --to;
+    return text.mid(from, to - from);
+}
+
 void disambiguate(QList<Entry> &entries)
 {
     QHash<QString, QList<int>> groups;
     for (int i = 0; i < entries.size(); ++i) {
         entries[i].baseName = entries.at(i).name;
-        groups[entries.at(i).name.trimmed().toLower()].append(i);
+        groups[jsTrim(entries.at(i).name).toLower()].append(i);
     }
     for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
         if (it.key().isEmpty() || it.value().size() < 2)
@@ -306,7 +319,7 @@ void disambiguate(QList<Entry> &entries)
             if (e.id.startsWith(QLatin1String("org.grassfield.")))
                 continue;
             const QString vendor = vendorOf(e.id);
-            const QString generic = e.genericName.trimmed();
+            const QString generic = jsTrim(e.genericName);
             const QString qualifier = !vendor.isEmpty() ? vendor : (!generic.isEmpty() && generic.toLower() != it.key() ? generic : e.id);
             e.name = e.baseName + QStringLiteral(" (") + qualifier + QLatin1Char(')');
         }
@@ -394,7 +407,8 @@ QStringList iconRoots()
     return roots;
 }
 
-QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap)
+// Opens an Icon= file by the shell's rules (see safeIconFile): the descriptor, or -1. *realPath gets the real path.
+static int openIconFile(const QString &path, const QStringList &roots, qint64 cap, QString *realPath)
 {
     auto under = [&roots](const QString &p) {
         for (const QString &r : roots) {
@@ -405,17 +419,17 @@ QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap)
     };
     static const QRegularExpression control(QStringLiteral("[\\x00-\\x1f\\x7f]"));
     if (!path.startsWith(QLatin1Char('/')) || path.size() > 4096 || path.contains(control))
-        return {};
+        return -1;
     const QString real = QFileInfo(path).canonicalFilePath();
     if (real.isEmpty() || !under(real))
-        return {};
+        return -1;
     const QByteArray native = QFile::encodeName(real);
     struct stat info;
     if (::lstat(native.constData(), &info) != 0 || !S_ISREG(info.st_mode))
-        return {};
+        return -1;
     const int fd = ::open(native.constData(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
     if (fd < 0)
-        return {};
+        return -1;
     bool ok = ::fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && info.st_size > 0 && info.st_size <= cap;
     if (ok) {
         char link[4097];
@@ -423,8 +437,46 @@ QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap)
         const ssize_t n = ::readlink(self.constData(), link, sizeof(link) - 1);
         ok = n > 0 && under(QString::fromLocal8Bit(link, static_cast<int>(n)));
     }
+    if (!ok) {
+        ::close(fd);
+        return -1;
+    }
+    if (realPath)
+        *realPath = real;
+    return fd;
+}
+
+QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap)
+{
+    QString real;
+    const int fd = openIconFile(path, roots, cap, &real);
+    if (fd < 0)
+        return {};
     ::close(fd);
-    return ok ? real : QString();
+    return real;
+}
+
+QByteArray readIconFile(const QString &path, const QStringList &roots, qint64 cap)
+{
+    const int fd = openIconFile(path, roots, cap, nullptr);
+    if (fd < 0)
+        return {};
+    // The size was checked on this descriptor; read at most that much (the file may be growing).
+    struct stat info;
+    QByteArray data;
+    if (::fstat(fd, &info) == 0 && info.st_size > 0 && info.st_size <= cap) {
+        data.resize(qsizetype(info.st_size));
+        qsizetype got = 0;
+        while (got < data.size()) {
+            const ssize_t n = ::read(fd, data.data() + got, size_t(data.size() - got));
+            if (n <= 0)
+                break;
+            got += n;
+        }
+        data.resize(got);
+    }
+    ::close(fd);
+    return data;
 }
 
 QUrl locationUrl()

@@ -59,7 +59,9 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    Ctrl+Down start the application (`FilesApp::launchApplication`: KIO's ApplicationLauncherJob, in a scope of its own like
    Open With); Get Info shows what the desktop entry says. Nothing can be renamed, copied, moved, trashed or created in it,
    nothing can be dropped into it or dragged out of it; the refusal reads as Finder's (no permission to access some of the
-   items) and the menu items are dimmed, not hidden.
+   items) and the menu items are dimmed, not hidden. An absolute `Icon=` file is decoded by `appicons.h` (PNG, and SVG that
+   names nothing outside itself; sizes capped; on a worker thread; see security.md GF-070); anything else shows the generic
+   application icon. Known differences from the grid (symbolic link loops, the icon decoder) are listed in `applicationslogic.h`.
 6. F6 Operations, all KIO jobs: copy/cut/paste (`KIO::paste`, `text/uri-list` + KDE cut flag + GNOME format),
    Move to Trash (`KIO::trash`), Put Back (`KIO::restoreFromTrash`), Delete Immediately (only in `trash:/`,
    confirmed), Empty Trash (`KIO::emptyTrash`, confirmed), New Folder (`KIO::mkdir`, "untitled folder", inline
