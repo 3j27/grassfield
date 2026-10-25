@@ -114,6 +114,7 @@
  {"path": "tests/unit/tst_overviewv2.qml", "layer": "headless"},
  {"path": "tests/unit/tst_pointercolors.qml", "layer": "headless"},
  {"path": "tests/unit/tst_pointersize.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_pixelgrid.qml", "layer": "headless"},
  {"path": "tests/unit/tst_popupmenu.qml", "layer": "headless"},
  {"path": "tests/unit/tst_previewlisting.qml", "layer": "headless"},
  {"path": "tests/unit/tst_previewtoolbar.qml", "layer": "headless"},

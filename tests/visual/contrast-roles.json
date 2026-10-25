@@ -3,7 +3,7 @@
   "Text roles of the shell for the exact token calculation of gate A2 (tests/visual/test_contrast_tokens.py).",
   "fg: <palette>.<colour token> (palette colors = the current appearance, darkColors = always dark). opacity: factors applied to the",
   "text alpha (numbers or token paths such as search.selectedSubtitleOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
-  "flat wallpaper colour, with and without a fill overlay), accent (solid accent), rename-field",
+  "flat wallpaper colour, with and without a fill overlay), accent (solid accent), selection (solid selection: the light accent in both appearances), rename-field",
   "(colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), bar-light-tone and bar-dark-tone (the adaptive menu bar: the wallpaper itself, for the wallpaper colours the tone can be chosen for, see test_contrast_tokens.py), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
   "the drop shadow), lock (lock screen: dark shadow-colour scrim at lock.dimOpacity over the blurred wallpaper, the same in both appearances and at",
   "every transparency), lock-field (lock + the dark password field fill at lock.fieldFillOpacity), lock-avatar (lock + the light avatar disc at",
@@ -84,6 +84,7 @@
   {"id": "rename field text", "fg": "colors.fieldText", "backdrop": "rename-field", "kind": "text", "sites": []},
   {"id": "apps label, chip and field text", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": []},
   {"id": "apps selected chip text", "fg": "colors.accentText", "backdrop": "accent", "kind": "text", "sites": []},
+  {"id": "selection text on selection", "fg": "colors.selectionText", "backdrop": "selection", "kind": "text", "sites": []},
   {"id": "text during a fade, crossfade or swipe (steady state opacity 1)", "fg": "colors.text", "backdrop": "material", "kind": "text",
    "exempt": "opacity only animates the show/hide, page crossfade, hover reveal or swipe of the surface and is 1 once it is shown; the rendered steady state is measured by contrast.sh",
    "sites": [

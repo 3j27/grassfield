@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// Grassfield Settings: sidebar with search and sections on the left, detail pane on the right.
-// App windows are opaque (master-prompt 5.5), so the sidebar uses a flat surface, not the shell material.
+// Grassfield Settings: sidebar with search and sections on the left, detail pane on the right (macOS 27 layout, ADR-0024).
+// App windows are opaque (master-prompt 5.5): the sidebar is a flat, slightly darker surface edge to edge, not the shell material.
 Window {
     id: root
 
@@ -19,6 +19,12 @@ Window {
     property string gfChromeRole: "settings"
     // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b).
     property bool canMinimize: true
+    // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
+    readonly property var tileColors: ({
+            wifi: "blue", bluetooth: "blue", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
+            accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
+            mouse: "graphite", keyboard: "graphite", about: "green"
+        })
     // The title of the shown section (the toolbar's title; the page itself repeats nothing).
     readonly property string sectionTitle: {
         for (const e of root.sections) {
@@ -68,7 +74,7 @@ Window {
     minimumWidth: Tokens.settingsWindowMinWidth
     minimumHeight: Tokens.settingsWindowMinHeight
     visible: true
-    color: Appearance.colors.materialTint
+    color: Appearance.colors.windowBackground
 
     function readCapabilities(): void {
         const file = root.backend.readText(root.backend.capabilitiesFile);
@@ -208,11 +214,10 @@ Window {
         width: Tokens.settingsSidebarWidth
         height: parent.height
 
+        // Edge to edge and a step darker than the detail pane, with no dividing line (macOS 27).
         Rectangle {
-            anchors.right: parent.right
-            width: 1
-            height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            anchors.fill: parent
+            color: Appearance.colors.sidebarFill
         }
 
         // The window lights, in the corner of the sidebar (ADR-0015); the toolbar over the detail pane holds the title.
@@ -225,14 +230,15 @@ Window {
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 
+        // A capsule search field, as wide as the selection (macOS 27).
         Rectangle {
             id: searchBox
-            x: Tokens.spacingMd
-            y: sidebarToolbar.height
-            width: parent.width - 2 * Tokens.spacingMd - 1
+            x: Tokens.settingsSidebarInset
+            y: sidebarToolbar.height + Tokens.spacingSm
+            width: parent.width - 2 * Tokens.settingsSidebarInset
             height: Tokens.settingsSearchHeight
-            radius: Tokens.radiusControl
-            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+            radius: height / 2
+            color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
             border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
             border.color: Appearance.focusRingColor
 
@@ -260,8 +266,8 @@ Window {
                 // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
                 persistentSelection: true
                 color: Appearance.colors.text
-                selectionColor: Appearance.colors.accent
-                selectedTextColor: Appearance.colors.accentText
+                selectionColor: Appearance.highlight
+                selectedTextColor: Appearance.highlightText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 onTextChanged: root.query = text
@@ -302,11 +308,11 @@ Window {
                 left: parent.left
                 right: parent.right
                 bottom: parent.bottom
-                leftMargin: Tokens.spacingMd
-                rightMargin: Tokens.spacingMd + 1
+                leftMargin: Tokens.settingsSidebarInset
+                rightMargin: Tokens.settingsSidebarInset
             }
             model: root.filtered
-            spacing: Tokens.spacingXs / 2
+            spacing: 0
             // Room for the focus ring outside the first and last rows (the list clips).
             topMargin: Tokens.controlFocusOutline
             bottomMargin: Tokens.controlFocusOutline
@@ -349,28 +355,37 @@ Window {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: Tokens.radiusControl
-                    color: entry.selected ? Appearance.colors.accent : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                    radius: Tokens.settingsSidebarItemRadius
+                    color: entry.selected ? Appearance.colors.selection : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                 }
 
                 // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: -Tokens.controlFocusOutline
-                    radius: Tokens.radiusControl + Tokens.controlFocusOutline
+                    radius: Tokens.settingsSidebarItemRadius + Tokens.controlFocusOutline
                     visible: entry.selected && list.activeFocus
                     color: "transparent"
                     border.width: Tokens.controlFocusOutline
                     border.color: Appearance.focusRingColor
                 }
 
-                Icon {
+                // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
+                Rectangle {
                     id: glyph
-                    name: entry.modelData.icon
-                    size: Tokens.settingsSidebarIconSize
-                    color: entry.selected ? Appearance.colors.accentText : Appearance.colors.text
                     x: Tokens.spacingSm
-                    anchors.verticalCenter: parent.verticalCenter
+                    y: Math.round((parent.height - height) / 2)
+                    width: Tokens.settingsSidebarIconSize
+                    height: Tokens.settingsSidebarIconSize
+                    radius: Tokens.settingsSidebarTileRadius
+                    color: Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
+
+                    Icon {
+                        anchors.centerIn: parent
+                        name: entry.modelData.icon
+                        size: Tokens.settingsSidebarGlyphSize
+                        color: Tokens.settingsSidebarTileGlyph
+                    }
                 }
 
                 Text {
@@ -384,7 +399,7 @@ Window {
                     }
                     text: entry.modelData.title
                     elide: Text.ElideRight
-                    color: entry.selected ? Appearance.colors.accentText : Appearance.colors.text
+                    color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                     font.weight: Tokens.typographyMenuWeight

@@ -21,7 +21,7 @@
 #     inactive, coloured once focused; back to dark: the dark bar again. The settings file is restored at exit.
 #   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): a window that draws its own
 #     chrome (ADR-0015, tag grassfield-client-chrome): no plugin bar above it (0 rows of the bar colour), its own lights at
-#     their own geometry (centres 25.75 px from the surface's top-left, 23 px apart, 14 px across, coloured while active)
+#     their own geometry (centres 26 px from the surface's top-left, 23 px apart, 14 px across, coloured while active)
 #     and glyphs on all three while the pointer is between two of them (macOS); the window's corner radius as before;
 #     radius 26 (the global default; corner inset 7-10 px), square join, glyphs with the pointer between its minimize
 #     and zoom lights
@@ -161,7 +161,7 @@ check_lights() { # <label> <x> <y>: positions and size of the lights, no glyph
   check "$label: lights" "$ok" "$details"
 }
 
-# The lights an app draws itself (grassfield-ui WindowControls, unified toolbar, ADR-0015): centres at 25.75 px from the
+# The lights an app draws itself (grassfield-ui WindowControls, unified toolbar, ADR-0015): centres at 26 px from the
 # surface's top-left and 23 px apart (window tokens), on the app's own toolbar colour (sampled right of the lights).
 measure_app() { # <name> <x> <y> <w> -> m[...] as measure
   local name=$1 x=$2 y=$3 w=$4 bg
@@ -178,9 +178,9 @@ measure_app() { # <name> <x> <y> <w> -> m[...] as measure
 check_app_lights() { # <label> <x> <y>: positions and size of the app's own lights
   local label=$1 x=$2 y=$3 name i=0 ok=0 details="" ex
   for name in close minimize zoom; do
-    ex=$(awk -v x="$x" -v i="$i" 'BEGIN { print x + 25.75 + 23 * i }')
-    within "${m[${name}_cx]}" "$ex" 0.75 && within "${m[${name}_cy]}" "$(awk -v y="$y" 'BEGIN { print y + 25.75 }')" 0.75 && within "${m[${name}_d]}" 14 1 || ok=1
-    details+="$name (${m[${name}_cx]},${m[${name}_cy]}) d ${m[${name}_d]}, expected ($ex,$(awk -v y="$y" 'BEGIN { print y + 25.75 }')) d 14; "
+    ex=$(awk -v x="$x" -v i="$i" 'BEGIN { print x + 26 + 23 * i }')
+    within "${m[${name}_cx]}" "$ex" 0.75 && within "${m[${name}_cy]}" "$(awk -v y="$y" 'BEGIN { print y + 26 }')" 0.75 && within "${m[${name}_d]}" 14 1 || ok=1
+    details+="$name (${m[${name}_cx]},${m[${name}_cy]}) d ${m[${name}_d]}, expected ($ex,$(awk -v y="$y" 'BEGIN { print y + 26 }')) d 14; "
     i=$((i + 1))
   done
   check "$label: lights" "$ok" "$details"
