@@ -16,6 +16,7 @@ the dev scripts as child processes).
 | `just visual --only menubar,dock --lang en --keep` | Subset; `--keep` leaves the nested session up. |
 | `just contrast` / `tests/visual/contrast.sh` | A2: capture 5 wallpapers x light/dark x transparency 0.25/0.6 (four glyph modes each), print the contrast table. |
 | `tests/visual/scenarios/<name>.sh` | One scenario on its own (shot in `.dev/visual/shots/<name>.<lang>.png`; `VISUAL_LANG=fr`). |
+| `tests/visual/f1-audit.sh [--only a,b]` | F1 audit captures, not a regression run: every scenario plus extra states (Dock tooltip and icon menu, desktop widgets and menu, volume overlay, four more Settings panes) in the **light** appearance of the macOS references, and the f2c.sh banners, Search states, alerts and widget gallery; shots in `.dev/f1-audit/` and `.dev/f2c/*-f1audit-*`. `VISUAL_APPEARANCE` (light/dark) sets the default of `vs_reset`. |
 | `tests/visual/ipc.sh <target> <fn> [args]` | `qs ipc --pid <.dev/shell.pid> call` against the nested shell only (refuses the owner's socket/instance). |
 | `python3 -I tests/visual/test_contrast.py` | Unit tests of the contrast tooling on synthetic images (also run by `scripts/dev/test.sh`). |
 

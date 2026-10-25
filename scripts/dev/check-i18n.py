@@ -4,11 +4,17 @@
 (a) lupdate dry run: translations/grassfield_fr.ts is up to date (no new/obsolete messages),
 (b) no unfinished message in the French catalog,
 (c) heuristic scan of QML for visible-text properties assigned a bare string literal,
+(e) the session helpers in packaging/bin (standard library only, so no Qt catalog): every helper that sends a notification has its
+    own CATALOG["fr"] (Python) or `fr:` cases of tr (bash); every string passed to tr() has a French text that is not the source
+    and keeps its % placeholders; no notify-send argument list holds a bare English literal,
 (d) every .desktop entry of ours has a French Name, GenericName, Comment and Keywords where it has an English one.
 
 A deliberate exception (brand name, protocol token, data key) carries `// i18n-ignore` on the line.
 Usage: python3 -I scripts/dev/check-i18n.py [--no-lupdate]
 """
+import ast
+import importlib.machinery
+import importlib.util
 import re
 import subprocess
 import sys
@@ -67,6 +73,65 @@ def scan_qml():
     return violations
 
 
+NOTIFY_OPTION_VALUES = {"Grassfield", "critical", "normal", "low", "--"}
+
+
+def scan_helpers():
+    """(e) the session helpers: see the module docstring."""
+    violations = []
+    for path in sorted((ROOT / "packaging" / "bin").iterdir()):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(ROOT)
+        text = path.read_text(encoding="utf-8")
+        if "notify-send" not in text and "Notifications.Notify" not in text:
+            continue
+        if text.startswith("#!/bin/bash") or text.startswith("#!/usr/bin/env bash"):
+            calls = set(re.findall(r'\btr "([^"$]+)"', text))
+            cases = {m.group(1) for m in re.finditer(r'^\s*fr:"([^"]+)"\)', text, re.M)}
+            for source in sorted(calls - cases):
+                violations.append(f"{rel}: tr {source!r} has no fr: case")
+            for source in sorted(cases - calls):
+                violations.append(f"{rel}: fr: case {source!r} is never used")
+            for number, line in enumerate(text.splitlines(), 1):
+                if "notify-send" in line and re.search(r'-- "[A-Z]', line):
+                    violations.append(f"{rel}:{number}: notify-send with a bare English literal")
+            continue
+        loader = importlib.machinery.SourceFileLoader("helper_" + path.name.replace("-", "_"), str(path))
+        module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        sys.dont_write_bytecode = True
+        loader.exec_module(module)
+        fr = getattr(module, "CATALOG", {}).get("fr")
+        if not fr:
+            violations.append(f"{rel}: sends notifications and has no CATALOG['fr']")
+            continue
+        for source, french in fr.items():
+            if not french.strip() or french == source:
+                violations.append(f"{rel}: French text of {source!r} is empty or the source")
+            elif source.count("%") != french.count("%"):
+                violations.append(f"{rel}: French text of {source!r} changes the % placeholders")
+        tree = ast.parse(text)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "tr" and node.args:
+                arg = node.args[0]
+                values = []
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    values = [arg.value]
+                elif isinstance(arg, ast.Name) and isinstance(getattr(module, arg.id, None), str):
+                    values = [getattr(module, arg.id)]
+                elif isinstance(arg, ast.IfExp):
+                    values = [n.value for n in (arg.body, arg.orelse) if isinstance(n, ast.Constant)]
+                for value in values:
+                    if value not in fr:
+                        violations.append(f"{rel}:{node.lineno}: tr({value[:40]!r}...) has no French text")
+            if isinstance(node, ast.List) and node.elts and isinstance(node.elts[0], ast.Constant) and node.elts[0].value == "notify-send":
+                for element in node.elts[1:]:
+                    if isinstance(element, ast.Constant) and isinstance(element.value, str) and HAS_WORD.search(element.value) \
+                            and not element.value.startswith("-") and element.value not in NOTIFY_OPTION_VALUES:
+                        violations.append(f"{rel}:{element.lineno}: notify-send argument {element.value!r} is a bare English literal")
+    return violations
+
+
 def main():
     failed = False
     if "--no-lupdate" not in sys.argv:
@@ -92,7 +157,7 @@ def main():
     if unfinished:
         failed = True
 
-    violations = scan_qml() + scan_desktop_entries()
+    violations = scan_qml() + scan_desktop_entries() + scan_helpers()
     for v in violations:
         print(f"i18n: {v}")
     if violations:

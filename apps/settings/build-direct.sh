@@ -18,7 +18,7 @@ if [[ ${1:-} == "--tests" ]]; then
     suffix="-asan"
   fi
   # shellcheck disable=SC2046
-  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${extra[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
+  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${extra[@]}" -I"$here/src" -I"$here/.." $(pkg-config --cflags Qt6Core) \
     "$root/tests/unit/settings/tst_systemguard.cpp" "$here/src/systemguard.cpp" \
     $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests$suffix"
   echo "built $out/settings-unit-tests$suffix"

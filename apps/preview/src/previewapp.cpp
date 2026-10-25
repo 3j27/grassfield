@@ -2,6 +2,7 @@
 
 #include "previewlogic.h"
 #include "appscope.h"
+#include "runmode.h"
 #include "chromecaps.h"
 #include "autoappearance.h"
 
@@ -21,11 +22,7 @@ namespace {
 
 QString configFile()
 {
-    const QString dev = qEnvironmentVariable("GRASSFIELD_CONFIG_HOME");
-    if (!dev.isEmpty())
-        return dev + QStringLiteral("/grassfield.json");
-    const QString xdg = qEnvironmentVariable("XDG_CONFIG_HOME");
-    return (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.config") : xdg) + QStringLiteral("/grassfield/grassfield.json");
+    return grassfield::apps::runmode::configDir() + QStringLiteral("/grassfield.json");
 }
 
 QString sizeText(qint64 bytes)
@@ -320,8 +317,9 @@ void PreviewApp::openInPreview(int current) const
     if (paths.isEmpty())
         return;
     current = qBound(0, current, paths.size() - 1);
-    // GRASSFIELD_PREVIEW_CMD (dev) may carry a --glance flag; the full viewer never gets it.
-    QStringList prefix = qEnvironmentVariable("GRASSFIELD_PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    // GRASSFIELD_PREVIEW_CMD (dev plumbing: honoured only in a dev session, runmode.h) may carry a --glance flag; the full
+    // viewer never gets it.
+    QStringList prefix = grassfield::apps::runmode::devValue("PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
     if (prefix.isEmpty())
         prefix << QCoreApplication::applicationFilePath();
     const QString program = prefix.takeFirst();

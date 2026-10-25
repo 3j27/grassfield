@@ -89,3 +89,15 @@ session, with the owner's real trash in its sidebar. Any D-Bus activatable handl
   and released when the probe answers. Quickshell sends no `exited` when a start fails, so the queue is also released
   when the probe's `running` goes back to false without a `started` (logged); the launches then start unscoped rather
   than wait for ever. Glance cancels a start that is still queued (Esc, a second Space).
+
+### Addendum: the crash notice reads the scope name and Reopen uses the same path (2026-10-25)
+- `grassfield-crash-watch` (a user service, not a shell module) announces "<App> quit unexpectedly" only for an application
+  scope under `app.slice` whose cgroup is gone or empty after a crash (`packaging/bin/grassfield-crash-watch` header). The
+  scope name `app-<launcher>-<id>-<random>.scope` is the contract it reads: the Dock starts `uwsm-app -- <Exec argv>`, so `<id>`
+  is usually the binary's name; the watcher finds the desktop entry by id, then by Exec binary, TryExec and StartupWMClass.
+  The Dock's launch path is unchanged. Later improvement: `uwsm-app -a <desktop id>` would name the scope after the entry.
+- Reopen starts the application through this path: `systemd-run --user --collect --quiet -- uwsm-app -- <id>.desktop`. The
+  transient unit is outside the watcher's sandbox (`uwsm-app` evals the scope command in its caller's context, which would
+  otherwise give the application no network and its seccomp filter); `uwsm-app` then puts the application in its own
+  scope. Only a plain `<name>.desktop` id is passed, after `--`. No Reopen without a unique entry or without `uwsm-app`
+  (never a launch outside a scope).

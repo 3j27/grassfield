@@ -3,6 +3,7 @@
 # application that kept its window open (it might hold unsaved work). packaging/bin/grassfield-session-end against fake
 # hyprctl, notify-send, uwsm and systemctl: no compositor, no session, nothing real is touched.
 set -euo pipefail
+export LC_ALL=C; unset GRASSFIELD_LANG LC_MESSAGES  # the helpers translate by locale: the assertions read the English source
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/session-end.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
