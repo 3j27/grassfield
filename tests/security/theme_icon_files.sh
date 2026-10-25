@@ -42,7 +42,8 @@
 # the review's hostile StatusNotifierItems (an IconThemePath full of FIFOs, an absolute or traversal IconName, a regular
 # file named by path, an SVG naming a FIFO in the app's folder, a regular icon in it, a pixmap, a plain user name); then
 # the same items as real StatusNotifierItems on a PRIVATE bus (dbus-daemon in the scratch directory, every process under
-# `env -i` with only that address, a guard refusing any other bus; SKIP where Unix sockets cannot be created).
+# `env -i` with only that address, a guard refusing any other bus; the session bus's default policy, checked first by
+# theme_icon_files.d/bus_check.py: a reply and a signal must arrive; SKIP where Unix sockets cannot be created).
 # Part 6, media art over https (coordinator, after the review of 80f0f19: macOS shows the artwork apps provide), offline:
 # a local HTTPS server on 127.0.0.1 with a throwaway CA (theme_icon_files.d/fake_https.py; no proxy variable, no other
 # host), reached as art.test through a test stand-in of the helper that changes only name resolution
@@ -558,10 +559,13 @@ note=$(fifos_untouched "$s") && copies_are_pngs "$s" >/dev/null && tcheck "no FI
 s=$tmp/traybus
 tray_scratch "$s"
 mkdir -m 700 "$tmp/bus"
+# The session bus's own default policy (/usr/share/dbus-1/session.conf): send to anyone, receive anything (method returns,
+# errors and signals included), own any name. With no receive rule (as here before), dbus-daemon drops every reply, the
+# Hello reply too: no client could even connect, and this part could never pass where it ran (follow-up of 061f599).
 cat >"$tmp/bus.conf" <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig><type>session</type><listen>unix:dir=$tmp/bus</listen><auth>EXTERNAL</auth>
-<policy context="default"><allow send_destination="*"/><allow own="*"/></policy></busconfig>
+<policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>
 EOF
 addr=$(env -i PATH=/usr/bin:/bin dbus-daemon --config-file="$tmp/bus.conf" --fork --print-address=1 --print-pid=3 3>"$tmp/bus.pid" 2>/dev/null || true)
 if [[ -z $addr ]]; then
@@ -571,7 +575,11 @@ elif [[ $addr != "unix:path=$tmp/bus/"* || $addr == *"/run/user/"* || ( -n ${DBU
   bad "tray on a private bus: refusing a bus address outside the test's directory ($addr)"
 elif ! env -i PATH=/usr/bin:/bin python3 -I -c 'import gi; gi.require_version("Gio", "2.0"); from gi.repository import Gio' 2>/dev/null; then
   echo "SKIP: theme icon files, tray on a private bus: python3 gi (PyGObject) missing: NOT VERIFIED"
+elif ! check=$(env -i PATH=/usr/bin:/bin GF_PRIVATE_BUS_DIR="$tmp/bus" DBUS_SESSION_BUS_ADDRESS="$addr" \
+  timeout -k 2 20 python3 -I tests/security/theme_icon_files.d/bus_check.py 2>&1); then
+  bad "tray on a private bus: the bus does not carry a method reply and a signal, so no tray item could work on it ($(grep -o 'bus-check: .*' <<<"$check" || echo "${check:0:200}"))"
 else
+  pass "tray: private bus: the bus carries a method reply and a signal ($(grep -o 'bus-check: .*' <<<"$check"))"
   mkcfg "$tmp/tbcfg" tray_bus_probe.qml
   n=0
   for c in "themepath-fifo|sni|$s/outside" "themepath-svgref|snisvg|$s/outside" "themepath-reg|sniok|$s/tp" "iconname-abs-fifo|$s/outside/evil.png|" \
