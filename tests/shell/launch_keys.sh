@@ -79,4 +79,9 @@ fi
 desc="an unknown target is a usage error"
 status=0; resolve bogus >/dev/null 2>&1 || status=$?
 check test "$status" = 2
+desc="run-mode rule: in a dev session (GRASSFIELD_DEV=1, no GRASSFIELD_SESSION) the launcher refuses (exit 3) and resolves nothing"
+status=0; out=$(env -i PATH="$PATH" HOME="$tmp/home" XDG_DATA_DIRS="$tmp/share" GRASSFIELD_DEV=1 GRASSFIELD_LAUNCH_DRY_RUN=1 sh "$root/packaging/bin/grassfield-launch-key" files 2>&1) || status=$?
+check test "$status" = 3 -a "${out#*refused in a dev session}" != "$out"
+desc="run-mode rule: a packaged session (GRASSFIELD_SESSION=1) is not dev even when GRASSFIELD_DEV=1 leaks into it"
+check test "$(env -i PATH="$PATH" HOME="$tmp/home" XDG_DATA_DIRS="$tmp/share" GRASSFIELD_DEV=1 GRASSFIELD_SESSION=1 GRASSFIELD_LAUNCH_DRY_RUN=1 sh "$root/packaging/bin/grassfield-launch-key" files)" = org.grassfield.Files.desktop
 exit "$fail"

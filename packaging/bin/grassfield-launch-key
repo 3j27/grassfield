@@ -7,6 +7,13 @@
 #
 # Test hook: GRASSFIELD_LAUNCH_DRY_RUN=1 prints the resolved desktop entry id instead of starting it (empty line: no target).
 
+# Run-mode rule (ADR-0019, shell/lib/RunMode.js): a dev session (GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1",
+# the nested instance) never starts apps through the owner's uwsm profiles: the key does nothing there.
+if [ "${GRASSFIELD_DEV:-}" = 1 ] && [ "${GRASSFIELD_SESSION:-}" != 1 ]; then
+  echo "grassfield-launch-key: refused in a dev session" >&2
+  exit 3
+fi
+
 kind=${1:-}
 dirs=${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
 
