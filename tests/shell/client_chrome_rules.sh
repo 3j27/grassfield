@@ -19,14 +19,20 @@ grep -q "tag = \"+$tag\"" "$rules"
 check "the session rule sets the same tag" $?
 grep -q "$tag" "$root/docs/specs/compositor.md"
 check "the spec (plugin work item P1) uses the same tag" $?
-# S2: the maximize exemption is exactly the client-chrome match (reviewer 2026-10-23: any xdg-tagged window was exempt).
+# S2: the maximize exemption is exactly the client-chrome matches (reviewer 2026-10-23: any xdg-tagged window was exempt):
+# Grassfield's apps with an xdg tag, and the third-party list of GF-056 (ADR-0015 amendment 2026-10-25).
 cc_class=$(sed -n 's/.*name = "gf-client-chrome", match = { class = "\([^"]*\)", xdg_tag = "\.+" }.*/\1/p' "$rules")
 [[ -n $cc_class ]]
 check "the client-chrome rule matches a class list and any xdg tag" $?
-grep -qF "name = \"gf-no-maximize-event\", match = { class = \"negative:$cc_class\" }, suppress_event = \"maximize\"" "$rules"
-check "S2: every other class keeps the maximize suppression" $?
-grep -q 'name = "gf-no-maximize-event-untagged", match = { class = ".\*", xdg_tag = "negative:.+" }, suppress_event = "maximize"' "$rules"
-check "S2: a window without an xdg tag keeps the maximize suppression" $?
+tp_class=$(sed -n 's/.*name = "gf-client-chrome-third-party", match = { class = "\([^"]*\)" }, tag = "+grassfield-client-chrome".*/\1/p' "$rules")
+[[ $tp_class == '^('*')$' ]]
+check "the third-party client-chrome rule matches a class list (GF-056)" $? "$tp_class"
+cc_inner=${cc_class#^}; cc_inner=${cc_inner%\$}
+tp_inner=${tp_class#^(}; tp_inner=${tp_inner%)\$}
+grep -qF "name = \"gf-no-maximize-event\", match = { class = \"negative:^($cc_inner|$tp_inner)\$\" }, suppress_event = \"maximize\"" "$rules"
+check "S2: every other class keeps the maximize suppression (negation of both lists)" $?
+grep -qF "name = \"gf-no-maximize-event-untagged\", match = { class = \"negative:$tp_class\", xdg_tag = \"negative:.+\" }, suppress_event = \"maximize\"" "$rules"
+check "S2: a window without an xdg tag and not in the third-party list keeps the maximize suppression" $?
 if grep -v "^ *--" "$rules" | grep 'suppress_event = "maximize"' | grep -v 'gf-no-maximize-event' | grep -q .; then
   check "S2: no other rule touches the maximize suppression" 1
 else

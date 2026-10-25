@@ -4,7 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
-import qs.services
+import qs.services // layering-exception: GF-087
 import "Zoom.js" as ZoomLogic
 
 // Screen magnification (Settings > Accessibility > Zoom, GF-064). The stored state (accessibility.zoom, zoomLevel) is

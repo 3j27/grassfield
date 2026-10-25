@@ -23,11 +23,23 @@ function localPath(url) {
     return path.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(path) ? path : "";
 }
 
-// An https URL the helper may fetch, as given, else "": https://host[:port][/path], the host of letters, digits, "." and
-// "-" (no user or password, no IP v6 literal), the path of printable ASCII without spaces or backslashes, at most 2048
-// characters (services/image-copy.py checks the same).
+// An https URL the helper may fetch, as given, else "": https://host[:port][/path], the host a name of labels of letters,
+// digits and inner hyphens (no user or password; no empty label, so no leading, trailing or doubled dot: review of
+// 684ed6d; never an IP literal in any notation: a host whose last label is a decimal or 0x number is one, as URL
+// parsers read it; never localhost or *.localhost), the path of printable ASCII without spaces or backslashes, at most
+// 2048 characters. services/image-copy.py checks the same, then resolves the name, refuses any address that is not public
+// (review of dce68c2, minor 1) and gives curl a URL rebuilt from the parts it checked.
 function remoteUrl(url) {
     if (typeof url !== "string" || url.length > 2048)
         return "";
-    return /^https:\/\/[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(\/[!-\[\]-~]*)?$/.test(url) ? url : "";
+    const m = /^https:\/\/([A-Za-z0-9.-]{1,253})(:[0-9]{1,5})?(\/[!-\[\]-~]*)?$/.exec(url);
+    if (m === null)
+        return "";
+    const host = m[1].toLowerCase();
+    const labels = host.split(".");
+    if (!labels.every(l => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))
+        return "";
+    if (/^([0-9]+|0x[0-9a-f]*)$/.test(labels[labels.length - 1]) || host === "localhost" || host.endsWith(".localhost"))
+        return "";
+    return url;
 }

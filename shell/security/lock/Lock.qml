@@ -12,7 +12,7 @@ pragma Singleton
 // docs/specs/security.md "Upstream base".
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
+import Quickshell.Hyprland // layering-exception: ADR-0021 security
 import Quickshell.Io
 import Quickshell.Services.Pam
 import Quickshell.Wayland

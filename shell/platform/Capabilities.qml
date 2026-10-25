@@ -6,7 +6,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "CapabilityEvent.js" as CapabilityEvent
 import "CapabilitiesFile.js" as CapabilitiesFile
-import "../services/DevGate.js" as DevGate
+import "../services/DevGate.js" as DevGate // layering-exception: GF-087
 
 // Capability detection for grassfield-compositor (contract gfc/1).
 // Sends the hello every helloRetryMs (the first ones can predate Quickshell's event socket, so

@@ -20,7 +20,9 @@ Option 1 for M1, revisit option 2 when Stages (M5) needs placement control.
 - **Titlebars**: drawn by the plugin for windows using server-side decorations; 28 px; buttons on the left
   in the order close, minimize, zoom; title centered; drag to move; double-click action from Settings
   (default: zoom). GTK/libadwaita CSD windows keep their own header bars; Grassfield sets
-  `gtk-decoration-layout=close,minimize,maximize:` in its session so their buttons are on the left (§4).
+  `gtk-decoration-layout=close,minimize,maximize:` in its session so their buttons are on the left (§4). Implemented
+  2026-10-25 as the dconf default `org.gnome.desktop.wm.preferences button-layout` of the Grassfield session
+  (`packaging/dconf/grassfield.d/20-window-buttons.conf`; ADR-0015 amendment 2026-10-25).
 - **Close** = close the window (`window.close`). Apps keep their own quit semantics.
 - **Zoom** (green button) = toggle Hyprland `fullscreen` mode `maximized` (fills the work area, menu bar and
   Dock stay). Option+click → true full screen. This follows the current macOS default (green button =

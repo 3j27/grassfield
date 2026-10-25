@@ -759,3 +759,62 @@ window's own `xdgMoveRequest` listener is left in place, see spike step 3).
 The tag helper against a live Hyprland (the log line above), every visual state, hover glyphs, AT-SPI exposure with a screen
 reader (the unit test checks the Accessible properties and press actions only), the TapHandler double-tap in a real session
 (Qt's synthetic test events carry no timestamps), and `client_chrome.sh` itself.
+
+## Amendment 2026-10-25: third-party apps that draw their own controls (GF-056)
+Third-party apps with their own title bar showed two sets of controls: theirs and the plugin's traffic lights. macOS: a
+window has one set of traffic lights, close, minimize, zoom, top-left, and an app that draws its own title bar gets no
+second bar from the system.
+
+Research (read only, `/usr/include/hyprland`, Hyprland 0.56.2): is there a per-window signal that a client draws its own
+decorations, so that the plugin could step aside without a list?
+- xdg-decoration: `CXDGDecoration` keeps `mostRecentlyRequested` / `mostRecentlySent` (protocols/XDGDecoration.hpp), but
+  the toplevel-to-decoration map is private (`CXDGDecorationProtocol::m_decorations`, no accessor), and neither
+  `CWindow` nor `CXDGToplevelResource` holds any decoration state. The KDE server-decoration protocol is the same
+  (`CServerDecorationKDEProtocol::m_decos`, private). A plugin cannot read the request through the installed API.
+- It would not be reliable anyway. Hyprland answers server-side: foot started with `csd.preferred=client` drew no bar of
+  its own (nested 2026-10-25), so a client that negotiates never shows a second set here. The second set comes from
+  clients that draw their frame whatever was negotiated: GTK3/GTK4/libadwaita header bars (they never negotiate, like a
+  bare client that draws nothing at all, e.g. a game) and Electron/Chromium custom frames.
+- XWayland has `CWindow::m_X11DoesntWantBorders`, but Omarchy runs Electron and Chromium on Wayland
+  (`ELECTRON_OZONE_PLATFORM_HINT=wayland`, `--ozone-platform=wayland`), and the field's meaning cannot be read from the
+  headers alone: not used.
+
+Decision (after the review of 9c0da79):
+- The session's GTK button layout is ADR-0002's `close,minimize,maximize:` (left, macOS order): a default in the Grassfield
+  dconf database the package ships (`packaging/dconf/grassfield.d/20-window-buttons.conf`,
+  `org.gnome.desktop.wm.preferences button-layout`; not a lock). Before, nothing set it and the session read GNOME's
+  `appmenu:close`: header bars and Chromium showed a close button only. The dev session reads the same defaults
+  (`scripts/dev/devenv.sh` compiles them into `.dev/dconf` with a profile whose user database is the process's own, isolated
+  one; the private bus and its portal get it too). Verified in the nested session: GSettings in a client's environment
+  and the settings portal on the private bus both answer `'close,minimize,maximize:'`; Evince (GTK3), Nautilus
+  (GTK4/libadwaita) and Chromium draw close, minimize, zoom on the left.
+- The tag goes only to apps whose own close, minimize and zoom were seen to work in the nested session
+  (`tests/compositor/third_party_chrome.sh`: tag, no plugin strip, the app's zoom button zooms and unzooms, its minimize
+  button minimizes, a capture of the title bar): rule `gf-client-chrome-third-party` on `chromium` (the browser window)
+  and `md.obsidian.Obsidian` (Obsidian's Wayland app id). Captures judged 2026-10-25: Chromium shows close, minimize,
+  zoom on the left of its tab strip, one set; Obsidian shows minimize, zoom, close at the top right (it ignores the GTK
+  layout), one set.
+- Not on the list, the plugin's titlebar kept:
+  - Chromium's `--app` windows (Omarchy's web apps, class `chrome-<site>-<profile>`): they draw no frame; one set, the
+    plugin's.
+  - Evince and Nautilus: with the layout they show close, minimize, zoom on the left, but under Hyprland 0.56.2 Evince's
+    zoom button does nothing (a double-click on its header bar still zooms) and Nautilus greys its minimize button (GTK4
+    offers minimize only when the compositor says it can minimize). They keep the plugin's working set next to their own
+    buttons: two sets, as before GF-056, until those buttons work (a plugin bridge for the maximize request and the
+    minimize capability are follow-ups).
+  - Not verified, so not listed: VS Code and its builds, Discord, Slack, Spotify, Brave, Chrome, Pinta, Disks, the GTK
+    portal's dialogs. They join once they pass the same nested checks.
+- The plugin needs no change: P1 (no titlebar), P3 (no band in Overview and Stages), P4 and P5 follow the tag. The listed
+  apps are exempt from `gf-no-maximize-event`, as Grassfield's apps are (Q4): their own zoom control is the only one they
+  have. `tests/shell/client_chrome_rules.sh` checks that both maximize negations are built from the two lists.
+
+Consequences:
+- An app set to draw no frame of its own (Chromium's "Use system title bar and borders") is still tagged and then has no
+  controls: it has to leave the list. A new app that draws its own frame has to join it. Neither is automatic until
+  Hyprland exposes a decoration signal.
+- Degradation (C1-C3): without the plugin nothing about the titlebar changes (there is none). The maximize exemption and
+  the button layout are session settings: with or without the plugin, the listed apps' own zoom works and header bars put
+  their buttons on the left.
+- Verified in the nested session (Hyprland 0.56.2 efb50993, 2026-10-25, every client on the private bus with an isolated
+  home): `third_party_chrome.sh` PASS, `client_chrome.sh` PASS, `chrome.sh` PASS. One set of controls on foot, Chromium,
+  Obsidian and the web app; two sets on Evince and Nautilus (see above).

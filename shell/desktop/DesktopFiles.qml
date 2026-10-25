@@ -7,7 +7,7 @@ import Grassfield.Ui
 import qs.services
 import qs.store
 import "IconsLogic.js" as Logic
-import "../dock/DockModel.js" as DockModel
+import "../dock/DockModel.js" as DockModel // layering-exception: GF-087
 
 // The desktop folder as a model (one instance, owned by DesktopIcons), the persisted icon slots, and every file operation of the desktop
 // icons (docs/specs/desktop.md). Nothing here touches a file unless a function below is called by an

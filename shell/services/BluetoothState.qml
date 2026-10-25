@@ -3,7 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Bluetooth
-import "../overlay/controlcenter/Model.js" as Model
+import "../overlay/controlcenter/Model.js" as Model // layering-exception: GF-087
 
 // Bluetooth through Quickshell.Bluetooth (BlueZ). Absent without an adapter.
 // In a GRASSFIELD_DEV session nothing is changed (the nested shell shares the owner's radios).

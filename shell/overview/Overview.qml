@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
+import Quickshell.Hyprland // layering-exception: GF-087
 import Grassfield.Ui
 import qs.platform
 import qs.services
