@@ -49,23 +49,24 @@ def stale(schema, target):
 
 
 def selftest():
-    import copy
     import tempfile
-    schema = json.loads(SCHEMA.read_text())
     failures = []
-    if stale(schema, DEFAULTS):
+    if stale(json.loads(SCHEMA.read_text()), DEFAULTS):
         failures.append("the repository's generated file is not current")
-    broken = copy.deepcopy(schema)
-    del broken["properties"]["material"]["properties"]["transparency"]["default"]
+    # A tiny schema of its own: the check never depends on a real key or value of the product schema.
+    tiny = {"type": "object", "properties": {"version": {"type": "integer", "default": 1},
+                                             "group": {"type": "object", "properties": {"n": {"type": "number", "default": 7}}}}}
+    broken = json.loads(json.dumps(tiny))
+    del broken["properties"]["group"]["properties"]["n"]["default"]
     if not stale(broken, DEFAULTS):
         failures.append("a leaf without a default was accepted")
     with tempfile.TemporaryDirectory() as tmp:
         target = pathlib.Path(tmp) / "grassfield.json"
-        target.write_text(render(schema, []))
-        if stale(schema, target):
+        target.write_text(render(tiny, []))
+        if stale(tiny, target):
             failures.append("fresh output reported stale")
-        target.write_text(target.read_text().replace("0.25", "0.5"))
-        if not stale(schema, target):
+        target.write_text(target.read_text().replace("7", "8"))
+        if not stale(tiny, target):
             failures.append("stale output was accepted")
     for f in failures:
         print(f"gen-settings selftest: {f}", file=sys.stderr)
