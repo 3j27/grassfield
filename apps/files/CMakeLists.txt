@@ -10,6 +10,8 @@ set(CMAKE_AUTOMOC ON)
 set(KF_MIN_VERSION "6.17") # FileUndoManager::redo()
 find_package(ECM ${KF_MIN_VERSION} NO_MODULE)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick DBus)
+# Qt 6.10+ defines the private module targets (Qt6::GuiPrivate, linked below for windowchrome.h) only when asked for.
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 # KDE Frameworks are separate CMake packages (there is no umbrella "KF6" package).
 find_package(KF6KIO ${KF_MIN_VERSION} REQUIRED)
 find_package(KF6CoreAddons ${KF_MIN_VERSION} REQUIRED)

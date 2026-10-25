@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
+# Qt 6.10+ defines the private module targets (Qt6::GuiPrivate, linked below for windowchrome.h) only when asked for.
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 # QtPdf/QtPdfQuick (qt6-webengine) and QtMultimedia are QML modules used at run time.
 find_package(Qt6 COMPONENTS Pdf PdfQuick Multimedia)
 
