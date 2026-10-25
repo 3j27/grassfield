@@ -61,6 +61,20 @@ WidgetBase {
         }
     }
 
+    // macOS: the artwork and the title open the app that plays (not while the widgets are being edited).
+    MouseArea {
+        x: art.x
+        y: art.y
+        width: root.isSmall ? art.width : text.x + text.width - art.x
+        height: root.isSmall ? text.y + text.height - art.y : art.height
+        enabled: root.transportEnabled && root.hasTrack
+        cursorShape: Qt.ArrowCursor
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Open the app that is playing")
+        Accessible.onPressAction: Media.openPlayerApp(false)
+        onClicked: Media.openPlayerApp(false)
+    }
+
     Column {
         id: text
 

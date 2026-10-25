@@ -77,4 +77,9 @@ cp "$root/packaging/systemd/grassfield-menu-bridge.service" "$tmp/b.service"
 sed -i 's/^ProtectHome=read-only/ProtectHome=yes/' "$tmp/b.service"
 desc="mutation: ProtectHome=yes on grassfield-menu-bridge.service is caught, and the bridge is in the bus list"
 if hides_bus "$tmp/b.service" && [[ " $BINARY_BUS_UNITS " == *" grassfield-menu-bridge.service "* ]]; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi
+# FINDINGS 3 (first real session): a unit with ProtectSystem=strict cannot create $XDG_RUNTIME_DIR/dconf, so a GSettings client
+# in it needs %t/dconf writable (not the memory backend: udiskie's dialogs keep the user's real settings).
+u=$root/packaging/systemd/grassfield-automount.service
+desc="the removable-media unit keeps ProtectSystem=strict and makes only %t/dconf writable, with the real GSettings backend"
+if grep -qx 'ReadWritePaths=-%t/dconf' "$u" && grep -qx 'ProtectSystem=strict' "$u" && ! grep -q GSETTINGS_BACKEND "$u"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi
 exit "$fail"

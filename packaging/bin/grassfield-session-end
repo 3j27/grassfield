@@ -28,11 +28,33 @@ import subprocess
 import sys
 import time
 
-ACTIONS = {
-    "logout": ("Log Out", "Log Out Anyway"),
-    "restart": ("Restart", "Restart Anyway"),
-    "shutdown": ("Shut Down", "Shut Down Anyway"),
+ACTIONS = {  # (button of the "Anyway" notice, title of that notice), both through tr()
+    "logout": ("Log Out Anyway", "Can't log out now"),
+    "restart": ("Restart Anyway", "Can't restart now"),
+    "shutdown": ("Shut Down Anyway", "Can't shut down now"),
 }
+# Strings: English is the source, CATALOG the French translation (gate I1: scripts/dev/check-i18n.py). The helpers cannot load
+# Qt's .qm catalogs (standard library only). Language: GRASSFIELD_LANG, else LC_ALL, LC_MESSAGES, LANG as the shell does.
+UNKNOWN_BODY = "The list of open windows could not be read, so the session was not ended. Your work may still be open."
+OPEN_BODY = "These applications are still open and may be waiting for you to save your work: %s."
+CATALOG = {
+    "fr": {
+        "Log Out Anyway": "Fermer la session malgré tout",
+        "Restart Anyway": "Redémarrer malgré tout",
+        "Shut Down Anyway": "Éteindre malgré tout",
+        "Can't log out now": "Impossible de fermer la session maintenant",
+        "Can't restart now": "Impossible de redémarrer maintenant",
+        "Can't shut down now": "Impossible d’éteindre maintenant",
+        UNKNOWN_BODY: "La liste des fenêtres ouvertes n’a pas pu être lue, la session n’a donc pas été fermée. "
+                      "Votre travail est peut-être encore ouvert.",
+        OPEN_BODY: "Ces apps sont encore ouvertes et attendent peut-être que vous enregistriez votre travail : %s.",
+    },
+}
+
+
+def tr(text):
+    lang = next((os.environ[v] for v in ("GRASSFIELD_LANG", "LC_ALL", "LC_MESSAGES", "LANG") if os.environ.get(v)), "")
+    return CATALOG.get(lang.partition("_")[0].partition(".")[0].partition("@")[0], {}).get(text, text)
 ADDRESS = re.compile(r"^0x[0-9a-fA-F]+$")
 POLL = 0.25
 TIMED_OUT = 124  # returncode of a helper that did not answer in time
@@ -174,12 +196,12 @@ def ask(title, body, anyway, timeout):
 def notify_blocked(action, names, unknown=False):
     """Show the notice and wait for "<Action> Anyway". Returns True when the user chose it. Without notify-send the notice
     is still shown (through notify_plain, without the button): nothing is ended then."""
-    label, anyway = ACTIONS[action]
-    title = "Can't %s now" % label.lower()
+    anyway, title = ACTIONS[action]
+    anyway, title = tr(anyway), tr(title)
     if unknown:
-        body = "The list of open windows could not be read, so the session was not ended. Your work may still be open."
+        body = tr(UNKNOWN_BODY)
     else:
-        body = "These applications are still open and may be waiting for you to save your work: %s." % ", ".join(names[:5])
+        body = tr(OPEN_BODY) % ", ".join(names[:5])
     answer = ask(title, body, anyway, bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_ASK_TIMEOUT"), float(ASK_TIMEOUT), 1.0, 3600.0))
     if answer is None:
         notify_plain(title, body)

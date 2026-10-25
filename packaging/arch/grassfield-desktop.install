@@ -4,7 +4,7 @@
 post_install() {
   echo "grassfield: checking the login path (also: /usr/lib/grassfield/grassfield-login-check)"
   /usr/lib/grassfield/grassfield-login-check 2>&1 | sed 's/^/grassfield: /' || true
-  echo "grassfield: the login screen now starts Grassfield; Omarchy stays one command away: grassfield-login set omarchy"
+  echo "grassfield: restart the computer once: SDDM reads its configuration only when it starts, so until then the login screen still starts your previous session. After that it starts Grassfield; Omarchy stays one command away: grassfield-login set omarchy"
 }
 
 post_upgrade() {

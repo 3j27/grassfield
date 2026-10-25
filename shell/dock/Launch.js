@@ -62,19 +62,69 @@ function forceQuitPids(pids) {
 // empty), minimized, checked}. The check goes to the most recently focused window that is not minimized (macOS: the key window);
 // a minimized window never has it. Choosing a row activates that one window (Compositor.activate restores a minimized window
 // and switches to its Desktop, the same call as a Dock click).
-function menuWindows(windows, max, appName) {
-    if (!windows || windows.length === 0)
+// The number a window keeps while it lives, per app (appKey -> window ref -> {title, n}): another app's menu never renumbers
+// this app's windows. A closed window's entry is dropped on the next call for its app.
+const numbers = new Map();
+
+function resetNumbers() {
+    numbers.clear();
+}
+
+function labelOf(title, n) {
+    return n > 1 ? title + " (" + n + ")" : title;
+}
+
+function menuWindows(windows, max, appName, appKey) {
+    const key = appKey === undefined || appKey === null ? "" : String(appKey);
+    if (!numbers.has(key))
+        numbers.set(key, new Map());
+    const mine = numbers.get(key);
+    if (!windows || windows.length === 0) {
+        mine.clear();
         return [];
-    const sorted = windows.slice().sort((a, b) => b.stamp - a.stamp);
-    const front = sorted.find(w => !w.minimized);
-    return sorted.map(w => {
+    }
+    const elide = t => t.length > max ? t.slice(0, max - 1) + "\u2026" : t;
+    const titled = windows.map(w => {
         const t = String(w.title === undefined || w.title === null ? "" : w.title).replace(/\s+/g, " ").trim();
-        const title = t === "" ? appName : t;
+        return {w: w, title: elide(t === "" ? appName : t)};
+    });
+    // Same visible title (after eliding, so two long titles that differ only past the cut also count): each window gets the
+    // smallest number no other window of that title holds and whose label no other window already shows (a window literally
+    // titled "foot (2)" keeps that label for itself), and keeps it until its title changes or it closes. Only a title shared
+    // by several windows shows a number.
+    const live = new Set(titled.map(l => l.w.ref));
+    for (const ref of Array.from(mine.keys())) {
+        if (!live.has(ref))
+            mine.delete(ref);
+    }
+    const count = {};
+    for (const l of titled)
+        count[l.title] = (count[l.title] || 0) + 1;
+    const rawTitles = new Set(titled.map(l => l.title));
+    for (const l of titled) {
+        const kept = mine.get(l.w.ref);
+        if (kept && kept.title === l.title)
+            continue;
+        const taken = new Set();
+        for (const o of titled) {
+            const e = mine.get(o.w.ref);
+            if (o !== l && e && e.title === l.title)
+                taken.add(e.n);
+        }
+        let n = 1;
+        while (taken.has(n) || (n > 1 && count[l.title] > 1 && rawTitles.has(labelOf(l.title, n))))
+            n++;
+        mine.set(l.w.ref, {title: l.title, n: n});
+    }
+    const sorted = titled.slice().sort((a, b) => b.w.stamp - a.w.stamp);
+    const front = sorted.find(l => !l.w.minimized);
+    return sorted.map(l => {
+        const n = mine.get(l.w.ref).n;
         return {
-            ref: w.ref,
-            title: title.length > max ? title.slice(0, max - 1) + "…" : title,
-            minimized: w.minimized === true,
-            checked: w === front
+            ref: l.w.ref,
+            title: count[l.title] > 1 ? labelOf(l.title, n) : l.title,
+            minimized: l.w.minimized === true,
+            checked: l === front
         };
     });
 }
