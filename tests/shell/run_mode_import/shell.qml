@@ -24,7 +24,8 @@ ShellRoot {
             root.check("dev", Mode.dev === true);
             root.check("not a packaged session", Mode.session === false);
             root.check("fixtures need their own variable", Mode.fixtures === (Quickshell.env("GRASSFIELD_VISUAL_FIXTURES") === "1"));
-            // Mode's own variable names (the vectors reach RunMode.js only): each property against the rule fed with the raw environment.
+            // Each property against the rule fed with the raw environment. Most variables are unset here, so a misspelled name in
+            // Mode.qml would still pass: the names are checked statically by tests/unit/tst_runmode.qml (modeReads table).
             const e = n => Quickshell.env(n);
             root.check("Mode.dev is the rule", Mode.dev === RunMode.dev(e("GRASSFIELD_DEV"), e("GRASSFIELD_SESSION")));
             root.check("Mode.session is the rule", Mode.session === RunMode.session(e("GRASSFIELD_SESSION")));

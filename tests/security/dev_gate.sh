@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# GF-AUDIT-001 SEC-03: the dev/test switches of the lock follow one gate (shell/services/DevGate.js): they work only with
-# GRASSFIELD_DEV=1 AND no GRASSFIELD_SESSION=1. Runs tests/security/dev_gate.d/probe.qml offscreen against the REAL Lock
-# singleton (and VisualFixtures) in five environments:
+# GF-AUDIT-001 SEC-03: the dev/test switches of the lock follow one gate (ADR-0019: shell/lib/RunMode.js dev, which the
+# security modules import by a relative path): they work only with GRASSFIELD_DEV=1 AND no GRASSFIELD_SESSION=1. Runs
+# tests/security/dev_gate.d/probe.qml offscreen against the REAL Lock singleton (and VisualFixtures, Widgets and qs.lib
+# Mode, which must agree with the lock's gate in every environment) in five environments:
 #   open                 dev session                                  -> hooks answer, PAM suppressed
 #   open, PAM opt-in     dev session + GRASSFIELD_DEV_ALLOW_PAM=1      -> hooks answer, PAM not suppressed (L2 test)
 #   closed               real session (GRASSFIELD_SESSION=1)           -> hooks refused, PAM not suppressed

@@ -11,7 +11,7 @@ import Grassfield.Ui
 import qs.services
 import qs.security.lock
 import "IdleModel.js" as IdleModel
-import "../../services/DevGate.js" as DevGate
+import "../../lib/RunMode.js" as RunMode
 
 // Idle handling (SEC7, ADR-0010): after T-10 s without input the screens dim, at T the session
 // locks (T = lock.idleMinutes, default 5, 0 = never). Any input undims and cancels. Wayland idle
@@ -25,8 +25,9 @@ Scope {
 
     readonly property var timing: IdleModel.timings(Settings.lockIdleMinutes)
     property bool dimmed: false
-    // Dev session only (DevGate): the dev hooks answer. Never in a real session (GRASSFIELD_SESSION=1), SEC-03.
-    readonly property bool devHooks: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
+    // Dev session only (RunMode.dev through the relative import, which no QML import path can replace): the dev hooks
+    // answer. Never in a real session (GRASSFIELD_SESSION=1), SEC-03.
+    readonly property bool devHooks: RunMode.dev(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
     // Seconds without input on the lock screen before the displays go off; 0 = never. Off in the nested dev session
     // unless a test sets it (`idle devDisplayOff <seconds>`): a dark nested output would spoil the lock tests' captures.
     property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
@@ -163,7 +164,7 @@ Scope {
         // Test hook (dev only, else "refused"): idle state as JSON.
         function status(): string {
             if (!root.devHooks)
-                return DevGate.REFUSED;
+                return RunMode.REFUSED;
             return JSON.stringify({
                 enabled: monitor.enabled,
                 idle: monitor.isIdle,
@@ -183,7 +184,7 @@ Scope {
         // logind (tests/security/reload_locked.sh). The dev shell never holds a real inhibitor, so nothing is delayed.
         function devSleep(phase: string): string {
             if (!root.devHooks)
-                return DevGate.REFUSED;
+                return RunMode.REFUSED;
             if (phase === "before")
                 sleepInhibitor.beforeSleep();
             else if (phase === "after")
@@ -197,7 +198,7 @@ Scope {
         // tests/security/lock_privacy.sh `display-off`. Takes effect at the next lock.
         function devDisplayOff(seconds: int): string {
             if (!root.devHooks || seconds < 0 || seconds > 600)
-                return DevGate.REFUSED;
+                return RunMode.REFUSED;
             root.displayOffSeconds = seconds;
             return "ok";
         }

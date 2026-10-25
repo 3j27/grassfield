@@ -3,8 +3,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
+import qs.lib
 import "BarToneLogic.js" as Logic
-import "DevGate.js" as DevGate
 
 // Adaptive menu bar foreground, one tone per output (macOS model: over a transparent bar the text and glyphs follow what is
 // behind them). The wallpaper (shell/desktop/Wallpaper.qml: the artwork, or an image) reports the luminance of the strip under
@@ -28,8 +28,8 @@ Singleton {
         target: "bartone"
 
         function status(): string {
-            if (!DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION")))
-                return DevGate.REFUSED;
+            if (!Mode.dev)
+                return Mode.refused;
             const out = {};
             for (const name of Object.keys(root.tones))
                 out[name] = {tone: root.tones[name], luminance: root.luminances[name], assist: root.assists[name] === true, white: root.contrasts[name] ? root.contrasts[name].white : null, black: root.contrasts[name] ? root.contrasts[name].black : null};

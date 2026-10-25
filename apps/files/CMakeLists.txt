@@ -9,7 +9,9 @@ set(CMAKE_AUTOMOC ON)
 
 set(KF_MIN_VERSION "6.17") # FileUndoManager::redo()
 find_package(ECM ${KF_MIN_VERSION} NO_MODULE)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui GuiPrivate Widgets Qml Quick DBus) # GuiPrivate: windowchrome.h; Qt 6.11 loads the private module only when asked
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick DBus)
+# Qt 6.10+ defines the private module targets (Qt6::GuiPrivate, linked below for windowchrome.h) only when asked for.
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 # KDE Frameworks are separate CMake packages (there is no umbrella "KF6" package).
 find_package(KF6KIO ${KF_MIN_VERSION} REQUIRED)
 find_package(KF6CoreAddons ${KF_MIN_VERSION} REQUIRED)
@@ -51,7 +53,7 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_runmode.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
+        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
         src/folderstylelogic.cpp src/folderstylestore.cpp)
     target_include_directories(files-unit-tests PRIVATE src ..)
     target_link_libraries(files-unit-tests PRIVATE Qt6::Core GTest::gtest GTest::gtest_main)

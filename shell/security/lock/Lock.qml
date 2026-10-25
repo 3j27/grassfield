@@ -20,7 +20,7 @@ import Grassfield.Ui
 import qs.security
 import qs.services
 import "../LockMachine.js" as Machine
-import "../../services/DevGate.js" as DevGate
+import "../../lib/RunMode.js" as RunMode
 
 // Session lock (ADR-0010, master-prompt R12): ext-session-lock through WlSessionLock, password
 // checked by PAM service "omarchy-lock-password" (no PAM file of ours). Only a PAM success
@@ -66,10 +66,11 @@ Singleton {
     property bool verified: false
     readonly property bool pamAvailable: controller.pamAvailable
     readonly property bool fingerprintAvailable: fingerprintFile.available
-    // Dev session (DevGate: GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1): the test hooks below answer, and PAM is
+    // Dev session (RunMode.dev: GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1, read through the relative import of
+    // shell/lib/RunMode.js, which no QML import path can replace): the test hooks below answer, and PAM is
     // suppressed unless GRASSFIELD_DEV_ALLOW_PAM=1. In a real session (GRASSFIELD_SESSION=1) both are off even when
     // GRASSFIELD_DEV=1 leaks into its environment (GF-AUDIT-001 SEC-03).
-    readonly property bool devHooks: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
+    readonly property bool devHooks: RunMode.dev(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
     readonly property bool pamSuppressed: controller.pamSuppressed
     // Lock fields (one per screen) that hold typed text: only ever read by the dev hook devLockView (L2 test: the
     // field is emptied after every attempt). Never the text, never its length.
@@ -678,18 +679,18 @@ Singleton {
             strandedProbe.start();
     }
 
-    // Dev hooks (DevGate: dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of
+    // Dev hooks (dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of
     // the singleton so that the offscreen test can call them; the IPC handler below only forwards.
 
     // Test hook: the state machine state.
     function devStatus(): string {
-        return root.devHooks ? root.lockState : DevGate.REFUSED;
+        return root.devHooks ? root.lockState : RunMode.REFUSED;
     }
 
     // Soft-reload the configuration the way Quickshell's file watcher would (tests/security/reload_locked.sh).
     function devReload(): string {
         if (!root.devHooks)
-            return DevGate.REFUSED;
+            return RunMode.REFUSED;
         console.warn("grassfield-lock: dev soft reload requested");
         Qt.callLater(() => Quickshell.reload(false));
         return "reloading";
@@ -698,7 +699,7 @@ Singleton {
     // Pause the periodic lock ownership check for 10 s (answers to other queries, lock() and verify() still check).
     function devPauseOwnershipCheck(): string {
         if (!root.devHooks)
-            return DevGate.REFUSED;
+            return RunMode.REFUSED;
         console.warn("grassfield-lock: dev pause of the lock ownership check (10 s)");
         devPause.restart();
         return "paused";
@@ -709,7 +710,7 @@ Singleton {
     // fresh answer confirms it.
     function devForgeUnlockedAnswer(): string {
         if (!root.devHooks)
-            return DevGate.REFUSED;
+            return RunMode.REFUSED;
         if (!root.holding)
             return "not-holding";
         console.warn("grassfield-lock: dev forged one unlocked answer");
@@ -722,7 +723,7 @@ Singleton {
     // whether PAM is suppressed. JSON.
     function devLockView(): string {
         if (!root.devHooks)
-            return DevGate.REFUSED;
+            return RunMode.REFUSED;
         return JSON.stringify({
             state: root.lockState,
             field: root.filledFields > 0 ? "filled" : "empty",

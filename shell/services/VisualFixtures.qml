@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
-import "DevGate.js" as DevGate
+import qs.lib
 
 // Dev-only hooks for deterministic screenshots and the contrast measurement (tests/visual).
 //
@@ -22,10 +22,11 @@ Singleton {
 
     // Never in a packaged session: GRASSFIELD_SESSION=1 (config/hypr/session.lua) turns every hook off, fixtures and
     // glyph mask alike, even when GRASSFIELD_DEV=1 leaks into the environment. The nested dev session never sets it (shell-run.sh
-    // leaves it alone; only the packaged session config sets it). The shell's one dev gate (shell/services/DevGate.js):
-    // every IPC test hook outside the security modules checks this property (docs/specs/security.md "IPC surface").
-    readonly property bool dev: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
-    readonly property bool active: dev && Quickshell.env("GRASSFIELD_VISUAL_FIXTURES") === "1"
+    // leaves it alone; only the packaged session config sets it). The shell's one dev rule (ADR-0019: qs.lib Mode, defined
+    // by shell/lib/RunMode.js): every IPC test hook outside the security modules checks this property or Mode.dev
+    // (docs/specs/security.md "IPC surface").
+    readonly property bool dev: Mode.dev
+    readonly property bool active: Mode.fixtures
     readonly property string network: "Grassfield"
     readonly property string user: "grassfield"
     readonly property string hostname: "grassfield"

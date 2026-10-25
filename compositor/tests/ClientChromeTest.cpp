@@ -11,6 +11,64 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
+// P8 (GF-056 part 2): a window that draws its own controls is told it can be minimized (GTK4 greys a minimize button the
+// compositor does not offer); every other window keeps exactly what Hyprland 0.56.2 sends.
+TEST(ClientChromeCapabilities, ClientChromeWindowsAreToldMinimizeWhileTheBridgeRuns) {
+    using gf::chrome::wmCapabilities;
+    const std::vector<uint32_t> hyprland{gf::chrome::kCapFullscreen, gf::chrome::kCapMaximize};
+    EXPECT_EQ(wmCapabilities(false, true), hyprland) << "not client chrome: Hyprland's own capabilities";
+    EXPECT_EQ(wmCapabilities(true, false), hyprland) << "no bridge (unload, start failed): Hyprland's own capabilities";
+    EXPECT_EQ(wmCapabilities(false, false), hyprland);
+    const auto chrome = wmCapabilities(true, true);
+    ASSERT_EQ(chrome.size(), 3U);
+    EXPECT_EQ(chrome[0], gf::chrome::kCapFullscreen);
+    EXPECT_EQ(chrome[1], gf::chrome::kCapMaximize);
+    EXPECT_EQ(chrome[2], gf::chrome::kCapMinimize);
+}
+
+TEST(ClientChromeCapabilities, TheValuesAreTheProtocolsEnum) {
+    // xdg-shell.xml xdg_toplevel.wm_capabilities: window_menu 1, maximize 2, fullscreen 3, minimize 4; the event since v5.
+    EXPECT_EQ(gf::chrome::kCapWindowMenu, 1U);
+    EXPECT_EQ(gf::chrome::kCapMaximize, 2U);
+    EXPECT_EQ(gf::chrome::kCapFullscreen, 3U);
+    EXPECT_EQ(gf::chrome::kCapMinimize, 4U);
+    EXPECT_EQ(gf::chrome::kWmCapabilitiesSince, 5U);
+}
+
+// The walk over a client's resources reads a resource through CXDGToplevelResource::fromResource only when it can be the
+// window's toplevel and be told: an xdg_toplevel, v5 or later, still holding its user data (null while it is destroyed;
+// fromResource would read through it).
+TEST(ClientChromeCapabilities, OnlyALiveToplevelWithTheEventIsReadDuringTheWalk) {
+    using gf::chrome::capabilityCandidate;
+    EXPECT_TRUE(capabilityCandidate("xdg_toplevel", 5, true));
+    EXPECT_TRUE(capabilityCandidate("xdg_toplevel", 7, true));
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel", 7, false)) << "a resource being destroyed (no user data) is never read";
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel", 4, true)) << "older than v5: it never had the event";
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel", 1, true));
+    EXPECT_FALSE(capabilityCandidate("xdg_surface", 7, true)) << "another interface";
+    EXPECT_FALSE(capabilityCandidate("xdg_popup", 7, true));
+    EXPECT_FALSE(capabilityCandidate("", 7, true));
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel_extra", 7, true)) << "the exact interface name, no prefix";
+}
+
+// A window is told only when the answer changes, and a window that could not be told is never walked again (every rule
+// change would repeat the walk for nothing).
+TEST(ClientChromeCapabilities, AWindowIsToldOnceAndAnUnreachableOneNeverAgain) {
+    using gf::chrome::CapabilityTell;
+    using gf::chrome::needsTell;
+    CapabilityTell fresh;
+    EXPECT_TRUE(needsTell(fresh, true)) << "a new client-chrome window: told minimize";
+    EXPECT_FALSE(needsTell(fresh, false)) << "a new other window: it already has Hyprland's own capabilities";
+    const CapabilityTell told{.minimizeTold = true, .unreachable = false};
+    EXPECT_FALSE(needsTell(told, true)) << "same answer: nothing sent again on the next rule change";
+    EXPECT_TRUE(needsTell(told, false)) << "the tag went, or the unload: told Hyprland's own capabilities again";
+    const CapabilityTell unreachable{.minimizeTold = false, .unreachable = true};
+    EXPECT_FALSE(needsTell(unreachable, true));
+    EXPECT_FALSE(needsTell(unreachable, false));
+}
+
 #include <cmath>
 #include <set>
 #include <string>

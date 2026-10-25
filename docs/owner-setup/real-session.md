@@ -287,6 +287,23 @@ does not accept keycodes on 0.56.2: report which; the Super+digit forwarding the
 
 ## 6. Known issues on main right now
 
+Build 1.0.0-rc1 (2026-10-25, from main 2b224ea; the 0.4.0 notes below still apply unless replaced here):
+- New since 0.4.0-11: GTK apps (Nautilus, Evince, ...) and Chromium show their own close, minimize and zoom buttons on the
+  left (the Grassfield session's GNOME button layout default is `close,minimize,maximize:`) and Grassfield draws no second
+  titlebar for Chromium's browser, Obsidian, Evince and Nautilus; web apps (`chrome-*`) keep Grassfield's traffic lights.
+  If you set a button layout yourself, yours wins and those apps may show fewer buttons:
+  `gsettings get org.gnome.desktop.wm.preferences button-layout` should print `'close,minimize,maximize:'`.
+- New: the menu bar, widget and lock-screen clocks no longer spin during the daylight-saving change (seen on 2026-10-25).
+- New: media art comes only from public https hosts, and every image from your own icon folders, notifications and the
+  tray is re-encoded by a helper before the shell shows it: tell me if an icon or an album cover you expect is missing.
+- Dock folder stacks (Downloads): this build still has the first implementation. On a folder with tens of thousands of files
+  it can use noticeable CPU and update slowly; the native helper that fixes it is under review and not in this build.
+- Mission Control (Overview) closing with no window open can stutter with transparency on (measured in the nested session
+  only; your hardware is the real measurement: tell me what you see).
+- The lock screen after a keyboard is unplugged and plugged back (Bluetooth or USB) is NOT VERIFIED: try it once (lock, unplug
+  the keyboard, plug it back, type your password).
+
+Earlier notes:
 - Search/Apps keyboard focus on two outputs: under a fix pass.
 - Attention bounce: most apps that ask for attention get the focus at once (Hyprland focuses activation requests;
   telling a user-triggered activation from another one is not possible in Hyprland 0.56.2), so the bounce shows mainly

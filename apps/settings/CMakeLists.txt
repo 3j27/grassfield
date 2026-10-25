@@ -7,7 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Gui GuiPrivate Qml Quick DBus) # GuiPrivate: windowchrome.h; Qt 6.11 loads the private module only when asked
+find_package(Qt6 REQUIRED COMPONENTS Gui Qml Quick DBus)
+# Qt 6.10+ defines the private module targets (Qt6::GuiPrivate, linked below for windowchrome.h) only when asked for.
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 
 add_executable(grassfield-settings src/main.cpp src/backend.cpp src/backend.h src/systemguard.cpp src/systemguard.h)
 # windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.

@@ -62,6 +62,14 @@ Variable classes:
 (`runmode::shellIpcArgs()`) uses it, or refuses with a clear error when it is not set: a dev session never drives the
 installed shell, which may be the owner's real one.
 
+Amendment (slice M2, integrator decision 2026-10-25): a `qs/<module>` directory on `QML_IMPORT_PATH` overrides any
+`qs.*` module (M1 review note 5), so the security modules (`shell/security/**`) and the security gates do not read the
+rule through `qs.lib` or `Mode`: they import `shell/lib/RunMode.js` by a relative path and call
+`RunMode.dev(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))` themselves (answer `RunMode.REFUSED`).
+That call is the one exception to "only `Mode` reads `GRASSFIELD_*`" in QML; M8's `tests/ci/run_mode.py` must accept
+exactly it in the security modules. Non-security modules use `Mode`. `tests/security/ipc_inventory.sh` holds both forms
+to the definitions.
+
 ## macOS reference
 A debug default never changes a shipped app's behaviour unless the developer build reads it; there is no "developer
 mode" that disables Quick Settings toggles, power actions or global menus. The real session simply works.

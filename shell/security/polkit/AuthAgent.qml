@@ -9,7 +9,7 @@ import Quickshell.Services.Polkit
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
-import "../../services/DevGate.js" as DevGate
+import "../../lib/RunMode.js" as RunMode
 
 // The session's polkit authentication agent (SEC6, ADR-0010): Quickshell.Services.Polkit,
 // one instance per shell. polkit allows one agent per session; when another one already owns
@@ -177,8 +177,8 @@ Scope {
         // Test hook (dev session only, else "refused"): "registered" | "unregistered". The real session's journal
         // has the same fact ("authentication agent registered").
         function status(): string {
-            if (!DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION")))
-                return DevGate.REFUSED;
+            if (!RunMode.dev(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION")))
+                return RunMode.REFUSED;
             return agent.isRegistered ? "registered" : "unregistered";
         }
     }

@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace gf::chrome {
 
@@ -27,6 +28,38 @@ namespace gf::chrome {
     // The band the plugin reserves above a window's surface: its titlebar, none for a window that draws its own chrome
     // (P3: Stages thumbnails; also the tiling and restore frames, so that no empty strip is left above such a window).
     double band(bool clientChrome);
+
+    // ---- P8: the minimize capability (GF-056 part 2) ----
+    // xdg_toplevel.wm_capabilities (xdg-shell v5) tells a client which window controls work; GTK4 greys the ones that are
+    // missing. Hyprland 0.56.2 sends every toplevel fullscreen and maximize, once, from CXDGToplevelResource's
+    // constructor (read from the binary: no minimize, no window menu): it does nothing with set_minimized on its own. A
+    // window that draws its own controls is minimized by the plugin (P5: the titlebar light's path, Dock target and
+    // effect), so while it is client chrome it is told minimize too. The values are the protocol's enum.
+    inline constexpr uint32_t kCapWindowMenu = 1;
+    inline constexpr uint32_t kCapMaximize   = 2;
+    inline constexpr uint32_t kCapFullscreen = 3;
+    inline constexpr uint32_t kCapMinimize   = 4;
+    inline constexpr uint32_t kWmCapabilitiesSince = 5; // the xdg_toplevel version that has the event
+
+    // The capabilities a window is told: Hyprland's own (fullscreen, maximize, in its order), plus minimize when the
+    // window is client chrome and the plugin bridges its set_minimized (P5).
+    std::vector<uint32_t> wmCapabilities(bool clientChrome, bool minimizeBridged);
+
+    // The xdg_toplevel resource is private in CXDGToplevelResource: the glue walks the client's resources. A resource is
+    // handed to CXDGToplevelResource::fromResource only when it is an xdg_toplevel with the event (v5 or later) and still
+    // has its user data: fromResource reads the user data without a check (read from the 0.56.2 binary), and it is null
+    // while the resource is being destroyed (a rule change can run inside another object's destroy chain).
+    bool capabilityCandidate(std::string_view interfaceName, int version, bool hasUserData);
+
+    // What one window was told. `unreachable`: its xdg_toplevel resource was not found (older than v5, or going), so it
+    // cannot be told anything: no further walk for it (every rule change would repeat it).
+    struct CapabilityTell {
+        bool minimizeTold = false;
+        bool unreachable  = false;
+    };
+
+    // Whether the window must be told again for the answer `withMinimize` (the answer changed and it can be told).
+    bool needsTell(const CapabilityTell& tell, bool withMinimize);
 
     // ---- P4: dragging a zoomed window by its own toolbar ----
     // The app starts Hyprland's interactive move (xdg_toplevel.move) from a press on its toolbar. macOS takes a window that

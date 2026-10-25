@@ -79,9 +79,11 @@ ShellRoot {
         // Defence in depth (R12 review #3 MAJOR): PAM is suppressed in a dev session unless GRASSFIELD_DEV_ALLOW_PAM=1.
         // ...and the lock shows it (a GRASSFIELD_DEV leaking into a real session is visible; the lock still fails closed).
         check("Lock.qml-dev-hint-on-lock", /controller\.pamSuppressed \? qsTr\("dev: password checks disabled"\)/.test(code));
-        // SEC-03: the dev gate is DevGate (GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1), never GRASSFIELD_DEV alone.
+        // SEC-03: the dev gate is RunMode.dev (GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1), never GRASSFIELD_DEV alone,
+        // read through the relative import of shell/lib/RunMode.js, never the qs.lib module (ADR-0019, M2).
         check("Lock.qml-dev-pam-suppressed", /controller\.pamSuppressed = root\.devHooks && Quickshell\.env\("GRASSFIELD_DEV_ALLOW_PAM"\) !== "1";/.test(code));
-        check("Lock.qml-devHooks-is-DevGate", /readonly property bool devHooks: DevGate\.allowed\(Quickshell\.env\("GRASSFIELD_DEV"\), Quickshell\.env\("GRASSFIELD_SESSION"\)\)/.test(code));
+        check("Lock.qml-devHooks-is-RunMode.dev", /readonly property bool devHooks: RunMode\.dev\(Quickshell\.env\("GRASSFIELD_DEV"\), Quickshell\.env\("GRASSFIELD_SESSION"\)\)/.test(code));
+        check("Lock.qml-RunMode-relative", /^import "\.\.\/\.\.\/lib\/RunMode\.js" as RunMode$/m.test(code) && !/^import qs\.lib\b/m.test(code));
         // A lock inherited at start keeps the 100 ms check until relock() or release(): a foreign locker under this lock
         // can release it while this surface keeps the keyboard (R12 counter-review of 620f08c), so keyboard focus must not
         // end the suspicion. inheritedLock = false appears exactly in relock() and release().

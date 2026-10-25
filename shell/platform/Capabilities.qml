@@ -5,8 +5,8 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "CapabilityEvent.js" as CapabilityEvent
+import qs.lib
 import "CapabilitiesFile.js" as CapabilitiesFile
-import "../services/DevGate.js" as DevGate // layering-exception: GF-087
 
 // Capability detection for grassfield-compositor (contract gfc/1).
 // Sends the hello every helloRetryMs (the first ones can predate Quickshell's event socket, so
@@ -79,8 +79,8 @@ Singleton {
         target: "capabilities"
 
         function status(): string {
-            if (!DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION")))
-                return DevGate.REFUSED;
+            if (!Mode.dev)
+                return Mode.refused;
             if (!root.settled)
                 return "pending";
             return root.pluginPresent ? "ready present " + root.features.join(",") : "ready degraded";
