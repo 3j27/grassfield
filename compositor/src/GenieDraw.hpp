@@ -40,7 +40,7 @@ namespace gf::genie {
     // Plugin load: a failure of an earlier load is forgotten (the GL objects are made again at the next draw).
     void reset();
 
-    // Dev fault injection (hl.plugin.grassfield.config("testFault", "funnel-shader"), only with GRASSFIELD_DEV=1): drops
+    // Dev fault injection (hl.plugin.grassfield.config("testFault", "funnel-shader"), only in a dev session): drops
     // the GL objects; the next funnel draw compiles a broken fragment shader and takes the real failure path.
     void injectShaderFault();
 

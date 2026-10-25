@@ -11,13 +11,13 @@ what=${1:-all}
 core_srcs=(src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp src/core/Json.cpp src/core/Stages.cpp src/core/CursorRefresh.cpp
   src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/Tiling.cpp src/core/LayerPointer.cpp src/core/ClientChrome.cpp src/core/FrameLog.cpp src/core/Quiet.cpp
-  src/core/Notices.cpp)
+  src/core/Notices.cpp src/core/RunMode.cpp)
 glue_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp src/Tiling.cpp src/LayerPointer.cpp src/ClientChrome.cpp src/FrameProbe.cpp)
 plugin_srcs=("${glue_srcs[@]}" "${core_srcs[@]}")
 test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
   tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp tests/StagesTest.cpp tests/CursorRefreshTest.cpp
   tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp tests/ClientChromeTest.cpp tests/FrameLogTest.cpp tests/QuietTest.cpp
-  tests/NoticesTest.cpp)
+  tests/NoticesTest.cpp tests/RunModeTest.cpp)
 
 # Every source file is in one of the lists above, which also feed the compile database and so clang-tidy
 # (scripts/dev/tidy.sh): a file left out was neither built here nor linted (core/Notices.cpp and its test were, until
@@ -60,7 +60,8 @@ plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm glesv2))
 # Pure logic only (src/core): no Hyprland headers, no compositor needed.
 # shellcheck disable=SC2207
 # GF_PLUGIN_SOURCE_DIR: QuietTest reads the plugin's sources (every key listener opens the quiet scope), as CMakeLists.txt.
-test_flags=(-std=c++23 -O0 -g -Wall -Wextra -Isrc "-DGF_PLUGIN_SOURCE_DIR=\"$PWD/src\"" $(pkg-config --cflags gtest_main))
+# GF_RUN_MODE_VECTORS: RunModeTest reads the run-mode vectors shared with the shell and the apps (ADR-0019).
+test_flags=(-std=c++23 -O0 -g -Wall -Wextra -Isrc "-DGF_PLUGIN_SOURCE_DIR=\"$PWD/src\"" "-DGF_RUN_MODE_VECTORS=\"$PWD/../tests/fixtures/run-mode-vectors.json\"" $(pkg-config --cflags gtest_main))
 # shellcheck disable=SC2207
 test_libs=($(pkg-config --libs gtest_main))
 

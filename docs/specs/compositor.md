@@ -536,9 +536,12 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   (`Tokens.motionReducedMax`), linearly. Default before any push: `funnel`. A change applies to the next animation (a
   running one keeps its effect). Shift held on any keyboard (`getModsFromAllKBs() & HL_MODIFIER_SHIFT`) when an
   animation starts plays it 10 times slower (as macOS Shift-click slow motion), for every effect. Dev fault injection:
-  `hl.plugin.grassfield.config("testFault", "funnel-shader")` is honoured only when Hyprland's environment has
-  `GRASSFIELD_DEV=1` (the nested dev session; the installed session never sets it), never advertised; the next funnel
-  draw compiles a broken shader so that FR46's failure path runs (`tests/compositor/genie.sh` step 6).
+  `hl.plugin.grassfield.config("testFault", "funnel-shader")` is honoured only in a dev session by the run-mode rule
+  (ADR-0019, `core/RunMode.hpp`): Hyprland's environment has `GRASSFIELD_DEV=1` and not `GRASSFIELD_SESSION=1` (the
+  nested dev session; the installed session sets `GRASSFIELD_SESSION=1` with `hl.env`, which calls `setenv` in
+  Hyprland's own process, so a leaked `GRASSFIELD_DEV=1` opens nothing there; `tests/RunModeTest.cpp` over the shared
+  vectors), never advertised; the next funnel draw compiles a broken shader so that FR46's failure path runs
+  (`tests/compositor/genie.sh` step 6).
 - **FR46** Funnel drawing safety: the element (type `EK_CUSTOM`, pass name `CGrassfieldGenieElement`, `draw()` called by
   Hyprland while it renders the pass, after the windows and before the top layers) scissors every draw to the frame's
   damage (nothing is drawn outside it), saves and restores the GL program, vertex array, array buffer, active texture and
