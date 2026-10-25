@@ -132,7 +132,7 @@ case $surface in
       shot "gallery-$tag-$ap-center"
       # The "Edit Widgets" pill sits under the last widget, so its row depends on how many notices the Center holds (a start-up
       # notice such as "Compositor extension not loaded" adds a row, 142 px lower): try each known row and keep the first
-      # click that opens the gallery (its panel covers a fifth of that region at least). F2C_PILL overrides the first row. No
+      # click that opens the gallery (its panel changes at least 5000 pixels of that region, the dark one differed by 28863 over the whole screen, measured). F2C_PILL overrides the first row. No
       # click opening it is a failure, never a "gallery" shot that is the Center again.
       opened=""
       for pill in "${F2C_PILL:-1715 742}" "1715 884" "1715 600"; do
@@ -141,7 +141,7 @@ case $surface in
         shot "gallery-$tag-$ap-gallery"
         changed=$(gallery_diff "$out/gallery-$tag-$ap-center.png" "$out/gallery-$tag-$ap-gallery.png")
         if [[ $changed =~ ^[0-9]+$ ]]; then
-          if ((changed >= 50000)); then
+          if ((changed >= 5000)); then
             opened=$changed
             break
           fi
