@@ -17,6 +17,9 @@ QtObject {
     property bool increaseContrast: false
     // Text size multiplier (1 to 1.3, Settings > Accessibility > Display): the tokens marked `textScale` follow it.
     property real textScale: 1
+    // An opaque app window (Settings, Files): the window's own background and a lighter secondary text replace the
+    // material's tint and the A2-darkened secondary text (those are for text over a blurred wallpaper). The shell never sets it.
+    property bool windowSurface: false
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and the tint setting ("accent" or "#rrggbb").
     property string iconMode: "default"
     property string iconTintSetting: "accent"
@@ -40,11 +43,19 @@ QtObject {
     readonly property real separatorOpacity: dark ? Tokens.materialSeparatorOpacity : Tokens.materialSeparatorOpacityLight
     readonly property var colors: devGlyphMode !== "" ? glyphColors(baseColors) : baseColors
     // The palette of the appearance with the chosen accent applied (accent and accentText), live.
-    readonly property var baseColors: dark ? accentedDark : accentedLight
+    readonly property var baseColors: windowSurface ? windowPalette(dark ? accentedDark : accentedLight) : (dark ? accentedDark : accentedLight)
     readonly property var accentedDark: Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast)
     readonly property var accentedLight: Accent.contrastBoost(Accent.apply(Tokens.colorLight, accentSetting, false, Tokens), increaseContrast)
     // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
     readonly property color focusRingColor: Accent.focusRing(baseColors.accent, baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
+    function windowPalette(base: var): var {
+        const c = Object.assign({}, base);
+        c.materialTint = base.windowBackground;
+        if (!increaseContrast)
+            c.textSecondary = base.windowTextSecondary;
+        return c;
+    }
+
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.
     readonly property var darkColors: devGlyphMode !== "" ? glyphColors(accentedDark) : accentedDark
     // The light palette for surfaces that are always light (the menu bar's dark foreground over a light wallpaper), hooked like `colors`.

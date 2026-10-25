@@ -37,9 +37,8 @@ Item {
     Rectangle {
         anchors.fill: column
         radius: Tokens.radiusMenu
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: 1
-        border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        // macOS: a feather-light group (about 3 % of the fill colour), no border.
+        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.settingsGroupFillOpacity)
     }
 
     Column {

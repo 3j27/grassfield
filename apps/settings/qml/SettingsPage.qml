@@ -9,7 +9,7 @@ Flickable {
     default property alias groups: column.data
 
     contentWidth: width
-    contentHeight: column.height + 2 * Tokens.spacingLg + Tokens.spacingLg
+    contentHeight: column.y + column.height + 2 * Tokens.spacingLg
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     Accessible.role: Accessible.Pane
@@ -17,9 +17,9 @@ Flickable {
 
     Column {
         id: column
-        x: Math.max(Tokens.spacingLg, (root.width - width) / 2)
-        y: Tokens.spacingLg
-        width: Math.min(Tokens.settingsContentMaxWidth, root.width - 2 * Tokens.spacingLg)
+        x: Math.max(Tokens.settingsContentMargin, (root.width - width) / 2)
+        y: Tokens.settingsPageTop
+        width: Math.min(Tokens.settingsContentMaxWidth, root.width - 2 * Tokens.settingsContentMargin)
         spacing: Tokens.settingsGroupGap
     }
 }

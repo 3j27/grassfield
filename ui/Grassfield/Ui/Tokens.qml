@@ -25,7 +25,9 @@ QtObject {
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        windowBackground: "#1D1F24",  // Opaque app window background in the dark appearance: the same as materialTint (no dark reference); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        windowTextSecondary: "#A0A0A8"  // Secondary text in opaque app windows, dark appearance: 4.5:1 or more on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     })
 
     // color roles, light appearance
@@ -48,7 +50,9 @@ QtObject {
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        windowBackground: "#FFFFFF",  // Opaque app window background (Settings, Files), macOS 255 against materialTint 244; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        windowTextSecondary: "#6E6E73"  // Secondary text in opaque app windows: lighter than textSecondary (which A2 darkens for material surfaces), 5:1 on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     })
 
     // color roles, accentDark appearance
@@ -883,12 +887,12 @@ QtObject {
     readonly property int settingsSidebarIconSize: 14
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSearchHeight: 28
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsContentMaxWidth: 520
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsRowHeight: 40
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsGroupGap: 20
+    // Settings content width, macOS 460 (was 520); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    readonly property int settingsContentMaxWidth: 460
+    // Plain Settings row, macOS 36 (was 40); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    readonly property int settingsRowHeight: 36
+    // Gap between Settings groups, macOS 10 (was 20); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    readonly property int settingsGroupGap: 10
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsPageTitleSize: Math.round(20 * Appearance.textScale)
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
@@ -959,6 +963,12 @@ QtObject {
     readonly property string settingsColorSquareBlackClear: "#00000000"
     // estimate: Sound pane, width of the percentage next to a slider [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsVolumeValueWidth: 44
+    // Settings group fill: the fill colour at about 3 % with no border, macOS 247 on 255; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    readonly property real settingsGroupFillOpacity: 0.03
+    // Settings content margin each side, macOS 20 (was 16); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    readonly property int settingsContentMargin: 20
+    // Gap between the toolbar and the first Settings group, macOS 0 (was 16); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    readonly property int settingsPageTop: 0
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164
