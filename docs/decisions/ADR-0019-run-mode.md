@@ -87,4 +87,9 @@ mode" that disables Quick Settings toggles, power actions or global menus. The r
 - Slices (plan §2): M1 (qs.lib, Mode, vectors), M2 (gate flip, security), M3 (services), M4 (platform, menubar),
   M5a/M5b (desktop, widgets, notifications, search, overview), M6 (C++ runmode.h), M7 (bridge and testFault),
   M8 (enforcement).
-- Unverified: that `hl.env` sets Hyprland's own environ (needed for M7).
+- Verified in M7 (Hyprland 0.56.2 binary, the `hl.env` binding in `Config::Lua::Bindings::Internal::registerConfigRuleBindings`):
+  `hl.env(name, value[, dbus])` calls `setenv(name, value, 1)` in Hyprland's own process. On the first parse always; on a
+  config reload only when the variable is unset or its value differs. So `session.lua`'s `hl.env("GRASSFIELD_SESSION", "1")`
+  is in the environment the plugin reads with `getenv` (and children inherit it), before the plugin is loaded (it comes
+  first in `session.lua`). The plugin reads the two variables at each `testFault` request, not once, so a reload that
+  changes them counts. The nested session (`dev.lua`, `devenv.sh` unsets `GRASSFIELD_SESSION`) has no `GRASSFIELD_SESSION`.
