@@ -61,11 +61,21 @@ check bash -c 'grep -qx "SessionDir=/usr/share/grassfield/sddm/wayland-sessions,
 desc="the login entry's name contains uwsm (Omarchy's theme picks the first such session) and it runs the launcher"
 check bash -c 'grep -q "^Name=.*uwsm" "$1" && grep -qx "Exec=/usr/lib/grassfield/grassfield-login" "$1"' _ "$pk/sddm/grassfield-login.desktop"
 
+export GRASSFIELD_LOGIN_SDDM_START=
 chk() { GRASSFIELD_LOGIN_ROOT=$fx sh "$pk/bin/grassfield-login-check" "$@"; }
 mkdir -p "$tmp/fakebin"; printf '#!/bin/sh\n' >"$tmp/fakebin/uwsm"; chmod +x "$tmp/fakebin/uwsm"
 desc="login-check on a good install: no warning, exit 0 even with --strict"
 out=$(PATH="$tmp/fakebin:$PATH" chk --strict); status=$?
-check bash -c '! grep -q "^WARN" <<<"$1" && grep -q "autologin starts Grassfield" <<<"$1" && grep -q "first session named" <<<"$1"' _ "$out"
+check bash -c '! grep -q "^WARN" <<<"$1" && grep -q "a boot (autologin) starts Grassfield" <<<"$1" && grep -q "first listed session named" <<<"$1"' _ "$out"
+desc="login-check warns when the SDDM daemon started before the drop-in (reboot once), not when it started after"
+touch -d '2026-01-02 00:00:00' "$fx/etc/sddm.conf.d/grassfield.conf"
+st=$(date -d '2026-01-01 00:00:00' +%s)
+out=$(GRASSFIELD_LOGIN_SDDM_START=$st PATH="$tmp/fakebin:$PATH" chk)
+check bash -c 'grep -q "^WARN: SDDM has been running since before the drop-in.*restart the computer once" <<<"$1"' _ "$out"
+out=$(GRASSFIELD_LOGIN_SDDM_START=$((st + 200000)) PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "since before the drop-in" <<<"$1"' _ "$out"
+out=$(GRASSFIELD_LOGIN_SDDM_START= PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "since before the drop-in" <<<"$1"' _ "$out"
 desc="login-check warns when another SDDM file takes over SessionDir or the autologin session"
 printf '[Wayland]\nSessionDir=/usr/share/wayland-sessions\n' >"$fx/etc/sddm.conf.d/zz-other.conf"
 out=$(PATH="$tmp/fakebin:$PATH" chk)

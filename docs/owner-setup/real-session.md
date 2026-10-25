@@ -103,8 +103,10 @@ must be unchanged. In the Grassfield session, changing the icon theme with `gset
 
 ## 4. Log out, enter Grassfield, come back
 
-**Normal route (after section 3 with the SDDM drop-in): log out of Omarchy and log in.** The greeter (or the autologin after a
-reboot) now starts Grassfield. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
+**Normal route (after section 3 with the SDDM drop-in): restart the computer once after the first install.** SDDM reads its
+configuration only when its daemon starts, so a daemon that ran before the install still starts your previous session (this
+happened on the first 1.0.0-rc1 install). After that one reboot the greeter (and the autologin) starts Grassfield; later
+logouts and logins need nothing. `grassfield-login-check` says "restart the computer once" while SDDM is older than the drop-in. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
 Check once, read-only, in either session:
 ```bash
 grassfield-login-check ; grassfield-login get
