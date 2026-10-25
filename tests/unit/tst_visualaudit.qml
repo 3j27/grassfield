@@ -86,6 +86,17 @@ TestCase {
         verify(toIcons >= 30 && toIcons <= 42, String(toIcons));
     }
 
+    // Priority 10: Settings floating sidebar (inset 8, radius 18, 32-pt rows, 20-pt tiles) and Files sidebar rows 32.
+    function test_sidebarMetrics() {
+        compare(Tokens.settingsSidebarInset, 8);
+        compare(Tokens.settingsSidebarRadius, 18);
+        compare(Tokens.settingsSidebarItemHeight, 32);
+        compare(Tokens.settingsSidebarTile, 20);
+        verify(Tokens.settingsSidebarIconSize < Tokens.settingsSidebarTile);
+        compare(Tokens.filesSidebarItemHeight, 32);
+        verify(Tokens.settingsSidebarSelectionRadius > Tokens.radiusControl);
+    }
+
     function readFile(url) {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, false);

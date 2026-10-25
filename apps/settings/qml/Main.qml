@@ -28,21 +28,31 @@ Window {
         return qsTr("Appearance");
     }
 
+    // The sidebar's icon tile colours (our own palette, tokens).
+    readonly property var tileColors: ({
+            blue: Tokens.settingsTileBlue,
+            teal: Tokens.settingsTileTeal,
+            pink: Tokens.settingsTilePink,
+            purple: Tokens.settingsTilePurple,
+            red: Tokens.settingsTileRed,
+            gray: Tokens.settingsTileGray
+        })
+
     readonly property var sections: [
-        {id: "wifi", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
-        {id: "bluetooth", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
-        {id: "sound", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
-        {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
-        {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
-        {id: "wallpaper", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
-        {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
-        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
-        {id: "menubar", title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
-        {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
-        {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
-        {id: "mouse", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
-        {id: "keyboard", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
-        {id: "about", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
+        {id: "wifi", tile: "blue", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
+        {id: "bluetooth", tile: "blue", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
+        {id: "sound", tile: "pink", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
+        {id: "displays", tile: "blue", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
+        {id: "appearance", tile: "gray", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
+        {id: "wallpaper", tile: "teal", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
+        {id: "accessibility", tile: "blue", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
+        {id: "desktop", tile: "purple", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
+        {id: "menubar", tile: "gray", title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
+        {id: "notifications", tile: "red", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
+        {id: "lock", tile: "gray", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
+        {id: "mouse", tile: "gray", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
+        {id: "keyboard", tile: "gray", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
+        {id: "about", tile: "gray", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
     ]
     property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
     property string query: ""
@@ -215,11 +225,17 @@ Window {
         width: Tokens.settingsSidebarWidth
         height: parent.height
 
+        // The floating panel (macOS): inset from the window edge, rounded, a feather-light fill and a light rim.
         Rectangle {
-            anchors.right: parent.right
-            width: 1
-            height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            id: panel
+            x: Tokens.settingsSidebarInset
+            y: Tokens.settingsSidebarInset
+            width: parent.width - Tokens.settingsSidebarInset
+            height: parent.height - 2 * Tokens.settingsSidebarInset
+            radius: Tokens.settingsSidebarRadius
+            color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.settingsSidebarFillOpacityDark : Tokens.settingsSidebarFillOpacity)
+            border.width: Appearance.dark ? 0 : 1
+            border.color: Appearance.withAlpha(Appearance.colors.materialHighlight, Tokens.materialHighlightOpacity)
         }
 
         // The window lights, in the corner of the sidebar (ADR-0015); the toolbar over the detail pane holds the title.
@@ -234,11 +250,11 @@ Window {
 
         Rectangle {
             id: searchBox
-            x: Tokens.spacingMd
+            x: Tokens.settingsSidebarInset + Tokens.spacingSm
             y: sidebarToolbar.height
-            width: parent.width - 2 * Tokens.spacingMd - 1
+            width: panel.width - 2 * Tokens.spacingSm
             height: Tokens.settingsSearchHeight
-            radius: Tokens.radiusControl
+            radius: Tokens.settingsSidebarSearchRadius
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
             border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
             border.color: Appearance.focusRingColor
@@ -309,8 +325,9 @@ Window {
                 left: parent.left
                 right: parent.right
                 bottom: parent.bottom
-                leftMargin: Tokens.spacingMd
-                rightMargin: Tokens.spacingMd + 1
+                leftMargin: Tokens.settingsSidebarInset + Tokens.spacingSm
+                rightMargin: Tokens.spacingSm
+                bottomMargin: Tokens.settingsSidebarInset
             }
             model: root.filtered
             spacing: Tokens.spacingXs / 2
@@ -356,7 +373,7 @@ Window {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: Tokens.radiusControl
+                    radius: Tokens.settingsSidebarSelectionRadius
                     color: entry.selected ? Appearance.colors.accent : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                 }
 
@@ -371,19 +388,29 @@ Window {
                     border.color: Appearance.focusRingColor
                 }
 
-                Icon {
-                    id: glyph
-                    name: entry.modelData.icon
-                    size: Tokens.settingsSidebarIconSize
-                    color: entry.selected ? Appearance.colors.accentText : Appearance.colors.text
+                // The coloured icon tile (our own palette): a white glyph on a rounded square.
+                Rectangle {
+                    id: tile
                     x: Tokens.spacingSm
                     anchors.verticalCenter: parent.verticalCenter
+                    width: Tokens.settingsSidebarTile
+                    height: width
+                    radius: Tokens.settingsSidebarTileRadius
+                    color: root.tileColors[entry.modelData.tile]
+
+                    Icon {
+                        id: glyph
+                        anchors.centerIn: parent
+                        name: entry.modelData.icon
+                        size: Tokens.settingsSidebarIconSize
+                        color: Appearance.colors.knob
+                    }
                 }
 
                 Text {
                     textFormat: Text.PlainText
                     anchors {
-                        left: glyph.right
+                        left: tile.right
                         leftMargin: Tokens.spacingSm
                         right: parent.right
                         rightMargin: Tokens.spacingSm

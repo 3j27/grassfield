@@ -909,10 +909,10 @@ QtObject {
     readonly property int settingsWindowMinHeight: 420
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSidebarWidth: 215
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSidebarItemHeight: 30
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSidebarIconSize: 14
+    // Sidebar row pitch, macOS 32 (was 30); audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarItemHeight: 32
+    // The white glyph inside the 20-pt icon tile; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarIconSize: 13
     // Settings content width, macOS 460 (was 520); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int settingsContentMaxWidth: 460
     // Plain Settings row, macOS 36 (was 40); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -995,6 +995,36 @@ QtObject {
     readonly property int settingsContentMargin: 20
     // Gap between the toolbar and the first Settings group, macOS 0 (was 16); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int settingsPageTop: 0
+    // The sidebar is a floating panel inset 8 from the window edge (macOS 8, was flush with a hairline); audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarInset: 8
+    // Radius of the floating sidebar panel, macOS 18; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarRadius: 18
+    // Fill of the floating sidebar in the light appearance: the fill colour at 2 % (macOS 249 on 255); audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property real settingsSidebarFillOpacity: 0.02
+    // Fill of the floating sidebar in the dark appearance: 1.4:1 against the window, tested; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property real settingsSidebarFillOpacityDark: 0.12
+    // Coloured icon tile of a sidebar row, macOS 20 (was a bare 14-pt glyph); audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarTile: 20
+    // Corner radius of the icon tile, macOS ~5; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarTileRadius: 5
+    // Selection radius of a sidebar row, macOS 8 (was 6); audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarSelectionRadius: 8
+    // The sidebar search is a capsule, macOS radius 14 on 28; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property int settingsSidebarSearchRadius: 14
+    // Icon tile colour (our own palette, no Apple artwork): the white glyph on it holds 3:1 or more, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property string settingsTileBlue: "#2F6FDE"
+    // Icon tile colour (our own palette, no Apple artwork): the white glyph on it holds 3:1 or more, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property string settingsTileTeal: "#1F8F96"
+    // Icon tile colour (our own palette, no Apple artwork): the white glyph on it holds 3:1 or more, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property string settingsTilePink: "#D6457F"
+    // Icon tile colour (our own palette, no Apple artwork): the white glyph on it holds 3:1 or more, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property string settingsTilePurple: "#7B4FD0"
+    // Icon tile colour (our own palette, no Apple artwork): the white glyph on it holds 3:1 or more, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property string settingsTileRed: "#D8403A"
+    // Icon tile colour (our own palette, no Apple artwork): the white glyph on it holds 3:1 or more, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 priority 10 (floating sidebars, coloured icon tiles; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/settings.md]
+    readonly property string settingsTileGray: "#6B7280"
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
+    readonly property int settingsSearchHeight: 28
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164
@@ -1092,12 +1122,12 @@ QtObject {
     readonly property int filesWindowMinHeight: 360
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarWidth: 184
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSidebarItemHeight: 26
+    // Files sidebar row pitch, macOS 32 (was 26); audit 2026-10-25 priority 10 (Files sidebar rows 32, section spacing) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesSidebarItemHeight: 32
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarIconSize: 16
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSidebarHeaderHeight: 28
+    // Files sidebar section header, macOS ~34 spacing (was 28); audit 2026-10-25 priority 10 (Files sidebar rows 32, section spacing) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesSidebarHeaderHeight: 34
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarHeight: 52
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]

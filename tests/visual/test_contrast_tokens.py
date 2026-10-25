@@ -591,6 +591,24 @@ class WindowSurfacePairs(unittest.TestCase):
         group = over(self.tok.color("colors", "dark", "fill"), self.tok.path("material.fillOpacity"), win)
         self.assertGreaterEqual(wcag(group, win), 1.3, "dark group against the window: %.2f:1" % wcag(group, win))
 
+    def test_settings_sidebar_surfaces_and_tiles(self):
+        # The floating sidebar panel (priority 10): text on the panel over the window, the panel against the window in dark, and
+        # the white glyph on every icon tile colour (graphic, 3:1).
+        panel = {"light": self.tok.path("settings.sidebarFillOpacity"), "dark": self.tok.path("settings.sidebarFillOpacityDark")}
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            fill = over(self.tok.color("colors", ap, "fill"), panel[ap], win)
+            for name in ("text", "textSecondary"):
+                r = wcag(self.tok.color("colors", ap, name), fill)
+                self.assertGreaterEqual(r, 4.5, "%s on the sidebar panel, %s: %.2f:1" % (name, ap, r))
+        win = self.window("dark")
+        r = wcag(over(self.tok.color("colors", "dark", "fill"), panel["dark"], win), win)
+        self.assertGreaterEqual(r, 1.3, "dark sidebar panel against the window: %.2f:1" % r)
+        white = self.tok.color("colors", "light", "knob")
+        for name in ("Blue", "Teal", "Pink", "Purple", "Red", "Gray"):
+            r = wcag(white, hex_rgb(self.tok.path("settings.tile" + name)))
+            self.assertGreaterEqual(r, 3.0, "white glyph on the %s tile: %.2f:1" % (name, r))
+
     def test_quick_settings_slider_fill_against_its_track(self):
         # WCAG 1.4.11: the white fill against the track, over the lightest module (every wallpaper colour, every transparency).
         for ap in APPEARANCES:
