@@ -26,14 +26,14 @@
 namespace gf::chrome {
 
     namespace {
-        // The two listeners of one window's xdg toplevel. Destroying them disconnects them. `minimizeTold`: the window was
-        // told the minimize capability (P8); unload tells it Hyprland's own capabilities again.
+        // The two listeners of one window's xdg toplevel. Destroying them disconnects them. `caps`: what the window was told
+        // (P8); its close and the unload tell it Hyprland's own capabilities again.
         struct SWatch {
             PHLWINDOWREF             window;
             WP<CXDGToplevelResource> toplevel;
             CHyprSignalListener      stateChanged;
             CHyprSignalListener      requestMove;
-            bool                     minimizeTold = false;
+            CapabilityTell           caps;
         };
 
         struct SState {
@@ -118,7 +118,8 @@ namespace gf::chrome {
         }
 
         // P8: the xdg_toplevel wl_resource of `top`: Hyprland keeps it private, so it is found among its client's resources
-        // (libwayland's own list) by its interface and CXDGToplevelResource::fromResource.
+        // (libwayland's own list) by its interface and CXDGToplevelResource::fromResource. Only a capabilityCandidate is
+        // handed to fromResource (v5 or later, user data still set): nullptr for a toplevel older than v5 or being destroyed.
         wl_resource* toplevelResource(const SP<CXDGToplevelResource>& top) {
             const auto xdg     = top ? top->m_owner.lock() : nullptr;
             const auto surface = xdg ? xdg->m_surface.lock() : nullptr;
@@ -134,7 +135,7 @@ namespace gf::chrome {
                 [](wl_resource* resource, void* data) -> wl_iterator_result {
                     auto*       f   = static_cast<SFind*>(data);
                     const char* cls = resource ? wl_resource_get_class(resource) : nullptr;
-                    if (!cls || std::string_view{cls} != "xdg_toplevel")
+                    if (!cls || !capabilityCandidate(cls, wl_resource_get_version(resource), wl_resource_get_user_data(resource) != nullptr))
                         return WL_ITERATOR_CONTINUE;
                     if (CXDGToplevelResource::fromResource(resource).get() != f->wanted)
                         return WL_ITERATOR_CONTINUE;
@@ -147,20 +148,24 @@ namespace gf::chrome {
 
         // P8: tells the window its capabilities again (core wmCapabilities) when they change, then a configure, as
         // xdg-shell asks ("when the capabilities change, compositors must send this event again and then send an
-        // xdg_surface.configure event"). Nothing for a client older than xdg_toplevel v5 (it never had the event).
+        // xdg_surface.configure event"). Nothing for a client older than xdg_toplevel v5 (it never had the event); a
+        // window whose resource is not found is remembered as unreachable and never walked again.
         // The configure is Hyprland's own full one (setSize with the size it already asked for: an xdg_toplevel.configure
         // with its current states, then the xdg_surface.configure; read from the 0.56.2 binary, no early return): a bare
         // xdg_surface.configure made GTK4 apply an empty state set (no longer activated or tiled: it drew its shadow
-        // margins and looked inactive).
-        void tellCapabilities(SWatch& e, bool clientChrome, bool bridged) {
+        // margins and looked inactive). `configure` false (a window that is being unmapped): the event only; its next map
+        // starts a new configure sequence, which carries it.
+        void tellCapabilities(SWatch& e, bool clientChrome, bool bridged, bool configure = true) {
             const bool withMinimize = clientChrome && bridged;
-            if (withMinimize == e.minimizeTold)
+            if (!needsTell(e.caps, withMinimize))
                 return;
             const auto   top = e.toplevel.lock();
             wl_resource* res = toplevelResource(top);
-            const auto   xdg = top ? top->m_owner.lock() : nullptr;
-            if (!res || !xdg || wl_resource_get_version(res) < static_cast<int>(kWmCapabilitiesSince))
+            if (!res || !top->m_owner.lock()) {
+                e.caps.unreachable = true;
+                logRequest(Log::DEBUG, "client chrome: {:x} cannot be told its capabilities (xdg_toplevel older than v5, or going)", addressOf(e.window.lock()));
                 return;
+            }
             const auto caps = wmCapabilities(clientChrome, bridged);
             wl_array   array;
             wl_array_init(&array);
@@ -174,8 +179,9 @@ namespace gf::chrome {
             }
             wl_resource_post_event(res, 3 /* xdg_toplevel.wm_capabilities */, &array);
             wl_array_release(&array);
-            top->setSize(top->m_pendingApply.size);
-            e.minimizeTold = withMinimize;
+            if (configure)
+                top->setSize(top->m_pendingApply.size);
+            e.caps.minimizeTold = withMinimize;
             logRequest(Log::DEBUG, "client chrome: {:x} told {} capabilities{}", addressOf(e.window.lock()), caps.size(), withMinimize ? " (minimize)" : "");
         }
 
@@ -204,7 +210,16 @@ namespace gf::chrome {
             tellCapabilities(s.watches.back(), isClientChrome(w), true);
         }
 
+        // window.close comes with the unmap. A toolkit that hides a window may keep its xdg_toplevel and map it again
+        // later: one told minimize is told Hyprland's own capabilities first (the event only, see tellCapabilities), so
+        // that an unload while it is hidden cannot leave it a minimize button nothing answers. Its next map watches it
+        // again and tells it minimize again while the plugin runs. A toplevel already destroyed is not found: nothing sent
+        // (Evince, Nautilus, Chromium and Obsidian destroy theirs before window.close: nested 2026-10-25).
         void forget(const PHLWINDOW& w) {
+            for (auto& e : st().watches) {
+                if (e.caps.minimizeTold && e.window.lock() == w)
+                    tellCapabilities(e, false, false, false);
+            }
             std::erase_if(st().watches, [&w](const SWatch& e) {
                 const auto mine = e.window.lock();
                 return !mine || mine == w || e.toplevel.expired();
@@ -263,7 +278,7 @@ namespace gf::chrome {
         // P8: every window told minimize is told Hyprland's own capabilities again before the bridge goes (C2: without the
         // plugin a client sees what Hyprland offers, and its minimize button greys again).
         for (auto& e : s.watches) {
-            if (e.minimizeTold)
+            if (e.caps.minimizeTold)
                 guarded("client chrome capabilities on stop", [&] { tellCapabilities(e, false, false); });
         }
         s.watches.clear();
