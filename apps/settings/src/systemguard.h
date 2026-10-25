@@ -8,7 +8,7 @@
 // read-only queries below may run. Kept free of QML and QObject so the rule is easy to read and to test.
 namespace grassfield::settings {
 
-// GRASSFIELD_DEV === "1", like Quickshell.env("GRASSFIELD_DEV") in the shell services.
+// The run-mode rule (apps/runmode.h, the same as shell/lib/RunMode.js): GRASSFIELD_DEV "1" and GRASSFIELD_SESSION not "1".
 bool devSession();
 
 // Exactly the read-only commands the pages issue (qml/System.js builds the same argument vectors; tst_settingssystem

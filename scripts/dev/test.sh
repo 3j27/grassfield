@@ -12,6 +12,12 @@
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
+# Inside the owner's real Grassfield session (GRASSFIELD_SESSION=1 in every terminal there) the suite runs at a low
+# priority and builds on two jobs, so it never makes the session stall (2026-10-25: load 32 on 8 threads).
+if [[ ${GRASSFIELD_SESSION:-} == 1 ]]; then
+  renice -n 15 -p $$ >/dev/null 2>&1 || true
+  export CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-2}
+fi
 
 layers_all=(data logic headless nested visual)
 requested=()

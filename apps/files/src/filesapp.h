@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runmode.h"
+
 #include <QFileSystemWatcher>
 #include <QJSValue>
 #include <QList>
@@ -72,8 +74,8 @@ public:
     QString homePath() const;
     QList<QUrl> initialUrls() const { return m_initialUrls; }
     bool dark() const { return m_dark; }
-    // GRASSFIELD_DEV=1: never offers anything that touches the owner's real trash (ADR-0011).
-    bool devSession() const { return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1"); }
+    // A dev session (runmode.h): never offers anything that touches the owner's real trash (ADR-0011).
+    bool devSession() const { return grassfield::apps::runmode::dev(); }
     bool reduceMotion() const { return m_reduceMotion; }
     QString titlebarDoubleClick() const { return m_titlebarDoubleClick; }
     bool canMinimize() const { return m_canMinimize; }

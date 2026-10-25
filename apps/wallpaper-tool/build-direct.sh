@@ -29,7 +29,7 @@ if [[ ${1:-} == "--tests" ]]; then
 fi
 
 # shellcheck disable=SC2046
-g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core Qt6Gui) \
+g++ "${cxxflags[@]}" -I"$here/src" -I"$here/.." $(pkg-config --cflags Qt6Core Qt6Gui) \
   "$here/src/main.cpp" "$here/src/wallpaperlogic.cpp" "$here/src/commonsfetch.cpp" "$here/src/videotool.cpp" \
   $(pkg-config --libs Qt6Core Qt6Gui) \
   -o "$out/grassfield-wallpaper$suffix"

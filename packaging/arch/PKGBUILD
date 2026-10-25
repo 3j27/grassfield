@@ -37,7 +37,7 @@ options=(!debug)
 # id) and the SHA-256 of the `git archive` of that commit (pacman 7.1 calc_checksum_git). No upstream script runs: the
 # composer reads src/, links/ and Pebble/ only. The pins live in icon-pins.sh, which scripts/dev/icons.sh sources too
 # (one definition); only the sha256sums below are written here, because makepkg's updpkgsums rewrites them in place.
-source "${startdir:-$(dirname "${BASH_SOURCE[0]}")}/icon-pins.sh"
+source "$_here/icon-pins.sh"
 _mactahoe_commit=$MT_PIN
 _pebble_commit=$PB_PIN
 source=("mactahoe-icon-theme::git+${MT_REPO}.git#commit=${_mactahoe_commit}"

@@ -126,11 +126,11 @@ QtObject {
 }
 EOF
 
-run() { # mode (1 = dev, 0 = real)
+run() { # GRASSFIELD_DEV value, then an optional GRASSFIELD_SESSION value (1 with 1 = a dev value that leaked into a real session)
   : >"$tmp/marker"
   : >"$tmp/locale"
   QT_FORCE_STDERR_LOGGING=1 PATH="$tmp/bin:$PATH" GRASSFIELD_SETTINGS_QML="$tmp/qml" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
-    timeout 30 scripts/dev/isolated.sh --name settings-guard env GRASSFIELD_DEV="$1" LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 LANGUAGE=fr "$root/.dev/build/grassfield-settings" 2>&1
+    timeout 30 scripts/dev/isolated.sh --name settings-guard env GRASSFIELD_DEV="$1" GRASSFIELD_SESSION="${2:-}" LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 LANGUAGE=fr "$root/.dev/build/grassfield-settings" 2>&1
 }
 
 out=$(run 1) || true
@@ -159,5 +159,16 @@ check "real: no stray run() command reached a tool" "$(grep -qE 'get-volume|^tou
 check "real: tools always see the C locale" "$([[ $(sort -u "$tmp/locale") == 'LC_ALL=C LANG=C LANGUAGE=unset' ]] && echo 0 || echo 1)"
 check "real: an unknown program is refused" "$(has 'actReturns=true,true,true,true,true,true,true,true,true,false' "$res")"
 check "real: touch never ran" "$(grep -q '^touch' "$tmp/marker" && echo 1 || echo 0)"
+[[ $fail -eq 0 ]] || echo "$out" | tail -20
+
+# A GRASSFIELD_DEV=1 that leaked into a packaged session (GRASSFIELD_SESSION=1) is a real session (ADR-0019): the same
+# answers as the real run above, never the dev guard.
+out=$(run 1 1) || true
+res=$(grep -E 'RESULT' <<<"$out" || true)
+echo "$res"
+check "leaked dev in a real session: it is not a dev session, the 9 actions run" "$(has 'dev=false ok=9 refused=1' "$res")"
+check "leaked dev in a real session: the actions reached the tools (no dev guard line)" "$(grep -q 'dev guard' <<<"$out" && echo 1 || echo 0)"
+check "leaked dev in a real session: an unknown program is still refused" "$(has 'actReturns=true,true,true,true,true,true,true,true,true,false' "$res")"
+check "leaked dev in a real session: touch never ran" "$(grep -q '^touch' "$tmp/marker" && echo 1 || echo 0)"
 [[ $fail -eq 0 ]] || echo "$out" | tail -20
 exit $fail
