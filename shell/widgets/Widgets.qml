@@ -5,12 +5,12 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.UPower
 import Grassfield.Ui
+import qs.lib
 import qs.services
 import "Placements.js" as Placements
-import "../services/DevGate.js" as DevGate
 
 // Widget placements (widgets/1, docs/specs/widgets.md): where each widget sits, in the Notification
-// Center and on the desktop, persisted in $GRASSFIELD_STATE_HOME (dev) or $XDG_STATE_HOME/grassfield
+// Center and on the desktop, persisted in Mode.stateDir ($GRASSFIELD_STATE_HOME, else $XDG_STATE_HOME/grassfield)
 // as widgets.json (directory 0700, file 0600, written atomically, version 1). Ids that are not in
 // the registry, sizes a widget does not offer and entries past the cap are dropped when the file is read
 // (and a file over Tokens.widgetMaxFileBytes is rejected); desktop entries that are off the grid or
@@ -23,17 +23,10 @@ Singleton {
     readonly property var center: placements.center
     readonly property var desktop: placements.desktop
     property bool loaded: false
-    // The shell's one dev gate (shell/services/DevGate.js, SEC-03): the IPC test hooks below answer only in a dev session.
-    readonly property bool devHooks: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
+    // The shell's one dev rule (qs.lib Mode, ADR-0019, SEC-03): the IPC test hooks below answer only in a dev session.
+    readonly property bool devHooks: Mode.dev
 
-    readonly property string home: Quickshell.env("HOME")
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string path: stateDir + "/widgets.json"
 
     // Battery widget availability: hidden from the gallery on a machine without a battery.
@@ -201,7 +194,7 @@ Singleton {
         // JSON [{uid, id, size, x, y, w, h}]: the desktop widgets of `screen` in output pixels.
         function status(screen: string): string {
             if (!root.devHooks)
-                return DevGate.REFUSED;
+                return Mode.refused;
             const s = root.screenByName(screen);
             if (!s)
                 return "[]";
@@ -214,13 +207,13 @@ Singleton {
 
         function addDesktop(id: string, size: string, screen: string): string {
             if (!root.devHooks)
-                return DevGate.REFUSED;
+                return Mode.refused;
             return root.addDesktop(id, size, screen) ? "added" : "no room";
         }
 
         function clearDesktop(): string {
             if (!root.devHooks)
-                return DevGate.REFUSED;
+                return Mode.refused;
             root.apply(Object.assign({}, root.placements, {desktop: []}));
             return "cleared";
         }

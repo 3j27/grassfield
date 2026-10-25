@@ -39,27 +39,44 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 | L5 | owner procedure "L5 polkit (owner, real session)" below: `pkcheck … --allow-user-interaction` (runs nothing as root) → dialog with message, action, icon; Esc/Cancel → exit 3; wrong password → "Incorrect password", no approval | L2† owner (a nested shell cannot register an agent) |
 
 ## Dev gate (GF-AUDIT-001 SEC-03)
-One rule for every dev/test switch of the shell: `shell/services/DevGate.js` `allowed(GRASSFIELD_DEV, GRASSFIELD_SESSION)`
-is true only for `GRASSFIELD_DEV` exactly `1` AND `GRASSFIELD_SESSION` not `1`. The packaged session config sets
+One rule for every dev/test switch of the shell (ADR-0019): `shell/lib/RunMode.js` `dev(GRASSFIELD_DEV, GRASSFIELD_SESSION)`
+is true only for `GRASSFIELD_DEV` exactly `1` AND `GRASSFIELD_SESSION` not `1`. How it is read (slice M2, integrator
+decision; `shell/services/DevGate.js`, which delegated to it since M1, is gone):
+- **the security modules** (`shell/security/**`) import `RunMode.js` by a relative path (`import "../../lib/RunMode.js" as
+  RunMode`) and call `RunMode.dev(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))` themselves;
+  they never use the `qs.lib` module or its `Mode` singleton, because a `qs/lib` directory on `QML_IMPORT_PATH` overrides
+  any `qs.*` module (M1 review note 5), while a relative import cannot be replaced by any import path; a refused hook
+  answers `RunMode.REFUSED`;
+- **every other module** asks `qs.lib` `Mode` (`Mode.dev`, `Mode.fixtures`, `Mode.devValue(name)`, `Mode.stateDir`,
+  `Mode.refused`), which `shell/lib/Mode.qml` defines from the same `RunMode.js`.
+
+The predicate is unchanged: `tst_devgate` compares the gate with the pre-ADR predicate on 225 pairs of raw values, and
+the migration was checked old against new (main's gate, the real modules) in 98 environments. The packaged session config sets
 `GRASSFIELD_SESSION=1` (`config/hypr/session.lua`); the nested dev session never does (`scripts/dev/devenv.sh` unsets an
 inherited one). A `GRASSFIELD_DEV=1` that leaks into a real session (environment.d, a uwsm env file, an import into the
 user manager) therefore changes nothing: no dev hook answers, PAM is not suppressed (the lock can be opened), the sleep
 inhibitor is taken, and the lock logs once "GRASSFIELD_DEV=1 ignored in a real session". Users: `Lock.devHooks`
 (`lock status|devReload|devPauseOwnershipCheck|devForgeUnlockedAnswer|devLockView`, PAM suppression), `Idle.devHooks`
 (`idle status|devSleep|devDisplayOff`, the display power-off default), `SleepInhibitor.dev` (no inhibitor in dev),
-`polkit status`, and, outside the security modules, `VisualFixtures.dev` (now `DevGate.allowed`), which every other IPC
-test hook checks. Tests: `tests/security/tst_devgate.qml` (the predicate), `tests/security/dev_gate.sh` (the real Lock
-singleton offscreen in five environments, including `GRASSFIELD_SESSION=1` with a leaked `GRASSFIELD_DEV=1`
-and `GRASSFIELD_DEV_ALLOW_PAM=1`: every hook `refused`, PAM not suppressed; mutation: a gate on `GRASSFIELD_DEV` alone
-fails it), `tests/security/ipc_inventory.sh` (no security module reads `GRASSFIELD_DEV` outside the gate).
+`polkit status`, and, outside the security modules, `Mode.dev` (`VisualFixtures.dev` is exactly `Mode.dev`,
+`VisualFixtures.active` exactly `Mode.fixtures`), which every other IPC test hook checks (BarTone, Capabilities,
+Widgets). Tests: `tests/security/tst_devgate.qml` (the gate as the security modules import it, 225 pairs against the
+pre-ADR predicate), `tests/security/dev_gate.sh` (the real Lock singleton offscreen in five environments, including
+`GRASSFIELD_SESSION=1` with a leaked `GRASSFIELD_DEV=1` and `GRASSFIELD_DEV_ALLOW_PAM=1`: every hook `refused`, PAM not
+suppressed; `Mode.dev`, `VisualFixtures.dev` and `Widgets.devHooks` agree with the lock's gate in each; mutation: a gate
+on `GRASSFIELD_DEV` alone fails it), `tests/security/ipc_inventory.sh` (the exact gates per class and per module kind,
+the definitions in `RunMode.js`, `Mode.qml` and `VisualFixtures.qml`, no security module on `qs.lib`, `Mode` or a
+non-relative `RunMode`, no `GRASSFIELD_DEV` read outside the gate call; its selftest: look-alike gates, a security
+module on `Mode` or a local `RunMode.js`, wrong definitions in `Mode.qml` and `RunMode.js` each fail).
 
 ## IPC surface (GF-AUDIT-001 SEC-04)
 Quickshell's `IpcHandler` functions can be called by any process of the user (`qs ipc`, socket under
 `$XDG_RUNTIME_DIR`; Flatpak sandboxes cannot reach it). Classes: **action** = called by Grassfield's own bindings,
 gestures or screen corners (`config/hypr/grassfield/bindings.lua`, `shell/desktop/HotCornerActions.js`), available in a
-real session, never returns private state; **dev** = test hook, refused outside a dev session (`DevGate`, directly or
-through `VisualFixtures.dev`; void functions do nothing, others answer `refused`); **fixtures** = dev session AND
-`GRASSFIELD_VISUAL_FIXTURES=1`. No function unlocks, runs a command, opens a URL, reads notification content or
+real session, never returns private state; **dev** = test hook, refused outside a dev session (the dev rule: the relative
+`RunMode.dev` call in the security modules, `Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing,
+others answer `refused`); **fixtures** = dev session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`,
+`VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
 approves polkit. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
 one that does not exist, when an action has no real-session caller or is gated, and when a dev or fixtures function
 does not check its gate.
@@ -600,7 +617,7 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
 | Path | Role |
 |---|---|
 | `shell/security/LockMachine.js` | Pure state machine `next(state, event)` and helpers (marker, holding, lid decision, initials, Caps Lock inference, clock pattern) |
-| `shell/services/DevGate.js` | The shell's one dev gate (`allowed(GRASSFIELD_DEV, GRASSFIELD_SESSION)`), see "Dev gate" |
+| `shell/lib/RunMode.js` | The one dev rule (`dev(GRASSFIELD_DEV, GRASSFIELD_SESSION)`, `REFUSED`), imported by the security modules through a relative path, see "Dev gate" |
 | `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
 | `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
