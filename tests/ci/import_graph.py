@@ -19,10 +19,11 @@ belongs to its nearest ancestor module; shell/shell.qml and the other files of s
 An import is `import qs.<module>` or a relative `import "<dir or file>"` (also `.import` in JS).
 
 Ratchet: a violating import line passes only with a trailing `// layering-exception: <tag>` marker on that line. Tags:
-`GF-087` (temporary: the slice that removes the violation removes the marker; L9 refuses any), `GF-050` (temporary: the idle
-module's notification import), `ADR-0021 security` (permanent, security files only: the lock and idle modules read raw
-Hyprland events). An unknown tag, a marker on a line that is not a violation, and a permanent marker outside shell/security
-are failures, so no marker outlives its violation.
+`GF-087` (temporary: the slice that removes the violation removes the marker; L9 refuses any), `GF-050` (temporary, accepted
+only on the `import qs.notifications` line of shell/security/idle/SleepInhibitor.qml), `ADR-0021 security` (permanent,
+accepted only in shell/security/lock and shell/security/idle, only on a raw Hyprland event line: the lock and idle modules).
+An unknown tag, a tag where it is not accepted, and a marker on a line that is not a violation are failures, so no marker
+outlives its violation.
 """
 import os
 import re
@@ -38,6 +39,13 @@ MARKER = re.compile(r"//\s*layering-exception:\s*(.*?)\s*$")
 IMPORT = re.compile(r"""^\s*\.?import\s+(?:["']([^"']+)["']|(qs(?:\.\w+)+)\b|(Quickshell\.Hyprland)\b)""")
 RAW_EVENT = re.compile(r"\b(?:on)?[rR]awEvent\b")
 SECURITY_ALLOWED = {"lib", "services"}
+PERMANENT_DIRS = ("security/lock/", "security/idle/")  # the only places the permanent tag is accepted (not polkit)
+GF050_FILE = "security/idle/SleepInhibitor.qml"
+GF050_IMPORT = "qs.notifications"
+
+
+def line_text(path, n):
+    return path.read_text(encoding="utf-8").splitlines()[n - 1]
 
 
 def layer_of(module):
@@ -196,6 +204,7 @@ def problems(shell, root=None):
     violations, _ = analyze(shell)
     for path, n, reason, tag in violations:
         where = f"{path.relative_to(root)}:{n}"
+        rel = path.relative_to(shell).as_posix()
         stale = reason.startswith("stale marker")
         if tag is None:
             out.append(f"{where}: {reason}; fix the import or mark the line `// layering-exception: GF-087`")
@@ -203,10 +212,12 @@ def problems(shell, root=None):
             out.append(f"{where}: unknown layering-exception tag {tag!r} (known: {', '.join(TAGS)})")
         elif stale:
             out.append(f"{where}: {reason} (remove the `layering-exception: {tag}` marker)")
-        elif tag == "ADR-0021 security" and "shell/security/" not in path.as_posix() + "/" and not path.as_posix().endswith("/shell/security"):
-            out.append(f"{where}: the permanent `ADR-0021 security` marker is for shell/security files only")
-        elif tag == "ADR-0021 security" and "Hyprland" not in reason and "rawEvent" not in reason:
+        elif tag == "ADR-0021 security" and not rel.startswith(PERMANENT_DIRS):
+            out.append(f"{where}: the permanent `ADR-0021 security` marker is for shell/security/lock and shell/security/idle only")
+        elif tag == "ADR-0021 security" and "Quickshell.Hyprland" not in reason and "rawEvent" not in reason:
             out.append(f"{where}: the permanent `ADR-0021 security` marker covers raw Hyprland events only ({reason})")
+        elif tag == "GF-050" and not (rel == GF050_FILE and GF050_IMPORT in line_text(path, n)):
+            out.append(f"{where}: the `GF-050` marker is for the `import qs.notifications` line of shell/{GF050_FILE} only")
     return out
 
 
@@ -273,7 +284,7 @@ def modules(*names):
 
 def selftest():
     failures = []
-    base_mods = modules("lib", "platform", "store", "services", "dock", "desktop", "search", "launchpad", "security", "security.lock", "security.idle")
+    base_mods = modules("lib", "platform", "store", "services", "dock", "desktop", "search", "launchpad", "notifications", "security", "security.lock", "security.idle", "security.polkit")
 
     def run(name, files, expect):
         with tempfile.TemporaryDirectory() as t:
@@ -323,13 +334,25 @@ def selftest():
     run("raw Hyprland in the lock with the permanent marker passes",
         {**clean, "security/lock/Lock.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, None)
     run("the permanent marker outside security fails",
-        {**clean, "search/S.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "for shell/security files only")
+        {**clean, "search/S.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "shell/security/lock and shell/security/idle only")
     run("the permanent marker covers raw events only",
         {**clean, "security/lock/Lock.qml": "import qs.dock // layering-exception: ADR-0021 security\nItem {}\n"}, "covers raw Hyprland events only")
     run("security imports lib, services and security", {**clean, "security/lock/Lock.qml": "import qs.lib\nimport qs.services\nimport qs.security.idle\nItem {}\n"}, None)
     run("security importing a feature fails", {**clean, "security/lock/Lock.qml": "import qs.desktop\nItem {}\n"}, "may import only lib, services and security")
     run("security importing platform fails", {**clean, "security/lock/Lock.qml": "import qs.platform\nItem {}\n"}, "may import only lib, services and security")
-    run("a security import marked GF-050 passes", {**clean, "security/idle/Sleep.qml": "import qs.search // layering-exception: GF-050\nItem {}\n"}, None)
+    run("a security import marked GF-050 passes",
+        {**clean, "security/idle/SleepInhibitor.qml": "import qs.notifications // layering-exception: GF-050\nItem {}\n"}, None)
+    run("GF-050 on another import of that file fails",
+        {**clean, "security/idle/SleepInhibitor.qml": "import qs.search // layering-exception: GF-050\nItem {}\n"}, "`GF-050` marker is for the")
+    run("GF-050 in another file fails",
+        {**clean, "security/idle/Idle.qml": "import qs.notifications // layering-exception: GF-050\nItem {}\n"}, "`GF-050` marker is for the")
+    run("GF-050 outside security fails", {**clean, "services/Apps.qml": "import qs.dock // layering-exception: GF-050\nItem {}\n"}, "`GF-050` marker is for the")
+    run("the permanent marker in the idle module passes",
+        {**clean, "security/idle/Idle.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, None)
+    run("the permanent marker in polkit fails",
+        {**clean, "security/polkit/Auth.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "shell/security/lock and shell/security/idle only")
+    run("the permanent marker in security itself fails",
+        {**clean, "security/Mod.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "shell/security/lock and shell/security/idle only")
     run("a feature importing security is a feature edge", {**clean, "dock/Dock.qml": "import qs.services\nimport qs.security.lock\nItem {}\n"}, None)
     run("a file of the module itself is no edge", {**clean, "dock/Dock.qml": 'import "."\nimport "DockModel.js" as M\nItem {}\n'}, None)
 
