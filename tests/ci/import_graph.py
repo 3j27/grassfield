@@ -68,6 +68,7 @@ QT_QML = "/usr/lib/qt6/qml"
 # A sound prefilter for the raw event rule: an identifier is spelled in the file as it is named, except for \u escapes.
 RAW_PREFILTER = re.compile(r"rawevent|\\u", re.I)
 RAW_TEXT = re.compile(r"rawevent|hyprland", re.I)
+RAW_JS = re.compile(r"[rR]awEvent")
 RAW_NAMES = {"rawEvent", "onRawEvent"}
 HYPRLAND = "Quickshell.Hyprland"
 
@@ -129,7 +130,8 @@ def prefetch_imports(paths):
 _ASTS = {}
 AST_IMPORT = re.compile(r'<UiImport\b[^>]*?\bfileName="([^"]*)"[^>]*?\bimportToken="[^"]*?\bl:(\d+)[^"]*"(?:[^>]*?\bsemicolonToken="[^"]*?\bl:(\d+))?')
 AST_QID = re.compile(r'<UiQualifiedId\b[^>]*?\bname="([^"]*)"')
-AST_NAME = re.compile(r'<\w+\b[^>]*?\bname="(?:on)?[rR]awEvent"[^>]*?\bidentifierToken="[^"]*?\bl:(\d+)')
+AST_NAME = re.compile(r'\b(?:name|id|value)="(?:on)?[rR]awEvent"')  # identifiers, destructured property names (id=), string literals (value=)
+AST_LINE = re.compile(r"\bl:(\d+)")
 
 
 def ast_of(path):
@@ -158,9 +160,9 @@ def ast_of(path):
                         imports.append((current[0] or ".".join(current[3]), current[1], current[2]))
                         current = None
                     continue
-                n = AST_NAME.search(line) if "awEvent" in line else None
-                if n:
-                    raw.append(int(n.group(1)))
+                if "awEvent" in line and AST_NAME.search(line):
+                    t = AST_LINE.search(line)
+                    raw.append(int(t.group(1)) if t else 0)
             result = {"imports": imports, "raw": sorted(raw)}
         _ASTS[key] = result
     return _ASTS[key]
@@ -330,13 +332,14 @@ def needs_tree(path):
 
 def raw_event_line(path):
     """The line to report for raw Hyprland events in a file: its `Quickshell.Hyprland` import, else its first rawEvent or
-    onRawEvent name; None when there is none. A .qml file is read from the syntax tree (a comment is not a use); a .js file
-    has no tree, so Qt's import scanner says whether it imports the module and the line is looked up in the text. A .qml that
-    does not parse falls back to the first line that mentions either name (a comment included: a false positive, never a miss)."""
+    onRawEvent name; None when there is none. A .qml file is read from the syntax tree: identifiers, destructured property names
+    (`const {rawEvent: e} = o`) and string literals (`o["rawEvent"]`) count, a comment does not. A .js file has no tree (qmldom
+    gives it none), so Qt's import scanner says whether it imports the module and the name anywhere in its text counts, a
+    comment included (a false positive, never a miss). Names built at run time (`"raw" + "Event"`) are out of reach."""
     if path.suffix == ".js":
         if ("module", HYPRLAND) in scanner_imports(path):
             return lines_for(path, HYPRLAND)[0][0]
-        return None
+        return next((n for n, line in enumerate(file_lines(path), 1) if RAW_JS.search(line)), None)
     if not needs_tree(path):
         return None
     tree = ast_of(path)
@@ -345,8 +348,7 @@ def raw_event_line(path):
             if k == HYPRLAND:
                 return a
         return tree["raw"][0] if tree["raw"] else None
-    text = path.read_text(encoding="utf-8", errors="replace")
-    return next((n for n, line in enumerate(QT_EOL.split(text), 1) if RAW_TEXT.search(line)), None)
+    return next((n for n, line in enumerate(file_lines(path), 1) if RAW_TEXT.search(line)), None)  # the tree failure is reported by analyze
 
 
 def analyze(shell):
@@ -383,8 +385,12 @@ def analyze(shell):
     for path, message in failures:
         found.append((path, message, None, 0))
     mods = modules_of(shell)
-    prefetch_asts(sorted({p for p, _, k, _ in found if k is not None and p.suffix == ".qml"}
-                         | {p for p in shell_sources(shell) if module_of_path(shell, mods, p) != "platform" and needs_tree(p)}))
+    need_tree = sorted({p for p, _, k, _ in found if k is not None and p.suffix == ".qml"}
+                       | {p for p in shell_sources(shell) if module_of_path(shell, mods, p) != "platform" and needs_tree(p)})
+    prefetch_asts(need_tree)
+    for p in need_tree:
+        if ast_of(p) is None:
+            found.append((p, f"{p.name}: qmldom could not read the file although the scanner did (did its dump change?)", None, 0))
     for path in shell_sources(shell):
         if module_of_path(shell, mods, path) == "platform":
             continue
@@ -605,8 +611,15 @@ def selftest():
     run("a Quickshell.Hyprland import is seen", {**clean, "search/S.qml": "import Quickshell.Hyprland\nItem {}\n"}, raw)
     run("a Quickshell.Hyprland import spelled with spaces is seen", {**clean, "search/S.qml": "import Quickshell .Hyprland\nItem {}\n"}, raw)
     run("a JS file importing Quickshell.Hyprland is seen", {**clean, "search/S.js": ".import Quickshell.Hyprland 1.0 as H\n"}, raw)
+    run("a JS body calling h.rawEvent.connect is seen", {**clean, "search/S.js": ".pragma library\nfunction f(h, cb) { h.rawEvent.connect(cb); }\n"}, raw)
+    run("a JS rawEvent mention in a comment counts (no tree for JS: a false positive, never a miss)", {**clean, "search/S.js": ".pragma library\n// rawEvent\n"}, raw)
+    run("a JS onRawEvent function is seen", {**clean, "search/S.js": ".pragma library\nfunction onRawEvent(e) {}\n"}, raw)
+    run("a destructured rawEvent property is seen", {**clean, "search/S.qml": "Item { function f(o) { const {rawEvent: ev} = o; } }\n"}, raw)
+    run("a rawEvent string key is seen", {**clean, "search/S.qml": 'Item { function f(o) { return o["rawEvent"]; } }\n'}, raw)
+    run("a single-quoted rawEvent string key is seen", {**clean, "search/S.qml": "Item { function f(o) { return o['rawEvent']; } }\n"}, raw)
+    run("an escaped spelling of rawEvent is seen", {**clean, "search/S.qml": 'Item { function f(o) { return o["\\u0072awEvent"]; } }\n'}, raw)
+    run("a rawEvent mention in a JS file of platform is fine", {**clean, "platform/X.js": ".pragma library\nfunction onRawEvent(e) {}\n"}, None)
     run("a rawEvent mention in a comment is not a use", {**clean, "search/S.qml": "Item {\n    // onRawEvent is not used here\n    /* Quickshell.Hyprland */\n}\n"}, None)
-    run("a rawEvent mention in a string is not a use", {**clean, "search/S.qml": 'Item { property string s: "onRawEvent" }\n'}, None)
     run("a platform file may use raw events", {**clean, "platform/Compositor.qml": "import Quickshell.Hyprland\nItem { function onRawEvent() {} }\n"}, None)
     run("a marked Hyprland import is one violation, covered by its marker",
         {**clean, "search/S.qml": "import Quickshell.Hyprland // layering-exception: GF-087\nItem { function onRawEvent() {} }\n"}, None)
