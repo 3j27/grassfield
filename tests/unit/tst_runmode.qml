@@ -69,18 +69,25 @@ TestCase {
             const m = new RegExp(pattern).exec(source);
             verify(m !== null, "Mode." + member + " is a RunMode call");
             compare(m[1], row.call, "Mode." + member + " calls RunMode." + row.call);
-            const names = [];
-            let e;
-            literal.lastIndex = 0;
-            while ((e = literal.exec(m[2])) !== null)
-                names.push(e[1]);
-            compare(names.join(","), row.reads.join(","), "Mode." + member + " reads");
+            // The whole argument text of the call, whitespace normalised: `env("A"), env("B") && ""` is not env("B").
+            const args = m[2].split(",").map(a => a.replace(/\s+/g, " ").trim());
+            const expected = row.reads.map(n => 'Quickshell.env("' + n + '")');
             if (row["function"] === true)
-                verify(/, Quickshell\.env\("GRASSFIELD_" \+ name\)$/.test(m[2]), "Mode." + member + " ends with the dynamic GRASSFIELD_<name>: " + m[2]);
+                expected.push('Quickshell.env("GRASSFIELD_" + name)');
+            compare(args.join(" | "), expected.join(" | "), "Mode." + member + " arguments");
             row.reads.forEach(n => allowed[n] = true);
             seen++;
         }
         verify(seen >= 8, "members checked: " + seen);
+        // The other direction: every member of Mode.qml is in the table (shellDir reads no variable and is pinned here).
+        const plain = {"shellDir": "Quickshell.shellDir"};
+        const memberRe = /(?:readonly property \w+ (\w+):|function (\w+)\()/g;
+        let mm;
+        while ((mm = memberRe.exec(source)) !== null) {
+            const name = mm[1] || mm[2];
+            verify(table[name] !== undefined || plain[name] !== undefined, "Mode." + name + " is not in the modeReads table");
+        }
+        verify(source.indexOf("readonly property string shellDir: Quickshell.shellDir\n") >= 0, "Mode.shellDir is Quickshell.shellDir");
         // No other read: every Quickshell.env("...") literal of the file is in the table, and the one dynamic read is devValue's.
         let e2;
         literal.lastIndex = 0;
