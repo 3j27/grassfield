@@ -8,9 +8,10 @@ var MAX_MINUTES = 240;
 var DIM_LEAD_SECONDS = 10;
 
 // lock.idleMinutes (grassfield.json, 0..240, 0 = never) → idle timings. Invalid values fall
-// back to the default rather than disabling the lock. Only a number is a number: false, "0", null and [0] convert to 0 in
-// JavaScript and would switch the lock off (the store reads the key through the settings contract, which refuses them
-// too: this is the second line of the same rule).
+// back to the default rather than disabling the lock: only an exact 0 means never. Only a number is a number: false, "0",
+// null and [0] convert to 0 in JavaScript and would switch the lock off. The settings store reads the key through the
+// contract (SettingsContract.normalize, rule zeroIsExact), which gives the same answers: a negative number or a fraction
+// that rounds to 0 is the default there too, so this function is the second line of the same rule, not the only one.
 function timings(minutes) {
     var m = minutes;
     if (typeof m !== "number" || !isFinite(m) || m < 0 || m > MAX_MINUTES || Math.floor(m) !== m)

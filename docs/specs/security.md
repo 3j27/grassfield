@@ -718,7 +718,10 @@ Decisions:
   multi-line message).
 
 `grassfield.json`: `lock.idleMinutes` (integer 0–240, default 5, 0 = never) is read through `Settings.lockIdleMinutes`
-(clamped); invalid values fall back to 5 in `IdleModel.timings`.
+(the settings contract, `SettingsContract.normalize`). Fail closed: only an exact 0 means never. A value above 240 is
+clamped to 240; a value below 0, a fraction that rounds to 0 (0.4), and anything that is not a number (false, "0", null,
+[0]) is invalid and reads as the default 5, in the shell and in the Settings app alike (`tests/fixtures/settings-vectors.json`,
+run through the real store by `tests/shell/settings_vectors`). `IdleModel.timings` applies the same rule again.
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
 puts the program in `message`, which is shown, and the action's icon is shown (see "Polkit details"). Caps Lock is

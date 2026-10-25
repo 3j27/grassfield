@@ -191,7 +191,7 @@ const RULES = {
     "notifications.history": {"type": "enum", "values": ["week", "day", "never"]},
     "notifications.appStyles": {"type": "notificationStyles"},
     "notifications.appPreviews": {"type": "notificationApps"},
-    "lock.idleMinutes": {"type": "integer", "min": 0, "max": 240},
+    "lock.idleMinutes": {"type": "integer", "zeroIsExact": true, "min": 0, "max": 240},
     "hotCorners.topLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.topRight": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.bottomLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
@@ -293,11 +293,15 @@ function inRange(rule, value) {
 // first, anything else invalid takes the key's default (how macOS reads a defaults value that is out of range: the Dock
 // clamps its tile size). A colour is lower case. Any other valid value is returned as it is. A string, a boolean or null
 // where a number is expected is never turned into one ("0" and false are not 0: lock.idleMinutes must never read 0 from them).
+// A rule with zeroIsExact (lock.idleMinutes, where 0 means "never") fails closed: a value below 0, or one that rounds to 0
+// without being exactly 0, is the default, so only an exact 0 reads 0.
 function normalize(path, value) {
     const rule = RULES[path];
     if (!rule)
         return undefined;
     if ((rule.type === "number" || rule.type === "integer") && typeof value === "number" && isFinite(value)) {
+        if (rule.zeroIsExact && (value < 0 || (value !== 0 && Math.round(value) === 0)))
+            return DEFAULTS[path];
         let n = rule.type === "integer" ? Math.round(value) : value;
         if (rule.min !== undefined)
             n = Math.max(rule.min, n);

@@ -78,6 +78,8 @@ def rule_of(path, leaf, errors):
         return {"type": "boolean"}
     if leaf.get("type") in ("integer", "number"):
         rule = {"type": leaf["type"]}
+        if leaf.get("x-grassfield", {}).get("zeroIsExact"):
+            rule["zeroIsExact"] = True
         if "minimum" in leaf:
             rule["min"] = leaf["minimum"]
         if "maximum" in leaf:
@@ -153,11 +155,15 @@ function inRange(rule, value) {
 // first, anything else invalid takes the key's default (how macOS reads a defaults value that is out of range: the Dock
 // clamps its tile size). A colour is lower case. Any other valid value is returned as it is. A string, a boolean or null
 // where a number is expected is never turned into one ("0" and false are not 0: lock.idleMinutes must never read 0 from them).
+// A rule with zeroIsExact (lock.idleMinutes, where 0 means "never") fails closed: a value below 0, or one that rounds to 0
+// without being exactly 0, is the default, so only an exact 0 reads 0.
 function normalize(path, value) {
     const rule = RULES[path];
     if (!rule)
         return undefined;
     if ((rule.type === "number" || rule.type === "integer") && typeof value === "number" && isFinite(value)) {
+        if (rule.zeroIsExact && (value < 0 || (value !== 0 && Math.round(value) === 0)))
+            return DEFAULTS[path];
         let n = rule.type === "integer" ? Math.round(value) : value;
         if (rule.min !== undefined)
             n = Math.max(rule.min, n);

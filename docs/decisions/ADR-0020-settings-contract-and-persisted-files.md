@@ -52,7 +52,9 @@ adding `version` is safe for a downgrade.
    `validate`, `normalize`, `versionStatus`), `shell/store/SettingsData.qml` (the JsonAdapter) and
    `apps/settingscontract.h`. `just check-schema` runs `--check` and `--selftest`, so stale output fails `check-quick`.
 2. **Normalisation, identical everywhere.** Numbers are clamped; integers are rounded then clamped; any other invalid
-   value takes its default.
+   value takes its default. A key where 0 switches a protection off (`lock.idleMinutes`, 0 = never lock) fails closed
+   (`x-grassfield.zeroIsExact` in the schema): only an exact 0 reads 0; a value below 0, or a fraction that would round to
+   0, is invalid and reads the default.
 3. **Version policy.** Missing `version` is read as 1 and written on the next write. `1` reads normally. An integer above
    1 makes the file read-only: valid keys apply best-effort, nothing is written, in-memory changes last for the session;
    Settings shows one banner and disables its controls. A non-integer is malformed and refused, as today.
