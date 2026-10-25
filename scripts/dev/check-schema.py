@@ -5,12 +5,16 @@ Supports the JSON Schema subset used by Grassfield: type, enum, required, proper
 additionalProperties (bool), items, minimum, maximum, minLength, pattern (re.search, ECMA-262 patterns written
 without lookbehind or unicode classes behave the same in Python).
 Usage: check-schema.py [FILE...]   (default: config/defaults/grassfield.json)
+Without arguments it also checks that config/defaults/grassfield.json is the current output of
+scripts/dev/gen-settings.py (every leaf has a default; ADR-0020) and runs that generator's --selftest.
 """
+import importlib.util
 import json
 import pathlib
 import re
 import sys
 
+sys.dont_write_bytecode = True
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = ROOT / "config/schema/grassfield.schema.json"
 
@@ -60,6 +64,14 @@ def main(argv):
     schema = json.loads(SCHEMA.read_text())
     files = argv or [str(ROOT / "config/defaults/grassfield.json")]
     failed = False
+    if not argv:
+        spec = importlib.util.spec_from_file_location("gen_settings", ROOT / "scripts/dev/gen-settings.py")
+        gen = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gen)
+        errors = gen.stale(schema, gen.DEFAULTS)
+        for e in errors:
+            print(f"gen-settings: {e}", file=sys.stderr)
+        failed |= bool(errors) or bool(gen.selftest())
     for name in files:
         errors = []
         check(json.loads(pathlib.Path(name).read_text()), schema, "$", errors)
