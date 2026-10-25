@@ -68,6 +68,14 @@ TestCase {
         Appearance.dark = dark;
     }
 
+    // Priority 8: Quick Settings. The glyph in a disk is about 20 (macOS), a 1x1 module is a circle one cell wide.
+    function test_quickSettingsMetrics() {
+        compare(Tokens.quicksettingsDiskGlyph, 20);
+        verify(Tokens.quicksettingsDiskGlyph < Tokens.quicksettingsIconDisk);
+        // A circle module (cols 1, rows 1) is rounded to a full circle by Module's radius rule (height <= cell).
+        verify(Tokens.quicksettingsCell > 0);
+    }
+
     function readFile(url) {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, false);

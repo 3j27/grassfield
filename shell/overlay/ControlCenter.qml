@@ -30,14 +30,14 @@ FocusScope {
     readonly property real pad: Tokens.quicksettingsPadding
     // Inset of the icon disk inside a capsule (the disk is vertically centred, so it is centred in a 1x1 too).
     readonly property real diskInset: (cell - Tokens.quicksettingsIconDisk) / 2
-    // Stages (only with the plugin's `stages-available`) sits beside Airplane Mode; while Now Playing takes that slot it gets a row of its own.
-    readonly property bool stagesRow: StagesLink.available && Media.available
-    readonly property real groupHeight: stagesRow ? 4 * cell + 3 * gap : 3 * cell + 2 * gap
+    // Airplane Mode and Stages (only with the plugin's `stages-available`) are 1x1 circles side by side under Bluetooth; Now Playing
+    // keeps its 2x2 slot at the right whether or not a player runs (macOS shows "Not Playing").
+    readonly property real groupHeight: 3 * cell + 2 * gap
     readonly property real gridBottom: sliders.height > 0 ? sliders.y + sliders.height : groupHeight
     readonly property real bodyHeight: expanded === "" ? gridBottom : detail.height
 
     // The visible glass surfaces, for the Overlay's blur regions.
-    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, appearanceSide, stagesToggle, display, keyboard, sound, appearanceBottom, battery, detail, note].filter(m => m.visible)
+    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, stagesToggle, display, keyboard, sound, appearanceBottom, battery, detail, note].filter(m => m.visible)
 
     function toggleSection(id: string): void {
         if (expanded === id)
@@ -82,7 +82,7 @@ FocusScope {
         expanded = "";
         const reason = keyboardFocused() ? Qt.TabFocusReason : Qt.MouseFocusReason;
         Qt.callLater(() => {
-            const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceSide.visible ? appearanceSideRow : appearanceBottomRow;
+            const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceBottomRow;
             target.forceActiveFocus(reason);
         });
     }
@@ -300,45 +300,20 @@ FocusScope {
 
         NowPlaying {
             id: nowPlaying
-            visible: Media.available
             x: 2 * root.pitch
             y: root.pitch
-        }
-
-        // Appearance sits beside Do Not Disturb while there is no player, below the sliders otherwise.
-        Module {
-            id: appearanceSide
-            visible: !Media.available
-            x: 2 * root.pitch
-            y: root.pitch
-            cols: 2
-
-            RadioRow {
-                id: appearanceSideRow
-                width: parent.width
-                height: parent.height
-                inset: root.diskInset
-                iconName: Appearance.dark ? "moon" : "sun"
-                title: qsTr("Appearance")
-                subtitle: Model.appearanceLabel(Settings.appearance, {light: qsTr("Light"), dark: qsTr("Dark"), auto: qsTr("Auto")})
-                on: root.expanded === "appearance"
-                expandable: true
-                expanded: root.expanded === "appearance"
-                onToggled: root.toggleSection("appearance")
-                onExpandToggled: root.toggleSection("appearance")
-            }
         }
 
         Module {
             id: airplane
             y: 2 * root.pitch
-            // Full width while no player takes the 2x2 slot at the right.
-            cols: Media.available || StagesLink.available ? 2 : 4
+            visible: Connectivity.airplaneAvailable
+            cols: 1
 
             RadioRow {
                 width: parent.width
                 height: parent.height
-                inset: root.diskInset
+                circleModule: true
                 iconName: "airplane"
                 title: qsTr("Airplane Mode")
                 subtitle: Connectivity.airplane ? qsTr("On") : qsTr("Off")
@@ -350,9 +325,8 @@ FocusScope {
 
         StagesToggle {
             id: stagesToggle
-            x: Media.available ? 0 : 2 * root.pitch
-            y: Media.available ? 3 * root.pitch : 2 * root.pitch
-            inset: root.diskInset
+            x: root.pitch
+            y: 2 * root.pitch
         }
 
         Column {
@@ -656,7 +630,6 @@ FocusScope {
 
             Module {
                 id: appearanceBottom
-                visible: Media.available
                 cols: 4
 
                 RadioRow {

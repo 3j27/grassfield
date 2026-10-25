@@ -643,6 +643,8 @@ QtObject {
     readonly property int quicksettingsEndGlyphSmall: 12
     // Glyph at the high end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
     readonly property int quicksettingsEndGlyphLarge: 18
+    // Glyph inside the 36-pt icon disk of a capsule and the glyph of a 1x1 circle module: about 20 (macOS ~20 x 14, was the 14-pt menu icon); audit 2026-10-25 priority 8 (Quick Settings; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
+    readonly property int quicksettingsDiskGlyph: 20
 
     // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19
