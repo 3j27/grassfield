@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
-import qs.launchpad
+import qs.launchpad // layering-exception: GF-087
 import qs.platform
 import qs.services
 

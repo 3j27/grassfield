@@ -255,6 +255,11 @@ if want logic; then
   python3 -I tests/ci/qmldir_types.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/qmldir_types.py "$rc" PASS
+  # Shell layering (ADR-0021, GF-087): the rules on synthetic trees; the tree itself is checked by `just check-shell`.
+  rc=0
+  python3 -I tests/ci/import_graph.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/import_graph.py "$rc" PASS
   # Symbolic glyph stroke width (ADR-0003, audit GF-124): the scanner on samples, then every shipped glyph.
   rc=0
   python3 -I tests/ci/icon_strokes.py --selftest || rc=1

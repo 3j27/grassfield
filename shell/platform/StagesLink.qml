@@ -4,7 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
-import qs.services
+import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
 import "StagesState.js" as StagesState
 

@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import qs.notifications
+import qs.notifications // layering-exception: GF-050
 import qs.security.lock
 import "IdleModel.js" as IdleModel
 import "../../services/DevGate.js" as DevGate
