@@ -1,0 +1,8 @@
+# Grassfield session dconf profile for a machine that has an administrator's database (ADR-0017, GF-117).
+# env-grassfield picks this one only when /etc/dconf/db/local exists: dconf logs "unable to open file ... expect degraded
+# performance" in every client for a listed database that is missing, so the plain profile omits system-db:local.
+# In dconf the first database wins: /etc/dconf/db/local defaults beat Grassfield's own defaults (the line below it) but not
+# the user's own settings (the line above it). Only the locks an administrator sets there bind the user.
+user-db:user
+system-db:local
+file-db:/usr/share/grassfield/dconf/grassfield.db

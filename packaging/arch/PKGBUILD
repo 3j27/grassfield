@@ -219,6 +219,7 @@ package_grassfield-desktop() {
   # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
   install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
   install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"
+  install -Dm644 "$root/packaging/dconf/profile-local" "$pkgdir/usr/share/grassfield/dconf/profile-local"
   install -Dm644 "$root/packaging/fontconfig/fonts.conf" "$pkgdir/usr/share/grassfield/fontconfig/fonts.conf"
   dconf compile "$srcdir/grassfield.db" "$root/packaging/dconf/grassfield.d"
   install -Dm644 "$srcdir/grassfield.db" "$pkgdir/usr/share/grassfield/dconf/grassfield.db"
