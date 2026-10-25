@@ -615,7 +615,7 @@ Variants {
                                 windows: tile.isPlus ? [] : tile.modelData.windows
                                 screenW: tile.modelData.screenW
                                 screenH: tile.modelData.screenH
-                                live: root.controller.profile === "full" && tile.modelData.active
+                                capture: !tile.modelData.active
                             }
 
                             Text {

@@ -16,7 +16,11 @@ Item {
     property real screenH: 0
     // Windows drawn at most (the rest are hidden; the lowest ones first).
     property int maxWindows: Tokens.overviewMiniMaxWindows
-    // Live capture (the "full" profile, active desktop); otherwise one frame per window.
+    // Whether the windows are captured. The compositor plugin lays the windows of the ACTIVE desktop out while the Overview is
+    // open, and a frame taken of one of those comes back as plain wallpaper (seen in the nested session, at any delay): the active
+    // desktop shows the cards with the app icons, the other desktops show captured frames.
+    property bool capture: true
+    // Live capture of the frames; otherwise one frame per window.
     property bool live: false
 
     readonly property real scaleFactor: screenW > 0 && screenH > 0 ? Math.min(width / screenW, height / screenH) : 0
@@ -57,7 +61,7 @@ Item {
             ScreencopyView {
                 id: view
                 anchors.fill: parent
-                captureSource: card.modelData.toplevel ? card.modelData.toplevel : null
+                captureSource: root.capture && card.modelData.toplevel ? card.modelData.toplevel : null
                 live: root.live
                 paintCursor: false
                 // A single frame can only be requested once the capture context knows the buffer size (sourceSize).
