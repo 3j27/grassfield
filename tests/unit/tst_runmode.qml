@@ -79,15 +79,17 @@ TestCase {
             seen++;
         }
         verify(seen >= 8, "members checked: " + seen);
-        // The other direction: every member of Mode.qml is in the table (shellDir reads no variable and is pinned here).
-        const plain = {"shellDir": "Quickshell.shellDir"};
+        // The other direction: every member of Mode.qml is in the table (shellDir and refused read no variable and are
+        // pinned here to their exact expression).
+        const plain = {"shellDir": "Quickshell.shellDir", "refused": "RunMode.REFUSED"};
         const memberRe = /(?:readonly property \w+ (\w+):|function (\w+)\()/g;
         let mm;
         while ((mm = memberRe.exec(source)) !== null) {
             const name = mm[1] || mm[2];
             verify(table[name] !== undefined || plain[name] !== undefined, "Mode." + name + " is not in the modeReads table");
         }
-        verify(source.indexOf("readonly property string shellDir: Quickshell.shellDir\n") >= 0, "Mode.shellDir is Quickshell.shellDir");
+        for (const name of Object.keys(plain))
+            verify(source.indexOf("readonly property string " + name + ": " + plain[name] + "\n") >= 0, "Mode." + name + " is " + plain[name]);
         // No other read: every Quickshell.env("...") literal of the file is in the table, and the one dynamic read is devValue's.
         let e2;
         literal.lastIndex = 0;
