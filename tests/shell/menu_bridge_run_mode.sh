@@ -49,11 +49,12 @@ if [[ $addr != "unix:path=$tmp/bus/"* || $addr == *"/run/user/"* || (-n ${DBUS_S
   exit 1
 fi
 
-# The bridge with only the given variables (plus the private bus and the scratch homes): <log> <VAR=value...>
+# The bridge with only the given variables (plus the private bus, the scratch homes and Qt's offscreen platform: no Qt
+# process starts here without it, a Qt tool that finds no display aborts): <log> <VAR=value...>
 start_bridge() {
   local log=$1
   shift
-  env -i PATH=/usr/bin:/bin HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/run" DBUS_SESSION_BUS_ADDRESS="$addr" "$@" "$bin" >"$log" 2>&1 </dev/null &
+  env -i PATH=/usr/bin:/bin QT_QPA_PLATFORM=offscreen HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/run" DBUS_SESSION_BUS_ADDRESS="$addr" "$@" "$bin" >"$log" 2>&1 </dev/null &
   bridge_pid=$!
 }
 # Waits up to 10 s for the bridge to listen or to exit: sets `state` to "listening", "exit <rc>" or "timeout". Not in a
