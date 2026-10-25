@@ -1167,6 +1167,30 @@
         <translation>Placer la fenêtre dans un Stage à part</translation>
     </message>
     <message>
+        <source>Calculator</source>
+        <translation>Calculatrice</translation>
+    </message>
+    <message>
+        <source>Mail</source>
+        <translation>Mail</translation>
+    </message>
+    <message>
+        <source>Web browser</source>
+        <translation>Navigateur web</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>Grassfield Settings</source>
+        <translation>Réglages Grassfield</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
         <source>Keyboard brightness up</source>
         <translation>Luminosité du clavier +</translation>
     </message>
