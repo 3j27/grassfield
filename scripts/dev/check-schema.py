@@ -68,7 +68,7 @@ def main(argv):
         spec = importlib.util.spec_from_file_location("gen_settings", ROOT / "scripts/dev/gen-settings.py")
         gen = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gen)
-        errors = gen.stale(schema, gen.DEFAULTS)
+        errors = gen.stale(schema)
         for e in errors:
             print(f"gen-settings: {e}", file=sys.stderr)
         failed |= bool(errors) or bool(gen.selftest())

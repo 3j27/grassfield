@@ -251,9 +251,11 @@ TestCase {
         compare(r.text, "");
     }
 
-    function test_readFallsBackToDefaults() {
+    function test_readClampsAndFallsBackToDefaults() {
         const data = {version: 1, material: {transparency: 9, profile: "full"}, lock: "oops"};
-        compare(Store.read(data, "material.transparency"), 0.25);
+        // An out-of-range number is clamped, as the shell reads it (ADR-0020, tests/fixtures/settings-vectors.json).
+        compare(Store.read(data, "material.transparency"), 1);
+        compare(Store.read({material: {transparency: "x"}}, "material.transparency"), 0.25);
         compare(Store.read(data, "material.profile"), "full");
         compare(Store.read(data, "lock.idleMinutes"), 5);
         compare(Store.read({}, "hotCorners.topLeft"), "none");

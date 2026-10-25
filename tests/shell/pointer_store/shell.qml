@@ -6,8 +6,8 @@ import Quickshell.Io
 import qs.store
 
 // pointer.size, pointer.outlineColor and pointer.fillColor read from grassfield.json by the real SettingsStore (scripts/dev/test.sh: `qs -p tests/shell/pointer_store`).
-// A valid integer snaps to the slider step; a non-integer, a string, a boolean or a number out of range is the default
-// 24 (an `int` property would have turned 51.5 into 52 and "64" into 64). Prints "pointer-store: PASS" or the failures.
+// A number is rounded and clamped to 24..96 like every reader of the settings contract (ADR-0020); a string, a boolean or
+// null is the default 24 (an `int` property would have turned "64" into 64). Prints "pointer-store: PASS" or the failures.
 ShellRoot {
     id: root
 
@@ -15,12 +15,12 @@ ShellRoot {
     // name, file text, expected pointerSize, expected outline and fill (default white and black)
     readonly property var cases: [
         {"name": "on step", "text": '{"version":1,"pointer":{"size":48}}', "want": 48},
-        {"name": "off step integer snaps", "text": '{"version":1,"pointer":{"size":51}}', "want": 52},
-        {"name": "fraction is the default", "text": '{"version":1,"pointer":{"size":51.5}}', "want": 24},
+        {"name": "off step integer is kept", "text": '{"version":1,"pointer":{"size":51}}', "want": 51},
+        {"name": "fraction is rounded", "text": '{"version":1,"pointer":{"size":51.5}}', "want": 52},
         {"name": "string is the default", "text": '{"version":1,"pointer":{"size":"64"}}', "want": 24},
         {"name": "boolean is the default", "text": '{"version":1,"pointer":{"size":true}}', "want": 24},
-        {"name": "above range is the default", "text": '{"version":1,"pointer":{"size":200}}', "want": 24},
-        {"name": "below range is the default", "text": '{"version":1,"pointer":{"size":7}}', "want": 24},
+        {"name": "above range is clamped", "text": '{"version":1,"pointer":{"size":200}}', "want": 96},
+        {"name": "below range is clamped", "text": '{"version":1,"pointer":{"size":7}}', "want": 24},
         {"name": "missing is the default", "text": '{"version":1}', "want": 24},
         {"name": "colours lower-cased", "text": '{"version":1,"pointer":{"outlineColor":"#FFFF00","fillColor":"#FF0000"}}', "want": 24, "outline": "#ffff00", "fill": "#ff0000"},
         {"name": "one colour only", "text": '{"version":1,"pointer":{"fillColor":"#336699"}}', "want": 24, "fill": "#336699"},

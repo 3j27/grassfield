@@ -66,4 +66,5 @@ add ActivationKeys
 add WindowActions
 add WindowControls
 add UnifiedToolbar
+add SettingsContract
 ```

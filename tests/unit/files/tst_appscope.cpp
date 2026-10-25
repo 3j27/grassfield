@@ -20,12 +20,23 @@ TEST(AppScope, UnscopedSessionKeepsTheCommand)
 
 TEST(AppScope, DevSessionIsNeverScoped)
 {
-    qputenv("GRASSFIELD_SESSION", "1");
+    qunsetenv("GRASSFIELD_SESSION"); // not inherited from the environment the tests run in
     qputenv("GRASSFIELD_DEV", "1");
     EXPECT_FALSE(grassfield::apps::scopedLaunch());
-    qunsetenv("GRASSFIELD_SESSION");
     qunsetenv("GRASSFIELD_DEV");
     EXPECT_FALSE(grassfield::apps::scopedLaunch());
+}
+
+// ADR-0019: a GRASSFIELD_DEV=1 that leaked into a packaged session (GRASSFIELD_SESSION=1) changes nothing there.
+TEST(AppScope, ALeakedDevValueInARealSessionChangesNothing)
+{
+    qputenv("GRASSFIELD_SESSION", "1");
+    qunsetenv("GRASSFIELD_DEV");
+    const bool plain = grassfield::apps::scopedLaunch();
+    qputenv("GRASSFIELD_DEV", "1");
+    EXPECT_EQ(grassfield::apps::scopedLaunch(), plain);
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_DEV");
 }
 
 // ADR-0015 Q4(b): the minimize light is greyed only when the shell says the plugin is absent or has no minimize feature.

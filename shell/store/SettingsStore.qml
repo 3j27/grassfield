@@ -219,7 +219,7 @@ Scope {
 
     component PointerConfig: JsonObject {
         // Cursor size in pixels, 24 to 96 (Settings > Accessibility > Pointer). A var, not an int: an int property
-        // would turn 51.5 or "64" into a valid size before PointerSize.fromStored could refuse them.
+        // would turn "64" into a valid size before PointerSize.fromStored could refuse it (a number is rounded and clamped there).
         property var size: 24
         // #rrggbb colours of the pointer (outline white, fill black = the packaged theme). Vars for the same reason.
         property var outlineColor: "#ffffff"

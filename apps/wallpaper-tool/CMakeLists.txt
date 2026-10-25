@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 
 add_executable(grassfield-wallpaper src/main.cpp src/wallpaperlogic.cpp src/wallpaperlogic.h src/commonsfetch.cpp src/commonsfetch.h src/videotool.cpp src/videotool.h)
+target_include_directories(grassfield-wallpaper PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..) # apps/runmode.h
 target_link_libraries(grassfield-wallpaper PRIVATE Qt6::Core Qt6::Gui)
 
 # Run by the shell and the Settings app, never by the user: /usr/lib/grassfield, not bin.

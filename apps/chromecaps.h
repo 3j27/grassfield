@@ -20,11 +20,13 @@
 
 #include <QFile>
 
+#include "runmode.h"
+
 namespace grassfield::apps {
 
 inline QString capabilitiesFile()
 {
-    const QString dev = qEnvironmentVariable("GRASSFIELD_STATE_HOME");
+    const QString dev = runmode::stateHomeOverride();
     if (!dev.isEmpty())
         return dev + QStringLiteral("/capabilities.json");
     const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
