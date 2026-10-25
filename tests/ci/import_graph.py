@@ -24,6 +24,7 @@ module's notification import), `ADR-0021 security` (permanent, security files on
 Hyprland events). An unknown tag, a marker on a line that is not a violation, and a permanent marker outside shell/security
 are failures, so no marker outlives its violation.
 """
+import os
 import re
 import sys
 import tempfile
@@ -208,6 +209,31 @@ def problems(shell, root=None):
     return out
 
 
+def tree_problems(root):
+    """A test tree that links shell module directories (qs.<module> resolves through them) must link shell/lib too:
+    every module may import qs.lib, and a tree without the link fails at load time (main 31bce38: lock_surfaces)."""
+    shell = (root / "shell").resolve()
+    lib = shell / "lib"
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root / "tests"):
+        dirnames[:] = [d for d in dirnames if d != ".dev" and not (Path(dirpath) / d).is_symlink()]
+        here = Path(dirpath)
+        links = [here / n for n in os.listdir(here) if (here / n).is_symlink()]
+        targets = {}
+        for link in links:
+            real = link.resolve()
+            if real.is_dir() and real != lib and (real / "qmldir").exists():
+                try:
+                    real.relative_to(shell)
+                except ValueError:
+                    continue
+                targets[link.name] = real
+        if targets and not any(p.name == "lib" and p.resolve() == lib for p in links):
+            out.append(f"{here.relative_to(root)}: links the shell module(s) {', '.join(sorted(targets))} but has no `lib` link to shell/lib "
+                       f"(add `lib -> {os.path.relpath(lib, here)}`)")
+    return out
+
+
 def describe(shell):
     violations, (nodes, edges) = analyze(shell)
     lines = ["modules (layer):"]
@@ -301,6 +327,29 @@ def selftest():
     run("a feature importing security is a feature edge", {**clean, "dock/Dock.qml": "import qs.services\nimport qs.security.lock\nItem {}\n"}, None)
     run("a file of the module itself is no edge", {**clean, "dock/Dock.qml": 'import "."\nimport "DockModel.js" as M\nItem {}\n'}, None)
 
+    # Test trees: a tree that links a shell module directory links lib too.
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        shell = build(tmp, {**base_mods, **clean})
+        tree = tmp / "tests" / "shell" / "case"
+        tree.mkdir(parents=True)
+        (tree / "services").symlink_to("../../../shell/services")
+        (tree / "Dock.qml").symlink_to("../../../shell/dock/Dock.qml")  # a file link is no module link
+        if not any("no `lib` link" in p for p in tree_problems(tmp)):
+            failures.append("test tree without lib passes")
+        (tree / "lib").symlink_to("../../../shell/lib")
+        if tree_problems(tmp):
+            failures.append(f"test tree with lib fails: {tree_problems(tmp)}")
+        (tree / "lib").unlink()
+        (tree / "lib").symlink_to("../../../shell/store")
+        if not any("no `lib` link" in p for p in tree_problems(tmp)):
+            failures.append("a lib link to another module passes")
+        other = tmp / "tests" / "shell" / "files_only"
+        other.mkdir()
+        (other / "Dock.qml").symlink_to("../../../shell/dock/Dock.qml")
+        if any("files_only" in p for p in tree_problems(tmp)):
+            failures.append("a tree with file links only needs no lib")
+
     # The strongly connected components: the whole graph, then the feature graph without layer violations.
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
@@ -324,7 +373,7 @@ def main(argv):
     if "--graph" in argv:
         print(describe(shell))
         return 0
-    bad = problems(shell, root)
+    bad = problems(shell, root) + tree_problems(root)
     for line in bad:
         print(line)
     violations, _ = analyze(shell)
