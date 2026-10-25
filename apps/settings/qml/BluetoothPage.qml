@@ -3,8 +3,8 @@ import QtQuick
 import Grassfield.Ui
 import "System.js" as System
 
-// Bluetooth through BlueZ's `bluetoothctl` (read-only queries; power and connect only through SystemService, so never
-// in a dev session). Paired devices only: no discovery or pairing here (same scope as Quick Settings).
+// Bluetooth through BlueZ over D-Bus (one read-only JSON state; power and connect only through SystemService, so never
+// in a dev session; a failed action shows its reason under the list). Paired devices only: no discovery or pairing here (same scope as Quick Settings).
 SettingsPage {
     id: root
 
@@ -15,12 +15,9 @@ SettingsPage {
 
     property bool answered: false
     property var controller: ({present: false, powered: false})
-    property var paired: []
-    property var connected: []
+    property var devices: []
     // MAC address being connected or disconnected, until the command ends.
     property string pending: ""
-
-    readonly property var devices: System.bluetoothDevices(root.paired, root.connected)
 
     // The rows of the list, keyed by MAC address: a refresh updates, inserts and removes rows in place.
     ListModel {
@@ -30,9 +27,7 @@ SettingsPage {
     onDevicesChanged: System.syncModel(deviceModel, root.devices, "mac")
 
     function refresh(): void {
-        root.system.query(System.QUERY.btShow, "bt.show");
-        root.system.query(System.QUERY.btPaired, "bt.paired");
-        root.system.query(System.QUERY.btConnected, "bt.connected");
+        root.system.queryBus("bt.state", "bt.state");
     }
 
     function toggleDevice(dev: var): void {
@@ -52,16 +47,13 @@ SettingsPage {
 
         function onFinished(tag: string, ok: bool, output: string): void {
             switch (tag) {
-            case "bt.show":
-                root.controller = ok ? System.parseBtShow(output) : {present: false, powered: false};
+            case "bt.state": {
+                const state = ok ? System.parseBtState(output) : null;
+                root.controller = state ? {present: state.present, powered: state.powered} : {present: false, powered: false};
+                root.devices = state ? state.devices : [];
                 root.answered = true;
                 break;
-            case "bt.paired":
-                root.paired = ok ? System.parseBtDevices(output) : [];
-                break;
-            case "bt.connected":
-                root.connected = ok ? System.parseBtDevices(output) : [];
-                break;
+            }
             case "bt.act":
                 root.pending = "";
                 root.refresh();
