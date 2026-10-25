@@ -1134,8 +1134,8 @@ QtObject {
     readonly property int filesToolbarButtonSize: 28
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarIconSize: 16
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSearchWidth: 180
+    // Expanded width of the search capsule (macOS ~200); collapsed it is a 36-pt circle; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesSearchWidth: 200
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesTabHeight: 28
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -1248,6 +1248,10 @@ QtObject {
     readonly property int filesColumnRowHeight: 22
     // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
+    // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesToolbarCapsule: 36
+    // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesToolbarGroupButton: 34
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

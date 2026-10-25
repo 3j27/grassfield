@@ -97,6 +97,13 @@ TestCase {
         verify(Tokens.settingsSidebarSelectionRadius > Tokens.radiusControl);
     }
 
+    // Priority 11: toolbar capsules are 36 pt; two 34-pt buttons make the 72-pt back/forward capsule.
+    function test_toolbarCapsules() {
+        compare(Tokens.filesToolbarCapsule, 36);
+        compare(2 * Tokens.filesToolbarGroupButton + Tokens.spacingXs, 72);
+        verify(Tokens.filesSearchWidth >= 180);
+    }
+
     function readFile(url) {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, false);

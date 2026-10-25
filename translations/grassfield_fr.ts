@@ -1665,6 +1665,10 @@
         <translation>Fichiers</translation>
     </message>
     <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
         <source>Back</source>
         <translation>Précédent</translation>
     </message>
@@ -3904,6 +3908,18 @@
     <message>
         <source>Sections</source>
         <translation>Sections</translation>
+    </message>
+    <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
     </message>
 </context>
 <context>

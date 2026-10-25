@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "NavHistory.js" as NavHistory
 
 // Grassfield Settings: sidebar with search and sections on the left, detail pane on the right.
 // App windows are opaque (master-prompt 5.5), so the sidebar uses a flat surface, not the shell material.
@@ -86,6 +87,7 @@ Window {
     }
 
     Component.onCompleted: {
+        root.navState = NavHistory.start(root.selectedId);
         root.backend.watch(root.backend.capabilitiesFile);
         root.readCapabilities();
     }
@@ -180,8 +182,22 @@ Window {
         value: cfg.value("icons.folderColor")
     }
 
+    // Back and forward through the panes (the toolbar's capsule): NavHistory.js.
+    property var navState: ({back: [], forward: [], current: ""})
+
     function select(id: string): void {
+        root.navState = NavHistory.visit(root.navState, id);
         root.selectedId = id;
+    }
+
+    function navBack(): void {
+        root.navState = NavHistory.back(root.navState);
+        root.selectedId = root.navState.current;
+    }
+
+    function navForward(): void {
+        root.navState = NavHistory.forward(root.navState);
+        root.selectedId = root.navState.current;
     }
 
     function focusSearch(): void {
@@ -451,6 +467,40 @@ Window {
             title: root.sectionTitle
             canMinimize: root.canMinimize
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
+
+            // Back and forward: one 72 x 36 capsule (macOS).
+            leading: Rectangle {
+                width: navRow.width + Tokens.spacingXs
+                height: Tokens.filesToolbarCapsule
+                radius: height / 2
+                color: Appearance.buttonFill
+                Accessible.role: Accessible.Grouping
+                Accessible.name: qsTr("Navigation")
+
+                Row {
+                    id: navRow
+                    anchors.centerIn: parent
+
+                    ToolButton {
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "chevron-right"
+                        iconRotation: 180
+                        enabled: NavHistory.canBack(root.navState)
+                        accessibleName: qsTr("Back")
+                        onClicked: root.navBack()
+                    }
+
+                    ToolButton {
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "chevron-right"
+                        enabled: NavHistory.canForward(root.navState)
+                        accessibleName: qsTr("Forward")
+                        onClicked: root.navForward()
+                    }
+                }
+            }
         }
 
         Rectangle {

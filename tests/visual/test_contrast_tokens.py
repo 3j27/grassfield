@@ -591,6 +591,23 @@ class WindowSurfacePairs(unittest.TestCase):
         group = over(self.tok.color("colors", "dark", "fill"), self.tok.path("material.fillOpacity"), win)
         self.assertGreaterEqual(wcag(group, win), 1.3, "dark group against the window: %.2f:1" % wcag(group, win))
 
+    def test_toolbar_capsules_and_their_selected_pill(self):
+        # Priority 11: back/forward, the view group and the search capsule are a 6 % grey (light) or 14 % (dark) fill over the window;
+        # the selected view is a lighter pill (white 0.85 in light, the dark fill again in dark). Text and icons on all of them.
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            fillc = self.tok.color("colors", ap, "fill")
+            if ap == "light":
+                group = over(fillc, self.tok.path("material.buttonFillOpacityLight"), win)
+                pill = over(self.tok.color("colors", ap, "chipFill"), self.tok.path("material.chipFillOpacityLight"), group)
+            else:
+                group = over(fillc, self.tok.path("material.fillOpacity"), win)
+                pill = over(fillc, self.tok.path("material.fillOpacity"), group)
+            for bg, what in ((group, "the capsule"), (pill, "the selected pill")):
+                for name in ("text", "textSecondary"):
+                    r = wcag(self.tok.color("colors", ap, name), bg)
+                    self.assertGreaterEqual(r, 4.5, "%s on %s, %s: %.2f:1" % (name, what, ap, r))
+
     def test_settings_sidebar_surfaces_and_tiles(self):
         # The floating sidebar panel (priority 10): text on the panel over the window, the panel against the window in dark, and
         # the white glyph on every icon tile colour (graphic, 3:1).
