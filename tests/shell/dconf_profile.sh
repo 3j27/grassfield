@@ -39,6 +39,11 @@ check test "$(g "$tmp/profile" get $KEY color-scheme)" = "'prefer-dark'" -a "$(g
 desc="with the profile, the GTK font defaults are Inter 10, grayscale and slight"
 check test "$(g "$tmp/profile" get $KEY font-name)" = "'Inter 10'" -a "$(g "$tmp/profile" get $KEY document-font-name)" = "'Inter 10'" \
   -a "$(g "$tmp/profile" get $KEY font-antialiasing)" = "'grayscale'" -a "$(g "$tmp/profile" get $KEY font-hinting)" = "'slight'"
+desc="with the profile, the window buttons are close, minimize, zoom on the left (ADR-0002), a default the user can change"
+check test "$(g "$tmp/profile" get org.gnome.desktop.wm.preferences button-layout)" = "'close,minimize,maximize:'" \
+  -a "$(g "$tmp/profile" writable org.gnome.desktop.wm.preferences button-layout)" = true
+desc="the dev environment (scripts/dev/devenv.sh) compiles the same defaults and exports a profile under .dev/dconf"
+check bash -c 'grep -q "dconf compile \"\$_gf_dconf_tmp\" \"\$_gf_dev_root/packaging/dconf/grassfield.d\"" "$1" && grep -q "export DCONF_PROFILE=\$_gf_dconf/profile" "$1"' _ "$root/scripts/dev/devenv.sh"
 desc="the font keys are defaults, not locks: still writable with the profile; monospace-font-name keeps the user value"
 check test "$(g "$tmp/profile" writable $KEY font-name)" = true -a "$(g "$tmp/profile" writable $KEY font-hinting)" = true \
   -a "$(g "$tmp/profile" get $KEY monospace-font-name)" = "'User Mono 9'"
