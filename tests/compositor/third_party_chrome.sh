@@ -8,9 +8,17 @@
 # starts through scripts/dev/isolated.sh (isolated homes, the dev dconf profile of scripts/dev/devenv.sh) on the private
 # bus and the nested socket, never the owner's bus or home; Chromium with a throwaway profile under .dev/. hyprctl only
 # through scripts/nestctl (read-only, plus window moves); captures with grim.
+# Offline: a test never touches the network. Every client gets the discard port (127.0.0.1:9, nothing listens) as its
+# proxy: the proxy variables for GIO, libproxy and curl-based code, --proxy-server for Chromium and Electron (they obey it
+# over the environment; nothing passes --no-proxy-server, which would override it, and the isolated homes, fresh every
+# run, hold no chromium-flags.conf or obsidian user-flags.conf that could). Chromium also runs with its background
+# networking, component updater and sync off. Obsidian's own updater is off (updateDisabled in its obsidian.json, the key
+# its main process reads); its log must show the installed package and no update check. Before this, Obsidian updated
+# itself from GitHub during the run (an asar in its isolated home, loaded instead of the installed version).
 #
 # Per app on the list that is installed (Evince: GTK3 header bar; Nautilus: GTK4/libadwaita; Chromium's browser window:
-# its GTK integration; Obsidian: Electron), one at a time at the same place:
+# its GTK integration; Obsidian: Electron, its starter window and a vault window on a temporary vault), one at a time at
+# the same place:
 #   T  SESSION  its class carries the Hyprland tag grassfield-client-chrome (rule gf-client-chrome-third-party)
 #   S  PLUGIN   no plugin strip above it (the measurement of client_chrome.sh)
 #   Z  SESSION  its own zoom button maximizes it (fullscreen=1, exempt from the maximize suppression), a second press
@@ -20,6 +28,7 @@
 #               GTK4 greys a minimize button the compositor does not offer: Nautilus's works only with P8 (minimize in
 #               its xdg wm_capabilities)
 #   D  PLUGIN   a click on that Dock tile restores it: back on its Desktop, at its geometry, focused
+#   C  client   its own close button, pressed last, closes the window
 #   V  visual   a capture of its top band, .dev/third-party-chrome/<app>-top.png: its own close, minimize, zoom. The
 #               script cannot judge a picture: it prints "visual NOT verified" with the path; whoever runs it judges the
 #               captures and records the verdict.
@@ -63,14 +72,19 @@ esac
 work=$dev/third-party-chrome
 rm -rf "$work"
 mkdir -p "$work"
+# Fresh isolated homes every run: nothing a previous run left there (an app's own update, a flags file) changes what is
+# tested.
+for n in layout foot evince nautilus chromium obsidian; do rm -rf "$dev/isolated/tpc-$n"; done
+dead_proxy=127.0.0.1:9
 log=$work/run-$(date +%Y%m%d-%H%M%S).log
 say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$log"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
 ctl() { timeout 10 "$root/scripts/nestctl" "$@"; }
 # A client on the nested socket and the private bus, isolated (scripts/dev/isolated.sh): <name> <command...>
 client_run() {
-  local name=$1; shift
-  WAYLAND_DISPLAY=$sock DBUS_SESSION_BUS_ADDRESS=$bus GDK_BACKEND=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland \
+  local name=$1 p=http://$dead_proxy; shift
+  http_proxy=$p https_proxy=$p all_proxy=$p HTTP_PROXY=$p HTTPS_PROXY=$p ALL_PROXY=$p no_proxy='' NO_PROXY='' \
+    WAYLAND_DISPLAY=$sock DBUS_SESSION_BUS_ADDRESS=$bus GDK_BACKEND=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland \
     setsid "$root/scripts/dev/isolated.sh" --name "tpc-$name" -- "$@" >>"$log" 2>&1 </dev/null &
   echo $!
 }
@@ -189,19 +203,23 @@ dock_tile() { # <hex address, no 0x> <since>
   rx=$((rx + rw / 2 - mon_x)) ry=$((ry + rh / 2 - mon_y))
   ((rx >= 0 && rx < mon_w && ry >= 0 && ry < mon_h)) && echo "$rx $ry"
 }
-# The app's own buttons work: <label> <class regex> <minimize dx> <zoom dx> <dy> (offsets from the window's top-left; a
-# negative dx counts from its right edge).
+# The app's own buttons work: <label> <class regex> <close dx> <minimize dx> <zoom dx> <dy> [first|right] (offsets from
+# the window's top-left; a negative dx counts from its right edge: at the window's first width, kept from its left edge,
+# with `first`, the default; at its current width with `right`, for a resizable window whose controls follow its edge).
 own_buttons() {
-  local label=$1 cls=$2 mdx=$3 zdx=$4 dy=$5 fs1 fs2 ws w0 x0 y0 h0 ws0 addr f0 tx ty x y w h active
-  # An offset from the right edge is taken at the window's first width and kept from its left edge: Obsidian's starter
-  # window is not resizable, its content (and its controls) stays at its size in the corner of a zoomed box.
+  local label=$1 cls=$2 cdx=$3 mdx=$4 zdx=$5 dy=$6 anchor=${7:-first} fs1 fs2 ws w0 x0 y0 h0 ws0 addr f0 tx ty x y w h active
+  # `first`: Obsidian's starter window is not resizable, its content (and its controls) stays at its size in the corner of
+  # a zoomed box.
   read -r _ _ w0 _ _ < <(geom "$cls")
-  ((mdx < 0)) && mdx=$((w0 + mdx))
-  ((zdx < 0)) && zdx=$((w0 + zdx))
-  at() { # <dx> -> "x y" (output px), from the window's current left edge
-    local x y
-    read -r x y _ _ _ < <(geom "$cls")
-    echo "$((x + $1)) $((y + dy))"
+  if [[ $anchor == first ]]; then
+    ((cdx < 0)) && cdx=$((w0 + cdx))
+    ((mdx < 0)) && mdx=$((w0 + mdx))
+    ((zdx < 0)) && zdx=$((w0 + zdx))
+  fi
+  at() { # <dx> -> "x y" (output px), from the window's current left edge (or its current right edge for a negative dx)
+    local x y w
+    read -r x y w _ _ < <(geom "$cls")
+    if (($1 < 0)); then echo "$((x + w + $1)) $((y + dy))"; else echo "$((x + $1)) $((y + dy))"; fi
   }
   # shellcheck disable=SC2046 # "x y"
   press $(at "$zdx")
@@ -236,6 +254,11 @@ own_buttons() {
   # The effect the settings chose (funnel or shrink; fade with Reduce Motion), from the plugin's timing lines: reported.
   tail -n +"$((f0 + 1))" "$follow" 2>/dev/null | grep -ao "minimize ${addr#0x}: [a-z]* \(minimize\|restore\) in [0-9]* ms, [0-9]* frames" \
     | while IFS= read -r l; do say "  $label: $l"; done
+  # Last, on this throwaway window: its own close button.
+  # shellcheck disable=SC2046
+  press $(at "$cdx")
+  wait_gone "$cls"
+  check "$label: its own close button closes it" $? "window ${addr} $(client "$cls" .address | grep -q . && echo 'still mapped' || echo gone)"
 }
 stop_app() { # <pid> <class regex>
   pkill -P "$1" 2>/dev/null; kill "$1" 2>/dev/null
@@ -261,17 +284,18 @@ judge foot '^foot$' 0
 stop_app "$p" '^foot$'
 
 # Header-bar apps with the session's GTK layout: close, minimize, zoom on the left, 23 px below the window's top.
-for gtk in "evince|Evince (GTK3 header bar)|^org\\.gnome\\.Evince$|evince|63|101" \
-  "nautilus|Nautilus (GTK4/libadwaita header bar)|^org\\.gnome\\.Nautilus$|nautilus --new-window|60|97"; do
-  IFS='|' read -r label title cls cmd mdx zdx <<<"$gtk"
+for gtk in "evince|Evince (GTK3 header bar)|^org\\.gnome\\.Evince$|evince|22|63|101" \
+  "nautilus|Nautilus (GTK4/libadwaita header bar)|^org\\.gnome\\.Nautilus$|nautilus --new-window|22|60|97"; do
+  IFS='|' read -r label title cls cmd cdx mdx zdx <<<"$gtk"
   command -v "${cmd%% *}" >/dev/null || continue
   say "$title"
   # shellcheck disable=SC2086 # the command and its arguments
   p=$(client_run "$label" $cmd); pids+=("$p")
-  if wait_mapped "$cls"; then
+  # Up to 30 s: on the private bus Nautilus can wait about 12 s for an accessibility bus that never starts.
+  if wait_mapped "$cls" 120; then
     sleep 1.5
     judge "$label" "$cls" 1
-    own_buttons "$label" "$cls" "$mdx" "$zdx" 23
+    own_buttons "$label" "$cls" "$cdx" "$mdx" "$zdx" 23
   else
     check "$label: mapped" 1 "$(ctl clients -j | jq -c '[.[].class]')"
   fi
@@ -280,13 +304,14 @@ done
 
 if command -v chromium >/dev/null; then
   cargs=(--user-data-dir="$work/chromium-profile" --no-first-run --no-default-browser-check --password-store=basic
-    --disable-background-networking --disable-component-update --disable-sync --ozone-platform=wayland --window-size=900,520)
+    --disable-background-networking --disable-component-update --disable-sync --proxy-server="$dead_proxy"
+    --ozone-platform=wayland --window-size=900,520)
   say "Chromium browser (its own frame, through its GTK integration)"
   p=$(client_run chromium chromium "${cargs[@]}" about:blank); pids+=("$p")
   if wait_mapped '^chromium$' 80; then
     sleep 2
     judge chromium '^chromium$' 1
-    own_buttons chromium '^chromium$' 50 83 21
+    own_buttons chromium '^chromium$' 17 50 83 21
   else
     check "chromium: mapped as chromium" 1 "$(ctl clients -j | jq -c '[.[].class]')"
   fi
@@ -307,17 +332,43 @@ if command -v chromium >/dev/null; then
 fi
 
 if command -v obsidian >/dev/null; then
-  say "Obsidian (Electron, its own frame)"
-  p=$(client_run obsidian obsidian); pids+=("$p")
-  if wait_mapped '^md\.obsidian\.Obsidian$' 120; then
-    sleep 2
-    judge obsidian '^md\.obsidian\.Obsidian$' 1
-    # Obsidian draws its controls at the top right, in its own order (minimize, zoom, close): it ignores the GTK layout.
-    own_buttons obsidian '^md\.obsidian\.Obsidian$' -110 -67 15
-  else
-    check "obsidian: mapped as md.obsidian.Obsidian" 1 "$(ctl clients -j | jq -c '[.[].class]')"
-  fi
-  stop_app "$p" '^md\.obsidian\.Obsidian$'
+  # Its user data directory in the isolated home (Electron's userData: $XDG_CONFIG_HOME/obsidian), with the settings file
+  # its main process reads at start: updateDisabled (its updater stays off) and, for the second run, a vault to open.
+  obs_cfg=$dev/isolated/tpc-obsidian/config/obsidian
+  mkdir -p "$obs_cfg"
+  printf '{"updateDisabled":true}\n' >"$obs_cfg/obsidian.json"
+  vault=$work/obsidian-vault
+  mkdir -p "$vault"
+  printf '# Grassfield test note\n' >"$vault/note.md"
+  for run in starter vault; do
+    if [[ $run == vault ]]; then
+      jq -n --arg p "$vault" '{updateDisabled: true, vaults: {"6766746573747661": {path: $p, ts: 1, open: true}}}' >"$obs_cfg/obsidian.json"
+      say "Obsidian (Electron, its own frame): a vault window on a temporary vault"
+    else
+      say "Obsidian (Electron, its own frame): its starter window"
+    fi
+    p=$(client_run obsidian obsidian --proxy-server="$dead_proxy"); pids+=("$p")
+    if wait_mapped '^md\.obsidian\.Obsidian$' 120; then
+      sleep 2
+      judge "obsidian-$run" '^md\.obsidian\.Obsidian$' 1
+      # Obsidian draws its controls at the top right, in its own order (minimize, zoom, close): it ignores the GTK layout.
+      # The starter window is not resizable (offsets at its first width); a vault window is, its controls follow its edge.
+      if [[ $run == starter ]]; then
+        own_buttons obsidian-starter '^md\.obsidian\.Obsidian$' -23 -110 -67 15
+      else
+        own_buttons obsidian-vault '^md\.obsidian\.Obsidian$' -23 -110 -66 20 right
+      fi
+    else
+      check "obsidian ($run): mapped as md.obsidian.Obsidian" 1 "$(ctl clients -j | jq -c '[.[].class]')"
+    fi
+    stop_app "$p" '^md\.obsidian\.Obsidian$'
+  done
+  # Offline and the installed version: its own log (written by its main process in the user data directory).
+  obs_log=$(cat "$obs_cfg/obsidian.log" 2>/dev/null)
+  obs_asars=$(find "$obs_cfg" -maxdepth 1 -name 'obsidian-*.asar' | wc -l)
+  [[ $obs_log == *"Loaded main app package "* && $obs_log != *"Loaded updated app"* && $obs_log != *"Checking for update"* && $obs_asars == 0 ]]
+  check "obsidian: the installed package, no update check, nothing downloaded" $? \
+    "$(grep -c 'Loaded main app package' <<<"$obs_log") start(s) on the installed package, $(grep -c 'Checking for update' <<<"$obs_log") update check(s), $obs_asars downloaded asar(s)"
 fi
 
 say "captures (visual NOT verified by this script: judge each one)"

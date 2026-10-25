@@ -791,13 +791,16 @@ Decision (after the review of 9c0da79):
   and the settings portal on the private bus both answer `'close,minimize,maximize:'`; Evince (GTK3), Nautilus
   (GTK4/libadwaita) and Chromium draw close, minimize, zoom on the left.
 - The tag goes only to apps whose own close, minimize and zoom were seen to work in the nested session
-  (`tests/compositor/third_party_chrome.sh`: tag, no plugin strip, the app's zoom button zooms and unzooms, its minimize
-  button minimizes toward the Dock tile the shell computed and that tile restores the window, a capture of the title bar):
-  rule `gf-client-chrome-third-party` on `org.gnome.Evince`, `org.gnome.Nautilus`, `chromium` (the browser window) and
-  `md.obsidian.Obsidian` (Obsidian's Wayland app id). Captures judged 2026-10-25: Evince (GTK3) and Nautilus
-  (GTK4/libadwaita) show close, minimize, zoom on the left of their header bar, one set, the three enabled; Chromium the
-  same on the left of its tab strip; Obsidian shows minimize, zoom, close at the top right (it ignores the GTK layout), one
-  set.
+  (`tests/compositor/third_party_chrome.sh`, offline: tag, no plugin strip, the app's zoom button zooms and unzooms, its
+  minimize button minimizes toward the Dock tile the shell computed and that tile restores the window, its close button
+  closes it, a capture of the title bar): rule `gf-client-chrome-third-party` on `org.gnome.Evince`,
+  `org.gnome.Nautilus`, `chromium` (the browser window) and `md.obsidian.Obsidian` (Obsidian's Wayland app id; its
+  starter window and a vault window). Captures judged 2026-10-25: Evince (GTK3) and Nautilus (GTK4/libadwaita) show
+  close, minimize, zoom on the left of their header bar, one set, the three enabled; Chromium the same on the left of its
+  tab strip; Obsidian shows minimize, zoom, close at the top right (it ignores the GTK layout), one set, in both windows.
+  The test reaches no network: the clients' proxy is a dead local port and Obsidian's updater is off; earlier runs had
+  let Obsidian update itself to 1.14.5 from GitHub, so its results then were for that version, not the installed 1.13.7
+  checked now.
 - Evince and Nautilus first kept the plugin's bar (726be58): two of their buttons did not work. Both causes are handled
   (GF-056 part 2):
   - Evince's zoom button: our own maximize suppression, not Hyprland. GTK3's button sends `xdg_toplevel.unset_maximized`
@@ -843,7 +846,8 @@ Consequences:
   `array[12]`, enabled again). The maximize exemption and the button layout are session settings: with or without the
   plugin, the listed apps' own zoom works and header bars put their buttons on the left.
 - Verified in the nested session (Hyprland 0.56.2 efb50993, 2026-10-25, every client on the private bus with an isolated
-  home): `third_party_chrome.sh` PASS (Evince, Nautilus, Chromium, Obsidian: own zoom zooms and unzooms, own minimize
-  goes to the Dock tile with the funnel in about 504 ms, the tile restores the window at its box, focused; foot and the
-  web app keep the plugin's strip), `client_chrome.sh` PASS, `chrome.sh` PASS, `minimize.sh` PASS. One set of controls on
-  every window tested.
+  home, offline): `third_party_chrome.sh` PASS (Evince, Nautilus, Chromium, Obsidian 1.13.7 starter and vault windows:
+  own zoom zooms and unzooms, own minimize goes to the Dock tile with the funnel in about 504 ms, the tile restores the
+  window at its box, focused, own close closes it; Obsidian's log shows the installed package and no update check; foot
+  and the web app keep the plugin's strip), `client_chrome.sh` PASS, `chrome.sh` PASS, `minimize.sh` PASS. One set of
+  controls on every window tested.
