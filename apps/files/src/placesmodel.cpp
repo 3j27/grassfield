@@ -1,6 +1,7 @@
 #include "placesmodel.h"
 
 #include "applicationslogic.h"
+#include "runmode.h"
 #include "taglogic.h"
 
 #include <QDir>
@@ -18,11 +19,11 @@
 
 namespace
 {
-// A GRASSFIELD_DEV session (nested, on the owner's machine) must never see or touch the owner's real trash:
+// A dev session (runmode.h; nested, on the owner's machine) must never see or touch the owner's real trash:
 // KIO's trash:/ is served by the session, so the Trash place and its listing are off (ADR-0011).
 bool devSession()
 {
-    return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1");
+    return grassfield::apps::runmode::dev();
 }
 
 QString symbolic(const QString &icon, const QString &fallback)

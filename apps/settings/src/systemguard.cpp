@@ -1,5 +1,7 @@
 #include "systemguard.h"
 
+#include "runmode.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
@@ -10,7 +12,7 @@ namespace grassfield::settings {
 
 bool devSession()
 {
-    return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1");
+    return grassfield::apps::runmode::dev();
 }
 
 bool isUuid(const QString &s)

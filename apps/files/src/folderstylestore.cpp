@@ -1,5 +1,6 @@
 #include "folderstylestore.h"
 
+#include "runmode.h"
 #include "tagstore.h"
 
 #include <QCoreApplication>
@@ -182,11 +183,7 @@ FolderStyleStore::FolderStyleStore(const QString &fallbackFile)
 
 QString FolderStyleStore::defaultFallbackFile()
 {
-    const QString dev = qEnvironmentVariable("GRASSFIELD_CONFIG_HOME");
-    if (!dev.isEmpty())
-        return dev + QStringLiteral("/folder-styles.json");
-    const QString xdg = qEnvironmentVariable("XDG_CONFIG_HOME");
-    return (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.config") : xdg) + QStringLiteral("/grassfield/folder-styles.json");
+    return grassfield::apps::runmode::configDir() + QStringLiteral("/folder-styles.json");
 }
 
 void FolderStyleStore::setFallbackFile(const QString &file)

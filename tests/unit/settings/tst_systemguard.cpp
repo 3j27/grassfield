@@ -207,3 +207,20 @@ TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)
     EXPECT_FALSE(isAllowedAction({QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("xdg-open https://x.org")}));
     EXPECT_FALSE(isAllowedAction({}));
 }
+
+// ADR-0019: the dev guard is the one run-mode rule. A GRASSFIELD_DEV=1 that leaked into a packaged session
+// (GRASSFIELD_SESSION=1) is not a dev session: the system sections act there.
+TEST(DevSession, FollowsTheRunModeRule)
+{
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_DEV");
+    EXPECT_FALSE(grassfield::settings::devSession());
+    qputenv("GRASSFIELD_DEV", "1");
+    EXPECT_TRUE(grassfield::settings::devSession());
+    qputenv("GRASSFIELD_SESSION", "1");
+    EXPECT_FALSE(grassfield::settings::devSession());
+    qputenv("GRASSFIELD_SESSION", "0");
+    EXPECT_TRUE(grassfield::settings::devSession());
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_DEV");
+}

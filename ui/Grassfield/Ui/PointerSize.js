@@ -20,10 +20,14 @@ function normalize(size) {
     return valid(size) ? size : DEFAULT;
 }
 
-// A value read from grassfield.json (any JSON type) to the size the shell uses: a non-integer, a string or a number
-// out of range is the default (nothing is rounded or clamped silently); a valid integer off the slider step snaps to it.
+// A value read from grassfield.json (any JSON type) to the size the shell uses, the way every reader of the settings
+// contract reads a number (ADR-0020, SettingsContract.read): a number is rounded to an integer and clamped to the range
+// (macOS clamps a defaults value that is out of range); anything else (a string, a boolean, null, NaN) is the default.
+// tests/shell/settings_vectors holds this reader to the contract's vectors.
 function fromStored(raw) {
-    return valid(raw) ? snap(raw) : DEFAULT;
+    if (typeof raw !== "number" || !isFinite(raw))
+        return DEFAULT;
+    return Math.max(MIN, Math.min(MAX, Math.round(raw)));
 }
 
 // A slider value to a storable size: rounded to the step, kept within the range.
