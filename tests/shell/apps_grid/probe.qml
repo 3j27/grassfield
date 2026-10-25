@@ -1,10 +1,10 @@
 // The shell's Apps grid, offscreen: Quickshell's own DesktopEntries (the parser the grid uses), then the grid's rules exactly as
 // shell/launchpad/AppsController.qml applies them: not noDisplay, not in the hidden list (hidden-entries.sh, passed in
 // GF_HIDDEN, one id per line), then Model.disambiguate and Model.sortApps. Prints one "GRID|<id>|<name>" line per app.
-// Run by tests/unit/files/apps_grid_vs_files.sh; never started without QT_QPA_PLATFORM=offscreen.
+// Run by tests/shell/apps_grid_vs_files.sh; never started without QT_QPA_PLATFORM=offscreen.
 import QtQuick
 import Quickshell
-import "../../../../shell/launchpad/Model.js" as Model
+import "../../../shell/launchpad/Model.js" as Model
 
 ShellRoot {
     id: root

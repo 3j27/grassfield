@@ -1,6 +1,6 @@
 // Prints what Files' Applications location lists, one "<id>\t<name>" line per application in the location's order, for the
 // environment of this process (XDG_DATA_HOME, XDG_DATA_DIRS, XDG_CURRENT_DESKTOP, LANG). Built and compared with the Apps grid
-// by tests/unit/files/apps_grid_vs_files.sh.
+// by tests/shell/apps_grid_vs_files.sh.
 #include "applicationslogic.h"
 
 #include <QCoreApplication>

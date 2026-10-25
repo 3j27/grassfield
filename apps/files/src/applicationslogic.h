@@ -11,7 +11,7 @@
 // rename, move or delete, and opening one starts the application (FilesApp::launchApplication).
 //
 // "The grid's behaviour" is three things, each reproduced here and checked against the real ones on the same fixture tree by
-// tests/unit/files/apps_grid_vs_files.sh (Quickshell's DesktopEntries run offscreen, hidden-entries.sh, Model.disambiguate):
+// tests/shell/apps_grid_vs_files.sh (Quickshell's DesktopEntries run offscreen, hidden-entries.sh, Model.disambiguate):
 //   1. Quickshell 0.3.1's DesktopEntries (what AppsController.qml iterates). Measured, not the desktop entry specification:
 //      - applications directories of XDG_DATA_HOME, then XDG_DATA_DIRS; the first one that has an id wins, and an id whose
 //        winning file is not listed (Hidden=true, NoDisplay=true, not an application, no Name) is not listed from a later one;
