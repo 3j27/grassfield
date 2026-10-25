@@ -54,9 +54,13 @@ Variable classes:
 
 | Class | Variables | Rule |
 |---|---|---|
-| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET` | honoured only when `dev`; inert otherwise |
+| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET`, `SHELL_DIR` | honoured only when `dev`; inert otherwise |
 | Always honoured | `CONFIG_HOME`, `STATE_HOME`, `APPS_TRACE` | as today |
 | Mode inputs | `DEV`, `SESSION`, `VISUAL_FIXTURES`, private bus selection | read only by `Mode` / `runmode.h` |
+
+`SHELL_DIR` is the directory of the shell that `qs ipc -p` targets. In dev, an app that must call the shell
+(`runmode::shellIpcArgs()`) uses it, or refuses with a clear error when it is not set: a dev session never drives the
+installed shell, which may be the owner's real one.
 
 ## macOS reference
 A debug default never changes a shipped app's behaviour unless the developer build reads it; there is no "developer

@@ -142,11 +142,16 @@ TEST(RunMode, ShellIpcArgsUseTheDevShellInADevSession)
         const ScopedEnv scoped(QJsonObject{{"GRASSFIELD_DEV", "1"}, {"GRASSFIELD_SHELL_DIR", "/work/shell"}});
         EXPECT_EQ(rm::shellIpcArgs(), (QStringList{"ipc", "-p", "/work/shell", "call"}));
     }
-    // A dev session without the variable, and a plain session, talk to the installed shell.
+    // A dev session without the variable has no shell to call: empty, never the installed shell (the caller refuses).
     {
         const ScopedEnv scoped(QJsonObject{{"GRASSFIELD_DEV", "1"}});
-        EXPECT_EQ(rm::shellIpcArgs(), (QStringList{"ipc", "-p", "/usr/share/grassfield/shell", "call"}));
+        EXPECT_TRUE(rm::shellIpcArgs().isEmpty());
     }
+    {
+        const ScopedEnv scoped(QJsonObject{{"GRASSFIELD_DEV", "1"}, {"GRASSFIELD_SHELL_DIR", ""}});
+        EXPECT_TRUE(rm::shellIpcArgs().isEmpty());
+    }
+    // A plain session talks to the installed shell, whatever GRASSFIELD_SHELL_DIR says.
     {
         const ScopedEnv scoped(QJsonObject{{"GRASSFIELD_SHELL_DIR", "/work/shell"}});
         EXPECT_EQ(rm::shellIpcArgs(), (QStringList{"ipc", "-p", "/usr/share/grassfield/shell", "call"}));

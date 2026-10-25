@@ -20,6 +20,7 @@ TEST(AppScope, UnscopedSessionKeepsTheCommand)
 
 TEST(AppScope, DevSessionIsNeverScoped)
 {
+    qunsetenv("GRASSFIELD_SESSION"); // not inherited from the environment the tests run in
     qputenv("GRASSFIELD_DEV", "1");
     EXPECT_FALSE(grassfield::apps::scopedLaunch());
     qunsetenv("GRASSFIELD_DEV");

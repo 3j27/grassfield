@@ -51,12 +51,15 @@ inline QString stateDir(const QString &stateHome, const QString &xdgStateHome, c
     return (xdgStateHome.isEmpty() ? home + QStringLiteral("/.local/state") : xdgStateHome) + QStringLiteral("/grassfield");
 }
 
-// The directory of the running shell for `qs ipc -p`: GRASSFIELD_SHELL_DIR in dev (the repository's shell), else the
-// installed one, never by name (`-c` would also search the user-writable ~/.config/quickshell, GF-115).
+// The directory of the running shell for `qs ipc -p`, never by name (`-c` would also search the user-writable
+// ~/.config/quickshell, GF-115). In dev: GRASSFIELD_SHELL_DIR (the repository's shell), or "" when it is not set: a dev
+// session never drives the installed shell, which may be the owner's real one (a debug build never drives the shipped
+// app). Outside dev: the installed shell.
 inline QString shellDir(const QString &devValue, const QString &sessionValue, const QString &shellDirValue)
 {
-    const QString fromDev = devPlumbing(devValue, sessionValue, shellDirValue);
-    return fromDev.isEmpty() ? QStringLiteral("/usr/share/grassfield/shell") : fromDev;
+    if (dev(devValue, sessionValue))
+        return shellDirValue;
+    return QStringLiteral("/usr/share/grassfield/shell");
 }
 
 // --- the process environment ---------------------------------------------------------------------------------------
@@ -89,11 +92,21 @@ inline QString stateDir()
 }
 
 // The arguments after `qs` of a call into the running shell: ipc -p <shell dir> call (then target, function, arguments).
+// Empty when there is no shell to call: a dev session without GRASSFIELD_SHELL_DIR. The caller must refuse then (an error
+// the user can read), never fall back to another shell.
 inline QStringList shellIpcArgs()
 {
-    return {QStringLiteral("ipc"), QStringLiteral("-p"),
-            shellDir(qEnvironmentVariable("GRASSFIELD_DEV"), qEnvironmentVariable("GRASSFIELD_SESSION"), qEnvironmentVariable("GRASSFIELD_SHELL_DIR")),
-            QStringLiteral("call")};
+    const QString dir = shellDir(qEnvironmentVariable("GRASSFIELD_DEV"), qEnvironmentVariable("GRASSFIELD_SESSION"), qEnvironmentVariable("GRASSFIELD_SHELL_DIR"));
+    if (dir.isEmpty())
+        return {};
+    return {QStringLiteral("ipc"), QStringLiteral("-p"), dir, QStringLiteral("call")};
+}
+
+// GRASSFIELD_STATE_HOME as set ("" when unset): the dev sessions' own state directory, honoured in every session like
+// stateDir() (ADR-0019: always honoured). The one reader of the variable besides stateDir().
+inline QString stateHomeOverride()
+{
+    return qEnvironmentVariable("GRASSFIELD_STATE_HOME");
 }
 
 } // namespace grassfield::apps::runmode
