@@ -1084,12 +1084,18 @@ QtObject {
     readonly property int filesWindowMinHeight: 360
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarWidth: 184
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSidebarItemHeight: 26
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSidebarIconSize: 16
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSidebarHeaderHeight: 28
+    // sidebar row pitch and selection height 32 (macOS 26 composites; macOS 27 Finder capture 64 px at 2 px/pt) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target]
+    readonly property int filesSidebarItemHeight: 32
+    // sidebar glyphs about 18 (macOS 26 composites) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property int filesSidebarIconSize: 18
+    // section spacing 40 / 24 (macOS 26 composites): a 34-pt header row over the 32-pt rows [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property int filesSidebarHeaderHeight: 34
+    // macOS 27 Finder: the selected row 10 pt from both sidebar edges (release capture at 2 px/pt) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property int filesSidebarInset: 10
+    // macOS 27 Finder: sidebar selection radius 7-8 (release capture at 2 px/pt) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property int filesSidebarItemRadius: 8
+    // macOS 27 Finder: the selected sidebar row is a neutral fill, 213 on the 235 sidebar (black at about 0.09), not the accent; the same alpha of white in the dark appearance (no dark capture) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property real filesSidebarSelectionOpacity: 0.09
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarHeight: 52
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]

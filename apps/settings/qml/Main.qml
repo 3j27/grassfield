@@ -402,7 +402,7 @@ Window {
                     color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
-                    font.weight: Tokens.typographyMenuWeight
+                    font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
                 }
 
                 MouseArea {

@@ -855,8 +855,8 @@ TestCase {
         }
     }
 
-    // A selected, focused row of Files (list and columns: accent fill, icons of rowIconSize: Tokens.filesListIconSize, at least iconMode.minSize) draws FileIcon with overAccent:
-    // the mean of the top 20 percent of the icon's pixels (a folder and a document) has at least 3:1 (2.5:1 in Dark) against the accent in every mode and both appearances (the
+    // A selected, focused row of Files (list and columns: selection fill, icons of rowIconSize: Tokens.filesListIconSize, at least iconMode.minSize) draws FileIcon with overAccent:
+    // the mean of the top 20 percent of the icon's pixels (a folder and a document) has at least 3:1 (2.5:1 in Dark) against the selection fill in every mode and both appearances (the
     // merge base had 3.77:1 in Clear, the wiring missing gave 2.01:1).
     Component {
         id: accentCell
@@ -871,7 +871,7 @@ TestCase {
 
             width: 40
             height: 40
-            color: Appearance.colors.accent
+            color: Appearance.colors.selection
 
             FolderIcon {
                 id: folderPart
@@ -919,7 +919,7 @@ TestCase {
                     }
                     wait(300);
                     const img = grabImage(cell);
-                    const bg = Qt.color(Appearance.colors.accent);
+                    const bg = Qt.color(Appearance.colors.selection);
                     // A robust statistic: the mean contrast of the top 20 percent of the icon's own pixels (those that differ from the accent), so
                     // that a stray pixel cannot carry a failing icon.
                     const rs = [];
