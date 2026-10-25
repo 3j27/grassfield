@@ -3,7 +3,7 @@ import "WindowActions.js" as Actions
 
 // The three window lights (close, minimize, zoom) of a Grassfield app window, drawn by the app itself (ADR-0015).
 // Place it at the window's top-left corner. It sizes itself to the row of `style` ("unified": 52 pt, first centre at
-// 25.75 / 25.75; "titlebar": 32 pt) and draws only the lights, never a bar.
+// 26 / 26; "titlebar": 32 pt) and draws only the lights, never a bar.
 //
 // Look (the compositor plugin's titlebar has the same values, from the window.* tokens): 14-pt lights 23 apart; the
 // glyphs (x, -, +) appear on all three while the pointer is over the group; an inactive window shows grey lights

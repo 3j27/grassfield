@@ -38,11 +38,17 @@ QtObject {
     readonly property real effectiveTransparency: reduceTransparency ? 0 : clamp01(transparency)
     // Hairline alpha: the light appearance uses a lighter line (F1 gap 18).
     readonly property real separatorOpacity: dark ? Tokens.materialSeparatorOpacity : Tokens.materialSeparatorOpacityLight
+    // Control fill alpha (push button, field, segmented track, unchecked box): the light appearance draws a light grey, not a
+    // dark well (ADR-0024).
+    readonly property real fillOpacity: dark ? Tokens.materialFillOpacity : Tokens.materialFillOpacityLight
     readonly property var colors: devGlyphMode !== "" ? glyphColors(baseColors) : baseColors
     // The palette of the appearance with the chosen accent applied (accent and accentText), live.
     readonly property var baseColors: dark ? accentedDark : accentedLight
-    readonly property var accentedDark: Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast)
-    readonly property var accentedLight: Accent.contrastBoost(Accent.apply(Tokens.colorLight, accentSetting, false, Tokens), increaseContrast)
+    // Both carry `selection` and `selectionText`: the fill and the text of a selected row, a default button or a checked box,
+    // the light accent with its text in both appearances (Accent.withSelection).
+    readonly property var accentedDark: Accent.withSelection(Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast), accentedLightBase)
+    readonly property var accentedLight: Accent.withSelection(Accent.contrastBoost(accentedLightBase, increaseContrast), accentedLightBase)
+    readonly property var accentedLightBase: Accent.apply(Tokens.colorLight, accentSetting, false, Tokens)
     // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
     readonly property color focusRingColor: Accent.focusRing(baseColors.accent, baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.
@@ -68,6 +74,7 @@ QtObject {
         c.text = m;
         c.textSecondary = m;
         c.accentText = m;
+        c.selectionText = m;
         c.fieldText = m;
         c.barText = m;
         c.indicator = m;

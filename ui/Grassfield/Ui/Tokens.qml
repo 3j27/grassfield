@@ -25,7 +25,10 @@ QtObject {
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        windowBackground: "#292929",  // opaque app window, dark appearance: macOS 27 System Settings 39-42 grey, neutral (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
+        groupFill: "#313131",  // inset group of an app window, dark appearance: macOS 27 System Settings groups #313030 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
+        sidebarFill: "#232323"  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
     })
 
     // color roles, light appearance
@@ -48,7 +51,10 @@ QtObject {
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        windowBackground: "#FFFFFF",  // opaque app window, light appearance: macOS 27 System Settings content 255 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        groupFill: "#F7F7F7",  // inset group of an app window, light appearance: macOS 27 System Settings groups 247 on 255, no border (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        sidebarFill: "#ECECEC"  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     })
 
     // color roles, accentDark appearance
@@ -204,6 +210,12 @@ QtObject {
     readonly property real materialDisabledOpacity: 0.38
     // estimate: hover opacity multiplier for an active menu bar item [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialHoverActiveFactor: 1.5
+    // estimate: the inner specular rim of the material in the light appearance (one device pixel, stronger along the top edge); the dark appearance keeps material.highlightOpacity (macOS 27 dark menu: the inner rim about 0.2 white over the panel) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
+    readonly property real materialHighlightOpacityLight: 0.45
+    // the material's outer edge in the dark appearance: one device pixel of near black outside the light inner rim (macOS 27 dark menu: outer pixel 4 against a 62 panel) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
+    readonly property real materialEdgeOpacityDark: 0.6
+    // control fill (push button, field, segmented track, unchecked box) in the light appearance: macOS 26/27 light controls about 6 percent black, not a dark well (docs/audits/visual-tahoe-2026-10-25.md section 2; macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); the A2 worst case keeps material.fillOpacity
+    readonly property real materialFillOpacityLight: 0.06
     // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialSeparatorOpacityLight: Appearance.increaseContrast ? 0.45 : 0.08
 
@@ -446,6 +458,8 @@ QtObject {
     readonly property int menuSwatchRing: 2
     // same limit as the menu bar's Window menu (AppMenuModel.titleMax): longest window title in a Dock menu's window list, characters [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuWindowTitleMax: 40
+    // label inset from the row edge in a menu section that holds a checkable row: 24 from the menu edge with the 5 of menu.padding (macOS 26 reference: 16 without, 24 with a check column, 38 with icons; macOS 27 keeps icons on their own rows) [ref: docs/audits/visual-tahoe-2026-10-25.md Menus; macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property int menuCheckInset: 19
     // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1) [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property string menuSwatchMark: "#1B1B1F"
 
@@ -851,28 +865,44 @@ QtObject {
     // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/apps.md]
     readonly property int appsBorderWidth: 1
 
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsWindowWidth: 715
+    // macOS 27 System Settings window 740 pt wide (three release captures) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsWindowWidth: 740
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowHeight: 640
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowMinWidth: 560
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowMinHeight: 420
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSidebarWidth: 215
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSidebarItemHeight: 30
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSidebarIconSize: 14
+    // macOS 27 System Settings sidebar 232 pt, edge to edge (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsSidebarWidth: 232
+    // macOS 27 System Settings sidebar row pitch and selection height 32 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsSidebarItemHeight: 32
+    // macOS 27 System Settings sidebar icon tiles 20 x 20 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsSidebarIconSize: 20
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSearchHeight: 28
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsContentMaxWidth: 520
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsRowHeight: 40
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsGroupGap: 20
+    // macOS 27 System Settings groups 468 wide with 20 margins in a 508 detail pane (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsContentMaxWidth: 468
+    // macOS 27 System Settings plain rows 38 pt apart (Desktop & Dock pane) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsRowHeight: 38
+    // macOS 26/27 System Settings: 20 pt between the detail pane's edges and its groups (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsContentMargin: 20
+    // macOS 27 System Settings: the first group 12 pt below the 52-pt toolbar (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsContentTop: 12
+    // macOS 26/27 System Settings: labels, controls and separators 10 pt inside a group (visual-tahoe-2026-10-25.md Settings; macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsRowInset: 10
+    // macOS 27 System Settings: the selection and the search field 10 pt from both sidebar edges (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsSidebarInset: 10
+    // macOS 26/27 System Settings: sidebar selection radius 8 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsSidebarItemRadius: 8
+    // estimate: radius of the 20-pt coloured icon tile of a sidebar row (macOS 26/27 about 5) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property int settingsSidebarTileRadius: 5
+    // white glyph on the coloured sidebar tile: 5.3:1 or more on every tile colour used (color.accentLight blue, purple, pink, red, green, graphite; computed, 3:1 needed for a graphic) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property string settingsSidebarTileGlyph: "#FFFFFF"
+    // estimate: the white glyph drawn on a sidebar icon tile [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
+    readonly property int settingsSidebarGlyphSize: 14
+    // macOS 26/27 System Settings groups about 10 apart (visual-tahoe-2026-10-25.md Settings) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+    readonly property int settingsGroupGap: 10
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsPageTitleSize: Math.round(20 * Appearance.textScale)
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
@@ -1544,8 +1574,8 @@ QtObject {
     readonly property int windowLightGap: 9
     // ADR-0015 / f1-reference-gaps.md:107: unified toolbar row, 52 pt, holds the lights and the toolbar items
     readonly property int windowUnifiedHeight: 52
-    // ADR-0015 / f1-reference-gaps.md:106: centre of the first light in a unified toolbar window, from the window's top-left corner (x and y)
-    readonly property real windowUnifiedLightCentre: 25.75
+    // centre of the first light in a unified toolbar window, from the window's top-left corner (x and y): macOS 27 measures (26.0, 25.5-25.75), macOS 26 25.75 (f1-reference-gaps.md:106); 26 puts the 14-pt discs on whole pixels at every scale; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0015
+    readonly property int windowUnifiedLightCentre: 26
     // ADR-0015: titlebar-only style, the plugin's kTitlebarHeight (32); also overview.windowTitlebarHeight
     readonly property int windowTitlebarHeight: 32
     // ADR-0015: titlebar style, left edge to the first light's edge (plugin kButtonInsetLeft); the centre is then at (16, 16)
