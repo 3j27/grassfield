@@ -87,13 +87,17 @@ namespace {
         return std::format("{:x}", address);
     }
 
+    int unregisteredPid(uint64_t window);
+
     // Coalesced per window (spec FR24): a client can send set_address by the thousand, the shell gets the latest
-    // registration at most every 100 ms.
+    // registration at most every 100 ms. Without a registration the event carries the window's Wayland client pid
+    // (unregisteredPid), so that the shell can ask the bridge for a menu that process registered otherwise.
     void post(const am::Announcement& a) {
         if (!st().ready)
             return;
+        const int pid = a.registration.service.empty() ? unregisteredPid(a.window) : a.registration.pid;
         gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Appmenu, .id = a.window},
-                           gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
+                           gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, pid));
     }
 
     void post(const std::optional<am::Announcement>& a) {
@@ -125,6 +129,21 @@ namespace {
     template <typename T>
     void eraseFrom(std::vector<UP<T>>& v, const T* p) {
         std::erase_if(v, [p](const UP<T>& e) { return e.get() == p; });
+    }
+
+    pid_t clientPid(wl_client* client);
+
+    // A mapped Wayland window without a set_address registration: the pid of its client (wl_client_get_credentials).
+    // Electron announces its menu through com.canonical.AppMenu.Registrar.RegisterWindow instead, and the bridge serves
+    // it to the windows of the registering process (ADR-0008 amendment 2026-10-25). 0 for an X11/XWayland window (its
+    // Wayland client is Xwayland, never served) and for a window that is not mapped (a clear).
+    int unregisteredPid(uint64_t window) {
+        const auto w = mappedWindowByAddress(window);
+        if (!w || w->m_isX11)
+            return 0;
+        const auto surface = w->resource();
+        wl_client* client  = surface ? surface->client() : nullptr;
+        return client ? static_cast<int>(clientPid(client)) : 0;
     }
 
     pid_t clientPid(wl_client* client) {

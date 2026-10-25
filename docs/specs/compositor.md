@@ -212,7 +212,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   dereferenced). It posts `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"…",
   "path":"…"}`: when a mapped window's registration changes (an unchanged one is not re-posted), when a window
   is mapped with one, and for every focused window (with empty service and path when it has none), coalesced
-  per window (FR24). A registration made before the window is mapped is posted at map.
+  per window (FR24). A registration made before the window is mapped is posted at map. `pid` (additive, ADR-0008) is
+  the registering client's pid; for a mapped Wayland window without a registration it is that window's client pid
+  (`wl_client_get_credentials`), so that the shell can ask the menu bridge for the menu that process registered with
+  `com.canonical.AppMenu.Registrar` (Electron, ADR-0008 amendment 2026-10-25); 0 for an X11/XWayland window (its
+  Wayland client is Xwayland) and for a clear.
 - **FR21** When an announced registration goes away — the window is unmapped (`window.close`) or destroyed,
   the appmenu object is released or destroyed (client exit), or the surface is destroyed — the plugin posts
   the same event with `"service":"","path":""`. A window mapped again on the same surface is announced again.
@@ -713,7 +717,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` (Dock tile, layout px, integers) | FR14 / FR15 |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
 | shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "funnel"\|"shrink"\|"fade")` (only with feature `minimize-effect`) | FR45 |
-| plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}`; `"service":"","path":""` = no menu (FR20–FR22) |
+| plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>","pid":N}`; `"service":"","path":""` = no `set_address` menu, with the window's Wayland client pid (0: X11/XWayland or a clear) (FR20–FR22) |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
 | shell → plugin | `hl.plugin.grassfield.overview("<json>")` | `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address":"0x<hex>","x","y","w","h"}…]}` (FR25-FR27) |

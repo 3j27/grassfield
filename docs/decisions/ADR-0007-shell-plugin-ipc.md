@@ -46,7 +46,9 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   windows:[{address, x?, y?, w?, h?}]}]}], reason?}` (coalesced state), `minimize-request`,
   `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` = the Wayland client's pid
   from `wl_client_get_credentials`; the menu bridge checks it against `GetConnectionUnixProcessID(service)` to stop one
-  app pointing its window at another app's menu), `overview` `{state: opening|open|closing|closed, windows, reason?}`
+  app pointing its window at another app's menu; without a registration, the mapped Wayland window's client pid, 0 for
+  X11/XWayland windows and clears: the bridge serves such a window a menu its process registered with
+  `com.canonical.AppMenu.Registrar`, ADR-0008 amendment 2026-10-25), `overview` `{state: opening|open|closing|closed, windows, reason?}`
   (`reason`: `invalid` / `no-windows` / `no-chrome` for a refused request, which changes nothing; `unavailable` at unload;
   `interrupted` when the overview ended without the shell's request; `fullscreen` when a window went full screen while
   shown and its workspace's windows left the overview, the state otherwise unchanged).
