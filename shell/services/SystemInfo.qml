@@ -10,8 +10,9 @@ Singleton {
     id: root
 
     // The product version: the VERSION file next to the shell directory (the repository root in a dev session,
-    // /usr/share/grassfield in the package). Read once, at construction; "unknown" when the file is missing.
-    property string grassfieldVersion: "unknown"
+    // /usr/share/grassfield in the package); "unknown" when the file is missing. A binding on the loaded file, and the load
+    // is awaited when the singleton is created, so the first reader (the startup log line) already sees the real value.
+    readonly property string grassfieldVersion: versionFile.loaded ? (versionFile.text().trim() || "unknown") : "unknown"
 
     FileView {
         id: versionFile
@@ -19,8 +20,9 @@ Singleton {
         path: Quickshell.shellPath("../VERSION")
         blockLoading: true
         printErrors: false
-        onLoaded: root.grassfieldVersion = text().trim()
     }
+
+    Component.onCompleted: versionFile.waitForJob()
 
     property string osName: ""
     property string osVersion: ""

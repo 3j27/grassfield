@@ -291,7 +291,7 @@ compositor_locked() {
 foreign_start() { # <step>: start the foreign locker; it takes the session lock over
   # Nested socket and instance only (checked at the top); the fixture refuses anything else itself.
   env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_FOREIGN_LOCKER=1 \
-    setsid qs -p "$foreign" --no-color >"$dev/foreign-locker.log" 2>&1 </dev/null &
+    setsid "$root/tests/security/foreign_locker/run.sh" --no-color >"$dev/foreign-locker.log" 2>&1 </dev/null &
   dev_record_pid "$dev/foreign-locker.pid" "$!"
   local got=""
   for _ in $(seq 1 40); do

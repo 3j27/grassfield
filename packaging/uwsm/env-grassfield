@@ -27,6 +27,11 @@ export QT_QPA_SYSTEM_ICON_THEME=grassfield-icons
 # (every GTK setting at its default), so a half-installed package must not set it.
 if [ -r /usr/share/grassfield/dconf/profile ] && [ -r /usr/share/grassfield/dconf/grassfield.db ]; then
     export DCONF_PROFILE=/usr/share/grassfield/dconf/profile
+    # GF-117: an administrator's database (/etc/dconf/db/local) wins over Grassfield's defaults when it exists. The profile
+    # that lists it is used only then, because dconf warns in every client about a listed database that is missing.
+    if [ -r /etc/dconf/db/local ] && [ -r /usr/share/grassfield/dconf/profile-local ]; then
+        export DCONF_PROFILE=/usr/share/grassfield/dconf/profile-local
+    fi
 fi
 
 # Fonts (ADR-0003): a session fontconfig that includes the system /etc/fonts/fonts.conf (so the user's own

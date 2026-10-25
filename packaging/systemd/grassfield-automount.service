@@ -21,6 +21,10 @@ RestartSec=3
 TimeoutStopSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
+# ProtectSystem=strict makes /run read-only, so dconf could not create $XDG_RUNTIME_DIR/dconf/user (92 warnings in the first
+# real session). Only that directory is writable (the "-" ignores it when absent); udiskie's dialogs keep the user's real
+# GSettings (theme, text scaling), which a memory backend would drop.
+ReadWritePaths=-%t/dconf
 ProtectHome=read-only
 PrivateTmp=yes
 RestrictNamespaces=yes
