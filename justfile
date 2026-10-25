@@ -54,6 +54,10 @@ check-schema *files:
 check-cmake:
     scripts/dev/check-cmake.sh
 
+# The same, and every target is built (minutes; run it before a release or after changing a CMakeLists.txt or a Qt module request).
+check-cmake-build:
+    scripts/dev/check-cmake.sh --build
+
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
