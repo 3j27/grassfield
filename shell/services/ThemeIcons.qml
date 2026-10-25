@@ -71,10 +71,14 @@ Singleton {
     // Keys asked by bindings during this event-loop turn, requested together by flushAsks (Qt.callLater runs a function
     // once per turn with the last arguments, so asking per key would request only the last). Mutated in place.
     readonly property var asks: ({list: []})
-    // Art URL retries after a failure: the delays (a test may shorten them), in ticks of retryTickMs; key -> {tries, left}.
-    // Mutated in place.
+    // Art URL retries after a failure: the delays (a test may shorten them), in ticks of retryTickMs; key -> {tries, left,
+    // idle}. Mutated in place. At most maxRetries entries (the oldest goes first); an entry leaves on success, after the
+    // last try (the "no" entry in `copies` then keeps the URL from being fetched again), when no view asked for its due
+    // retry within retryIdleTicks ticks (no longer shown: forgotten, asked afresh if shown again), and with its key.
     property var retryDelaysMs: [60000, 600000]
     property int retryTickMs: 5000
+    property int maxRetries: 256
+    readonly property int retryIdleTicks: 2
     readonly property var retries: ({})
 
     // An absolute icon path (Icon=/path, file:///path) as a plain path, or "": no control character, at most 4096 characters.
@@ -248,6 +252,7 @@ Singleton {
                 files.push(map[key].file);
             delete map[key];
             delete lru.at[key];
+            delete retries[key];
         }
         dropped = dropped.concat(files);
         return map;
@@ -297,6 +302,12 @@ Singleton {
                 String(maxIconBytes), String(maxPictureBytes), String(maxCopyBytes)].concat(args)
         });
         activeRun = proc;
+        // A handler of that change may have stopped the run already (the session locked inside it: review of 684ed6d);
+        // then it never starts. Its items are back in the queue (stopArtRun).
+        if (activeRun !== proc) {
+            proc.destroy();
+            return;
+        }
         watchdog.restart();
         proc.running = true;
     }
@@ -361,37 +372,52 @@ Singleton {
     // A failed art URL: asked again after the next delay of retryDelaysMs, while still shown; after the last, never again
     // this session.
     function scheduleRetry(key: string): void {
-        const r = retries[key] || {tries: 0, left: 0, done: false};
+        const r = retries[key] || {tries: 0, left: 0, idle: 0};
+        delete retries[key];
         if (r.tries >= retryDelaysMs.length) {
-            r.done = true;
-            r.left = 0;
-        } else {
-            r.left = retryDelaysMs[r.tries];
-            r.tries++;
+            retryTimer.running = Object.keys(retries).length > 0;
+            return;
         }
-        retries[key] = r;
-        retryTimer.running = Object.keys(retries).some(k => !retries[k].done);
+        r.left = retryDelaysMs[r.tries];
+        r.tries++;
+        r.idle = 0;
+        retries[key] = r; // re-inserted: the newest
+        const keys = Object.keys(retries);
+        for (let i = 0; i < keys.length - maxRetries; i++)
+            delete retries[keys[i]];
+        retryTimer.running = Object.keys(retries).length > 0;
     }
 
-    // One tick: a URL whose delay ran out is marked "retry", so the bindings still showing it ask for it again
-    // (copyOf); one no binding asks for is not fetched.
+    // One tick: a URL whose delay ran out is marked "retry", so the views still showing it ask for it again (copyOf);
+    // one that none asks for within retryIdleTicks ticks is forgotten.
     function retryTick(): void {
         let next = null;
         for (const key of Object.keys(retries)) {
             const r = retries[key];
-            if (r.done || r.left <= 0)
+            const entry = copies[key];
+            if (r.left > 0) {
+                r.left -= retryTickMs;
+                if (r.left <= 0 && entry !== undefined && entry.state === "no") {
+                    next = next || Object.assign({}, copies);
+                    next[key] = {state: "retry", url: "", file: ""};
+                }
                 continue;
-            r.left -= retryTickMs;
-            if (r.left > 0)
+            }
+            if (entry === undefined || entry.state !== "retry") {
+                if (entry === undefined || entry.state !== "pending")
+                    delete retries[key];
                 continue;
-            if (copies[key] !== undefined && copies[key].state === "no") {
+            }
+            r.idle++;
+            if (r.idle >= retryIdleTicks) {
                 next = next || Object.assign({}, copies);
-                next[key] = {state: "retry", url: "", file: ""};
+                delete next[key];
+                delete retries[key];
             }
         }
         if (next !== null)
             copies = next;
-        retryTimer.running = Object.keys(retries).some(k => !retries[k].done && retries[k].left > 0);
+        retryTimer.running = Object.keys(retries).length > 0;
     }
 
     // The session locks while a run fetches art: the run is stopped (TERM to timeout's process group: python and curl),
@@ -402,6 +428,9 @@ Singleton {
             return;
         activeRun = null;
         watchdog.stop();
+        // Quickshell only signals a process it reports started: one locked in the turn it was started is stopped as soon
+        // as it is (onStarted).
+        proc.stopped = true;
         proc.signal(15);
         killer.proc = proc;
         killer.restart();
@@ -428,6 +457,15 @@ Singleton {
         Process {
             id: proc
             property var keys: []
+            property bool stopped: false
+            // Stopped before it started (stopArtRun), or started while the session is locked with art in its batch.
+            onStarted: {
+                if (proc.stopped || (SessionState.locked && proc.keys.some(k => k.startsWith("url:")))) {
+                    if (!proc.stopped && root.activeRun === proc)
+                        root.stopArtRun();
+                    proc.signal(15);
+                }
+            }
             stdout: StdioCollector {
                 onStreamFinished: root.runFinished(proc, text)
             }

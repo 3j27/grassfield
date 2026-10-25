@@ -19,11 +19,17 @@
 #
 # Media art an app names by an https URL (Spotify, browsers) is fetched by curl into memory, then re-encoded the same
 # way (macOS itself fetches nothing: apps hand over image bytes; review of dce68c2, minor 1, integrator decision):
-#   - the URL: https only, a host name (never an IP literal in any notation, never localhost or *.localhost), no user,
-#     password or whitespace;
-#   - the name is resolved here first; every address must be public (no private, loopback, link-local, shared, reserved
-#     or multicast range, also inside IPv4-mapped, 6to4 and Teredo addresses), and curl connects to exactly those
-#     addresses (`--resolve`: no second lookup, so no DNS rebinding) and to no proxy;
+#   - the URL: https only, a host name of letter-digit-hyphen labels (never an IP literal in any notation, never
+#     localhost or *.localhost, no empty label: no leading, trailing or doubled dot), no user, password or whitespace;
+#     curl is given a URL the helper rebuilds from the parts it checked, so curl's host, the --resolve name and the
+#     checked name are the same bytes (review of 684ed6d: "x." passed the check as "x", curl did not match it against
+#     --resolve and resolved it itself);
+#   - the name is resolved here first; every address must be public (no private, loopback, link-local, site-local,
+#     shared, reserved or multicast range, also inside IPv4-mapped, IPv4-compatible, IPv4-translated, NAT64, 6to4 and
+#     Teredo addresses), and curl connects to exactly those addresses (`--resolve`: no second lookup, so no DNS
+#     rebinding) and to no proxy;
+#   - curl runs in a process group of its own with PR_SET_PDEATHSIG: SIGTERM to the helper kills it first, and it dies
+#     with the helper however that ends (no curl outlives a stopped run; rsvg-convert likewise);
 #   - redirects are followed here, at most FETCH_REDIRECTS, each target checked like the first URL;
 #   - at most FETCH_BYTES, FETCH_SECONDS in all, no cookies, no credentials (no HOME, no .curlrc or .netrc: `-q` first),
 #     no URL globbing, a fixed user agent with nothing personal; only the CA variables of the session reach curl.
@@ -40,7 +46,7 @@
 #       re-encodes at most NAME_ATTEMPTS readable candidates.
 #   image-copy.py file <source> <cap> <destination>
 #       Notifications: one file, written to <destination> (created, 0600); exit status 0 when written.
-import base64, ipaddress, os, re, resource, socket, stat, subprocess, sys, threading, time
+import base64, ctypes, ipaddress, os, re, resource, signal, socket, stat, subprocess, sys, threading, time
 
 BOX = 256
 MAX_SIDE = 16384
@@ -199,56 +205,122 @@ def raster(data):
     return None
 
 
-def limits():
-    resource.setrlimit(resource.RLIMIT_AS, (RSVG_MEMORY, RSVG_MEMORY))
-    resource.setrlimit(resource.RLIMIT_CPU, (RSVG_SECONDS, RSVG_SECONDS + 1))
-    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+LIBC = ctypes.CDLL(None, use_errno=True)
+PR_SET_PDEATHSIG = 1
+# The children running now (rsvg-convert, curl): killed by the SIGTERM handler before the helper exits.
+CHILDREN = []
+
+
+def child_setup(parent, own_group, cpu, memory):
+    """Runs in the child before exec: its own process group (curl), death with the helper (PR_SET_PDEATHSIG, and a
+    check that the helper did not already die), CPU, memory and core limits."""
+    def setup():
+        if own_group:
+            os.setpgid(0, 0)
+        LIBC.prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
+        if os.getppid() != parent:
+            os._exit(1)
+        if memory:
+            resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 1))
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    return setup
+
+
+def on_term(signum, frame):
+    for child, own_group in list(CHILDREN):
+        try:
+            if own_group:
+                os.killpg(child.pid, signal.SIGKILL)
+            else:
+                child.kill()
+        except OSError:
+            pass
+    os._exit(1)
+
+
+def start(cmd, own_group, cpu, memory, **kw):
+    p = subprocess.Popen(cmd, close_fds=True, preexec_fn=child_setup(os.getpid(), own_group, cpu, memory), **kw)
+    CHILDREN.append((p, own_group))
+    return p
+
+
+def finish(p):
+    CHILDREN[:] = [c for c in CHILDREN if c[0] is not p]
 
 
 def rsvg(document, args):
     try:
-        p = subprocess.run(["rsvg-convert"] + args, input=document, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                           timeout=RSVG_SECONDS, preexec_fn=limits, close_fds=True)
-    except (OSError, subprocess.SubprocessError):
+        p = start(["rsvg-convert"] + args, False, RSVG_SECONDS, RSVG_MEMORY, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                  stderr=subprocess.DEVNULL)
+    except OSError:
         return None
-    out = p.stdout
+    try:
+        out, _ = p.communicate(document, timeout=RSVG_SECONDS)
+    except (OSError, subprocess.SubprocessError):
+        p.kill()
+        p.wait()
+        return None
+    finally:
+        finish(p)
     if p.returncode != 0 or not out.startswith(b"\x89PNG\r\n\x1a\n") or len(out) > OUT_CAP:
         return None
     return out
 
 
-def fetch_limits():
-    resource.setrlimit(resource.RLIMIT_CPU, (FETCH_SECONDS + 2, FETCH_SECONDS + 3))
-    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-
-
 def url_target(url):
-    """(host, port) of an https URL the helper may fetch, or None (ArtUrl.remoteUrl's rules)."""
+    """(host, port, path) of an https URL the helper may fetch, or None (ArtUrl.remoteUrl's rules). The host is
+    lowercased; every label is letters, digits and inner hyphens (so no leading, trailing or doubled dot)."""
     m = FETCH_URL.fullmatch(url) if len(url) <= 2048 else None
     if m is None:
         return None
-    host = m.group(1).lower().rstrip(".")
+    host = m.group(1).lower()
     labels = host.split(".")
+    if not all(re.fullmatch(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels):
+        return None
     # An IP literal in any notation (decimal, octal, hex, dotted or not: a host whose last label is a number is one),
     # localhost and *.localhost are refused outright.
-    if not host or re.fullmatch(r"[0-9]+|0x[0-9a-f]*", labels[-1]) or host == "localhost" or host.endswith(".localhost"):
+    if re.fullmatch(r"[0-9]+|0x[0-9a-f]*", labels[-1]) or host == "localhost" or host.endswith(".localhost"):
         return None
     port = int(m.group(2)) if m.group(2) else 443
-    return (host, port) if 0 < port < 65536 else None
+    if not 0 < port < 65536:
+        return None
+    return host, port, m.group(3) or "/"
+
+
+def rebuilt_url(host, port, path):
+    """The URL curl is given: exactly the checked host, the port only when it is not 443, the checked path."""
+    return "https://%s%s%s" % (host, "" if port == 443 else ":%d" % port, path)
+
+
+NAT64 = ipaddress.ip_network("64:ff9b::/96")
+NAT64_LOCAL = ipaddress.ip_network("64:ff9b:1::/48")
+TRANSLATED = ipaddress.ip_network("::ffff:0:0:0/96")
 
 
 def public_address(ip):
-    """True for an address that is public: not private, loopback, link-local, shared, reserved, unspecified or multicast,
-    also once an IPv4 address embedded in an IPv4-mapped, 6to4 or Teredo address is taken out."""
+    """True for an address that is public: not private, loopback, link-local, site-local, shared, reserved, unspecified
+    or multicast; an IPv6 address carrying an IPv4 one (IPv4-mapped, IPv4-compatible ::/96, IPv4-translated
+    ::ffff:0:0:0/96, NAT64 64:ff9b::/96, 6to4, Teredo) only when that IPv4 address is public too; local-use NAT64
+    64:ff9b:1::/48 never."""
     try:
         a = ipaddress.ip_address(ip.split("%")[0])
     except ValueError:
         return False
     if a.version == 6:
+        if a.is_site_local or a in NAT64_LOCAL:
+            return False
+        low = ipaddress.IPv4Address(int(a) & 0xFFFFFFFF)
+        if a in NAT64:
+            # A DNS64 network's synthesized address for an IPv4-only host: as public as that host (ipaddress counts the
+            # whole prefix as reserved).
+            return public_address(str(low))
         inner = [x for x in (a.ipv4_mapped, a.sixtofour) if x is not None] + (list(a.teredo) if a.teredo else [])
+        if int(a) >> 32 == 0 or a in TRANSLATED:
+            inner.append(low)
         if any(not public_address(str(x)) for x in inner):
             return False
-    return a.is_global and not a.is_multicast
+    return a.is_global and not a.is_multicast and not a.is_reserved and not a.is_unspecified
 
 
 def address_allowed(host, ip):
@@ -276,12 +348,15 @@ def curl_once(url, host, port, addresses, seconds):
     env = {"PATH": "/usr/bin:/bin"}
     env.update({k: os.environ[k] for k in FETCH_ENV if k in os.environ})
     pinned = ",".join("[%s]" % a if ":" in a else a for a in addresses)
+    # Only a URL rebuilt from checked parts, naming exactly the pinned host.
+    target = url_target(url)
+    if target is None or url != rebuilt_url(host, port, target[2]) or target[:2] != (host, port):
+        return None
     cmd = ["curl", "-q", "--silent", "--fail", "--globoff", "--noproxy", "*", "--proto", "=https", "--max-filesize", str(FETCH_BYTES),
            "--max-time", "%.1f" % seconds, "--connect-timeout", "%.1f" % seconds, "--resolve", "%s:%d:%s" % (host, port, pinned),
            "--user-agent", FETCH_AGENT, "--output", "-", "--write-out", "%{stderr}%{http_code} %{redirect_url}\n", "--", url]
     try:
-        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
-                             close_fds=True, preexec_fn=fetch_limits)
+        p = start(cmd, True, FETCH_SECONDS + 2, 0, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     except OSError:
         return None
     try:
@@ -297,6 +372,7 @@ def curl_once(url, host, port, addresses, seconds):
         p.wait()
         return None
     finally:
+        finish(p)
         p.stdout.close()
         p.stderr.close()
     if rc != 0 or not info[0].isdigit():
@@ -311,14 +387,14 @@ def fetch(url):
         target = url_target(url)
         if target is None:
             return None
-        host, port = target
+        host, port, path = target
         addresses = resolve_host(host, port)
         if not addresses or not all(address_allowed(host, a) for a in addresses):
             return None
         left = deadline - time.monotonic()
         if left < 0.5:
             return None
-        answer = curl_once(url, host, port, addresses, left)
+        answer = curl_once(rebuilt_url(host, port, path), host, port, addresses, left)
         if answer is None:
             return None
         status, data, location = answer
@@ -494,6 +570,7 @@ PIXMAPS = [p for p in [os.path.join(data_home, "pixmaps")] + [os.path.join(d, "p
 
 
 def main(argv):
+    signal.signal(signal.SIGTERM, on_term)
     mode = argv[1] if len(argv) > 1 else ""
     try:
         if mode == "batch" and len(argv) >= 6:

@@ -54,7 +54,11 @@
 # no cookie, no credentials and only the fixed user agent. The shell (ThemeIcons.artSource) shows the art as a PNG it
 # made, starts no fetch while the session is locked (the art already made still shows) and stops a fetch running when it
 # locks (minor 3), fetches held URLs after unlocking, fetches only the newest of three URLs asked in one turn, and
-# retries a failed URL with backoff, three tries at most (minor 4).
+# retries a failed URL with backoff, three tries at most (minor 4). Review of 684ed6d: curl always connects where the
+# helper pinned (the machine's host name with a trailing dot, several dots, in uppercase, plain, or as a redirect
+# Location with a trailing dot never reaches the loopback server the system resolver would give), the IPv6 forms that
+# carry an IPv4 address are judged by it, the retry map is bounded and forgets URLs no longer shown, a lock inside the
+# change that starts a run sends no request, and no curl outlives the helper (SIGTERM, SIGKILL, a stopped run).
 # Plain shell test: PASS/FAIL lines, non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -628,7 +632,7 @@ else
     answer() { grep -F -- "	$2" <<<"$1" | grep -E "^(ok|no)	url:" | head -n 1 | cut -f1; }
     requested() { python3 -I -c 'import json, sys; print(sum(1 for l in open(sys.argv[1]) if json.loads(l)["path"] == sys.argv[2]))' "$h/requests.log" "$1"; }
     acheck() { # <label> <ok>
-      if [[ $2 == 1 ]]; then pass "https art: $1"; else bad "https art: $1 ($(tr '\n' '|' <<<"$out" | sed "s|$B|\$B|g" | cut -c1-600))"; fi
+      if [[ $2 == 1 ]]; then pass "https art: $1"; else bad "https art: $1 ($(grep -E 'probe: |^(ok|no|later)	' <<<"$out" | tr '\n' '|' | sed "s|$B|\$B|g" | cut -c1-900); requests: $(python3 -I -c 'import json, sys; print(" ".join(json.loads(l)["path"] for l in open(sys.argv[1])))' "$h/requests.log" | tail -c 300))"; fi
     }
     # Precondition for the pinning check: the system resolver does not know art.test.
     pinned=0
@@ -670,6 +674,52 @@ PY
     out=$(helper_url "$B/redir-loop" "$B/redir-numeric")
     acheck "a redirect to a loopback name or to an IP literal is refused (only the first hop reached the server)" \
       "$([[ $(answer "$out" "url:$B/redir-loop") == no && $(answer "$out" "url:$B/redir-numeric") == no ]] && ! grep -q '"host": "loop.test\|"host": "127.0.0.1' "$h/requests.log" && echo 1)"
+    # Review of 684ed6d (major): curl must connect where the helper pinned, whatever form the name takes. The machine's
+    # own host name resolves to a loopback address through the system (nss-myhostname); a second server listens there.
+    # The stand-in pins that name to 127.0.0.3, where nothing listens. A request reaching the second server means curl
+    # resolved a name itself: a trailing dot, several dots, an uppercase name, a redirect Location with a trailing dot.
+    hn=$(python3 -I -c 'import socket; print(socket.gethostname().lower())')
+    la=$(python3 -I - "$hn" <<'PY'
+import ipaddress, socket, sys
+try:
+    addrs = sorted({i[4][0] for i in socket.getaddrinfo(sys.argv[1], 443, type=socket.SOCK_STREAM)})
+except OSError:
+    addrs = []
+v4 = [a for a in addrs if ":" not in a and ipaddress.ip_address(a).is_loopback and a != "127.0.0.3"]
+print(v4[0] if v4 and all(ipaddress.ip_address(a).is_loopback for a in addrs) else "")
+PY
+)
+    if [[ -z $la || ! $hn =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+      echo "SKIP: theme icon files, https art: the pin leak cases need a host name the system resolves to loopback only (${hn:-none}: ${la:-not loopback}): NOT VERIFIED"
+    else
+      openssl req -x509 -newkey rsa:2048 -nodes -keyout "$h/leak-key.pem" -out "$h/leak-cert.pem" -days 1 -subj "/CN=$hn" \
+        -addext "subjectAltName=DNS:$hn" >/dev/null 2>&1
+      cat "$h/cert.pem" "$h/leak-cert.pem" >"$h/both.pem"
+      env -i PATH=/usr/bin:/bin python3 -I tests/security/theme_icon_files.d/fake_https.py "$h/leak-cert.pem" "$h/leak-key.pem" "$h/leak.log" \
+        "$s/outside/art-ref.fifo" "$la" >"$h/leak-port" 2>"$h/leak.err" &
+      watchers+=($!)
+      for _ in $(seq 1 50); do [[ -s $h/leak-port ]] && break; sleep 0.1; done
+      lp=$(head -n 1 "$h/leak-port" 2>/dev/null || true)
+      # A second main server whose /redir-dot sends the trailing-dot name of the leak server.
+      env -i PATH=/usr/bin:/bin python3 -I tests/security/theme_icon_files.d/fake_https.py "$h/cert.pem" "$h/key.pem" "$h/requests2.log" \
+        "$s/outside/art-ref.fifo" 127.0.0.1 "$hn:$lp" >"$h/port2" 2>/dev/null &
+      watchers+=($!)
+      for _ in $(seq 1 50); do [[ -s $h/port2 ]] && break; sleep 0.1; done
+      p2=$(head -n 1 "$h/port2" 2>/dev/null || true)
+      leaks() { [[ -f $h/leak.log ]] && wc -l <"$h/leak.log" || echo 0; }
+      # Positive control: by name, without the helper, curl does reach the second server (so the cases below are real).
+      env -i PATH=/usr/bin:/bin curl -q -s --noproxy '*' --cacert "$h/leak-cert.pem" --max-time 5 -o /dev/null "https://$hn:$lp/ok.png" || true
+      acheck "control: the machine's host name reaches the loopback server through the system resolver ($hn -> $la)" "$([[ $(leaks) == 1 ]] && echo 1)"
+      HN=$(tr '[:lower:]' '[:upper:]' <<<"$hn")
+      out=$(env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" CURL_CA_BUNDLE="$h/both.pem" GF_REAL_HELPER="$root/shell/services/image-copy.py" \
+        GF_TEST_PIN="$hn=127.0.0.3" timeout -k 2 120 python3 -I tests/security/theme_icon_files.d/image-copy-testnet.py batch "$s/fetch-out" 8388608 16777216 134217728 \
+        url 1 "https://$hn.:$lp/ok.png" url 2 "https://$hn..:$lp/ok.png" url 3 "https://$HN:$lp/ok.png" url 4 "https://$hn:$lp/ok.png" \
+        url 5 "https://art.test:$p2/redir-dot")
+      lout=$out
+      acheck "a trailing dot, several dots, an uppercase name, the plain name and a redirect Location with a trailing dot never reach the loopback server (curl connects where the helper pinned)" \
+        "$([[ $(grep -c '^no	' <<<"$lout") == 5 && $(leaks) == 1 ]] && echo 1)"
+      acheck "the redirect case reached its first hop (so its refusal was the trailing-dot hop)" "$(grep -q '"path": "/redir-dot"' "$h/requests2.log" && echo 1)"
+    fi
     out=$(env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" python3 -I - "$root/shell/services/image-copy.py" <<'PY'
 import importlib.util, sys
 spec = importlib.util.spec_from_file_location("imagecopy", sys.argv[1])
@@ -679,18 +729,57 @@ cases = {"8.8.8.8": True, "2606:4700:4700::1111": True, "127.0.0.1": False, "10.
          "192.168.1.1": False, "169.254.169.254": False, "100.64.0.1": False, "0.0.0.0": False, "224.0.0.1": False,
          "255.255.255.255": False, "192.0.2.1": False, "::1": False, "fe80::1": False, "fc00::1": False, "::": False,
          "::ffff:127.0.0.1": False, "::ffff:10.0.0.1": False, "2002:7f00:1::1": False, "2002:a00:1::1": False,
-         "2001:0:4136:e378:8000:63bf:80ff:fffe": False, "ff02::1": False, "not an address": False}
+         "2001:0:4136:e378:8000:63bf:80ff:fffe": False, "ff02::1": False, "not an address": False,
+         # Review of 684ed6d (minor 2): IPv4-compatible, NAT64 (well-known with a private or public IPv4, local-use),
+         # IPv4-translated and site-local forms.
+         "::7f00:1": False, "::808:808": False, "64:ff9b::a00:1": False, "64:ff9b::7f00:1": False, "64:ff9b::808:808": True,
+         "64:ff9b:1::808:808": False, "::ffff:0:a00:1": False, "fec0::1": False, "::ffff:8.8.8.8": True}
 bad = [ip for ip, want in cases.items() if m.public_address(ip) != want]
-urls = {"https://cdn.example.com/a.png": ("cdn.example.com", 443), "https://art.test:8443/x": ("art.test", 8443),
-        "https://1.example.com/a.png": ("1.example.com", 443), "https://127.0.0.1/a": None, "https://2130706433/a": None,
+urls = {"https://cdn.example.com/a.png": ("cdn.example.com", 443, "/a.png"), "https://art.test:8443/x": ("art.test", 8443, "/x"),
+        "https://1.example.com/a.png": ("1.example.com", 443, "/a.png"), "https://art.test": ("art.test", 443, "/"),
+        "https://ART.Test:00443/a": ("art.test", 443, "/a"), "https://xn--kmerxe-wxa.example/a": ("xn--kmerxe-wxa.example", 443, "/a"),
+        "https://127.0.0.1/a": None, "https://2130706433/a": None,
         "https://0x7f000001/a": None, "https://0x7f.0.0.1/a": None, "https://0177.0.0.1/a": None, "https://127.1/a": None,
         "https://10.0.0.1./a": None, "https://localhost/a": None, "https://LOCALHOST./a": None, "https://a.localhost/a": None,
-        "https://[::1]/a": None, "https://u:p@cdn.example.com/a": None, "http://cdn.example.com/a": None, "https://x:0/a": None}
+        "https://[::1]/a": None, "https://u:p@cdn.example.com/a": None, "http://cdn.example.com/a": None, "https://x:0/a": None,
+        # Review of 684ed6d (major): no empty label (trailing, several, leading or doubled dots), LDH labels only.
+        "https://cdn.example.com./a": None, "https://cdn.example.com../a": None, "https://.cdn.example.com/a": None,
+        "https://cdn..example.com/a": None, "https://-cdn.example.com/a": None, "https://cdn-.example.com/a": None,
+        "https://-/a": None, "https://k\u00f6merxe.example/a": None}
 bad += [u for u, want in urls.items() if m.url_target(u) != want]
+# The URL curl is given is rebuilt from the checked parts: the checked (lowercased) host, the port only when not 443.
+rebuilt = {"https://ART.Test:00443/a": "https://art.test/a", "https://art.test:8443/x?y=1": "https://art.test:8443/x?y=1",
+           "https://art.test": "https://art.test/"}
+bad += [u for u, want in rebuilt.items() if m.rebuilt_url(*m.url_target(u)) != want]
+# fetch(): every curl call names exactly the host it pins (also on a redirect hop), and a hop to a name with a trailing
+# dot is refused before any call (curl_once and resolve_host stubbed: no network).
+calls = []
+script = {}
+m.resolve_host = lambda host, port: {"pub.test": ["8.8.8.8"], "hop.test": ["8.8.4.4"]}.get(host, [])
+def fake_curl(url, host, port, addresses, seconds):
+    calls.append((url, host, port, tuple(addresses)))
+    return script.get(url, (200, b"data", ""))
+m.curl_once = fake_curl
+def run(url, redirects):
+    calls.clear()
+    script.clear()
+    script.update(redirects)
+    return m.fetch(url), list(calls)
+cases2 = [
+    ("trailing dot", run("https://pub.test./a.png", {}), None, []),
+    ("uppercase", run("https://PUB.TEST/a.png", {}), b"data", [("https://pub.test/a.png", "pub.test", 443, ("8.8.8.8",))]),
+    ("hop with a trailing dot", run("https://pub.test/a.png", {"https://pub.test/a.png": (302, b"", "https://hop.test./b.png")}), None,
+     [("https://pub.test/a.png", "pub.test", 443, ("8.8.8.8",))]),
+    ("hop uppercase", run("https://pub.test/a.png", {"https://pub.test/a.png": (302, b"", "https://HOP.test:8443/b.png")}), b"data",
+     [("https://pub.test/a.png", "pub.test", 443, ("8.8.8.8",)), ("https://hop.test:8443/b.png", "hop.test", 8443, ("8.8.4.4",))]),
+]
+for label, (got, made), want, want_calls in cases2:
+    if got != want or made != want_calls:
+        bad.append("fetch:" + label)
 print("bad=" + ",".join(bad))
 PY
 )
-    acheck "the URL rule (IP literals in every notation and localhost names refused) and the address rule (public addresses only: private, loopback, link-local, shared, reserved, multicast, mapped, 6to4 and Teredo forms refused)" \
+    acheck "the URL rule (IP literals in every notation, localhost names, empty labels: trailing, several, leading or doubled dots refused; LDH labels; the URL curl gets rebuilt from the checked parts) and the address rule (public addresses only: private, loopback, link-local, site-local, shared, reserved, multicast, and IPv4-mapped, IPv4-compatible, IPv4-translated, NAT64, 6to4 and Teredo forms carrying such an address refused)" \
       "$([[ $out == "bad=" ]] && echo 1)"
     rows_ok=$(python3 -I - "$h/requests.log" <<'PY'
 import json, sys
@@ -703,6 +792,21 @@ PY
     out=$(helper_url "$B/slow")
     ms=$((($(date +%s%N) - start) / 1000000))
     acheck "a response that does not come within 5 s is refused (${ms} ms)" "$([[ $(answer "$out" "url:$B/slow") == no ]] && ((ms < 8000)) && echo 1)"
+    # No curl outlives the helper (review of 684ed6d): killed mid-fetch with SIGTERM (its handler kills curl's process
+    # group first) or SIGKILL (curl has PR_SET_PDEATHSIG).
+    curls() { for d in /proc/[0-9]*; do tr '\0' ' ' <"$d/cmdline" 2>/dev/null | grep -q '^curl -q' && echo x || true; done | wc -l; }
+    for sig in TERM KILL; do
+      rm -rf "$s/fetch-out" && mkdir -m 700 "$s/fetch-out"
+      env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" CURL_CA_BUNDLE="$h/cert.pem" GF_REAL_HELPER="$root/shell/services/image-copy.py" \
+        python3 -I tests/security/theme_icon_files.d/image-copy-testnet.py batch "$s/fetch-out" 8388608 16777216 134217728 url 1 "$B/slow" >/dev/null 2>&1 &
+      hp=$!
+      for _ in $(seq 1 50); do (($(curls) >= 1)) && break; sleep 0.1; done
+      running=$(curls)
+      kill -s "$sig" "$hp" 2>/dev/null || true
+      wait "$hp" 2>/dev/null || true
+      sleep 0.5
+      acheck "the helper killed with SIG$sig mid-fetch leaves no curl behind (curl processes before: $running, after: $(curls))" "$( ((running >= 1)) && [[ $(curls) == 0 ]] && echo 1)"
+    done
 
     # The shell: ThemeIcons.artSource as the Now Playing views use it, with the stand-in in place of the helper (no proxy
     # variable: offline).
@@ -727,10 +831,17 @@ PY
       "$(grep -q 'probe: lock-stop running=false entry=pending queued=true' <<<"$out" && grep -q 'probe: lock-stop while-locked entry=pending source=none' <<<"$out" && echo 1)"
     acheck "after unlocking, the stopped URL is fetched again (two requests in all)" \
       "$(grep -q 'probe: lock-stop after-unlock class=copy status=1' <<<"$out" && [[ $(requested /slow3) == 2 ]] && echo 1)"
+    acheck "no curl process outlives the stopped run (review of 684ed6d)" "$(grep -q 'probe: lock-stop curls-after-1s=0' <<<"$out" && echo 1)"
+    acheck "a lock inside the change that starts a run: the run never starts (or is stopped once started), no request goes out, no curl is left" \
+      "$(grep -q 'probe: same-turn run-created=true locked=true running-after-lock=false' <<<"$out" && grep -q 'probe: same-turn while-locked entry=pending curls-after-1s=0' <<<"$out" && echo 1)"
+    acheck "after unlocking, that URL is fetched once" "$(grep -q 'probe: same-turn after-unlock entry=ok' <<<"$out" && [[ $(requested /slow3-same) == 1 ]] && echo 1)"
     acheck "a failed URL is retried with backoff while shown: one that works on its third try is shown (review of dce68c2, minor 4)" \
       "$(grep -q 'probe: retry flaky=ok class=copy' <<<"$out" && [[ $(requested /flaky) == 3 ]] && echo 1)"
     acheck "one that always fails is asked exactly three times, then never again" \
-      "$(grep -q 'dead=no tries=2 done=true' <<<"$out" && [[ $(requested /dead) == 3 ]] && echo 1)"
+      "$(grep -q 'dead=no dead-retry-entry=false' <<<"$out" && [[ $(requested /dead) == 3 ]] && echo 1)"
+    acheck "a failed URL no view shows any more is forgotten at its due retry, not fetched again (review of 684ed6d, minor 3)" \
+      "$(grep -q 'gone=none gone-retry-entry=false' <<<"$out" && [[ $(requested /dead-gone) == 1 ]] && echo 1)"
+    acheck "the retry map keeps at most maxRetries entries, the oldest leaves first" "$(grep -q 'probe: retry bound keys=url:x-two,url:x-three$' <<<"$out" && echo 1)"
     acheck "the shell never stalled" "$([[ $rc == 0 ]] && grep -q 'probe: done' <<<"$out" && echo 1)"
   fi
 fi

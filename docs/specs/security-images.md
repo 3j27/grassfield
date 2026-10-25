@@ -77,16 +77,26 @@ fetches it (review of dce68c2, minor 1): so it fetches only from public addresse
 fetched it itself. `ThemeIcons.artSource(url)` is what both Now Playing views show, for `Media.artShown`: the player's
 URL, applied 300 ms after its last change, so skipping through tracks fetches only where it stops.
 - **URL check.** It must match `https://host[:port][/path]`, both in `ArtUrl.remoteUrl` and in the helper:
-  - the host is a name of letters, digits, `.` and `-`; no user or password;
+  - the host is a name of labels of letters, digits and inner hyphens; no user or password; no empty label, so no
+    leading, trailing or doubled dot (review of 684ed6d: `x.` passed the check as `x`, and curl, given `x.`, did not
+    match it against `--resolve x:…` and resolved it itself);
   - never an IP literal in any notation: an IPv6 literal does not match, and a host whose last label is a decimal or
     `0x` number is one (`127.0.0.1`, `2130706433`, `0x7f000001`, `0177.0.0.1`, `127.1`), as URL parsers read it;
-  - never `localhost` or a `*.localhost` name (a trailing dot changes nothing);
+  - never `localhost` or a `*.localhost` name;
   - the path is printable ASCII without spaces or backslashes; at most 2048 characters.
-- **Addresses.** The helper resolves the name itself (3 s at most). Every address must be public: no private,
-  loopback, link-local, shared (100.64/10), reserved, documentation, unspecified or multicast range, also once an IPv4
-  address inside an IPv4-mapped, 6to4 or Teredo address is taken out. curl then connects to exactly those addresses
-  (`--resolve host:port:addresses`), so a second lookup cannot answer differently (no DNS rebinding), and to no proxy
-  (`--noproxy '*'`: a proxy would resolve the name itself). Behind a mandatory proxy, https art therefore does not show.
+- **Addresses.** The helper resolves the name itself (3 s at most). Every address must be public:
+  - none in a private, loopback, link-local, site-local (fec0::/10), shared (100.64/10), reserved, documentation,
+    unspecified or multicast range;
+  - an IPv6 address that carries an IPv4 one counts only when that IPv4 address is public too: IPv4-mapped,
+    IPv4-compatible (::/96), IPv4-translated (::ffff:0:0:0/96), NAT64 (64:ff9b::/96, a DNS64 network's synthesized
+    address), 6to4 and Teredo;
+  - local-use NAT64 (64:ff9b:1::/48) never counts.
+
+  curl then connects to exactly those addresses (`--resolve host:port:addresses`), so a second lookup cannot answer
+  differently (no DNS rebinding), and to no proxy (`--noproxy '*'`: a proxy would resolve the name itself). Behind a
+  mandatory proxy, https art therefore does not show.
+- **The URL curl gets** is rebuilt from the parts the helper checked: the lowercased host, the port only when it is not
+  443, and the path. So curl's host, the `--resolve` name and the checked name are the same bytes, on every hop.
 - **Redirects** are followed by the helper, not by curl: at most 3, and each target goes through the same URL check,
   resolution and address rule before any connection.
 - **Fetch.** curl runs with `-q` first (no `.curlrc`), no `HOME` (no `.netrc`), `--globoff`, `--proto =https`,
@@ -98,11 +108,21 @@ URL, applied 300 ms after its last change, so skipping through tracks fetches on
   least-recently-used order. One helper run at a time, and only the newest queued URL is fetched; older ones are
   forgotten and asked again while shown.
 - **Retries** (minor 4). A URL that fails is asked again after 60 s, then after 10 min, and only while a view still
-  shows it. After its third try it is not asked again this session.
+  shows it. After its third try it is not asked again this session. The retry map is bounded (review of 684ed6d):
+  - at most 256 entries, the oldest leaving first;
+  - an entry leaves on success, after its last try, and with its key;
+  - an entry also leaves when no view asks for its due retry within two ticks: the URL is no longer shown, so it is
+    forgotten and asked afresh if it is shown again.
 - **Locked** (minor 3). No fetch starts while the session is locked (`SessionState.locked`), and queued URLs wait for
-  the unlock. A run that is fetching art when the session locks is stopped at once: TERM to `timeout`'s process group,
-  which holds python and curl. Its items wait for the unlock under new numbers, and whatever it wrote is deleted. Only
-  art already made shows; the lock screen itself shows no media art.
+  the unlock. A run that is fetching art when the session locks is stopped at once: TERM to `timeout`, which signals
+  its process group. Its items wait for the unlock under new numbers, and whatever it wrote is deleted. Only art
+  already made shows; the lock screen itself shows no media art. Two races are closed (review of 684ed6d):
+  - **A lock inside the change that starts a run** (Quickshell signals only a process it reports started). The run is
+    not started at all when the change already stopped it. A run that started anyway is stopped as soon as Quickshell
+    reports it started, if it was stopped or carries art while the session is locked.
+  - **No curl outlives the helper.** curl runs in a process group of its own with `PR_SET_PDEATHSIG` (SIGKILL). The
+    helper's SIGTERM handler kills that group before the helper exits, and if the helper is killed outright, curl dies
+    with it. rsvg-convert has the same death signal.
 
 **The copy directory belongs to the user,** like every file of the session, the shell's own QML included. A process
 running as the user can replace a copy. The design protects against what applications *name*: a path, a theme file, a
@@ -136,11 +156,19 @@ running as the user.
   - a response slower than 5 s;
   - an http URL, and a URL with credentials.
 
-  No request carries a cookie or credentials. In the shell:
+  No request carries a cookie or credentials. The pin cases use the machine's host name, which the system resolves to
+  a loopback address where a second server listens (a positive control shows it). The stand-in pins that name to an
+  address where nothing listens. A trailing dot, several dots, an uppercase name, the plain name and a redirect Location
+  with a trailing dot never reach that server. URL vectors, rebuilt URLs and address vectors (IPv4-compatible, NAT64,
+  IPv4-translated, site-local) are checked, and `fetch()` is checked with curl stubbed. The helper killed mid-fetch
+  with SIGTERM or SIGKILL leaves no curl. In the shell:
   - no fetch starts while locked, and the held art is fetched after the unlock;
-  - a fetch running when the session locks is stopped at once and fetched again after the unlock;
+  - a fetch running when the session locks is stopped at once (no curl left) and fetched again after the unlock;
+  - a lock inside the change that starts a run sends no request and leaves no curl; the URL is fetched once, after
+    the unlock;
   - of three URLs asked in one turn, only the newest is fetched;
-  - a URL failing twice is shown on its third try, and one that always fails is asked exactly three times.
+  - a URL failing twice is shown on its third try, and one that always fails is asked exactly three times;
+  - a failed URL no view shows any more is forgotten, and the retry map is bounded.
 - **Part 5:** the tray: the real `TrayButton` with fake items (IconThemePath FIFO, absolute and traversal `IconName`,
   pixmap and plain name). There is also a private-bus StatusNotifierItem run (`env -i`, a private
   `DBUS_SESSION_BUS_ADDRESS` and a guard refusing the session bus). It is skipped where Unix sockets are blocked.

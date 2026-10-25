@@ -392,6 +392,11 @@ TestCase {
         ["https://127.0.0.1:4433/ok.png", "https://2130706433/a.png", "https://0x7f000001/a.png", "https://0x7f.0.0.1/a.png", "https://0177.0.0.1/a.png",
          "https://127.1/a.png", "https://10.0.0.1./a.png", "https://8.8.8.8/a.png", "https://localhost/a.png", "https://LOCALHOST./a.png",
          "https://art.localhost:8443/a.png", "https://x.y.localhost/a.png", "https://0x/a.png"].forEach(u => compare(ArtUrl.remoteUrl(u), "", "refused: " + u));
+        // Review of 684ed6d: no empty label (curl would not match a trailing-dot name against the helper's pin), LDH
+        // labels only; an uppercase or punycode name is fine (the helper lowercases it and pins exactly that).
+        ["https://example.com./a.png", "https://example.com../a.png", "https://example..com/a.png", "https://.example.com/a.png",
+         "https://-x.example.com/a.png", "https://x-.example.com/a.png", "https://k\u00f6merxe.example/a.png", "https://-/a.png"].forEach(u => compare(ArtUrl.remoteUrl(u), "", "refused: " + u));
+        ["https://EXAMPLE.com/a.png", "https://xn--kmerxe-wxa.example/a.png", "https://a-b.example.com/a.png"].forEach(u => compare(ArtUrl.remoteUrl(u), u, "accepted: " + u));
         ["http://example.com/a.png", "HTTPS://example.com/a.png", "https://user:pw@example.com/a.png", "https://user@example.com/a.png",
          "https://[::1]/a.png", "https://example.com/a b.png", "https://example.com/a\\b.png", "https://example.com/a\n.png",
          "https://exa_mple.com/a.png", "https:///a.png", "ftp://example.com/a.png", "file:///tmp/a.png", "data:image/png;base64,AAAA",
