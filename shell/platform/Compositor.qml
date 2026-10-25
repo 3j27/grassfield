@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.lib
 import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
@@ -611,13 +612,7 @@ Singleton {
     // All the decisions are in ShowDesktopFlow.js (a pure reducer) run by ShowDesktopController.qml, which listens to the
     // Hyprland events itself (tests/unit/tst_showdesktopflow.qml, tst_showdesktopreplay.qml, tst_showdesktopglue.qml). This file
     // only tells it how to read the window list and the Spaces, where to send the requests and where the record file is.
-    readonly property string desktopStateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
-    }
+    readonly property string desktopStateDir: Mode.stateDir
     readonly property string desktopStatePath: desktopStateDir + "/show-desktop.json"
 
     function toplevelData(): var {

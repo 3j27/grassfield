@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.lib
 import "UpdateNotice.js" as UpdateNotice
 
 // Watches the installed package version against what this session runs (GF-083). `updatePending` turns true once the
@@ -15,7 +16,7 @@ Item {
     // Overridable for tests.
     property string versionPath: "/usr/share/grassfield/VERSION"
     property var queryCommand: ["hyprctl", "grassfield"]
-    property bool active: Quickshell.env("GRASSFIELD_SESSION") === "1" && Quickshell.env("GRASSFIELD_DEV") !== "1"
+    property bool active: Mode.updateNotices
     property bool pluginPresent: Capabilities.pluginPresent
 
     property string installedVersion: ""
