@@ -47,35 +47,44 @@ TestCase {
         }
     }
 
-    // Mode.qml reads the right variables, by name: the runtime test (tests/shell/run_mode_import) runs with most of them unset, so
-    // a misspelled GRASSFIELD_SESION would pass there. Each property's Quickshell.env names, in order, against the table.
-    function test_modeReadsTheRightVariables() {
+    // Mode.qml calls the right rule on the right variables, by name: the runtime test (tests/shell/run_mode_import) runs with most of
+    // them unset, so a misspelled GRASSFIELD_SESION or `fixtures: RunMode.ownBus(...)` would pass there. Each member's RunMode function
+    // and Quickshell.env names, in order, against the table; devValue (the gate of every dev-plumbing variable) is checked the same way.
+    function test_modeCallsTheRightRuleOnTheRightVariables() {
         const request = new XMLHttpRequest();
         request.open("GET", Qt.resolvedUrl("../../shell/lib/Mode.qml"), false);
         request.send();
         const source = request.responseText.replace(/\/\/[^\n]*/g, "");
         const table = vectors().modeReads;
+        const literal = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
         const allowed = {};
         let seen = 0;
-        for (const prop of Object.keys(table)) {
-            if (prop === "comment")
+        for (const member of Object.keys(table)) {
+            if (member === "comment")
                 continue;
-            const m = new RegExp("readonly property \\w+ " + prop + ": RunMode\\.(\\w+)\\(([^\\n]*)\\)\\n").exec(source);
-            verify(m !== null, "Mode." + prop + " is a RunMode call");
+            const row = table[member];
+            const pattern = row["function"] === true
+                ? "function " + member + "\\(name\\) \\{\\s*return RunMode\\.(\\w+)\\(([^\\n]*)\\);"
+                : "readonly property \\w+ " + member + ": RunMode\\.(\\w+)\\(([^\\n]*)\\)\\n";
+            const m = new RegExp(pattern).exec(source);
+            verify(m !== null, "Mode." + member + " is a RunMode call");
+            compare(m[1], row.call, "Mode." + member + " calls RunMode." + row.call);
             const names = [];
-            const re = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
             let e;
-            while ((e = re.exec(m[2])) !== null)
+            literal.lastIndex = 0;
+            while ((e = literal.exec(m[2])) !== null)
                 names.push(e[1]);
-            compare(names.join(","), table[prop].join(","), "Mode." + prop + " reads");
-            table[prop].forEach(n => allowed[n] = true);
+            compare(names.join(","), row.reads.join(","), "Mode." + member + " reads");
+            if (row["function"] === true)
+                verify(/, Quickshell\.env\("GRASSFIELD_" \+ name\)$/.test(m[2]), "Mode." + member + " ends with the dynamic GRASSFIELD_<name>: " + m[2]);
+            row.reads.forEach(n => allowed[n] = true);
             seen++;
         }
-        verify(seen >= 7, "properties checked: " + seen);
+        verify(seen >= 8, "members checked: " + seen);
         // No other read: every Quickshell.env("...") literal of the file is in the table, and the one dynamic read is devValue's.
-        const re2 = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
         let e2;
-        while ((e2 = re2.exec(source)) !== null)
+        literal.lastIndex = 0;
+        while ((e2 = literal.exec(source)) !== null)
             verify(allowed[e2[1]] === true, "unexpected read of " + e2[1]);
         const dynamic = (source.match(/Quickshell\.env\([^)]*\)/g) || []).filter(c => !/^Quickshell\.env\("[A-Za-z0-9_]+"\)$/.test(c));
         compare(dynamic.length, 1, "one dynamic read");
