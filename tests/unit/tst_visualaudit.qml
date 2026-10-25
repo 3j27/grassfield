@@ -30,4 +30,11 @@ TestCase {
         // The query starts after the magnifier.
         verify(Tokens.searchQueryInset >= Tokens.searchFieldInset + Tokens.searchFieldIconSize);
     }
+
+    // Priority 3: notifications. Cards 6 apart, banners start at the column's top, equal 22-pt capsules.
+    function test_notificationMetrics() {
+        compare(Tokens.notificationBannerGap, 6);
+        compare(Tokens.notificationActionHeight, 22);
+        verify(Tokens.notificationCenterInset >= Tokens.notificationBannerGap);
+    }
 }

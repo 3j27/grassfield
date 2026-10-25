@@ -669,6 +669,8 @@ QtObject {
     readonly property int notificationCenterGroupCollapsed: 3
     // estimate: pixels of rows kept alive beyond the viewport (keyboard reach) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterCache: 2000
+    // Banner and card action capsules, macOS 22 tall, equal width across the card (audit 2026-10-25, Banners) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
+    readonly property int notificationActionHeight: 22
 
     // estimate: compact pill [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdWidth: 220
