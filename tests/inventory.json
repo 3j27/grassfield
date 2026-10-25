@@ -142,6 +142,7 @@
  {"path": "tests/unit/tst_wallpaper.qml", "layer": "headless"},
  {"path": "tests/unit/tst_widgets.qml", "layer": "headless"},
  {"path": "tests/unit/files/tst_appscope.cpp", "layer": "logic"},
+ {"path": "tests/unit/files/tst_applications.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_autoappearance.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_filelogic.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_folderprune.cpp", "layer": "logic"},
