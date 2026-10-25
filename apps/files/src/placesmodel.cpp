@@ -1,5 +1,6 @@
 #include "placesmodel.h"
 
+#include "applicationslogic.h"
 #include "taglogic.h"
 
 #include <QDir>
@@ -97,6 +98,16 @@ void PlacesModel::rebuild()
         {QStandardPaths::MoviesLocation, tr("Videos"), QStringLiteral("folder-videos-symbolic")},
     };
     for (const Standard &s : standard) {
+        // Finder's Favorites: the Applications folder comes before Desktop, Documents and Downloads.
+        if (s.location == QStandardPaths::DesktopLocation) {
+            Place apps;
+            apps.section = QStringLiteral("favorites");
+            apps.name = tr("Applications");
+            apps.url = ApplicationsLogic::locationUrl();
+            apps.iconName = symbolic(QStringLiteral("folder-applications"), symbolic(QStringLiteral("applications-all"), QStringLiteral("folder-symbolic")));
+            apps.kind = QStringLiteral("applications");
+            places.append(apps);
+        }
         const QString path = QStandardPaths::writableLocation(s.location);
         // Only folders that exist; xdg-user-dirs maps missing ones to $HOME, which is listed once.
         if (path.isEmpty() || !QDir(path).exists() || (s.location != QStandardPaths::HomeLocation && QDir(path) == QDir(home)))

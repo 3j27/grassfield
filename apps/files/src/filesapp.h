@@ -129,6 +129,15 @@ public:
     // [{id, name}] of the applications registered for the first item's MIME type, preferred first.
     Q_INVOKABLE QVariantList applicationsFor(const QList<QUrl> &urls) const;
     Q_INVOKABLE void openWith(const QString &storageId, const QList<QUrl> &urls);
+    // The Applications location (grassfield-apps:/): the installed applications as Finder's Applications folder shows them.
+    // launchApplication starts the application of a grassfield-app:/<id> item (nothing else): through KIO's
+    // ApplicationLauncherJob, like Open With, so that it runs in a scope of its own.
+    Q_INVOKABLE QUrl applicationsUrl() const;
+    // True (and operationFailed with the permission message) when `urls` hold an item of the Applications location or the
+    // location itself: nothing can be done to them but opening.
+    bool refuseApplicationItems(const QList<QUrl> &urls);
+    Q_INVOKABLE bool isApplicationUrl(const QUrl &url) const;
+    Q_INVOKABLE void launchApplication(const QUrl &url);
     // Glance: starts `grassfield-preview --glance` (detached) for the local regular files among `urls`.
     Q_INVOKABLE void glance(const QList<QUrl> &urls);
 

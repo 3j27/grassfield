@@ -1,4 +1,5 @@
 #include "filesapp.h"
+#include "applicationslogic.h"
 #include "appscope.h"
 #include "chromecaps.h"
 #include "autoappearance.h"
@@ -398,6 +399,10 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 QVariantList FilesApp::pathSegments(const QUrl &url) const
 {
     QVariantList out;
+    if (ApplicationsLogic::isLocationUrl(url)) {
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Applications")}, {QStringLiteral("url"), ApplicationsLogic::locationUrl()}});
+        return out;
+    }
     // A tag search: the segments of its folder, then the tag.
     const bool search = TagLogic::isSearchUrl(url);
     const QUrl folder = search ? TagLogic::searchFolder(url) : url;
@@ -584,6 +589,41 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
     job->start();
 }
 
+QUrl FilesApp::applicationsUrl() const
+{
+    return ApplicationsLogic::locationUrl();
+}
+
+bool FilesApp::isApplicationUrl(const QUrl &url) const
+{
+    return !ApplicationsLogic::entryId(url).isEmpty();
+}
+
+void FilesApp::launchApplication(const QUrl &url)
+{
+    const QString id = ApplicationsLogic::entryId(url);
+    if (id.isEmpty())
+        return;
+    KService::Ptr service = KService::serviceByStorageId(id + QStringLiteral(".desktop"));
+    if (!service)
+        service = KService::serviceByDesktopName(id);
+    if (!service) {
+        emit operationFailed(tr("The application is no longer installed."));
+        return;
+    }
+    if (launchingBlocked()) {
+        emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    auto *job = new KIO::ApplicationLauncherJob(service, this);
+    attachDelegate(job);
+    connect(job, &KJob::result, this, [this, job] {
+        if (job->error() && job->error() != KIO::ERR_USER_CANCELED)
+            emit operationFailed(job->errorString());
+    });
+    job->start();
+}
+
 void FilesApp::glance(const QList<QUrl> &urls)
 {
     // Glance shows local regular files only (it validates them again): folders and remote items are skipped.
@@ -607,8 +647,24 @@ void FilesApp::glance(const QList<QUrl> &urls)
         emit operationFailed(tr("Glance could not be started: grassfield-preview was not found."));
 }
 
+// The Applications location is read-only (Finder: the apps of /Applications cannot be renamed, moved or deleted by the
+// user): its items are never copied, moved, trashed or renamed, nothing is dropped or pasted into it, and the reason is
+// the one Finder gives (no permission).
+bool FilesApp::refuseApplicationItems(const QList<QUrl> &urls)
+{
+    for (const QUrl &u : urls) {
+        if (u.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(u)) {
+            emit operationFailed(tr("The operation can’t be completed because you don’t have permission to access some of the items."));
+            return true;
+        }
+    }
+    return false;
+}
+
 void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
 {
+    if (refuseApplicationItems(urls))
+        return;
     if (urls.isEmpty())
         return;
     auto *data = new QMimeData;
@@ -624,6 +680,8 @@ void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
 
 void FilesApp::paste(const QUrl &destination, QObject *folder)
 {
+    if (refuseApplicationItems({destination}))
+        return;
     const QMimeData *data = QGuiApplication::clipboard()->mimeData();
     if (!data || !KIO::canPasteMimeData(data))
         return;
@@ -675,6 +733,8 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
 
 void FilesApp::trash(const QList<QUrl> &urls)
 {
+    if (refuseApplicationItems(urls))
+        return;
     if (urls.isEmpty())
         return;
     KIO::CopyJob *job = KIO::trash(urls, KIO::HideProgressInfo);
@@ -712,6 +772,8 @@ void FilesApp::restore(const QList<QUrl> &urls)
 
 void FilesApp::deletePermanently(const QList<QUrl> &urls)
 {
+    if (refuseApplicationItems(urls))
+        return;
     QList<QUrl> trashed;
     for (const QUrl &u : urls) {
         if (u.scheme() == QLatin1String("trash"))
@@ -736,6 +798,8 @@ void FilesApp::emptyTrash()
 
 void FilesApp::newFolder(const QUrl &directory, QObject *folder)
 {
+    if (refuseApplicationItems({directory}))
+        return;
     const QString name = FileLogic::uniqueName(tr("untitled folder"), [&directory](const QString &n) { return nameTaken(directory, n); });
     const QUrl url = childUrl(directory, name);
     KIO::MkdirJob *job = KIO::mkdir(url);
@@ -757,6 +821,8 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
 
 void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
 {
+    if (refuseApplicationItems({url}))
+        return;
     if (newName == url.fileName())
         return;
     if (!FileLogic::isValidFileName(newName)) {
@@ -836,6 +902,8 @@ void FilesApp::endStyleMoves(const QStringList &paths)
 
 void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
 {
+    if (refuseApplicationItems(urls))
+        return;
     QPointer<QObject> target = folder;
     for (const QUrl &url : urls) {
         if (url.scheme() == QLatin1String("trash"))
@@ -860,6 +928,8 @@ void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
 void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *folder)
 {
     if (urls.isEmpty() || !destination.isValid())
+        return;
+    if (refuseApplicationItems(urls) || refuseApplicationItems({destination}))
         return;
     if (destination.scheme() == QLatin1String("trash")) {
         trash(urls);

@@ -282,7 +282,7 @@ FocusScope {
                 anchors.fill: parent
                 enabled: !cell.renaming
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                drag.target: dragProxy
+                drag.target: root.model.isApplications ? null : dragProxy
                 drag.threshold: Tokens.filesDragThreshold
                 property bool collapseOnRelease: false
 

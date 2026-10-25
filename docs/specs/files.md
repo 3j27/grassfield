@@ -40,13 +40,22 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    Ctrl+1/2/3/4, View As (item and background menus), the global View menu and the toolbar switcher; the view, sort,
    hidden-files and gallery info panel choices persist (QSettings `Grassfield/Files`; view settings are global, there
    is no per-folder view memory). Tag search results (F16) in the column mode show as a list.
-5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists; Tags
-   (F16);
+5. F5 Sidebar: Favorites = Home, Applications, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists
+   (Applications always; Go > Applications, Ctrl+Shift+A); Tags (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
    (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
    listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:
    `FileLogic::hiddenNetworkEntry`),
    Trash (`trash:/`, full/empty icon from a KIO listing). Items accept drops.
+   **Applications** (`grassfield-apps:/`, macOS: Finder's Applications): a virtual, read-only location listing the desktop
+   entries the user sees with the rules of the shell's Apps grid (`ApplicationsLogic`, held to
+   `shell/launchpad/hidden-entries.sh` by `tests/unit/files/tst_applications.cpp`): Type=Application, not NoDisplay or
+   Hidden, OnlyShowIn/NotShowIn for `XDG_CURRENT_DESKTOP`, an installed TryExec, no helper launchers; localized names, theme
+   icons through the same provider as the rest of Files, sorted by name. Search filters it by name. Double-click, Return and
+   Ctrl+Down start the application (`FilesApp::launchApplication`: KIO's ApplicationLauncherJob, in a scope of its own like
+   Open With); Get Info shows what the desktop entry says. Nothing can be renamed, copied, moved, trashed or created in it,
+   nothing can be dropped into it or dragged out of it; the refusal reads as Finder's (no permission to access some of the
+   items) and the menu items are dimmed, not hidden.
 6. F6 Operations, all KIO jobs: copy/cut/paste (`KIO::paste`, `text/uri-list` + KDE cut flag + GNOME format),
    Move to Trash (`KIO::trash`), Put Back (`KIO::restoreFromTrash`), Delete Immediately (only in `trash:/`,
    confirmed), Empty Trash (`KIO::emptyTrash`, confirmed), New Folder (`KIO::mkdir`, "untitled folder", inline

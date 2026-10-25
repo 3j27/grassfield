@@ -25,6 +25,9 @@
 #include <KIO/FileSystemFreeSpaceJob>
 #include <KIO/Job>
 #include <KIO/PreviewJob>
+#include <KIO/UDSEntry>
+
+#include <sys/stat.h>
 
 // QT_LOGGING_RULES="grassfield.files.debug=true": listing times, selection and expectation traces.
 Q_LOGGING_CATEGORY(lcFiles, "grassfield.files", QtInfoMsg)
@@ -117,6 +120,17 @@ constexpr int kPreviewBatchSize = 32;
 // An expected item that has not appeared by then (failed or slow job) no longer steers the selection.
 constexpr int kExpectationLifetimeMs = 10000;
 
+// An application's icon: a theme icon name as is, an absolute path as is, anything else (a missing or unknown icon) the
+// generic application icon.
+QString applicationIconName(const QString &name)
+{
+    if (name.startsWith(QLatin1Char('/')) && QFileInfo::exists(name))
+        return name;
+    if (!name.isEmpty() && !name.startsWith(QLatin1Char('/')) && QIcon::hasThemeIcon(name))
+        return name;
+    return QIcon::hasThemeIcon(QStringLiteral("application-x-executable")) ? QStringLiteral("application-x-executable") : QStringLiteral("text-x-generic");
+}
+
 QString resolvedIconName(const KFileItem &item)
 {
     // Cache per icon name: QIcon::hasThemeIcon walks the theme directories.
@@ -207,6 +221,13 @@ FolderModel::FolderModel(QObject *parent)
     m_lister->setAutoErrorHandlingEnabled(false);
     m_lister->setDelayedMimeTypes(true);
     m_results = new ItemListModel(this);
+    m_appsTimer.setSingleShot(true);
+    m_appsTimer.setInterval(400);
+    connect(&m_appsWatcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_appsTimer.start(); });
+    connect(&m_appsTimer, &QTimer::timeout, this, [this] {
+        if (isApplications())
+            loadApplications();
+    });
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -333,8 +354,9 @@ FolderModel::~FolderModel()
 void FolderModel::setUrl(const QUrl &url)
 {
     const bool search = TagLogic::isSearchUrl(url);
-    const QUrl clean = search ? url : url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
-    if (clean == m_url && (search || m_lister->url().isValid()))
+    const bool applications = ApplicationsLogic::isLocationUrl(url);
+    const QUrl clean = search ? url : applications ? ApplicationsLogic::locationUrl() : url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
+    if (clean == m_url && (search || applications || m_lister->url().isValid()))
         return;
     m_url = clean;
     applySelection({});
@@ -356,12 +378,21 @@ void FolderModel::setUrl(const QUrl &url)
         if (sourceModel() != m_results)
             setSourceModel(m_results);
         startSearch();
+    } else if (applications) {
+        // The folder listing stops; the installed applications are the rows.
+        m_lister->stop();
+        m_results->clear();
+        if (sourceModel() != m_results)
+            setSourceModel(m_results);
+        loadApplications();
     } else {
         if (sourceModel() != m_dirModel)
             setSourceModel(m_dirModel);
         m_results->clear();
+        m_apps.clear();
         m_dirModel->openUrl(m_url);
     }
+    watchApplications();
     watchShownFolder();
     emit urlChanged();
     emit rootChanged();
@@ -436,7 +467,7 @@ int FolderModel::currentRow() const
 bool FolderModel::writable() const
 {
     // Nothing can be created in a trash or a tag search (its items keep their own folders).
-    if (isTrash() || isSearch())
+    if (isTrash() || isSearch() || isApplications())
         return false;
     const KFileItem root = m_lister->rootItem();
     return !root.isNull() && root.isWritable();
@@ -444,6 +475,8 @@ bool FolderModel::writable() const
 
 QString FolderModel::title() const
 {
+    if (isApplications())
+        return tr("Applications");
     if (isSearch())
         return TagLogic::displayName(TagLogic::searchTag(m_url));
     const QList<FileLogic::Segment> segments = FileLogic::pathSegments(m_url, QDir::homePath(), tr("Computer"), tr("Trash"));
@@ -507,6 +540,17 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
     const KFileItem item = sourceItem(mapToSource(index));
     if (item.isNull())
         return {};
+    if (isApplications()) {
+        switch (role) {
+        case IconNameRole:
+            return applicationIconName(item.iconName());
+        case SizeTextRole:
+        case ModifiedTextRole:
+            return QString();
+        case KindRole:
+            return tr("Application");
+        }
+    }
     // Lazy refinement: the lister only guessed the type from the name (setDelayedMimeTypes). A row a
     // view actually shows reads its content once (a few hundred bytes); sorting never does.
     if ((role == IconNameRole || role == KindRole || role == CanPreviewRole) && !item.isMimeTypeKnown())
@@ -888,6 +932,39 @@ int FolderModel::findPrefix(const QString &prefix, int from) const
 
 QVariantMap FolderModel::info(int row) const
 {
+    if (isApplications()) {
+        QVariantMap a;
+        if (row < 0) {
+            a[QStringLiteral("name")] = title();
+            a[QStringLiteral("url")] = m_url;
+            a[QStringLiteral("iconName")] = QStringLiteral("folder");
+            a[QStringLiteral("kind")] = tr("Applications");
+            a[QStringLiteral("isDir")] = true;
+            a[QStringLiteral("readable")] = true;
+            a[QStringLiteral("writable")] = false;
+            return a;
+        }
+        const KFileItem shown = itemAt(row);
+        const auto it = m_apps.constFind(shown.url());
+        if (shown.isNull() || it == m_apps.cend())
+            return a;
+        a[QStringLiteral("name")] = it->name;
+        a[QStringLiteral("url")] = shown.url();
+        a[QStringLiteral("iconName")] = applicationIconName(it->icon);
+        a[QStringLiteral("kind")] = tr("Application");
+        a[QStringLiteral("isApplication")] = true;
+        a[QStringLiteral("genericName")] = it->genericName;
+        a[QStringLiteral("comment")] = it->comment;
+        a[QStringLiteral("where")] = QFileInfo(it->path).absolutePath();
+        a[QStringLiteral("desktopEntry")] = it->path;
+        a[QStringLiteral("command")] = it->exec;
+        a[QStringLiteral("categories")] = it->categories.join(QStringLiteral(", "));
+        a[QStringLiteral("readable")] = true;
+        a[QStringLiteral("writable")] = false;
+        a[QStringLiteral("isDir")] = false;
+        a[QStringLiteral("size")] = qint64(-1);
+        return a;
+    }
     const KFileItem item = row < 0 ? rootItem() : itemAt(row);
     QVariantMap m;
     if (item.isNull())
@@ -1061,6 +1138,10 @@ bool FolderModel::previewSupported(const KFileItem &item) const
 void FolderModel::reload()
 {
     m_tags.clear();
+    if (isApplications()) {
+        loadApplications();
+        return;
+    }
     if (isSearch()) {
         clearAllPreviews();
         stopSearch();
@@ -1076,6 +1157,58 @@ void FolderModel::reload()
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {TagsRole, TagColorsRole});
     m_styles.clear();
     m_dirModel->openUrl(m_url, KDirModel::Reload);
+}
+
+void FolderModel::loadApplications()
+{
+    const QList<ApplicationsLogic::Entry> entries = ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment());
+    // Rows that stay keep their selection; the others go.
+    QHash<QUrl, ApplicationsLogic::Entry> next;
+    KFileItemList items;
+    for (const ApplicationsLogic::Entry &e : entries) {
+        const QUrl url = ApplicationsLogic::entryUrl(e.id);
+        KIO::UDSEntry entry;
+        entry.fastInsert(KIO::UDSEntry::UDS_NAME, e.id);
+        entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, e.name);
+        entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, e.icon);
+        entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFREG);
+        entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, 0444);
+        entry.fastInsert(KIO::UDSEntry::UDS_SIZE, 0);
+        entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("application/x-desktop"));
+        items.append(KFileItem(entry, url, true, false));
+        next.insert(url, e);
+    }
+    m_apps = next;
+    m_results->clear();
+    m_results->append(items);
+    // A selected row that is gone leaves the selection.
+    QSet<QUrl> keep;
+    for (const QUrl &url : std::as_const(m_selected)) {
+        if (next.contains(url))
+            keep.insert(url);
+    }
+    if (keep != m_selected)
+        applySelection(keep);
+    if (m_loading) {
+        m_loading = false;
+        emit loadingChanged();
+    }
+    emit countChanged();
+}
+
+// New and removed applications show without a reload (a package installed while the window is open).
+void FolderModel::watchApplications()
+{
+    const QStringList old = m_appsWatcher.directories();
+    if (!old.isEmpty())
+        m_appsWatcher.removePaths(old);
+    m_appsTimer.stop();
+    if (!isApplications())
+        return;
+    for (const QString &dir : ApplicationsLogic::processEnvironment().applicationDirs) {
+        if (QDir(dir).exists())
+            m_appsWatcher.addPath(dir);
+    }
 }
 
 void FolderModel::startSearch()

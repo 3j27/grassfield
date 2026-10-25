@@ -315,6 +315,11 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        sequence: "Ctrl+Shift+A"
+        onActivated: win.tab.navigate(win.app.applicationsUrl(), true)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
         sequences: ["Ctrl+R", "F5"]
         onActivated: win.tab.folder.reload()
         onActivatedAmbiguously: activated()

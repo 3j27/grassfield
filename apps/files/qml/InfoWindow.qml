@@ -72,7 +72,22 @@ Window {
         onActivated: root.close()
     }
 
-    readonly property var rows: [
+    // An application of the Applications location: what its desktop entry says, read-only.
+    readonly property bool isApplication: root.info.isApplication === true
+
+    readonly property var applicationRows: [
+        {label: qsTr("Kind:"), value: root.info.kind},
+        {label: qsTr("Category:"), value: root.info.genericName},
+        {label: qsTr("Comment:"), value: root.info.comment},
+        {label: qsTr("Where:"), value: root.info.where},
+        {label: qsTr("Desktop entry:"), value: root.info.desktopEntry},
+        {label: qsTr("Command:"), value: root.info.command},
+        {label: qsTr("Categories:"), value: root.info.categories},
+        {header: qsTr("Sharing & Permissions")},
+        {label: qsTr("You can:"), value: qsTr("Read only")}
+    ]
+
+    readonly property var rows: root.isApplication ? root.applicationRows : [
         {label: qsTr("Kind:"), value: root.info.kind},
         {label: qsTr("Size:"), value: root.info.isDir ? root.folderSize : qsTr("%1 (%2 bytes)").arg(root.info.sizeText).arg(root.info.bytes)},
         {label: qsTr("Where:"), value: root.info.where},
@@ -150,7 +165,7 @@ Window {
                     Text {
                         textFormat: Text.PlainText
                         width: parent.width
-                        text: root.info.isDir ? root.folderSize : root.info.sizeText
+                        text: root.isApplication ? root.info.kind : root.info.isDir ? root.folderSize : root.info.sizeText
                         color: Appearance.colors.textSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
@@ -179,6 +194,7 @@ Window {
             // in a tooltip.
             Item {
                 id: tagLine
+                visible: !root.isApplication
                 width: content.width
                 height: tagSwatches.implicitHeight
                 Accessible.role: Accessible.Grouping

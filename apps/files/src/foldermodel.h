@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include "applicationslogic.h"
 #include "folderstylelogic.h"
 #include "previewqueue.h"
 
@@ -34,6 +35,10 @@ class PreviewJob;
 // Adds flat roles for QML delegates, Finder-style sorting (FileLogic::compareEntries), a name filter,
 // a URL-keyed selection that survives re-sorting, thumbnails through KIO::PreviewJob, tags (user.xdg.tags,
 // TagStore) and free space through KIO::fileSystemFreeSpace. It never touches files: operations live in FilesApp.
+//
+// The Applications location (grassfield-apps:/) lists the installed applications the same way (the rows of the search
+// list; one item per desktop entry, url grassfield-app:/<id>, never a file): read-only, nothing can be created, renamed,
+// moved or deleted in it, and opening a row starts the application (FilesApp::launchApplication).
 //
 // A tag search location (grassfield-tag:/<tag>?in=<folder>, TagLogic) lists the matches of a TagSearch instead of a
 // folder: the same roles, selection and thumbnails, over a flat list of items from several folders, kept up to date
@@ -62,6 +67,8 @@ class FolderModel : public QSortFilterProxyModel
     // A tag search location (see the class comment); searchLimited: a bound of TagSearch stopped it early.
     Q_PROPERTY(bool isSearch READ isSearch NOTIFY urlChanged)
     Q_PROPERTY(bool searchLimited READ searchLimited NOTIFY loadingChanged)
+    // The Applications location (grassfield-apps:/, ApplicationsLogic): the desktop entries the user sees, read-only.
+    Q_PROPERTY(bool isApplications READ isApplications NOTIFY urlChanged)
 
 public:
     enum Roles {
@@ -119,6 +126,7 @@ public:
     void setLargePreviewSize(int size);
     bool isSearch() const;
     bool searchLimited() const { return m_searchLimited; }
+    bool isApplications() const { return ApplicationsLogic::isLocationUrl(m_url); }
 
     // Where folder looks are read from (FilesApp's store; null: no folder is customised).
     void setStyleStore(const FolderStyleStore *store) { m_styleStore = store; }
@@ -234,6 +242,10 @@ private:
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
     void emitRowChanged(const QUrl &url, const QList<int> &roles);
 
+    // The Applications location: the rows are rebuilt from the desktop entries (and again when an applications directory changes).
+    void loadApplications();
+    void watchApplications();
+
     // Tag search.
     void startSearch();
     void stopSearch();
@@ -289,6 +301,10 @@ private:
 
     // Tag search: the matches (source model while searching), the running search and KIO's change notifications.
     ItemListModel *m_results = nullptr;
+    // The shown applications by item url (Get Info, Kind) and the watch on the applications directories.
+    QHash<QUrl, ApplicationsLogic::Entry> m_apps;
+    QFileSystemWatcher m_appsWatcher;
+    QTimer m_appsTimer;
     SearchRunner *m_search = nullptr;
     OrgKdeKDirNotifyInterface *m_notify = nullptr;
     bool m_searchLimited = false;

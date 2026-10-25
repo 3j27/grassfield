@@ -2776,6 +2776,10 @@
         <translation>Impossible de lancer le Survol&#xa0;: grassfield-preview est introuvable.</translation>
     </message>
     <message>
+        <source>The operation can’t be completed because you don’t have permission to access some of the items.</source>
+        <translation>L’opération ne peut pas être effectuée car vous n’avez pas l’autorisation d’accéder à certains éléments.</translation>
+    </message>
+    <message>
         <source>Moving 1 item…</source>
         <translation>Déplacement de 1 élément…</translation>
     </message>
@@ -2896,6 +2900,10 @@
         <translation>«&#xa0;%1&#xa0;» ne peut pas être copié ou déplacé ici&#xa0;: le dossier contient «&#xa0;%2&#xa0;», qui a le même nom une fois les accents composés. Renommez l’un des deux d’abord.</translation>
     </message>
     <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
         <source>Links can’t carry tags.</source>
         <translation>Les liens ne peuvent pas recevoir de tags.</translation>
     </message>
@@ -2919,12 +2927,20 @@
 <context>
     <name>FolderModel</name>
     <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
         <source>Computer</source>
         <translation>Ordinateur</translation>
     </message>
     <message>
         <source>Trash</source>
         <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>Application</source>
+        <translation>Application</translation>
     </message>
     <message>
         <source>Tags are only searched in local folders.</source>
@@ -3539,6 +3555,26 @@
     <message>
         <source>Kind:</source>
         <translation>Type&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Category:</source>
+        <translation>Catégorie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Comment:</source>
+        <translation>Commentaire&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Desktop entry:</source>
+        <translation>Lanceur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Command:</source>
+        <translation>Commande&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Categories:</source>
+        <translation>Catégories&#xa0;:</translation>
     </message>
     <message>
         <source>Size:</source>
@@ -4390,6 +4426,10 @@
     <message>
         <source>Videos</source>
         <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
     </message>
     <message>
         <source>Computer</source>

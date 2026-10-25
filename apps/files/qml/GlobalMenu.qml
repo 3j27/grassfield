@@ -20,6 +20,7 @@ Platform.MenuBar {
     readonly property var folder: bar.win.folder
     readonly property int count: bar.folder ? bar.folder.selectedCount : 0
     readonly property bool inTrash: bar.folder !== null && bar.folder.isTrash
+    readonly property bool inApplications: bar.folder !== null && bar.folder.isApplications
     readonly property bool writable: bar.folder !== null && bar.folder.writable
     // Items can be renamed, cut and trashed (BrowserTab.itemsEditable: a writable folder or a tag search).
     readonly property bool editable: bar.folder !== null && !bar.inTrash && (bar.folder.writable || bar.folder.isSearch)
@@ -149,7 +150,7 @@ Platform.MenuBar {
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Glance at %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Glance at “%1”").arg(bar.firstName) : qsTr("Glance")
-            enabled: bar.count > 0 && !bar.inTrash
+            enabled: bar.count > 0 && !bar.inTrash && !bar.inApplications
             onTriggered: bar.tab.glance()
         }
         // The colour tags of the selection (the window's item menu shows them as a row of colour dots).
@@ -227,7 +228,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Copy %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Copy “%1”").arg(bar.firstName) : qsTr("Copy")
             shortcut: "Ctrl+C"
-            enabled: bar.count > 0
+            enabled: bar.count > 0 && !bar.inApplications
             onTriggered: bar.tab.copySelection(false)
         }
         Platform.MenuItem {
@@ -380,7 +381,7 @@ Platform.MenuBar {
 
                 visible: kind !== "tag"
                 text: bar.label(name)
-                shortcut: bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
+                shortcut: kind === "applications" ? "Ctrl+Shift+A" : bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
                 onTriggered: bar.win.openPlace(index, url, mounted)
             }
 

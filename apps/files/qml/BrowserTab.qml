@@ -36,6 +36,8 @@ FocusScope {
     readonly property var segments: root.app.pathSegments(root.url)
     readonly property string title: root.segments.length > 0 ? DisplayName.text(root.segments[root.segments.length - 1].label) : ""
     readonly property bool isTrash: String(root.url).startsWith("trash:")
+    // The Applications location: read-only, opening starts the application.
+    readonly property bool isApplications: String(root.url).startsWith("grassfield-apps:")
 
     Accessible.role: Accessible.Pane
     Accessible.name: root.title
@@ -168,6 +170,10 @@ FocusScope {
     function activate(row: int, model: var): void {
         if (row < 0)
             return;
+        if (model.isApplications) {
+            root.app.launchApplication(model.urlAt(row));
+            return;
+        }
         if (model.isDirAt(row))
             root.navigate(model.urlAt(row), true);
         else
@@ -179,6 +185,12 @@ FocusScope {
         const rows = m.selectedRows();
         if (rows.length === 0)
             return;
+        if (m.isApplications) {
+            // Finder opens every selected application (bounded here).
+            for (let i = 0; i < Math.min(rows.length, 10); i++)
+                root.app.launchApplication(m.urlAt(rows[i]));
+            return;
+        }
         const files = [];
         let firstDir = null;
         for (let i = 0; i < rows.length; i++) {
@@ -207,6 +219,10 @@ FocusScope {
         const urls = root.selection();
         if (urls.length === 0)
             return;
+        if (root.activeFolder.isApplications) {
+            root.app.trash(urls); // refused with the permission message: the location is read-only
+            return;
+        }
         if (root.activeFolder.isTrash)
             root.app.restore(urls);
         else
@@ -219,7 +235,7 @@ FocusScope {
 
     function deleteImmediately(): void {
         const urls = root.selection();
-        if (urls.length === 0)
+        if (urls.length === 0 || root.activeFolder.isApplications)
             return;
         const message = urls.length === 1 ? qsTr("“%1” will be deleted immediately. You can’t undo this action.").arg(DisplayName.text(root.activeFolder.nameAt(root.activeFolder.selectedRows()[0])))
                                           : qsTr("%1 items will be deleted immediately. You can’t undo this action.").arg(urls.length);
@@ -232,7 +248,7 @@ FocusScope {
 
     function copySelection(cut: bool): void {
         const urls = root.selection();
-        if (urls.length > 0 && !(cut && !root.itemsEditable(root.activeFolder)))
+        if (urls.length > 0 && !root.activeFolder.isApplications && !(cut && !root.itemsEditable(root.activeFolder)))
             root.app.copyToClipboard(urls, cut);
     }
 
@@ -369,6 +385,7 @@ FocusScope {
     }
 
     function dropUrls(urls: var, destination: url, model: var): void {
+        // FilesApp refuses a drop on the Applications location with the permission message.
         root.app.drop(urls, destination, model);
     }
 
@@ -488,6 +505,17 @@ FocusScope {
                 {separator: true},
                 {id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")},
                 {id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")}
+            ];
+        }
+        if (model.isApplications) {
+            // Finder's menu of an application in a read-only Applications folder: the editing items are there, dimmed.
+            return [
+                {id: "open", text: qsTr("Open")},
+                {separator: true},
+                {id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: false},
+                {separator: true},
+                {id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")},
+                {id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: false}
             ];
         }
         const items = [];
