@@ -37,6 +37,38 @@ TEST(ClientChromeCapabilities, TheValuesAreTheProtocolsEnum) {
     EXPECT_EQ(gf::chrome::kWmCapabilitiesSince, 5U);
 }
 
+// The walk over a client's resources reads a resource through CXDGToplevelResource::fromResource only when it can be the
+// window's toplevel and be told: an xdg_toplevel, v5 or later, still holding its user data (null while it is destroyed;
+// fromResource would read through it).
+TEST(ClientChromeCapabilities, OnlyALiveToplevelWithTheEventIsReadDuringTheWalk) {
+    using gf::chrome::capabilityCandidate;
+    EXPECT_TRUE(capabilityCandidate("xdg_toplevel", 5, true));
+    EXPECT_TRUE(capabilityCandidate("xdg_toplevel", 7, true));
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel", 7, false)) << "a resource being destroyed (no user data) is never read";
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel", 4, true)) << "older than v5: it never had the event";
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel", 1, true));
+    EXPECT_FALSE(capabilityCandidate("xdg_surface", 7, true)) << "another interface";
+    EXPECT_FALSE(capabilityCandidate("xdg_popup", 7, true));
+    EXPECT_FALSE(capabilityCandidate("", 7, true));
+    EXPECT_FALSE(capabilityCandidate("xdg_toplevel_extra", 7, true)) << "the exact interface name, no prefix";
+}
+
+// A window is told only when the answer changes, and a window that could not be told is never walked again (every rule
+// change would repeat the walk for nothing).
+TEST(ClientChromeCapabilities, AWindowIsToldOnceAndAnUnreachableOneNeverAgain) {
+    using gf::chrome::CapabilityTell;
+    using gf::chrome::needsTell;
+    CapabilityTell fresh;
+    EXPECT_TRUE(needsTell(fresh, true)) << "a new client-chrome window: told minimize";
+    EXPECT_FALSE(needsTell(fresh, false)) << "a new other window: it already has Hyprland's own capabilities";
+    const CapabilityTell told{.minimizeTold = true, .unreachable = false};
+    EXPECT_FALSE(needsTell(told, true)) << "same answer: nothing sent again on the next rule change";
+    EXPECT_TRUE(needsTell(told, false)) << "the tag went, or the unload: told Hyprland's own capabilities again";
+    const CapabilityTell unreachable{.minimizeTold = false, .unreachable = true};
+    EXPECT_FALSE(needsTell(unreachable, true));
+    EXPECT_FALSE(needsTell(unreachable, false));
+}
+
 #include <cmath>
 #include <set>
 #include <string>

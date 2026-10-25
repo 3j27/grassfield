@@ -45,6 +45,22 @@ namespace gf::chrome {
     // window is client chrome and the plugin bridges its set_minimized (P5).
     std::vector<uint32_t> wmCapabilities(bool clientChrome, bool minimizeBridged);
 
+    // The xdg_toplevel resource is private in CXDGToplevelResource: the glue walks the client's resources. A resource is
+    // handed to CXDGToplevelResource::fromResource only when it is an xdg_toplevel with the event (v5 or later) and still
+    // has its user data: fromResource reads the user data without a check (read from the 0.56.2 binary), and it is null
+    // while the resource is being destroyed (a rule change can run inside another object's destroy chain).
+    bool capabilityCandidate(std::string_view interfaceName, int version, bool hasUserData);
+
+    // What one window was told. `unreachable`: its xdg_toplevel resource was not found (older than v5, or going), so it
+    // cannot be told anything: no further walk for it (every rule change would repeat it).
+    struct CapabilityTell {
+        bool minimizeTold = false;
+        bool unreachable  = false;
+    };
+
+    // Whether the window must be told again for the answer `withMinimize` (the answer changed and it can be told).
+    bool needsTell(const CapabilityTell& tell, bool withMinimize);
+
     // ---- P4: dragging a zoomed window by its own toolbar ----
     // The app starts Hyprland's interactive move (xdg_toplevel.move) from a press on its toolbar. macOS takes a window that
     // fills the screen out of that state at its previous size, under the pointer at the same place in its toolbar row.
