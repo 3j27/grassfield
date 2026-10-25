@@ -47,15 +47,47 @@ TestCase {
         }
     }
 
-    // Mode.qml calls the right rule on the right variables, by name: the runtime test (tests/shell/run_mode_import) runs with most of
-    // them unset, so a misspelled GRASSFIELD_SESION or `fixtures: RunMode.ownBus(...)` would pass there. Each member's RunMode function
-    // and Quickshell.env names, in order, against the table; devValue (the gate of every dev-plumbing variable) is checked the same way.
-    function test_modeCallsTheRightRuleOnTheRightVariables() {
+    // The source of Mode.qml without comments, by the simple rule (`//` to the end of the line, `/* */`), which is exact only if no
+    // string, regex or template literal holds a comment marker: a marker after an odd number of quotes on its line fails, and so
+    // does a backtick, a single quote or any `/` that is left (a regex literal or a division). Mode.qml needs none of them.
+    function modeSource() {
         const request = new XMLHttpRequest();
         request.open("GET", Qt.resolvedUrl("../../shell/lib/Mode.qml"), false);
         request.send();
-        const source = request.responseText.replace(/\/\/[^\n]*/g, "");
+        const src = request.responseText;
+        let out = "";
+        let i = 0;
+        while (i < src.length) {
+            if (src.startsWith("//", i) || src.startsWith("/*", i)) {
+                const lineStart = src.lastIndexOf("\n", i - 1) + 1;
+                compare((src.slice(lineStart, i).match(/"/g) || []).length % 2, 0, "a comment marker inside a string at offset " + i);
+                if (src.startsWith("//", i)) {
+                    const eol = src.indexOf("\n", i);
+                    i = eol < 0 ? src.length : eol;
+                } else {
+                    const end = src.indexOf("*/", i + 2);
+                    verify(end >= 0, "an unterminated block comment at offset " + i);
+                    out += " ";
+                    i = end + 2;
+                }
+                continue;
+            }
+            out += src[i++];
+        }
+        verify(out.indexOf("`") < 0, "Mode.qml holds no template literal");
+        verify(out.indexOf("'") < 0, "Mode.qml holds no single-quoted string");
+        verify(out.indexOf("/") < 0, "Mode.qml holds no regex literal or division outside comments");
+        return out;
+    }
+
+    // Mode.qml calls the right rule on the right variables, by name: the runtime test (tests/shell/run_mode_import) runs with most of
+    // them unset, so a misspelled GRASSFIELD_SESION or `fixtures: RunMode.ownBus(...)` would pass there. Each member's RunMode function
+    // and Quickshell.env arguments, in order and whole, against the table; devValue (the gate of every dev-plumbing variable) is
+    // checked the same way, and every member declaration of every form must be in the table.
+    function test_modeCallsTheRightRuleOnTheRightVariables() {
+        const source = modeSource();
         const table = vectors().modeReads;
+        const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
         const literal = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
         const allowed = {};
         let seen = 0;
@@ -64,8 +96,8 @@ TestCase {
                 continue;
             const row = table[member];
             const pattern = row["function"] === true
-                ? "function " + member + "\\(name\\) \\{\\s*return RunMode\\.(\\w+)\\(([^\\n]*)\\);"
-                : "readonly property \\w+ " + member + ": RunMode\\.(\\w+)\\(([^\\n]*)\\)\\n";
+                ? "function\\s+" + member + "\\s*\\(\\s*name\\s*\\)\\s*\\{\\s*return\\s+RunMode\\.(\\w+)\\(([^\\n]*)\\);"
+                : "readonly\\s+property\\s+\\w+\\s+" + member + "\\s*:\\s*RunMode\\.(\\w+)\\(([^\\n]*)\\)\\s*\\n";
             const m = new RegExp(pattern).exec(source);
             verify(m !== null, "Mode." + member + " is a RunMode call");
             compare(m[1], row.call, "Mode." + member + " calls RunMode." + row.call);
@@ -79,17 +111,23 @@ TestCase {
             seen++;
         }
         verify(seen >= 8, "members checked: " + seen);
-        // The other direction: every member of Mode.qml is in the table (shellDir and refused read no variable and are
-        // pinned here to their exact expression).
+        // The other direction: every member declaration of Mode.qml (property of any form, function, signal) is in the table.
+        // shellDir and refused read no variable and are pinned to their exact expression.
         const plain = {"shellDir": "Quickshell.shellDir", "refused": "RunMode.REFUSED"};
-        const memberRe = /(?:readonly property \w+ (\w+):|function (\w+)\()/g;
+        const declared = {};
+        const memberRe = /\bproperty\s+[\w.<>]+\s+(\w+)|\b(?:function|signal)\s+(\w+)/g;
         let mm;
         while ((mm = memberRe.exec(source)) !== null) {
             const name = mm[1] || mm[2];
-            verify(table[name] !== undefined || plain[name] !== undefined, "Mode." + name + " is not in the modeReads table");
+            declared[name] = (declared[name] || 0) + 1;
+            verify((own(table, name) && name !== "comment") || own(plain, name), "Mode." + name + " is not in the modeReads table");
         }
-        for (const name of Object.keys(plain))
-            verify(source.indexOf("readonly property string " + name + ": " + plain[name] + "\n") >= 0, "Mode." + name + " is " + plain[name]);
+        for (const name of Object.keys(declared))
+            compare(declared[name], 1, "Mode." + name + " is declared once");
+        for (const name of Object.keys(plain)) {
+            const re = new RegExp("readonly\\s+property\\s+string\\s+" + name + "\\s*:\\s*" + plain[name].replace(/\./g, "\\.") + "\\s*\\n");
+            verify(re.test(source), "Mode." + name + " is " + plain[name]);
+        }
         // No other read: every Quickshell.env("...") literal of the file is in the table, and the one dynamic read is devValue's.
         let e2;
         literal.lastIndex = 0;
