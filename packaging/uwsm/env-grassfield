@@ -36,3 +36,10 @@ fi
 if [ -r /usr/share/grassfield/fontconfig/fonts.conf ]; then
     export FONTCONFIG_FILE=/usr/share/grassfield/fontconfig/fonts.conf
 fi
+
+# Text antialiasing of QtQuick (the shell and every Qt Quick app): distance-field text, the default renderer, picks its mode in
+# QSGDefaultContext (qtdeclarative 6.11, qsgdefaultcontext.cpp) as HighQualitySubPixelAntialiasing and never reads fontconfig
+# or the GTK setting, which gave orange/blue fringes (visual audit 2026-10-25, section 2). QSG_DISTANCEFIELD_ANTIALIASING=gray
+# selects grayscale, as ADR-0003 and macOS have it. Qt Widgets and native-rendered text follow FC_RGBA (fonts.conf: none,
+# above) and GTK follows font-antialiasing='grayscale' (dconf, above), so they were already gray.
+export QSG_DISTANCEFIELD_ANTIALIASING=gray
