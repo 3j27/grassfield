@@ -151,7 +151,8 @@ function inRange(rule, value) {
 
 // The value a reader uses for a stored value (any JSON type): a number is clamped to its range, an integer is rounded
 // first, anything else invalid takes the key's default (how macOS reads a defaults value that is out of range: the Dock
-// clamps its tile size). A valid value is returned as it is.
+// clamps its tile size). A colour is lower case. Any other valid value is returned as it is. A string, a boolean or null
+// where a number is expected is never turned into one ("0" and false are not 0: lock.idleMinutes must never read 0 from them).
 function normalize(path, value) {
     const rule = RULES[path];
     if (!rule)
@@ -164,7 +165,9 @@ function normalize(path, value) {
             n = Math.min(rule.max, n);
         return n;
     }
-    return validate(path, value) === "" ? value : DEFAULTS[path];
+    if (validate(path, value) !== "")
+        return DEFAULTS[path];
+    return (rule.type === "tint" || rule.type === "folderColor" || rule.type === "pointerColor") ? value.toLowerCase() : value;
 }
 
 // The normalised value of a dotted path in parsed data; the default when absent or invalid.
@@ -197,6 +200,11 @@ def render_contract(schema, errors):
         "const DEFAULTS = {",
     ]
     out.append(",\n".join(f"    {json.dumps(p)}: {json.dumps(leaf['default'], ensure_ascii=False)}" for p, leaf in settable))
+    out += ["};", "",
+            "// Default of every leaf of the schema, the keys owned by the Dock included (a reader that puts a key back to its",
+            "// default when the file has none).",
+            "const ALL_DEFAULTS = {"]
+    out.append(",\n".join(f"    {json.dumps(p)}: {json.dumps(leaf['default'], ensure_ascii=False)}" for p, leaf in entries if p != "version"))
     out += ["};", "", "// Rule of every settable key.", "const RULES = {"]
     out.append(",\n".join(f"    {json.dumps(p)}: {json.dumps(rule_of(p, leaf, errors), ensure_ascii=False)}" for p, leaf in settable))
     out += ["};"]
