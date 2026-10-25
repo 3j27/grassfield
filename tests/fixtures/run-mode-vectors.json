@@ -1,5 +1,15 @@
 {
 "comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
+"modeReads": {
+ "comment": "The environment variables each shell/lib/Mode.qml property reads, in argument order (checked statically by tests/unit/tst_runmode.qml: the runtime tests run with most of them unset, so a misspelled name would not show there). The C++ side lists the same names in apps/runmode.h from M6.",
+ "dev": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION"],
+ "session": ["GRASSFIELD_SESSION"],
+ "fixtures": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_VISUAL_FIXTURES"],
+ "ownBus": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_PRIVATE_BUS"],
+ "updateNotices": ["GRASSFIELD_SESSION"],
+ "configDir": ["GRASSFIELD_CONFIG_HOME", "XDG_CONFIG_HOME", "HOME"],
+ "stateDir": ["GRASSFIELD_STATE_HOME", "XDG_STATE_HOME", "HOME"]
+},
 "modes": [
  {"name": "nothing set", "env": {}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
  {"name": "dev session", "env": {"GRASSFIELD_DEV": "1"}, "dev": true, "session": false, "fixtures": false, "ownBus": false, "updateNotices": false},

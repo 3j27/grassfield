@@ -47,6 +47,41 @@ TestCase {
         }
     }
 
+    // Mode.qml reads the right variables, by name: the runtime test (tests/shell/run_mode_import) runs with most of them unset, so
+    // a misspelled GRASSFIELD_SESION would pass there. Each property's Quickshell.env names, in order, against the table.
+    function test_modeReadsTheRightVariables() {
+        const request = new XMLHttpRequest();
+        request.open("GET", Qt.resolvedUrl("../../shell/lib/Mode.qml"), false);
+        request.send();
+        const source = request.responseText.replace(/\/\/[^\n]*/g, "");
+        const table = vectors().modeReads;
+        const allowed = {};
+        let seen = 0;
+        for (const prop of Object.keys(table)) {
+            if (prop === "comment")
+                continue;
+            const m = new RegExp("readonly property \\w+ " + prop + ": RunMode\\.(\\w+)\\(([^\\n]*)\\)\\n").exec(source);
+            verify(m !== null, "Mode." + prop + " is a RunMode call");
+            const names = [];
+            const re = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
+            let e;
+            while ((e = re.exec(m[2])) !== null)
+                names.push(e[1]);
+            compare(names.join(","), table[prop].join(","), "Mode." + prop + " reads");
+            table[prop].forEach(n => allowed[n] = true);
+            seen++;
+        }
+        verify(seen >= 7, "properties checked: " + seen);
+        // No other read: every Quickshell.env("...") literal of the file is in the table, and the one dynamic read is devValue's.
+        const re2 = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
+        let e2;
+        while ((e2 = re2.exec(source)) !== null)
+            verify(allowed[e2[1]] === true, "unexpected read of " + e2[1]);
+        const dynamic = (source.match(/Quickshell\.env\([^)]*\)/g) || []).filter(c => !/^Quickshell\.env\("[A-Za-z0-9_]+"\)$/.test(c));
+        compare(dynamic.length, 1, "one dynamic read");
+        verify(dynamic[0].indexOf('"GRASSFIELD_" + name') >= 0, "the dynamic read is GRASSFIELD_<name>: " + dynamic[0]);
+    }
+
     // Only exact strings open a gate, whatever else the caller passes.
     function test_closedWithoutExactDev() {
         const values = [undefined, null, "", "0", "true", "yes", " 1", "1 ", "01", 1, true];
