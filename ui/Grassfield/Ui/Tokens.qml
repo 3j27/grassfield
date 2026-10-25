@@ -588,6 +588,8 @@ QtObject {
     readonly property int panelAlertIconFrame: 64
     // estimate: glyph inside the 64 alert icon frame [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertIconGlyph: 48
+    // alert icon and text 22.9-23.8 from the alert edge, its buttons 16 (macOS 26 composites; unchanged in the macOS 27 captures) [ref: docs/audits/visual-tahoe-2026-10-25.md § Alerts and sheets — alert close]
+    readonly property int panelAlertTextInset: 24
     // F1 gap 13: sheet padding 20 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelSheetPadding: 20
     // F1 gap 13: sheet footer 64 tall under a full-width hairline [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]

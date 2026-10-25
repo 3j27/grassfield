@@ -507,7 +507,7 @@ TestCase {
         runTint(32, "#E25AA1");
     }
 
-    // The accent fill of a selected row (Search; Force Quit rows are 18 px and never in a mode): the ink follows the row's text colour (TintedIcon.overAccent), so
+    // The selection fill of a selected row (Files; Force Quit rows are 18 px and never in a mode): the ink follows the row's text colour (TintedIcon.overAccent), so
     // the plate and the ink are the opposite of the fill. The plate pixel (between the rim and the artwork) has at least 4.5:1 against the
     // accent in Clear (the old design measured 2.77:1 on main's 5.61:1 there) and 2.5:1 in Dark and Tinted (their plates are the mode's own).
     function test_a2_accentRow() {
@@ -520,8 +520,8 @@ TestCase {
         testCase.iconSize = 32;
         for (const dark of [true, false]) {
             Appearance.dark = dark;
-            const accent = Qt.color(Appearance.colors.accent);
-            const name = `32px ${dark ? "dark" : "light"} accent row ${Appearance.colors.accent}`;
+            const accent = Qt.color(Appearance.colors.selection);
+            const name = `32px ${dark ? "dark" : "light"} selection row ${Appearance.colors.selection}`;
             testCase.darkPass = dark;
             testCase.wallpaperPass = false;
             testCase.panelColor = accent;

@@ -371,8 +371,8 @@ Variants {
                             height: parent.height
                             verticalAlignment: TextInput.AlignVCenter
                             color: Appearance.colors.text
-                            selectionColor: Appearance.colors.accent
-                            selectedTextColor: Appearance.colors.accentText
+                            selectionColor: Appearance.highlight
+                            selectedTextColor: Appearance.highlightText
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyBodySize
                             clip: true
