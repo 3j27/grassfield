@@ -214,7 +214,7 @@ vs_spawn() {
   vs_track "$!"
 }
 
-# Known state: no popups, no clients, dark, transparency 0.25, motion reduced, pointer parked on GF-REF.
+# Known state: no popups, no clients, dark (or VISUAL_APPEARANCE), transparency 0.25, motion reduced, pointer parked on GF-REF.
 vs_reset() {
   # VISUAL_APPEARANCE: the F1 audit (f1-audit.sh) captures the scenarios in the light appearance of the references.
   local appearance=${1:-${VISUAL_APPEARANCE:-dark}} transparency=${2:-0.25}

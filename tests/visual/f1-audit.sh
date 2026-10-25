@@ -10,8 +10,12 @@ set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
-only=""
-[[ ${1:-} == --only ]] && only=${2:?--only needs a comma list}
+only="" mode=all
+case ${1:-} in
+  --only) only=${2:?--only needs a comma list} ;;
+  # Internal: one extra state in its own process, so lib.sh's set -e applies (in run's `if` it would be ignored).
+  --extra) mode=extra ;;
+esac
 export VISUAL_APPEARANCE=light VISUAL_LANG=en VISUAL_SHOTS=$root/.dev/f1-audit
 mkdir -p "$VISUAL_SHOTS"
 failed=0
@@ -28,7 +32,7 @@ run() {
   fi
 }
 
-# extra NAME: one of the states below, in a subshell with the visual helpers.
+# extra NAME: one of the states below, in a subshell with the visual helpers. Started as `f1-audit.sh --extra NAME`.
 extra() {
   (
     # shellcheck source=lib.sh
@@ -71,13 +75,24 @@ extra() {
   )
 }
 
+if [[ $mode == extra ]]; then
+  extra "${2:?--extra needs a name}"
+  exit
+fi
+
+extras="dock-tooltip dock-menu widgets desktop-menu osd settings-desktop settings-notifications settings-wifi settings-about"
+known=" $(cd "$here/scenarios" && ls -- *.sh | sed 's/\.sh$//' | tr '\n' ' ')$extras f2c-banners f2c-search f2c-alerts f2c-gallery "
+for n in ${only//,/ }; do
+  [[ $known == *" $n "* ]] || { echo "f1-audit: unknown name $n (known:$known)" >&2; exit 2; }
+done
+
 for f in "$here"/scenarios/*.sh; do
   n=$(basename "$f" .sh)
   [[ $n == lock ]] && continue
   run "$n" "$f"
 done
-for n in dock-tooltip dock-menu widgets desktop-menu osd settings-desktop settings-notifications settings-wifi settings-about; do
-  run "$n" extra "$n"
+for n in $extras; do
+  run "$n" "$here/f1-audit.sh" --extra "$n"
 done
 for s in banners search alerts gallery; do
   run "f2c-$s" "$here/f2c.sh" "$s" f1audit
