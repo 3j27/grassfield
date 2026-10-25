@@ -23,7 +23,14 @@ case " $* " in *" -w "*) printf '%s\n' "${FAKE_ANSWER:-}" ;; esac
 exit 0
 SH
 printf '#!/bin/sh\necho "systemd-run $*" >>"$FAKE_LOG"\n' >"$tmp/bin/systemd-run"
-printf '#!/bin/sh\necho "gdbus $*" >>"$FAKE_LOG"\n' >"$tmp/bin/gdbus"
+cat >"$tmp/bin/gdbus" <<'SH'
+#!/bin/sh
+# GetNameOwner answers with the owner kept in $FAKE_OWNER_FILE (not logged); everything else is logged.
+case " $* " in
+  *GetNameOwner*) [ -s "${FAKE_OWNER_FILE:-/nonexistent}" ] && { printf "('%s',)\n" "$(cat "$FAKE_OWNER_FILE")"; exit 0; }; exit 1 ;;
+esac
+echo "gdbus $*" >>"$FAKE_LOG"
+SH
 printf '#!/bin/sh\nexit 0\n' >"$tmp/bin/uwsm-app"
 printf '#!/bin/sh\ncat "$FAKE_JOURNAL"\n' >"$tmp/bin/journalctl"
 chmod +x "$tmp/bin"/*
@@ -80,9 +87,15 @@ class W(m.Watcher):
     def __init__(self, *a, **k): super().__init__(*a, **k); self.out = []
     def send(self, job, now): self.out.append((job["info"]["name"], job["info"]["key"], job["info"]["desktop_id"]))
 
+def fresh(tree=True):
+    """An empty cgroup2 tree (its cgroup.controllers file is what says the tree is there), or none at all."""
+    shutil.rmtree(tmp + "/cg", ignore_errors=True)
+    if tree:
+        os.makedirs(tmp + "/cg"); open(tmp + "/cg/cgroup.controllers", "w").write("cpu memory pids\n")
+
 def run(entry, script, env=env_en, times=range(0, 13)):
     """script: {time: (cgroup, state)} applied before the step at that time. Returns (what was sent, pending left)."""
-    shutil.rmtree(tmp + "/cg", ignore_errors=True)   # every cgroup is gone unless the script says otherwise
+    fresh()   # every cgroup is gone unless the script says otherwise
     w = W(uid, env, tmp + "/cg"); w.add(entry, 0.0)
     for t in times:
         if t in script:
@@ -155,7 +168,7 @@ print("scope-names", m.parse_scope("app-Hyprland-gtk\\x2dlaunch-27c3252d.scope")
 print("traversal", [m.desktop_entry(a, env_en) for a in ("../x", "a/b", "", ".hidden", "x..y", "spotify\n")])
 # 8. Dedupe key = desktop id (or the program), so two gtk-launch scopes of different programs both get a notice, one program once.
 w = W(uid, env_en, tmp + "/cg")
-shutil.rmtree(tmp + "/cg", ignore_errors=True)
+fresh()
 for i, (a, x) in enumerate([("gtk\\x2dlaunch", "alpha"), ("gtk\\x2dlaunch", "beta"), ("spotify", "spotify"), ("spotify", "spotify")]):
     unit = "app-Hyprland-%s-%d.scope" % (a, 100 + i)
     e = mod(gpu, COREDUMP_EXE="/usr/bin/" + x, COREDUMP_CGROUP=CG + unit, COREDUMP_USER_UNIT=unit)
@@ -170,6 +183,30 @@ led = m.Ledger(); print("cap", [led.reserve("k%d" % i, 2000.0 + i) for i in rang
 print("under_cap", m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 100.0), m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 3700.0), m.under_cap([0.0] * 5, 100.0))
 # A scope that stays populated is dropped at the deadline (nothing pending is kept).
 print("pending-after", run(gpu, {0: [(SPOTIFY, "populated")]})[1], run(gpu, {0: [(SPOTIFY, "gone")]})[1])
+# Entries without _EXE (2 of 127 real ones) are trusted by their coredump unit; a user-manager unit is refused either way.
+noexe = {k: v for k, v in gpu.items() if k != "_EXE"}
+res["no-exe"] = run(noexe, {0: [(SPOTIFY, "gone")]})
+res["no-exe-user-unit"] = run(mod(noexe, _SYSTEMD_UNIT="user@%d.service" % uid), {})
+res["no-exe-no-unit"] = run({k: v for k, v in noexe.items() if k != "_SYSTEMD_UNIT"}, {})
+res["foreign-exe"] = run(mod(gpu, _EXE="/usr/bin/evil"), {})
+# Chromium-based apps run their browser process in a scope named after the application id (not a desktop file id): the crashed
+# binary finds the entry.
+desktop("chromium.desktop", "Name=Chromium\nName[fr]=Chromium fr\nExec=chromium %U\n")
+def chrome(appid, exe, env=env_en):
+    u = "app-Hyprland-%s-77.scope" % appid
+    e = mod(gpu, COREDUMP_EXE="/usr/lib/chromium/" + exe, COREDUMP_CGROUP=CG + u, COREDUMP_USER_UNIT=u)
+    return one(run(e, {0: [(CG + u, "gone")]}, env)[0])
+print("chromium", chrome("org.chromium.Chromium", "chromium"), chrome("org.chromium.Chromium", "chromium", env_fr), chrome("org.other.App", "other-bin"))
+# A missing cgroup2 tree is unknown, never "everything quit"; a tree without the scope is gone.
+fresh(tree=False)
+w = W(uid, env_en, tmp + "/cg"); w.add(gpu, 0.0); w.step(0.0); w.step(11.0)
+print("no-tree", w.out, len(w.pending), m.scope_state(SPOTIFY, tmp + "/cg"))
+fresh(); print("tree", m.scope_state(SPOTIFY, tmp + "/cg"))
+# The Flatpak user installation is under the data home (XDG_DATA_HOME/flatpak/exports/share), not next to it.
+xh = tmp + "/xh"; os.makedirs(xh + "/flatpak/exports/share/applications")
+open(xh + "/flatpak/exports/share/applications/org.f.App.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Flat App\nExec=flatpak run org.f.App\n")
+env_fp = {"XDG_DATA_HOME": xh, "XDG_DATA_DIRS": tmp + "/none", "LANG": "C"}
+print("flatpak-path", xh + "/flatpak/exports/share" in m.data_dirs(env_fp), not any(".." in d for d in m.data_dirs(env_fp)), m.desktop_entry("org.f.App", env_fp))
 for k, v in res.items():
     print("case", k, one(v[0]))
 
@@ -197,6 +234,21 @@ def drive(w, limit=8.0):
         w.step(time.monotonic()); time.sleep(0.05)
 def jobinfo(name, desktop_id, key=None): return {"info": {"name": name, "key": key or name, "desktop_id": desktop_id, "signal": "SIGSEGV"}, "at": 1.0, "key": key or name, "attempts": 0, "ready": 0.0}
 def logged(): return open(log).read().splitlines()
+# The id of a notice belongs to the server that showed it: closed by id only while the same server owns the name.
+ownerfile = tmp + "/owner"; os.environ["FAKE_OWNER_FILE"] = ownerfile
+def wait_ends(owner_after, owner_before=":1.7"):
+    m.WAIT_SECONDS = 0.8
+    open(ownerfile, "w").write(owner_before) if owner_before else (os.path.exists(ownerfile) and os.remove(ownerfile))
+    reset("", "5"); w = m.Watcher(uid, env_en)
+    w.send(jobinfo("Spotify", "spotify.desktop"), time.monotonic())
+    time.sleep(0.2)
+    open(ownerfile, "w").write(owner_after) if owner_after else (os.path.exists(ownerfile) and os.remove(ownerfile))
+    drive(w, 4.0)
+    return len(w.waiting), any(x.startswith("gdbus call") and "CloseNotification 42" in x for x in logged())
+print("owner", wait_ends(":1.7"), wait_ends(":1.9"), wait_ends(None), wait_ends(":1.7", None))
+m.WAIT_SECONDS = 600.0
+if mode == "owner":
+    sys.exit(0)
 reset("reopen"); w = m.Watcher(uid, env_fr); w.send(jobinfo("Spotify", "spotify.desktop"), time.monotonic()); drive(w); l = logged()
 print("reopen", len(l), "-p -w -A reopen=Rouvrir" in l[0], "« Spotify » a quitt" in l[0], "(SIGSEGV)" in l[0], l[1].startswith("systemd-run --user --collect --quiet -- ") and l[1].endswith("uwsm-app -- spotify.desktop"))
 reset(""); w = m.Watcher(uid, env_en); w.send(jobinfo("Spotify", "spotify.desktop"), time.monotonic()); drive(w); l = logged()
@@ -222,7 +274,7 @@ for t in range(100, 110): w.step(float(t))
 print("send-fails", len(w.sending), "k" in w.ledger.last)
 os.environ["PATH"] = saved
 # The loop never waits for a notice: 3 s notify-send, two apps, junk lines: main() is done in under 2 s and both are shown.
-shutil.rmtree(tmp + "/cg", ignore_errors=True)
+fresh()
 b = mod(gpu, COREDUMP_CGROUP=CG + "app-Hyprland-foot-77.scope", COREDUMP_USER_UNIT="app-Hyprland-foot-77.scope", COREDUMP_EXE="/usr/bin/foot")
 open(tmp + "/journal", "w").write(json.dumps(gpu) + "\nnot json\n" + json.dumps(b) + "\n[]\n")
 os.environ["FAKE_JOURNAL"] = tmp + "/journal"; reset("", "3")
@@ -230,7 +282,7 @@ t0 = time.monotonic(); rc = m.main(); elapsed = time.monotonic() - t0
 time.sleep(1.0)
 print("loop", rc, elapsed < 2.0, sum(x.startswith("notify-send") for x in logged()))
 PY
-decisions() { python3 -I "$tmp/test.py" "$root" "$tmp" "$1" decisions 2>&1 || true; }
+decisions() { python3 -I "$tmp/test.py" "$root" "$tmp" "$1" "${2:-decisions}" 2>&1 || true; }
 out=$(python3 -I "$tmp/test.py" "$root" "$tmp" "$helper" all 2>&1) || { echo "$out"; echo "FAIL: the crash-watch test program ran"; exit 1; }
 has() { grep -qxF -- "$1" <<<"$out"; }
 
@@ -243,7 +295,11 @@ expect=(
   "case forged-exe None" "case forged-unit None" "case forged-no-trusted None" "case forged-id None" "case other-coredump-uid None"
   "case uid-is-coredump-uid ('Spotify', 'spotify.desktop', 'spotify.desktop')" "case not-app-slice None" "case unit-mismatch None" "case dotdot None"
   "bad none-announced" "pending-after 0 0"
+  "case no-exe ('Spotify', 'spotify.desktop', 'spotify.desktop')" "case no-exe-user-unit None" "case no-exe-no-unit None" "case foreign-exe None"
+  "chromium ('Chromium', 'chromium.desktop', 'chromium.desktop') ('Chromium fr', 'chromium.desktop', 'chromium.desktop') ('other-bin', 'other-bin', None)"
+  "no-tree [] 0 unknown" "tree gone" "flatpak-path True True ('org.f.App.desktop', 'Flat App')"
 )
+expect_owner=("owner (0, True) (0, False) (0, False) (0, False)")
 desc="a command run from a terminal (qml --version in foot, real dump 128224): the terminal's scope is populated, no notice"
 check has "case terminal-child None"
 desc="a helper of a running app (Spotify GPU process, real dump 2602): no notice while the scope holds processes, also not once the wait is over"
@@ -265,6 +321,16 @@ desc="a cgroup outside app.slice, with a unit that does not match COREDUMP_USER_
 check bash -c 'for c in not-app-slice unit-mismatch dotdot; do grep -qxF "case $c None" <<<"$1" || exit 1; done' _ "$out"
 desc="unknown or malformed fields (a superscript digit, lists, None, ints) never announce and never raise"
 check has "bad none-announced"
+desc="an entry without _EXE is trusted by its systemd-coredump unit; a user-manager unit, no unit, or another _EXE is refused"
+check has "case no-exe ('Spotify', 'spotify.desktop', 'spotify.desktop')"
+check bash -c 'for c in no-exe-user-unit no-exe-no-unit foreign-exe; do grep -qxF "case $c None" <<<"$1" || exit 1; done' _ "$out"
+desc="Chromium-based apps (scope named after the application id, no such desktop file): the crashed binary finds the entry; unknown stays the program name"
+check has "chromium ('Chromium', 'chromium.desktop', 'chromium.desktop') ('Chromium fr', 'chromium.desktop', 'chromium.desktop') ('other-bin', 'other-bin', None)"
+desc="a missing cgroup2 tree is unknown (silence), a tree without the scope is gone"
+check has "no-tree [] 0 unknown"
+check has "tree gone"
+desc="the Flatpak user installation is XDG_DATA_HOME/flatpak/exports/share (no '..'), and its entries are found"
+check has "flatpak-path True True ('org.f.App.desktop', 'Flat App')"
 desc="the Dock's scopes (the binary's name) resolve: by id, by Exec binary (nautilus, grassfield-files), by StartupWMClass; localized"
 check has "by-id ('Spotify', 'spotify.desktop', 'spotify.desktop') ('Spotify fr', 'spotify.desktop', 'spotify.desktop') ('Foot', 'foot.desktop', 'foot.desktop')"
 check has "by-exec ('Files (Nautilus)', 'org.gnome.Nautilus.desktop', 'org.gnome.Nautilus.desktop') ('Fichiers', 'org.gnome.Nautilus.desktop', 'org.gnome.Nautilus.desktop') ('Grassfield Files', 'grassfield-files.desktop', 'grassfield-files.desktop')"
@@ -294,14 +360,16 @@ check has "bad-id 1 False"
 desc="at most 2 notices wait for a click (4 tasks each); the third is shown without the button; the wait ends by closing the notice by id"
 check has "max-waiting 2 3 2"
 check has "wait-ends 0 True"
+desc="the notice is closed by id only while the server that showed it still owns the name (not after a restart, not when unknown)"
+check has "owner (0, True) (0, False) (0, False) (0, False)"
 desc="a notify-send that cannot start is retried a bounded number of times, then the dedupe slot is freed"
 check has "send-fails 0 False"
 desc="the loop is not blocked by notices that wait for a click (3 s notify-send, two apps, junk lines: done in under 2 s, both shown)"
 check has "loop 1 True 2"
 
 # Mutation tests: every mutant of a rule must make the decisions fail.
-mutate() { # name, python regex, replacement
-  local name=$1 dest=$tmp/mutant-$1
+mutate() { # name, text to replace, replacement, optional mode (decisions | owner)
+  local name=$1 dest=$tmp/mutant-$1 mode=${4:-decisions}
   python3 -I - "$helper" "$dest" "$2" "$3" <<'PY'
 import sys
 src, dest, old, new = sys.argv[1:5]
@@ -310,19 +378,22 @@ assert old in text, old
 open(dest, "w").write(text.replace(old, new, 1))
 PY
   local result
-  result=$(decisions "$dest")
-  for e in "${expect[@]}"; do grep -qxF -- "$e" <<<"$result" || return 0   # a decision line differs: the mutant is caught
+  result=$(decisions "$dest" "$mode")
+  local -n lines=expect
+  [[ $mode == owner ]] && local -n lines=expect_owner
+  for e in "${lines[@]}"; do grep -qxF -- "$e" <<<"$result" || return 0   # a decision line differs: the mutant is caught
   done
   echo "MUTANT SURVIVED: $name" >&2
   return 1
 }
-while IFS='|' read -r name old new; do
+while IFS='|' read -r name old new mode; do
   desc="mutation: $name is caught"
-  check mutate "$name" "$old" "$new"
+  check mutate "$name" "$old" "$new" "$mode"
 done <<'EOF'
 drop-trusted-check|not isinstance(entry, dict) or not trusted(entry)|not isinstance(entry, dict)
-drop-exe-check|text_of(entry.get("_EXE")) in COREDUMP_EXES and |True and
-drop-unit-check|and text_of(entry.get("_SYSTEMD_UNIT")).startswith("systemd-coredump@")|and True
+drop-exe-check|(exe == "" or exe in COREDUMP_EXES)|True
+exe-absent-refused|exe == "" or |
+drop-unit-check|text_of(entry.get("_SYSTEMD_UNIT")).startswith("systemd-coredump@") and |True and 
 drop-message-id-check|and text_of(entry.get("MESSAGE_ID")) == COREDUMP_MESSAGE_ID|and True
 drop-app-slice-check|user@%d.service/app.slice/"|user@%d.service/"
 drop-user-check|number(entry.get("COREDUMP_UID")) != uid or|False or
@@ -331,7 +402,12 @@ populated-counts-as-quit|if state in ("gone", "empty"):|if state in ("gone", "em
 unknown-counts-as-quit|if state in ("gone", "empty"):|if state in ("gone", "empty", "unknown"):
 no-deadline|elif now >= item["deadline"]:|elif False:
 ignore-populated-flag|{"0": "empty", "1": "populated"}.get(line.split()[1], "unknown")|"empty"
-dir-without-events-is-gone|return "unknown" if os.path.isdir(base) else "gone"|return "gone"
+dir-without-events-is-gone|if os.path.isdir(base) or not os.path.isfile(|if not os.path.isfile(
+missing-tree-is-gone|if os.path.isdir(base) or not os.path.isfile((root or CGROUP_ROOT) + "/cgroup.controllers"):|if os.path.isdir(base):
+drop-exe-fallback|if found is None and cand["exe"] != cand["appid"]:|if False:
+flatpak-path-reverted|os.path.join(home, "flatpak/exports/share")|os.path.join(home, "../flatpak/exports/share")
+drop-owner-check|if notice_id and owner and server_owner() == owner:|if notice_id:|owner
+owner-not-recorded|self.owner = server_owner()  # who showed it: ids are only good for that server|self.owner = ":1.7"|owner
 drop-unit-match|text_of(entry.get("COREDUMP_USER_UNIT")).strip() not in ("", unit)|False
 drop-exec-index|appid in (binary, os.path.basename(keys.get("TryExec", ""))) or|False or
 drop-generic-rule|shown = [m for m in shown if m[2]]|shown = shown
