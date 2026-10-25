@@ -12,7 +12,14 @@ modules. `Quickshell.Hyprland` and `rawEvent` belong to platform.
 
 Rule choices: a feature-to-feature edge is a violation only when it lies on a cycle of the feature graph once every layer
 violation is removed from that graph. A raw-event violation is reported once per file, on the `import Quickshell.Hyprland`
-line (on the first rawEvent use when the file has no such import).
+line (on the first line that mentions `rawEvent`, `onRawEvent` or `Quickshell.Hyprland` when the file has no such import).
+
+No JavaScript tokenizer. Imports are read from the file header only (QML imports and pragmas, JS `.import` and `.pragma`, can
+only come before the root object): the header is every line up to the first one that is not blank, a comment, an import or a
+pragma, and comments are stripped there with the simple rule (`//` to the end of the line, `/* */`), exact where no string,
+regex or template literal can occur. An import-like line after the header is a violation of its own. Raw Hyprland events are
+searched in the WHOLE file text with no comment stripping: a mention in a comment counts as a use, which can only cause a
+false positive (reword the comment or mark the line), never a missed violation.
 
 A module is a directory with a qmldir (`qs.overlay.controlcenter` is shell/overlay/controlcenter); a directory without one
 belongs to its nearest ancestor module; shell/shell.qml and the other files of shell/ itself are the composition root.
@@ -24,7 +31,7 @@ only on the `import qs.notifications` line of shell/security/idle/SleepInhibitor
 accepted only in shell/security/lock and shell/security/idle, only on a raw Hyprland event line: the lock and idle modules).
 An unknown tag, a tag where it is not accepted, and a marker on a line that is not a violation are failures, so no marker
 outlives its violation. A marker covers exactly one import: a violating line that holds another import is a failure.
-Comments (block and line) are stripped before matching, so a commented import is no import.
+A commented-out import in the header is no import.
 
 Limit: a test tree whose module is made of file links plus a `qmldir` link (no directory link, like tests/security/lock_surfaces/launchpad)
 is not covered by the test-tree `lib` check; only a link to a module directory is.
@@ -42,7 +49,7 @@ ROOT_LAYER = 5
 TAGS = ("GF-087", "GF-050", "ADR-0021 security")
 MARKER = re.compile(r"//\s*layering-exception:\s*(.*?)\s*$")
 IMPORT = re.compile(r"""^\s*\.?import\s+(?:["']([^"']+)["']|(qs(?:\.\w+)+)\b|(Quickshell\.Hyprland)\b)""")
-RAW_EVENT = re.compile(r"\b(?:on)?[rR]awEvent\b")
+RAW_EVENT = re.compile(r"\b(?:on)?[rR]awEvent\b|Quickshell\.Hyprland")
 SECURITY_ALLOWED = {"lib", "services"}
 PERMANENT_DIRS = ("security/lock/", "security/idle/")  # the only places the permanent tag is accepted (not polkit)
 GF050_FILE = "security/idle/SleepInhibitor.qml"
@@ -51,193 +58,6 @@ GF050_IMPORT = "qs.notifications"
 
 GENERIC_IMPORT = re.compile(r"^\s*\.?import\s+\S")
 MULTI = "multi-import line"
-
-
-REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
-REGEX_KEYWORDS = {"return", "typeof", "case", "in", "of", "delete", "void", "throw", "new", "else", "do", "yield", "await"}
-IDENT = re.compile(r"[\w$]")
-
-
-def regex_end(text, i):
-    """Index just past the regex literal that starts at text[i] (a `/`), or -1 when it is not one: the literal is a single
-    line (no closing `/` before the newline: -1), a backslash escapes the next character, a `/` inside `[...]` does not close it,
-    and it must be followed (after its flags) by something other than a quote, a name or a number (`a++ / 2 + "/"`)."""
-    j, in_class, n = i + 1, False, len(text)
-    while j < n and text[j] != "\n":
-        c = text[j]
-        if c == "\\":
-            j += 2
-            continue
-        if c == "[":
-            in_class = True
-        elif c == "]":
-            in_class = False
-        elif c == "/" and not in_class:
-            k = j + 1
-            while k < n and text[k].isalpha():
-                k += 1
-            if k < n and (text[k] in "\"'`" or text[k].isdigit() or text[k] in "$_"):
-                return -1
-            return j + 1
-        j += 1
-    return -1
-
-
-CODE_SPECIAL = re.compile(r"[\"'`/{}]")
-STRING_SPECIAL = {'"': re.compile(r'[\\\n"]'), "'": re.compile(r"[\\\n']")}
-TEMPLATE_SPECIAL = re.compile(r"[\\`$]")
-TRAILING_WORD = re.compile(r"([\w$]+)\s*$")
-
-
-def strip_comments(text):
-    """The text without block and line comments (strings, template literals and regex literals respected), line
-    structure unchanged: a commented import is no import, and `/* x */ import qs.desktop` is one.
-
-    A `/` starts a regex literal when the last token is an operator, an opening bracket, a separator or a
-    regex-introducing keyword (`return`, `typeof`, ...), or when it is the first token; after a name, a number, `)`, `]`, a
-    string or a postfix `++`/`--` it is a division. Known limit: `if (ok) /re/.test(s)` reads the `/` after `)` as a division.
-    When the text is ambiguous nothing is stripped (a missed comment only causes a false positive, never a missed violation):
-    a `/*` or `//` right after a backslash, and a `/*` with no closing `*/`, are not comments. `p.replace(/\\/*$/, "")` holds none.
-
-    Template literals nest: `${...}` is code again, and a backtick inside it opens a template of its own. Plain runs of
-    code and string text are copied in one piece, so the cost is that of a few regex searches per file."""
-    out, i, n = [], 0, len(text)
-    modes = []  # innermost last: ("s", quote) string, ("t",) template literal, ("e", depth) code inside `${ }`
-    last = prev = None  # the last two significant characters of code
-    word, in_word = "", False  # the identifier that ends the code so far (survives spaces and comments)
-    while i < n:
-        top = modes[-1] if modes else None
-        if top is not None and top[0] == "s":
-            m = STRING_SPECIAL[top[1]].search(text, i)
-            j = n if m is None else m.start()
-            if j > i:
-                out.append(text[i:j])
-                i = j
-                continue
-            c = text[i]
-            if c == "\\" and i + 1 < n:
-                out.append(text[i:i + 2])
-                i += 2
-                continue
-            out.append(c)
-            if c != "\\":
-                modes.pop()  # the closing quote, or a newline (an unterminated string ends with its line)
-            i += 1
-            continue
-        if top is not None and top[0] == "t":
-            m = TEMPLATE_SPECIAL.search(text, i)
-            j = n if m is None else m.start()
-            if j > i:
-                out.append(text[i:j])
-                i = j
-                continue
-            c = text[i]
-            if c == "\\" and i + 1 < n:
-                out.append(text[i:i + 2])
-                i += 2
-            elif text.startswith("${", i):
-                out.append("${")
-                modes.append(("e", 0))
-                last = prev = None
-                in_word = False
-                i += 2
-            else:
-                out.append(c)
-                if c == "`":
-                    modes.pop()
-                    last, prev, in_word = c, last, False
-                i += 1
-            continue
-        # code (top level or inside `${ }`): copy the run up to the next character that can change the state
-        m = CODE_SPECIAL.search(text, i)
-        j = n if m is None else m.start()
-        if j > i:
-            chunk = text[i:j]
-            out.append(chunk)
-            t = TRAILING_WORD.search(chunk)
-            body = chunk.rstrip()
-            if body:
-                ps = _prev_sig(body)
-                prev = ps if ps is not None else last
-                last = body[-1]
-            if t:
-                run = t.group(1)
-                word = word + run if (in_word and t.start(1) == 0) else run
-                in_word = t.end(1) == len(chunk)
-            else:
-                in_word = False
-            i = j
-            continue
-        c = text[i]
-        if top is not None and c in "{}":
-            if c == "{":
-                modes[-1] = ("e", top[1] + 1)
-            elif top[1] == 0:
-                modes.pop()
-                out.append(c)
-                last, prev, in_word = '"', last, False  # the template goes on; a value just ended
-                i += 1
-                continue
-            else:
-                modes[-1] = ("e", top[1] - 1)
-        if c in "\"'":
-            modes.append(("s", c))
-            out.append(c)
-            last, prev, in_word = c, last, False
-        elif c == "`":
-            modes.append(("t",))
-            out.append(c)
-            last, prev, in_word = c, last, False
-        elif c in "{}":
-            out.append(c)
-            last, prev, in_word = c, last, False
-        elif text.startswith("//", i) and text[i - 1:i] != "\\":
-            while i < n and text[i] != "\n":
-                i += 1
-            continue
-        elif text.startswith("/*", i) and text[i - 1:i] != "\\" and text.find("*/", i + 2) >= 0:
-            j = text.find("*/", i + 2) + 2
-            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
-            i = j
-            continue
-        elif last is None or (last in REGEX_AFTER and not (last in "+-" and prev == last)) or (IDENT.match(last) and word in REGEX_KEYWORDS):
-            j = regex_end(text, i)
-            if j > 0:
-                out.append(text[i:j])
-                last, prev, in_word = ")", last, False
-                i = j
-                continue
-            out.append(c)
-            last, prev, in_word = c, last, False
-        else:
-            out.append(c)  # a division
-            last, prev, in_word = c, last, False
-        i += 1
-    return "".join(out)
-
-
-def _prev_sig(body):
-    """The significant character before the last one of `body` (which ends in a significant character)."""
-    k = len(body) - 2
-    while k >= 0 and body[k].isspace():
-        k -= 1
-    return body[k] if k >= 0 else None
-
-
-_STRIPPED = {}
-
-
-def stripped_lines(path):
-    """The comment-stripped lines of a file, tokenised once per version of the file (path, mtime, size)."""
-    st = os.stat(path)
-    key = (str(path), st.st_mtime_ns, st.st_size)
-    if key not in _STRIPPED:
-        _STRIPPED[key] = strip_comments(path.read_text(encoding="utf-8")).splitlines()
-    return _STRIPPED[key]
-
-
-def code_lines(path):
-    return stripped_lines(path)
 
 
 HEADER_LINE = re.compile(r"^\s*\.?(?:import|pragma)\s")
@@ -370,13 +190,12 @@ def scan(shell):
                     dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
                     if dst is not None:
                         out.append((path, n, line, src, "module", dst, count))
-        for n, code in enumerate(code_lines(path), 1):
-            if n < body:
-                continue
-            line = originals[n - 1]
-            if any(GENERIC_IMPORT.match(seg) for seg in code.split(";")):
+        for n, line in enumerate(originals, 1):
+            if n >= body and any(GENERIC_IMPORT.match(seg) for seg in line.split(";")):
                 out.append((path, n, line, src, "late", "an import after the file header", 1))
-            elif RAW_EVENT.search(code):
+            elif not raw and RAW_EVENT.search(line):
+                # The whole text, comments included (no tokenizer): a mention in a comment counts as a use, which can only
+                # cause a false positive. Reword the comment or mark the line.
                 raw.append((path, n, line, src, "rawevent", "rawEvent", 0))
         out.extend(raw[:1])
     return out
@@ -607,21 +426,12 @@ def selftest():
     run("a block comment around an import hides it", {**clean, "services/Apps.qml": "/* import qs.dock */\nItem {}\n"}, None)
     run("a multi-line block comment hides its imports", {**clean, "services/Apps.qml": "/*\nimport qs.dock\n*/\nItem {}\n"}, None)
     run("a line comment after an import hides a second one", {**clean, "services/Apps.qml": "import qs.platform // import qs.dock\nItem {}\n"}, None)
-    low = "imports go to a lower layer only"
-    run("a regex literal holding /* is no comment (raw event after it)",
-        {**clean, "search/S.qml": 'Item { function f(p) { return p.replace(/\\/*$/, ""); }\n function onRawEvent() {} }\n'},
-        "raw Hyprland events go through qs.platform")
-    run("a division followed by a block comment: the comment is stripped", {**clean, "services/Apps.qml": "Item { property real x: a / b /* hide\nimport qs.dock\n*/ }\n"}, None)
-    run("a keyword before a long comment still introduces a regex",
-        {**clean, "search/S.qml": 'Item { function f(p) { return /* a comment longer than 24 chars */ /\\/*/.test(p); }\n function onRawEvent() {} }\n'},
-        "raw Hyprland events go through qs.platform")
     run("an import after the header is refused", {**clean, "services/Apps.qml": "Item {}\nimport qs.dock\n"}, "an import after the file header")
     run("an import after the header is refused even in a nested object", {**clean, "services/Apps.qml": "Item {\n    Item {}\n}\nimport qs.platform\n"}, "an import after the file header")
     run("pragmas belong to the header", {**clean, "services/Apps.qml": "pragma Singleton\npragma ComponentBehavior: Bound\nimport qs.platform\nItem {}\n"}, None)
     run("a block comment before the imports is part of the header", {**clean, "services/Apps.qml": "/*\n licence\n*/\nimport qs.dock\nItem {}\n"}, "imports go to a lower layer only")
     run("a JS .pragma and .import header", {**clean, "services/Y.js": '.pragma library\n.import "../dock/DockModel.js" as M\n'}, "imports go to a lower layer only")
     run("a JS import after code is refused", {**clean, "services/Y.js": 'var x = 1;\n.import "../dock/DockModel.js" as M\n'}, "an import after the file header")
-    run("rawEvent in a comment is not a use", {**clean, "search/S.qml": "// onRawEvent\n/* onRawEvent */\nItem {}\n"}, None)
     run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
     run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
     run("Hyprland as a second import counts", {**clean, "search/S.qml": "import QtQuick; import Quickshell.Hyprland\nItem {}\n"}, "raw Hyprland events go through qs.platform")
@@ -659,48 +469,6 @@ def selftest():
         {**clean, "security/Mod.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "shell/security/lock and shell/security/idle only")
     run("a feature importing security is a feature edge", {**clean, "dock/Dock.qml": "import qs.services\nimport qs.security.lock\nItem {}\n"}, None)
     run("a file of the module itself is no edge", {**clean, "dock/Dock.qml": 'import "."\nimport "DockModel.js" as M\nItem {}\n'}, None)
-
-    # The comment stripper on fixed samples.
-    for name, src, want in [
-        ("regex with /*", 'x.replace(/\\/*$/, "")', 'x.replace(/\\/*$/, "")'),
-        ("regex after return", "return /a*/.test(s) /* c */", "return /a*/.test(s)" + " " * 8),
-        ("division then comment", "a / b /* c */ + d", "a / b         + d"),
-        ("line comment after code", "a = 1 // c\nb", "a = 1 \nb"),
-        ("string with //", "s = 'a//b' // c", "s = 'a//b' "),
-        ("block comment keeps lines", "a /* x\ny */ b", "a     \n     b"),
-    ]:
-        got = strip_comments(src)
-        if got != want:
-            failures.append(f"strip_comments {name}: {got!r} != {want!r}")
-
-    # The regex rules, pinned on regex_end: a single line, a backslash escape, a `/` inside a character class.
-    for name, src, want in [
-        ("character class holds /", "/[/]/x", 5),
-        ("escaped slash", "/a\\/b/", 6),
-        ("escaped bracket keeps the class open", "/[\\]/]/", 7),
-        ("single line", "/a\nb/", -1),
-        ("no closing slash", "/abc", -1),
-        ("followed by a string", '/ 2 + "/"', -1),
-        ("followed by a number", "/a/2", -1),
-    ]:
-        got = regex_end(src, 0)
-        if got != want:
-            failures.append(f"regex_end {name}: {got} != {want}")
-    sample = strip_comments("a++ / 2 /* c */")
-    if sample != "a++ / 2 " + " " * 7:
-        failures.append(f"a postfix ++ is followed by a division: {sample!r}")
-    sample = strip_comments("return /* long comment text here */ /a*/ + 1 /* z */")
-    if "/a*/" not in sample or "long comment" in sample or " z " in sample:
-        failures.append(f"a regex after return and a comment: {sample!r}")
-    sample = strip_comments("`a ${ `b` + /* c */ 1 } d /* kept */`")
-    if "kept" not in sample or " c " in sample:
-        failures.append(f"a template keeps its text and strips the code inside ${{}}: {sample!r}")
-    sample = strip_comments("x = 1 /* open")
-    if sample != "x = 1 /* open":
-        failures.append(f"an unterminated block comment is kept: {sample!r}")
-    sample = strip_comments("a = `x` / 2 /* c */")
-    if "/* c */" in sample:
-        failures.append(f"a division after a template: {sample!r}")
 
     # Test trees: a tree that links a shell module directory links lib too.
     with tempfile.TemporaryDirectory() as t:
