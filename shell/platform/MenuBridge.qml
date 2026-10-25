@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Grassfield.Ui
 import qs.services // layering-exception: GF-087
 import "MenuBridge.js" as Logic
 import "Minimized.js" as Minimized
@@ -11,7 +12,9 @@ import "Minimized.js" as Minimized
 // Global menus of applications (T1/T2, master-prompt §5.7, ADR-0008, docs/specs/menu-bridge.md).
 //
 // The plugin announces, per window, the DBusMenu (service, path) its client registered through
-// org_kde_kwin_appmenu, with the client's pid (gfc/1 `appmenu` events). This service keeps that map, connects to
+// org_kde_kwin_appmenu, with the client's pid (gfc/1 `appmenu` events); a Wayland window without one comes with its
+// client's pid only, and the bridge serves it a menu that process registered with com.canonical.AppMenu.Registrar
+// (Electron, ADR-0008 amendment 2026-10-25). This service keeps that map, connects to
 // grassfield-menu-bridge (menu/1 socket), tells it whether the plugin serves appmenu (only then does the bridge own
 // com.canonical.AppMenu.Registrar), asks it to open the focused window's menu and exposes the result to the menu
 // bar. Without a bridge, a plugin or a menu for the window, `menus` stays empty and the bar keeps its T0 menus.
@@ -36,7 +39,8 @@ Singleton {
     property bool registrar: false
     property bool helloSent: false
 
-    // Hyprland window address (lowercase hex) -> {service, path, pid}, from the plugin's appmenu events.
+    // Hyprland window address (lowercase hex) -> {service, path, pid}, from the plugin's appmenu events. An entry with an
+    // empty service is a Wayland window without a set_address menu: {service: "", path: "", pid} (open-registered).
     property var registrations: ({})
     // Windows whose appmenu event was re-requested from the plugin (once each).
     property var queried: ({})
@@ -101,8 +105,34 @@ Singleton {
         send(Logic.itemLine("about-to-show", root.openedWindow, dbusId));
     }
 
+    // Choosing an item: its action reaches the application once the popup host gave the keyboard back (macOS sends a
+    // menu's action after the menu closed). An Electron click handler runs for the focused window only (Electron passes
+    // BaseWindow.getFocusedWindow() to it) and no window is focused while the popup holds the keyboard: the host drops it
+    // at close and unmaps Tokens.focusReturnReleaseHoldMs later (KeyboardRelease), so the line is sent after that.
+    // Measured in the nested session (Obsidian, Electron 43): sent while the popup was open, File > New Window did nothing;
+    // sent after it closed, it opened a window.
     function activate(dbusId: int): void {
-        send(Logic.itemLine("activate", root.openedWindow, dbusId));
+        const line = Logic.itemLine("activate", root.openedWindow, dbusId);
+        if (line === "")
+            return;
+        if (activation.running)
+            activation.triggered(); // the previous choice goes first (one click closes the popup: not expected)
+        activation.line = line;
+        activation.restart();
+    }
+
+    Timer {
+        id: activation
+
+        property string line: ""
+
+        interval: Tokens.focusReturnReleaseHoldMs
+        onTriggered: {
+            const pending = activation.line;
+            activation.line = "";
+            activation.stop();
+            root.send(pending);
+        }
     }
 
     function send(line: string): void {
@@ -129,7 +159,7 @@ Singleton {
         }
         if (wanted === "" || root.openedWindow !== "" || !socket.connected || !root.helloSent)
             return;
-        const line = Logic.openLine(wanted, reg);
+        const line = reg.service === "" ? Logic.openRegisteredLine(wanted, reg.pid) : Logic.openLine(wanted, reg);
         if (line === "")
             return; // e.g. a plugin without the pid field: no T1/T2 menu
         send(line);
@@ -181,7 +211,7 @@ Singleton {
         if (!ev)
             return;
         const next = Object.assign({}, root.registrations);
-        if (ev.service === "")
+        if (ev.service === "" && ev.pid === 0)
             delete next[ev.address];
         else
             next[ev.address] = {service: ev.service, path: ev.path, pid: ev.pid};

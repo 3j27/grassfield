@@ -17,6 +17,10 @@ TestCase {
                 {address: "55d3c2a0b1f0", service: ":1.42", path: "/MenuBar/1", pid: 4242});
         // A clear: no menu for the window.
         compare(Bridge.parseAppmenuEvent(event({address: "1a", service: "", path: "", pid: 0})), {address: "1a", service: "", path: "", pid: 0});
+        // A Wayland window without a set_address menu: its client's pid (ADR-0008 amendment 2026-10-25, Electron).
+        compare(Bridge.parseAppmenuEvent(event({address: "1a", service: "", path: "", pid: 4242})), {address: "1a", service: "", path: "", pid: 4242});
+        compare(Bridge.parseAppmenuEvent(event({address: "1a", service: "", path: "", pid: -1})).pid, 0);
+        compare(Bridge.parseAppmenuEvent(event({address: "1a", service: "", path: "", pid: "4242"})).pid, 0);
         // A plugin without the pid field: accepted, pid 0 (the bridge is then never asked to open it).
         compare(Bridge.parseAppmenuEvent(event({address: "1a", service: "org.kde.Foo", path: "/a"})).pid, 0);
         compare(Bridge.parseAppmenuEvent(event({address: "1a", service: ":1.2", path: "/a", pid: -3})).pid, 0);
@@ -43,6 +47,11 @@ TestCase {
         compare(Bridge.openLine("1a", {service: "x", path: "/MenuBar/1", pid: 7}), "");
         compare(Bridge.openLine("1a", {service: ":1.42", path: "MenuBar", pid: 7}), "");
         compare(Bridge.openLine("no", {service: ":1.42", path: "/MenuBar/1", pid: 7}), "");
+        compare(Bridge.openRegisteredLine("0x1A", 4242), JSON.stringify({type: "open-registered", window: "1a", pid: 4242}) + "\n");
+        compare(Bridge.openRegisteredLine("1a", 0), "");
+        compare(Bridge.openRegisteredLine("1a", 1.5), "");
+        compare(Bridge.openRegisteredLine("no", 7), "");
+        verify(Bridge.menuLost("foreign-namespace"));
         compare(Bridge.openLine("1a", null), "");
         compare(Bridge.itemLine("activate", "1a", 12), "{\"type\":\"activate\",\"window\":\"1a\",\"id\":12}\n");
         compare(Bridge.itemLine("about-to-show", "1a", 0), "{\"type\":\"about-to-show\",\"window\":\"1a\",\"id\":0}\n");
