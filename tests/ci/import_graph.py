@@ -11,19 +11,23 @@ feature graph is a violation). Security modules (shell/security/**) may import o
 modules. `Quickshell.Hyprland` and `rawEvent` belong to platform.
 
 Rule choices: a feature-to-feature edge is a violation only when it lies on a cycle of the feature graph once every layer
-violation is removed from that graph. A raw-event violation is reported once per file, on the `import Quickshell.Hyprland`
-line (on the first line that mentions `rawEvent`, `onRawEvent` or `Quickshell.Hyprland` when the file has no such import).
+violation is removed from that graph. A raw-event violation is reported once per file, on its `import Quickshell.Hyprland`
+line (else on its first `rawEvent` or `onRawEvent` name).
 
-No JavaScript tokenizer. Imports are read from the file header only (QML imports and pragmas, JS `.import` and `.pragma`, can
-only come before the root object): the header is every line up to the first one that is not blank, a comment, an import or a
-pragma, and comments are stripped there with the simple rule (`//` to the end of the line, `/* */`), exact where no string,
-regex or template literal can occur. An import-like line after the header is a violation of its own. Raw Hyprland events are
-searched in the WHOLE file text with no comment stripping: a mention in a comment counts as a use, which can only cause a
-false positive (reword the comment or mark the line), never a missed violation.
+No hand parsing of QML or JavaScript. Imports come from Qt's own parser: `qmlimportscanner` (qt6-declarative) reads every
+file, one process per file, a few at a time and at the lowest priority; `qmldom --dump-ast` (same package) gives the lines of
+the imports and the identifiers named `rawEvent` or `onRawEvent` in the files that need them (a file with a violation, a
+Hyprland import or a text that could name rawEvent: a sound prefilter, since identifiers are spelled as named except for
+unicode escapes). A comment or a string is therefore never a use. Both tools are run with QT_QPA_PLATFORM=offscreen.
+- A file the scanner reports syntax errors on (it prints them on stderr and drops the imports) is a failure.
+- The scanner's JS reader skips a `.import` after code or after a split `.pragma`: a `.import X` in the text that the scanner
+  does not report is a failure too (a false positive on a comment that spells one, never a miss).
+- qmldom does not escape quotes in its dump, so its tag lines are read one by one, not as XML.
+Needs qt6-declarative's /usr/lib/qt6/qmlimportscanner and /usr/lib/qt6/bin/qmldom (the PKGBUILD makedepends it).
 
 A module is a directory with a qmldir (`qs.overlay.controlcenter` is shell/overlay/controlcenter); a directory without one
 belongs to its nearest ancestor module; shell/shell.qml and the other files of shell/ itself are the composition root.
-An import is `import qs.<module>` or a relative `import "<dir or file>"` (also `.import` in JS).
+An import is `import qs.<module>` or a relative `import "<dir or file>"` (also `.import` in JS), as the scanner reports it.
 
 Ratchet: a violating import line passes only with a trailing `// layering-exception: <tag>` marker on that line. Tags:
 `GF-087` (temporary: the slice that removes the violation removes the marker; L9 refuses any), `GF-050` (temporary, accepted
@@ -31,81 +35,141 @@ only on the `import qs.notifications` line of shell/security/idle/SleepInhibitor
 accepted only in shell/security/lock and shell/security/idle, only on a raw Hyprland event line: the lock and idle modules).
 An unknown tag, a tag where it is not accepted, and a marker on a line that is not a violation are failures, so no marker
 outlives its violation. A marker covers exactly one import: a violating line that holds another import is a failure.
-A commented-out import in the header is no import.
 
 Limit: a test tree whose module is made of file links plus a `qmldir` link (no directory link, like tests/security/lock_surfaces/launchpad)
 is not covered by the test-tree `lib` check; only a link to a module directory is.
 """
+import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 LAYER = {"lib": 0, "platform": 1, "store": 2, "services": 3}
 FEATURE = 4
 ROOT_LAYER = 5
+JS_IMPORT = re.compile(r"""\.\s*import\s+(?:"([^"]*)"|'([^']*)'|([A-Za-z_][\w.]*))""")
 TAGS = ("GF-087", "GF-050", "ADR-0021 security")
 MARKER = re.compile(r"//\s*layering-exception:\s*(.*?)\s*$")
-IMPORT = re.compile(r"""^\s*\.?import\s+(?:["']([^"']+)["']|(qs(?:\.\w+)+)\b|(Quickshell\.Hyprland)\b)""")
-RAW_EVENT = re.compile(r"\b(?:on)?[rR]awEvent\b|Quickshell\.Hyprland")
 SECURITY_ALLOWED = {"lib", "services"}
 PERMANENT_DIRS = ("security/lock/", "security/idle/")  # the only places the permanent tag is accepted (not polkit)
 GF050_FILE = "security/idle/SleepInhibitor.qml"
-GF050_IMPORT = "qs.notifications"
+GF050_TARGET = "notifications"
 
 
-GENERIC_IMPORT = re.compile(r"^\s*\.?import\s+\S")
 MULTI = "multi-import line"
+IMPORT_SCANNER = "/usr/lib/qt6/qmlimportscanner"
+QMLDOM = "/usr/lib/qt6/bin/qmldom"
+QT_QML = "/usr/lib/qt6/qml"
+# A sound prefilter for the raw event rule: an identifier is spelled in the file as it is named, except for \u escapes.
+RAW_PREFILTER = re.compile(r"rawevent|\\u", re.I)
+RAW_TEXT = re.compile(r"rawevent|hyprland", re.I)
+RAW_NAMES = {"rawEvent", "onRawEvent"}
+HYPRLAND = "Quickshell.Hyprland"
 
 
-HEADER_LINE = re.compile(r"^\s*\.?(?:import|pragma)\s")
+QT_EOL = re.compile("\r\n|[\n\r\u2028\u2029]")  # the line terminators of QML and JS: not \f, \v or \x85, which str.splitlines also splits at
 
 
-def simple_strip(line, in_block):
-    """One header line without its comments (`//` to the end of the line, `/* */`, which may span lines): the simple rule,
-    exact in the file header where no string, regex or template literal can occur. Returns (code, still inside a block)."""
-    out, i = [], 0
-    while i < len(line):
-        if in_block:
-            j = line.find("*/", i)
-            if j < 0:
-                return "".join(out), True
-            i, in_block = j + 2, False
-            out.append(" ")
-            continue
-        a, b = line.find("//", i), line.find("/*", i)
-        if a >= 0 and (b < 0 or a < b):
-            out.append(line[i:a])
-            return "".join(out), False
-        if b >= 0:
-            out.append(line[i:b] + " ")
-            i, in_block = b + 2, True
-            continue
-        out.append(line[i:])
-        break
-    return "".join(out), in_block
+def file_lines(path):
+    """The lines of a file counted the way Qt counts them, so that its line numbers index this list."""
+    return QT_EOL.split(path.read_text(encoding="utf-8", errors="replace"))
 
 
-def header_of(lines):
-    """The file header: QML imports and pragmas (JS `.import` and `.pragma`) can only come before the root object, so the
-    header is every line up to the first one that is neither blank, a comment, an import nor a pragma. Returns
-    ([(line number, comment-free code)], number of the first body line)."""
-    rows, in_block = [], False
-    for n, line in enumerate(lines, 1):
-        code, in_block = simple_strip(line, in_block)
-        if code.strip() and not HEADER_LINE.match(code):
-            return rows, n
-        rows.append((n, code))
-    return rows, len(lines) + 1
+class QtToolError(Exception):
+    pass
 
 
-def line_text(path, n):
-    """The code of line n of a file: comment-free inside the header, the line itself after it."""
-    lines = path.read_text(encoding="utf-8").splitlines()
-    rows, _ = header_of(lines)
-    return rows[n - 1][1] if n <= len(rows) else lines[n - 1]
+def qt_run(cmd):
+    """One of Qt's own tools, headless and at the lowest priority (a stray banner or window must never appear)."""
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+    env.pop("DISPLAY", None)
+    env.pop("WAYLAND_DISPLAY", None)
+    try:
+        return subprocess.run(["nice", "-n", "19", *cmd], capture_output=True, text=True, env=env, timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise QtToolError(f"{cmd[0]}: {e}")
+
+
+_IMPORTS = {}
+
+
+def scanner_imports(path):
+    """The imports of one .qml/.js file as Qt's own parser reads them (qmlimportscanner): [(type, name)] with type module,
+    directory or javascript, `name` as written. Cached by file content (the same content imports the same things anywhere)."""
+    key = (path.suffix, hashlib.sha1(path.read_bytes()).hexdigest())
+    if key not in _IMPORTS:
+        r = qt_run([IMPORT_SCANNER, "-qmlFiles", str(path), "-importPath", QT_QML])
+        if r.returncode != 0 or r.stderr.strip():
+            # Syntax errors come on stderr with exit 0 and the file's imports are silently dropped: never trust such a file.
+            raise QtToolError(f"{path.name} does not parse (qmlimportscanner: {(r.stderr or r.stdout).strip()[:160]})")
+        try:
+            entries = json.loads(r.stdout)
+        except ValueError as e:
+            raise QtToolError(f"qmlimportscanner gave no JSON for {path.name}: {e}")
+        _IMPORTS[key] = [(e.get("type"), e.get("name") or e.get("path")) for e in entries]
+    return _IMPORTS[key]
+
+
+def prefetch_imports(paths):
+    """Fills the scanner cache with a few processes at a time; errors are raised again, per file, by scanner_imports."""
+    def one(p):
+        try:
+            scanner_imports(p)
+        except QtToolError:
+            pass
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(one, paths))
+
+
+_ASTS = {}
+AST_IMPORT = re.compile(r'<UiImport\b[^>]*?\bfileName="([^"]*)"[^>]*?\bimportToken="[^"]*?\bl:(\d+)[^"]*"(?:[^>]*?\bsemicolonToken="[^"]*?\bl:(\d+))?')
+AST_QID = re.compile(r'<UiQualifiedId\b[^>]*?\bname="([^"]*)"')
+AST_NAME = re.compile(r'<\w+\b[^>]*?\bname="(?:on)?[rR]awEvent"[^>]*?\bidentifierToken="[^"]*?\bl:(\d+)')
+
+
+def ast_of(path):
+    """The syntax tree of a .qml file from Qt's own code model (qmldom --dump-ast), reduced to what the rules need:
+    {"imports": [(key, first line, last line)], "raw": [lines naming rawEvent or onRawEvent]}, or None when it does not parse.
+    `key` is the module name (`qs.dock`, joined from the qualified-id nodes, whatever the spacing or comments) or the quoted path.
+    The dump is not well-formed XML (string literal values hold raw quotes), so its tag lines are read one by one; a string
+    literal can only add a false name, never hide a node."""
+    key = hashlib.sha1(path.read_bytes()).hexdigest()
+    if key not in _ASTS:
+        r = qt_run([QMLDOM, "--dump-ast", str(path)])
+        result = None
+        if r.returncode == 0 and "<UiProgram>" in r.stdout:
+            imports, raw, current = [], [], None
+            for line in r.stdout.split("\n"):
+                m = AST_IMPORT.search(line) if "<UiImport" in line else None
+                if m:
+                    first = int(m.group(2))
+                    current = [m.group(1), first, max(first, int(m.group(3))) if m.group(3) else first, []]
+                    continue
+                if current is not None:
+                    q = AST_QID.search(line)
+                    if q:
+                        current[3].append(q.group(1))
+                    elif "</UiImport>" in line:
+                        imports.append((current[0] or ".".join(current[3]), current[1], current[2]))
+                        current = None
+                    continue
+                n = AST_NAME.search(line) if "awEvent" in line else None
+                if n:
+                    raw.append(int(n.group(1)))
+            result = {"imports": imports, "raw": sorted(raw)}
+        _ASTS[key] = result
+    return _ASTS[key]
+
+
+def prefetch_asts(paths):
+    """Runs qmldom on several files at a time (the results are cached by content)."""
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(ast_of, paths))
 
 
 def listing(root, sub):
@@ -160,45 +224,38 @@ def module_of_path(shell, mods, path):
 
 
 def scan(shell):
-    """Every import of every .qml/.js file of shell/: (file, line number, line text, source module, kind, target, imports on the line).
-    Imports are read from the file header only; an import-like line after it is reported as kind "late"."""
+    """Every import of every .qml/.js file of shell/ from Qt's import scanner: ([(file, source module, kind, target, key)], failures).
+    kind is module or unknown (an `import qs.<name>` without a qmldir); a directory or file import is resolved against the
+    file and counted when it lands in shell/. `key` is how the import is written, to find its lines in the syntax tree."""
     mods = modules_of(shell)
-    out = []
-    for path in shell_sources(shell):
+    files = shell_sources(shell)
+    prefetch_imports(files)
+    out, failures = [], []
+    for path in files:
         src = module_of_path(shell, mods, path)
-        raw = []  # one raw-event record per file: the Hyprland import line, else the first use
-        originals = path.read_text(encoding="utf-8").splitlines()
-        rows, body = header_of(originals)
-        for n, code in rows:
-            line = originals[n - 1]
-            segments = code.split(";")
-            count = sum(1 for seg in segments if GENERIC_IMPORT.match(seg))
-            for m in (IMPORT.match(seg) for seg in segments):
-                if not m:
-                    continue
-                rel_target, qs_target, hypr = m.groups()
-                if hypr:
-                    raw.insert(0, (path, n, line, src, "hyprland", "Quickshell.Hyprland", count))
-                elif qs_target:
-                    name = qs_target[3:]
-                    if name.replace(".", "/") not in mods:
-                        out.append((path, n, line, src, "unknown", qs_target, count))
-                    else:
-                        out.append((path, n, line, src, "module", name, count))
-                else:
-                    tgt = (path.parent / rel_target)
-                    dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
-                    if dst is not None:
-                        out.append((path, n, line, src, "module", dst, count))
-        for n, line in enumerate(originals, 1):
-            if n >= body and any(GENERIC_IMPORT.match(seg) for seg in line.split(";")):
-                out.append((path, n, line, src, "late", "an import after the file header", 1))
-            elif not raw and RAW_EVENT.search(line):
-                # The whole text, comments included (no tokenizer): a mention in a comment counts as a use, which can only
-                # cause a false positive. Reword the comment or mark the line.
-                raw.append((path, n, line, src, "rawevent", "rawEvent", 0))
-        out.extend(raw[:1])
-    return out
+        try:
+            entries = scanner_imports(path)
+        except QtToolError as e:
+            failures.append((path, str(e)))
+            continue
+        if path.suffix == ".js":
+            # The scanner's JS reader skips a directive that comes after code or after a split `.pragma`: whatever the text imports
+            # that it does not report is a failure (a false positive on a mention in a comment, never a miss).
+            seen = {name for _, name in entries}
+            for m in JS_IMPORT.finditer(path.read_text(encoding="utf-8", errors="replace")):
+                arg = next(g for g in m.groups() if g is not None)
+                if arg not in seen:
+                    failures.append((path, f"{path.name} has `.import {arg}` that Qt's import scanner does not report (a directive after code or a split pragma?)"))
+        for kind, name in entries:
+            if kind == "module" and name.startswith("qs."):
+                module = name[3:]
+                out.append((path, src, "module" if module.replace(".", "/") in mods else "unknown", module if module.replace(".", "/") in mods else name, name))
+            elif kind in ("directory", "javascript"):
+                tgt = Path(os.path.normpath(path.parent / name))
+                dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
+                if dst is not None:
+                    out.append((path, src, "module", dst, name))
+    return out, failures
 
 
 def tarjan(nodes, edges):
@@ -235,11 +292,68 @@ def tarjan(nodes, edges):
     return sorted(comps)
 
 
+def lines_for(path, key):
+    """The (first line, last line) of every import of `key` in a file: from the syntax tree for a .qml file; for a .js file
+    (the code model has no tree for it) or one that does not parse, the lines that say `import` and name the target, or (0, 0)."""
+    if path.suffix == ".qml":
+        tree = ast_of(path)
+        if tree is not None:
+            return [(a, b) for k, a, b in tree["imports"] if k == key] or [(0, 0)]
+    base = os.path.basename(key.rstrip("/")) if ("/" in key or key.endswith(".js")) else key.split(".")[-1]
+    lines = file_lines(path)
+    hits = [(n, n) for n, line in enumerate(lines, 1) if "import" in line and base in line]
+    return hits or [(0, 0)]
+
+
+def imports_overlapping(path, a, b):
+    """How many imports share lines a..b: a marker covers exactly one."""
+    if path.suffix == ".qml":
+        tree = ast_of(path)
+        if tree is not None:
+            return sum(1 for _, x, y in tree["imports"] if x <= b and y >= a)
+    lines = file_lines(path)
+    return max(1, sum(lines[n - 1].count("import") for n in range(max(a, 1), b + 1)))
+
+
+def needs_tree(path):
+    """Whether raw_event_line must read the syntax tree of a .qml file: it imports Quickshell.Hyprland (Qt's import scanner says
+    so) or its text holds a name that could be rawEvent (a sound prefilter: identifiers are spelled as named, except for unicode escapes)."""
+    if path.suffix != ".qml":
+        return False
+    try:
+        if ("module", HYPRLAND) in scanner_imports(path):
+            return True
+    except QtToolError:
+        return True
+    return bool(RAW_PREFILTER.search(path.read_text(encoding="utf-8", errors="replace")))
+
+
+def raw_event_line(path):
+    """The line to report for raw Hyprland events in a file: its `Quickshell.Hyprland` import, else its first rawEvent or
+    onRawEvent name; None when there is none. A .qml file is read from the syntax tree (a comment is not a use); a .js file
+    has no tree, so Qt's import scanner says whether it imports the module and the line is looked up in the text. A .qml that
+    does not parse falls back to the first line that mentions either name (a comment included: a false positive, never a miss)."""
+    if path.suffix == ".js":
+        if ("module", HYPRLAND) in scanner_imports(path):
+            return lines_for(path, HYPRLAND)[0][0]
+        return None
+    if not needs_tree(path):
+        return None
+    tree = ast_of(path)
+    if tree is not None:
+        for k, a, _ in tree["imports"]:
+            if k == HYPRLAND:
+                return a
+        return tree["raw"][0] if tree["raw"] else None
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return next((n for n, line in enumerate(QT_EOL.split(text), 1) if RAW_TEXT.search(line)), None)
+
+
 def analyze(shell):
     """Returns (violations, graph): violations are (file, line number, reason, marker tag or None); graph is (nodes, edges)."""
-    imports = scan(shell)
+    imports, failures = scan(shell)
     nodes, edges = set(), {}
-    for _, _, _, src, kind, tgt, _ in imports:
+    for _, src, kind, tgt, _ in imports:
         nodes.add(src)
         if kind == "module" and tgt != src:
             nodes.add(tgt)
@@ -255,34 +369,52 @@ def analyze(shell):
     kept = {s: {t for t in ts if not upward(s, t)} for s, ts in edges.items()}
     in_cycle = {frozenset((s, t)) for comp in tarjan(nodes, kept) for s in comp for t in kept.get(s, ()) if t in comp}
 
-    found = []  # (path, line number, text, reason, imports on the line)
-    for path, n, text, src, kind, tgt, count in imports:
-        if kind == "late":
-            found.append((path, n, text, f"{tgt}: imports and pragmas belong to the header, before the root object", count))
-        elif kind == "unknown":
-            found.append((path, n, text, f"{tgt} is not a module of shell/ (no qmldir)", count))
+    found = []  # (path, reason, key of the import or None, line when the key is None)
+    for path, src, kind, tgt, key in imports:
+        if kind == "unknown":
+            found.append((path, f"{tgt} is not a module of shell/ (no qmldir)", key, None))
         elif kind == "module" and tgt != src:
             if upward(src, tgt):
-                why = ("a security module may import only lib, services and security" if is_security(src) and not is_security(tgt)
+                why = (f"a security module may import only lib, services and security (imports {tgt})" if is_security(src) and not is_security(tgt)
                        else f"{src} (layer {layer_of(src)}) imports {tgt} (layer {layer_of(tgt)}): imports go to a lower layer only")
-                found.append((path, n, text, why, count))
+                found.append((path, why, key, None))
             elif frozenset((src, tgt)) in in_cycle:
-                found.append((path, n, text, f"{src} and {tgt} import each other through a cycle of feature modules", count))
-        elif kind in ("hyprland", "rawevent") and src != "platform":
-            found.append((path, n, text, f"{tgt} outside platform: raw Hyprland events go through qs.platform", count))
-    flagged = {(p, n) for p, n, _, _, _ in found}
-    violations = []
-    for path, n, text, reason, count in sorted(found, key=lambda f: (str(f[0]), f[1], f[3])):
-        m = MARKER.search(text)
-        tag = m.group(1) if m else None
-        if tag is not None and count > 1:
-            reason, tag = f"{reason}; a marker covers exactly one import and this line holds {count}", MULTI
-        violations.append((path, n, reason, tag))
-    # Markers on lines that are not violations (stale), checked over every line of every file.
+                found.append((path, f"{src} and {tgt} import each other through a cycle of feature modules", key, None))
+    for path, message in failures:
+        found.append((path, message, None, 0))
+    mods = modules_of(shell)
+    prefetch_asts(sorted({p for p, _, k, _ in found if k is not None and p.suffix == ".qml"}
+                         | {p for p in shell_sources(shell) if module_of_path(shell, mods, p) != "platform" and needs_tree(p)}))
     for path in shell_sources(shell):
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if module_of_path(shell, mods, path) == "platform":
+            continue
+        n = raw_event_line(path)
+        if n is not None:
+            found.append((path, f"{HYPRLAND} or rawEvent outside platform: raw Hyprland events go through qs.platform", None, n))
+
+    violations, covered = [], {}
+    for path, reason, key, fixed in sorted(found, key=lambda f: (str(f[0]), f[1])):
+        spans = lines_for(path, key) if key is not None else [(fixed, fixed)]
+        for a, b in spans:
+            marker_line, tag = a, None
+            for n in range(a, b + 1):
+                m = MARKER.search(file_lines(path)[n - 1]) if n > 0 else None
+                if m:
+                    marker_line, tag = n, m.group(1)
+                    break
+            r = reason
+            if tag is not None and imports_overlapping(path, a, b) > 1:
+                r, tag = f"{reason}; a marker covers exactly one import and these lines hold several", MULTI
+            violations.append((path, marker_line, r, tag))
+            covered.setdefault(path, set()).update(range(a, b + 1))
+    # Markers on lines that are not violations (stale), over every file.
+    for path in shell_sources(shell):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "layering-exception" not in text:
+            continue
+        for n, line in enumerate(QT_EOL.split(text), 1):
             m = MARKER.search(line)
-            if m and (path, n) not in flagged:
+            if m and n not in covered.get(path, ()):
                 violations.append((path, n, "stale marker: this line is not a layering violation", m.group(1)))
     return violations, (nodes, edges)
 
@@ -307,7 +439,7 @@ def problems(shell, root=None):
             out.append(f"{where}: the permanent `ADR-0021 security` marker is for shell/security/lock and shell/security/idle only")
         elif tag == "ADR-0021 security" and "Quickshell.Hyprland" not in reason and "rawEvent" not in reason:
             out.append(f"{where}: the permanent `ADR-0021 security` marker covers raw Hyprland events only ({reason})")
-        elif tag == "GF-050" and not (rel == GF050_FILE and GF050_IMPORT in line_text(path, n)):
+        elif tag == "GF-050" and not (rel == GF050_FILE and f"(imports {GF050_TARGET})" in reason):
             out.append(f"{where}: the `GF-050` marker is for the `import qs.notifications` line of shell/{GF050_FILE} only")
     return out
 
@@ -426,37 +558,61 @@ def selftest():
     run("a block comment around an import hides it", {**clean, "services/Apps.qml": "/* import qs.dock */\nItem {}\n"}, None)
     run("a multi-line block comment hides its imports", {**clean, "services/Apps.qml": "/*\nimport qs.dock\n*/\nItem {}\n"}, None)
     run("a line comment after an import hides a second one", {**clean, "services/Apps.qml": "import qs.platform // import qs.dock\nItem {}\n"}, None)
+    # No hand parsing: imports and raw event names come from Qt's own parser (qmlimportscanner and qmldom). The cases are the reviewers'
+    # evasions of the earlier hand-written readers; every one must be caught.
+    low = "imports go to a lower layer only"
     raw = "raw Hyprland events go through qs.platform"
-    late = "an import after the file header"
-    # Nothing in the body is stripped or tokenised, so nothing hides a violation: the reviewer's adversarial bodies (N01, N03, N17,
-    # N20) and more, each followed by a raw event use or a late import that must still be seen.
+    bad = "does not parse"
+
+    def svc(text):
+        return {**clean, "services/Apps.qml": text}
+
+    run("an import spelled `qs .dock` is seen", svc("import qs .dock\nItem {}\n"), low)
+    run("an import spelled `qs .dock`, marked, passes (the marker finds the import by its parsed name)", svc("import qs .dock // layering-exception: GF-087\nItem {}\n"), None)
+    run("an import with a comment inside the dotted name is seen", svc("import qs/**/.dock\nItem {}\n"), low)
+    run("a directory import with a doubled slash is seen", svc('import "..//dock"\nItem {}\n'), low)
+    run("a directory import with a doubled slash, marked, passes", svc('import "..//dock" // layering-exception: GF-087\nItem {}\n'), None)
+    run("a string holding /* in a pragma does not swallow the next import", svc('pragma Translator: "a/*"\nimport qs.dock\nItem {}\n'), low)
+    run("a shebang line does not end the header", svc("#!/usr/bin/env qml\n/**/ import qs.dock\nItem {}\n"), low)
+    run("an import split over lines with a form feed is seen", svc("import\n\fqs.dock\nItem {}\n"), low)
+    run("a marker on the last line of an import split over lines covers it", svc("import\n\fqs.dock // layering-exception: GF-087\nItem {}\n"), None)
+    run("a path import split over lines with a form feed is seen", svc('import\n\f"../dock"\nItem {}\n'), low)
+    run("a byte order mark before a single import is seen", svc("﻿import qs.dock\nItem {}\n"), low)
+    run("an import after a block comment on the same line is seen", svc("/**/ import qs.dock\nItem {}\n"), low)
+    run("a pragma split over two lines does not end the header", svc("pragma\n    Singleton\n/**/ import qs.dock\nItem {}\n"), low)
+    run("a JS .import after a comment is seen", {**clean, "dock/Z.js": ".pragma library\n", "services/Y.js": '.pragma library\n/**/ .import "../dock/Z.js" as Z\n'}, low)
+    unseen = "that Qt's import scanner does not report"
+    run("a JS .import the scanner skips after a split .pragma is refused",
+        {**clean, "dock/Z.js": ".pragma library\n", "services/Y.js": '.pragma\n    library\n/**/ .import "../dock/Z.js" as Z\n'}, unseen)
+    run("a JS .import the scanner skips after code is refused", {**clean, "services/Y.js": 'var x = 1;\n.import "../dock/DockModel.js" as M\n'}, unseen)
+    run("an import after the root object does not parse", svc("Item {}\nimport qs.dock\n"), bad)
+    run("a syntax error anywhere does not parse", svc("import qs.dock\nItem { property var x: \n"), bad)
+    run("a second root object does not parse", {**clean, "search/S.qml": "Item {}\nItem { function onRawEvent() {} }\n"}, bad)
+    # Raw events: the syntax tree names the identifier, so the spelling of the surrounding code cannot hide it, and a comment is not a use.
+    body = "Item {\n    %s\n    function onRawEvent() {}\n}\n"
     run("N01: `.in /` and strings holding /* and */ hide nothing",
-        {**clean, "search/S.qml": 'Item { property var x: a.in / b + "x/ " + "/*" }\nItem { property string t: "*/" }\nItem { function onRawEvent() {} }\n'}, raw)
-    run("N03: `a++ + /[/*]/` hides nothing", {**clean, "search/S.qml": "Item { property var x: a++ + /[/*]/ }\nItem { function onRawEvent() {} }\n"}, raw)
-    run("N17: `a - -/[/*]/` hides nothing", {**clean, "search/S.qml": "Item { property var x: a - -/[/*]/ }\nItem { function onRawEvent() {} }\n"}, raw)
-    run("N20: a regex holding /* and a template holding /* hide nothing",
-        {**clean, "search/S.qml": 'Item { property var x: p.replace(/\\/*$/, "") + `a ${ `b/*c` } d` }\nItem { function onRawEvent() {} }\n'}, raw)
+        {**clean, "search/S.qml": body % 'property var x: a.in / b + "x/ " + "/*"; property string t: "*/"'}, raw)
+    run("N03: `a++ + /[/*]/` hides nothing", {**clean, "search/S.qml": body % "property var x: a++ + /[/*]/"}, raw)
+    run("N17: `a - -/[/*]/` hides nothing", {**clean, "search/S.qml": body % "property var x: a - -/[/*]/"}, raw)
+    run("N20: a regex holding /* and a nested template hide nothing",
+        {**clean, "search/S.qml": body % 'property var x: p.replace(/\\/*$/, "") + `a ${ `b/*c` } d`'}, raw)
     run("a regex after return and a long comment hides nothing",
-        {**clean, "search/S.qml": 'Item { function f(p) { return /* a comment longer than 24 chars */ /\\/*/.test(p); }\n function onRawEvent() {} }\n'}, raw)
-    run("a block comment opened in the body hides nothing",
-        {**clean, "search/S.qml": "Item { /* a comment\n */ }\nItem { function onRawEvent() {} }\n"}, raw)
-    run("an unterminated block comment in the body hides nothing", {**clean, "search/S.qml": "Item { property int x: 1 /* }\nItem { function onRawEvent() {} }\n"}, raw)
-    run("a late import after an adversarial body is seen",
-        {**clean, "services/Apps.qml": 'Item { property var x: a++ + /[/*]/ + "/*" }\nimport qs.dock\n'}, late)
-    run("a late import after a regex holding // is seen", {**clean, "services/Apps.qml": "Item { property var x: /a\\/\\/b/ }\nimport qs.dock\n"}, late)
-    run("a rawEvent mention in a comment counts as a use (no stripping in the body)",
-        {**clean, "search/S.qml": "Item {\n    // onRawEvent is not used here\n}\n"}, raw)
-    run("a Quickshell.Hyprland mention in a block comment counts as a use",
-        {**clean, "search/S.qml": "Item {\n    /* Quickshell.Hyprland */\n}\n"}, raw)
-    run("a rawEvent mention in a platform file is fine", {**clean, "platform/Compositor.qml": "import qs.lib\nItem {\n    // onRawEvent\n}\n"}, None)
-    run("a raw event mention in a marked file: one violation, the marked import line",
+        {**clean, "search/S.qml": body % "function f(p) { return /* a comment longer than 24 chars */ /\\/*/.test(p); }"}, raw)
+    run("a block comment opened in the body hides nothing", {**clean, "search/S.qml": "Item {\n    /* a comment\n    */\n    function onRawEvent() {}\n}\n"}, raw)
+    run("`function onRawEvent` is seen", {**clean, "search/S.qml": "Item { function onRawEvent(e) {} }\n"}, raw)
+    run("a rawEvent binding is seen", {**clean, "search/S.qml": "Item { Connections { function onRawEvent(event) {} } }\n"}, raw)
+    run("a rawEvent member access is seen", {**clean, "search/S.qml": "Item { property var h; Component.onCompleted: h.rawEvent.connect(null) }\n"}, raw)
+    run("a Quickshell.Hyprland import is seen", {**clean, "search/S.qml": "import Quickshell.Hyprland\nItem {}\n"}, raw)
+    run("a Quickshell.Hyprland import spelled with spaces is seen", {**clean, "search/S.qml": "import Quickshell .Hyprland\nItem {}\n"}, raw)
+    run("a JS file importing Quickshell.Hyprland is seen", {**clean, "search/S.js": ".import Quickshell.Hyprland 1.0 as H\n"}, raw)
+    run("a rawEvent mention in a comment is not a use", {**clean, "search/S.qml": "Item {\n    // onRawEvent is not used here\n    /* Quickshell.Hyprland */\n}\n"}, None)
+    run("a rawEvent mention in a string is not a use", {**clean, "search/S.qml": 'Item { property string s: "onRawEvent" }\n'}, None)
+    run("a platform file may use raw events", {**clean, "platform/Compositor.qml": "import Quickshell.Hyprland\nItem { function onRawEvent() {} }\n"}, None)
+    run("a marked Hyprland import is one violation, covered by its marker",
         {**clean, "search/S.qml": "import Quickshell.Hyprland // layering-exception: GF-087\nItem { function onRawEvent() {} }\n"}, None)
-    run("an import after the header is refused", {**clean, "services/Apps.qml": "Item {}\nimport qs.dock\n"}, "an import after the file header")
-    run("an import after the header is refused even in a nested object", {**clean, "services/Apps.qml": "Item {\n    Item {}\n}\nimport qs.platform\n"}, "an import after the file header")
     run("pragmas belong to the header", {**clean, "services/Apps.qml": "pragma Singleton\npragma ComponentBehavior: Bound\nimport qs.platform\nItem {}\n"}, None)
     run("a block comment before the imports is part of the header", {**clean, "services/Apps.qml": "/*\n licence\n*/\nimport qs.dock\nItem {}\n"}, "imports go to a lower layer only")
     run("a JS .pragma and .import header", {**clean, "services/Y.js": '.pragma library\n.import "../dock/DockModel.js" as M\n'}, "imports go to a lower layer only")
-    run("a JS import after code is refused", {**clean, "services/Y.js": 'var x = 1;\n.import "../dock/DockModel.js" as M\n'}, "an import after the file header")
     run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
     run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
     run("Hyprland as a second import counts", {**clean, "search/S.qml": "import QtQuick; import Quickshell.Hyprland\nItem {}\n"}, "raw Hyprland events go through qs.platform")
