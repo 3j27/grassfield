@@ -10,6 +10,10 @@ feature modules may import each other only while no cycle forms (a feature edge 
 feature graph is a violation). Security modules (shell/security/**) may import only lib, services and other security
 modules. `Quickshell.Hyprland` and `rawEvent` belong to platform.
 
+Rule choices: a feature-to-feature edge is a violation only when it lies on a cycle of the feature graph once every layer
+violation is removed from that graph. A raw-event violation is reported once per file, on the `import Quickshell.Hyprland`
+line (on the first rawEvent use when the file has no such import).
+
 A module is a directory with a qmldir (`qs.overlay.controlcenter` is shell/overlay/controlcenter); a directory without one
 belongs to its nearest ancestor module; shell/shell.qml and the other files of shell/ itself are the composition root.
 An import is `import qs.<module>` or a relative `import "<dir or file>"` (also `.import` in JS).
