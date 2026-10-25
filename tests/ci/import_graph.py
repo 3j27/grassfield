@@ -53,10 +53,34 @@ GENERIC_IMPORT = re.compile(r"^\s*\.?import\s+\S")
 MULTI = "multi-import line"
 
 
+REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
+REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.])(?:return|typeof|case|in|of|delete|void|throw|new|else|do|yield|await)\s*$")
+
+
+def regex_end(text, i):
+    """Index just past the regex literal that starts at text[i] (a `/`), or -1 when the line holds no closing `/`."""
+    j, in_class, n = i + 1, False, len(text)
+    while j < n and text[j] != "\n":
+        c = text[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == "[":
+            in_class = True
+        elif c == "]":
+            in_class = False
+        elif c == "/" and not in_class:
+            return j + 1
+        j += 1
+    return -1
+
+
 def strip_comments(text):
-    """The text without block and line comments (strings respected), line structure unchanged: a commented import is no
-    import, and `/* x */ import qs.desktop` is one."""
-    out, i, n, quote = [], 0, len(text), None
+    """The text without block and line comments (strings and regex literals respected), line structure unchanged: a
+    commented import is no import, and `/* x */ import qs.desktop` is one. A `/` starts a regex literal when it follows an
+    operator, an opening bracket, a separator, a regex-introducing keyword or the start of the text (the usual heuristic);
+    after a name, a number, `)`, `]` or a string it is a division. `p.replace(/\\/*$/, "")` holds no comment."""
+    out, i, n, quote, last = [], 0, len(text), None, None
     while i < n:
         c = text[i]
         if quote:
@@ -69,6 +93,7 @@ def strip_comments(text):
         elif c in "\"'`":
             quote = c
             out.append(c)
+            last = c
         elif text.startswith("//", i):
             while i < n and text[i] != "\n":
                 i += 1
@@ -79,8 +104,19 @@ def strip_comments(text):
             out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
             i = j
             continue
+        elif c == "/" and (last is None or last in REGEX_AFTER or REGEX_AFTER_WORD.search("".join(out)[-24:])):
+            j = regex_end(text, i)
+            if j > 0:
+                out.append(text[i:j])
+                last = ")"
+                i = j
+                continue
+            out.append(c)
+            last = c
         else:
             out.append(c)
+            if not c.isspace():
+                last = c
         i += 1
     return "".join(out)
 
@@ -405,6 +441,17 @@ def selftest():
     run("a line comment after an import hides a second one", {**clean, "services/Apps.qml": "import qs.platform // import qs.dock\nItem {}\n"}, None)
     run("a path with two slashes in a string is no comment", {**clean, "services/Apps.qml": "import qs.platform\nItem { property string u: \"http://x\" }\nimport qs.dock\n"},
         "imports go to a lower layer only")
+    low = "imports go to a lower layer only"
+    run("a regex literal holding /* is no comment (raw event after it)",
+        {**clean, "search/S.qml": 'Item { function f(p) { return p.replace(/\\/*$/, ""); }\n function onRawEvent() {} }\n'},
+        "raw Hyprland events go through qs.platform")
+    run("a regex literal holding // is no comment", {**clean, "services/Apps.qml": 'Item { function f(p) { return /a\\/\\/b/.test(p); } }\nimport qs.dock\n'}, low)
+    run("a regex character class holding / is no comment", {**clean, "services/Apps.qml": 'Item { function f(p) { return p.split(/[/]*/); } }\nimport qs.dock\n'}, low)
+    run("a regex after = is no comment", {**clean, "services/Apps.qml": 'Item { function f() { const r = /\\/*x/; } }\nimport qs.dock\n'}, low)
+    run("a division followed by a block comment: the comment is stripped", {**clean, "services/Apps.qml": "Item { property real x: a / b /* hide\nimport qs.dock\n*/ }\n"}, None)
+    run("a division is not a regex start", {**clean, "services/Apps.qml": "Item { property real x: (a) / 2 / 3 }\nimport qs.dock\n"}, low)
+    run("a string holding /* is no comment", {**clean, "services/Apps.qml": 'Item { property string s: "/*" }\nimport qs.dock\n'}, low)
+    run("a string holding // is no comment", {**clean, "services/Apps.qml": "Item { property string s: 'http://x' }\nimport qs.dock\n"}, low)
     run("rawEvent in a comment is not a use", {**clean, "search/S.qml": "// onRawEvent\n/* onRawEvent */\nItem {}\n"}, None)
     run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
     run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
@@ -443,6 +490,19 @@ def selftest():
         {**clean, "security/Mod.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "shell/security/lock and shell/security/idle only")
     run("a feature importing security is a feature edge", {**clean, "dock/Dock.qml": "import qs.services\nimport qs.security.lock\nItem {}\n"}, None)
     run("a file of the module itself is no edge", {**clean, "dock/Dock.qml": 'import "."\nimport "DockModel.js" as M\nItem {}\n'}, None)
+
+    # The comment stripper on fixed samples.
+    for name, src, want in [
+        ("regex with /*", 'x.replace(/\\/*$/, "")', 'x.replace(/\\/*$/, "")'),
+        ("regex after return", "return /a*/.test(s) /* c */", "return /a*/.test(s)" + " " * 8),
+        ("division then comment", "a / b /* c */ + d", "a / b         + d"),
+        ("line comment after code", "a = 1 // c\nb", "a = 1 \nb"),
+        ("string with //", "s = 'a//b' // c", "s = 'a//b' "),
+        ("block comment keeps lines", "a /* x\ny */ b", "a     \n     b"),
+    ]:
+        got = strip_comments(src)
+        if got != want:
+            failures.append(f"strip_comments {name}: {got!r} != {want!r}")
 
     # Test trees: a tree that links a shell module directory links lib too.
     with tempfile.TemporaryDirectory() as t:
