@@ -34,7 +34,8 @@ pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprlan
 # Pure logic, no Hyprland includes (unit-testable).
 add_library(gfcore STATIC src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp src/core/Json.cpp src/core/Stages.cpp src/core/CursorRefresh.cpp
-  src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/Tiling.cpp src/core/LayerPointer.cpp src/core/ClientChrome.cpp src/core/FrameLog.cpp src/core/Quiet.cpp)
+  src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/Tiling.cpp src/core/LayerPointer.cpp src/core/ClientChrome.cpp src/core/FrameLog.cpp src/core/Quiet.cpp
+  src/core/Notices.cpp)
 target_include_directories(gfcore PUBLIC src)
 set_target_properties(gfcore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(gfcore PRIVATE -Wall -Wextra)
@@ -79,7 +80,8 @@ if(GRASSFIELD_BUILD_TESTS)
   enable_testing()
   add_executable(grassfield-compositor-tests tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
     tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp tests/StagesTest.cpp tests/CursorRefreshTest.cpp
-    tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp tests/ClientChromeTest.cpp tests/FrameLogTest.cpp tests/QuietTest.cpp)
+    tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp tests/ClientChromeTest.cpp tests/FrameLogTest.cpp tests/QuietTest.cpp
+    tests/NoticesTest.cpp)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   # QuietTest reads the plugin's sources (every key listener opens the quiet scope).
   target_compile_definitions(grassfield-compositor-tests PRIVATE GF_PLUGIN_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")

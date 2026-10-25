@@ -74,4 +74,26 @@ if [[ -f $_gf_dev_root/.dev/share/icons/grassfield-cursors/manifest.hl ]]; then
   esac
   unset _gf_cursor_size
 fi
+# The Grassfield session's GTK defaults (packaging/dconf/grassfield.d, ADR-0017: icon theme, fonts, window buttons), as
+# /usr/share/uwsm/env-grassfield gives them to a real session through DCONF_PROFILE: compiled into .dev/dconf (again when a
+# source is newer) with a dev profile that reads the process's own user database first (XDG_CONFIG_HOME/dconf/user: an
+# isolated one for every client isolated.sh starts and for the private bus's activated services, the portal included),
+# then these defaults. No system database, never the owner's user database for a client. Without dconf: nothing exported.
+_gf_dconf=$_gf_dev_root/.dev/dconf
+if command -v dconf >/dev/null 2>&1 && [[ -d $_gf_dev_root/packaging/dconf/grassfield.d ]]; then
+  if [[ ! -s $_gf_dconf/grassfield.db || -n $(find "$_gf_dev_root/packaging/dconf/grassfield.d" -newer "$_gf_dconf/grassfield.db" -print -quit 2>/dev/null) ]]; then
+    mkdir -p "$_gf_dconf" 2>/dev/null
+    _gf_dconf_tmp=$(mktemp "$_gf_dconf/.grassfield.db.XXXXXX" 2>/dev/null) &&
+      dconf compile "$_gf_dconf_tmp" "$_gf_dev_root/packaging/dconf/grassfield.d" 2>/dev/null &&
+      mv -f "$_gf_dconf_tmp" "$_gf_dconf/grassfield.db" 2>/dev/null
+    rm -f "${_gf_dconf_tmp:-}" 2>/dev/null
+    unset _gf_dconf_tmp
+  fi
+  if [[ -s $_gf_dconf/grassfield.db ]]; then
+    printf 'user-db:user\nfile-db:%s\n' "$_gf_dconf/grassfield.db" >"$_gf_dconf/profile.new" 2>/dev/null &&
+      { cmp -s "$_gf_dconf/profile.new" "$_gf_dconf/profile" 2>/dev/null && rm -f "$_gf_dconf/profile.new" || mv -f "$_gf_dconf/profile.new" "$_gf_dconf/profile"; }
+    [[ -r $_gf_dconf/profile ]] && export DCONF_PROFILE=$_gf_dconf/profile
+  fi
+fi
+unset _gf_dconf
 unset _gf_dev_root
