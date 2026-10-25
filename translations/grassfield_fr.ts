@@ -4008,7 +4008,7 @@
         <translation>Date et heure&#xa0;: %1. Ouvrir les notifications</translation>
     </message>
     <message>
-        <source>ddd d MMM</source>
+        <source>ddd MMM d</source>
         <translation>ddd d MMM</translation>
     </message>
     <message>
@@ -4016,7 +4016,7 @@
         <translation>ddd</translation>
     </message>
     <message>
-        <source>d MMM</source>
+        <source>MMM d</source>
         <translation>d MMM</translation>
     </message>
 </context>

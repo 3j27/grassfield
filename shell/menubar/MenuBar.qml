@@ -298,11 +298,11 @@ Scope {
                 const d = FixedTime.date(clock.date);
                 let dateText = "";
                 if (kind === "both")
-                    dateText = Qt.locale().toString(d, qsTr("ddd d MMM"));
+                    dateText = Qt.locale().toString(d, qsTr("ddd MMM d"));
                 else if (kind === "day")
                     dateText = Qt.locale().toString(d, qsTr("ddd"));
                 else if (kind === "date")
-                    dateText = Qt.locale().toString(d, qsTr("d MMM"));
+                    dateText = Qt.locale().toString(d, qsTr("MMM d"));
                 const t = Qt.formatTime(d, ClockFormat.timePattern(Qt.locale().timeFormat(Locale.ShortFormat), Settings.menubarClockHours, Settings.menubarClockShowSeconds, Settings.menubarClockShowAmPm));
                 return ClockFormat.join(dateText, ClockFormat.flash(t, off));
             }
@@ -847,6 +847,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "grassfield-logo"
                             }
@@ -998,6 +999,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "now-playing"
                             }
@@ -1016,6 +1018,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "moon"
                             }
@@ -1036,7 +1039,8 @@ Scope {
                             onEntered: win.hoverSwitch("network")
 
                             Icon {
-                                size: Tokens.menubarIconSize
+                                size: Connectivity.iconName.indexOf("wifi") === 0 ? Tokens.menubarIconSize * Tokens.menubarWifiIconScale : Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: Connectivity.iconName
                             }
@@ -1059,6 +1063,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: Audio.iconName
                             }
@@ -1080,6 +1085,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: win.battery && win.battery.state === UPowerDeviceState.Charging ? "battery-charging" : "battery"
                             }
@@ -1110,6 +1116,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "search"
                             }
@@ -1130,6 +1137,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "control-center"
                             }

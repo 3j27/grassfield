@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import Grassfield.Ui
+import "../../shell/menubar/ClockFormat.js" as Clock
 
 // Values of the visual audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, "Priorities" 1-7): the measured macOS
 // numbers the tokens now carry, and the geometry derived from them. A change here is a design decision, not a refactor.
@@ -64,6 +65,38 @@ TestCase {
         fuzzyCompare(Appearance.chipFill.a, Tokens.materialFillOpacity, 0.01);
         fuzzyCompare(Appearance.buttonFill.a, Tokens.materialFillOpacity, 0.01);
         Appearance.dark = dark;
+    }
+
+    function readFile(url) {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", url, false);
+        xhr.send();
+        return xhr.responseText;
+    }
+
+    // Priority 7: menu bar. 16-pt glyphs with heavier strokes (our own SVGs, icons-bar/ copies of branding/icons/symbolic with
+    // only the stroke changed), a wider Wi-Fi glyph, a floating capsule, desktop icons 10 from the edge.
+    function test_menuBarMetrics() {
+        compare(Tokens.menubarIconSize, 16);
+        verify(Tokens.menubarIconSize * Tokens.menubarWifiIconScale * 19 / 24 >= 16);
+        verify(Tokens.menubarHoverInsetTop >= 1 && Tokens.menubarHoverInsetBottom >= 1);
+        compare(Tokens.desktopIconMargin, 10);
+    }
+
+    function test_barGlyphsAreTheSameDrawingsWithAHeavierStroke() {
+        const names = ["grassfield-logo", "wifi-1", "wifi-2", "wifi-3", "wifi-off", "network-wired", "volume-1", "volume-2", "volume-3", "volume-mute",
+            "battery", "battery-charging", "search", "now-playing", "moon", "control-center"];
+        for (const n of names) {
+            const base = readFile(Qt.resolvedUrl("../../ui/Grassfield/Ui/icons/" + n + ".svg"));
+            const bar = readFile(Qt.resolvedUrl("../../ui/Grassfield/Ui/icons-bar/" + n + ".svg"));
+            verify(base.length > 0, n);
+            compare(bar, base.replace(/stroke-width="1\.75"/g, 'stroke-width="2.4"'), n);
+        }
+    }
+
+    function test_menuBarClockGap() {
+        verify(Clock.DATE_TIME_GAP.length >= 2);
+        compare(Clock.join("Sat Oct 17", "09:41"), "Sat Oct 17" + Clock.DATE_TIME_GAP + "09:41");
     }
 
     // WCAG relative luminance and contrast of two "#rrggbb" colours.

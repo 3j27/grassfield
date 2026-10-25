@@ -223,14 +223,14 @@ QtObject {
     readonly property int menubarHeight: 24
     // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarItemPadding: 11
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
-    readonly property int menubarIconSize: 14
-    // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property int menubarHoverInsetTop: 0
-    // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    // Status glyphs 16 (macOS ink 12-13.5 tall; was 14); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property int menubarIconSize: 16
+    // The open-title capsule floats: 1 from the screen edge (macOS ~23 tall on a taller bar); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property int menubarHoverInsetTop: 1
+    // The open-title capsule floats: 1 above the bar's bottom edge; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHoverInsetBottom: 1
-    // F1 gap 3: status glyphs 19 apart (18.5-20) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property real menubarStatusItemPadding: 9.5
+    // Status glyphs 18.5-20 apart in macOS; with the 16-pt glyph a pitch of 33; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property real menubarStatusItemPadding: 8.5
     // F1 gap 3: screen edge to the system mark [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetLeft: 20.5
     // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
@@ -267,6 +267,8 @@ QtObject {
     readonly property real menubarInactiveOpacity: 0.65
     // estimate: slide in, ms (Reduce Motion: shown at once) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarRevealDuration: 200
+    // The Wi-Fi glyph is wider than the others: 16 x 1.3 gives an ink about 16.5 wide, macOS 17; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property real menubarWifiIconScale: 1.3
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockIconSize: 48
@@ -1039,8 +1041,8 @@ QtObject {
     readonly property int desktopIconCellWidth: 112
     // estimate: desktop icons v1, px height of a grid slot [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconCellHeight: 112
-    // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
-    readonly property int desktopIconMargin: 16
+    // Desktop icon column from the screen edge: 10 (macOS centre 66 from the edge; was 16); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property int desktopIconMargin: 10
     // estimate: desktop icons v1, icon edge [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSize: 64
     // estimate: desktop icons v1, label font size [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
