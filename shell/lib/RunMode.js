@@ -30,6 +30,10 @@ function ownBus(devValue, sessionValue, privateBusValue) {
     return !dev(devValue, sessionValue) || privateBusValue === "1";
 }
 
+// Answer of a dev-gated IPC function outside a dev session (the security modules return it through their relative
+// import of this file, every other module through Mode.refused).
+var REFUSED = "refused";
+
 // Update notices are for a packaged session only.
 function updateNotices(sessionValue) {
     return session(sessionValue);

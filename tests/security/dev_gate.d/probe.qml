@@ -1,10 +1,13 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.lib
 import qs.security.lock
 import qs.services
+import qs.widgets
+import "lib/RunMode.js" as RunMode
 
-// The REAL Lock singleton (and VisualFixtures) under the environment tests/security/dev_gate.sh sets
+// The REAL Lock singleton (and VisualFixtures, Widgets, Mode) under the environment tests/security/dev_gate.sh sets
 // (GF-AUDIT-001 SEC-03): DEV_GATE_EXPECT=open (dev session: GRASSFIELD_DEV=1, no GRASSFIELD_SESSION) or closed (a real
 // session, GRASSFIELD_SESSION=1, with or without a leaked GRASSFIELD_DEV=1). DEV_GATE_PAM=allowed: the L2 opt-in
 // GRASSFIELD_DEV_ALLOW_PAM=1 is set. Offscreen, no compositor: nothing here can lock (the session starts unlocked, no
@@ -33,6 +36,13 @@ ShellRoot {
         } else {
             check("started-unlocked", Lock.lockState === "unlocked");
         }
+        // ADR-0019, slice M2: every reader of the rule agrees with the lock's gate (the security modules' relative RunMode.js
+        // call), and that gate is the rule fed with the raw environment.
+        const e = n => Quickshell.env(n);
+        const rule = RunMode.dev(e("GRASSFIELD_DEV"), e("GRASSFIELD_SESSION"));
+        check("lock-gate-is-the-rule", Lock.devHooks === rule);
+        check("mode-agrees", Mode.dev === rule && VisualFixtures.dev === rule && Widgets.devHooks === rule);
+        check("fixtures-agree", VisualFixtures.active === Mode.fixtures && Mode.fixtures === (rule && e("GRASSFIELD_VISUAL_FIXTURES") === "1"));
         if (expect === "slept" || expect === "notslept") {
             // nothing else: the start decision is the whole check
         } else if (expect === "closed") {
