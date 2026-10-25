@@ -32,43 +32,75 @@ Scope {
     // `loaded` (which is also true for a malformed file, whose values are then only the adapter's leftovers).
     property bool validRead: false
 
-    // Validated views of the loaded values (a hand-edited file may hold anything).
-    readonly property string appearance: ["dark", "light", "auto"].indexOf(config.appearance) >= 0 ? config.appearance : "dark"
-    readonly property real transparency: clampNumber(config.material.transparency, 0, 1, 0.25)
-    readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
+    // The value of a dotted key as every reader of grassfield.json sees it (ui/Grassfield/Ui/SettingsContract.js, generated from
+    // the schema; ADR-0020): a number out of range is clamped (an integer rounded first), any other invalid value, a number
+    // written as a string or a boolean included, is the key's default. The adapter keeps the stored values untouched (its
+    // leaves are vars), so a hand-edited file may hold anything and still reads the same here and in the Settings app.
+    function read(path: string): var {
+        let node = config;
+        for (const part of path.split("."))
+            node = node === null || node === undefined ? undefined : node[part];
+        // A list comes out of the adapter as an array-like (a QVariantList): the contract checks real arrays.
+        if (node !== null && typeof node === "object" && !Array.isArray(node) && typeof node.length === "number")
+            node = Array.prototype.slice.call(node);
+        return SettingsContract.normalize(path, node);
+    }
+
+    readonly property string appearance: read("appearance")
+    readonly property real transparency: read("material.transparency")
+    readonly property string materialProfile: read("material.profile")
+    readonly property bool reduceTransparency: read("accessibility.reduceTransparency")
+    readonly property bool reduceMotion: read("accessibility.reduceMotion")
+    readonly property bool increaseContrast: read("accessibility.increaseContrast")
     // Text size multiplier of the shell's text (Settings > Accessibility > Display), 1 to 1.3; a hand-edited value is clamped.
-    readonly property real textSize: clampNumber(config.accessibility.textSize, 1, 1.3, 1)
-    readonly property bool zoomOn: config.accessibility.zoom === true
-    readonly property real zoomLevel: clampNumber(config.accessibility.zoomLevel, 1.5, 5, 2)
+    readonly property real textSize: read("accessibility.textSize")
+    readonly property bool zoomOn: read("accessibility.zoom")
+    readonly property real zoomLevel: read("accessibility.zoomLevel")
     // Tile size of the Dock in px (Settings > Size); a hand-edited value is clamped to the slider range.
-    readonly property int dockSize: tileSize(config.dock.size)
-    // Screen edge of the Dock (Settings > Position on screen); anything but left/right is the bottom.
-    readonly property string dockPosition: dockEdge(config.dock.position)
-    readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
+    readonly property int dockSize: read("dock.size")
+    // Screen edge of the Dock (Settings > Position on screen).
+    readonly property string dockPosition: read("dock.position")
+    readonly property real dockMagnification: read("dock.magnification")
+    readonly property bool dockMagnificationEnabled: read("dock.magnificationEnabled")
+    readonly property bool dockAutohide: read("dock.autohide")
+    readonly property bool dockShowRecents: read("dock.showRecents")
+    readonly property bool dockMinimizeIntoApp: read("dock.minimizeIntoApp")
+    readonly property bool dockAnimateOpening: read("dock.animateOpening")
+    readonly property bool dockShowIndicators: read("dock.showIndicators")
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
-    // user's own, is returned as it is. Nothing is written back.
+    // user's own, is returned as it is. Nothing is written back. The Dock owns this key and its recent list and stack options.
     readonly property var dockPinned: {
         const list = stringList(config.dock.pinned);
         return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
     }
     readonly property var dockRecent: stringList(config.dock.recent)
-    readonly property var dockFolders: stringList(config.dock.folders)
+    readonly property var dockFolders: read("dock.folders")
     readonly property var dockStackOptions: config.dock.stackOptions && typeof config.dock.stackOptions === "object" ? config.dock.stackOptions : ({})
-    readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
-    readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
+    readonly property string titlebarDoubleClick: read("windows.titlebarDoubleClick")
+    readonly property bool windowsTilingEdges: read("windows.tilingEdges")
+    readonly property bool windowsTilingMenuBar: read("windows.tilingMenuBar")
+    readonly property bool windowsTilingMargins: read("windows.tilingMargins")
+    readonly property bool windowsStages: read("windows.stages")
+    readonly property bool windowsRebuildExtension: read("windows.rebuildExtension")
+    readonly property string dockMinimizeEffect: read("dock.minimizeEffect")
+    readonly property bool notificationsDnd: read("notifications.dnd")
     readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
     readonly property var notificationsAppStyles: NotificationPrefs.normalizeStyles(config.notifications.appStyles)
-    readonly property string notificationsHistory: NotificationPrefs.validHistory(config.notifications.history) ? config.notifications.history : "week"
-    readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
-    readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
-    readonly property string accentColor: Accent.normalize(config.accent.color)
-    readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
-    readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
-    readonly property string folderColor: FolderStyle.normalizeColor(config.icons.folderColor)
-    readonly property int pointerSize: PointerSize.fromStored(config.pointer.size)
-    readonly property string pointerOutlineColor: PointerColors.normalizeOutline(config.pointer.outlineColor)
-    readonly property string pointerFillColor: PointerColors.normalizeFill(config.pointer.fillColor)
+    readonly property string notificationsHistory: read("notifications.history")
+    readonly property string notificationsPreviews: read("notifications.previews")
+    readonly property bool desktopShowIcons: read("desktop.showIcons")
+    readonly property bool menubarShowBackground: read("menubar.showBackground")
+    readonly property string menubarAutoHide: read("menubar.autoHide")
+    readonly property bool menubarShowNowPlaying: read("menubar.showNowPlaying")
+    readonly property bool menubarShowSearch: read("menubar.showSearch")
+    readonly property string accentColor: read("accent.color")
+    readonly property string iconMode: read("icons.mode")
+    readonly property string iconTint: read("icons.tint")
+    readonly property string folderColor: read("icons.folderColor")
+    readonly property int pointerSize: read("pointer.size")
+    readonly property string pointerOutlineColor: read("pointer.outlineColor")
+    readonly property string pointerFillColor: read("pointer.fillColor")
     // The wallpaper settings, complete and valid (WallpaperConfig.normalize: an invalid field reads as its default).
     // The shell only reads them; the Settings app writes them.
     readonly property var wallpaper: WallpaperConfig.normalize({
@@ -82,13 +114,14 @@ Scope {
         online: config.wallpaper.online,
         outputs: config.wallpaper.outputs
     })
-    readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
+    // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:
+    // false or "0" in a hand-edited file must not switch the auto-lock off).
+    readonly property int lockIdleMinutes: read("lock.idleMinutes")
 
-    // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
-    readonly property string hotCornerTopLeft: cornerAction(config.hotCorners.topLeft)
-    readonly property string hotCornerTopRight: cornerAction(config.hotCorners.topRight)
-    readonly property string hotCornerBottomLeft: cornerAction(config.hotCorners.bottomLeft)
-    readonly property string hotCornerBottomRight: cornerAction(config.hotCorners.bottomRight)
+    readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
+    readonly property string hotCornerTopRight: read("hotCorners.topRight")
+    readonly property string hotCornerBottomLeft: read("hotCorners.bottomLeft")
+    readonly property string hotCornerBottomRight: read("hotCorners.bottomRight")
 
     // A stored tile size: a whole number inside the slider's range (dock.sizeMin..dock.sizeMax); anything that is not a number reads
     // as the default size (same rule as Geometry.clampSize, which the Dock uses for the live resize).
@@ -125,96 +158,96 @@ Scope {
     signal loadedFile
 
     component MaterialConfig: JsonObject {
-        property real transparency: 0.25
-        property string profile: "balanced"
+        property var transparency: 0.25
+        property var profile: "balanced"
     }
 
     component AccessibilityConfig: JsonObject {
-        property bool reduceTransparency: false
-        property bool reduceMotion: false
-        property bool increaseContrast: false
-        property real textSize: 1
+        property var reduceTransparency: false
+        property var reduceMotion: false
+        property var increaseContrast: false
+        property var textSize: 1
         // Screen magnification (Hyprland cursor:zoom_factor): on or off, and the factor while on, 1.5 to 5.
-        property bool zoom: false
-        property real zoomLevel: 2
+        property var zoom: false
+        property var zoomLevel: 2
     }
 
     component DockConfig: JsonObject {
         property var pinned: ["chromium", "foot", "org.grassfield.Settings"]
         property var size: 48
-        property string position: "bottom"
-        property real magnification: 1.6
-        property bool magnificationEnabled: false
-        property bool autohide: false
+        property var position: "bottom"
+        property var magnification: 1.6
+        property var magnificationEnabled: false
+        property var autohide: false
         // Recently launched apps that are not pinned, newest first (owned by the Dock), and whether to show them.
         property var recent: []
-        property bool showRecents: true
+        property var showRecents: true
         // Folder stacks in the right section of the Dock ("~/" allowed) and their options per folder (Stacks.js).
         property var folders: ["~/Downloads"]
         property var stackOptions: ({})
         // Minimized windows go into their app's tile instead of getting a tile of their own.
-        property bool minimizeIntoApp: false
+        property var minimizeIntoApp: false
         // "Animate opening applications": the launch bounce (macOS). Attention bounces are not part of it.
-        property bool animateOpening: true
+        property var animateOpening: true
         // "Show indicators for open applications": the running dot under apps (macOS).
-        property bool showIndicators: true
+        property var showIndicators: true
         // "Minimize animation": funnel (the default) | shrink. The compositor plugin draws it.
-        property string minimizeEffect: "funnel"
+        property var minimizeEffect: "funnel"
     }
 
     component WindowsConfig: JsonObject {
-        property string titlebarDoubleClick: "zoom"
+        property var titlebarDoubleClick: "zoom"
         // Window tiling (macOS 15+, all on by default): drag to the screen edges, drag to the menu bar, margins.
-        property bool tilingEdges: true
-        property bool tilingMenuBar: true
-        property bool tilingMargins: true
+        property var tilingEdges: true
+        property var tilingMenuBar: true
+        property var tilingMargins: true
         // Stages (macOS: Desktop & Dock > Windows, off by default; ADR-0013, owner decision D-4): pushed to the compositor
         // plugin as config("stagesEnabled") while it advertises stages-available.
-        property bool stages: false
+        property var stages: false
         // "Rebuild the compositor extension after Hyprland updates" (opt-in, ADR-0009 amendment 2026-10-23): when no
         // extension build matches the installed Hyprland the shell (shell.qml) runs grassfield-compositor-rebuild
         // --session in the background.
-        property bool rebuildExtension: false
+        property var rebuildExtension: false
     }
 
     component LockConfig: JsonObject {
-        property int idleMinutes: 5
+        property var idleMinutes: 5
     }
 
     component HotCornersConfig: JsonObject {
-        property string topLeft: "none"
-        property string topRight: "none"
-        property string bottomLeft: "none"
-        property string bottomRight: "none"
+        property var topLeft: "none"
+        property var topRight: "none"
+        property var bottomLeft: "none"
+        property var bottomRight: "none"
     }
 
     component DesktopConfig: JsonObject {
-        property bool showIcons: true
+        property var showIcons: true
     }
 
     component MenubarConfig: JsonObject {
         // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
-        property bool showBackground: false
+        property var showBackground: false
         // always | desktop | fullscreen | never: "Automatically hide and show the menu bar" (BarHide.js).
-        property string autoHide: "fullscreen"
+        property var autoHide: "fullscreen"
         // Now Playing item of the bar (Settings > Desktop & Dock > Menu Bar): shown while a player has a session.
-        property bool showNowPlaying: true
+        property var showNowPlaying: true
         // Search item (magnifier) of the bar.
-        property bool showSearch: true
+        property var showSearch: true
     }
 
     component AccentConfig: JsonObject {
         // multicolor | blue | purple | pink | red | orange | yellow | green | graphite (Settings > Appearance > Accent colour).
-        property string color: "multicolor"
+        property var color: "multicolor"
     }
 
     component IconsConfig: JsonObject {
         // default | dark | clear | tinted (ADR-0014): app and file icons only.
-        property string mode: "default"
+        property var mode: "default"
         // "accent" or a #rrggbb colour for the tinted mode.
-        property string tint: "accent"
+        property var tint: "accent"
         // "theme" (the icon theme's own folder colour), "accent" or a #rrggbb colour: every folder icon.
-        property string folderColor: "theme"
+        property var folderColor: "theme"
     }
 
     component PointerConfig: JsonObject {
@@ -242,15 +275,15 @@ Scope {
     }
 
     component NotificationsConfig: JsonObject {
-        property bool dnd: false
+        property var dnd: false
         // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
-        property string previews: "unlocked"
+        property var previews: "unlocked"
         // Per-app overrides [{app, previews}] (NotificationPrefs.js).
         property var appPreviews: []
         // Per-app alert style overrides [{app, style}] (banners | alerts | none, NotificationPrefs.js).
         property var appStyles: []
         // How long the history stays on disk: week | day | never.
-        property string history: "week"
+        property var history: "week"
     }
 
     function setAppearance(value: string): void {
@@ -495,11 +528,11 @@ Scope {
         file.reload();
     }
 
-    // The adapter keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so
-    // a pointer key deleted by hand (or by a reset elsewhere) would leave the old size or colour active while the Settings
-    // app shows the default. A missing key is the default: put it back after each load (unsaved local changes go on top
-    // again in reapplyDirty). A file that cannot be parsed is left alone.
-    function resetMissingPointerKeys(text: string): void {
+    // The adapter keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so a
+    // key deleted by hand (or by a reset elsewhere) would leave the old value active while the Settings app shows the default.
+    // A missing key is the default: put it back after each load, for every key of the contract (SettingsContract.ALL_DEFAULTS;
+    // unsaved local changes go on top again in reapplyDirty). A file that cannot be parsed is left alone.
+    function resetMissingKeys(text: string): void {
         let parsed = null;
         try {
             parsed = text.trim() === "" ? {} : JSON.parse(text);
@@ -508,42 +541,19 @@ Scope {
         }
         if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
             return;
-        const pointer = parsed.pointer !== null && typeof parsed.pointer === "object" && !Array.isArray(parsed.pointer) ? parsed.pointer : {};
-        if (!("size" in pointer))
-            config.pointer.size = PointerSize.DEFAULT;
-        if (!("outlineColor" in pointer))
-            config.pointer.outlineColor = PointerColors.DEFAULT_OUTLINE;
-        if (!("fillColor" in pointer))
-            config.pointer.fillColor = PointerColors.DEFAULT_FILL;
-        // And for the per-app previews list.
-        const notif = parsed.notifications !== null && typeof parsed.notifications === "object" && !Array.isArray(parsed.notifications) ? parsed.notifications : {};
-        if (!("appPreviews" in notif))
-            config.notifications.appPreviews = [];
-        if (!("appStyles" in notif))
-            config.notifications.appStyles = [];
-        if (!("history" in notif))
-            config.notifications.history = "week";
-        // Same for the wallpaper group (ADR-0016): removing a key, or the whole object, reads as the defaults.
-        const wp = parsed.wallpaper !== null && typeof parsed.wallpaper === "object" && !Array.isArray(parsed.wallpaper) ? parsed.wallpaper : {};
-        const d = WallpaperConfig.WALLPAPER_DEFAULTS;
-        if (!("source" in wp))
-            config.wallpaper.source = d.source;
-        if (!("path" in wp))
-            config.wallpaper.path = d.path;
-        if (!("color" in wp))
-            config.wallpaper.color = d.color;
-        if (!("fit" in wp))
-            config.wallpaper.fit = d.fit;
-        if (!("interval" in wp))
-            config.wallpaper.interval = d.interval;
-        if (!("shuffle" in wp))
-            config.wallpaper.shuffle = d.shuffle;
-        if (!("videoOnBattery" in wp))
-            config.wallpaper.videoOnBattery = d.videoOnBattery;
-        if (!("online" in wp))
-            config.wallpaper.online = {provider: d.online.provider};
-        if (!("outputs" in wp))
-            config.wallpaper.outputs = [];
+        for (const path in SettingsContract.ALL_DEFAULTS) {
+            let node = parsed;
+            let present = true;
+            for (const part of path.split(".")) {
+                if (node === null || typeof node !== "object" || Array.isArray(node) || !(part in node)) {
+                    present = false;
+                    break;
+                }
+                node = node[part];
+            }
+            if (!present)
+                applyPath(path, JSON.parse(JSON.stringify(SettingsContract.ALL_DEFAULTS[path])));
+        }
     }
 
     Timer {
@@ -568,7 +578,7 @@ Scope {
     JsonAdapter {
         id: config
         property int version: 1
-        property string appearance: "dark"
+        property var appearance: "dark"
         property MaterialConfig material: MaterialConfig {}
         property AccessibilityConfig accessibility: AccessibilityConfig {}
         property DockConfig dock: DockConfig {}
@@ -623,7 +633,7 @@ Scope {
         onSaved: root.saved()
         onLoaded: {
             root.checkText(file.text());
-            root.resetMissingPointerKeys(file.text());
+            root.resetMissingKeys(file.text());
             root.reapplyDirty();
             root.loadedFile();
         }
