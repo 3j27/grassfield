@@ -15,6 +15,9 @@ StartLimitBurst=5
 [Service]
 Type=simple
 Slice=session.slice
+# ProtectSystem=strict makes /run read-only, so dconf cannot create $XDG_RUNTIME_DIR/dconf/user (92 warnings in the first real
+# session). udiskie keeps no persistent settings, so GSettings uses its memory backend; the sandbox stays as it is.
+Environment=GSETTINGS_BACKEND=memory
 ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray
 Restart=on-failure
 RestartSec=3
