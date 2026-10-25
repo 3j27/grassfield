@@ -31,7 +31,8 @@ TestCase {
     }
 
     function test_invalidFallsBackToDefault() {
-        const values = [-1, 241, 2.5, NaN, undefined, "x"];
+        // false, "0", "", null and [0] are 0 to Number(): they must never switch the lock off.
+        const values = [-1, 241, 2.5, NaN, undefined, "x", false, true, "0", "5", "", null, [0], {}];
         for (let i = 0; i < values.length; i++) {
             const t = IdleModel.timings(values[i]);
             verify(t.enabled, String(values[i]));
