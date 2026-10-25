@@ -24,6 +24,14 @@ namespace gf::chrome {
         return caps;
     }
 
+    bool capabilityCandidate(std::string_view interfaceName, int version, bool hasUserData) {
+        return interfaceName == "xdg_toplevel" && version >= static_cast<int>(kWmCapabilitiesSince) && hasUserData;
+    }
+
+    bool needsTell(const CapabilityTell& tell, bool withMinimize) {
+        return !tell.unreachable && withMinimize != tell.minimizeTold;
+    }
+
     bool moveAnswersPress(const std::optional<ZoomedPress>& press, uint64_t window, bool buttonHeld, uint64_t nowMs) {
         if (!press || press->window == 0 || press->window != window || !buttonHeld)
             return false;
