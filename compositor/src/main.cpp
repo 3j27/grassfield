@@ -228,10 +228,11 @@ namespace {
             HyprlandAPI::addNotification(state().handle, text, color, timeMs);
     }
 
-    // A notice in the session's language (GF-067: core/Notices.hpp, French or English by LC_ALL, LC_MESSAGES, LANG).
+    // A notice in the session's language (GF-067: core/Notices.hpp, French or English in gettext's order).
     void notify(gf::notices::Notice notice, const CHyprColor& color, float timeMs = 8000.F) {
         // NOLINTNEXTLINE(concurrency-mt-unsafe): read once on Hyprland's main thread, nothing in the plugin sets the environment
-        const auto lang = gf::notices::languageFrom(std::getenv("LC_ALL"), std::getenv("LC_MESSAGES"), std::getenv("LANG"));
+        const auto lang =
+            gf::notices::languageFrom(std::getenv("LANGUAGE"), std::getenv("LC_ALL"), std::getenv("LC_MESSAGES"), std::getenv("LANG"));
         notify(std::string{gf::notices::text(notice, lang)}, color, timeMs);
     }
 } // namespace

@@ -7,15 +7,25 @@ namespace gf::notices {
             return value != nullptr && value[0] != '\0';
         }
 
-        // "fr" alone or followed by a territory, codeset or modifier ("fr_FR", "fr.UTF-8", "fr@euro").
+        // "fr" alone or followed by a territory, codeset or modifier ("fr_FR", "fr-FR", "fr.UTF-8", "fr@euro").
         bool isFrench(std::string_view locale) {
-            return locale.starts_with("fr") && (locale.size() == 2 || locale[2] == '_' || locale[2] == '.' || locale[2] == '@');
+            return locale.starts_with("fr") &&
+                (locale.size() == 2 || locale[2] == '_' || locale[2] == '-' || locale[2] == '.' || locale[2] == '@');
+        }
+
+        // The C locale, under which gettext ignores LANGUAGE: "C", "POSIX", "C.UTF-8" and the like.
+        bool isC(std::string_view locale) {
+            return locale == "C" || locale == "POSIX" || locale.starts_with("C.");
         }
     } // namespace
 
-    Lang languageFrom(const char* lcAll, const char* lcMessages, const char* lang) {
-        const char* chosen = set(lcAll) ? lcAll : set(lcMessages) ? lcMessages : set(lang) ? lang : nullptr;
-        return chosen != nullptr && isFrench(chosen) ? Lang::Fr : Lang::En;
+    Lang languageFrom(const char* language, const char* lcAll, const char* lcMessages, const char* lang) {
+        const char* locale = set(lcAll) ? lcAll : set(lcMessages) ? lcMessages : set(lang) ? lang : nullptr;
+        if (locale != nullptr && !isC(locale) && set(language)) {
+            const std::string_view list{language};
+            return isFrench(list.substr(0, list.find(':'))) ? Lang::Fr : Lang::En;
+        }
+        return locale != nullptr && isFrench(locale) ? Lang::Fr : Lang::En;
     }
 
     std::string_view text(Notice notice, Lang lang) {
@@ -30,6 +40,7 @@ namespace gf::notices {
             case Notice::InitFailed:
                 return fr ? "[Grassfield] L’extension du compositeur n’a pas pu démarrer : barres de titre désactivées."
                           : "[Grassfield] Compositor plugin failed to start: titlebars disabled.";
+            case Notice::End: break;
         }
         return "[Grassfield]";
     }
