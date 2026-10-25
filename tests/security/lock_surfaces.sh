@@ -91,6 +91,9 @@ compositor = read("shell/platform/Compositor.qml")
 windows = ipc(compositor, "windows")
 for name in ("minimize", "tile", "hide", "cycleApp"):
     first_decision("shell/platform/Compositor.qml", f"windows.{name}", R) if windows is None else first_decision("shell/platform/Compositor.qml", name, R, text=windows, lines=2)
+# The plugin's minimize-request event (the titlebar button and, since GF-056 P8, a tagged window's own minimize button)
+# moves nothing behind the lock either.
+first_decision("shell/platform/Compositor.qml", "minimizeByAddress", R, text=compositor, lines=2)
 first_decision("shell/switcher/Switcher.qml", "step", "if (locked)", lines=8)
 # Review of 1d2c856: the desktop's context menu, its attribution card and the widget menu (an Overlay layer with the
 # keyboard) also refuse and close.
@@ -271,6 +274,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
   'shell/desktop/IconsView.qml#root.closeMenu("outside");#root.closeAbout("outside");' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows cycleApp")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows minimize request")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
   'shell/security/polkit/AuthAgent.qml#shown && (!root.heldByLock || root.userFocused)#shown' \
