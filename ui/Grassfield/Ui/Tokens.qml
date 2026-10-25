@@ -701,20 +701,34 @@ QtObject {
 
     // F1 gap 8: panel width with results 639 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchWidth: 640
-    // docs/specs/search.md: about 1/4 from the top
-    readonly property real searchTopFraction: 0.22
+    // panel top at 0.199 of the screen height (macOS 26 composite gs-086-210) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    readonly property real searchTopFraction: 0.2
     // F1 gap 8: field row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchFieldHeight: 56
     // F1 gap 8: query text ~26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchFieldSize: Math.round(26 * Appearance.textScale)
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchFieldIconSize: 22
+    // magnifier glyph about 21 pt, drawn by the 26-pt icon box (22 drew 17) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    readonly property int searchFieldIconSize: 26
+    // magnifier, hairline (19.4-20.4) and chip row (20) inset from the panel edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    readonly property int searchFieldInset: 20
+    // query text left inset 61 from the panel edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    readonly property int searchQueryInset: 61
     // F1 gap 8: result row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRowHeight: 56
     // F1 gap 8: result icon ~32 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRowIconSize: 32
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchHeaderHeight: 28
+    // selected row 10 from the panel sides [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    readonly property int searchRowInset: 10
+    // selected row radius 17.8 (the panel's 26 less the 10 inset is 16; macOS draws it rounder) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/audits/ui-finesse-2026-10-25.md § F9. Concentric radii — side by side]
+    readonly property int searchRowRadius: 18
+    // result title and subtitle 72.5 from the panel edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    readonly property int searchRowTextInset: 72
+    // result title: macOS 27 cap height 12.5 pt (about 17.7-pt SF), Inter 17 has the same cap height (cap 0.727 em against SF's 0.705) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10]
+    readonly property int searchTitleSize: Math.round(17 * Appearance.textScale)
+    // result subtitle about 15 pt (macOS 26 and 27) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10]
+    readonly property int searchSubtitleSize: Math.round(15 * Appearance.textScale)
+    // selected row: a neutral fill, not the accent; macOS 27 lifts the dark panel by 8-10 luminance (white at about 0.06); the light appearance darkens by the same alpha (no light reference). At most material.fillOpacity, so the A2 material roles cover the text on it (tests/visual/test_contrast_tokens.py) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target]
+    readonly property real searchSelectionFillOpacity: 0.06
     // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchChipTop: 10
     // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
@@ -725,8 +739,6 @@ QtObject {
     readonly property real searchGlyphScale: 0.7
     // estimate: decoded icon size relative to the row icon tile [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchIconOversample: 2
-    // A2: subtitle on the selected row (was 0.8: 4.2-4.4:1 on the accent); 4.5:1 or more in both appearances, tested [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property real searchSelectedSubtitleOpacity: 0.9
     // estimate: minimum gap between the panel and the screen edges [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchEdgeMargin: 16
     // task: results at most 60 percent of the screen [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]

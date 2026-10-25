@@ -3,9 +3,9 @@
 ## macOS reference behavior (described in words)
 - `Cmd+Space` opens a centered floating search field (~680 pt wide, ~1/4 from the top), large type
   (~22 pt), magnifier glyph, material background, rounded ~26 pt.
-- Typing shows grouped results below (Top Hit, Applications, Documents, Folders, Settings,
-  Calculator/Conversion inline answers). Arrow keys move, Return opens, Cmd+Return reveals in Files,
-  Esc clears then closes. The top hit is preselected.
+- Typing shows results below, ordered by group (Top Hit, Applications, Documents, Folders, Settings,
+  Calculator/Conversion inline answers) without group headers (macOS 27). Arrow keys move, Return opens, Cmd+Return
+  reveals in Files, Esc clears then closes. The top hit is preselected and drawn on a neutral light fill, not the accent.
 
 ## Purpose and non-goals
 Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit conversion, commands
@@ -41,6 +41,12 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 - Apps: entries with NoDisplay, or hidden by OnlyShowIn/NotShowIn for `$XDG_CURRENT_DESKTOP`, are not listed. Search uses the same list as the Apps window (`Apps.isListed()` in `shell/services/Apps.qml`, fed by `launchpad/hidden-entries.sh`); the list is rebuilt, debounced, when desktop entries change and Search re-ranks on `Apps.listChanged`.
 - Commands: Sleep, Restart, Shut Down, Log Out reuse `Power` and the confirmation dialogs. Lock Screen (REQ-SRCH-PRV-d2) locks through the lock module (`Lock.lock("search")`, the singleton behind the `lock` IPC target of shell/security/lock; the System menu calls the same function); `Search.lockAvailable` is true.
 - Settings pages provider (REQ-SRCH-PRV-d1, macOS model: Spotlight lists System Settings panes): typing a page name or one of its keywords (title scores like a command, keywords at 0.8 of that) lists the page in a "Settings" group (also as Top Hit when it beats the best app and command) and Return opens Grassfield Settings on it (`SettingsApp.openSection(id)`, `grassfield-settings --section=<id>`). Pure matching in `shell/search/SettingsPages.js` (page ids = the Settings sections); a fourth filter chip "Settings" joins Applications, Commands and Documents. Test: `tests/unit/tst_searchsettings.qml`.
+- Rows (ADR-0024 lot 2, macOS 27 Spotlight; measured in `docs/audits/visual-tahoe-2026-10-25.md` § Search — partly close, 6/10
+  and `docs/audits/ui-finesse-2026-10-25.md` § 7.1 macOS 27 changed the target): one row per result, no header rows (the groups
+  still order the list, Tab moves between them and `status()` reports them); 17 / 15 type (Inter sizes with the cap height of
+  macOS's 17.7 / 15); title and subtitle 72 from the panel edge; the selected row 10 from the panel sides, radius 18, a neutral
+  fill (`colors.fill` at `search.selectionFillOpacity`, ordinary text colours, inside the A2 material fill overlay). Field:
+  magnifier, hairline and chips 20 from the edges, query 61, panel top at 0.20 of the screen.
 - Latency is logged by the shell: `search open->visible N ms` (IPC call to first frame) and `search keystroke->results N ms`.
 
 - Filter chips (F2c): with a query that has results in two or more of Applications, Commands and Documents (files and recents), a chip row sits under the field (`Filters.js`; the capsule is the Apps category chip). A click narrows the results to that kind (the Top Hit joins its kind; inline answers are hidden) and a second click clears it; a new query clears it. IPC `search filter <apps|commands|documents|"">` is the test hook. The field keeps the text focus; the chips are reachable by keyboard: Tab past the last result group (Shift+Tab before the first) moves the focus ring to the first (last) chip, Left/Right/Home/End move along them, Space or Return selects or clears, Esc or Tab past the end returns to the field, and any other key (typing, Up, Down) leaves the chips and acts on the field. The ring is the shared outside accent ring (`control.focusOutline`). Test: `tests/shell/search_chips`. The `filter` hook answers only in a visual fixture session (`VisualFixtures.active`).
