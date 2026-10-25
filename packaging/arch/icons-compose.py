@@ -78,6 +78,46 @@ PB_PLACES = ("16x16/places", "scalable/places")
 KINDS = ("apple-logo", "finder-face", "doubt", "appstore")
 
 
+_IDS = re.compile(rb'\sid="([^"]+)"')
+_EMPTY_PATTERN = re.compile(rb'<pattern\b[^>]*/>')
+_PAINT_REF = re.compile(rb'((?:fill|stroke)\s*[=:]\s*"?)url\(#([^)"\s]+)\)')
+
+
+def clean_svg(path):
+    """Replace paint references Qt's SVG renderer cannot resolve by `none`, in place; report whether the file changed.
+
+    Some upstream exports (Penpot and others) fill a shape with url(#x) where x is missing from the document or is an empty
+    <pattern/>. Qt logs "Could not resolve property: x" on every load and draws nothing for the shape; `none` is the same
+    picture without the noise (and what a browser draws for a missing reference). Only fill/stroke references are touched.
+    """
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if b"url(#" not in data:
+        return False
+    ids = set(_IDS.findall(data))
+    # Qt takes a pattern's content only from the pattern itself, never through href (browsers inherit it): a self-closed
+    # <pattern/> is a paint server Qt cannot use, whether its href is missing (Penpot), a gradient (Inkscape) or another
+    # pattern. Such a fill is replaced by none; Qt drew nothing for it either.
+    dangling = set()
+    for m in _EMPTY_PATTERN.finditer(data):
+        own = _IDS.search(m.group(0))
+        if own:
+            dangling.add(own.group(1))
+
+    def fix(m):
+        ref = m.group(2)
+        if ref in ids and ref not in dangling:
+            return m.group(0)
+        return m.group(1) + b"none"
+
+    new = _PAINT_REF.sub(fix, data)
+    if new == data:
+        return False
+    with open(path, "wb") as fh:
+        fh.write(new)
+    return True
+
+
 def die(msg):
     sys.exit("icons-compose: " + msg)
 
@@ -434,6 +474,7 @@ def compose(a):
         shutil.rmtree(out)
     os.makedirs(out)
     present_dirs = {"scalable/apps"}
+    cleaned = 0
     for r in sorted(out_entries):
         kind, val = out_entries[r]
         dst = os.path.join(out, r)
@@ -442,6 +483,8 @@ def compose(a):
         if kind == "f":
             shutil.copyfile(val, dst)
             os.chmod(dst, 0o644)
+            if dst.endswith(".svg") and clean_svg(dst):
+                cleaned += 1
         else:
             os.symlink(posixpath.normpath(val), dst)
     os.makedirs(os.path.join(out, "scalable/apps"), exist_ok=True)
@@ -490,6 +533,7 @@ def compose(a):
     verify_signatures(out, a.signatures, listed_hashes)
 
     # ---- report
+    print("icons-compose: %d SVGs had unresolvable paint references replaced by none (clean_svg)" % cleaned)
     print("icons-compose: layer counts (files + links, names)")
     for label, ly, _, _ in layers:
         nf = sum(1 for e in ly.e.values() if e[0] == "f")
