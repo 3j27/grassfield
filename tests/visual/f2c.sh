@@ -4,6 +4,7 @@
 #   tests/visual/f2c.sh search TAG     query, filter chips and empty state, light and dark -> .dev/f2c/search-TAG-*.png
 #   tests/visual/f2c.sh overview TAG   four windows, light and dark -> .dev/f2c/overview-TAG-*.png
 #   tests/visual/f2c.sh alerts TAG     alert (Force Quit-free confirm) and sheet -> .dev/f2c/alerts-TAG-*.png
+#   tests/visual/f2c.sh gallery TAG    Notification Center and its widget gallery, light and dark -> .dev/f2c/gallery-TAG-*.png
 # Output goes to .dev/f2c/ only.
 source "$(dirname "$0")/lib.sh"
 surface=${1:?surface}
@@ -95,8 +96,19 @@ case $surface in
       vs_ipc menubar close >/dev/null
     done ;;
   gallery)
+    # The Center, and the gallery that opens on it, stay open between iterations (vs_reset does not close them): the dark run
+    # used to start with the gallery already open, its click on the pill did nothing and "center" and "gallery" were the same
+    # picture (audit 2026-10-25). Each iteration therefore starts, and ends, with the Center closed.
+    close_center() {
+      for try in 1 2 3; do
+        [[ $(vs_ipc notifications status) == *center=true* ]] || return 0
+        vs_ipc notifications toggleCenter >/dev/null
+        vs_sleep 1.5
+      done
+    }
     for ap in light dark; do
       vs_reset "$ap" 0.25
+      close_center
       vs_ipc notifications clearAll >/dev/null
       vs_notify
       vs_sleep 2
@@ -109,6 +121,7 @@ case $surface in
       vs_pointer abs ${F2C_PILL:-1715 742} sleep 300 click >/dev/null
       vs_sleep 2
       shot "gallery-$tag-$ap-gallery"
+      close_center
       vs_ipc notifications clearAll >/dev/null
     done ;;
   *) echo "f2c: unknown surface $surface" >&2; exit 2 ;;

@@ -24,6 +24,7 @@
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
+ {"path": "tests/visual/fringe-count.sh", "reason": "measuring tool for captures (colour fringes of text), used by hand in the grayscale-text proof"},
  {"path": "tests/visual/ipc.sh", "reason": "helper: qs ipc against the nested shell"},
  {"path": "tests/visual/flow-lib.sh", "reason": "helper sourced by the tests/visual/flow-*.sh functional flows"},
  {"path": "tests/visual/run.sh", "reason": "runner of tests/visual/scenarios/*.sh, not a test itself"},
