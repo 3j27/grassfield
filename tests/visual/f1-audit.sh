@@ -37,9 +37,12 @@ extra() {
     vs_reset
     case $1 in
       dock-tooltip)
+        # A real pointer on tile 1 (Apps): the IPC hover drives magnification only, and parking the pointer would hide
+        # the tooltip again.
         vs_ipc dock magnify 1.0 false
-        vs_ipc dock hover 927
-        vs_capture dock-tooltip ;;
+        read -r x y < <(vs_ipc dock centre 1 GF-REF)
+        vs_pointer abs "${x%.*}" "${y%.*}"
+        VS_NOPARK=1 VS_SETTLE=1.5 vs_capture dock-tooltip ;;
       dock-menu)
         # Tile 0 (Files): the Apps tile (1) has no menu, a secondary click there only shows its tooltip.
         read -r x y < <(vs_ipc dock centre 0 GF-REF)
