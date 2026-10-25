@@ -645,6 +645,8 @@ QtObject {
     readonly property int quicksettingsEndGlyphLarge: 18
     // Glyph inside the 36-pt icon disk of a capsule and the glyph of a 1x1 circle module: about 20 (macOS ~20 x 14, was the 14-pt menu icon); audit 2026-10-25 priority 8 (Quick Settings; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsDiskGlyph: 20
+    // Quick Settings slider track in the dark appearance: the fill colour (white) at this opacity, a lighter groove: 2.0:1 or more against the module (non-text), the white fill 4.5:1 against it, tested (docs/testing/f1-reference-gaps.md § Quick Settings; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property real quicksettingsSliderTrackOpacityDark: 0.25
 
     // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19

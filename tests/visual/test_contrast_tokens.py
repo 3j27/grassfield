@@ -639,18 +639,25 @@ class WindowSurfacePairs(unittest.TestCase):
             self.assertGreaterEqual(r, 3.0, "white glyph on the %s tile: %.2f:1" % (name, r))
 
     def test_quick_settings_slider_fill_against_its_track(self):
-        # WCAG 1.4.11: the white fill against the track, over the lightest module (every wallpaper colour, every transparency).
+        # WCAG 1.4.11: the white fill against the track, and the empty track against the module (1.5:1), every wallpaper colour and
+        # transparency. Light: the shadow colour darkens the module; dark: the fill colour lightens it (a shadow on a dark module is invisible).
         for ap in APPEARANCES:
             fill = self.tok.color("colors", ap, "knob")
-            shadow = self.tok.color("colors", ap, "shadow")
-            worst = None
+            if ap == "light":
+                tc, op = self.tok.color("colors", ap, "shadow"), self.tok.path("quicksettings.sliderTrackOpacity")
+            else:
+                tc, op = self.tok.color("colors", ap, "fill"), self.tok.path("quicksettings.sliderTrackOpacityDark")
+            worst = groove = None
             for t in TRANSPARENCIES:
                 for wp in WALLPAPER_COLORS:
                     module = over(self.tok.color("colors", ap, "materialTint"), self.tok.tint_alpha(t), wp)
-                    track = over(shadow, self.tok.path("quicksettings.sliderTrackOpacity"), module)
+                    track = over(tc, op, module)
                     r = wcag(fill, track)
                     worst = r if worst is None else min(worst, r)
+                    g = wcag(track, module)
+                    groove = g if groove is None else min(groove, g)
             self.assertGreaterEqual(worst, 3.0, "slider fill against the track, %s appearance: %.2f:1" % (ap, worst))
+            self.assertGreaterEqual(groove, 1.5, "slider track against the module, %s appearance: %.2f:1" % (ap, groove))
 
 
 if __name__ == "__main__":

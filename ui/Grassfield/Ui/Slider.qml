@@ -98,7 +98,7 @@ T.Control {
         width: parent.width
         height: root.trackHeight
         radius: height / 2
-        color: root.knobless ? Appearance.withAlpha(Appearance.colors.shadow, Tokens.quicksettingsSliderTrackOpacity) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.knobless ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.quicksettingsSliderTrackOpacityDark) : Appearance.withAlpha(Appearance.colors.shadow, Tokens.quicksettingsSliderTrackOpacity)) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Rectangle {
             width: root.knobless ? Math.max(parent.height, root.position * root.travel) : root.knobWidth / 2 + root.position * root.travel
