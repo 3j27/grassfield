@@ -285,6 +285,7 @@
  {"path": "compositor/tests/QuietTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/NoticesTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/RunModeTest.cpp", "layer": "logic"},
+ {"path": "compositor/tests/TopClampTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/MinimizeTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/OverviewFocusTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/OverviewTest.cpp", "layer": "logic"},

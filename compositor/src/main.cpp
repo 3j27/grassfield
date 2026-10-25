@@ -18,6 +18,7 @@
 #include "Stages.hpp"
 #include "Tiling.hpp"
 #include "Titlebar.hpp"
+#include "TopClamp.hpp"
 #include "core/Notices.hpp"
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -114,6 +115,9 @@ namespace {
             // A press on a zoomed window that draws its own chrome, recorded while it is still zoomed: the app's move request
             // that may follow takes it out of the zoom under the pointer (ADR-0015 P4).
             gf::guarded("client chrome press", [&] { gf::chrome::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            // The release that ends one of Hyprland's own moves or resizes (an app's move request, a mouse binding): the
+            // window's titlebar is held below the menu bar once Hyprland ended the drag (macOS).
+            gf::guarded("top clamp release", [&] { gf::topClamp::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
             if (CGrassfieldTitlebar::onRevealedBarButton(e))
                 info.cancelled = true;
@@ -206,6 +210,7 @@ namespace {
             }
         };
         step("listeners", [&] { s.listeners.clear(); });
+        step("top clamp", [] { gf::topClamp::stop(); });     // the clamp scheduled after a drag removed (its callback is in this library)
         step("client chrome", [] { gf::chrome::stop(); });   // per-window toplevel listeners removed
         step("frame probe", [] { gf::frameProbe::stop(); }); // presentation listeners removed
         step("desktop focus", [] { gf::desktopFocus::stop(); }); // no press or commit may reach the policy any more
@@ -331,6 +336,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
             gf::guarded("frame probe rollback", [] { gf::frameProbe::stop(); });
             gf::log(Log::WARN, "frame probe listeners failed to register; frame-times not advertised");
         }
+        // The titlebar never goes under the menu bar (macOS): the plugin's own titlebar drags and the end of Hyprland's drags.
+        gf::guarded("top clamp start", [] { gf::topClamp::start(); });
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");
 

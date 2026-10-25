@@ -586,6 +586,20 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   windows have margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingMargins",
   "true" | "false")` once the plugin advertises `window-tiling`. Without the plugin (C2) the shell shows no tiling items
   and the keys do nothing; drags move windows as Hyprland does.
+- **FR56** A window's titlebar never goes under the menu bar (macOS; owner report from the 1.0.0-rc1 real session:
+  Chromium dragged up until its tab strip was under the menu bar could not be grabbed again). For floating windows (not
+  full screen or zoomed), on every output, with the plugin's titlebar (a 32 px band above the surface) or the app's own
+  (client chrome, ADR-0015: no band, the surface top): the frame's top is held at the bottom of the menu bar strip of the
+  output the pointer is on (that output's top reserved area; the output under the frame's top centre when the pointer is
+  on none), so a window can always be grabbed again. Only the top is held: a window may hang off the sides or the
+  bottom. A titlebar drag by the plugin holds it at every step (the window stops at the menu bar while the pointer goes
+  on, and follows it again on the way down); a pointer on the menu bar still tiles to fill (FR47). Hyprland's own
+  interactive move and resize (an app's `xdg_toplevel.move`/`resize`, a mouse binding) have no hook during the drag: the
+  release of the button that ends one (seen before Hyprland handles it) schedules one callback after Hyprland ended the
+  drag, which moves the window down (a move) or stops its top edge at the menu bar, the bottom edge kept (a resize).
+  Hyprland's drag itself is left alone. Not covered: windows placed by keyboard moves, by the app or at map. Pure:
+  `core/TopClamp.*` (`tests/TopClampTest.cpp`); glue `TopClamp.*`; nested `tests/compositor/top_clamp.sh`. Without the
+  plugin (C2) nothing holds the top: Hyprland's behaviour.
 - **FR51** Pointer focus on the shell's layers (feature `layer-pointer`, plugin 0.12.0-pointer; integrator finding 2026-10-22,
   `docs/specs/menubar.md` "Known limitations": a click with no pointer motion since a bar menu opened reached no surface).
   Cause (Hyprland 0.56.2, measured, and read from the binary): when a layer surface takes the keyboard (`CLayerSurface::onMap`
