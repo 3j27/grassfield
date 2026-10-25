@@ -10,8 +10,8 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- suppression. Two rules make the negation of those matches (any class but Grassfield's and the third-party list below;
 -- or no xdg tag and not in that list) without reading the tag itself: the tag is a dynamic effect, the suppression a
 -- static one read at map. tests/shell/client_chrome_rules.sh checks that both negations are built from the two lists.
-hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview)|obsidian|code|code-oss|Code|codium|VSCodium|discord|Slack|slack|spotify|Spotify|chromium|google-chrome|brave-browser|chrome-.+|org\\.gnome\\.Nautilus|org\\.gnome\\.NautilusPreviewer|org\\.gnome\\.DiskUtility|org\\.gnome\\.Evince|com\\.github\\.PintaProject\\.Pinta|xdg-desktop-portal-gtk)$" }, suppress_event = "maximize" })
-hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "negative:^(obsidian|code|code-oss|Code|codium|VSCodium|discord|Slack|slack|spotify|Spotify|chromium|google-chrome|brave-browser|chrome-.+|org\\.gnome\\.Nautilus|org\\.gnome\\.NautilusPreviewer|org\\.gnome\\.DiskUtility|org\\.gnome\\.Evince|com\\.github\\.PintaProject\\.Pinta|xdg-desktop-portal-gtk)$", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview)|chromium|md\\.obsidian\\.Obsidian)$" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "negative:^(chromium|md\\.obsidian\\.Obsidian)$", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
 
 -- Client chrome (ADR-0015): Grassfield apps that draw their own lights and toolbar are tagged
 -- `grassfield-client-chrome`; the compositor plugin draws no titlebar on them (plugin work item P1, docs/specs/compositor.md)
@@ -22,15 +22,18 @@ hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "nega
 hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })
 
 -- Third-party apps that draw their own window controls (GF-056; ADR-0015 amendment 2026-10-25). macOS: a window has one
--- set of traffic lights, and an app that draws its own title bar gets no second bar from the system. Hyprland 0.56.2 gives
--- a plugin no per-window decoration signal it could use instead (the xdg-decoration request is kept in a private map,
--- and header-bar toolkits never negotiate), so the list is by class (Wayland app id, X11 class): Electron and Chromium
--- custom frames (Obsidian, VS Code and its builds, Discord, Slack, Spotify, Chromium and its web apps, Chrome, Brave) and
--- GTK header-bar apps Omarchy installs (Files/Nautilus and its previewer, Disks, Evince, Pinta, the GTK portal's file
--- dialogs). Same tag as Grassfield's apps: no plugin titlebar, no band in Overview and Stages, the app's own minimize and
--- zoom work (exempt from the maximize suppression above). An app set to use the system title bar (Chromium's "Use system
--- title bar and borders", VS Code's "window.titleBarStyle": "native") draws no controls: take it out of this list.
-hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(obsidian|code|code-oss|Code|codium|VSCodium|discord|Slack|slack|spotify|Spotify|chromium|google-chrome|brave-browser|chrome-.+|org\\.gnome\\.Nautilus|org\\.gnome\\.NautilusPreviewer|org\\.gnome\\.DiskUtility|org\\.gnome\\.Evince|com\\.github\\.PintaProject\\.Pinta|xdg-desktop-portal-gtk)$" }, tag = "+grassfield-client-chrome" })
+-- set of traffic lights, close, minimize, zoom, top-left; an app that draws its own title bar gets no second bar from the
+-- system. Hyprland 0.56.2 gives a plugin no per-window decoration signal it could use instead (the xdg-decoration request
+-- is kept in a private map, and header-bar toolkits never negotiate), so the list is by Wayland app id. Only apps whose
+-- own close, minimize and zoom were seen to work in the nested session with the session's GTK button layout
+-- (close,minimize,maximize: on the left, packaging/dconf/grassfield.d/20-window-buttons.conf;
+-- tests/compositor/third_party_chrome.sh): Chromium's browser window (its --app web apps draw no frame and keep the
+-- plugin's titlebar) and Obsidian (its controls top right, in its own order). Evince and Nautilus are not on it: under
+-- Hyprland 0.56.2 Evince's zoom button does nothing and Nautilus greys its minimize button, so they keep the plugin's
+-- working set. Others join only once verified. Same tag as Grassfield's apps: no plugin titlebar, no band in Overview
+-- and Stages, the app's own minimize and zoom work (exempt from the maximize suppression above). An app set to use the
+-- system title bar (Chromium's "Use system title bar and borders") draws no controls: take it out of this list.
+hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|md\\.obsidian\\.Obsidian)$" }, tag = "+grassfield-client-chrome" })
 
 -- Get Info and Customize Folder draw the titlebar-only style (role "info"): radius 12 like every titlebar window; the
 -- main windows keep the toolbar radius 26 (ADR-0015 Q5).
