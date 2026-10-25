@@ -944,6 +944,7 @@ QVariantMap FolderModel::info(int row) const
             a[QStringLiteral("name")] = title();
             a[QStringLiteral("url")] = m_url;
             a[QStringLiteral("iconName")] = QStringLiteral("folder");
+            a[QStringLiteral("thumbnail")] = QString();
             a[QStringLiteral("kind")] = tr("Applications");
             a[QStringLiteral("isDir")] = true;
             a[QStringLiteral("readable")] = true;
@@ -957,6 +958,7 @@ QVariantMap FolderModel::info(int row) const
         a[QStringLiteral("name")] = it->name;
         a[QStringLiteral("url")] = shown.url();
         a[QStringLiteral("iconName")] = applicationIconName(it->icon);
+        a[QStringLiteral("thumbnail")] = QString();
         a[QStringLiteral("kind")] = tr("Application");
         a[QStringLiteral("isApplication")] = true;
         a[QStringLiteral("genericName")] = it->genericName;

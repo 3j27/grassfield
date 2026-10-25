@@ -145,7 +145,7 @@ Window {
                     isDir: root.info.isDir
                     folderColor: root.folderStyle.color
                     folderGlyph: root.folderStyle.glyph
-                    thumbnail: root.info.thumbnail
+                    thumbnail: root.info.thumbnail || ""
                 }
 
                 Column {
@@ -274,7 +274,7 @@ Window {
                         visible: !line.isHeader
                         x: Tokens.filesInfoLabelWidth + Tokens.spacingSm
                         width: parent.width - x
-                        text: line.isHeader ? "" : line.modelData.value
+                        text: line.isHeader ? "" : (line.modelData.value ?? "")
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily

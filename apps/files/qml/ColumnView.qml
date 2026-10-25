@@ -162,7 +162,7 @@ FocusScope {
                         isDir: root.previewInfo ? root.previewInfo.isDir : false
                         folderColor: root.previewInfo ? root.previewInfo.folderColor : ""
                         folderGlyph: root.previewInfo ? root.previewInfo.folderGlyph : ""
-                        thumbnail: root.previewInfo ? root.previewInfo.thumbnail : ""
+                        thumbnail: root.previewInfo ? (root.previewInfo.thumbnail || "") : ""
                     }
 
                     Text {
