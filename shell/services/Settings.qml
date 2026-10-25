@@ -98,6 +98,19 @@ Singleton {
     readonly property string menubarAutoHide: store.menubarAutoHide
     readonly property bool menubarShowNowPlaying: store.menubarShowNowPlaying
     readonly property bool menubarShowSearch: store.menubarShowSearch
+    readonly property bool menubarShowWifi: store.menubarShowWifi
+    readonly property bool menubarShowSound: store.menubarShowSound
+    readonly property bool menubarShowBattery: store.menubarShowBattery
+    readonly property bool menubarShowBatteryPercentage: store.menubarShowBatteryPercentage
+    readonly property bool menubarShowFocus: store.menubarShowFocus
+    readonly property string menubarClockDate: store.menubarClockDate
+    readonly property bool menubarClockShowAmPm: store.menubarClockShowAmPm
+    readonly property bool menubarClockFlashSeparators: store.menubarClockFlashSeparators
+    readonly property bool menubarShowTrayItems: store.menubarShowTrayItems
+    readonly property int menubarRecentItems: store.menubarRecentItems
+    readonly property bool menubarClockShowDayOfWeek: store.menubarClockShowDayOfWeek
+    readonly property string menubarClockHours: store.menubarClockHours
+    readonly property bool menubarClockShowSeconds: store.menubarClockShowSeconds
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft

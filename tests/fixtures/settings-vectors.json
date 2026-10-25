@@ -90,6 +90,14 @@
     {"name": "boolean null is the default", "path": "windows.tilingEdges", "stored": null, "default": true, "valid": false},
     {"name": "boolean 0 is the default", "path": "dock.showRecents", "stored": 0, "default": true, "valid": false},
     {"name": "boolean empty string is the default", "path": "menubar.showSearch", "stored": "", "default": true, "valid": false},
-    {"name": "notification app styles of the wrong type is the default", "path": "notifications.appStyles", "stored": "none", "default": true, "valid": false}
+    {"name": "notification app styles of the wrong type is the default", "path": "notifications.appStyles", "stored": "none", "default": true, "valid": false},
+    {"name": "recent items in range", "path": "menubar.recentItems", "stored": 7, "read": 7, "valid": true},
+    {"name": "recent items above range is clamped", "path": "menubar.recentItems", "stored": 99, "read": 50, "valid": false},
+    {"name": "recent items below range is clamped", "path": "menubar.recentItems", "stored": -3, "read": 0, "valid": false},
+    {"name": "recent items zero hides the menu and is valid", "path": "menubar.recentItems", "stored": 0, "read": 0, "valid": true},
+    {"name": "recent items of the wrong type is the default", "path": "menubar.recentItems", "stored": "ten", "default": true, "valid": false},
+    {"name": "clock date never", "path": "menubar.clockDate", "stored": "never", "read": "never", "valid": true},
+    {"name": "clock date of an unknown value is the default", "path": "menubar.clockDate", "stored": "sometimes", "default": true, "valid": false},
+    {"name": "clock date of the wrong type is the default", "path": "menubar.clockDate", "stored": 3, "default": true, "valid": false}
   ]
 }

@@ -32,6 +32,13 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `menubar.autoHide` | enum `always` \| `desktop` \| `fullscreen` \| `never` | fullscreen | Automatically hide and show the menu bar (macOS: Always, On Desktop Only, In Full Screen Only, Never) |
 | `menubar.showNowPlaying` | bool | true | Now Playing item in the menu bar while a player has a session |
 | `menubar.showSearch` | bool | true | Search item in the menu bar |
+| `menubar.showWifi` / `showSound` / `showBattery` / `showBatteryPercentage` / `showFocus` | bool | true | Menu bar items (Settings > Menu Bar); Focus only while Do Not Disturb is on |
+| `menubar.clockDate` | enum `auto` \| `always` \| `never` | auto | Menu bar clock date (auto = when space allows) |
+| `menubar.clockShowDayOfWeek` / `clockShowAmPm` / `clockFlashSeparators` | bool | true / true / false | Menu bar clock: day of the week, AM/PM, flashing colons |
+| `menubar.clockHours` | enum `auto` \| `12` \| `24` | auto | Menu bar clock hour format (auto follows the locale) |
+| `menubar.clockShowSeconds` | bool | false | Menu bar clock with seconds |
+| `menubar.showTrayItems` | bool | true | Status items of other applications (tray) |
+| `menubar.recentItems` | integer 0-50 | 10 | Entries per section of the Grassfield menu's Recent Items (0 hides it) |
 | `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` \| `"online"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7; `online` needs no path and is off by default: it contacts the network once a day, step 2) |
 | `wallpaper.path` | absolute path (no control characters, at most 4096 bytes) | `""` | the picture, folder or video; a source that needs a path without a valid one reads as `builtin`; in a dev session only paths under `<repo>/.dev` |
 | `wallpaper.color` | `"#rrggbb"` | `"#000000"` | the `color` source and the backdrop of fit, centre and tile |

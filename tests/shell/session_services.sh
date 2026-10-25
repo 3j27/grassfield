@@ -3,6 +3,7 @@
 # notifications, the clickable migrations notice, Night Shift, screenshots, removable media. Logic with fakes (no session,
 # no D-Bus, no battery needed) plus static checks of the units, drop-ins, autostart and PKGBUILD that must agree.
 set -euo pipefail
+export LC_ALL=C; unset GRASSFIELD_LANG LC_MESSAGES  # the helpers translate by locale: the assertions read the English source
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/session-services.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
@@ -35,29 +36,7 @@ check grep -qx "levels None 20 None None 10 None 5 None None 20 None 20 None" <<
 desc="low battery: reads sysfs, and a machine without a battery exits cleanly"
 check bash -c 'grep -qx "no battery None" <<<"$1" && grep -qx "battery (17, .Discharging.)" <<<"$1" && grep -qx "exit-without-battery 0" <<<"$1"' _ "$out"
 
-# --- crash notifications -----------------------------------------------------------------------------------------------
-cat >"$tmp/crash.py" <<'PY'
-import importlib.machinery, importlib.util, os, sys
-sys.dont_write_bytecode = True  # no __pycache__ in packaging/bin (it would be packaged)
-loader = importlib.machinery.SourceFileLoader("crash", sys.argv[1] + "/packaging/bin/grassfield-crash-watch")
-spec = importlib.util.spec_from_loader("crash", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
-uid = os.getuid(); last = {}
-def e(**kw):
-    d = {"_UID": str(uid), "COREDUMP_PID": "123", "COREDUMP_EXE": "/usr/bin/firefox", "COREDUMP_COMM": "firefox-bin"}; d.update(kw); return d
-print("name", m.interesting(e(), uid, last, 1000.0))
-print("comm-fallback", m.interesting(e(COREDUMP_EXE="", COREDUMP_COMM="thing"), uid, last, 1000.0))
-print("other-user", m.interesting(e(_UID=str(uid + 1)), uid, last, 1000.0))
-print("bad-pid", m.interesting(e(COREDUMP_PID="x; rm"), uid, last, 1000.0))
-last["firefox"] = 1000.0
-print("deduped", m.interesting(e(), uid, last, 1030.0))
-print("deduped-9min", m.interesting(e(), uid, last, 1000.0 + 540))
-print("after-window", m.interesting(e(), uid, last, 1000.0 + 601))
-print("cap", m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 100.0), m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 3700.0), m.under_cap([0.0] * 5, 100.0))
-print("own", m.interesting(e(COREDUMP_EXE="/usr/lib/grassfield/grassfield-crash-watch"), uid, last, 5000.0))
-PY
-out=$(python3 -I "$tmp/crash.py" "$root")
-desc="crash notifications: this user's crashes only, named by the executable, one per program per 10 minutes, at most 6 an hour, never our own"
-check bash -c 'grep -qx "name firefox" <<<"$1" && grep -qx "comm-fallback thing" <<<"$1" && grep -qx "other-user None" <<<"$1" && grep -qx "bad-pid None" <<<"$1" && grep -qx "deduped None" <<<"$1" && grep -qx "deduped-9min None" <<<"$1" && grep -qx "after-window firefox" <<<"$1" && grep -qx "cap False True True" <<<"$1" && grep -qx "own None" <<<"$1"' _ "$out"
+# --- crash notifications: the notice rules and their fixtures are in tests/shell/crash_watch.sh --------------------------------
 
 # --- migrations notice (clickable) -------------------------------------------------------------------------------------
 mkdir -p "$tmp/bin"
@@ -76,6 +55,13 @@ check bash -c 'grep -q "notify-send .*-A default=Run .*Click to run 2 pending mi
 desc="migrations notice: dismissed without a click starts nothing"
 migrate "1" ""
 check bash -c 'grep -q "Click to run 1 pending migration\." "$1/log" && ! grep -q systemd-run "$1/log"' _ "$tmp"
+desc="migrations notice: in a French session the title, text and button are French (GRASSFIELD_LANG fr_FR.UTF-8 or fr; en stays English)"
+GRASSFIELD_LANG=fr_FR.UTF-8 migrate "1 2" ""
+check bash -c 'grep -q "default=Exécuter -- Migrations Omarchy en attente Cliquez pour exécuter 2 migrations en attente\." "$1/log"' _ "$tmp"
+GRASSFIELD_LANG=fr migrate "1" ""
+check bash -c 'grep -q "Cliquez pour exécuter 1 migration en attente\." "$1/log"' _ "$tmp"
+GRASSFIELD_LANG=en migrate "1" ""
+check bash -c 'grep -q "default=Run -- Pending Omarchy migrations Click to run 1 pending migration\." "$1/log"' _ "$tmp"
 desc="migrations notice: nothing pending, nothing shown"
 migrate "" ""
 check bash -c '[[ ! -s "$1/log" ]]' _ "$tmp"

@@ -73,7 +73,8 @@ Scope {
         {id: "appearance", title: qsTr("Appearance"), keywords: [qsTr("dark"), qsTr("light"), qsTr("auto"), qsTr("theme"), qsTr("accent"), qsTr("transparency"), qsTr("icons")]},
         {id: "wallpaper", title: qsTr("Wallpaper"), keywords: [qsTr("background"), qsTr("picture"), qsTr("shuffle")]},
         {id: "accessibility", title: qsTr("Accessibility"), keywords: [qsTr("pointer"), qsTr("cursor"), qsTr("contrast"), qsTr("reduce motion"), qsTr("text size")]},
-        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("menu bar"), qsTr("screen corners")]},
+        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("screen corners")]},
+        {id: "menubar", title: qsTr("Menu Bar"), keywords: [qsTr("clock"), qsTr("menu bar background"), qsTr("status items"), qsTr("hide menu bar"), qsTr("battery percentage")]},
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
         {id: "lock", title: qsTr("Lock Screen"), keywords: [qsTr("idle"), qsTr("password")]},
         {id: "mouse", title: qsTr("Mouse & Trackpad"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling"), qsTr("tap to click"), qsTr("touchpad")]},
@@ -241,13 +242,14 @@ Scope {
             seen[p] = true;
             docs.push(mkPath("file", p));
         }
+        // macOS: an empty field shows no results; documents (recent included) appear from the first keystroke.
         let recents = [];
-        for (const r of recentList) {
+        for (const r of q === "" ? [] : recentList) {
             if (recents.length >= Tokens.searchRecentCount)
                 break;
             if (seen[r.path])
                 continue;
-            if (lq === "" || Ranking.norm(Files.baseName(r.path)).indexOf(lq) >= 0)
+            if (Ranking.norm(Files.baseName(r.path)).indexOf(lq) >= 0)
                 recents.push(mkPath("recent", r.path));
         }
         if (lq !== "")

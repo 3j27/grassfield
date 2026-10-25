@@ -862,6 +862,15 @@ function toolPath(env) {
     return env.dev ? env.repoRoot + "/.dev/build/grassfield-wallpaper" : "/usr/lib/grassfield/grassfield-wallpaper";
 }
 
+// Extra environment for the helper: Qt applications print a warning at start when the locale is not UTF-8, and the systemd
+// user session often has none (no LANG). env = {lcAll, lcCtype, lang}, the session's values (empty when unset). The session's
+// own UTF-8 locale is kept; otherwise LC_ALL=C.UTF-8 (the glibc locale that always exists, and the one Qt falls back to).
+function toolEnvironment(env) {
+    const utf8 = /utf-?8/i;
+    const effective = env.lcAll || env.lcCtype || env.lang || "";
+    return utf8.test(effective) ? {} : {"LC_ALL": "C.UTF-8"};
+}
+
 function cacheRoot(env) {
     if (env.dev)
         return env.repoRoot + "/.dev/cache/wallpapers";

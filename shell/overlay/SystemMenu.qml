@@ -17,8 +17,8 @@ PopupMenu {
         {separator: true},
         {id: "settings", text: qsTr("Settings…")},
         {separator: true},
-        {id: "recentMenu", text: qsTr("Recent Items"), submenu: RecentItems.menu()},
-        {separator: true},
+        // Settings > Menu Bar > Recent items "None" hides the submenu.
+        ...(Settings.menubarRecentItems > 0 ? [{id: "recentMenu", text: qsTr("Recent Items"), submenu: RecentItems.menu()}, {separator: true}] : []),
         {id: "forcequit", text: qsTr("Force Quit…")},
         {separator: true},
         {id: "sleep", text: qsTr("Sleep")},

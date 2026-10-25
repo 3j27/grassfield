@@ -46,6 +46,11 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
     px at 96 dpi, the reference's 13 px body; Adwaita's 11 pt would be 14.7 px), `font-antialiasing` grayscale,
     `font-hinting` slight. Defaults, not locks (only icon-theme is locked). Qt: its generic theme asks for "Sans Serif"
     (fontconfig, now Inter) and `QT_QPA_PLATFORMTHEME=gtk3` reads `font-name`; nothing else is needed.
+  - QtQuick text (amendment 2026-10-25): the rules above reach GTK and Qt Widgets/native text but not QtQuick's default
+    distance-field text, which QSGDefaultContext (qtdeclarative 6.11) renders with `HighQualitySubPixelAntialiasing`
+    whatever fontconfig says, so the shell and the Qt Quick apps showed RGB fringes (visual audit 2026-10-25, section 2).
+    `QSG_DISTANCEFIELD_ANTIALIASING=gray` is exported by `packaging/uwsm/env-grassfield` (real session) and
+    `scripts/dev/devenv.sh` (dev and nested sessions); `tests/shell/fontconfig_session.sh` pins both.
   - Tracking: Inter's "dynamic metrics" (rsms.me/inter lab, `InterDynamicTracking`, text family): tracking in em =
     -0.0223 + 0.185 * e^(-0.1745 * px) (display family: -0.015 + 0.17 * e^(-0.12 * px), not used yet).
     `Tokens.typographyTracking{A,B,C}` and `Appearance.tracking(px)`; applied in Grassfield.Ui's Button, MenuItem,

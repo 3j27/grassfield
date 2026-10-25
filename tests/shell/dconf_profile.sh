@@ -57,6 +57,28 @@ desc="env-grassfield exports DCONF_PROFILE only behind a readability test of the
 check bash -c 'grep -q "^if \[ -r /usr/share/grassfield/dconf/profile \] && \[ -r /usr/share/grassfield/dconf/grassfield.db \]; then" "$1" && grep -q "DCONF_PROFILE=/usr/share/grassfield/dconf/profile" "$1"' _ "$root/packaging/uwsm/env-grassfield"
 desc="the icon database (00-icons.conf) holds only icon-theme, and only that key is locked (10-fonts.conf holds unlocked defaults)"
 check bash -c '[ "$(grep -vc "^\[\|^$" "$1/00-icons.conf")" = 1 ] && [ "$(cat "$1/locks/icon-theme")" = /org/gnome/desktop/interface/icon-theme ]' _ "$root/packaging/dconf/grassfield.d"
-desc="the packaged profile lists system-db:local between the user database and Grassfield's defaults (admin locks, GF-117)"
-check test "$(grep -v '^#' "$root/packaging/dconf/profile" | tr '\n' ' ')" = "user-db:user system-db:local file-db:/usr/share/grassfield/dconf/grassfield.db "
+desc="the packaged profile lists no system database (no dconf warning on a machine without /etc/dconf/db/local)"
+check test "$(grep -v '^#' "$root/packaging/dconf/profile" | tr '\n' ' ')" = "user-db:user file-db:/usr/share/grassfield/dconf/grassfield.db "
+desc="profile-local lists system-db:local between the user database and Grassfield's defaults (admin locks, GF-117)"
+check test "$(grep -v '^#' "$root/packaging/dconf/profile-local" | tr '\n' ' ')" = "user-db:user system-db:local file-db:/usr/share/grassfield/dconf/grassfield.db "
+desc="env-grassfield switches to profile-local only when /etc/dconf/db/local is readable, and the package installs both"
+check bash -c 'grep -q "\[ -r /etc/dconf/db/local \] && \[ -r /usr/share/grassfield/dconf/profile-local \]" "$1" && grep -q "packaging/dconf/profile-local" "$2"' _ "$root/packaging/uwsm/env-grassfield" "$root/packaging/arch/PKGBUILD"
+# Behaviour of the real env file with both outcomes: the paths are rewritten to scratch copies.
+mkdir -p "$tmp/sysdconf/db"
+sed "s|/usr/share/grassfield/dconf|$tmp/gfdconf|g; s|/etc/dconf/db/local|$tmp/sysdconf/db/local|g" "$root/packaging/uwsm/env-grassfield" >"$tmp/env"
+mkdir -p "$tmp/gfdconf"; cp "$root/packaging/dconf/profile" "$root/packaging/dconf/profile-local" "$tmp/gfdconf/"; : >"$tmp/gfdconf/grassfield.db"
+sel() { env -i PATH="$PATH" sh -c '. "$1"; printf %s "${DCONF_PROFILE-}"' _ "$tmp/env"; }
+desc="env-grassfield exports the plain profile when no administrator database exists"
+check test "$(sel)" = "$tmp/gfdconf/profile"
+: >"$tmp/sysdconf/db/local"
+desc="env-grassfield exports profile-local once /etc/dconf/db/local exists"
+check test "$(sel)" = "$tmp/gfdconf/profile-local"
+# dconf itself: the plain profile gives no warning when the local database is missing, profile-local does (the noise avoided).
+if [[ -x $(command -v dconf) ]]; then
+  sed "s|/usr/share/grassfield/dconf/grassfield.db|$tmp/grassfield.db|" "$root/packaging/dconf/profile" >"$tmp/profile.plain"
+  desc="reading with the plain profile logs no 'degraded performance' warning (no /etc/dconf/db/local on this scratch root)"
+  warn=$(env -i PATH="$PATH" HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/xdg" XDG_RUNTIME_DIR="$tmp" XDG_DATA_DIRS=/usr/share \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent DCONF_PROFILE="$tmp/profile.plain" gsettings get $KEY icon-theme 2>&1 >/dev/null || true)
+  check bash -c '! grep -qi "degraded" <<<"$1"' _ "$warn"
+fi
 exit "$fail"

@@ -26,6 +26,12 @@ Singleton {
             picturesDir: Quickshell.env("GRASSFIELD_PICTURES_DIR")
         })
     readonly property string tool: WallpaperConfig.toolPath(environment)
+    // The helper runs with a UTF-8 locale even when the session has none (FINDINGS 5: Qt warned on every start).
+    readonly property var toolEnv: WallpaperConfig.toolEnvironment({
+            lcAll: Quickshell.env("LC_ALL") || "",
+            lcCtype: Quickshell.env("LC_CTYPE") || "",
+            lang: Quickshell.env("LANG") || ""
+        })
     readonly property string cacheDir: WallpaperConfig.cacheRoot(environment)
     readonly property string preparedDir: cacheDir + "/prepared"
     // The transcoded video wallpapers, their posters and statistics (grassfield-wallpaper transcode).

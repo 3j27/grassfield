@@ -13,7 +13,8 @@ import "../dock/DockModel.js" as DockModel // layering-exception: GF-087
 Singleton {
     id: root
 
-    readonly property int max: 10
+    // Settings > Menu Bar > Recent items (macOS: Recent documents, applications, and servers); 0 hides the submenu.
+    readonly property int max: Settings.menubarRecentItems
     readonly property string home: Quickshell.env("HOME")
     // Documents outside this root (default $HOME; tests point it at their fixtures, like Search) are not listed.
     readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home

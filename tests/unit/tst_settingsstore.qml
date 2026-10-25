@@ -93,6 +93,33 @@ TestCase {
             compare(Store.read(file, path), Store.DEFAULTS[path], path);
     }
 
+    // Settings > Menu Bar: every key of the pane has the default the shell assumes and refuses a wrong value.
+    function test_menuBarPaneKeys() {
+        const booleans = ["showWifi", "showSound", "showBattery", "showBatteryPercentage", "showFocus", "showNowPlaying", "showSearch",
+            "showBackground", "showTrayItems", "clockShowAmPm", "clockFlashSeparators", "clockShowDayOfWeek", "clockShowSeconds"];
+        for (const k of booleans) {
+            const path = "menubar." + k;
+            compare(Store.validate(path, true), "", path);
+            verify(Store.validate(path, "yes") !== "", path);
+        }
+        compare(Store.DEFAULTS["menubar.clockShowSeconds"], false);
+        compare(Store.DEFAULTS["menubar.clockDate"], "auto");
+        compare(Store.DEFAULTS["menubar.recentItems"], 10);
+        for (const m of ["auto", "always", "never"])
+            compare(Store.validate("menubar.clockDate", m), "");
+        verify(Store.validate("menubar.clockDate", "sometimes") !== "");
+        compare(Store.validate("menubar.recentItems", 0), "");
+        compare(Store.validate("menubar.recentItems", 50), "");
+        verify(Store.validate("menubar.recentItems", 51) !== "");
+        compare(Store.DEFAULTS["menubar.clockHours"], "auto");
+        for (const m of ["auto", "12", "24"])
+            compare(Store.validate("menubar.clockHours", m), "");
+        verify(Store.validate("menubar.clockHours", "36") !== "");
+        for (const m of ["always", "desktop", "fullscreen", "never"])
+            compare(Store.validate("menubar.autoHide", m), "");
+        verify(Store.validate("menubar.autoHide", "sometimes") !== "");
+    }
+
     function test_validateDockFolders() {
         compare(Store.validate("dock.folders", ["~/Downloads", "/srv/x"]), "");
         compare(Store.validate("dock.folders", []), "");

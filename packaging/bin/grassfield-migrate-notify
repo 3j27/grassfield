@@ -14,6 +14,20 @@ update_in_progress() {
   ! flock -n "$lock" true 2>/dev/null
 }
 
+# Strings: English is the source; the French translation is the `fr:` case of tr (gate I1: scripts/dev/check-i18n.py reads it).
+# Language: GRASSFIELD_LANG, else LC_ALL, LC_MESSAGES, LANG, as the shell does.
+lang=${GRASSFIELD_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}
+lang=${lang%%[_.@]*}
+tr() {
+  case "$lang:$1" in
+    fr:"Pending Omarchy migrations") printf '%s' "Migrations Omarchy en attente" ;;
+    fr:"Click to run 1 pending migration.") printf '%s' "Cliquez pour exécuter 1 migration en attente." ;;
+    fr:"Click to run %s pending migrations.") printf '%s' "Cliquez pour exécuter %s migrations en attente." ;;
+    fr:"Run") printf '%s' "Exécuter" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 update_in_progress && exit 0
 command -v omarchy-migrate >/dev/null || exit 0
 pending=$(omarchy-migrate --pending 2>/dev/null | sed '/^[[:space:]]*$/d' | wc -l)
@@ -26,9 +40,9 @@ for _ in $(seq 1 60); do
 done
 update_in_progress && exit 0
 
-if ((pending == 1)); then body="Click to run 1 pending migration."; else body="Click to run $pending pending migrations."; fi
+if ((pending == 1)); then body=$(tr "Click to run 1 pending migration."); else body=$(printf "$(tr "Click to run %s pending migrations.")" "$pending"); fi
 # -w waits for the click or the dismissal; the action id of a click on the banner is "default".
-answer=$(notify-send -a Grassfield -u critical -w -A default=Run -- "Pending Omarchy migrations" "$body" 2>/dev/null) || exit 0
+answer=$(notify-send -a Grassfield -u critical -w -A "default=$(tr "Run")" -- "$(tr "Pending Omarchy migrations")" "$body" 2>/dev/null) || exit 0
 if [[ $answer == default ]]; then
   # A transient unit of the user manager, outside this service's sandbox: the migration terminal may use sudo.
   exec systemd-run --user --collect --quiet -- omarchy-launch-floating-terminal-with-presentation omarchy-migrate

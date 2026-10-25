@@ -94,6 +94,19 @@ Scope {
     readonly property string menubarAutoHide: read("menubar.autoHide")
     readonly property bool menubarShowNowPlaying: read("menubar.showNowPlaying")
     readonly property bool menubarShowSearch: read("menubar.showSearch")
+    readonly property bool menubarShowWifi: read("menubar.showWifi")
+    readonly property bool menubarShowSound: read("menubar.showSound")
+    readonly property bool menubarShowBattery: read("menubar.showBattery")
+    readonly property bool menubarShowBatteryPercentage: read("menubar.showBatteryPercentage")
+    readonly property bool menubarShowFocus: read("menubar.showFocus")
+    readonly property string menubarClockDate: read("menubar.clockDate")
+    readonly property bool menubarClockShowAmPm: read("menubar.clockShowAmPm")
+    readonly property bool menubarClockFlashSeparators: read("menubar.clockFlashSeparators")
+    readonly property bool menubarShowTrayItems: read("menubar.showTrayItems")
+    readonly property int menubarRecentItems: read("menubar.recentItems")
+    readonly property bool menubarClockShowDayOfWeek: read("menubar.clockShowDayOfWeek")
+    readonly property string menubarClockHours: read("menubar.clockHours")
+    readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
     readonly property string iconMode: read("icons.mode")
     readonly property string iconTint: read("icons.tint")
@@ -234,6 +247,21 @@ Scope {
         property var showNowPlaying: true
         // Search item (magnifier) of the bar.
         property var showSearch: true
+        // Status items (Settings > Menu Bar, macOS Control Center menu bar modules).
+        property var showWifi: true
+        property var showSound: true
+        property var showBattery: true
+        property var showBatteryPercentage: true
+        property var showFocus: true
+        // Clock (macOS Clock options): date, day of the week, hour format (auto | 12 | 24), seconds.
+        property var clockDate: "auto"
+        property var clockShowAmPm: true
+        property var clockFlashSeparators: false
+        property var showTrayItems: true
+        property var recentItems: 10
+        property var clockShowDayOfWeek: true
+        property var clockHours: "auto"
+        property var clockShowSeconds: false
     }
 
     component AccentConfig: JsonObject {

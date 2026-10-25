@@ -1167,6 +1167,30 @@
         <translation>Placer la fenêtre dans un Stage à part</translation>
     </message>
     <message>
+        <source>Calculator</source>
+        <translation>Calculatrice</translation>
+    </message>
+    <message>
+        <source>Mail</source>
+        <translation>Mail</translation>
+    </message>
+    <message>
+        <source>Web browser</source>
+        <translation>Navigateur web</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>Grassfield Settings</source>
+        <translation>Réglages Grassfield</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
         <source>Keyboard brightness up</source>
         <translation>Luminosité du clavier +</translation>
     </message>
@@ -1772,6 +1796,81 @@
     </message>
 </context>
 <context>
+    <name>ClockOptionsSheet</name>
+    <message>
+        <source>Clock Options</source>
+        <translation>Options de l’horloge</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>Date</source>
+        <translation>Date</translation>
+    </message>
+    <message>
+        <source>Show date</source>
+        <translation>Afficher la date</translation>
+    </message>
+    <message>
+        <source>When Space Allows drops the date when the menu bar is crowded.</source>
+        <translation>« Si la place le permet » retire la date quand la barre des menus est chargée.</translation>
+    </message>
+    <message>
+        <source>When Space Allows</source>
+        <translation>Si la place le permet</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
+        <source>Show the day of the week</source>
+        <translation>Afficher le jour de la semaine</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Heure</translation>
+    </message>
+    <message>
+        <source>Time format</source>
+        <translation>Format de l’heure</translation>
+    </message>
+    <message>
+        <source>Automatic follows the language and region.</source>
+        <translation>Automatique suit la langue et la région.</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>12-hour</source>
+        <translation>12 heures</translation>
+    </message>
+    <message>
+        <source>24-hour</source>
+        <translation>24 heures</translation>
+    </message>
+    <message>
+        <source>Show AM/PM</source>
+        <translation>Afficher AM/PM</translation>
+    </message>
+    <message>
+        <source>Display the time with seconds</source>
+        <translation>Afficher l’heure avec les secondes</translation>
+    </message>
+    <message>
+        <source>Flash the time separators</source>
+        <translation>Faire clignoter les séparateurs de l’heure</translation>
+    </message>
+</context>
+<context>
     <name>ColorWell</name>
     <message>
         <source>Preset colours</source>
@@ -2238,58 +2337,6 @@
     <message>
         <source>Add Folder…</source>
         <translation>Ajouter un dossier…</translation>
-    </message>
-    <message>
-        <source>Menu Bar</source>
-        <translation>Barre des menus</translation>
-    </message>
-    <message>
-        <source>Show menu bar background</source>
-        <translation>Afficher l’arrière-plan de la barre des menus</translation>
-    </message>
-    <message>
-        <source>Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.</source>
-        <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
-    </message>
-    <message>
-        <source>Automatically hide and show the menu bar</source>
-        <translation>Masquer et afficher automatiquement la barre des menus</translation>
-    </message>
-    <message>
-        <source>A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.</source>
-        <translation>Une barre des menus masquée glisse par-dessus la fenêtre quand le pointeur atteint le bord supérieur de l’écran.</translation>
-    </message>
-    <message>
-        <source>Always</source>
-        <translation>Toujours</translation>
-    </message>
-    <message>
-        <source>On Desktop Only</source>
-        <translation>Sur le bureau uniquement</translation>
-    </message>
-    <message>
-        <source>In Full Screen Only</source>
-        <translation>En plein écran uniquement</translation>
-    </message>
-    <message>
-        <source>Never</source>
-        <translation>Jamais</translation>
-    </message>
-    <message>
-        <source>Show Now Playing in the menu bar</source>
-        <translation>Afficher « En cours de lecture » dans la barre des menus</translation>
-    </message>
-    <message>
-        <source>While a media player has a track, a button in the menu bar opens its controls.</source>
-        <translation>Tant qu’un lecteur multimédia a un morceau, un bouton de la barre des menus ouvre ses commandes.</translation>
-    </message>
-    <message>
-        <source>Show Search in the menu bar</source>
-        <translation>Afficher la recherche dans la barre des menus</translation>
-    </message>
-    <message>
-        <source>A magnifier button in the menu bar opens Search.</source>
-        <translation>Un bouton en forme de loupe dans la barre des menus ouvre la recherche.</translation>
     </message>
     <message>
         <source>Desktop</source>
@@ -3783,8 +3830,16 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent</source>
-        <translation>dock agrandissement masquage automatique bureau icônes éléments coins de l’écran barre de titre fenêtre barre des menus arrière-plan transparente</translation>
+        <source>dock magnification autohide desktop icons items screen corners titlebar window</source>
+        <translation>dock agrandissement masquage bureau icônes éléments coins de l’écran barre de titre fenêtre</translation>
+    </message>
+    <message>
+        <source>Menu Bar</source>
+        <translation>Barre des menus</translation>
+    </message>
+    <message>
+        <source>menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent</source>
+        <translation>barre des menus horloge date heure secondes 24 heures masquer éléments d’état batterie pourcentage wifi son concentration en cours de lecture arrière-plan transparent</translation>
     </message>
     <message>
         <source>Notifications</source>
@@ -3955,6 +4010,185 @@
     <message>
         <source>ddd d MMM</source>
         <translation>ddd d MMM</translation>
+    </message>
+    <message>
+        <source>ddd</source>
+        <translation>ddd</translation>
+    </message>
+    <message>
+        <source>d MMM</source>
+        <translation>d MMM</translation>
+    </message>
+</context>
+<context>
+    <name>MenuBarPage</name>
+    <message>
+        <source>Menu Bar</source>
+        <translation>Barre des menus</translation>
+    </message>
+    <message>
+        <source>Automatically hide and show the menu bar</source>
+        <translation>Masquer et afficher automatiquement la barre des menus</translation>
+    </message>
+    <message>
+        <source>A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.</source>
+        <translation>Une barre des menus masquée glisse par-dessus la fenêtre quand le pointeur atteint le bord supérieur de l’écran.</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>On Desktop Only</source>
+        <translation>Sur le bureau uniquement</translation>
+    </message>
+    <message>
+        <source>In Full Screen Only</source>
+        <translation>En plein écran uniquement</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
+        <source>Show menu bar background</source>
+        <translation>Afficher l’arrière-plan de la barre des menus</translation>
+    </message>
+    <message>
+        <source>Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.</source>
+        <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
+    </message>
+    <message>
+        <source>Recent documents and applications</source>
+        <translation>Documents et apps récents</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Clock</source>
+        <translation>Horloge</translation>
+    </message>
+    <message>
+        <source>Clock Options…</source>
+        <translation>Options de l’horloge…</translation>
+    </message>
+    <message>
+        <source>Date, day of the week, 24-hour time, seconds.</source>
+        <translation>Date, jour de la semaine, heure sur 24 heures, secondes.</translation>
+    </message>
+    <message>
+        <source>The number of items the Recent Items menu lists. None hides the menu.</source>
+        <translation>Nombre d’éléments listés par le menu Éléments récents. « Aucune » masque le menu.</translation>
+    </message>
+    <message>
+        <source>Menu Bar Controls</source>
+        <translation>Commandes de la barre des menus</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>The network status and its menu.</source>
+        <translation>L’état du réseau et son menu.</translation>
+    </message>
+    <message>
+        <source>Show Wi-Fi in the menu bar</source>
+        <translation>Afficher le Wi-Fi dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>The volume and the output devices.</source>
+        <translation>Le volume et les périphériques de sortie.</translation>
+    </message>
+    <message>
+        <source>Show Sound in the menu bar</source>
+        <translation>Afficher le son dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>Shown on a computer that has a battery.</source>
+        <translation>Affichée sur un ordinateur doté d’une batterie.</translation>
+    </message>
+    <message>
+        <source>Show Battery in the menu bar</source>
+        <translation>Afficher la batterie dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Show Percentage</source>
+        <translation>Afficher le pourcentage</translation>
+    </message>
+    <message>
+        <source>The charge level beside the battery.</source>
+        <translation>Le niveau de charge à côté de la batterie.</translation>
+    </message>
+    <message>
+        <source>Show the battery percentage in the menu bar</source>
+        <translation>Afficher le pourcentage de la batterie dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>A moon in the menu bar while Do Not Disturb is on; a click turns it off.</source>
+        <translation>Une lune dans la barre des menus tant que Ne pas déranger est activé ; un clic le désactive.</translation>
+    </message>
+    <message>
+        <source>Show Focus in the menu bar</source>
+        <translation>Afficher la concentration dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Now Playing</source>
+        <translation>En cours de lecture</translation>
+    </message>
+    <message>
+        <source>While a media player has a track, a button in the menu bar opens its controls.</source>
+        <translation>Tant qu’un lecteur multimédia a un morceau, un bouton de la barre des menus ouvre ses commandes.</translation>
+    </message>
+    <message>
+        <source>Show Now Playing in the menu bar</source>
+        <translation>Afficher « En cours de lecture » dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>A magnifier button in the menu bar opens Search.</source>
+        <translation>Un bouton en forme de loupe dans la barre des menus ouvre la recherche.</translation>
+    </message>
+    <message>
+        <source>Show Search in the menu bar</source>
+        <translation>Afficher la recherche dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Allow in the Menu Bar</source>
+        <translation>Autoriser dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>Choosing which application may show an item is not available: this switch covers all of them.</source>
+        <translation>Choisir application par application n’est pas disponible : cet interrupteur les couvre toutes.</translation>
+    </message>
+    <message>
+        <source>Items from applications</source>
+        <translation>Éléments des applications</translation>
+    </message>
+    <message>
+        <source>The status icons that applications such as chat and sync tools put in the menu bar.</source>
+        <translation>Les icônes d’état que des applications (messagerie, synchronisation) placent dans la barre des menus.</translation>
+    </message>
+    <message>
+        <source>Show status items of applications in the menu bar</source>
+        <translation>Afficher les éléments d’état des applications dans la barre des menus</translation>
     </message>
 </context>
 <context>
@@ -4229,6 +4463,10 @@
     <message>
         <source>Now Playing</source>
         <translation>En cours de lecture</translation>
+    </message>
+    <message>
+        <source>Open the app that is playing</source>
+        <translation>Ouvrir l’app en cours de lecture</translation>
     </message>
     <message>
         <source>Not playing</source>
@@ -4854,12 +5092,32 @@
         <translation>agrandissement</translation>
     </message>
     <message>
-        <source>menu bar</source>
-        <translation>barre des menus</translation>
-    </message>
-    <message>
         <source>screen corners</source>
         <translation>coins de l’écran</translation>
+    </message>
+    <message>
+        <source>Menu Bar</source>
+        <translation>Barre des menus</translation>
+    </message>
+    <message>
+        <source>clock</source>
+        <translation>horloge</translation>
+    </message>
+    <message>
+        <source>menu bar background</source>
+        <translation>arrière-plan de la barre des menus</translation>
+    </message>
+    <message>
+        <source>status items</source>
+        <translation>éléments d’état</translation>
+    </message>
+    <message>
+        <source>hide menu bar</source>
+        <translation>masquer la barre des menus</translation>
+    </message>
+    <message>
+        <source>battery percentage</source>
+        <translation>pourcentage de la batterie</translation>
     </message>
     <message>
         <source>Notifications</source>

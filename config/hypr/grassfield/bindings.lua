@@ -135,6 +135,22 @@ for n = 1, 4 do
 end
 bind("SUPER + ALT + S", "Move the window to a stage of its own", shell("stages", "newStage"))
 
+-- Keyboard launch keys: each opens the user's default app, resolved at press time by grassfield-launch-key (desktop entries
+-- and xdg-mime, no package names). Search is Spotlight. Keys with no target here stay unbound.
+local launch_key = os.getenv("GRASSFIELD_LAUNCH_KEY") or "/usr/lib/grassfield/grassfield-launch-key"
+local function launch(kind)
+  return hl.dsp.exec_cmd("'" .. launch_key .. "' " .. kind)
+end
+bind("XF86Calculator", "Calculator", launch("calculator"), { locked = false })
+bind("XF86Mail", "Mail", launch("mail"), { locked = false })
+bind("XF86WWW", "Web browser", launch("web"), { locked = false })
+bind("XF86HomePage", "Web browser", launch("web"), { locked = false })
+bind("XF86Search", "Search", shell("search", "toggle"), { locked = false })
+bind("XF86Explorer", "Files", launch("files"), { locked = false })
+bind("XF86MyComputer", "Files", launch("files"), { locked = false })
+bind("XF86Tools", "Grassfield Settings", launch("settings"), { locked = false })
+bind("XF86AudioMedia", "Music", launch("music"), { locked = false })
+
 -- Hardware keys: real volume/brightness changes plus the OSD (shell/osd).
 bind("XF86AudioRaiseVolume", "Volume up", shell("volume", "up"), { repeating = true, locked = true })
 bind("XF86AudioLowerVolume", "Volume down", shell("volume", "down"), { repeating = true, locked = true })

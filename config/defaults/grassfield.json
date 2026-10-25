@@ -66,7 +66,20 @@
     "showBackground": false,
     "autoHide": "fullscreen",
     "showNowPlaying": true,
-    "showSearch": true
+    "showSearch": true,
+    "showWifi": true,
+    "showSound": true,
+    "showBattery": true,
+    "showBatteryPercentage": true,
+    "showFocus": true,
+    "clockDate": "auto",
+    "clockShowDayOfWeek": true,
+    "clockHours": "auto",
+    "clockShowAmPm": true,
+    "clockFlashSeparators": false,
+    "showTrayItems": true,
+    "recentItems": 10,
+    "clockShowSeconds": false
   },
   "accent": {
     "color": "multicolor"
