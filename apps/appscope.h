@@ -1,9 +1,11 @@
 // Shared by the Grassfield apps (R5: one copy). An application one of the apps starts (Files and Glance -> Preview,
 // Preview -> the full viewer) runs in a scope of its own through uwsm's app launcher, like the applications the shell
 // starts (shell/services/Apps.qml scoped): without it the child stays in the unit of the app that started it and
-// closes with it. Only in a real session (GRASSFIELD_SESSION=1, never GRASSFIELD_DEV=1) and only when uwsm-app is on
+// closes with it. Only in a real session (runmode.h: GRASSFIELD_SESSION=1; a GRASSFIELD_DEV=1 that leaked into it changes nothing) and only when uwsm-app is on
 // the PATH (looked up synchronously: no race at start-up).
 #pragma once
+
+#include "runmode.h"
 
 #include <QProcess>
 #include <QStandardPaths>
@@ -14,9 +16,7 @@ namespace grassfield::apps {
 
 inline bool scopedLaunch()
 {
-    return qEnvironmentVariable("GRASSFIELD_SESSION") == QLatin1String("1")
-        && qEnvironmentVariable("GRASSFIELD_DEV") != QLatin1String("1")
-        && !QStandardPaths::findExecutable(QStringLiteral("uwsm-app")).isEmpty();
+    return runmode::session() && !QStandardPaths::findExecutable(QStringLiteral("uwsm-app")).isEmpty();
 }
 
 // program + args of an application start: `uwsm-app -- program args` in a real session, unchanged otherwise.

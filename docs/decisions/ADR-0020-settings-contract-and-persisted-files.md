@@ -46,7 +46,7 @@ adding `version` is safe for a downgrade.
 
 ## Decision
 1. **Schema as the single source.** Every leaf gets a `default`; rules the schema cannot express are `x-grassfield`
-   annotations (`tint`, `folderColor`, `pointerColor`, `wallpaperPath`, `wallpaperOutputs`, `notificationApps`, `pathList`,
+   annotations (`tint`, `folderColor`, `pointerColor`, `wallpaperPath`, `wallpaperOutputs`, `notificationApps`, `notificationStyles`, `pathList`,
    `settable: false`, `qmlType`). `scripts/dev/gen-settings.py` (stdlib only, the `ui/tools/gen-tokens.py` pattern)
    writes `config/defaults/grassfield.json`, `ui/Grassfield/Ui/SettingsContract.js` (`VERSION`, `DEFAULTS`, `RULES`,
    `validate`, `normalize`, `versionStatus`), `shell/store/SettingsData.qml` (the JsonAdapter) and

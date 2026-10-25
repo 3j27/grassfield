@@ -45,6 +45,8 @@
  {"name": "dev: value honoured", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": "12:00"},
  {"name": "dev: unset is empty", "env": {"GRASSFIELD_DEV": "1"}, "variable": "GRASSFIELD_FIXED_TIME", "value": ""},
  {"name": "no dev: inert", "env": {"GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": ""},
- {"name": "leaked dev in a packaged session: inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_OPEN_POLICY": "allow"}, "variable": "GRASSFIELD_OPEN_POLICY", "value": ""}
+ {"name": "leaked dev in a packaged session: inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_OPEN_POLICY": "allow"}, "variable": "GRASSFIELD_OPEN_POLICY", "value": ""},
+ {"name": "dev: the shell directory is honoured", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SHELL_DIR": "/work/shell"}, "variable": "GRASSFIELD_SHELL_DIR", "value": "/work/shell"},
+ {"name": "leaked dev in a packaged session: the shell directory is inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_SHELL_DIR": "/tmp/evil"}, "variable": "GRASSFIELD_SHELL_DIR", "value": ""}
 ]
 }

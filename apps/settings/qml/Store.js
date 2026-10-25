@@ -7,187 +7,17 @@
 
 // grassfield.json (contract version 1) merge and validation logic. Pure functions, no I/O:
 // the caller reads the file, passes its text in and writes the returned text back.
-// RULES mirrors config/schema/grassfield.schema.json (tests/unit/tst_settingsstore.qml checks the parity).
 // Rules: preserve every other key of the file, never write a key outside the schema, refuse a malformed file.
 
-const DEFAULTS = {
-    "appearance": "dark",
-    "material.transparency": 0.25,
-    "material.profile": "balanced",
-    "accessibility.reduceTransparency": false,
-    "accessibility.reduceMotion": false,
-    "accessibility.increaseContrast": false,
-    "accessibility.textSize": 1,
-    "accessibility.zoom": false,
-    "accessibility.zoomLevel": 2,
-    "dock.size": 48,
-    "dock.position": "bottom",
-    "dock.magnification": 1.6,
-    "dock.magnificationEnabled": false,
-    "dock.autohide": false,
-    "dock.showRecents": true,
-    "dock.folders": ["~/Downloads"],
-    "dock.minimizeIntoApp": false,
-    "dock.animateOpening": true,
-    "dock.showIndicators": true,
-    "dock.minimizeEffect": "funnel",
-    "desktop.showIcons": true,
-    "menubar.showBackground": false,
-    "menubar.autoHide": "fullscreen",
-    "menubar.showNowPlaying": true,
-    "menubar.showSearch": true,
-    "windows.titlebarDoubleClick": "zoom",
-    "windows.tilingEdges": true,
-    "windows.tilingMenuBar": true,
-    "windows.tilingMargins": true,
-    "windows.stages": false,
-    "windows.rebuildExtension": false,
-    "notifications.dnd": false,
-    "notifications.previews": "unlocked",
-    "notifications.appPreviews": [],
-    "notifications.appStyles": [],
-    "notifications.history": "week",
-    "lock.idleMinutes": 5,
-    "hotCorners.topLeft": "none",
-    "hotCorners.topRight": "none",
-    "hotCorners.bottomLeft": "none",
-    "hotCorners.bottomRight": "none",
-    "accent.color": "multicolor",
-    "icons.mode": "default",
-    "icons.tint": "accent",
-    "icons.folderColor": "theme",
-    "pointer.size": Ui.PointerSize.DEFAULT,
-    "pointer.outlineColor": Ui.PointerColors.DEFAULT_OUTLINE,
-    "pointer.fillColor": Ui.PointerColors.DEFAULT_FILL,
-    "wallpaper.source": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.source,
-    "wallpaper.path": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.path,
-    "wallpaper.color": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.color,
-    "wallpaper.fit": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.fit,
-    "wallpaper.interval": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.interval,
-    "wallpaper.shuffle": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.shuffle,
-    "wallpaper.videoOnBattery": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.videoOnBattery,
-    "wallpaper.online.provider": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.online.provider,
-    "wallpaper.outputs": []
-};
+// DEFAULTS, RULES and validate come from the generated ui/Grassfield/Ui/SettingsContract.js (scripts/dev/gen-settings.py,
+// from the schema): one definition for every reader. The Dock owns dock.pinned, dock.recent and dock.stackOptions: they
+// are only preserved, never settable.
+const DEFAULTS = Tree.SettingsContract.DEFAULTS;
+const RULES = Tree.SettingsContract.RULES;
 
-const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
-
-// Settable keys (dock.pinned is owned by the Dock and is only preserved).
-const RULES = {
-    "appearance": {type: "enum", values: ["dark", "light", "auto"]},
-    "material.transparency": {type: "number", min: 0, max: 1},
-    "material.profile": {type: "enum", values: ["full", "balanced", "reduced"]},
-    "accessibility.reduceTransparency": {type: "boolean"},
-    "accessibility.reduceMotion": {type: "boolean"},
-    "accessibility.increaseContrast": {type: "boolean"},
-    "accessibility.textSize": {type: "number", min: 1, max: 1.3},
-    "accessibility.zoom": {type: "boolean"},
-    "accessibility.zoomLevel": {type: "number", min: 1.5, max: 5},
-    "dock.size": {type: "integer", min: 32, max: 96},
-    "dock.position": {type: "enum", values: ["left", "bottom", "right"]},
-    "dock.magnification": {type: "number", min: 1, max: 2.5},
-    "dock.magnificationEnabled": {type: "boolean"},
-    "dock.autohide": {type: "boolean"},
-    "dock.showRecents": {type: "boolean"},
-    "dock.folders": {type: "pathList"},
-    "dock.minimizeIntoApp": {type: "boolean"},
-    "dock.animateOpening": {type: "boolean"},
-    "dock.showIndicators": {type: "boolean"},
-    "dock.minimizeEffect": {type: "enum", values: ["funnel", "shrink"]},
-    "desktop.showIcons": {type: "boolean"},
-    "menubar.showBackground": {type: "boolean"},
-    "menubar.autoHide": {type: "enum", values: ["always", "desktop", "fullscreen", "never"]},
-    "menubar.showNowPlaying": {type: "boolean"},
-    "menubar.showSearch": {type: "boolean"},
-    "windows.titlebarDoubleClick": {type: "enum", values: ["zoom", "minimize", "none"]},
-    "windows.tilingEdges": {type: "boolean"},
-    "windows.tilingMenuBar": {type: "boolean"},
-    "windows.tilingMargins": {type: "boolean"},
-    "windows.stages": {type: "boolean"},
-    "windows.rebuildExtension": {type: "boolean"},
-    "notifications.dnd": {type: "boolean"},
-    "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
-    // Per-app override of the previews setting (ui/Grassfield/Ui/NotificationPrefs.js, one copy of the rules).
-    "notifications.appPreviews": {type: "notificationApps"},
-    // Per-app alert style (banners | alerts | none) and how long the history stays on disk.
-    "notifications.appStyles": {type: "notificationStyles"},
-    "notifications.history": {type: "enum", values: ["week", "day", "never"]},
-    "lock.idleMinutes": {type: "integer", min: 0, max: 240},
-    "hotCorners.topLeft": {type: "enum", values: CORNER_ACTIONS},
-    "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
-    "hotCorners.bottomLeft": {type: "enum", values: CORNER_ACTIONS},
-    "hotCorners.bottomRight": {type: "enum", values: CORNER_ACTIONS},
-    // Accent colour; the names mirror ui/Grassfield/Ui/Accent.js NAMES (tests/unit/tst_accent.qml checks the parity).
-    "accent.color": {type: "enum", values: ["multicolor", "blue", "purple", "pink", "red", "orange", "yellow", "green", "graphite"]},
-    "icons.mode": {type: "enum", values: ["default", "dark", "clear", "tinted"]},
-    // "accent" or a #rrggbb colour (schema `pattern`).
-    "icons.tint": {type: "tint"},
-    // "theme", "accent" or a #rrggbb colour (schema `pattern`).
-    "icons.folderColor": {type: "folderColor"},
-    // Cursor size in pixels, mirrors ui/Grassfield/Ui/PointerSize.js (the unit test checks the bounds).
-    "pointer.size": {type: "integer", min: Ui.PointerSize.MIN, max: Ui.PointerSize.MAX},
-    // #rrggbb (schema `pattern`), any colour: like macOS there is no contrast guard.
-    "pointer.outlineColor": {type: "pointerColor"},
-    "pointer.fillColor": {type: "pointerColor"},
-    // ADR-0016: lists, defaults, path and outputs rules come from ui/Grassfield/Ui/WallpaperConfig.js (one copy).
-    "wallpaper.source": {type: "enum", values: Tree.WallpaperConfig.SOURCES},
-    "wallpaper.path": {type: "wallpaperPath"},
-    "wallpaper.color": {type: "pointerColor"},
-    "wallpaper.fit": {type: "enum", values: Tree.WallpaperConfig.FITS},
-    "wallpaper.interval": {type: "enum", values: Tree.WallpaperConfig.INTERVAL_NAMES},
-    "wallpaper.shuffle": {type: "boolean"},
-    "wallpaper.videoOnBattery": {type: "boolean"},
-    "wallpaper.online.provider": {type: "enum", values: Tree.WallpaperConfig.ONLINE_PROVIDERS},
-    "wallpaper.outputs": {type: "wallpaperOutputs"}
-};
-
-// Error message for an invalid value, or "" when the value is acceptable for the key.
+// Error message for an invalid value, or "" when the value is acceptable for the key (writes are strict).
 function validate(path, value) {
-    const rule = RULES[path];
-    if (!rule)
-        return "unknown setting: " + path;
-    switch (rule.type) {
-    case "enum":
-        return rule.values.indexOf(value) >= 0 ? "" : path + ": expected one of " + rule.values.join(", ");
-    case "tint":
-        return Ui.IconModes.validTint(value) ? "" : path + ": expected accent or a #rrggbb colour";
-    case "folderColor":
-        return Ui.FolderStyle.validColor(value) ? "" : path + ": expected theme, accent or a #rrggbb colour";
-    case "pointerColor":
-        return Ui.PointerColors.validColor(value) ? "" : path + ": expected a #rrggbb colour";
-    case "wallpaperPath":
-        // "" (no path) is valid: the source then reads as the built-in artwork.
-        return value === "" || Tree.WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";
-    case "wallpaperOutputs": {
-        const why = Tree.WallpaperConfig.outputsProblem(value);
-        return why === "" ? "" : path + ": " + why;
-    }
-    case "notificationApps": {
-        const why = Tree.NotificationPrefs.problem(value);
-        return why === "" ? "" : path + ": " + why;
-    }
-    case "notificationStyles": {
-        const why = Tree.NotificationPrefs.problemStyles(value);
-        return why === "" ? "" : path + ": " + why;
-    }
-    case "pathList": {
-        // Folders kept in the Dock as stacks: absolute paths or ~/ ones, as the Dock reads them (shell/dock/Stacks.js folderList).
-        const ok = Array.isArray(value) && value.length <= 12 && value.every(v => typeof v === "string" && v !== "" && v.length <= 4096
-            && !/[\u0000-\u001f]/.test(v) && (v.indexOf("/") === 0 || v.indexOf("~/") === 0) && v.split("/").indexOf("..") < 0);
-        return ok ? "" : path + ": expected at most 12 absolute paths without control characters";
-    }
-    case "boolean":
-        return typeof value === "boolean" ? "" : path + ": expected true or false";
-    case "integer":
-        if (typeof value !== "number" || !isFinite(value) || Math.floor(value) !== value)
-            return path + ": expected an integer";
-        return value >= rule.min && value <= rule.max ? "" : path + ": expected " + rule.min + " to " + rule.max;
-    case "number":
-        if (typeof value !== "number" || !isFinite(value))
-            return path + ": expected a number";
-        return value >= rule.min && value <= rule.max ? "" : path + ": expected " + rule.min + " to " + rule.max;
-    }
-    return "unsupported rule";
+    return Tree.SettingsContract.validate(path, value);
 }
 
 // The unsafe-file detection (integers beyond 2^53, duplicate keys, integer-like keys) lives in
@@ -221,15 +51,10 @@ function isObject(v) {
     return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
-// Value of a dotted path in parsed data, validated; the schema default when absent or invalid.
+// Value of a dotted path in parsed data, as every reader sees it: a number out of range is clamped (an integer is rounded
+// first), any other invalid value reads as the schema default (SettingsContract.read).
 function read(data, path) {
-    let node = data;
-    for (const part of path.split(".")) {
-        if (!isObject(node))
-            return DEFAULTS[path];
-        node = node[part];
-    }
-    return validate(path, node) === "" ? node : DEFAULTS[path];
+    return Tree.SettingsContract.read(data, path);
 }
 
 // Set several keys at once (`entries`: {dotted path: value}) in one merged text, so that a reader that watches the file (the

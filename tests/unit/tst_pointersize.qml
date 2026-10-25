@@ -45,13 +45,20 @@ TestCase {
     }
 
     function test_fromStored() {
-        // Valid integers: on the step as is, off the step snapped.
+        // A number is rounded and clamped, like every reader of the contract (ADR-0020): an off-step integer is kept.
         compare(PointerSize.fromStored(24), 24);
         compare(PointerSize.fromStored(48), 48);
-        compare(PointerSize.fromStored(51), 52);
+        compare(PointerSize.fromStored(51), 51);
+        compare(PointerSize.fromStored(51.5), 52);
+        compare(PointerSize.fromStored(60.5), 61);
         compare(PointerSize.fromStored(96), 96);
-        // Anything else is the default, never rounded, parsed or clamped.
-        const bad = [51.5, "64", "x", true, null, undefined, NaN, Infinity, 23, 97, 1000, -48, [48], {}];
+        compare(PointerSize.fromStored(23), 24);
+        compare(PointerSize.fromStored(97), 96);
+        compare(PointerSize.fromStored(200), 96);
+        compare(PointerSize.fromStored(1000), 96);
+        compare(PointerSize.fromStored(-48), 24);
+        // Anything that is not a finite number is the default, never parsed.
+        const bad = ["64", "x", true, null, undefined, NaN, Infinity, [48], {}];
         for (const v of bad)
             compare(PointerSize.fromStored(v), 24, "fromStored(" + JSON.stringify(v) + ")");
     }
