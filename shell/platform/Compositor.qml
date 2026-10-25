@@ -564,8 +564,11 @@ Singleton {
         onTriggered: minimizedSyncTimer.restart()
     }
 
-    // The titlebar button (plugin) posts a minimize-request event; the address is validated.
+    // The titlebar button (plugin) posts a minimize-request event, and so does a tagged window's own minimize button
+    // (GF-056 P8); the address is validated. Like the SUPER+M binding, nothing behind the lock moves (GF-116).
     function minimizeByAddress(address: string): void {
+        if (SessionState.refuses("windows minimize request"))
+            return;
         const wanted = Minimized.normalizeAddress(address);
         if (wanted === "")
             return;

@@ -5,7 +5,7 @@ import Quickshell.Io
 import qs.notifications // layering-exception: GF-050
 import qs.security.lock
 import "IdleModel.js" as IdleModel
-import "../../services/DevGate.js" as DevGate
+import "../../lib/RunMode.js" as RunMode
 
 // Lock before sleep (SEC1, ADR-0010): a logind *delay* inhibitor on "sleep" is held while the
 // session runs; on PrepareForSleep(true) the screen locks and the inhibitor is released as soon
@@ -28,13 +28,14 @@ import "../../services/DevGate.js" as DevGate
 // user gets a notice (Notifications, "The screen may not lock before sleep") and the child is retried every minute;
 // the notice is withdrawn once it runs again.
 // The sleep delay lasts at most what logind allows (InhibitDelayMaxUSec, IdleModel.sleepBudgetMs).
-// In the nested dev session (DevGate: GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1) the inhibitor is never taken: it
-// would delay the owner's real suspend. The watcher only listens and stays on. A GRASSFIELD_DEV=1 that leaks into a
-// real session (GRASSFIELD_SESSION=1) changes nothing here (SEC-03).
+// In the nested dev session (RunMode.dev through the relative import, which no QML import path can replace:
+// GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1) the inhibitor is never taken: it would delay the owner's real suspend.
+// The watcher only listens and stays on. A GRASSFIELD_DEV=1 that leaks into a real session (GRASSFIELD_SESSION=1)
+// changes nothing here (SEC-03).
 Scope {
     id: root
 
-    readonly property bool dev: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
+    readonly property bool dev: RunMode.dev(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
     readonly property bool inhibiting: inhibitor.running
     property bool sleeping: false
     // Consecutive early exits of a child (IdleModel.failuresAfterRun); reset once it has run FAST_EXIT_MS, which the
