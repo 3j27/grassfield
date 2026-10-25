@@ -35,7 +35,7 @@ FEATURE = 4
 ROOT_LAYER = 5
 TAGS = ("GF-087", "GF-050", "ADR-0021 security")
 MARKER = re.compile(r"//\s*layering-exception:\s*(.*?)\s*$")
-IMPORT = re.compile(r'^\s*\.?import\s+(?:"([^"]+)"|(qs(?:\.\w+)+)\b|(Quickshell\.Hyprland)\b)')
+IMPORT = re.compile(r"""^\s*\.?import\s+(?:["']([^"']+)["']|(qs(?:\.\w+)+)\b|(Quickshell\.Hyprland)\b)""")
 RAW_EVENT = re.compile(r"\b(?:on)?[rR]awEvent\b")
 SECURITY_ALLOWED = {"lib", "services"}
 
@@ -81,8 +81,9 @@ def scan(shell):
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if line.lstrip().startswith("//"):
                 continue
-            m = IMPORT.match(line)
-            if m:
+            statements = [IMPORT.match(seg) for seg in line.split(";")]
+            statements = [m for m in statements if m]
+            for m in statements:
                 rel_target, qs_target, hypr = m.groups()
                 if hypr:
                     raw.insert(0, (path, n, line, src, "hyprland", "Quickshell.Hyprland"))
@@ -97,7 +98,7 @@ def scan(shell):
                     dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
                     if dst is not None:
                         out.append((path, n, line, src, "module", dst))
-            elif RAW_EVENT.search(line):
+            if not statements and RAW_EVENT.search(line):
                 raw.append((path, n, line, src, "rawevent", "rawEvent"))
         out.extend(raw[:1])
     return out
@@ -304,6 +305,11 @@ def selftest():
     run("a tag naming nothing known fails", {**clean, "services/Apps.qml": "import qs.dock // layering-exception: because\nItem {}\n"}, "unknown layering-exception tag")
     run("a stale marker fails", {**clean, "services/Apps.qml": "import qs.platform // layering-exception: GF-087\nItem {}\n"}, "stale marker")
     run("an unknown module fails", {**clean, "services/Apps.qml": "import qs.nothing\nItem {}\n"}, "is not a module")
+    run("a second import on the same line counts", {**clean, "services/Apps.qml": "import QtQuick; import qs.dock\nItem {}\n"}, "imports go to a lower layer only")
+    run("a second import on the same line, marked, passes", {**clean, "services/Apps.qml": "import QtQuick; import qs.dock // layering-exception: GF-087\nItem {}\n"}, None)
+    run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
+    run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
+    run("Hyprland as a second import counts", {**clean, "search/S.qml": "import QtQuick; import Quickshell.Hyprland\nItem {}\n"}, "raw Hyprland events go through qs.platform")
     run("feature to feature while acyclic passes", {**clean, "desktop/D.qml": "import qs.dock\nItem {}\n"}, None)
     cycle = {**clean, "desktop/D.qml": "import qs.dock\nItem {}\n", "dock/Dock.qml": "import qs.services\nimport qs.desktop\nItem {}\n"}
     run("a feature cycle fails", cycle, "through a cycle of feature modules")
