@@ -590,8 +590,9 @@ void FilesApp::glance(const QList<QUrl> &urls)
     }
     if (paths.isEmpty() || launchingBlocked())
         return;
-    // GRASSFIELD_PREVIEW_CMD (dev) wins, then a grassfield-preview next to this binary, then the PATH.
-    QStringList command = qEnvironmentVariable("GRASSFIELD_PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    // GRASSFIELD_PREVIEW_CMD (dev plumbing: honoured only in a dev session, runmode.h) wins, then a grassfield-preview next
+    // to this binary, then the PATH.
+    QStringList command = grassfield::apps::runmode::devValue("PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
     if (command.isEmpty()) {
         const QString sibling = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-preview");
         command << (QFileInfo(sibling).isExecutable() ? sibling : QStringLiteral("grassfield-preview"));

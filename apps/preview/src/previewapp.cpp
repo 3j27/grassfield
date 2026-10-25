@@ -317,8 +317,9 @@ void PreviewApp::openInPreview(int current) const
     if (paths.isEmpty())
         return;
     current = qBound(0, current, paths.size() - 1);
-    // GRASSFIELD_PREVIEW_CMD (dev) may carry a --glance flag; the full viewer never gets it.
-    QStringList prefix = qEnvironmentVariable("GRASSFIELD_PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    // GRASSFIELD_PREVIEW_CMD (dev plumbing: honoured only in a dev session, runmode.h) may carry a --glance flag; the full
+    // viewer never gets it.
+    QStringList prefix = grassfield::apps::runmode::devValue("PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
     if (prefix.isEmpty())
         prefix << QCoreApplication::applicationFilePath();
     const QString program = prefix.takeFirst();
