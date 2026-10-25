@@ -239,6 +239,7 @@
  {"path": "tests/shell/bindings_forward.sh", "layer": "logic"},
  {"path": "tests/shell/session_services.sh", "layer": "logic"},
  {"path": "tests/shell/crash_watch.sh", "layer": "logic"},
+ {"path": "tests/shell/i18n_helpers_gate.sh", "layer": "logic"},
  {"path": "tests/shell/shell_unit.sh", "layer": "logic"},
  {"path": "tests/shell/gate_run.sh", "layer": "logic"},
  {"path": "tests/shell/unit_bus_access.sh", "layer": "logic"},
