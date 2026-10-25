@@ -100,6 +100,7 @@
  {"path": "tests/unit/tst_showdesktopreplay.qml", "layer": "headless"},
  {"path": "tests/unit/tst_showdesktopglue.qml", "layer": "headless"},
  {"path": "tests/shell/show_desktop_nested.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/shell/audit_dark_nested.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/shell/show_desktop_record.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/unit/tst_localeformat.qml", "layer": "headless"},
  {"path": "tests/unit/tst_icontile.qml", "layer": "headless"},
