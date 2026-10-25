@@ -9,7 +9,8 @@ import qs.store
 // ui/Grassfield/Ui/SettingsContract.js): every key the shell reads directly from the JSON file today must read what the
 // contract reads, so that the shell and the Settings app can never show two values for one stored value (the pointer size
 // did, GF-084 C2 review). A vector the shell still reads differently is marked "shell": "C3" in the fixture (slice C3 moves
-// the store onto the contract); it is skipped here and counted, so the list can only shrink. Real SettingsStore, offscreen
+// the store onto the contract): for those the test expects the shell to still differ and fails when it no longer does, so a
+// mark never goes stale and the list can only shrink (C3 removes the marks). Real SettingsStore, offscreen
 // (scripts/dev/test.sh: `qs -p tests/shell/settings_vectors`). Prints "settings-vectors: PASS" or the failures.
 ShellRoot {
     id: root
@@ -27,14 +28,17 @@ ShellRoot {
             "pointer.size": "pointerSize",
             "appearance": "appearance",
             "notifications.history": "notificationsHistory",
-            "menubar.autoHide": "menubarAutoHide"
+            "menubar.autoHide": "menubarAutoHide",
+            "menubar.showNowPlaying": "data.menubar.showNowPlaying",
+            "pointer.outlineColor": "pointerOutlineColor",
+            "dock.folders": "dockFolders"
         })
 
     property var vectors: []
     property var defaults: ({})
     property var failures: []
     property int loaded: 0
-    property int skipped: 0
+    property int knownDifferences: 0
 
     FileView {
         id: fixture
@@ -85,10 +89,6 @@ ShellRoot {
         for (const v of all) {
             if (root.readers[v.path] === undefined)
                 continue;
-            if (v.shell === "C3") {
-                skipped++;
-                continue;
-            }
             picked.push(v);
         }
         vectors = picked;
@@ -120,8 +120,17 @@ ShellRoot {
                 onLoadedFile: {
                     const v = root.vectors[item.index];
                     const want = v.default === true ? root.defaultOf(v.path) : v.read;
-                    const got = this[root.readers[v.path]];
-                    root.check(v.name + " (" + v.path + "): shell " + JSON.stringify(got) + ", contract " + JSON.stringify(want), JSON.stringify(got) === JSON.stringify(want));
+                    let got = this;
+                    for (const part of root.readers[v.path].split("."))
+                        got = got[part];
+                    const same = JSON.stringify(got) === JSON.stringify(want);
+                    if (v.shell === "C3") {
+                        // A known difference of slice C3: it must still be one.
+                        root.knownDifferences++;
+                        root.check(v.name + " (" + v.path + "): marked C3 but the shell now reads the contract's " + JSON.stringify(want) + "; remove the mark", !same);
+                    } else {
+                        root.check(v.name + " (" + v.path + "): shell " + JSON.stringify(got) + ", contract " + JSON.stringify(want), same);
+                    }
                     root.loaded++;
                     if (root.loaded === root.vectors.length)
                         cleanup.running = true;
@@ -137,7 +146,7 @@ ShellRoot {
             if (running)
                 return;
             if (root.failures.length === 0) {
-                console.log("settings-vectors: PASS (" + root.loaded + " read by the shell, " + root.skipped + " known C3 differences skipped)");
+                console.log("settings-vectors: PASS (" + root.loaded + " read by the shell, " + root.knownDifferences + " of them known C3 differences, still different)");
                 Qt.exit(0);
             } else {
                 console.log("settings-vectors: FAIL " + root.failures.join("; "));

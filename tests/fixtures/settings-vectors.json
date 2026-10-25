@@ -1,5 +1,5 @@
 {
-  "about": "Shared vectors of the settings contract (ui/Grassfield/Ui/SettingsContract.js, generated from config/schema/grassfield.schema.json): what a reader makes of a stored value. `stored` is the JSON value in grassfield.json (`absent` true = the key is missing), `read` what every reader uses (a number out of range is clamped, an integer rounded first, any other invalid value is the schema default; `default` true = the key's default), `valid` whether a write of that value is accepted, `shell` C3 marks a vector the shell's SettingsStore still reads differently (coerces a numeric string; slice C3 fixes it; tests/shell/settings_vectors skips it). Read by tests/unit/tst_settingscontract.qml; the shell's SettingsStore can read the same file once it uses the contract (GF-084 C3).",
+  "about": "Shared vectors of the settings contract (ui/Grassfield/Ui/SettingsContract.js, generated from config/schema/grassfield.schema.json): what a reader makes of a stored value. `stored` is the JSON value in grassfield.json (`absent` true = the key is missing), `read` what every reader uses (a number out of range is clamped, an integer rounded first, any other invalid value is the schema default; `default` true = the key's default), `valid` whether a write of that value is accepted, `shell` C3 marks a vector the shell's SettingsStore still reads differently (type coercion, list filtering, colour case; slice C3 fixes them; tests/shell/settings_vectors expects the difference and fails when it is gone). Read by tests/unit/tst_settingscontract.qml; the shell's SettingsStore can read the same file once it uses the contract (GF-084 C3).",
   "vectors": [
     {"name": "transparency in range", "path": "material.transparency", "stored": 0.5, "read": 0.5, "valid": true},
     {"name": "transparency above range is clamped", "path": "material.transparency", "stored": 9, "read": 1, "valid": false},
@@ -39,9 +39,9 @@
     {"name": "pointer colour without the hash is the default", "path": "pointer.fillColor", "stored": "123456", "default": true, "valid": false},
     {"name": "dock folders", "path": "dock.folders", "stored": ["~/Downloads", "/srv/x"], "read": ["~/Downloads", "/srv/x"], "valid": true},
     {"name": "dock folders empty", "path": "dock.folders", "stored": [], "read": [], "valid": true},
-    {"name": "dock folders relative is the default", "path": "dock.folders", "stored": ["relative"], "default": true, "valid": false},
-    {"name": "dock folders with a parent step is the default", "path": "dock.folders", "stored": ["/a/../b"], "default": true, "valid": false},
-    {"name": "dock folders over the cap is the default", "path": "dock.folders", "stored": ["/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a"], "default": true, "valid": false},
+    {"name": "dock folders relative is the default", "path": "dock.folders", "stored": ["relative"], "default": true, "valid": false, "shell": "C3"},
+    {"name": "dock folders with a parent step is the default", "path": "dock.folders", "stored": ["/a/../b"], "default": true, "valid": false, "shell": "C3"},
+    {"name": "dock folders over the cap is the default", "path": "dock.folders", "stored": ["/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a", "/a"], "default": true, "valid": false, "shell": "C3"},
     {"name": "wallpaper path empty", "path": "wallpaper.path", "stored": "", "read": "", "valid": true},
     {"name": "wallpaper path absolute", "path": "wallpaper.path", "stored": "/home/u/a.png", "read": "/home/u/a.png", "valid": true},
     {"name": "wallpaper path relative is the default", "path": "wallpaper.path", "stored": "a.png", "default": true, "valid": false},
@@ -49,6 +49,9 @@
     {"name": "wallpaper outputs empty", "path": "wallpaper.outputs", "stored": [], "read": [], "valid": true},
     {"name": "online provider apod", "path": "wallpaper.online.provider", "stored": "apod", "read": "apod", "valid": true},
     {"name": "notification app styles empty", "path": "notifications.appStyles", "stored": [], "read": [], "valid": true},
+    {"name": "boolean as a string is the default (typed adapter coerces it in the shell)", "path": "menubar.showNowPlaying", "stored": "false", "default": true, "valid": false, "shell": "C3"},
+    {"name": "colour keeps its case (the shell lower-cases it)", "path": "pointer.outlineColor", "stored": "#ABCDEF", "read": "#ABCDEF", "valid": true, "shell": "C3"},
+    {"name": "dock folders with a non-string entry is the default (the shell drops the entry)", "path": "dock.folders", "stored": ["/a", 5], "default": true, "valid": false, "shell": "C3"},
     {"name": "notification app styles of the wrong type is the default", "path": "notifications.appStyles", "stored": "none", "default": true, "valid": false}
   ]
 }
