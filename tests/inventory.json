@@ -127,6 +127,7 @@
  {"path": "tests/unit/tst_searchsettings.qml", "layer": "headless"},
  {"path": "tests/unit/tst_searchunits.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsstore.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_settingscontract.qml", "layer": "headless"},
  {"path": "tests/unit/tst_mousetrackpad.qml", "layer": "headless"},
  {"path": "tests/unit/tst_updatenotice.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingssystem.qml", "layer": "headless"},
