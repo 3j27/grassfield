@@ -42,7 +42,8 @@ TEST(Notices, TheFirstSetLocaleVariableDecidesInPosixOrder) {
     EXPECT_EQ(languageFrom(nullptr, nullptr, nullptr, nullptr), Lang::En);
 }
 
-// gettext's order, as Qt and the shell pick their language: LANGUAGE's first entry beats the locale, unless the locale is C.
+// gettext's rule: LANGUAGE's first entry beats the locale, unless the locale is C (also C.UTF-8). The shell (Qt's system
+// locale) still follows LANGUAGE under LANG=C.UTF-8: `LANGUAGE=fr LANG=C.UTF-8` gives a French shell and English notices.
 TEST(Notices, LanguageFirstEntryWinsUnlessTheLocaleIsC) {
     EXPECT_EQ(languageFrom("fr:en", nullptr, nullptr, "en_US.UTF-8"), Lang::Fr);
     EXPECT_EQ(languageFrom("en_GB:fr", nullptr, nullptr, "fr_FR.UTF-8"), Lang::En) << "the first entry, not any entry";

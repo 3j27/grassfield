@@ -60,8 +60,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR1** The plugin refuses to hook anything when `__hyprland_api_get_hash()` differs from
   `__hyprland_api_get_client_hash()`, logs the mismatch and shows one notification. The plugin's own notices (this one
   and the failed start) are in the session's language (GF-067; macOS shows system notices in the user's language): a
-  compiled table, `core/Notices.hpp`, French or English in gettext's order, as Qt and the shell choose: `LANGUAGE`'s first
-  entry unless the locale is C or POSIX, then `LC_ALL`, `LC_MESSAGES`, `LANG` (the first set and not empty);
+  compiled table, `core/Notices.hpp`, French or English by gettext's rule: `LANGUAGE`'s first entry unless the locale is
+  C or POSIX, then `LC_ALL`, `LC_MESSAGES`, `LANG` (the first set and not empty). The shell can differ: it takes Qt's
+  system locale, which still follows `LANGUAGE` under `LANG=C.UTF-8`, where gettext ignores it, so
+  `LANGUAGE=fr LANG=C.UTF-8` gives a French shell and English plugin notices (gettext's rule, kept on purpose);
   `tests/NoticesTest.cpp` fails when a notice is missing from the table's list or has no French text. They are Hyprland notifications, shown
   before any gfc/1 channel exists, so gfc/1 is unchanged.
 - **FR2** Every mapped floating window (not full screen, `decorate` rule not false, not X11
