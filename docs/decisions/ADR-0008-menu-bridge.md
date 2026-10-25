@@ -194,3 +194,60 @@ Consequences: a same-user process can keep the idle lock from firing for as long
 with the Wayland idle-inhibit protocol or on any desktop serving this interface (macOS power assertions likewise); the
 security consequence is recorded in ADR-0010's amendment of the same date. Tests: `tests/unit/menu-bridge/tst_screensaver.cpp`,
 `tests/integration/screensaver_inhibit.sh` (bare, private bus).
+
+## Amendment 2026-10-25: Electron's menus through RegisterWindow (owner report, 1.0.0-rc1 real session)
+Context: Obsidian shows no menus in the menu bar (macOS: every application's menus are in the menu bar). Upstream research
+(electron v43.6.0, Chromium 150.0.7871.250 as /usr/bin/obsidian runs it; Chromium 152 sources):
+- Electron builds its global menu (`GlobalMenuBarX11`, libdbusmenu-glib) when Ozone/Wayland reports
+  `supports_global_application_menus`, which it does when the compositor advertises `org_kde_kwin_appmenu_manager`
+  (the plugin does, `ui/ozone/platform/wayland/ozone_platform_wayland.cc`). It never calls `set_address`: on window Show
+  and Hide it calls `com.canonical.AppMenu.Registrar.RegisterWindow(u windowId, o "/com/canonical/menu/<windowId hex>")`
+  and `UnregisterWindow(u)` (`global_menu_bar_registrar_x11.cc`). On Wayland `windowId` is not an X11 window but
+  `WaylandWindowManager`'s per-process counter (`AllocateAcceleratedWidget`: 1, 2, ...), meaningless outside the process.
+  Chromium itself uses `org_kde_kwin_appmenu` and never calls `RegisterWindow`.
+- The real session's journal: `registrar: RegisterWindow from :1.98 answered com.canonical.AppMenu.Registrar.Error.NotSupported`
+  at Obsidian's start, `UnregisterWindow` when its window closed. Its menu was exported and shown nowhere.
+
+Options:
+1. **Serve `RegisterWindow` by the sender's process (chosen).** The registration (sender's unique name, object path) is
+   kept for the sender's process; the menu is shown for the Wayland windows of that process. The pid of a window's
+   Wayland client is known to the plugin (`wl_client_get_credentials`, as for `set_address`), the pid of a D-Bus sender to
+   the bus daemon (`GetConnectionUnixProcessID`): equal pids are the same process, as in the spoofing rule above.
+2. Map Electron's `windowId` to a window: impossible on Wayland (a per-process counter, no protocol carries it).
+3. Change Electron (a flag or `SetAppmenu`): none exists; applications cannot be patched.
+4. Status quo: Electron applications' menus stay unreachable (Obsidian draws no menu bar of its own).
+
+Decision (integrator, 2026-10-25):
+- The registrar accepts `RegisterWindow(u, o)` and `UnregisterWindow(u)`: kept per (sender, windowId), at most 16 per
+  sender and 128 in all (beyond: `org.freedesktop.DBus.Error.LimitsExceeded`), dropped when the sender leaves the bus.
+  The sender's pid is asked from the bus daemon once per sender. `GetMenuForWindow` and `GetMenus` keep their errors
+  (nobody can look a registration up).
+- The plugin's gfc/1 `appmenu` event for a Wayland window without a `set_address` registration carries that window's
+  client pid (empty service and path); X11/XWayland windows and clears keep pid 0. This is the PID -> windows link: the
+  shell, for the focused window without a T1/T2 registration and with a pid, sends the bridge the new menu/1 line
+  `{"type":"open-registered","window":"<hex>","pid":N}`.
+- The bridge serves that window the latest registration of a sender whose process is pid N (Electron's application
+  menu is the same for every window; when one process registered several menus, the latest wins: the focused window
+  cannot be mapped to Electron's windowId). At use it re-checks the sender's process (`GetConnectionUnixProcessID`
+  again, the same check as `open`: a reused pid never gets another process's menu) and refuses a process in another pid
+  namespace than the bridge's (`NSpid` of `/proc/<pid>/status`; a Flatpak app talks through a proxy and fails the pid
+  check anyway). From there it is an `open` of (sender, path, pid): the same crash attribution, size limits, back-off
+  and degraded mode. A window whose process has not registered yet waits: the registration, when it comes, opens it.
+- X11/XWayland applications that call `RegisterWindow` are kept like any sender but never served: the plugin reports no
+  pid for their windows. Qt under XWayland still hides its menu bar while the registrar exists (the limitation above,
+  unchanged: it decides from the registrar's presence, not from the reply).
+
+macOS outcome: Electron applications (Obsidian, VS Code, Discord, Slack...) show their File, Edit, View... menus in the
+menu bar, and an item click runs the application's action, as for Qt and Chromium.
+
+Risks and consequences:
+- A process can only register menus for itself (the sender is its own connection) and they are shown only for windows
+  whose Wayland client is that same process: no menu can be injected into another application's windows.
+- An application with several different window menus shows the latest registered one for all its windows.
+- A registration made before the shell asks is kept (16 per sender, 128 in all, LimitsExceeded beyond, no eviction):
+  the caps bound the memory; a same-uid process that opens many bus connections can fill the 128 entries, and the
+  applications registering after that show T0 menus until those connections leave the bus (bounded, as the other
+  same-uid risks of MB14).
+- Tests: unit tests of the registration book (caps, replacement, unregister, sender gone, latest per pid), the registrar
+  replies, the `open-registered` validation and the namespace check; the shell's line and event parsing; a nested case
+  with Obsidian (`tests/integration/electron_menus.sh`). Spec: `docs/specs/menu-bridge.md` MB2, MB5, MB17.
