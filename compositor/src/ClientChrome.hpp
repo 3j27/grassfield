@@ -8,6 +8,9 @@
 //   P4  the app's xdg_toplevel.move on a zoomed window: the window leaves the zoom at its floating size, under the pointer
 //       at the same place in its toolbar row, then follows the pointer (Hyprland's interactive move, restarted there).
 //   P5  the app's xdg_toplevel.set_minimized: the minimize path of the titlebar's own light (minimize-request, FR6).
+//   P8  such a window is told the minimize capability (xdg_toplevel.wm_capabilities, then a configure): GTK4 greys a
+//       minimize button the compositor does not offer, and Hyprland offers only fullscreen and maximize; unload tells it
+//       Hyprland's own capabilities again (GF-056 part 2).
 // Per-window listeners on each xdg toplevel (stateChanged, requestMove), added when a window opens, dropped when it
 // closes or at unload; each handler checks the tag when it runs (the tag may come or go with a rule change).
 

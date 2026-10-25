@@ -17,6 +17,13 @@ namespace gf::chrome {
         return clientChrome ? 0.0 : theme::kTitlebarHeight;
     }
 
+    std::vector<uint32_t> wmCapabilities(bool clientChrome, bool minimizeBridged) {
+        std::vector<uint32_t> caps{kCapFullscreen, kCapMaximize};
+        if (clientChrome && minimizeBridged)
+            caps.push_back(kCapMinimize);
+        return caps;
+    }
+
     bool moveAnswersPress(const std::optional<ZoomedPress>& press, uint64_t window, bool buttonHeld, uint64_t nowMs) {
         if (!press || press->window == 0 || press->window != window || !buttonHeld)
             return false;

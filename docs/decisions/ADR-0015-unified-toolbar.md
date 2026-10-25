@@ -723,6 +723,8 @@ window's own `xdgMoveRequest` listener is left in place, see spike step 3).
 - **P7 one token source.** `ui/tools/gen-tokens.py` also writes the plugin's light constants (`kButtonDiameter`,
   `kButtonSpacing`, `kTitlebarHeight`, `kButtonInsetLeft`, colours, glyph ratios) from `window.*`, or a GTest compares
   `Theme.hpp` with `tokens.json` (ADR test plan, "generated light constants equal what the titlebar draws").
+- **P8 minimize capability** (added 2026-10-25, GF-056 part 2): a client-chrome window is told it can be minimized
+  (xdg `wm_capabilities` with minimize; P5 handles the request); see the amendment of 2026-10-25 below.
 - **S1 session rule** (`config/hypr/grassfield/windows.lua`, `--verify-config` accepted the keys in the spike):
   `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })`.
 - **S2 maximize exemption (Q4):** `gf-no-maximize-event` becomes `match = { class = ".*", xdg_tag = "negative:.+" }` so a
@@ -789,32 +791,63 @@ Decision (after the review of 9c0da79):
   and the settings portal on the private bus both answer `'close,minimize,maximize:'`; Evince (GTK3), Nautilus
   (GTK4/libadwaita) and Chromium draw close, minimize, zoom on the left.
 - The tag goes only to apps whose own close, minimize and zoom were seen to work in the nested session
-  (`tests/compositor/third_party_chrome.sh`: tag, no plugin strip, the app's zoom button zooms and unzooms, its minimize
-  button minimizes, a capture of the title bar): rule `gf-client-chrome-third-party` on `chromium` (the browser window)
-  and `md.obsidian.Obsidian` (Obsidian's Wayland app id). Captures judged 2026-10-25: Chromium shows close, minimize,
-  zoom on the left of its tab strip, one set; Obsidian shows minimize, zoom, close at the top right (it ignores the GTK
-  layout), one set.
+  (`tests/compositor/third_party_chrome.sh`, offline: tag, no plugin strip, the app's zoom button zooms and unzooms, its
+  minimize button minimizes toward the Dock tile the shell computed and that tile restores the window, its close button
+  closes it, a capture of the title bar): rule `gf-client-chrome-third-party` on `org.gnome.Evince`,
+  `org.gnome.Nautilus`, `chromium` (the browser window) and `md.obsidian.Obsidian` (Obsidian's Wayland app id; its
+  starter window and a vault window). Captures judged 2026-10-25: Evince (GTK3) and Nautilus (GTK4/libadwaita) show
+  close, minimize, zoom on the left of their header bar, one set, the three enabled; Chromium the same on the left of its
+  tab strip; Obsidian shows minimize, zoom, close at the top right (it ignores the GTK layout), one set, in both windows.
+  The test reaches no network: the clients' proxy is a dead local port and Obsidian's updater is off; earlier runs had
+  let Obsidian update itself to 1.14.5 from GitHub, so its results then were for that version, not the installed 1.13.7
+  checked now.
+- Evince and Nautilus first kept the plugin's bar (726be58): two of their buttons did not work. Both causes are handled
+  (GF-056 part 2):
+  - Evince's zoom button: our own maximize suppression, not Hyprland. GTK3's button sends `xdg_toplevel.unset_maximized`
+    (Hyprland reports a floating window as maximized and tiled), and `gf-no-maximize-event` dropped it for every untagged
+    class. Tagged (exempt), the request reaches Hyprland, which toggles the maximized mode (WAYLAND_DEBUG in the nested
+    session: `unset_maximized()`, then fullscreen 1; the second press restores the box). The first test also lost clicks
+    on a window moved under a resting pointer (no pointer focus without a motion): the test now moves the pointer first.
+  - Nautilus's minimize button was greyed: GTK4 offers minimize only when `xdg_toplevel.wm_capabilities` lists it, and
+    Hyprland 0.56.2 sends every toplevel fullscreen and maximize (no minimize, no window menu), once, from
+    `CXDGToplevelResource`'s constructor (read from the binary: the only call of `CXdgToplevel::sendWmCapabilities`).
+    Plugin work item **P8** (docs/specs/compositor.md): while a window is client chrome and the plugin's minimize bridge
+    (P5) runs, the plugin sends it wm_capabilities again with minimize added (fullscreen, maximize, minimize: Hyprland's
+    own, in its order, plus minimize), then a configure, as xdg-shell asks when the capabilities change. That configure
+    is Hyprland's own full one (`setSize` with the size it already asked for: an `xdg_toplevel.configure` with its
+    current states, then the `xdg_surface.configure`); a bare `xdg_surface.configure` made GTK4 drop its activated and
+    tiled states. The toplevel's `wl_resource` is private in `CXDGToplevelResource`: the plugin finds it among its
+    client's resources (`wl_client_for_each_resource`, interface `xdg_toplevel`, `CXDGToplevelResource::fromResource`).
+    A client older than xdg_toplevel v5 gets nothing (it never had the event). Re-evaluated on `window.updateRules` (the
+    tag can come or go); on unload every window told minimize is told Hyprland's own capabilities again. The button
+    sends `set_minimized`, which P5 already routes to the titlebar light's path: `minimize-request` to the shell, its
+    Dock tile, the effect the settings choose (funnel in the nested run), restore from the Dock.
 - Not on the list, the plugin's titlebar kept:
   - Chromium's `--app` windows (Omarchy's web apps, class `chrome-<site>-<profile>`): they draw no frame; one set, the
     plugin's.
-  - Evince and Nautilus: with the layout they show close, minimize, zoom on the left, but under Hyprland 0.56.2 Evince's
-    zoom button does nothing (a double-click on its header bar still zooms) and Nautilus greys its minimize button (GTK4
-    offers minimize only when the compositor says it can minimize). They keep the plugin's working set next to their own
-    buttons: two sets, as before GF-056, until those buttons work (a plugin bridge for the maximize request and the
-    minimize capability are follow-ups).
   - Not verified, so not listed: VS Code and its builds, Discord, Slack, Spotify, Brave, Chrome, Pinta, Disks, the GTK
     portal's dialogs. They join once they pass the same nested checks.
-- The plugin needs no change: P1 (no titlebar), P3 (no band in Overview and Stages), P4 and P5 follow the tag. The listed
-  apps are exempt from `gf-no-maximize-event`, as Grassfield's apps are (Q4): their own zoom control is the only one they
-  have. `tests/shell/client_chrome_rules.sh` checks that both maximize negations are built from the two lists.
+- P1 (no titlebar), P3 (no band in Overview and Stages), P4, P5 and P8 follow the tag. The listed apps are exempt from
+  `gf-no-maximize-event`, as Grassfield's apps are (Q4): their own zoom control is the only one they have.
+  `tests/shell/client_chrome_rules.sh` checks that both maximize negations are built from the two lists.
 
 Consequences:
 - An app set to draw no frame of its own (Chromium's "Use system title bar and borders") is still tagged and then has no
   controls: it has to leave the list. A new app that draws its own frame has to join it. Neither is automatic until
   Hyprland exposes a decoration signal.
-- Degradation (C1-C3): without the plugin nothing about the titlebar changes (there is none). The maximize exemption and
-  the button layout are session settings: with or without the plugin, the listed apps' own zoom works and header bars put
-  their buttons on the left.
+- Known limit: the listed GTK apps and Chromium draw the buttons the GTK layout names. A user layout without minimize or
+  zoom (a `button-layout` set in the user's dconf database beats the Grassfield default, which is not a lock) leaves
+  those windows a partial set, and one without any button leaves none; the plugin's titlebar does not come back for them.
+  Obsidian ignores the layout. Owner check in a real Grassfield session:
+  `gsettings get org.gnome.desktop.wm.preferences button-layout` answers `'close,minimize,maximize:'`.
+- Degradation (C1-C3): without the plugin there is no titlebar and no P8: a client sees Hyprland's own capabilities, so
+  GTK4's minimize button is greyed again, as macOS greys an unavailable action (nested: plugin unload with Nautilus open,
+  `wm_capabilities(array[8])` and a full configure, the button greys and the window stays active at its size; load,
+  `array[12]`, enabled again). The maximize exemption and the button layout are session settings: with or without the
+  plugin, the listed apps' own zoom works and header bars put their buttons on the left.
 - Verified in the nested session (Hyprland 0.56.2 efb50993, 2026-10-25, every client on the private bus with an isolated
-  home): `third_party_chrome.sh` PASS, `client_chrome.sh` PASS, `chrome.sh` PASS. One set of controls on foot, Chromium,
-  Obsidian and the web app; two sets on Evince and Nautilus (see above).
+  home, offline): `third_party_chrome.sh` PASS (Evince, Nautilus, Chromium, Obsidian 1.13.7 starter and vault windows:
+  own zoom zooms and unzooms, own minimize goes to the Dock tile with the funnel in about 504 ms, the tile restores the
+  window at its box, focused, own close closes it; Obsidian's log shows the installed package and no update check; foot
+  and the web app keep the plugin's strip), `client_chrome.sh` PASS, `chrome.sh` PASS, `minimize.sh` PASS. One set of
+  controls on every window tested.

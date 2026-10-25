@@ -14,22 +14,26 @@
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/protocols/XDGShell.hpp>
+#include <hyprland/src/protocols/core/Compositor.hpp>
 
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace gf::chrome {
 
     namespace {
-        // The two listeners of one window's xdg toplevel. Destroying them disconnects them.
+        // The two listeners of one window's xdg toplevel. Destroying them disconnects them. `minimizeTold`: the window was
+        // told the minimize capability (P8); unload tells it Hyprland's own capabilities again.
         struct SWatch {
             PHLWINDOWREF             window;
             WP<CXDGToplevelResource> toplevel;
             CHyprSignalListener      stateChanged;
             CHyprSignalListener      requestMove;
+            bool                     minimizeTold = false;
         };
 
         struct SState {
@@ -113,6 +117,76 @@ namespace gf::chrome {
             logRequest(Log::DEBUG, "client chrome: {:x} dragged out of its zoom: {:.0f}x{:.0f} at {:.0f},{:.0f}", addressOf(w), box.w, box.h, box.x, box.y);
         }
 
+        // P8: the xdg_toplevel wl_resource of `top`: Hyprland keeps it private, so it is found among its client's resources
+        // (libwayland's own list) by its interface and CXDGToplevelResource::fromResource.
+        wl_resource* toplevelResource(const SP<CXDGToplevelResource>& top) {
+            const auto xdg     = top ? top->m_owner.lock() : nullptr;
+            const auto surface = xdg ? xdg->m_surface.lock() : nullptr;
+            wl_client* client  = surface ? surface->client() : nullptr;
+            if (!client)
+                return nullptr;
+            struct SFind {
+                CXDGToplevelResource* wanted = nullptr;
+                wl_resource*          found  = nullptr;
+            } find{.wanted = top.get()};
+            wl_client_for_each_resource(
+                client,
+                [](wl_resource* resource, void* data) -> wl_iterator_result {
+                    auto*       f   = static_cast<SFind*>(data);
+                    const char* cls = resource ? wl_resource_get_class(resource) : nullptr;
+                    if (!cls || std::string_view{cls} != "xdg_toplevel")
+                        return WL_ITERATOR_CONTINUE;
+                    if (CXDGToplevelResource::fromResource(resource).get() != f->wanted)
+                        return WL_ITERATOR_CONTINUE;
+                    f->found = resource;
+                    return WL_ITERATOR_STOP;
+                },
+                &find);
+            return find.found;
+        }
+
+        // P8: tells the window its capabilities again (core wmCapabilities) when they change, then a configure, as
+        // xdg-shell asks ("when the capabilities change, compositors must send this event again and then send an
+        // xdg_surface.configure event"). Nothing for a client older than xdg_toplevel v5 (it never had the event).
+        // The configure is Hyprland's own full one (setSize with the size it already asked for: an xdg_toplevel.configure
+        // with its current states, then the xdg_surface.configure; read from the 0.56.2 binary, no early return): a bare
+        // xdg_surface.configure made GTK4 apply an empty state set (no longer activated or tiled: it drew its shadow
+        // margins and looked inactive).
+        void tellCapabilities(SWatch& e, bool clientChrome, bool bridged) {
+            const bool withMinimize = clientChrome && bridged;
+            if (withMinimize == e.minimizeTold)
+                return;
+            const auto   top = e.toplevel.lock();
+            wl_resource* res = toplevelResource(top);
+            const auto   xdg = top ? top->m_owner.lock() : nullptr;
+            if (!res || !xdg || wl_resource_get_version(res) < static_cast<int>(kWmCapabilitiesSince))
+                return;
+            const auto caps = wmCapabilities(clientChrome, bridged);
+            wl_array   array;
+            wl_array_init(&array);
+            for (const uint32_t cap : caps) {
+                auto* slot = static_cast<uint32_t*>(wl_array_add(&array, sizeof(uint32_t)));
+                if (!slot) {
+                    wl_array_release(&array);
+                    return;
+                }
+                *slot = cap;
+            }
+            wl_resource_post_event(res, 3 /* xdg_toplevel.wm_capabilities */, &array);
+            wl_array_release(&array);
+            top->setSize(top->m_pendingApply.size);
+            e.minimizeTold = withMinimize;
+            logRequest(Log::DEBUG, "client chrome: {:x} told {} capabilities{}", addressOf(e.window.lock()), caps.size(), withMinimize ? " (minimize)" : "");
+        }
+
+        // The capabilities of a watched window after an open or a rule change (the tag may come or go).
+        void syncCapabilities(const PHLWINDOW& w) {
+            for (auto& e : st().watches) {
+                if (e.window.lock() == w)
+                    tellCapabilities(e, isClientChrome(w), st().ready);
+            }
+        }
+
         void watch(const PHLWINDOW& w) {
             auto& s = st();
             std::erase_if(s.watches, [](const SWatch& e) { return e.window.expired() || e.toplevel.expired(); });
@@ -127,6 +201,7 @@ namespace gf::chrome {
             e.stateChanged = top->m_events.stateChanged.listen([ref, weakTop] { guarded("client chrome stateChanged", [&] { onStateChanged(ref, weakTop); }); });
             e.requestMove  = top->m_events.requestMove.listen([ref](const SXDGToplevelMoveRequest& /*request*/) { guarded("client chrome requestMove", [&] { onRequestMove(ref); }); });
             s.watches.push_back(std::move(e));
+            tellCapabilities(s.watches.back(), isClientChrome(w), true);
         }
 
         void forget(const PHLWINDOW& w) {
@@ -171,6 +246,8 @@ namespace gf::chrome {
         auto& ev = bus->m_events.window;
         s.listeners.push_back(ev.open.listen([](const PHLWINDOW& w) { guarded("client chrome window.open", [&] { watch(w); }); }));
         s.listeners.push_back(ev.close.listen([](const PHLWINDOW& w) { guarded("client chrome window.close", [&] { forget(w); }); }));
+        // The tag is a dynamic effect of the session rules: a rule change can make a window client chrome or not (P8).
+        s.listeners.push_back(ev.updateRules.listen([](const PHLWINDOW& w) { guarded("client chrome window.updateRules", [&] { syncCapabilities(w); }); }));
         if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
                 if (w && w->m_isMapped)
@@ -183,6 +260,12 @@ namespace gf::chrome {
 
     void stop() {
         auto& s = st();
+        // P8: every window told minimize is told Hyprland's own capabilities again before the bridge goes (C2: without the
+        // plugin a client sees what Hyprland offers, and its minimize button greys again).
+        for (auto& e : s.watches) {
+            if (e.minimizeTold)
+                guarded("client chrome capabilities on stop", [&] { tellCapabilities(e, false, false); });
+        }
         s.watches.clear();
         s.listeners.clear();
         s.press.reset();

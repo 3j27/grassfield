@@ -11,6 +11,32 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
+// P8 (GF-056 part 2): a window that draws its own controls is told it can be minimized (GTK4 greys a minimize button the
+// compositor does not offer); every other window keeps exactly what Hyprland 0.56.2 sends.
+TEST(ClientChromeCapabilities, ClientChromeWindowsAreToldMinimizeWhileTheBridgeRuns) {
+    using gf::chrome::wmCapabilities;
+    const std::vector<uint32_t> hyprland{gf::chrome::kCapFullscreen, gf::chrome::kCapMaximize};
+    EXPECT_EQ(wmCapabilities(false, true), hyprland) << "not client chrome: Hyprland's own capabilities";
+    EXPECT_EQ(wmCapabilities(true, false), hyprland) << "no bridge (unload, start failed): Hyprland's own capabilities";
+    EXPECT_EQ(wmCapabilities(false, false), hyprland);
+    const auto chrome = wmCapabilities(true, true);
+    ASSERT_EQ(chrome.size(), 3U);
+    EXPECT_EQ(chrome[0], gf::chrome::kCapFullscreen);
+    EXPECT_EQ(chrome[1], gf::chrome::kCapMaximize);
+    EXPECT_EQ(chrome[2], gf::chrome::kCapMinimize);
+}
+
+TEST(ClientChromeCapabilities, TheValuesAreTheProtocolsEnum) {
+    // xdg-shell.xml xdg_toplevel.wm_capabilities: window_menu 1, maximize 2, fullscreen 3, minimize 4; the event since v5.
+    EXPECT_EQ(gf::chrome::kCapWindowMenu, 1U);
+    EXPECT_EQ(gf::chrome::kCapMaximize, 2U);
+    EXPECT_EQ(gf::chrome::kCapFullscreen, 3U);
+    EXPECT_EQ(gf::chrome::kCapMinimize, 4U);
+    EXPECT_EQ(gf::chrome::kWmCapabilitiesSince, 5U);
+}
+
 #include <cmath>
 #include <set>
 #include <string>
