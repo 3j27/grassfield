@@ -37,7 +37,7 @@ fi
 unset _gf_icon_src _gf_icon_dst
 # Grayscale QtQuick text (ADR-0003), as /usr/share/uwsm/env-grassfield gives a real session: the distance-field renderer
 # ignores fontconfig and would draw RGB subpixel text (orange/blue fringes).
-export QSG_DISTANCEFIELD_ANTIALIASING=gray
+export QSG_DISTANCEFIELD_ANTIALIASING=${QSG_DISTANCEFIELD_ANTIALIASING-gray}  # an explicitly set (even empty) value wins: before/after captures
 # This tree's QML modules (Grassfield.Ui, the built Grassfield.I18n) always win over the packaged ones that an installed
 # grassfield-desktop puts in /usr/lib/qt6/qml/Grassfield (QML_IMPORT_PATH comes before the default import path).
 case ":${QML_IMPORT_PATH:-}:" in
