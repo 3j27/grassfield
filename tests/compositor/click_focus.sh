@@ -629,7 +629,7 @@ fi
 lock_cycle() { # the foreign locker takes the session lock, then releases it over IPC (nothing is typed while locked)
   local locked="" i
   WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 \
-    setsid "$root/scripts/dev/isolated.sh" --name click-focus-locker qs -p "$foreign" --no-color >>"$run/locker.log" 2>&1 </dev/null &
+    setsid "$root/scripts/dev/isolated.sh" --name click-focus-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
   locker_pid=$!
   for i in $(seq 1 60); do
     locked=$(foreign_ipc status)

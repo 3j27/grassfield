@@ -624,7 +624,7 @@ request "{\"target\":\"remembered\",\"address\":\"$addr_a\",\"workspace\":$ws_a,
 t_req=$(date +%s%3N)
 ev_lock=$(grep -ac "" "$events")
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
-  setsid "$root/scripts/dev/isolated.sh" --name overview-focus-locker qs -p "$foreign" --no-color > >(stamp_events >"$run/locker.log") 2>&1 </dev/null &
+  setsid "$root/scripts/dev/isolated.sh" --name overview-focus-locker "$root/tests/security/foreign_locker/run.sh" --no-color > >(stamp_events >"$run/locker.log") 2>&1 </dev/null &
 locker_pid=$!
 locked=""
 for i in $(seq 1 60); do
