@@ -1,5 +1,5 @@
 .pragma library
-// Unversioned on purpose (as apps/settings/qml/Store.js): a versioned .import resolves the installed Grassfield.Ui, not
+// Unversioned on purpose (as apps/settings/qml/Store.js): a versioned import directive resolves the installed Grassfield.Ui, not
 // the tree's own (QML_IMPORT_PATH), and a function added since is missing there.
 .import Grassfield.Ui as Ui
 

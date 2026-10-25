@@ -4,6 +4,7 @@
 #   tests/visual/f2c.sh search TAG     query, filter chips and empty state, light and dark -> .dev/f2c/search-TAG-*.png
 #   tests/visual/f2c.sh overview TAG   four windows, light and dark -> .dev/f2c/overview-TAG-*.png
 #   tests/visual/f2c.sh alerts TAG     alert (Force Quit-free confirm) and sheet -> .dev/f2c/alerts-TAG-*.png
+#   tests/visual/f2c.sh gallery TAG    Notification Center and its widget gallery, light and dark -> .dev/f2c/gallery-TAG-*.png
 # Output goes to .dev/f2c/ only.
 source "$(dirname "$0")/lib.sh"
 surface=${1:?surface}
@@ -95,8 +96,30 @@ case $surface in
       vs_ipc menubar close >/dev/null
     done ;;
   gallery)
+    # The Center, and the gallery that opens on it, stay open between iterations (vs_reset does not close them): the dark run
+    # used to start with the gallery already open, its click on the pill did nothing and "center" and "gallery" were the same
+    # picture (audit 2026-10-25). Each iteration therefore starts, and ends, with the Center closed.
+    close_center() {
+      local try
+      for try in 1 2 3 4 5; do
+        [[ $(vs_ipc notifications status) == *center=true* ]] || return 0
+        vs_ipc notifications toggleCenter >/dev/null
+        vs_sleep 1.5
+      done
+      [[ $(vs_ipc notifications status) == *center=true* ]] || return 0
+      echo "f2c gallery: the Notification Center did not close after 5 tries" >&2
+      exit 1
+    }
+    # Differing pixels of the region where the gallery panel appears (GF-REF 1920x1080: x 30-410, y 400-1075), "ERR" when the
+    # comparison could not be made. Elsewhere on the screen banners and clocks change by themselves.
+    gallery_diff() {
+      magick "$1" -crop 380x675+30+400 +repage "$out/.crop-a.png" 2>/dev/null && magick "$2" -crop 380x675+30+400 +repage "$out/.crop-b.png" 2>/dev/null ||
+        { echo ERR; return 0; }
+      vs_px_diff "$out/.crop-a.png" "$out/.crop-b.png"
+    }
     for ap in light dark; do
       vs_reset "$ap" 0.25
+      close_center
       vs_ipc notifications clearAll >/dev/null
       vs_notify
       vs_sleep 2
@@ -105,10 +128,30 @@ case $surface in
         vs_pointer abs 1850 12 sleep 300 click >/dev/null
         vs_sleep 3
       done
+      [[ $(vs_ipc notifications status) == *center=true* ]] || { echo "f2c gallery: the Notification Center did not open ($ap)" >&2; exit 1; }
       shot "gallery-$tag-$ap-center"
-      vs_pointer abs ${F2C_PILL:-1715 742} sleep 300 click >/dev/null
-      vs_sleep 2
-      shot "gallery-$tag-$ap-gallery"
+      # The "Edit Widgets" pill sits under the last widget, so its row depends on how many notices the Center holds (a start-up
+      # notice such as "Compositor extension not loaded" adds a row, 142 px lower): try each known row and keep the first
+      # click that opens the gallery (its panel changes at least 5000 pixels of that region, the dark one differed by 28863 over the whole screen, measured). F2C_PILL overrides the first row. No
+      # click opening it is a failure, never a "gallery" shot that is the Center again.
+      opened=""
+      for pill in "${F2C_PILL:-1715 742}" "1715 884" "1715 600"; do
+        vs_pointer abs $pill sleep 300 click >/dev/null
+        vs_sleep 2
+        shot "gallery-$tag-$ap-gallery"
+        changed=$(gallery_diff "$out/gallery-$tag-$ap-center.png" "$out/gallery-$tag-$ap-gallery.png")
+        if [[ $changed =~ ^[0-9]+$ ]]; then
+          if ((changed >= 5000)); then
+            opened=$changed
+            break
+          fi
+        else
+          echo "f2c gallery: the shots cannot be compared ($changed)" >&2
+          exit 1
+        fi
+      done
+      [[ -n $opened ]] || { echo "f2c gallery: no click on the Edit Widgets pill opened the gallery ($ap): $changed px differ in its region" >&2; exit 1; }
+      close_center
       vs_ipc notifications clearAll >/dev/null
     done ;;
   *) echo "f2c: unknown surface $surface" >&2; exit 2 ;;
