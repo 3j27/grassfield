@@ -293,6 +293,9 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 500\n            * 7200' \
   'shell/security/lock/LockView.qml#            text: Qt.formatTime(FixedTime.date(clock.date), #            visible: clock.minutes >= 0; text: Qt.formatTime(FixedTime.date(clock.date), ' \
   'shell/security/idle/IdleModel.js#var FAST_RETRY_MS = 5000;#var FAST_RETRY_MS = 5000; var WALL = SystemClock;' \
+  'shell/security/idle/IdleModel.js#var FAST_RETRY_MS = 5000;#var FAST_RETRY_MS = 5000; var WALL = WallClock;' \
+  'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 500\n    WallClock { id: wallProbe }' \
+  'shell/security/lock/LockView.qml#        id: clock#        id: clock\n    }\n    WallClock {\n        id: probe' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
   'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 3600000' \
