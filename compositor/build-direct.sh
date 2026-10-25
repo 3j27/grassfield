@@ -21,11 +21,12 @@ test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGest
 
 # Every source file is in one of the lists above, which also feed the compile database and so clang-tidy
 # (scripts/dev/tidy.sh): a file left out was neither built here nor linted (core/Notices.cpp and its test were, until
-# the run-mode slice M7). Keep them in step with CMakeLists.txt.
+# the run-mode slice M7). Keep them in step with CMakeLists.txt. Every C or C++ source under src/ and tests/ counts, at
+# any depth and with any of the usual extensions (review of e0a3734: a new subdirectory or a .cc file passed).
 unlisted=()
-for f in src/*.cpp src/core/*.cpp tests/*.cpp; do
+while IFS= read -r -d '' f; do
   [[ " ${glue_srcs[*]} ${core_srcs[*]} ${test_srcs[*]} " == *" $f "* ]] || unlisted+=("$f")
-done
+done < <(find src tests -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.c++' -o -name '*.c' \) -print0 | sort -z)
 if ((${#unlisted[@]})); then
   echo "build-direct: not in core_srcs, glue_srcs or test_srcs (and so not built here nor linted): ${unlisted[*]}" >&2
   exit 1

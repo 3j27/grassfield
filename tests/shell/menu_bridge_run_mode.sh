@@ -9,6 +9,8 @@
 #      (exit 3)
 #   C  a development run with its socket starts as one ("(development, private bus)")
 #   D  neither a session nor a development run: refused (exit 3)
+#   E  a GRASSFIELD_MENU_BRIDGE_SOCKET that leaked into a session (ADR-0019 dev plumbing): ignored and noted, the bridge
+#      listens on the session socket
 # SAFETY (D-Bus, R3): every bridge runs under `env -i` on a PRIVATE bus (dbus-daemon listening in this test's scratch
 # directory; a guard refuses any other address) with a scratch HOME and XDG_RUNTIME_DIR; it never sees the owner's bus.
 # SKIP where Unix sockets cannot be created. The bridge is built with bridges/menu-bridge/build-direct.sh when missing or
@@ -114,6 +116,15 @@ start_bridge "$tmp/d.log"
 settle "$tmp/d.log"
 check "D: neither a session nor a development run is refused (exit 3)" \
   "$([[ $state == "exit 3" ]] && grep -q "not in a Grassfield session" "$tmp/d.log" && echo 1)" "$state"
+stop_bridge
+
+# E: a socket variable that leaked into a session.
+rm -f "$tmp/run/grassfield/menu-bridge.sock"
+start_bridge "$tmp/e.log" GRASSFIELD_SESSION=1 GRASSFIELD_MENU_BRIDGE_SOCKET="$tmp/run/leaked.sock"
+settle "$tmp/e.log"
+check "E: a leaked GRASSFIELD_MENU_BRIDGE_SOCKET in a session is ignored (noted), the session socket is used" \
+  "$([[ $state == listening && -S $tmp/run/grassfield/menu-bridge.sock && ! -e $tmp/run/leaked.sock ]] && grep -q "GRASSFIELD_MENU_BRIDGE_SOCKET ignored" "$tmp/e.log" && echo 1)" \
+  "$state: $(tr '\n' ' ' <"$tmp/e.log" | cut -c1-300)"
 stop_bridge
 
 exit "$fail"
