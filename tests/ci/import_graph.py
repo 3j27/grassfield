@@ -426,6 +426,31 @@ def selftest():
     run("a block comment around an import hides it", {**clean, "services/Apps.qml": "/* import qs.dock */\nItem {}\n"}, None)
     run("a multi-line block comment hides its imports", {**clean, "services/Apps.qml": "/*\nimport qs.dock\n*/\nItem {}\n"}, None)
     run("a line comment after an import hides a second one", {**clean, "services/Apps.qml": "import qs.platform // import qs.dock\nItem {}\n"}, None)
+    raw = "raw Hyprland events go through qs.platform"
+    late = "an import after the file header"
+    # Nothing in the body is stripped or tokenised, so nothing hides a violation: the reviewer's adversarial bodies (N01, N03, N17,
+    # N20) and more, each followed by a raw event use or a late import that must still be seen.
+    run("N01: `.in /` and strings holding /* and */ hide nothing",
+        {**clean, "search/S.qml": 'Item { property var x: a.in / b + "x/ " + "/*" }\nItem { property string t: "*/" }\nItem { function onRawEvent() {} }\n'}, raw)
+    run("N03: `a++ + /[/*]/` hides nothing", {**clean, "search/S.qml": "Item { property var x: a++ + /[/*]/ }\nItem { function onRawEvent() {} }\n"}, raw)
+    run("N17: `a - -/[/*]/` hides nothing", {**clean, "search/S.qml": "Item { property var x: a - -/[/*]/ }\nItem { function onRawEvent() {} }\n"}, raw)
+    run("N20: a regex holding /* and a template holding /* hide nothing",
+        {**clean, "search/S.qml": 'Item { property var x: p.replace(/\\/*$/, "") + `a ${ `b/*c` } d` }\nItem { function onRawEvent() {} }\n'}, raw)
+    run("a regex after return and a long comment hides nothing",
+        {**clean, "search/S.qml": 'Item { function f(p) { return /* a comment longer than 24 chars */ /\\/*/.test(p); }\n function onRawEvent() {} }\n'}, raw)
+    run("a block comment opened in the body hides nothing",
+        {**clean, "search/S.qml": "Item { /* a comment\n */ }\nItem { function onRawEvent() {} }\n"}, raw)
+    run("an unterminated block comment in the body hides nothing", {**clean, "search/S.qml": "Item { property int x: 1 /* }\nItem { function onRawEvent() {} }\n"}, raw)
+    run("a late import after an adversarial body is seen",
+        {**clean, "services/Apps.qml": 'Item { property var x: a++ + /[/*]/ + "/*" }\nimport qs.dock\n'}, late)
+    run("a late import after a regex holding // is seen", {**clean, "services/Apps.qml": "Item { property var x: /a\\/\\/b/ }\nimport qs.dock\n"}, late)
+    run("a rawEvent mention in a comment counts as a use (no stripping in the body)",
+        {**clean, "search/S.qml": "Item {\n    // onRawEvent is not used here\n}\n"}, raw)
+    run("a Quickshell.Hyprland mention in a block comment counts as a use",
+        {**clean, "search/S.qml": "Item {\n    /* Quickshell.Hyprland */\n}\n"}, raw)
+    run("a rawEvent mention in a platform file is fine", {**clean, "platform/Compositor.qml": "import qs.lib\nItem {\n    // onRawEvent\n}\n"}, None)
+    run("a raw event mention in a marked file: one violation, the marked import line",
+        {**clean, "search/S.qml": "import Quickshell.Hyprland // layering-exception: GF-087\nItem { function onRawEvent() {} }\n"}, None)
     run("an import after the header is refused", {**clean, "services/Apps.qml": "Item {}\nimport qs.dock\n"}, "an import after the file header")
     run("an import after the header is refused even in a nested object", {**clean, "services/Apps.qml": "Item {\n    Item {}\n}\nimport qs.platform\n"}, "an import after the file header")
     run("pragmas belong to the header", {**clean, "services/Apps.qml": "pragma Singleton\npragma ComponentBehavior: Bound\nimport qs.platform\nItem {}\n"}, None)
