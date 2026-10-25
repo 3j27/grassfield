@@ -97,7 +97,11 @@ namespace {
                     deco->onTitleChanged();
             });
         }));
-        l.push_back(ev.input.mouse.move.listen([](Vector2D /*pos*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onGlobalMouseMove(); }));
+        l.push_back(ev.input.mouse.move.listen([](Vector2D /*pos*/, Event::SCallbackInfo& /*info*/) {
+            // The first motion of one of Hyprland's drags: the window's box before it moved (FR56).
+            gf::guarded("top clamp motion", [] { gf::topClamp::beforePointerMotion(); });
+            CGrassfieldTitlebar::onGlobalMouseMove();
+        }));
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
         // its held-button state, which pins pointer focus while a button is down. Stages first: a pointer focus
         // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before

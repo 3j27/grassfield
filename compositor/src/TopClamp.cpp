@@ -24,12 +24,22 @@ namespace gf::topClamp {
     namespace {
         // A release that ended one of Hyprland's drags, waiting for Hyprland to end it.
         struct SPending {
-            PHLWINDOWREF window;
-            bool         resize = false;
+            PHLWINDOWREF                  window;
+            bool                          resize = false;
+            std::optional<topclamp::Rect> before; // the surface box when the drag was first seen moving
+        };
+
+        // The window one of Hyprland's drags holds, and its surface box at the first motion of the drag (Hyprland keeps
+        // the box the drag began with to itself: CDragStateController::m_beginDragPositionXY is private). At worst one
+        // motion step after the drag began: a resize from the bottom or a side edge never moves the top at any step.
+        struct SSeen {
+            PHLWINDOWREF   window;
+            topclamp::Rect box;
         };
 
         struct SState {
             bool                    ready = false;
+            std::optional<SSeen>    seen;
             std::optional<SPending> pending;
             deferredFocus::CLater   later; // its callback is code of this library: cancelled in stop()
         };
@@ -71,18 +81,8 @@ namespace gf::topClamp {
             return out;
         }
 
-        // The box of `w` held below the menu bar, or nothing when it already is (or is on no output).
-        std::optional<CBox> held(const PHLWINDOW& w, const CBox& surface, const Vector2D& pointer, bool resize) {
-            const double   band = gf::chrome::bandOf(w); // none above a window that draws its own chrome (ADR-0015)
-            const auto     all  = outputs();
-            const auto     box  = toRect(surface);
-            const auto     at   = topclamp::outputFor(pointer.x, pointer.y, topclamp::Rect{box.x, box.y - band, box.w, box.h + band}, all);
-            if (!at)
-                return std::nullopt;
-            const auto next = resize ? topclamp::afterResize(box, band, all[*at]) : topclamp::afterMove(box, band, all[*at]);
-            if (!topclamp::changed(next, box))
-                return std::nullopt;
-            return toCBox(next);
+        bool hyprlandDrag(eMouseBindMode mode) {
+            return mode == MBIND_MOVE || mode == MBIND_RESIZE || mode == MBIND_RESIZE_BLOCK_RATIO || mode == MBIND_RESIZE_FORCE_RATIO;
         }
 
         // After Hyprland handled the release: its drag is over, the window keeps its titlebar below the menu bar.
@@ -96,13 +96,16 @@ namespace gf::topClamp {
             const auto w = pending->window.lock();
             if (!holdable(w))
                 return;
-            const auto target = w->layoutTarget();
-            const auto box    = held(w, target->position(), g_pInputManager->getMouseCoordsInternal(), pending->resize);
-            if (!box)
+            const auto     target  = w->layoutTarget();
+            const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
+            // No band above a window that draws its own chrome (ADR-0015).
+            const auto next = topclamp::afterDrag(pending->before, toRect(target->position()), pending->resize, gf::chrome::bandOf(w), topclamp::Point{pointer.x, pointer.y}, outputs());
+            if (!next)
                 return;
-            g_layoutManager->setTargetGeom(*box, target);
+            const CBox box = toCBox(*next);
+            g_layoutManager->setTargetGeom(box, target);
             logRequest(Log::DEBUG, "top clamp {:x}: {} ended under the menu bar, now at {:.0f},{:.0f} {:.0f}x{:.0f}", reinterpret_cast<uintptr_t>(w.get()),
-                       pending->resize ? "resize" : "move", box->x, box->y, box->w, box->h);
+                       pending->resize ? "resize" : "move", box.x, box.y, box.w, box.h);
         }
     } // namespace
 
@@ -110,6 +113,7 @@ namespace gf::topClamp {
         auto& s = st();
         s.later.clear(); // a previous stop() cancelled it (the library may have stayed mapped)
         s.pending.reset();
+        s.seen.reset();
         s.ready = true;
         return true;
     }
@@ -119,29 +123,54 @@ namespace gf::topClamp {
         s.ready = false;
         s.later.cancel();
         s.pending.reset();
+        s.seen.reset();
     }
 
     CBox heldMove(const PHLWINDOW& w, const CBox& surface, const Vector2D& pointer) {
         if (!st().ready || !holdable(w))
             return surface;
-        return held(w, surface, pointer, false).value_or(surface);
+        return toCBox(topclamp::heldMove(toRect(surface), gf::chrome::bandOf(w), topclamp::Point{pointer.x, pointer.y}, outputs()));
+    }
+
+    void beforePointerMotion() {
+        auto& s = st();
+        if (!s.ready || !g_layoutManager)
+            return;
+        const auto& drag = g_layoutManager->dragController();
+        if (!drag || !hyprlandDrag(drag->mode())) {
+            s.seen.reset(); // no drag (one that ended without a release seen here is forgotten too)
+            return;
+        }
+        const auto target = drag->target();
+        const auto w      = target ? target->window() : nullptr;
+        if (!holdable(w) || (s.seen && s.seen->window.lock() == w))
+            return;
+        s.seen = SSeen{.window = w, .box = toRect(target->position())};
     }
 
     void beforePointerButton(bool pressed) {
         auto& s = st();
-        if (!s.ready || pressed || !g_layoutManager)
+        if (!s.ready || !g_layoutManager)
             return;
-        const auto& drag = g_layoutManager->dragController();
-        if (!drag)
+        const auto& drag     = g_layoutManager->dragController();
+        const bool  dragging = drag && hyprlandDrag(drag->mode());
+        if (pressed) {
+            if (!dragging)
+                s.seen.reset(); // a press that may begin a drag: its first motion records the box
             return;
-        const auto mode = drag->mode();
-        if (mode != MBIND_MOVE && mode != MBIND_RESIZE && mode != MBIND_RESIZE_BLOCK_RATIO && mode != MBIND_RESIZE_FORCE_RATIO)
+        }
+        if (!dragging)
             return;
         const auto target = drag->target();
         const auto w      = target ? target->window() : nullptr;
         if (!holdable(w))
             return;
-        s.pending = SPending{.window = w, .resize = mode != MBIND_MOVE};
+        // Kept for the whole drag (a release of another button may come first): forgotten at the next motion or press
+        // without a drag.
+        std::optional<topclamp::Rect> before;
+        if (s.seen && s.seen->window.lock() == w)
+            before = s.seen->box;
+        s.pending = SPending{.window = w, .resize = drag->mode() != MBIND_MOVE, .before = before};
         s.later.schedule([] { gf::guarded("top clamp after a drag", [] { afterHyprlandDrag(); }); });
     }
 

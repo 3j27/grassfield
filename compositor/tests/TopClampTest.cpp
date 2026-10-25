@@ -7,9 +7,11 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 
 namespace {
     using gf::topclamp::Output;
+    using gf::topclamp::Point;
     using gf::topclamp::Rect;
 
     // Two outputs side by side, the left one 1920x1080 with a 32 px menu bar, the right one 2560x1440 at x 1920 with a
@@ -53,24 +55,91 @@ TEST(TopClamp, AWindowBelowTheMenuBarIsLeftAlone) {
 }
 
 TEST(TopClamp, EachOutputHasItsOwnMenuBar) {
-    // The output under the pointer decides: the right output's menu bar is 24 px high.
+    // The frame's top edge is on the right output, whose menu bar is 24 px high.
     const Rect frame{2000, -10, 900, 632};
-    const size_t index = gf::topclamp::outputFor(2300, 5, frame, kOutputs).value_or(kNone);
+    const size_t index = gf::topclamp::outputFor(frame, Point{2300, 5}, kOutputs).value_or(kNone);
     ASSERT_EQ(index, 1U);
     const Rect moved = gf::topclamp::afterMove(Rect{2000, 22, 900, 600}, kBand, kOutputs.at(index));
     EXPECT_DOUBLE_EQ(moved.y, 24 + kBand);
 }
 
-TEST(TopClamp, TheOutputUnderThePointerWinsSoAWindowCanCrossToAnotherOutput) {
-    // A window dragged from the lower output up into the upper one: once the pointer is on the upper output, its menu bar
-    // holds the window, not the lower output's top edge.
+TEST(TopClamp, TheOutputUnderTheTopEdgeHoldsTheWindow) {
+    // A window dragged by its titlebar from the lower output up into the upper one: once its top edge is on the upper
+    // output, that output's menu bar holds it, not the lower output's top.
     const Rect frame{100, 1050, 800, 632};
-    const size_t upper = gf::topclamp::outputFor(400, 1070, frame, kOutputs).value_or(kNone);
+    const size_t upper = gf::topclamp::outputFor(frame, Point{400, 1070}, kOutputs).value_or(kNone);
     ASSERT_EQ(upper, 0U);
-    EXPECT_FALSE(gf::topclamp::changed(gf::topclamp::afterMove(Rect{100, 1082, 800, 600}, kBand, kOutputs.at(upper)), Rect{100, 1082, 800, 600}));
-    // Without a pointer on any output, the top centre of the frame decides.
-    EXPECT_EQ(gf::topclamp::outputFor(-500, -500, Rect{2100, 10, 400, 300}, kOutputs).value_or(kNone), 1U);
-    EXPECT_FALSE(gf::topclamp::outputFor(-500, -500, Rect{-900, -900, 100, 100}, kOutputs).has_value()) << "nowhere: no clamp";
+    EXPECT_FALSE(gf::topclamp::changed(gf::topclamp::heldMove(Rect{100, 1082, 800, 600}, kBand, Point{400, 1095}, kOutputs), Rect{100, 1082, 800, 600}));
+    // The top edge across two outputs: the one sharing most of its width.
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{1500, 10, 1000, 300}, Point{-500, -500}, kOutputs).value_or(kNone), 1U);
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{1200, 10, 1000, 300}, Point{-500, -500}, kOutputs).value_or(kNone), 0U);
+    // Above every output: the nearest output below the top edge (the pointer plays no part).
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{2100, -300, 400, 300}, Point{100, 1500}, kOutputs).value_or(kNone), 1U);
+    // Nowhere near an output: the pointer, else nothing.
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{-900, -900, 100, 100}, Point{100, 1500}, kOutputs).value_or(kNone), 2U);
+    EXPECT_FALSE(gf::topclamp::outputFor(Rect{-900, -900, 100, 100}, Point{-500, -500}, kOutputs).has_value()) << "nowhere: no clamp";
+}
+
+// Review of e0a3734: the output under the POINTER decided, and a window sitting correctly on an upper output was moved
+// or cut at the release of a SUPER+drag or a resize that ended with the pointer on another output.
+namespace {
+    // Two 1920x1080 outputs stacked, a 24 px menu bar on each.
+    constexpr std::array<Output, 2> kStacked{Output{Rect{0, 0, 1920, 1080}, 24}, Output{Rect{0, 1080, 1920, 1080}, 1104}};
+    // A 2560x1440 output and a 1920x1080 one to its right, bottom edges aligned (the right one starts at y 360).
+    constexpr std::array<Output, 2> kBottomAligned{Output{Rect{0, 0, 2560, 1440}, 24}, Output{Rect{2560, 360, 1920, 1080}, 384}};
+} // namespace
+
+TEST(TopClamp, ASuperDragEndingWithThePointerOnTheLowerOutputLeavesTheWindowAlone) {
+    // SUPER+LMB grips the window anywhere: its top is on the upper output, the pointer near its bottom on the lower one.
+    const Rect after{200, 500, 800, 900};
+    EXPECT_FALSE(gf::topclamp::afterDrag(Rect{200, 300, 800, 900}, after, false, 0, Point{600, 1300}, kStacked).has_value()) << "was y 500 -> 1104";
+    EXPECT_FALSE(gf::topclamp::afterDrag(Rect{1500, 100, 1000, 800}, Rect{1800, 200, 1000, 800}, false, 0, Point{2700, 600}, kBottomAligned).has_value());
+    EXPECT_FALSE(gf::topclamp::afterDrag(std::nullopt, after, false, 0, Point{600, 1300}, kStacked).has_value()) << "start unknown: same rule for a move";
+}
+
+TEST(TopClamp, AResizeFromTheBottomOrASideEdgeNeverMovesTheWindow) {
+    // Bottom edge dragged down onto the lower output (stacked): the top did not move.
+    const Rect taller{200, 500, 800, 1300};
+    EXPECT_FALSE(gf::topclamp::afterDrag(Rect{200, 500, 800, 900}, taller, true, 0, Point{600, 1800}, kStacked).has_value()) << "was y 500 -> 1104, h 900 -> 296";
+    // Right edge dragged onto the right output (bottom-aligned outputs).
+    const Rect wider{1800, 200, 1000, 800};
+    EXPECT_FALSE(gf::topclamp::afterDrag(Rect{1800, 200, 700, 800}, wider, true, 0, Point{2700, 600}, kBottomAligned).has_value()) << "was y 200 -> 384, h 800 -> 616";
+    // Even a window whose top is under the menu bar (placed there by the app): a bottom-edge resize leaves it.
+    const Rect high{300, 5, 800, 700};
+    EXPECT_FALSE(gf::topclamp::afterDrag(Rect{300, 5, 800, 600}, high, true, kBand, Point{600, 700}, kOutputs).has_value());
+    // A resize whose start was never seen moving is left alone.
+    EXPECT_FALSE(gf::topclamp::afterDrag(std::nullopt, Rect{300, 5, 800, 700}, true, kBand, Point{600, 5}, kOutputs).has_value());
+}
+
+TEST(TopClamp, AResizeThatMovedTheTopEdgeUnderTheMenuBarStopsIt) {
+    // The top edge dragged up under the menu bar of the output it is on: held, the bottom edge kept.
+    const auto held = gf::topclamp::afterDrag(Rect{300, 200, 800, 500}, Rect{300, 10, 800, 690}, true, kBand, Point{600, 10}, kOutputs);
+    ASSERT_TRUE(held.has_value());
+    EXPECT_DOUBLE_EQ(held.value_or(Rect{}).y, 32 + kBand);
+    EXPECT_DOUBLE_EQ(held.value_or(Rect{}).y + held.value_or(Rect{}).h, 700);
+    // On the lower of two stacked outputs, the top edge into its menu bar strip: held below that menu bar.
+    const auto lower = gf::topclamp::afterDrag(Rect{200, 1300, 800, 500}, Rect{200, 1090, 800, 710}, true, 0, Point{600, 1090}, kStacked);
+    ASSERT_TRUE(lower.has_value());
+    EXPECT_DOUBLE_EQ(lower.value_or(Rect{}).y, 1104);
+    // Further up, onto the upper output: below the upper output's menu bar, nothing to hold.
+    EXPECT_FALSE(gf::topclamp::afterDrag(Rect{200, 1300, 800, 500}, Rect{200, 1000, 800, 800}, true, 0, Point{600, 1000}, kStacked).has_value());
+}
+
+TEST(TopClamp, AMoveThatLeftTheTitlebarUnderAMenuBarIsHeld) {
+    // An app's move request (Chromium's tab strip, no band) released with the strip under the lower output's menu bar.
+    const auto lower = gf::topclamp::afterDrag(Rect{200, 1500, 800, 600}, Rect{200, 1090, 800, 600}, false, 0, Point{500, 1100}, kStacked);
+    ASSERT_TRUE(lower.has_value());
+    EXPECT_DOUBLE_EQ(lower.value_or(Rect{}).y, 1104);
+    EXPECT_DOUBLE_EQ(lower.value_or(Rect{}).h, 600) << "a move keeps the size";
+    // Above the top of the upper output.
+    const auto upper = gf::topclamp::afterDrag(Rect{200, 300, 800, 600}, Rect{200, -40, 800, 600}, false, 0, Point{500, 5}, kStacked);
+    ASSERT_TRUE(upper.has_value());
+    EXPECT_DOUBLE_EQ(upper.value_or(Rect{}).y, 24);
+    // Bottom-aligned outputs: a top edge above the right output and off the left one is out of reach: held below the
+    // right output's menu bar.
+    const auto right = gf::topclamp::afterDrag(Rect{3000, 600, 800, 600}, Rect{3000, 200, 800, 600}, false, 0, Point{3400, 400}, kBottomAligned);
+    ASSERT_TRUE(right.has_value());
+    EXPECT_DOUBLE_EQ(right.value_or(Rect{}).y, 384);
 }
 
 TEST(TopClamp, AResizeStopsTheTopEdgeAtTheMenuBar) {
