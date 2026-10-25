@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# Electron global menus end to end in the nested session (ADR-0008 amendment 2026-10-25; docs/specs/menu-bridge.md MB2,
+# MB12, MB17; compositor FR20).
+#
+#   Obsidian (Electron, Wayland), offline in a throwaway home (updates disabled, every request sent to a dead proxy), on a
+#   one-note vault:
+#     - it registers its window with com.canonical.AppMenu.Registrar (bridge log "RegisterWindow from :1.N kept") and the
+#       menu bar shows its own menus (File, Edit, View ... Help): the plugin reports the window's client pid, the shell
+#       sends open-registered, the bridge serves the registration of that process (bridge log: the window's pid);
+#     - File > New Window clicked with the (virtual) pointer opens a second window: an Obsidian click handler that runs
+#       only for its focused window, so the action must arrive after the popup gave the keyboard back (MB12); the second
+#       window shows Obsidian's menus too, read once its registration settled (no layout failure in the bridge log);
+#     - File > Close Window (a role item) closes the second window; the first one shows its menus again;
+#     - File > Quit closes the app (process gone).
+#   SKIP when obsidian is not installed. Screenshots: .dev/shots/electron-menus-*.png (scripts/dev/shot.sh).
+#
+# Usage: tests/integration/electron_menus.sh   (restarts the nested session of this checkout; run it outside the Claude
+#                                               Code sandbox: it starts the nested compositor)
+# Exit: 0 PASS (or SKIP), 1 FAIL, 2 environment error. Summary: .dev/electron-menus/run-<stamp>/summary.txt
+#
+# SAFETY: the registrar, the bridge and Obsidian share the nested shell's PRIVATE bus (.dev/bus.address, checked to be a
+# /tmp/dbus-* socket); Obsidian gets the nested Wayland socket only and an isolated home under .dev/isolated (through
+# scripts/dev/isolated.sh), with its updates disabled and http(s) sent to 127.0.0.1:9 (no network). hyprctl is used
+# read-only through scripts/nestctl; input goes through scripts/dev/pointer.sh (nested only). Obsidian is stopped by its
+# process group.
+set -uo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+dev=$root/.dev
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_require_host electron_menus
+nested_sock() { dev_nested_target "$dev" && echo "$DEV_NESTED_SOCK"; }
+run=$dev/electron-menus/run-$(date +%Y%m%d-%H%M%S)
+mkdir -p "$run"
+summary=$run/summary.txt
+output=GF-REF
+class=md.obsidian.Obsidian
+fail=0
+
+say() { printf '%s\n' "$*" | tee -a "$summary"; }
+check() { # <description> <command...>
+  local what=$1
+  shift
+  if "$@"; then say "  PASS $what"; else say "  FAIL $what"; fail=1; fi
+}
+die() { say "ENVIRONMENT: $*"; exit 2; }
+
+if ! command -v obsidian >/dev/null; then
+  say "SKIP electron menus: obsidian is not installed"
+  exit 0
+fi
+for tool in jq qs grim; do
+  command -v "$tool" >/dev/null || die "$tool is needed"
+done
+
+# ---- builds ------------------------------------------------------------------------------------------------------
+[[ -f $root/compositor/build/grassfield-compositor.so ]] || "$root/compositor/build-direct.sh" plugin || die "plugin build failed"
+[[ -x $dev/build/grassfield-menu-bridge ]] || "$root/bridges/menu-bridge/build-direct.sh" >/dev/null || die "bridge build failed"
+
+# ---- helpers -----------------------------------------------------------------------------------------------------
+ob_pid=""
+stop_obsidian() {
+  [[ -n $ob_pid ]] || return 0
+  kill -- "-$ob_pid" 2>/dev/null
+  sleep 1
+  kill -9 -- "-$ob_pid" 2>/dev/null
+}
+trap 'stop_obsidian; "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1' EXIT
+
+private_bus() {
+  local bus
+  bus=$(cat "$dev/bus.address" 2>/dev/null) || return 1
+  case $bus in unix:path=/tmp/dbus-*) printf '%s\n' "$bus" ;; *) return 1 ;; esac
+}
+
+state() { # menu bar test hook (JSON)
+  local pid
+  pid=$(dev_live_pid "$dev/shell.pid") || return 1
+  QT_QPA_PLATFORM=offscreen timeout 5 qs ipc --pid "$pid" call menubar bridgeState "$output" 2>/dev/null
+}
+
+wait_for() { # <seconds> <command...>
+  local deadline=$((SECONDS + $1))
+  shift
+  while ((SECONDS < deadline)); do
+    "$@" && return 0
+    sleep 0.3
+  done
+  return 1
+}
+
+clients() { "$root/scripts/nestctl" clients -j 2>/dev/null; }
+windows() { clients | jq --arg c "$class" '[.[] | select(.class == $c and .mapped)] | length'; }
+has_windows() { [[ $(windows) -ge $1 ]]; }
+windows_at_most() { [[ $(windows) -le $1 ]]; }
+focused_address() { # hex address (no 0x) of the most recently focused Obsidian window
+  clients | jq -r --arg c "$class" '[.[] | select(.class == $c)] | sort_by(.focusHistoryID) | .[0].address // "" | ltrimstr("0x")'
+}
+client_pid() { clients | jq -r --arg c "$class" '[.[] | select(.class == $c)][0].pid // 0'; }
+on_wayland() { [[ $(clients | jq --arg c "$class" '[.[] | select(.class == $c and .xwayland)] | length') == 0 ]]; }
+exited() { local stat; stat=$(ps -o stat= -p "$1" 2>/dev/null); [[ -z $stat || $stat == Z* ]]; }
+
+menus_are() { # <address> <jq expression over .menus, true when as wanted>
+  local s
+  s=$(state) || return 1
+  jq -e --arg w "$1" ".window == \$w and ($2)" <<<"$s" >/dev/null
+}
+obsidian_menus='(.menus | index("File")) != null and (.menus | index("Edit")) != null and (.menus | index("Help")) != null and (.menus | length) >= 4'
+
+center_of_title() { # <title> -> "x y" of that bridge title in the bar
+  state | jq -r --arg t "$1" '.bar[] | select(.kind == "bridge" and .title == $t) | "\(.x + (.w / 2 | floor)) \(.y + (.h / 2 | floor))"' | head -n 1
+}
+row_of() { # <regex> -> "x y w h" of the first popup row whose text matches
+  state | jq -r --arg r "$1" '[.popup[]? | select(.text | test($r))][0] // empty | "\(.x) \(.y) \(.w) \(.h)"'
+}
+row_present() { [[ -n $(row_of "$1") ]]; }
+point() { "$root/scripts/dev/pointer.sh" output "$output" "$@" >/dev/null; }
+click_title() { # <title>
+  local xy
+  xy=$(center_of_title "$1")
+  [[ -n $xy ]] || return 1
+  # shellcheck disable=SC2086
+  point abs $xy sleep 150 click sleep 300
+}
+click_row() { # <regex>
+  local x y w h
+  read -r x y w h <<<"$(row_of "$1")"
+  [[ -n ${x:-} ]] || return 1
+  point abs $((x + w / 3)) $((y + h / 2)) sleep 150 click sleep 300
+}
+# The bridge log of this run only (the file may hold earlier sessions).
+log_from=1
+bridge_log() { tail -n "+$log_from" "$dev/menu-bridge.log" 2>/dev/null; }
+bridge_log_has() { bridge_log | grep -a -q -E -- "$1"; }
+
+say "electron menus run $run"
+
+# ---- session -----------------------------------------------------------------------------------------------------
+"$root/scripts/dev/nested-down.sh" >/dev/null 2>&1
+log_from=$(($(wc -l <"$dev/menu-bridge.log" 2>/dev/null || echo 0) + 1))
+"$root/scripts/dev/nested-up.sh" --private-bus >"$run/nested-up.log" 2>&1 || die "nested session did not start (see $run/nested-up.log)"
+# A log rewritten by the new bridge is shorter than the old one: then all of it is this run's.
+(($(wc -l <"$dev/menu-bridge.log" 2>/dev/null || echo 0) + 1 < log_from)) && log_from=1
+wait_for 15 test -S "$dev/run/menu-bridge.sock" || die "no bridge socket"
+wait_for 20 bridge_log_has "shell connected" || die "the shell did not connect to the bridge"
+bus=$(private_bus) || die "no private bus address"
+say "  private bus: $bus"
+wait_for 15 bridge_log_has "owning com.canonical.AppMenu.Registrar" || die "the bridge does not own the registrar"
+point abs 960 600 sleep 200
+
+# ---- Obsidian ----------------------------------------------------------------------------------------------------
+say ""
+say "[Electron] Obsidian (Electron $(cat /usr/lib/electron43/version 2>/dev/null || echo "?"))"
+name=el-obsidian
+rm -rf "${dev:?}/isolated/$name"
+cfg=$dev/isolated/$name/config/obsidian
+vault=$run/vault
+mkdir -p "$cfg" "$vault"
+printf '# A note\n' >"$vault/note.md"
+jq -n --arg p "$vault" '{updateDisabled: true, vaults: {"656c6d656e757331": {path: $p, ts: 1, open: true}}}' >"$cfg/obsidian.json"
+sock=$(nested_sock) || die "no nested Wayland socket"
+proxy=http://127.0.0.1:9
+http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy no_proxy="" WAYLAND_DISPLAY=$sock DBUS_SESSION_BUS_ADDRESS=$bus \
+  ELECTRON_OZONE_PLATFORM_HINT=wayland \
+  setsid "$root/scripts/dev/isolated.sh" --name "$name" -- obsidian --proxy-server=127.0.0.1:9 >"$run/obsidian.out" 2>&1 </dev/null &
+ob_pid=$!
+
+check "Obsidian window mapped" wait_for 40 has_windows 1
+check "Obsidian runs on Wayland (not XWayland)" on_wayland
+first=$(focused_address)
+cpid=$(client_pid)
+say "  window $first \"$(clients | jq -r --arg c "$class" '[.[] | select(.class == $c)][0].title // ""')\", client pid $cpid (started $ob_pid)"
+check "Obsidian registered its window with the registrar (bridge log)" wait_for 20 bridge_log_has "registrar: RegisterWindow from :[0-9.]+ kept"
+check "menu bar shows Obsidian's own menus (File, Edit ... Help)" wait_for 20 menus_are "$first" "$obsidian_menus"
+say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
+check "the bridge served the registration to the window's client pid $cpid" bridge_log_has "window $first: menu :[0-9.]+ /com/canonical/menu/[0-9A-F]+ \(pid $cpid,"
+say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-bar "$output")"
+
+click_title File
+check "File menu open with New Window" wait_for 5 row_present '^New Window$'
+say "  File rows: $(state | jq -c '[.popup[]?.text]')"
+say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-file "$output")"
+click_row '^New Window$'
+check "pointer click on File > New Window opened a second window (focused-window click handler)" wait_for 15 has_windows 2
+second=$(focused_address)
+say "  second window $second"
+check "the second window shows Obsidian's menus" wait_for 20 menus_are "$second" '(.menus | index("File")) != null'
+say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
+check "no layout failure in the bridge log (registrations served once settled)" test -z "$(bridge_log | grep -a 'GetLayout on .*failed\|refused: this application')"
+
+click_title File
+check "second window's File menu open with Close Window" wait_for 5 row_present '^Close( Window)?$'
+say "  File rows: $(state | jq -c '[.popup[]?.text]')"
+click_row '^Close( Window)?$'
+check "pointer click on File > Close Window closed the second window" wait_for 15 windows_at_most 1
+check "the remaining window shows Obsidian's menus again" wait_for 20 menus_are "$first" "$obsidian_menus"
+
+click_title File
+check "File menu open with Quit" wait_for 5 row_present '^Quit$'
+click_row '^Quit$'
+check "pointer click on File > Quit closed every window" wait_for 15 windows_at_most 0
+check "Obsidian exited" wait_for 15 exited "$ob_pid"
+bridge_log >"$run/menu-bridge.log"
+cp "$dev/shell.log" "$run/shell.log"
+grep -a "registrar\|window .*menu\|activate\|registered" "$run/menu-bridge.log" | tail -n 20 >>"$summary"
+
+# ---- cleanup -----------------------------------------------------------------------------------------------------
+stop_obsidian
+check "no process of Obsidian's group left" test -z "$(pgrep -g "$ob_pid" 2>/dev/null)"
+"$root/scripts/dev/nested-down.sh" >"$run/nested-down.log" 2>&1
+trap - EXIT
+say ""
+if ((fail)); then
+  say "RESULT: FAIL (summary $summary)"
+  exit 1
+fi
+say "RESULT: PASS (summary $summary)"
+exit 0
