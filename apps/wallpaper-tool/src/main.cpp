@@ -26,6 +26,7 @@
 #include <QTextStream>
 
 #include "commonsfetch.h"
+#include "runmode.h"
 #include "videotool.h"
 #include "wallpaperlogic.h"
 
@@ -382,7 +383,7 @@ int cmdFetch(const QStringList &args)
     o.lang = a.options.value(QStringLiteral("lang"), QStringLiteral("en"));
     if (o.lang != QLatin1String("en") && o.lang != QLatin1String("fr"))
         return fail(Usage, QStringLiteral("bad --lang"));
-    o.dev = qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1");
+    o.dev = grassfield::apps::runmode::dev();
     o.baseUrl = a.options.value(QStringLiteral("base-url"));
     if (a.options.contains(QStringLiteral("base-url")) && !commons::baseUrlAllowed(o.baseUrl, o.dev))
         return fail(Usage, QStringLiteral("--base-url is only for a dev session and only http://127.0.0.1:<port>"));

@@ -2,6 +2,7 @@
 
 #include "previewlogic.h"
 #include "appscope.h"
+#include "runmode.h"
 #include "chromecaps.h"
 #include "autoappearance.h"
 
@@ -21,11 +22,7 @@ namespace {
 
 QString configFile()
 {
-    const QString dev = qEnvironmentVariable("GRASSFIELD_CONFIG_HOME");
-    if (!dev.isEmpty())
-        return dev + QStringLiteral("/grassfield.json");
-    const QString xdg = qEnvironmentVariable("XDG_CONFIG_HOME");
-    return (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.config") : xdg) + QStringLiteral("/grassfield/grassfield.json");
+    return grassfield::apps::runmode::configDir() + QStringLiteral("/grassfield.json");
 }
 
 QString sizeText(qint64 bytes)

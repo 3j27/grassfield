@@ -1,5 +1,7 @@
 #include "backend.h"
 
+#include "runmode.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -50,12 +52,8 @@ QString reasonOf(const QByteArray &err, const QByteArray &out)
 
 QString resolveConfigFile()
 {
-    // GRASSFIELD_CONFIG_HOME (dev) wins, like the shell; else $XDG_CONFIG_HOME/grassfield.
-    const QString dev = qEnvironmentVariable("GRASSFIELD_CONFIG_HOME");
-    if (!dev.isEmpty())
-        return dev + "/grassfield.json";
-    const QString xdg = qEnvironmentVariable("XDG_CONFIG_HOME");
-    return (xdg.isEmpty() ? QDir::homePath() + "/.config" : xdg) + "/grassfield/grassfield.json";
+    // GRASSFIELD_CONFIG_HOME wins, like the shell; else $XDG_CONFIG_HOME/grassfield (runmode.h).
+    return grassfield::apps::runmode::configDir() + "/grassfield.json";
 }
 
 QString resolveBindingsFile()

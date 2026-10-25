@@ -207,11 +207,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
 
 QString FilesApp::configFile() const
 {
-    const QString dev = qEnvironmentVariable("GRASSFIELD_CONFIG_HOME");
-    if (!dev.isEmpty())
-        return dev + QStringLiteral("/grassfield.json");
-    const QString xdg = qEnvironmentVariable("XDG_CONFIG_HOME");
-    return (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.config") : xdg) + QStringLiteral("/grassfield/grassfield.json");
+    return grassfield::apps::runmode::configDir() + QStringLiteral("/grassfield.json");
 }
 
 void FilesApp::readAppearance()
