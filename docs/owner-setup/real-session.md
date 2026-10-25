@@ -255,13 +255,17 @@ can run these; the ones marked (VM) are best done on a snapshot or a spare machi
 - [ ] Screenshots: Super+Shift+3 (the screen), Super+Shift+4 (drag a selection), Super+Shift+5 (the picker); Print also. A notice
       shows, the picture is in `~/Pictures` and on the clipboard (`wl-paste -t image/png | file -`). Clicking the notice does not open an
       editor (known: it needs a hint Grassfield's server does not run).
-- [ ] Crash notice (macOS model: only an application that quit by crashing; needs a core dump, `coredumpctl list` shows it):
-      from a terminal, `sleep 300 & kill -SEGV %1` shows NO banner (a command run in a terminal is a child of the terminal's
-      app scope; the shell prints "Segmentation fault" and `coredumpctl list` has the dump). Same for a helper process of a
-      running app and for the shell's own crashes (systemd restarts it). App level: start a second Foot from Apps, then from
-      the first terminal `kill -SEGV $(pgrep -n -x foot)` (the newest one, the one you started from Apps): within seconds a
-      banner "<App name> quit unexpectedly" appears with a "Reopen" button that starts the app again in its own scope
-      (`systemctl --user list-units 'app-*foot*'`). A second crash of the same app within 10 minutes does not repeat.
+- [ ] Crash notice (macOS model: "<App> quit unexpectedly" only when an application of yours is gone after a crash; needs a
+      core dump, `coredumpctl list` shows it). No banner: from a terminal `sleep 300 & kill -SEGV %1` (the terminal's scope
+      still holds the shell), a crashing helper of an app that keeps running, the shell's own crashes (systemd restarts it).
+      With a banner, safe procedure (one throwaway Foot in a scope of its own, one PID, checked before it is killed):
+      `uwsm-app -u app-Hyprland-foot-gfcrashtest.scope -- foot`, then in your first terminal
+      `s=/sys/fs/cgroup/user.slice/user-$UID.slice/user@$UID.service/app.slice/app-graphical.slice/app-Hyprland-foot-gfcrashtest.scope`,
+      `cat $s/cgroup.procs` (the new Foot and its shell), `ps -o pid,comm,args -p <the pid whose comm is foot>` (must be the
+      throwaway one; a `foot --server` serves all its windows from one process, never use it for this), `kill -SEGV <that pid>`.
+      Within about 10 s a banner "Foot quit unexpectedly" (French session: « Foot » a quitté de façon inattendue) with a
+      "Reopen" button (« Rouvrir ») appears; Reopen starts Foot again in its own scope (`systemctl --user list-units 'app-*foot*'`).
+      A second crash of the same app within 10 minutes does not repeat.
 - [ ] Low battery (unplugged laptop): at 20 %, 10 % and 5 % one banner each ("Low battery" / "Very low battery"). To test without
       draining: `GRASSFIELD_POWER_SUPPLY` cannot be faked in the running unit; read the log instead after a real discharge:
       `journalctl --user -u grassfield-battery-watch`. Desktop without battery: the unit is "inactive (condition)".

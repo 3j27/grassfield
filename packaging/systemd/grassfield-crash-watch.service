@@ -33,7 +33,10 @@ SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 CapabilityBoundingSet=
 MemoryMax=128M
-TasksMax=16
+# Tasks: python 2 (loop + worker thread), journalctl 1, a `notify-send -w` 4 each (measured by the review; at most 2 wait for
+# a click: 8), a plain notify-send up to 4, gdbus and systemd-run about 3 each for a moment (estimated): about 20 at the worst.
+# The old 16 was too few for three notices at once.
+TasksMax=32
 
 [Install]
 WantedBy=graphical-session.target

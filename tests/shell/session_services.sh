@@ -3,6 +3,7 @@
 # notifications, the clickable migrations notice, Night Shift, screenshots, removable media. Logic with fakes (no session,
 # no D-Bus, no battery needed) plus static checks of the units, drop-ins, autostart and PKGBUILD that must agree.
 set -euo pipefail
+export LC_ALL=C; unset GRASSFIELD_LANG LC_MESSAGES  # the helpers translate by locale: the assertions read the English source
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/session-services.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
@@ -54,6 +55,13 @@ check bash -c 'grep -q "notify-send .*-A default=Run .*Click to run 2 pending mi
 desc="migrations notice: dismissed without a click starts nothing"
 migrate "1" ""
 check bash -c 'grep -q "Click to run 1 pending migration\." "$1/log" && ! grep -q systemd-run "$1/log"' _ "$tmp"
+desc="migrations notice: in a French session the title, text and button are French (GRASSFIELD_LANG fr_FR.UTF-8 or fr; en stays English)"
+GRASSFIELD_LANG=fr_FR.UTF-8 migrate "1 2" ""
+check bash -c 'grep -q "default=Exécuter -- Migrations Omarchy en attente Cliquez pour exécuter 2 migrations en attente\." "$1/log"' _ "$tmp"
+GRASSFIELD_LANG=fr migrate "1" ""
+check bash -c 'grep -q "Cliquez pour exécuter 1 migration en attente\." "$1/log"' _ "$tmp"
+GRASSFIELD_LANG=en migrate "1" ""
+check bash -c 'grep -q "default=Run -- Pending Omarchy migrations Click to run 1 pending migration\." "$1/log"' _ "$tmp"
 desc="migrations notice: nothing pending, nothing shown"
 migrate "" ""
 check bash -c '[[ ! -s "$1/log" ]]' _ "$tmp"
