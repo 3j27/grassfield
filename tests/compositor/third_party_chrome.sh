@@ -9,20 +9,25 @@
 # bus and the nested socket, never the owner's bus or home; Chromium with a throwaway profile under .dev/. hyprctl only
 # through scripts/nestctl (read-only, plus window moves); captures with grim.
 #
-# Per app on the list that is installed (Chromium's browser window: its GTK integration; Obsidian: Electron), one at a
-# time at the same place:
+# Per app on the list that is installed (Evince: GTK3 header bar; Nautilus: GTK4/libadwaita; Chromium's browser window:
+# its GTK integration; Obsidian: Electron), one at a time at the same place:
 #   T  SESSION  its class carries the Hyprland tag grassfield-client-chrome (rule gf-client-chrome-third-party)
 #   S  PLUGIN   no plugin strip above it (the measurement of client_chrome.sh)
 #   Z  SESSION  its own zoom button maximizes it (fullscreen=1, exempt from the maximize suppression), a second press
 #               restores it
-#   M  PLUGIN   its own minimize button puts it on special:minimized (xdg set_minimized, the client-chrome bridge P5)
+#   M  PLUGIN   its own minimize button puts it on special:minimized (xdg set_minimized, the client-chrome bridge P5),
+#               toward the Dock tile the shell computed (the plugin's log line, as for the titlebar's minimize light).
+#               GTK4 greys a minimize button the compositor does not offer: Nautilus's works only with P8 (minimize in
+#               its xdg wm_capabilities)
+#   D  PLUGIN   a click on that Dock tile restores it: back on its Desktop, at its geometry, focused
 #   V  visual   a capture of its top band, .dev/third-party-chrome/<app>-top.png: its own close, minimize, zoom. The
 #               script cannot judge a picture: it prints "visual NOT verified" with the path; whoever runs it judges the
 #               captures and records the verdict.
+# The Dock is brought to the output first (the pointer rests on its bottom edge, as minimize.sh's dock_to): a session
+# started with the focus on the small WAYLAND-1 has its Dock there. Clicks come after a fresh pointer motion: a window
+# moved under a resting pointer has no pointer focus, and a click there is lost.
 # Not on the list, the plugin's titlebar kept (not tagged, the strip above them): foot; a Chromium web app (--app: no
-# frame of its own); Evince (GTK3) and Nautilus (GTK4/libadwaita), header-bar apps whose own controls do not all work
-# under Hyprland 0.56.2 (Evince's zoom button does nothing, Nautilus greys its minimize button: ADR-0015 amendment
-# 2026-10-25), so they keep the plugin's working set next to theirs (reported, a capture each).
+# frame of its own).
 # The layout the clients are given: org.gnome.desktop.wm.preferences button-layout read in a client's environment
 # (GSettings through the dev profile) and through the settings portal on the private bus (what GTK4 and Chromium read),
 # both 'close,minimize,maximize:' (ADR-0002, packaging/dconf/grassfield.d/20-window-buttons.conf).
@@ -81,6 +86,14 @@ ctl -j plugin list | jq -e '[.[]? | select(.name == "grassfield-compositor")] | 
   || { echo "third_party_chrome: the plugin is not loaded" >&2; exit 2; }
 
 pids=()
+# An anchor pointer for the whole run (as in minimize.sh): the seat keeps its pointer while pointer.sh adds and removes its
+# own devices, so clients keep their wl_pointer.
+"$root/scripts/dev/pointer.sh" output "$out" sleep 3600000 >>"$log" 2>&1 &
+pids+=($!)
+# Hyprland's log as it is written (read-only), line-buffered: the plugin's line with the Dock rectangle of each minimize.
+follow=$work/hyprland-follow.log
+timeout 3600 stdbuf -oL "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
+pids+=($!)
 cleanup() {
   local p
   for p in "${pids[@]}"; do pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; done
@@ -147,10 +160,39 @@ judge() {
     visual+=("$label: the plugin's traffic lights (and, for a header-bar app, its own buttons too): $work/$label-top.png")
   fi
 }
+# A click at <x> <y> (output px) after a fresh motion from the side of the output.
+press() {
+  pointer abs $((mon_w - 40)) $((mon_h / 2)) sleep 150
+  pointer abs $(($1 - 4)) $(($2 - 3)) sleep 120
+  pointer abs "$1" "$2" sleep 150 click
+}
+# The Dock on this output: the pointer rests on its bottom edge for longer than Tokens.dockRevealDwell, then leaves it.
+dock_here() {
+  pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 500
+  pointer abs $((mon_w / 2)) $((mon_h - 1)) sleep 1200
+  pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 600
+}
+follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
+# Centre of the Dock tile the shell sent with the latest minimize of <hex> (after line <since> of the follow log), as
+# "x y" on this output; waits up to 3 s; nothing without that line or when the tile is on another output.
+dock_tile() { # <hex address, no 0x> <since>
+  local line rect rx ry rw rh deadline=$(($(date +%s%3N) + 3000))
+  while :; do
+    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    [[ -n $line ]] && break
+    (($(date +%s%3N) > deadline)) && return 1
+    sleep 0.05
+  done
+  rect=$(sed -n 's/.*toward the Dock rectangle \(-\{0,1\}[0-9]*\),\(-\{0,1\}[0-9]*\) \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' <<<"$line")
+  [[ -n $rect ]] || return 1
+  read -r rx ry rw rh <<<"$rect"
+  rx=$((rx + rw / 2 - mon_x)) ry=$((ry + rh / 2 - mon_y))
+  ((rx >= 0 && rx < mon_w && ry >= 0 && ry < mon_h)) && echo "$rx $ry"
+}
 # The app's own buttons work: <label> <class regex> <minimize dx> <zoom dx> <dy> (offsets from the window's top-left; a
 # negative dx counts from its right edge).
 own_buttons() {
-  local label=$1 cls=$2 mdx=$3 zdx=$4 dy=$5 fs1 fs2 ws w0
+  local label=$1 cls=$2 mdx=$3 zdx=$4 dy=$5 fs1 fs2 ws w0 x0 y0 h0 ws0 addr f0 tx ty x y w h active
   # An offset from the right edge is taken at the window's first width and kept from its left edge: Obsidian's starter
   # window is not resizable, its content (and its controls) stays at its size in the corner of a zoomed box.
   read -r _ _ w0 _ _ < <(geom "$cls")
@@ -161,16 +203,39 @@ own_buttons() {
     read -r x y _ _ _ < <(geom "$cls")
     echo "$((x + $1)) $((y + dy))"
   }
-  pointer abs $(at "$zdx") sleep 80 click sleep 1000
+  # shellcheck disable=SC2046 # "x y"
+  press $(at "$zdx")
+  sleep 1
   read -r _ _ _ _ fs1 < <(geom "$cls")
-  pointer abs $(at "$zdx") sleep 80 click sleep 1000
+  # shellcheck disable=SC2046
+  press $(at "$zdx")
+  sleep 1
   read -r _ _ _ _ fs2 < <(geom "$cls")
   [[ $fs1 == 1 && $fs2 == 0 ]]
   check "$label: its own zoom button zooms and unzooms (SESSION)" $? "fullscreen $fs1 then $fs2"
-  pointer abs $(at "$mdx") sleep 80 click sleep 1500
+  read -r x0 y0 w0 h0 _ < <(geom "$cls")
+  ws0=$(client "$cls" .workspace.name) addr=$(client "$cls" .address)
+  f0=$(follow_lines)
+  # shellcheck disable=SC2046
+  press $(at "$mdx")
+  sleep 1.5
   ws=$(client "$cls" .workspace.name)
   [[ $ws == special:minimized ]]
   check "$label: its own minimize button minimizes (PLUGIN P5)" $? "workspace '$ws'"
+  read -r tx ty <<<"$(dock_tile "${addr#0x}" "$f0")"
+  [[ -n ${ty:-} ]]
+  check "$label: toward its Dock tile (the shell's rectangle, plugin log line)" $? "tile centre ${tx:-?},${ty:-?} on $out"
+  [[ -n ${ty:-} ]] || return
+  WAYLAND_DISPLAY=$sock timeout 10 grim -o "$out" "$work/$label-minimized.png" 2>>"$log"
+  pointer abs "$tx" "$ty" sleep 300 # hover first (Dock magnification settles)
+  pointer abs "$tx" "$ty" sleep 40 click sleep 1500
+  read -r x y w h _ < <(geom "$cls")
+  ws=$(client "$cls" .workspace.name) active=$(ctl activewindow -j | jq -r '.address // ""')
+  [[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" && $active == "$addr" ]]
+  check "$label: its Dock tile restores it (PLUGIN)" $? "now ${w}x${h} at ($x,$y) on '$ws', active $active; was ${w0}x${h0} at ($x0,$y0) on '$ws0'"
+  # The effect the settings chose (funnel or shrink; fade with Reduce Motion), from the plugin's timing lines: reported.
+  tail -n +"$((f0 + 1))" "$follow" 2>/dev/null | grep -ao "minimize ${addr#0x}: [a-z]* \(minimize\|restore\) in [0-9]* ms, [0-9]* frames" \
+    | while IFS= read -r l; do say "  $label: $l"; done
 }
 stop_app() { # <pid> <class regex>
   pkill -P "$1" 2>/dev/null; kill "$1" 2>/dev/null
@@ -178,7 +243,7 @@ stop_app() { # <pid> <class regex>
 }
 
 say "third_party_chrome: nested pid $hypr_pid, instance $sig, output $out ${mon_w}x${mon_h}, bus $bus"
-pointer abs $((mon_w - 40)) $((mon_h / 2)) sleep 50
+dock_here
 
 say "layout the clients are given"
 gs=$(client_query layout gsettings get org.gnome.desktop.wm.preferences button-layout)
@@ -195,15 +260,18 @@ wait_mapped '^foot$' || { say "setup error: foot did not map"; exit 2; }
 judge foot '^foot$' 0
 stop_app "$p" '^foot$'
 
-for gtk in "evince|Evince (GTK3 header bar)|^org\\.gnome\\.Evince$|evince" "nautilus|Nautilus (GTK4/libadwaita header bar)|^org\\.gnome\\.Nautilus$|nautilus --new-window"; do
-  IFS='|' read -r label title cls cmd <<<"$gtk"
+# Header-bar apps with the session's GTK layout: close, minimize, zoom on the left, 23 px below the window's top.
+for gtk in "evince|Evince (GTK3 header bar)|^org\\.gnome\\.Evince$|evince|63|101" \
+  "nautilus|Nautilus (GTK4/libadwaita header bar)|^org\\.gnome\\.Nautilus$|nautilus --new-window|60|97"; do
+  IFS='|' read -r label title cls cmd mdx zdx <<<"$gtk"
   command -v "${cmd%% *}" >/dev/null || continue
-  say "$title: not on the list, the plugin's titlebar (its own controls do not all work under Hyprland 0.56.2)"
+  say "$title"
   # shellcheck disable=SC2086 # the command and its arguments
   p=$(client_run "$label" $cmd); pids+=("$p")
   if wait_mapped "$cls"; then
     sleep 1.5
-    judge "$label" "$cls" 0
+    judge "$label" "$cls" 1
+    own_buttons "$label" "$cls" "$mdx" "$zdx" 23
   else
     check "$label: mapped" 1 "$(ctl clients -j | jq -c '[.[].class]')"
   fi
