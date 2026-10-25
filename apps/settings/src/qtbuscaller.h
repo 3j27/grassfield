@@ -23,7 +23,7 @@ public:
     {
         BusReply out;
         if (!m_connection.isConnected()) {
-            out.error = QStringLiteral("org.freedesktop.DBus.Error.NoServer: no connection to the system bus");
+            out.error = QStringLiteral("org.freedesktop.DBus.Error.NoServer: no connection to the system bus"); // i18n-ignore: an error name, mapped to text by reasonOf
             return out;
         }
         QDBusMessage message = QDBusMessage::createMethodCall(service, path, iface, member);

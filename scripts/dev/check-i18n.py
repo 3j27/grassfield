@@ -13,7 +13,9 @@ A deliberate exception (brand name, protocol token, data key) carries `// i18n-i
 Part (e) reads the helpers as text (ast for Python, patterns for sh/bash): it never imports, sources or runs them. It also
 flags English text held in a variable (title = "..."), in a module-level constant that is not in the catalog, and the label of
 a notify-send action (-A id=Label); option values such as icon names (-i dialog-information) are not text.
-Usage: python3 -I scripts/dev/check-i18n.py [--no-lupdate] | --helpers-only DIR
+(f) the Settings app's C++ (apps/settings/src): a QStringLiteral/QLatin1String literal of two or more words is text nobody translates
+    unless it goes through tr()/QCoreApplication::translate (lupdate then lists it); log lines (qWarning, qDebug...) are skipped.
+Usage: python3 -I scripts/dev/check-i18n.py [--no-lupdate] | --helpers-only DIR | --cpp-only DIR
 """
 import ast
 import re
@@ -266,7 +268,31 @@ def scan_helpers(directory=None):
     return violations
 
 
+CPP_LITERAL = re.compile(r'(?:QStringLiteral|QLatin1String|QString::fromUtf8|QString::fromLatin1)\(\s*"((?:[^"\\]|\\.)*)"')
+CPP_LOG = re.compile(r"\bq(?:C)?(?:Debug|Info|Warning|Critical)\b")
+
+
+def scan_cpp(directory=None):
+    """(f) bare English text in the Settings app's C++, read as text (a pattern reader): never compiled."""
+    violations = []
+    base = directory or ROOT / "apps" / "settings" / "src"
+    for path in sorted(list(base.glob("*.cpp")) + list(base.glob("*.h"))):
+        rel = path.name if directory else path.relative_to(ROOT)
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "i18n-ignore" in line or CPP_LOG.search(line) or line.lstrip().startswith("//"):
+                continue
+            for match in CPP_LITERAL.finditer(line):
+                if re.search(r"[^\W\d_]{2,}\s+[^\W\d_]{2,}", match.group(1)):
+                    violations.append(f"{rel}:{number}: English text {match.group(1)[:40]!r} is not wrapped in tr()/QCoreApplication::translate")
+    return violations
+
+
 def main():
+    if "--cpp-only" in sys.argv:  # part (f) alone on a directory (selftest, tests/shell/i18n_helpers_gate.sh)
+        found = scan_cpp(Path(sys.argv[sys.argv.index("--cpp-only") + 1]))
+        for v in found:
+            print(f"i18n: {v}")
+        return 1 if found else 0
     if "--helpers-only" in sys.argv:  # part (e) alone on a directory (the gate's selftest, tests/shell/i18n_helpers_gate.sh)
         found = scan_helpers(Path(sys.argv[sys.argv.index("--helpers-only") + 1]))
         for v in found:
@@ -296,7 +322,7 @@ def main():
     if unfinished:
         failed = True
 
-    violations = scan_qml() + scan_desktop_entries() + scan_helpers()
+    violations = scan_qml() + scan_desktop_entries() + scan_helpers() + scan_cpp()
     for v in violations:
         print(f"i18n: {v}")
     if violations:

@@ -150,7 +150,7 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
         const bool ok = status == QProcess::NormalExit && code == 0;
         const QByteArray out = p->readAllStandardOutput();
         if (!ok)
-            emit failed(tag, p->property("timedOut").toBool() ? QStringLiteral("timed out") : reasonOf(p->readAllStandardError(), out));
+            emit failed(tag, p->property("timedOut").toBool() ? QCoreApplication::translate("SystemBus", "timed out") : reasonOf(p->readAllStandardError(), out));
         emit finished(tag, ok, QString::fromUtf8(out));
         p->deleteLater();
     });
@@ -235,7 +235,7 @@ void Backend::busQuery(const QString &what, const QString &tag)
     runBus(tag, [wifi](BusCaller &bus, QString *output) {
         const StateResult r = wifi ? wifiState(bus) : bluetoothState(bus);
         if (!r.ok)
-            return r.error.isEmpty() ? QStringLiteral("no answer") : r.error;
+            return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
         *output = QString::fromUtf8(QJsonDocument(r.json).toJson(QJsonDocument::Compact));
         return QString();
     });
@@ -308,7 +308,7 @@ QVariantMap Backend::readText(const QString &path) const
 QString Backend::writeText(const QString &path, const QString &text) const
 {
     if (!QDir().mkpath(QFileInfo(path).absolutePath()))
-        return QStringLiteral("cannot create the directory of %1").arg(path);
+        return QCoreApplication::translate("SystemBus", "cannot create the directory of %1").arg(path);
     QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly))
         return f.errorString();

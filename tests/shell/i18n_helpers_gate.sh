@@ -126,4 +126,16 @@ check bash -c '[[ ! -e $1/marker-py && ! -e $1/marker-sh ]]' _ "$tmp"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
+mkdir -p "$tmp/cpp"
+cat >"$tmp/cpp/bad.cpp" <<'CPP'
+QString a() { return QStringLiteral("that network is gone"); }
+QString b() { return QCoreApplication::translate("X", "that network is gone"); }
+QString c() { return QStringLiteral("two words"); } // i18n-ignore: a test
+QString d() { return QStringLiteral("org.example.Name"); }
+CPP
+desc="part (f): a bare English QStringLiteral in the Settings C++ is reported, translate(), i18n-ignore and one-word tokens are not"
+check bash -c '[[ $(python3 -I "$1/scripts/dev/check-i18n.py" --cpp-only "$2/cpp" 2>&1 | wc -l) == 1 ]] && python3 -I "$1/scripts/dev/check-i18n.py" --cpp-only "$2/cpp" 2>&1 | grep -q "bad.cpp:1:"' _ "$root" "$tmp"
+desc="part (f): apps/settings/src has no bare English literal"
+check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --cpp-only "$1/apps/settings/src" 2>&1) ]]' _ "$root"
+
 exit $fail

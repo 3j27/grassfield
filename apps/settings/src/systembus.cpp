@@ -3,6 +3,7 @@
 #include "systemguard.h"
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDBusArgument>
 #include <QDBusMetaType>
 #include <QDBusObjectPath>
@@ -66,7 +67,7 @@ Result property(BusCaller &bus, const QString &service, const QString &path, con
 {
     const BusReply r = bus.call(service, path, kProps, QStringLiteral("Get"), {iface, name}, kReadMs);
     if (!r.ok || r.args.isEmpty())
-        return {false, {}, r.ok ? QStringLiteral("empty reply") : r.error};
+        return {false, {}, r.ok ? QCoreApplication::translate("SystemBus", "empty reply") : r.error};
     return {true, unwrap(r.args.first()), {}};
 }
 
@@ -80,7 +81,7 @@ Props allProperties(BusCaller &bus, const QString &service, const QString &path,
 {
     const BusReply r = bus.call(service, path, kProps, QStringLiteral("GetAll"), {iface}, kReadMs);
     if (!r.ok || r.args.isEmpty())
-        return {false, {}, r.ok ? QStringLiteral("empty reply") : r.error};
+        return {false, {}, r.ok ? QCoreApplication::translate("SystemBus", "empty reply") : r.error};
     return {true, cast<QVariantMap>(r.args.first()), {}};
 }
 
@@ -171,7 +172,7 @@ ManagedObjects bluezObjects(BusCaller &bus, QString *error)
 {
     const BusReply r = bus.call(kBluez, QStringLiteral("/"), kObjectManager, QStringLiteral("GetManagedObjects"), {}, kReadMs);
     if (!r.ok || r.args.isEmpty()) {
-        *error = r.ok ? QStringLiteral("empty reply") : r.error;
+        *error = r.ok ? QCoreApplication::translate("SystemBus", "empty reply") : r.error;
         return {};
     }
     return cast<ManagedObjects>(r.args.first());
@@ -206,7 +207,7 @@ bool isBool(const QVariant &v)
 QString fail(const QString &error)
 {
     const QString r = reasonOf(error);
-    return r.isEmpty() ? QStringLiteral("failed") : r;
+    return r.isEmpty() ? QCoreApplication::translate("SystemBus", "failed") : r;
 }
 
 QString setProperty(BusCaller &bus, const QString &service, const QString &path, const QString &iface, const QString &name, const QVariant &value)
@@ -243,7 +244,7 @@ BusReply GuardedCaller::call(const QString &service, const QString &path, const 
 {
     if (m_dev && !isReadOnlyCall(service, iface, member, args)) {
         BusReply r;
-        r.error = QStringLiteral("dev guard: %1.%2 suppressed").arg(iface, member);
+        r.error = QStringLiteral("dev guard: %1.%2 suppressed").arg(iface, member); // i18n-ignore: a log line
         return r;
     }
     return m_inner.call(service, path, iface, member, args, timeoutMs);
@@ -252,11 +253,13 @@ BusReply GuardedCaller::call(const QString &service, const QString &path, const 
 QString reasonOf(const QString &error)
 {
     if (error.contains(QLatin1String("ServiceUnknown")) || error.contains(QLatin1String("NameHasNoOwner")))
-        return QStringLiteral("the service is not running");
-    if (error.contains(QLatin1String("NoReply")) || error.contains(QLatin1String("Timeout")) || error.contains(QLatin1String("timed out")))
-        return QStringLiteral("timed out");
+        return QCoreApplication::translate("SystemBus", "the service is not running");
+    if (error.contains(QLatin1String("NoReply")) || error.contains(QLatin1String("Timeout")) || error.contains(QLatin1String("timed out"))) // i18n-ignore: a match on the error text
+        return QCoreApplication::translate("SystemBus", "timed out");
     if (error.contains(QLatin1String("AccessDenied")) || error.contains(QLatin1String("NotAuthorized")) || error.contains(QLatin1String("PermissionDenied")))
-        return QStringLiteral("not allowed: the system refused the request");
+        return QCoreApplication::translate("SystemBus", "not allowed: the system refused the request");
+    if (error.contains(QLatin1String("NoServer")))
+        return QCoreApplication::translate("SystemBus", "no connection to the system bus");
     QString t = error;
     const int colon = t.indexOf(QLatin1String(": "));
     if (colon >= 0 && t.left(colon).contains(QLatin1Char('.')))
@@ -361,7 +364,7 @@ bool validAction(const QVariantMap &op)
 QString runAction(BusCaller &bus, const QVariantMap &op)
 {
     if (!validAction(op))
-        return QStringLiteral("invalid request");
+        return QCoreApplication::translate("SystemBus", "invalid request");
     const QString name = op.value(QStringLiteral("op")).toString();
     if (name == QLatin1String("wifi.radio"))
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());
@@ -370,7 +373,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
         QString error;
         const WifiDevice dev = firstWifiDevice(bus, &error);
         if (!dev.found)
-            return error.isEmpty() ? QStringLiteral("no Wi-Fi adapter") : fail(error);
+            return error.isEmpty() ? QCoreApplication::translate("SystemBus", "no Wi-Fi adapter") : fail(error);
         if (name == QLatin1String("wifi.scan")) {
             const BusReply r = bus.call(kNmService, dev.path, kNmWireless, QStringLiteral("RequestScan"), {QVariant::fromValue(QVariantMap())}, kActMs);
             return r.ok ? QString() : fail(r.error);
@@ -390,7 +393,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
                                             kActMs);
                 return r.ok ? QString() : fail(r.error);
             }
-            return QStringLiteral("that network is no longer saved");
+            return QCoreApplication::translate("SystemBus", "that network is no longer saved");
         }
         // wifi.connectOpen: only an access point that needs no password; anything else is joined from Quick Settings.
         const QByteArray ssid = QByteArray::fromHex(op.value(QStringLiteral("hex")).toString().toLatin1());
@@ -398,7 +401,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
             if (ap.ssid != ssid)
                 continue;
             if (ap.wpa != 0 || ap.rsn != 0 || (ap.flags & 1) != 0)
-                return QStringLiteral("that network needs a password");
+                return QCoreApplication::translate("SystemBus", "that network needs a password");
             ConnectionSettings settings;
             settings.insert(QStringLiteral("connection"), QVariantMap{{QStringLiteral("id"), QString::fromUtf8(ssid)}, {QStringLiteral("type"), QStringLiteral("802-11-wireless")}});
             settings.insert(QStringLiteral("802-11-wireless"), QVariantMap{{QStringLiteral("ssid"), ssid}, {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
@@ -406,7 +409,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
                                         {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(dev.path)), QVariant::fromValue(QDBusObjectPath(ap.path))}, kActMs);
             return r.ok ? QString() : fail(r.error);
         }
-        return QStringLiteral("that network is no longer in range");
+        return QCoreApplication::translate("SystemBus", "that network is no longer in range");
     }
 
     // Bluetooth.
@@ -416,7 +419,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
         return fail(error);
     if (name == QLatin1String("bt.power")) {
         const QString adapter = firstAdapterPath(objects);
-        return adapter.isEmpty() ? QStringLiteral("no Bluetooth adapter") : setProperty(bus, kBluez, adapter, kAdapter, QStringLiteral("Powered"), op.value(QStringLiteral("on")).toBool());
+        return adapter.isEmpty() ? QCoreApplication::translate("SystemBus", "no Bluetooth adapter") : setProperty(bus, kBluez, adapter, kAdapter, QStringLiteral("Powered"), op.value(QStringLiteral("on")).toBool());
     }
     const QString mac = op.value(QStringLiteral("mac")).toString().toUpper();
     for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
@@ -426,7 +429,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
         const BusReply r = bus.call(kBluez, it.key().path(), kDevice1, op.value(QStringLiteral("connect")).toBool() ? QStringLiteral("Connect") : QStringLiteral("Disconnect"), {}, kActMs);
         return r.ok ? QString() : fail(r.error);
     }
-    return QStringLiteral("that device is no longer paired");
+    return QCoreApplication::translate("SystemBus", "that device is no longer paired");
 }
 
 } // namespace grassfield::settings
