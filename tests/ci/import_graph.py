@@ -240,9 +240,52 @@ def code_lines(path):
     return stripped_lines(path)
 
 
+HEADER_LINE = re.compile(r"^\s*\.?(?:import|pragma)\s")
+
+
+def simple_strip(line, in_block):
+    """One header line without its comments (`//` to the end of the line, `/* */`, which may span lines): the simple rule,
+    exact in the file header where no string, regex or template literal can occur. Returns (code, still inside a block)."""
+    out, i = [], 0
+    while i < len(line):
+        if in_block:
+            j = line.find("*/", i)
+            if j < 0:
+                return "".join(out), True
+            i, in_block = j + 2, False
+            out.append(" ")
+            continue
+        a, b = line.find("//", i), line.find("/*", i)
+        if a >= 0 and (b < 0 or a < b):
+            out.append(line[i:a])
+            return "".join(out), False
+        if b >= 0:
+            out.append(line[i:b] + " ")
+            i, in_block = b + 2, True
+            continue
+        out.append(line[i:])
+        break
+    return "".join(out), in_block
+
+
+def header_of(lines):
+    """The file header: QML imports and pragmas (JS `.import` and `.pragma`) can only come before the root object, so the
+    header is every line up to the first one that is neither blank, a comment, an import nor a pragma. Returns
+    ([(line number, comment-free code)], number of the first body line)."""
+    rows, in_block = [], False
+    for n, line in enumerate(lines, 1):
+        code, in_block = simple_strip(line, in_block)
+        if code.strip() and not HEADER_LINE.match(code):
+            return rows, n
+        rows.append((n, code))
+    return rows, len(lines) + 1
+
+
 def line_text(path, n):
-    """The code of line n of a file (comments stripped)."""
-    return code_lines(path)[n - 1]
+    """The code of line n of a file: comment-free inside the header, the line itself after it."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    rows, _ = header_of(lines)
+    return rows[n - 1][1] if n <= len(rows) else lines[n - 1]
 
 
 def listing(root, sub):
@@ -297,20 +340,22 @@ def module_of_path(shell, mods, path):
 
 
 def scan(shell):
-    """Every import of every .qml/.js file of shell/: (file, line number, line text, source module, kind, target, imports on the line)."""
+    """Every import of every .qml/.js file of shell/: (file, line number, line text, source module, kind, target, imports on the line).
+    Imports are read from the file header only; an import-like line after it is reported as kind "late"."""
     mods = modules_of(shell)
     out = []
     for path in shell_sources(shell):
         src = module_of_path(shell, mods, path)
         raw = []  # one raw-event record per file: the Hyprland import line, else the first use
         originals = path.read_text(encoding="utf-8").splitlines()
-        for n, code in enumerate(code_lines(path), 1):
+        rows, body = header_of(originals)
+        for n, code in rows:
             line = originals[n - 1]
             segments = code.split(";")
             count = sum(1 for seg in segments if GENERIC_IMPORT.match(seg))
-            statements = [IMPORT.match(seg) for seg in segments]
-            statements = [m for m in statements if m]
-            for m in statements:
+            for m in (IMPORT.match(seg) for seg in segments):
+                if not m:
+                    continue
                 rel_target, qs_target, hypr = m.groups()
                 if hypr:
                     raw.insert(0, (path, n, line, src, "hyprland", "Quickshell.Hyprland", count))
@@ -325,7 +370,13 @@ def scan(shell):
                     dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
                     if dst is not None:
                         out.append((path, n, line, src, "module", dst, count))
-            if count == 0 and RAW_EVENT.search(code):
+        for n, code in enumerate(code_lines(path), 1):
+            if n < body:
+                continue
+            line = originals[n - 1]
+            if any(GENERIC_IMPORT.match(seg) for seg in code.split(";")):
+                out.append((path, n, line, src, "late", "an import after the file header", 1))
+            elif RAW_EVENT.search(code):
                 raw.append((path, n, line, src, "rawevent", "rawEvent", 0))
         out.extend(raw[:1])
     return out
@@ -387,7 +438,9 @@ def analyze(shell):
 
     found = []  # (path, line number, text, reason, imports on the line)
     for path, n, text, src, kind, tgt, count in imports:
-        if kind == "unknown":
+        if kind == "late":
+            found.append((path, n, text, f"{tgt}: imports and pragmas belong to the header, before the root object", count))
+        elif kind == "unknown":
             found.append((path, n, text, f"{tgt} is not a module of shell/ (no qmldir)", count))
         elif kind == "module" and tgt != src:
             if upward(src, tgt):
@@ -554,30 +607,20 @@ def selftest():
     run("a block comment around an import hides it", {**clean, "services/Apps.qml": "/* import qs.dock */\nItem {}\n"}, None)
     run("a multi-line block comment hides its imports", {**clean, "services/Apps.qml": "/*\nimport qs.dock\n*/\nItem {}\n"}, None)
     run("a line comment after an import hides a second one", {**clean, "services/Apps.qml": "import qs.platform // import qs.dock\nItem {}\n"}, None)
-    run("a path with two slashes in a string is no comment", {**clean, "services/Apps.qml": "import qs.platform\nItem { property string u: \"http://x\" }\nimport qs.dock\n"},
-        "imports go to a lower layer only")
     low = "imports go to a lower layer only"
     run("a regex literal holding /* is no comment (raw event after it)",
         {**clean, "search/S.qml": 'Item { function f(p) { return p.replace(/\\/*$/, ""); }\n function onRawEvent() {} }\n'},
         "raw Hyprland events go through qs.platform")
-    run("a regex literal holding // is no comment", {**clean, "services/Apps.qml": 'Item { function f(p) { return /a\\/\\/b/.test(p); } }\nimport qs.dock\n'}, low)
-    run("a regex character class holding / is no comment", {**clean, "services/Apps.qml": 'Item { function f(p) { return p.split(/[/]*/); } }\nimport qs.dock\n'}, low)
-    run("a regex after = is no comment", {**clean, "services/Apps.qml": 'Item { function f() { const r = /\\/*x/; } }\nimport qs.dock\n'}, low)
     run("a division followed by a block comment: the comment is stripped", {**clean, "services/Apps.qml": "Item { property real x: a / b /* hide\nimport qs.dock\n*/ }\n"}, None)
-    run("a division is not a regex start", {**clean, "services/Apps.qml": "Item { property real x: (a) / 2 / 3 }\nimport qs.dock\n"}, low)
-    run("a string holding /* is no comment", {**clean, "services/Apps.qml": 'Item { property string s: "/*" }\nimport qs.dock\n'}, low)
-    run("a string holding // is no comment", {**clean, "services/Apps.qml": "Item { property string s: 'http://x' }\nimport qs.dock\n"}, low)
     run("a keyword before a long comment still introduces a regex",
         {**clean, "search/S.qml": 'Item { function f(p) { return /* a comment longer than 24 chars */ /\\/*/.test(p); }\n function onRawEvent() {} }\n'},
         "raw Hyprland events go through qs.platform")
-    run("a postfix ++ before a division, strings holding / and /*", {**clean, "services/Apps.qml": 'Item { property var x: a++ / 2 + "/" + "/*" }\nimport qs.dock\n'}, low)
-    run("a nested template literal holding /* is no comment",
-        {**clean, "services/Apps.qml": 'Item { property string s: `a ${ `b/*c` } d` }\nimport qs.dock\n'}, low)
-    run("after ) a regex is read as a division (known limit): a backslash before /* keeps the text",
-        {**clean, "services/Apps.qml": 'Item { function f() { if (ok) /\\/*/.test(s); } }\nimport qs.dock\n'}, low)
-    run("a backslash before /* keeps the text even when a later comment closes it",
-        {**clean, "services/Apps.qml": 'Item { function f() { if (ok) /\\/*/.test(s); } }\nimport qs.dock\n/* later */\n'}, low)
-    run("a /* with no closing */ is no comment", {**clean, "services/Apps.qml": "Item { property int x: 1 /* }\nimport qs.dock\n"}, low)
+    run("an import after the header is refused", {**clean, "services/Apps.qml": "Item {}\nimport qs.dock\n"}, "an import after the file header")
+    run("an import after the header is refused even in a nested object", {**clean, "services/Apps.qml": "Item {\n    Item {}\n}\nimport qs.platform\n"}, "an import after the file header")
+    run("pragmas belong to the header", {**clean, "services/Apps.qml": "pragma Singleton\npragma ComponentBehavior: Bound\nimport qs.platform\nItem {}\n"}, None)
+    run("a block comment before the imports is part of the header", {**clean, "services/Apps.qml": "/*\n licence\n*/\nimport qs.dock\nItem {}\n"}, "imports go to a lower layer only")
+    run("a JS .pragma and .import header", {**clean, "services/Y.js": '.pragma library\n.import "../dock/DockModel.js" as M\n'}, "imports go to a lower layer only")
+    run("a JS import after code is refused", {**clean, "services/Y.js": 'var x = 1;\n.import "../dock/DockModel.js" as M\n'}, "an import after the file header")
     run("rawEvent in a comment is not a use", {**clean, "search/S.qml": "// onRawEvent\n/* onRawEvent */\nItem {}\n"}, None)
     run("a single-quoted path counts", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M\nItem {}\n"}, "imports go to a lower layer only")
     run("a single-quoted path, marked, passes", {**clean, "services/Apps.qml": "import '../dock/DockModel.js' as M // layering-exception: GF-087\nItem {}\n"}, None)
