@@ -15,6 +15,8 @@ case ${1:-} in
   --only) only=${2:?--only needs a comma list} ;;
   # Internal: one extra state in its own process, so lib.sh's set -e applies (in run's `if` it would be ignored).
   --extra) mode=extra ;;
+  "") ;;
+  *) echo "usage: f1-audit.sh [--only a,b]" >&2; exit 2 ;;
 esac
 export VISUAL_APPEARANCE=light VISUAL_LANG=en VISUAL_SHOTS=$root/.dev/f1-audit
 mkdir -p "$VISUAL_SHOTS"
