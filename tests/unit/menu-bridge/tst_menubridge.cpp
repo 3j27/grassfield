@@ -8,6 +8,7 @@
 #include "MenuClient.h"
 #include "Penalties.h"
 #include "Protocol.h"
+#include "Registrations.h"
 #include "Safety.h"
 
 #include <QCoreApplication>
@@ -15,6 +16,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusServer>
 #include <QDBusVariant>
@@ -94,6 +96,22 @@ TEST(ShellMessages, ValidMessagesParse) {
     auto close = parse(R"({"type":"close","window":"ffffffffffffffff"})");
     ASSERT_TRUE(close.has_value());
     EXPECT_EQ(close->type, ShellMessage::Type::Close);
+}
+
+// ADR-0008 amendment 2026-10-25: a window without a set_address registration, its Wayland client pid N: the menu that
+// process registered with com.canonical.AppMenu.Registrar.
+TEST(ShellMessages, OpenRegisteredParses) {
+    auto open = parse(R"({"type":"open-registered","window":"55D3C2A0B1F0","pid":4242})");
+    ASSERT_TRUE(open.has_value());
+    EXPECT_EQ(open->type, ShellMessage::Type::OpenRegistered);
+    EXPECT_EQ(open->window, QStringLiteral("55d3c2a0b1f0"));
+    EXPECT_EQ(open->pid, 4242);
+    EXPECT_TRUE(open->service.isEmpty()) << "nothing the shell sends names a bus name here";
+    EXPECT_EQ(errorOf(R"({"type":"open-registered","window":"1a"})"), QStringLiteral("field:pid"));
+    EXPECT_EQ(errorOf(R"({"type":"open-registered","window":"1a","pid":0})"), QStringLiteral("field:pid"));
+    EXPECT_EQ(errorOf(R"({"type":"open-registered","window":"1a","pid":-4})"), QStringLiteral("field:pid"));
+    EXPECT_EQ(errorOf(R"({"type":"open-registered","window":"1a","pid":"4242"})"), QStringLiteral("field:pid"));
+    EXPECT_EQ(errorOf(R"({"type":"open-registered","window":"zz","pid":42})"), QStringLiteral("field:window"));
 }
 
 TEST(ShellMessages, MalformedInputIsRefused) {
@@ -1084,6 +1102,149 @@ TEST(PenaltyState, FileIsReadWithoutFollowingSymlinksAndBounded) {
     ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
     EXPECT_FALSE(readStateFile(fifo, &data, &why));
     EXPECT_FALSE(why.isEmpty());
+}
+
+// ---- com.canonical.AppMenu.Registrar registrations (ADR-0008 amendment 2026-10-25) -------------------------------
+
+namespace {
+    registrar::Answer call(registrar::Book& book, const char* member, const char* signature, const QVariantList& args, const char* sender = ":1.98") {
+        return registrar::handle(book, QLatin1String(member), QLatin1String(signature), args, QLatin1String(sender));
+    }
+
+    QVariantList registerArgs(quint32 windowId, const char* path) {
+        return {QVariant::fromValue(windowId), QVariant::fromValue(QDBusObjectPath(QLatin1String(path)))};
+    }
+
+    // A registration kept and settled (what the registrar object does registrar::kSettleMs after it arrived).
+    void addSettled(registrar::Book& book, const char* sender, quint32 windowId, const char* path) {
+        const quint64 seq = book.add(QLatin1String(sender), windowId, QLatin1String(path));
+        ASSERT_GT(seq, 0U);
+        ASSERT_TRUE(book.settle(QLatin1String(sender), windowId, seq));
+    }
+} // namespace
+
+// What Electron does on window Show and Hide (global_menu_bar_registrar_x11.cc): kept, then forgotten.
+TEST(Registrar, ElectronsRegisterAndUnregisterAreKept) {
+    registrar::Book book;
+    const auto      kept = call(book, "RegisterWindow", "uo", registerArgs(1, "/com/canonical/menu/1"));
+    EXPECT_EQ(kept.kind, registrar::Answer::Kind::Reply);
+    EXPECT_TRUE(kept.added);
+    EXPECT_EQ(kept.windowId, 1U);
+    EXPECT_GT(kept.seq, 0U) << "what the registrar object settles later";
+    EXPECT_EQ(book.count(), 1);
+    EXPECT_TRUE(book.holds(QStringLiteral(":1.98")));
+    const auto gone = call(book, "UnregisterWindow", "u", {QVariant::fromValue(quint32{1})});
+    EXPECT_EQ(gone.kind, registrar::Answer::Kind::Reply);
+    EXPECT_TRUE(gone.removed);
+    EXPECT_EQ(book.count(), 0);
+    const auto again = call(book, "UnregisterWindow", "u", {QVariant::fromValue(quint32{1})});
+    EXPECT_EQ(again.kind, registrar::Answer::Kind::Reply) << "unregistering an unknown window is harmless";
+    EXPECT_FALSE(again.removed);
+}
+
+TEST(Registrar, MalformedCallsAndOtherMethods) {
+    registrar::Book book;
+    EXPECT_EQ(call(book, "RegisterWindow", "u", {QVariant::fromValue(quint32{1})}).error, QStringLiteral("org.freedesktop.DBus.Error.InvalidArgs"));
+    EXPECT_EQ(call(book, "RegisterWindow", "us", {QVariant::fromValue(quint32{1}), QStringLiteral("/a")}).error, QStringLiteral("org.freedesktop.DBus.Error.InvalidArgs"));
+    EXPECT_EQ(call(book, "RegisterWindow", "uo", registerArgs(1, "/a"), "org.example.Wellknown").error, QStringLiteral("org.freedesktop.DBus.Error.InvalidArgs"))
+        << "only a unique name can register: it is the connection the menu is read from";
+    EXPECT_EQ(call(book, "GetMenuForWindow", "u", {QVariant::fromValue(quint32{1})}).error, QStringLiteral("com.canonical.AppMenu.Registrar.Error.NotFound"));
+    EXPECT_EQ(call(book, "GetMenus", "", {}).error, QStringLiteral("org.freedesktop.DBus.Error.NotSupported"));
+    EXPECT_EQ(call(book, "Frobnicate", "", {}).kind, registrar::Answer::Kind::Drop) << "nothing is built for unknown members";
+    EXPECT_EQ(book.count(), 0);
+}
+
+TEST(Registrar, TheBookIsCappedWithoutEviction) {
+    registrar::Book book;
+    for (quint32 id = 1; id <= registrar::kMaxPerSender; ++id)
+        EXPECT_TRUE(book.add(QStringLiteral(":1.5"), id, QStringLiteral("/m/%1").arg(id)));
+    EXPECT_FALSE(book.add(QStringLiteral(":1.5"), 99, QStringLiteral("/m/99"))) << "16 per sender";
+    EXPECT_TRUE(book.add(QStringLiteral(":1.5"), 3, QStringLiteral("/m/3b"))) << "re-registering the same window replaces it";
+    EXPECT_EQ(call(book, "RegisterWindow", "uo", registerArgs(99, "/m/99"), ":1.5").error, QStringLiteral("org.freedesktop.DBus.Error.LimitsExceeded"));
+    for (int s = 0; book.count() < registrar::kMaxTotal; ++s) {
+        for (quint32 id = 1; id <= registrar::kMaxPerSender && book.count() < registrar::kMaxTotal; ++id)
+            ASSERT_TRUE(book.add(QStringLiteral(":2.%1").arg(s), id, QStringLiteral("/m")));
+    }
+    EXPECT_FALSE(book.add(QStringLiteral(":3.1"), 1, QStringLiteral("/m"))) << "128 in all";
+    EXPECT_EQ(book.count(), registrar::kMaxTotal);
+    EXPECT_TRUE(book.senderGone(QStringLiteral(":1.5")));
+    EXPECT_TRUE(book.add(QStringLiteral(":3.1"), 1, QStringLiteral("/m"))) << "a sender that left frees room";
+}
+
+// The PID -> windows link: a window is served the newest registration of a sender of its own process.
+TEST(Registrar, TheNewestRegistrationOfTheWindowsProcessIsServed) {
+    registrar::Book book;
+    addSettled(book, ":1.98", 1, "/com/canonical/menu/1");
+    EXPECT_FALSE(book.latestFor(4242).has_value()) << "the sender's process is not known yet: nothing is served";
+    book.setPid(QStringLiteral(":1.98"), 4242);
+    auto served = book.latestFor(4242);
+    ASSERT_TRUE(served.has_value());
+    EXPECT_EQ(served->sender, QStringLiteral(":1.98"));
+    EXPECT_EQ(served->path, QStringLiteral("/com/canonical/menu/1"));
+    addSettled(book, ":1.98", 2, "/com/canonical/menu/2");
+    EXPECT_EQ(book.latestFor(4242)->path, QStringLiteral("/com/canonical/menu/2")) << "several menus of one process: the latest";
+    addSettled(book, ":1.98", 1, "/com/canonical/menu/1");
+    EXPECT_EQ(book.latestFor(4242)->path, QStringLiteral("/com/canonical/menu/1")) << "registered again: newest again";
+    EXPECT_FALSE(book.latestFor(4243).has_value()) << "another process's window gets nothing";
+    EXPECT_FALSE(book.latestFor(0).has_value());
+    addSettled(book, ":1.120", 1, "/other");
+    book.setPid(QStringLiteral(":1.120"), 5000);
+    EXPECT_EQ(book.latestFor(4242)->sender, QStringLiteral(":1.98")) << "a registration of another process never serves this one";
+    book.setPid(QStringLiteral(":9.9"), 4242);
+    EXPECT_EQ(book.pidOf(QStringLiteral(":9.9")), 0) << "no pid is kept for a sender without registrations";
+}
+
+// Electron registers a window before its menu object answers (a GetLayout then fails with UnknownMethod and backs the app
+// off): a registration is served once settled, the window keeping the previous settled menu of its process meanwhile.
+TEST(Registrar, ARegistrationIsServedOnceSettled) {
+    registrar::Book book;
+    const quint64   first = book.add(QStringLiteral(":1.98"), 1, QStringLiteral("/com/canonical/menu/1"));
+    book.setPid(QStringLiteral(":1.98"), 4242);
+    EXPECT_FALSE(book.latestFor(4242).has_value()) << "kept, not settled: nothing is served yet";
+    EXPECT_FALSE(book.settle(QStringLiteral(":1.98"), 2, first)) << "another window id";
+    EXPECT_FALSE(book.settle(QStringLiteral(":1.99"), 1, first)) << "another sender";
+    EXPECT_TRUE(book.settle(QStringLiteral(":1.98"), 1, first));
+    EXPECT_FALSE(book.settle(QStringLiteral(":1.98"), 1, first)) << "settled once";
+    ASSERT_TRUE(book.latestFor(4242).has_value());
+    const quint64 second = book.add(QStringLiteral(":1.98"), 2, QStringLiteral("/com/canonical/menu/2"));
+    EXPECT_EQ(book.latestFor(4242)->path, QStringLiteral("/com/canonical/menu/1")) << "a newer registration not settled yet: the previous one stays";
+    const quint64 again = book.add(QStringLiteral(":1.98"), 2, QStringLiteral("/com/canonical/menu/2"));
+    EXPECT_FALSE(book.settle(QStringLiteral(":1.98"), 2, second)) << "registered again meanwhile: the older settle is stale";
+    EXPECT_TRUE(book.settle(QStringLiteral(":1.98"), 2, again));
+    EXPECT_EQ(book.latestFor(4242)->path, QStringLiteral("/com/canonical/menu/2"));
+    const quint64 replaced = book.add(QStringLiteral(":1.98"), 1, QStringLiteral("/com/canonical/menu/1"));
+    EXPECT_GT(replaced, again);
+    EXPECT_EQ(book.latestFor(4242)->path, QStringLiteral("/com/canonical/menu/2")) << "re-registering unsettles that registration";
+    EXPECT_TRUE(book.remove(QStringLiteral(":1.98"), 1));
+    EXPECT_FALSE(book.settle(QStringLiteral(":1.98"), 1, replaced)) << "gone before it settled";
+}
+
+// A pid can be reused by a new process after the registering one exited: its sender left the bus, its registrations
+// are gone, and the new process's window is served nothing until it registers itself (the bridge also re-checks the
+// sender's process at every open: the same check as open's spoofing rule).
+TEST(Registrar, APidReusedAfterTheSenderLeftGetsNothing) {
+    registrar::Book book;
+    addSettled(book, ":1.98", 1, "/com/canonical/menu/1");
+    book.setPid(QStringLiteral(":1.98"), 4242);
+    ASSERT_TRUE(book.latestFor(4242).has_value());
+    EXPECT_TRUE(book.senderGone(QStringLiteral(":1.98")));
+    EXPECT_FALSE(book.latestFor(4242).has_value());
+    EXPECT_EQ(book.pidOf(QStringLiteral(":1.98")), 0);
+    EXPECT_FALSE(book.senderGone(QStringLiteral(":1.98")));
+}
+
+// A process in another pid namespace (a Flatpak app, a nested sandbox) is never served a registrar menu.
+TEST(Registrar, PidNamespaceDepthFromProcStatus) {
+    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tobsidian\nNSpid:\t4242\nNSsid:\t1\n")), 1);
+    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tapp\nNSpid:\t9876\t2\n")), 2) << "a process in a nested pid namespace";
+    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tapp\nNSpid:\t9876\t5\t2\n")), 3);
+    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tapp\n")), 0) << "no NSpid line: unknown, refused";
+    EXPECT_EQ(nsPidDepth(QByteArray("NSpid:\t12x\n")), 0) << "malformed: refused";
+    EXPECT_EQ(nsPidDepth(QByteArray("NSpid:\n")), 0);
+    EXPECT_EQ(nsPidDepth(QByteArray()), 0);
+    EXPECT_TRUE(inBridgePidNamespace(::getpid())) << "this process is in its own namespace";
+    EXPECT_FALSE(inBridgePidNamespace(0));
+    EXPECT_FALSE(inBridgePidNamespace(-1));
 }
 
 // ---- start-up guards -------------------------------------------------------------------------------------------

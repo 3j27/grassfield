@@ -1,6 +1,7 @@
 #include "Safety.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStringList>
 
@@ -18,6 +19,35 @@ namespace gf::menubridge {
 
     bool sessionRun(const QByteArray& sessionValue) {
         return sessionValue == "1";
+    }
+
+    int nsPidDepth(const QByteArray& statusText) {
+        for (const QByteArray& raw : statusText.split('\n')) {
+            if (!raw.startsWith("NSpid:"))
+                continue;
+            const QList<QByteArray> pids = raw.mid(6).simplified().split(' ');
+            int                     n    = 0;
+            for (const QByteArray& p : pids) {
+                bool ok = false;
+                if (p.toLongLong(&ok) <= 0 || !ok)
+                    return 0;
+                ++n;
+            }
+            return n;
+        }
+        return 0;
+    }
+
+    bool inBridgePidNamespace(qint64 pid) {
+        if (pid <= 0)
+            return false;
+        auto read = [](const QString& path) {
+            QFile f(path);
+            return f.open(QIODevice::ReadOnly) ? f.read(16384) : QByteArray();
+        };
+        const int theirs = nsPidDepth(read(QStringLiteral("/proc/%1/status").arg(pid)));
+        const int mine   = nsPidDepth(read(QStringLiteral("/proc/self/status")));
+        return theirs > 0 && theirs == mine;
     }
 
     bool isDefaultSessionBus(const QString& address, uint uid) {

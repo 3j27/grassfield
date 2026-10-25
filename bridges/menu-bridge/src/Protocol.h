@@ -6,6 +6,9 @@
 // shell -> bridge (one JSON object per line, at most limits::kShellLine bytes):
 //   {"type":"hello","v":"menu/1","appmenu":true|false}
 //   {"type":"open","window":"<hex>","service":"<bus name>","path":"<object path>","pid":N}
+//   {"type":"open-registered","window":"<hex>","pid":N}
+//       (additive, ADR-0008 amendment 2026-10-25: the window has no set_address registration and its Wayland client is
+//        pid N; open the menu that process registered with com.canonical.AppMenu.Registrar, e.g. Electron's)
 //   {"type":"about-to-show","window":"<hex>","id":N}
 //   {"type":"activate","window":"<hex>","id":N}
 //   {"type":"close","window":"<hex>"}
@@ -65,16 +68,17 @@ namespace gf::menubridge {
         enum class Type {
             Hello,
             Open,
+            OpenRegistered,
             AboutToShow,
             Activate,
             Close,
         };
         Type    type    = Type::Hello;
         bool    appmenu = false; // hello: the plugin advertises "appmenu" and the menu bar renders bridge menus
-        QString window;          // lowercase hex (open, about-to-show, activate, close)
+        QString window;          // lowercase hex (open, open-registered, about-to-show, activate, close)
         QString service;         // open
         QString path;            // open
-        qint64  pid = 0;         // open: > 0
+        qint64  pid = 0;         // open, open-registered: > 0
         int     id  = 0;         // about-to-show, activate: >= 0
     };
 

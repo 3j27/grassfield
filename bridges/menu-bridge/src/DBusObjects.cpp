@@ -5,6 +5,9 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusServiceWatcher>
+#include <QTimer>
 
 namespace gf::menubridge {
 
@@ -35,6 +38,19 @@ namespace gf::menubridge {
         return interface == QLatin1String("org.freedesktop.DBus.Introspectable") || interface == QLatin1String("org.freedesktop.DBus.Peer");
     }
 
+    RegistrarObject::RegistrarObject(std::function<void()> changed) : m_changed(std::move(changed)) {}
+
+    RegistrarObject::~RegistrarObject() = default;
+
+    void RegistrarObject::setConnection(const QDBusConnection& connection) {
+        if (m_watcher)
+            return;
+        m_watcher = new QDBusServiceWatcher(this);
+        m_watcher->setConnection(connection);
+        m_watcher->setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
+        QObject::connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this](const QString& name) { dropSender(name); });
+    }
+
     bool RegistrarObject::handleMessage(const QDBusMessage& message, const QDBusConnection& connection) {
         if (message.type() != QDBusMessage::MethodCallMessage)
             return true; // signals and replies are never for this object
@@ -44,27 +60,67 @@ namespace gf::menubridge {
         // message is already buffered by libdbus, but nothing is built for it).
         if (message.interface() != QLatin1String(kRegistrarService))
             return true;
-        const QString member = message.member();
-        QString       error;
-        QString       text;
-        if (member == QLatin1String("RegisterWindow") || member == QLatin1String("UnregisterWindow")) {
-            error = QStringLiteral("com.canonical.AppMenu.Registrar.Error.NotSupported");
-            text  = QStringLiteral("Grassfield links menus to windows through org_kde_kwin_appmenu; X11 window ids are not supported");
-        } else if (member == QLatin1String("GetMenuForWindow")) {
-            error = QStringLiteral("com.canonical.AppMenu.Registrar.Error.NotFound");
-            text  = QStringLiteral("no registration is kept by this registrar");
-        } else if (member == QLatin1String("GetMenus")) {
-            error = QStringLiteral("org.freedesktop.DBus.Error.NotSupported");
-            text  = QStringLiteral("GetMenus is not implemented");
-        } else
+        const QString           sender        = message.service();
+        const bool              watchedBefore = m_book.holds(sender);
+        const registrar::Answer a             = registrar::handle(m_book, message.member(), message.signature(), message.arguments(), sender);
+        if (a.kind == registrar::Answer::Kind::Drop)
             return true; // not a registrar method: dropped
-        const QString key = message.service() + u' ' + member;
+        const QString key = sender + u' ' + message.member();
         if (!m_logged.contains(key) && m_logged.size() < 256) {
             m_logged.insert(key);
-            log(QStringLiteral("registrar: %1 from %2 answered %3").arg(member, message.service(), error));
+            log(QStringLiteral("registrar: %1 from %2 %3").arg(message.member(), sender, a.kind == registrar::Answer::Kind::Reply ? QStringLiteral("kept") : QStringLiteral("answered %1").arg(a.error)));
         }
-        connection.send(message.createErrorReply(error, text));
+        if (a.kind == registrar::Answer::Kind::Reply)
+            connection.send(message.createReply());
+        else
+            connection.send(message.createErrorReply(a.error, a.message));
+        // A new sender: watch it, THEN ask its pid (the bus daemon handles one connection's messages in order: either the
+        // answer says it is gone, or its later departure is a NameOwnerChanged the watch receives).
+        if (a.added && !watchedBefore && m_watcher) {
+            m_watcher->addWatchedService(sender);
+            askPid(connection, sender);
+        }
+        // Served once settled (Registrations.h: Electron registers before its menu object answers).
+        if (a.added) {
+            QTimer::singleShot(registrar::kSettleMs, this, [this, sender, windowId = a.windowId, seq = a.seq] {
+                if (m_book.settle(sender, windowId, seq) && m_changed)
+                    m_changed();
+            });
+        }
+        if (a.removed && m_changed)
+            m_changed();
         return true;
+    }
+
+    void RegistrarObject::askPid(const QDBusConnection& connection, const QString& sender) {
+        QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"),
+                                                           QStringLiteral("GetConnectionUnixProcessID"));
+        call << sender;
+        auto* w = new QDBusPendingCallWatcher(connection.asyncCall(call, kPidTimeoutMs), this);
+        QObject::connect(w, &QDBusPendingCallWatcher::finished, this, [this, sender](QDBusPendingCallWatcher* reply) {
+            reply->deleteLater();
+            const QDBusMessage m = reply->reply();
+            if (m.type() != QDBusMessage::ReplyMessage || m.arguments().isEmpty()) {
+                dropSender(sender); // gone, or no answer: a registration nobody can be tied to a process is useless
+                return;
+            }
+            m_book.setPid(sender, m.arguments().at(0).toLongLong());
+            if (m_changed)
+                m_changed();
+        });
+    }
+
+    void RegistrarObject::dropSender(const QString& sender) {
+        if (m_watcher)
+            m_watcher->removeWatchedService(sender);
+        if (m_book.senderGone(sender) && m_changed)
+            m_changed();
+    }
+
+    void RegistrarObject::clear() {
+        if (m_watcher)
+            m_watcher->setWatchedServices({});
+        m_book.clear();
     }
 
     QString DiagnosticsObject::introspect(const QString& /*path*/) const {
