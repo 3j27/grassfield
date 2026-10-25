@@ -577,6 +577,18 @@ class WindowSurfacePairs(unittest.TestCase):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
 
+    def test_row_secondary_on_the_hover_fill(self):
+        # Settings device rows (Wi-Fi, Bluetooth, Sound): while hovered, the hover fill sits on the window or on a Settings group.
+        # The window grey is under 4.5:1 there (3.62:1 in light), so DeviceRow switches to textSecondary on hover.
+        group = {"light": self.tok.path("settings.groupFillOpacity"), "dark": self.tok.path("material.fillOpacity")}
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            on_group = over(self.tok.color("colors", ap, "fill"), group[ap], win)
+            for base, what in ((win, "the window"), (on_group, "a Settings group")):
+                hov = over(self.tok.color("colors", ap, "hover"), self.tok.path("material.hoverOpacity"), base)
+                r = wcag(self.tok.color("colors", ap, "textSecondary"), hov)
+                self.assertGreaterEqual(r, 4.5, "textSecondary on the hover fill over %s, %s: %.2f:1" % (what, ap, r))
+
     def test_text_secondary_on_the_fields_and_tabs_of_a_window(self):
         # The sidebar and toolbar search placeholders, the inactive Files tab titles, a rename field: the translucent fill over the window.
         for ap in APPEARANCES:
