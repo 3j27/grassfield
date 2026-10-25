@@ -23,6 +23,13 @@ unicode escapes). A comment or a string is therefore never a use. Both tools are
 - The scanner's JS reader skips a `.import` after code or after a split `.pragma`: a `.import X` in the text that the scanner
   does not report is a failure too (a false positive on a comment that spells one, never a miss).
 - qmldom does not escape quotes in its dump, so its tag lines are read one by one, not as XML.
+- A quoted import must be a plain relative path that resolves (percent escapes decoded) to an existing file or directory inside
+  shell/; `root:/...`, `file:///...`, absolute and missing paths are refused. The qmldir files are read too: only `module` lines
+  and type entries naming an existing plain file of the same directory pass (no import, depends, plugin or outside path).
+  `.mjs`, `Qt.include` and a bare `import qs` are refused (none is used). A raw event name counts as an identifier, a destructured
+  property name or a string literal in QML, and anywhere in the text of a .js file (qmldom gives .js no tree). Names built at run
+  time are out of reach.
+- A canary runs first: both tools must exist and read a tiny file as relied on, so a missing tool or a changed dump fails loudly.
 Needs qt6-declarative's /usr/lib/qt6/qmlimportscanner and /usr/lib/qt6/bin/qmldom (the PKGBUILD makedepends it).
 
 A module is a directory with a qmldir (`qs.overlay.controlcenter` is shell/overlay/controlcenter); a directory without one
@@ -63,6 +70,7 @@ GF050_TARGET = "notifications"
 
 
 MULTI = "multi-import line"
+QT_INCLUDE = re.compile(r"""\bQt\s*(?:\.\s*include\b|\[\s*["']include["']\s*\])""")
 QMLDIR_ENTRY = re.compile(r"^(?:internal\s+[A-Z]\w*\s+|(?:singleton\s+)?[A-Z]\w*\s+\d+(?:\.\d+)?\s+)([A-Za-z0-9_]+\.(?:qml|js))$")
 QMLDIR_MODULE = re.compile(r"^module\s+[A-Za-z_][\w.]*$")
 IMPORT_SCANNER = "/usr/lib/qt6/qmlimportscanner"
@@ -251,6 +259,18 @@ def qmldir_failures(shell):
     return out
 
 
+def shape_failures(shell):
+    """What the reader cannot follow and the tree does not use is refused: `.mjs` modules and `Qt.include` (a script pulled in
+    by name at run time), anywhere in shell/ (the text is searched whole, a comment included: a false positive, never a miss)."""
+    out = []
+    for p in listing(shell.parent, shell.name):
+        if p.suffix == ".mjs":
+            out.append((p, f"{p.name}: .mjs modules are not read by this check and are not used; refused"))
+        elif p.suffix in (".qml", ".js") and QT_INCLUDE.search(p.read_text(encoding="utf-8", errors="replace")):
+            out.append((p, f"{p.name}: Qt.include pulls in a script this check cannot follow; refused"))
+    return out
+
+
 def scan(shell):
     """Every import of every .qml/.js file of shell/ from Qt's import scanner: ([(file, source module, kind, target, key)], failures).
     kind is module or unknown (an `import qs.<name>` without a qmldir); a directory or file import is resolved against the
@@ -258,7 +278,7 @@ def scan(shell):
     mods = modules_of(shell)
     files = shell_sources(shell)
     prefetch_imports(files)
-    out, failures = [], list(qmldir_failures(shell))
+    out, failures = [], list(qmldir_failures(shell)) + shape_failures(shell)
     for path in files:
         src = module_of_path(shell, mods, path)
         try:
@@ -275,7 +295,9 @@ def scan(shell):
                 if arg not in seen:
                     failures.append((path, f"{path.name} has `.import {arg}` that Qt's import scanner does not report (a directive after code or a split pragma?)"))
         for kind, name in entries:
-            if kind == "module" and name.startswith("qs."):
+            if kind == "module" and name == "qs":
+                failures.append((path, f"{path.name}: a bare `import qs` is refused (name a module: `import qs.<module>`)"))
+            elif kind == "module" and name.startswith("qs."):
                 module = name[3:]
                 out.append((path, src, "module" if module.replace(".", "/") in mods else "unknown", module if module.replace(".", "/") in mods else name, name))
             elif kind in ("directory", "javascript"):
@@ -617,6 +639,13 @@ def selftest():
     run("a qmldir type entry pointing outside its directory is refused", {**clean, "search/qmldir": "module qs.search\nEvil 1.0 ../dock/X.qml\n"}, qd)
     run("a qmldir entry with another extension is refused", {**clean, "search/qmldir": "module qs.search\nEvil 1.0 Evil.qmlx\n"}, qd)
     run("a qmldir entry naming a missing file is refused", {**clean, "search/qmldir": "module qs.search\nEvil 1.0 Evil.qml\n"}, "names a file that does not exist")
+    run("a .mjs module is refused", {**clean, "services/X.mjs": "export const a = 1;\n"}, ".mjs modules are not read")
+    run("Qt.include in a JS file is refused", {**clean, "services/X.js": '.pragma library\nQt.include("../dock/DockModel.js");\n'}, "Qt.include")
+    run("Qt.include in a QML file is refused", svc('Item { Component.onCompleted: Qt.include("x.js") }\n'), "Qt.include")
+    run("Qt[\"include\"] is refused", svc('Item { Component.onCompleted: Qt["include"]("x.js") }\n'), "Qt.include")
+    run("a bare `import qs` is refused", svc("import qs\nItem {}\n"), "bare `import qs`")
+    run("a root: import is refused even when such a directory exists",
+        {**clean, "services/root:/X.js": ".pragma library\n", "services/Apps.qml": 'import "root:/X.js" as X\nItem {}\n'}, "unresolvable import")
     run("an import spelled `qs .dock` is seen", svc("import qs .dock\nItem {}\n"), low)
     run("an import spelled `qs .dock`, marked, passes (the marker finds the import by its parsed name)", svc("import qs .dock // layering-exception: GF-087\nItem {}\n"), None)
     run("an import with a comment inside the dotted name is seen", svc("import qs/**/.dock\nItem {}\n"), low)
@@ -740,6 +769,56 @@ def selftest():
         if any("files_only" in p for p in tree_problems(tmp)):
             failures.append("a tree with file links only needs no lib")
 
+    # The tools: present and read as relied on; a missing one is a loud failure, not an empty reading.
+    if tool_problems():
+        failures.append(f"the canary fails on the installed tools: {tool_problems()}")
+    saved = globals()["IMPORT_SCANNER"]
+    try:
+        globals()["IMPORT_SCANNER"] = "/nonexistent/qmlimportscanner"
+        if not any("is missing" in x for x in tool_problems()):
+            failures.append("a missing qmlimportscanner is not reported")
+    finally:
+        globals()["IMPORT_SCANNER"] = saved
+
+    # Tools that run but say nothing useful (a changed output) are caught by the canary and by the tree failure, not read as "no imports".
+    def with_fake_tools(scanner_body, dom_body, check):
+        with tempfile.TemporaryDirectory() as fake_dir:
+            fakes = {}
+            for key, body in (("IMPORT_SCANNER", scanner_body), ("QMLDOM", dom_body)):
+                if body is not None:
+                    f = Path(fake_dir) / key
+                    f.write_text("#!/bin/sh\n" + body + "\n")
+                    f.chmod(0o755)
+                    fakes[key] = str(f)
+            saved = {k: globals()[k] for k in fakes}
+            _IMPORTS.clear()
+            _ASTS.clear()
+            try:
+                globals().update(fakes)
+                check()
+            finally:
+                globals().update(saved)
+                _IMPORTS.clear()
+                _ASTS.clear()
+
+    def expect_canary(text):
+        def check():
+            if not any(text in x for x in tool_problems()):
+                failures.append(f"the canary did not report {text!r}: {tool_problems()}")
+        return check
+
+    with_fake_tools("echo '[]'", None, expect_canary("did not report the canary"))
+    with_fake_tools(None, "true", expect_canary("did not read the canary as expected"))
+
+    def expect_loud():
+        with tempfile.TemporaryDirectory() as t:
+            tmp = Path(t)
+            shell = build(tmp, {**base_mods, **clean, "services/Apps.qml": "import qs.dock\nItem {}\n"})
+            if not any("qmldom could not read" in x for x in problems(shell, tmp)):
+                failures.append("a qmldom that gives nothing for a file that needs its tree is not a loud failure")
+
+    with_fake_tools(None, "true", expect_loud)
+
     # In a checkout top level only tracked files count: an untracked stray file with a violating import, or a stray test tree
     # without lib, is not the source.
     with tempfile.TemporaryDirectory() as t:
@@ -778,9 +857,37 @@ def selftest():
     return failures
 
 
+def tool_problems():
+    """A canary for the two Qt tools: each must exist and read a tiny file the way this check relies on. Without it a missing tool or
+    a changed dump would make the readers see nothing and the tree pass."""
+    for tool in (IMPORT_SCANNER, QMLDOM):
+        if not os.access(tool, os.X_OK):
+            return [f"{tool} is missing: this check needs qt6-declarative (qmlimportscanner and qmldom)"]
+    with tempfile.TemporaryDirectory() as t:
+        f = Path(t) / "Canary.qml"
+        f.write_text("import QtQuick\nimport qs .canary // note\nItem { function onRawEvent() {} }\n", encoding="utf-8")
+        try:
+            seen = scanner_imports(f)
+            tree = ast_of(f)
+        except QtToolError as e:
+            return [f"the Qt tools fail on a canary file: {e}"]
+    out = []
+    if ("module", "qs.canary") not in seen:
+        out.append(f"qmlimportscanner did not report the canary's `import qs .canary` (reported {seen[:4]}): has its output changed?")
+    if tree is None or ("qs.canary", 2, 2) not in tree["imports"] or tree["raw"] != [3]:
+        out.append(f"qmldom --dump-ast did not read the canary as expected (got {tree}): has its dump changed?")
+    return out
+
+
 def main(argv):
     root = Path(__file__).resolve().parents[2]
     shell = root / "shell"
+    broken = tool_problems()
+    if broken:
+        for b in broken:
+            print("import-graph: " + b)
+        print("import-graph: FAILED (the Qt tools are unusable)")
+        return 1
     if "--selftest" in argv:
         failures = selftest()
         for f in failures:
