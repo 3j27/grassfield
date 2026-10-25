@@ -48,6 +48,7 @@
  {"path": "tests/unit/tst_barhide.qml", "layer": "headless"},
  {"path": "tests/unit/tst_battery.qml", "layer": "headless"},
  {"path": "tests/unit/tst_bartone.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_visualaudit.qml", "layer": "headless"},
  {"path": "tests/unit/tst_clockformat.qml", "layer": "headless"},
  {"path": "tests/unit/tst_medialogic.qml", "layer": "headless"},
  {"path": "tests/unit/tst_buttonkeys.qml", "layer": "headless"},

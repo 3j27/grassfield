@@ -691,8 +691,8 @@ QtObject {
     readonly property int searchFieldHeight: 56
     // F1 gap 8: query text ~26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchFieldSize: Math.round(26 * Appearance.textScale)
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchFieldIconSize: 22
+    // Magnifier glyph box: the ink is about 21 pt as in macOS; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchFieldIconSize: 26
     // F1 gap 8: result row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRowHeight: 56
     // F1 gap 8: result icon ~32 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
@@ -719,6 +719,20 @@ QtObject {
     readonly property int searchMaxFiles: 20
     // estimate: recent documents shown for an empty query [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRecentCount: 5
+    // Result row title, macOS ~17 +-1 against 13 before; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchTitleSize: 17
+    // Result row subtitle, macOS ~15 +-1 against 11 before; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchSubtitleSize: 15
+    // Result row text left inset from the panel edge, macOS 72.5; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchTextInset: 72
+    // Query text left inset from the panel edge, macOS 61; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchQueryInset: 61
+    // Magnifier and hairline inset from the panel edge, macOS 19.4-20.4; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchFieldInset: 20
+    // Selection capsule inset from the panel edge, macOS 10; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchRowInset: 10
+    // Selection capsule radius, macOS 17.8; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
+    readonly property int searchRowRadius: 18
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockTopMargin: 64

@@ -160,7 +160,7 @@ Variants {
 
             Icon {
                 id: glass
-                x: Tokens.spacingLg
+                x: Tokens.searchFieldInset
                 y: (Tokens.searchFieldHeight - height) / 2
                 size: Tokens.searchFieldIconSize
                 name: "search"
@@ -170,9 +170,9 @@ Variants {
             TextInput {
                 id: field
                 TextCursor {}
-                x: glass.x + glass.width + Tokens.spacingMd
+                x: Tokens.searchQueryInset
                 y: 0
-                width: panel.width - x - Tokens.spacingLg
+                width: panel.width - x - Tokens.searchFieldInset
                 height: Tokens.searchFieldHeight
                 verticalAlignment: TextInput.AlignVCenter
                 color: Appearance.colors.text
@@ -260,9 +260,9 @@ Variants {
 
             Rectangle {
                 visible: panel.hasResults || panel.noResults
-                x: Tokens.spacingLg
+                x: Tokens.searchFieldInset
                 y: Tokens.searchFieldHeight - 1
-                width: panel.width - 2 * Tokens.spacingLg
+                width: panel.width - 2 * Tokens.searchFieldInset
                 height: 1
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
@@ -272,9 +272,9 @@ Variants {
             Flickable {
                 id: chipFlick
                 visible: panel.chipsShown
-                x: Tokens.spacingLg - Tokens.controlFocusOutline
+                x: Tokens.searchFieldInset - Tokens.controlFocusOutline
                 y: Tokens.searchFieldHeight + Tokens.searchChipTop - Tokens.controlFocusOutline
-                width: panel.width - 2 * Tokens.spacingLg + 2 * Tokens.controlFocusOutline
+                width: panel.width - 2 * Tokens.searchFieldInset + 2 * Tokens.controlFocusOutline
                 // Room around the chips for the focus ring outside them (the row clips).
                 height: Tokens.launcherChipHeight + 2 * Tokens.controlFocusOutline
                 contentWidth: chipRow.width + 2 * Tokens.controlFocusOutline
@@ -338,9 +338,9 @@ Variants {
 
             ListView {
                 id: list
-                x: Tokens.spacingSm
+                x: Tokens.searchRowInset
                 y: panel.listTop
-                width: panel.width - 2 * Tokens.spacingSm
+                width: panel.width - 2 * Tokens.searchRowInset
                 height: panel.height - y - Tokens.spacingSm
                 clip: true
                 interactive: contentHeight > height
@@ -398,14 +398,14 @@ Variants {
                     Rectangle {
                         visible: row.selected
                         anchors.fill: parent
-                        radius: Tokens.radiusMenu
+                        radius: Tokens.searchRowRadius
                         color: Appearance.colors.accent
                     }
 
                     Item {
                         id: iconBox
                         visible: !row.isHeader
-                        x: Tokens.spacingMd
+                        x: Tokens.searchFieldInset - Tokens.searchRowInset
                         anchors.verticalCenter: parent.verticalCenter
                         width: Tokens.searchRowIconSize
                         height: Tokens.searchRowIconSize
@@ -448,8 +448,8 @@ Variants {
                     Column {
                         visible: !row.isHeader
                         anchors {
-                            left: iconBox.right
-                            leftMargin: Tokens.spacingMd
+                            left: parent.left
+                            leftMargin: Tokens.searchTextInset - Tokens.searchRowInset
                             right: parent.right
                             rightMargin: Tokens.spacingMd
                             verticalCenter: parent.verticalCenter
@@ -462,7 +462,7 @@ Variants {
                             elide: Text.ElideRight
                             color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
                             font.family: Appearance.fontFamily
-                            font.pixelSize: row.info.kind === "calc" ? Tokens.typographyTitleSize : Tokens.typographyBodySize
+                            font.pixelSize: Tokens.searchTitleSize
                             font.weight: Tokens.typographyMenuWeight
                         }
 
@@ -473,7 +473,7 @@ Variants {
                             elide: Text.ElideMiddle
                             color: row.selected ? Appearance.withAlpha(Appearance.colors.accentText, Tokens.searchSelectedSubtitleOpacity) : Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
+                            font.pixelSize: Tokens.searchSubtitleSize
                         }
                     }
 

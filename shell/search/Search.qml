@@ -310,7 +310,7 @@ Scope {
         let sel = -1;
         const prevKey = selected >= 0 && selected < items.length ? items[selected].key : "";
         for (const grp of g) {
-            rowList.push({header: true, title: grp.title, groupId: grp.id});
+            // macOS: no group headers; the groups only order the rows.
             for (const it of grp.items) {
                 if (prevKey !== "" && it.key === prevKey && fileHitsOnly)
                     sel = flat.length;
