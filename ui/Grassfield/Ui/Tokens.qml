@@ -829,8 +829,8 @@ QtObject {
     readonly property int overviewMinGap: 24
     // estimate: margin around the window area [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAreaMargin: 32
-    // estimate: dim over the blurred wallpaper [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property real overviewBackdropOpacity: 0.45
+    // Dim over the blurred wallpaper: macOS does not dim the wallpaper (about 0.1, was 0.45, which showed it at 55 %); audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property real overviewBackdropOpacity: 0.1
     // estimate: dim when blur is off (Reduce Transparency) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewBackdropOpacityOpaque: 0.92
     // F1 gap 15: Space thumbnail 138x90 +-1 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -849,10 +849,6 @@ QtObject {
     readonly property int overviewTileLabelGap: 8
     // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddEdgeInset: 18
-    // estimate: app icons in a Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property int overviewTileIconSize: 24
-    // estimate: icons shown per Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property int overviewTileMaxIcons: 4
     // estimate: window name pill [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewLabelHeight: 34
     // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -895,6 +891,12 @@ QtObject {
     readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddSize: 32
+    // Windows drawn in a desktop miniature (the topmost ones); audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property int overviewMiniMaxWindows: 6
+    // Corner radius of a window in a desktop miniature; audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property int overviewMiniWindowRadius: 2
+    // App icon of a miniature window that has no captured frame yet, as a share of its smaller side; audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property real overviewMiniIconScale: 0.5
 
     // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/apps.md]
     readonly property int appsBorderWidth: 1

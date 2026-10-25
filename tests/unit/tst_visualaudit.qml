@@ -104,6 +104,15 @@ TestCase {
         verify(Tokens.filesSearchWidth >= 180);
     }
 
+    // Priority 12: Overview. The wallpaper is barely dimmed (about 0.1, macOS), a desktop is a miniature of its windows.
+    function test_overviewMetrics() {
+        verify(Tokens.overviewBackdropOpacity <= 0.12 && Tokens.overviewBackdropOpacity >= 0.05);
+        // Reduce Transparency keeps its opaque dim.
+        verify(Tokens.overviewBackdropOpacityOpaque > 0.8);
+        verify(Tokens.overviewMiniMaxWindows >= 4);
+        verify(Tokens.overviewMiniIconScale > 0 && Tokens.overviewMiniIconScale < 1);
+    }
+
     function readFile(url) {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, false);

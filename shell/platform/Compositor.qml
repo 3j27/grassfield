@@ -912,7 +912,8 @@ Singleton {
     }
 
     // Regular workspaces (id > 0) of an output, ordered by id:
-    // [{id, name, active, windowCount, appIds}].
+    // [{id, name, active, windowCount, appIds, windows, screenW, screenH}]. `windows` (bottom to top as Hyprland lists them) are the
+    // windowsAcross entries of the Space, `screenW` x `screenH` the output size: what a desktop miniature needs.
     function spacesOn(screenName: string, revision: int): var {
         const out = [];
         const mon = monitorByName(screenName);
@@ -923,10 +924,12 @@ Singleton {
             if (ws.id <= 0 || !ws.monitor || ws.monitor.name !== screenName)
                 continue;
             const appIds = [];
+            const inSpace = [];
             let count = 0;
             for (let j = 0; j < wins.length; j++) {
                 if (wins[j].workspaceId !== ws.id)
                     continue;
+                inSpace.push(wins[j]);
                 count++;
                 if (appIds.indexOf(wins[j].appId) === -1)
                     appIds.push(wins[j].appId);
@@ -936,7 +939,10 @@ Singleton {
                 name: ws.name,
                 active: mon && mon.activeWorkspace ? mon.activeWorkspace.id === ws.id : false,
                 windowCount: count,
-                appIds: appIds
+                appIds: appIds,
+                windows: inSpace,
+                screenW: mon ? mon.width : 0,
+                screenH: mon ? mon.height : 0
             });
         }
         out.sort((a, b) => a.id - b.id);
