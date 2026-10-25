@@ -67,12 +67,17 @@ mkdir -p "$tmp/fakebin"; printf '#!/bin/sh\n' >"$tmp/fakebin/uwsm"; chmod +x "$t
 desc="login-check on a good install: no warning, exit 0 even with --strict"
 out=$(PATH="$tmp/fakebin:$PATH" chk --strict); status=$?
 check bash -c '! grep -q "^WARN" <<<"$1" && grep -q "a boot (autologin) starts Grassfield" <<<"$1" && grep -q "first listed session named" <<<"$1"' _ "$out"
-desc="login-check warns when the SDDM daemon started before the drop-in (reboot once), not when it started after"
-touch -d '2026-01-02 00:00:00' "$fx/etc/sddm.conf.d/grassfield.conf"
-st=$(date -d '2026-01-01 00:00:00' +%s)
-out=$(GRASSFIELD_LOGIN_SDDM_START=$st PATH="$tmp/fakebin:$PATH" chk)
+desc="login-check warns when the SDDM daemon started before the drop-in was installed (reboot once), not when it started after"
+# The install changes the file's ctime; its mtime is the package's build time (an old one here): only ctime counts.
+touch -d '2020-01-01 00:00:00' "$fx/etc/sddm.conf.d/grassfield.conf"
+ct=$(stat -c %Z "$fx/etc/sddm.conf.d/grassfield.conf")
+out=$(GRASSFIELD_LOGIN_SDDM_START=$((ct - 100)) PATH="$tmp/fakebin:$PATH" chk)
 check bash -c 'grep -q "^WARN: SDDM has been running since before the drop-in.*restart the computer once" <<<"$1"' _ "$out"
-out=$(GRASSFIELD_LOGIN_SDDM_START=$((st + 200000)) PATH="$tmp/fakebin:$PATH" chk)
+desc="login-check: a daemon started after the build but before the install (old mtime, newer ctime) still warns"
+out=$(GRASSFIELD_LOGIN_SDDM_START=$((ct - 1)) PATH="$tmp/fakebin:$PATH" chk)
+check bash -c 'grep -q "^WARN: SDDM has been running since before the drop-in" <<<"$1"' _ "$out"
+desc="login-check: no warning when the daemon started after the install, or when no daemon time is known"
+out=$(GRASSFIELD_LOGIN_SDDM_START=$((ct + 100)) PATH="$tmp/fakebin:$PATH" chk)
 check bash -c '! grep -q "since before the drop-in" <<<"$1"' _ "$out"
 out=$(GRASSFIELD_LOGIN_SDDM_START= PATH="$tmp/fakebin:$PATH" chk)
 check bash -c '! grep -q "since before the drop-in" <<<"$1"' _ "$out"

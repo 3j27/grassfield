@@ -56,7 +56,8 @@ if [ -r "$dropin" ]; then
     pid=$(pgrep -xo sddm 2>/dev/null)
     [ -n "$pid" ] && start=$(( $(date +%s) - $(ps -o etimes= -p "$pid" 2>/dev/null | tr -d ' ' || echo 0) ))
   fi
-  mtime=$(stat -c %Y "$dropin" 2>/dev/null || echo 0)
+  # The change time, not the modification time: pacman keeps the package's build mtime, the install moves ctime.
+  mtime=$(stat -c %Z "$dropin" 2>/dev/null || echo 0)
   if [ -n "$start" ] && [ "$start" != 0 ] && [ "$start" -lt "$mtime" ]; then
     warn "SDDM has been running since before the drop-in was installed: restart the computer once to apply it (until then the login screen still starts the previous session)"
   fi
