@@ -2,6 +2,10 @@
 
 #include <QFileSystemWatcher>
 
+#include <functional>
+
+#include "systembus.h"
+
 #include "chromecaps.h"
 #include <QObject>
 #include <QString>
@@ -63,6 +67,13 @@ public:
     // nothing runs: one "dev guard: <what> suppressed" line is logged, suppressed(what) is emitted, false returned.
     // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started.
     Q_INVOKABLE bool act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs = 15000);
+    // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
+    // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
+    // (read-only, also in a dev session). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
+    // and the like (systembus.h runAction); in a dev session nothing is sent (one "dev guard: <what> suppressed" line,
+    // suppressed(what), false returned); an op that is not well formed is refused (false).
+    Q_INVOKABLE void busQuery(const QString &what, const QString &tag);
+    Q_INVOKABLE bool busAct(const QString &what, const QVariantMap &op, const QString &tag);
     // The outputs the compositor reports to this client (Qt screens): [{name, model, manufacturer, x, y, width,
     // height, scale, pixelWidth, pixelHeight, refreshRate, primary}]. Read-only; never talks to Hyprland.
     Q_INVOKABLE QVariantList screens() const;
@@ -81,6 +92,7 @@ private:
     bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
     void start(const QStringList &argv, const QString &tag, int timeoutMs);
+    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job);
 
     QString m_configFile;
     QString m_bindingsFile;
