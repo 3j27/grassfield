@@ -308,8 +308,8 @@ QtObject {
     readonly property int dockSeparatorHeight: 49
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockTooltipGap: 8
-    // estimate: height reserved above the shelf for the label [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
-    readonly property int dockTooltipArea: 36
+    // Height reserved above the shelf for the label: the tail tip now sits tooltipGap above the shelf edge, so the label (24 + 7 tail) and the gap need 39+; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockTooltipArea: 44
     // estimate: width reserved beside the shelf of a Dock on the left or right edge for the label of a tile (the label sits beside the tile, so it needs its width) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipSideArea: 240
     // estimate: app badge on a minimized-window tile [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -420,6 +420,14 @@ QtObject {
     readonly property int dockMenuTailHeight: 13
     // reference gs-014-019: tail tip 16 above the shelf top [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuTailGap: 16
+    // Running dot inside the bottom padding: (padding - indicatorSize) / 2, so its centre is 5 above the shelf edge, macOS ~5; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockIndicatorGap: 3
+    // Room the tile reserves for the running dot: none, the dot sits in the padding (shelf 76 -> 68); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockIndicatorArea: 0
+    // Width of the separator tile (was spacing*2 + 1 = 9): body to separator line about 19, macOS 20.5 scaled; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockSeparatorSpace: 25
+    // Separator line: the separator colour at 0.3 (was the generic 0.16), macOS about -34 % luminance; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property real dockSeparatorOpacity: 0.3
 
     // task spec: pointer dwell before a hot corner fires [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int hotCornerDwellMs: 150

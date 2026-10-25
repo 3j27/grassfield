@@ -38,6 +38,17 @@ TestCase {
         verify(Tokens.notificationCenterInset >= Tokens.notificationBannerGap);
     }
 
+    // Priority 5: Dock. No band under the icons, the dot inside the padding with its centre 5 above the shelf edge.
+    function test_dockMetrics() {
+        compare(Tokens.dockIndicatorArea, 0);
+        compare(Tokens.dockPadding - Tokens.dockIndicatorSize, 2 * Tokens.dockIndicatorGap);
+        compare(Tokens.dockPadding - Tokens.dockIndicatorGap - Tokens.dockIndicatorSize / 2, 5);
+        verify(Tokens.dockSeparatorSpace > 2 * Tokens.dockSpacing + Tokens.dockSeparatorWidth);
+        verify(Tokens.dockSeparatorOpacity >= 0.25);
+        // The room above the shelf holds the label (24 + 7 tail) and the 8-pt gap to the shelf.
+        verify(Tokens.dockTooltipArea >= 24 + 7 + Tokens.dockTooltipGap);
+    }
+
     // WCAG relative luminance and contrast of two "#rrggbb" colours.
     function lum(hex) {
         const ch = k => {

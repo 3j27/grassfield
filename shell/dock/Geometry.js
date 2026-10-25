@@ -153,24 +153,27 @@ function iconOrigin(edge, iconSize, iconPx, indicatorArea) {
     return {x: 0, y: iconSize - iconPx};
 }
 
-// The running dot in the tile's box. `lift` is how far the tile has moved away from the edge (hover rise): the dot stays on
-// the shelf.
+// The running dot in the tile's box, in the shelf padding on the screen-edge side of the icon, `spacing` (dock.indicatorGap)
+// from it. `lift` is how far the tile has moved away from the edge (hover rise): the dot stays on the shelf.
 function dotOrigin(edge, tileW, tileH, iconSize, spacing, dotSize, lift) {
     if (edge === "left")
-        return {x: -lift, y: (tileH - dotSize) / 2};
+        return {x: -spacing - dotSize - lift, y: (tileH - dotSize) / 2};
     if (edge === "right")
         return {x: iconSize + spacing + lift, y: (tileH - dotSize) / 2};
     return {x: (tileW - dotSize) / 2, y: iconSize + spacing + lift};
 }
 
 // The label of a tile, in the tile's box: above the icon (bottom), beside it on the side away from the screen edge.
-// `ttW` x `ttH` is the label (its tail included), `gap` the room between it and the icon.
-function tooltipOrigin(edge, tileW, tileH, iconSize, iconPx, indicatorArea, gap, ttW, ttH) {
+// `ttW` x `ttH` is the label (its tail included), `gap` the room between its tip and the shelf edge (macOS: the tip is about 8
+// beyond the shelf, not beside the icon). `padding` (the shelf padding, 0 when omitted) puts the shelf edge beyond the icon; a
+// magnified icon that reaches past the shelf pushes the label out with it.
+function tooltipOrigin(edge, tileW, tileH, iconSize, iconPx, indicatorArea, gap, ttW, ttH, padding) {
+    const reach = Math.max(iconPx, iconSize + (padding || 0));
     if (edge === "left")
-        return {x: indicatorArea + iconPx + gap, y: (tileH - ttH) / 2};
+        return {x: indicatorArea + reach + gap, y: (tileH - ttH) / 2};
     if (edge === "right")
-        return {x: iconSize - iconPx - gap - ttW, y: (tileH - ttH) / 2};
-    return {x: (tileW - ttW) / 2, y: tileH - indicatorArea - iconPx - gap - ttH};
+        return {x: iconSize - reach - gap - ttW, y: (tileH - ttH) / 2};
+    return {x: (tileW - ttW) / 2, y: tileH - indicatorArea - reach - gap - ttH};
 }
 
 // Which side of the label the tail is on: the one toward the tile.
