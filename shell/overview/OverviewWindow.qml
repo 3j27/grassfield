@@ -613,8 +613,8 @@ Variants {
                                 anchors.fill: parent
                                 anchors.margins: face.border.width
                                 windows: tile.isPlus ? [] : tile.modelData.windows
-                                screenW: tile.modelData.screenW
-                                screenH: tile.modelData.screenH
+                                screenW: tile.isPlus ? 0 : tile.modelData.screenW
+                                screenH: tile.isPlus ? 0 : tile.modelData.screenH
                                 capture: !tile.modelData.active
                             }
 
