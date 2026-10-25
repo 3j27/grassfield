@@ -27,7 +27,8 @@ QtObject {
         destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#1D1F24",  // Opaque app window background in the dark appearance: the same as materialTint (no dark reference); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
-        windowTextSecondary: "#A0A0A8"  // Secondary text in opaque app windows, dark appearance: 4.5:1 or more on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        windowTextSecondary: "#A0A0A8",  // Secondary text in opaque app windows, dark appearance: 4.5:1 or more on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        chipFill: "#FFFFFF"  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
     })
 
     // color roles, light appearance
@@ -52,7 +53,8 @@ QtObject {
         destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#FFFFFF",  // Opaque app window background (Settings, Files), macOS 255 against materialTint 244; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
-        windowTextSecondary: "#6E6E73"  // Secondary text in opaque app windows: lighter than textSecondary (which A2 darkens for material surfaces), 5:1 on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        windowTextSecondary: "#6E6E73",  // Secondary text in opaque app windows: lighter than textSecondary (which A2 darkens for material surfaces), 5:1 on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        chipFill: "#FFFFFF"  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
     })
 
     // color roles, accentDark appearance
@@ -210,6 +212,12 @@ QtObject {
     readonly property real materialHoverActiveFactor: 1.5
     // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialSeparatorOpacityLight: Appearance.increaseContrast ? 0.45 : 0.08
+    // Light appearance: chips (Search, Apps) are white at this opacity; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
+    readonly property real materialChipFillOpacityLight: 0.85
+    // Light appearance: a secondary push button is the fill colour at about 6 %, no stroke, macOS ~6 % grey; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
+    readonly property real materialButtonFillOpacityLight: 0.06
+    // Light appearance: the Apps field, the Force Quit list and the Overview add button are white at this opacity; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
+    readonly property real materialWellFillOpacityLight: 0.7
 
     // task spec / macOS convention, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarHeight: 24

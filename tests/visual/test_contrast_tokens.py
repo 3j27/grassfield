@@ -134,7 +134,14 @@ def backdrops(tok, role, appearance, t, wallpaper):
         base = over(tok.color(pal, appearance, "materialTint"), tok.tint_alpha(t), wallpaper)
         fill = tok.color(pal, appearance, "fill")
         # Without a fill, and with the fill overlay of a tile or field (materialFillOpacity), worst case of the two.
-        return [base, over(fill, tok.path("material.fillOpacity"), base)]
+        out = [base, over(fill, tok.path("material.fillOpacity"), base)]
+        if pal == "colors" and appearance == "light":
+            # The light control fills (Appearance.chipFill, buttonFill, lightWellFill): white chips and wells, a 6 % grey button.
+            chip = tok.color(pal, appearance, "chipFill")
+            out += [over(chip, tok.path("material.chipFillOpacityLight"), base),
+                    over(fill, tok.path("material.buttonFillOpacityLight"), base),
+                    over(chip, tok.path("material.wellFillOpacityLight"), base)]
+        return out
     if kind == "accent":
         return [tok.color(pal, appearance, "accent")]
     if kind == "rename-field":

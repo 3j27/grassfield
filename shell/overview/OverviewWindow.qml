@@ -603,7 +603,8 @@ Variants {
                             height: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
                             width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
-                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            color: tile.isPlus && !Appearance.dark ? Appearance.withAlpha(Appearance.colors.chipFill, tileMouse.containsMouse ? Tokens.materialChipFillOpacityLight : Tokens.materialWellFillOpacityLight)
+                                : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
                             border.width: tile.modelData.active || tile.focused || tile.dropTarget ? Tokens.overviewSelectionWidth : 1
                             border.color: tile.modelData.active || tile.focused || tile.dropTarget ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 

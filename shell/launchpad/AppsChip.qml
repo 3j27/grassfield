@@ -25,7 +25,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.active ? Appearance.colors.accent : Appearance.chipFill
     }
 
     Rectangle {

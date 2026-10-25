@@ -49,6 +49,23 @@ TestCase {
         verify(Tokens.dockTooltipArea >= 24 + 7 + Tokens.dockTooltipGap);
     }
 
+    // Priority 6: light controls on light glass. White chips and wells, a 6 % grey secondary button, and the dark appearance
+    // keeps the material fill.
+    function test_lightControlFills() {
+        const dark = Appearance.dark;
+        Appearance.dark = false;
+        compare(Appearance.chipFill.r, 1);
+        fuzzyCompare(Appearance.chipFill.a, Tokens.materialChipFillOpacityLight, 0.01);
+        fuzzyCompare(Appearance.buttonFill.a, Tokens.materialButtonFillOpacityLight, 0.01);
+        verify(Appearance.buttonFill.r < 0.1);
+        fuzzyCompare(Appearance.lightWellFill.a, Tokens.materialWellFillOpacityLight, 0.01);
+        verify(Tokens.materialButtonFillOpacityLight <= 0.08);
+        Appearance.dark = true;
+        fuzzyCompare(Appearance.chipFill.a, Tokens.materialFillOpacity, 0.01);
+        fuzzyCompare(Appearance.buttonFill.a, Tokens.materialFillOpacity, 0.01);
+        Appearance.dark = dark;
+    }
+
     // WCAG relative luminance and contrast of two "#rrggbb" colours.
     function lum(hex) {
         const ch = k => {

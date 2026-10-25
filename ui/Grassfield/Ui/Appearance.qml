@@ -48,6 +48,13 @@ QtObject {
     readonly property var accentedLight: Accent.contrastBoost(Accent.apply(Tokens.colorLight, accentSetting, false, Tokens), increaseContrast)
     // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
     readonly property color focusRingColor: Accent.focusRing(baseColors.accent, baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
+    // Control fills (audit 2026-10-25, priority 6). Dark appearance: the translucent fill of the material, as before. Light
+    // appearance (macOS): chips white, secondary push buttons about 6 % grey, wells (the Apps field, Force Quit list, Overview add
+    // button) white and translucent, none with a dark stroke.
+    readonly property color chipFill: dark ? withAlpha(colors.fill, Tokens.materialFillOpacity) : withAlpha(colors.chipFill, Tokens.materialChipFillOpacityLight)
+    readonly property color buttonFill: dark ? withAlpha(colors.fill, Tokens.materialFillOpacity) : withAlpha(colors.fill, Tokens.materialButtonFillOpacityLight)
+    readonly property color lightWellFill: withAlpha(colors.chipFill, Tokens.materialWellFillOpacityLight)
+
     function windowPalette(base: var): var {
         const c = Object.assign({}, base);
         c.materialTint = base.windowBackground;

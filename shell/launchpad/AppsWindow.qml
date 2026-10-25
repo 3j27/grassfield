@@ -349,7 +349,7 @@ Variants {
                         height: Tokens.launcherSearchHeight
                         radius: height / 2
                         // The translucent fill of the material; in dark a little less of it, so the light placeholder keeps 4.5:1.
-                        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.launcherSearchFillOpacityDark : Tokens.materialFillOpacity)
+                        color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.launcherSearchFillOpacityDark) : Appearance.lightWellFill
                         border.width: field.activeFocus ? Tokens.controlFocusOutline : 0
                         border.color: Appearance.focusRingColor
                         Accessible.role: Accessible.Pane
