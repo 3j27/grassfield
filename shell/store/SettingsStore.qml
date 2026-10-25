@@ -31,12 +31,19 @@ Scope {
     // malformed or unreadable. Consumers that act destructively on "the settings are the defaults" wait for this, not for
     // `loaded` (which is also true for a malformed file, whose values are then only the adapter's leftovers).
     property bool validRead: false
+    // True while the file on disk is valid JSON that cannot be rewritten safely (JsonSafety.unsafeReason): its values are
+    // not used, the defaults are (see read()).
+    property bool unsafeFile: false
 
     // The value of a dotted key as every reader of grassfield.json sees it (ui/Grassfield/Ui/SettingsContract.js, generated from
     // the schema; ADR-0020): a number out of range is clamped (an integer rounded first), any other invalid value, a number
     // written as a string or a boolean included, is the key's default. The adapter keeps the stored values untouched (its
     // leaves are vars), so a hand-edited file may hold anything and still reads the same here and in the Settings app.
     function read(path: string): var {
+        // A file the Settings app refuses to edit (an integer beyond 2^53, a duplicate key: JsonSafety) shows its defaults
+        // there under a banner: the shell reads the same, never the values of a file it could not rewrite safely either.
+        if (root.unsafeFile && SettingsContract.DEFAULTS[path] !== undefined)
+            return JSON.parse(JSON.stringify(SettingsContract.DEFAULTS[path]));
         let node = config;
         for (const part of path.split("."))
             node = node === null || node === undefined ? undefined : node[part];
@@ -85,8 +92,8 @@ Scope {
     readonly property bool windowsRebuildExtension: read("windows.rebuildExtension")
     readonly property string dockMinimizeEffect: read("dock.minimizeEffect")
     readonly property bool notificationsDnd: read("notifications.dnd")
-    readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
-    readonly property var notificationsAppStyles: NotificationPrefs.normalizeStyles(config.notifications.appStyles)
+    readonly property var notificationsAppPreviews: read("notifications.appPreviews")
+    readonly property var notificationsAppStyles: read("notifications.appStyles")
     readonly property string notificationsHistory: read("notifications.history")
     readonly property string notificationsPreviews: read("notifications.previews")
     readonly property bool desktopShowIcons: read("desktop.showIcons")
@@ -116,7 +123,7 @@ Scope {
     readonly property string pointerFillColor: read("pointer.fillColor")
     // The wallpaper settings, complete and valid (WallpaperConfig.normalize: an invalid field reads as its default).
     // The shell only reads them; the Settings app writes them.
-    readonly property var wallpaper: WallpaperConfig.normalize({
+    readonly property var wallpaper: root.unsafeFile ? WallpaperConfig.normalize({}) : WallpaperConfig.normalize({
         source: config.wallpaper.source,
         path: config.wallpaper.path,
         color: config.wallpaper.color,
@@ -169,150 +176,6 @@ Scope {
 
     signal saved
     signal loadedFile
-
-    component MaterialConfig: JsonObject {
-        property var transparency: 0.25
-        property var profile: "balanced"
-    }
-
-    component AccessibilityConfig: JsonObject {
-        property var reduceTransparency: false
-        property var reduceMotion: false
-        property var increaseContrast: false
-        property var textSize: 1
-        // Screen magnification (Hyprland cursor:zoom_factor): on or off, and the factor while on, 1.5 to 5.
-        property var zoom: false
-        property var zoomLevel: 2
-    }
-
-    component DockConfig: JsonObject {
-        property var pinned: ["chromium", "foot", "org.grassfield.Settings"]
-        property var size: 48
-        property var position: "bottom"
-        property var magnification: 1.6
-        property var magnificationEnabled: false
-        property var autohide: false
-        // Recently launched apps that are not pinned, newest first (owned by the Dock), and whether to show them.
-        property var recent: []
-        property var showRecents: true
-        // Folder stacks in the right section of the Dock ("~/" allowed) and their options per folder (Stacks.js).
-        property var folders: ["~/Downloads"]
-        property var stackOptions: ({})
-        // Minimized windows go into their app's tile instead of getting a tile of their own.
-        property var minimizeIntoApp: false
-        // "Animate opening applications": the launch bounce (macOS). Attention bounces are not part of it.
-        property var animateOpening: true
-        // "Show indicators for open applications": the running dot under apps (macOS).
-        property var showIndicators: true
-        // "Minimize animation": funnel (the default) | shrink. The compositor plugin draws it.
-        property var minimizeEffect: "funnel"
-    }
-
-    component WindowsConfig: JsonObject {
-        property var titlebarDoubleClick: "zoom"
-        // Window tiling (macOS 15+, all on by default): drag to the screen edges, drag to the menu bar, margins.
-        property var tilingEdges: true
-        property var tilingMenuBar: true
-        property var tilingMargins: true
-        // Stages (macOS: Desktop & Dock > Windows, off by default; ADR-0013, owner decision D-4): pushed to the compositor
-        // plugin as config("stagesEnabled") while it advertises stages-available.
-        property var stages: false
-        // "Rebuild the compositor extension after Hyprland updates" (opt-in, ADR-0009 amendment 2026-10-23): when no
-        // extension build matches the installed Hyprland the shell (shell.qml) runs grassfield-compositor-rebuild
-        // --session in the background.
-        property var rebuildExtension: false
-    }
-
-    component LockConfig: JsonObject {
-        property var idleMinutes: 5
-    }
-
-    component HotCornersConfig: JsonObject {
-        property var topLeft: "none"
-        property var topRight: "none"
-        property var bottomLeft: "none"
-        property var bottomRight: "none"
-    }
-
-    component DesktopConfig: JsonObject {
-        property var showIcons: true
-    }
-
-    component MenubarConfig: JsonObject {
-        // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
-        property var showBackground: false
-        // always | desktop | fullscreen | never: "Automatically hide and show the menu bar" (BarHide.js).
-        property var autoHide: "fullscreen"
-        // Now Playing item of the bar (Settings > Desktop & Dock > Menu Bar): shown while a player has a session.
-        property var showNowPlaying: true
-        // Search item (magnifier) of the bar.
-        property var showSearch: true
-        // Status items (Settings > Menu Bar, macOS Control Center menu bar modules).
-        property var showWifi: true
-        property var showSound: true
-        property var showBattery: true
-        property var showBatteryPercentage: true
-        property var showFocus: true
-        // Clock (macOS Clock options): date, day of the week, hour format (auto | 12 | 24), seconds.
-        property var clockDate: "auto"
-        property var clockShowAmPm: true
-        property var clockFlashSeparators: false
-        property var showTrayItems: true
-        property var recentItems: 10
-        property var clockShowDayOfWeek: true
-        property var clockHours: "auto"
-        property var clockShowSeconds: false
-    }
-
-    component AccentConfig: JsonObject {
-        // multicolor | blue | purple | pink | red | orange | yellow | green | graphite (Settings > Appearance > Accent colour).
-        property var color: "multicolor"
-    }
-
-    component IconsConfig: JsonObject {
-        // default | dark | clear | tinted (ADR-0014): app and file icons only.
-        property var mode: "default"
-        // "accent" or a #rrggbb colour for the tinted mode.
-        property var tint: "accent"
-        // "theme" (the icon theme's own folder colour), "accent" or a #rrggbb colour: every folder icon.
-        property var folderColor: "theme"
-    }
-
-    component PointerConfig: JsonObject {
-        // Cursor size in pixels, 24 to 96 (Settings > Accessibility > Pointer). A var, not an int: an int property
-        // would turn "64" into a valid size before PointerSize.fromStored could refuse it (a number is rounded and clamped there).
-        property var size: 24
-        // #rrggbb colours of the pointer (outline white, fill black = the packaged theme). Vars for the same reason.
-        property var outlineColor: "#ffffff"
-        property var fillColor: "#000000"
-    }
-
-    component WallpaperJson: JsonObject {
-        // Vars, not typed properties: a hand-edited file may hold anything, and WallpaperConfig.normalize decides
-        // what is valid (a typed property would coerce 1 or "false" into a valid value first).
-        property var source: "builtin"
-        property var path: ""
-        property var color: "#000000"
-        property var fit: "fill"
-        property var interval: "1h"
-        property var shuffle: true
-        property var videoOnBattery: false
-        // {provider}: a var too, a hand-edited file may hold anything (WallpaperConfig.normalize decides).
-        property var online: ({provider: "commons"})
-        property var outputs: []
-    }
-
-    component NotificationsConfig: JsonObject {
-        property var dnd: false
-        // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
-        property var previews: "unlocked"
-        // Per-app overrides [{app, previews}] (NotificationPrefs.js).
-        property var appPreviews: []
-        // Per-app alert style overrides [{app, style}] (banners | alerts | none, NotificationPrefs.js).
-        property var appStyles: []
-        // How long the history stays on disk: week | day | never.
-        property var history: "week"
-    }
 
     function setAppearance(value: string): void {
         change("appearance", value === "light" || value === "auto" ? value : "dark");
@@ -452,8 +315,12 @@ Scope {
     function applyPath(path: string, value: var): void {
         const parts = path.split(".");
         let target = config;
-        for (let i = 0; i < parts.length - 1; i++)
+        for (let i = 0; i < parts.length - 1; i++) {
             target = target[parts[i]];
+            // A group that is not an object (a var that held null or a number in a hand-edited file) has nothing to set.
+            if (target === null || target === undefined || typeof target !== "object")
+                return;
+        }
         target[parts[parts.length - 1]] = value;
     }
 
@@ -537,13 +404,16 @@ Scope {
             ok = false;
         }
         let why = "is not valid JSON";
+        let unsafeNow = false;
         if (ok) {
             const unsafe = JsonSafety.unsafeReason(text);
             if (unsafe !== "") {
                 ok = false;
+                unsafeNow = true;
                 why = "cannot be rewritten safely: " + unsafe;
             }
         }
+        unsafeFile = unsafeNow;
         if (!ok && !writeBlocked)
             console.warn("settings: " + file.path + " " + why + "; keeping the file untouched, changes will not be saved until it is fixed");
         writeBlocked = !ok;
@@ -579,8 +449,14 @@ Scope {
                 }
                 node = node[part];
             }
-            if (!present)
-                applyPath(path, JSON.parse(JSON.stringify(SettingsContract.ALL_DEFAULTS[path])));
+            if (!present) {
+                // wallpaper.online is one var holding an object (it may hold anything in a hand-edited file, null included):
+                // it is put back whole.
+                if (path === "wallpaper.online.provider")
+                    config.wallpaper.online = {provider: SettingsContract.ALL_DEFAULTS[path]};
+                else
+                    applyPath(path, JSON.parse(JSON.stringify(SettingsContract.ALL_DEFAULTS[path])));
+            }
         }
     }
 
@@ -603,23 +479,9 @@ Scope {
         }
     }
 
-    JsonAdapter {
+    // Every key of the schema, a var each, with its default (generated: scripts/dev/gen-settings.py).
+    SettingsData {
         id: config
-        property int version: 1
-        property var appearance: "dark"
-        property MaterialConfig material: MaterialConfig {}
-        property AccessibilityConfig accessibility: AccessibilityConfig {}
-        property DockConfig dock: DockConfig {}
-        property WindowsConfig windows: WindowsConfig {}
-        property NotificationsConfig notifications: NotificationsConfig {}
-        property LockConfig lock: LockConfig {}
-        property HotCornersConfig hotCorners: HotCornersConfig {}
-        property DesktopConfig desktop: DesktopConfig {}
-        property MenubarConfig menubar: MenubarConfig {}
-        property AccentConfig accent: AccentConfig {}
-        property IconsConfig icons: IconsConfig {}
-        property PointerConfig pointer: PointerConfig {}
-        property WallpaperJson wallpaper: WallpaperJson {}
     }
 
     // Fresh read of the file for the merge (the watched FileView may lag behind an external write).

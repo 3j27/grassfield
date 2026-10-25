@@ -104,6 +104,8 @@ ShellRoot {
     }
 
     function dataFor(v): string {
+        if (v.raw !== undefined)
+            return v.raw;
         if (v.absent === true || v.allAbsent === true)
             return '{"version":1}';
         const parts = v.path.split(".");
@@ -142,6 +144,17 @@ ShellRoot {
             root.check("contract key " + path + " has no reader in this test", root.readers[path] !== undefined);
         const picked = all.filter(v => root.readers[v.path] !== undefined);
         picked.push({name: "a file without any key", allAbsent: true});
+        // Files whose values the contract cannot use at all: every key reads its default, and the store still finishes its
+        // load (a null group once threw in resetMissingKeys and skipped the rest).
+        picked.push({name: "wallpaper.online is null", allAbsent: true, raw: '{"version":1,"wallpaper":{"online":null}}'});
+        picked.push({name: "groups that are not objects", allAbsent: true,
+                        raw: '{"version":1,"wallpaper":null,"dock":5,"notifications":"x","lock":[],"pointer":true,"menubar":null,"hotCorners":7}'});
+        // A file Settings refuses to edit (a duplicate key, an integer beyond 2^53) shows the defaults there: so does the
+        // shell, whatever its other keys say (lock.idleMinutes 0 would be "never").
+        picked.push({name: "an unsafe file with a duplicate key", allAbsent: true,
+                        raw: '{"version":1,"lock":{"idleMinutes":0},"dock":{"size":80},"material":{"transparency":0.5},"menubar":{"showWifi":false},"x":1,"x":2}'});
+        picked.push({name: "an unsafe file with an integer beyond 2^53", allAbsent: true,
+                        raw: '{"version":1,"lock":{"idleMinutes":0},"dock":{"size":80},"wallpaper":{"source":"color"},"n":9007199254740993}'});
         cases = picked;
         setup.running = true;
     }

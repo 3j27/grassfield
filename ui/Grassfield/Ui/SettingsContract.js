@@ -299,6 +299,12 @@ function normalize(path, value) {
     const rule = RULES[path];
     if (!rule)
         return undefined;
+    // The per-app notification lists keep their good entries and drop the bad or repeated ones (a write is still refused
+    // as a whole by validate): the shell and the Settings app read one list.
+    if (rule.type === "notificationApps")
+        return NotificationPrefs.normalize(value);
+    if (rule.type === "notificationStyles")
+        return NotificationPrefs.normalizeStyles(value);
     if ((rule.type === "number" || rule.type === "integer") && typeof value === "number" && isFinite(value)) {
         if (rule.zeroIsExact && (value < 0 || (value !== 0 && Math.round(value) === 0)))
             return DEFAULTS[path];
