@@ -108,6 +108,8 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
   (per-surface tints: yes, at the values above); `ui-finesse-2026-10-25.md` F7's 26 / 12 targets.
 
 ## Plan (phases; each is a reviewed slice with `just check`, tests and `just shot`)
+Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/action-plan.md`.
+
 1. **Coherence (macOS 27):** window radius 20 at power 2.6 everywhere, after a nested 45° measurement; shadow and border
    per appearance; concentric inner radii; menus (row icons, 16-pt text, radius 7); white on the accent with a dark
    selection fill; dark window neutrals; light windows and groups; Settings and Files sidebars (tone, coloured tiles,
