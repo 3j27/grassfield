@@ -41,6 +41,26 @@ check test "$cleaned" = "True False"
 desc="the cleaned file loads under Qt without a warning and keeps the valid gradient fill"
 check bash -c '"$1" "$2" >/dev/null && grep -q "fill=\"url(#g)\"" "$2" && ! grep -q "url(#f)\|url(#missing" "$2"' _ "$tmp/svgcheck" "$tmp/cleaned.svg"
 
+# A pattern that inherits its content through href (what librsvg and browsers draw) is written out, not dropped.
+cat >"$tmp/inherit.svg" <<'EOF2'
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="16" height="16"><defs><pattern id="base" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="4" fill="#f00"/></pattern><pattern xlink:href="#base" id="alias" x="0" y="0"/><pattern xlink:href="#alias" id="chain"/></defs><rect width="16" height="8" fill="url(#alias)"/><rect y="8" width="16" height="8" fill="url(#chain)"/></svg>
+EOF2
+cp "$tmp/inherit.svg" "$tmp/inherit-clean.svg"
+python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("c", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+print(m.clean_svg(sys.argv[2]))' "$root/packaging/arch/icons-compose.py" "$tmp/inherit-clean.svg" >"$tmp/inherit.changed"
+desc="an empty pattern with an href to a pattern with content is expanded (fills keep their url), not replaced by none"
+check bash -c 'grep -q True "$1" && [ "$(grep -o "url(#alias)\|url(#chain)" "$2" | wc -l)" = 2 ] && ! grep -q "<pattern[^>]*/>" "$2"' _ "$tmp/inherit.changed" "$tmp/inherit-clean.svg"
+desc="Qt loads the expanded file without a warning"
+check bash -c '"$1" "$2" >/dev/null' _ "$tmp/svgcheck" "$tmp/inherit-clean.svg"
+if command -v rsvg-convert >/dev/null && command -v magick >/dev/null; then
+  rsvg-convert -w 64 -h 64 -o "$tmp/i-before.png" "$tmp/inherit.svg"
+  rsvg-convert -w 64 -h 64 -o "$tmp/i-after.png" "$tmp/inherit-clean.svg"
+  desc="librsvg draws the expanded file pixel-identically to the original (GTK apps see no change)"
+  check bash -c '[ "$(magick compare -metric AE "$1" "$2" null: 2>&1 | cut -d" " -f1)" = 0 ]' _ "$tmp/i-before.png" "$tmp/i-after.png"
+fi
+
 if [[ -z $theme ]]; then
   echo "SKIP: no composed grassfield-icons theme under .dev here (run scripts/dev/icons.sh)"
   exit "$fail"

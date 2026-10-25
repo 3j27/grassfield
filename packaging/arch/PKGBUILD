@@ -332,4 +332,11 @@ package_grassfield-icons() {
     "Its README states GPL-3.0; the repository holds no licence file at this commit." \
     "Its README credits MacTahoe, Hatter (https://github.com/Mibea/Hatter, base of its folders) and Adwaita as sources." \
     >"$lic/PEBBLE"
+  # GPL-3.0 section 5a: the composer edits some of the upstream SVG files it copies (icons-compose.py clean_svg).
+  printf '%s\n' \
+    "Modification notice (GPL-3.0 section 5a): the build of this theme (packaging/arch/icons-compose.py, clean_svg) edits a small" \
+    "number of the SVG files copied from the layers above: an empty <pattern href=\"#x\"/> is written out with the attributes and" \
+    "content of the pattern it references, and a fill or stroke that points to a missing or contentless paint server is replaced" \
+    "by none, so that Qt's SVG renderer can read the file. The drawings are otherwise unchanged. Date of this change: 2026-10-25." \
+    >"$lic/NOTICE"
 }

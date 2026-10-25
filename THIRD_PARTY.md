@@ -160,6 +160,11 @@ mark (`packaging/arch/icons-apple-signatures.txt`) or holds a copy of a listed f
 session selects the theme with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a locked dconf database that
 holds only `icon-theme='grassfield-icons'`. Grassfield's own apps and some system tools are mapped to pack drawings by
 `packaging/arch/icons-aliases.txt` (links inside the theme). Dev sessions compose the same theme with `scripts/dev/icons.sh` (`just icons`).
+**Modification notice (GPL-3.0 section 5a):** the composer edits a small number of the upstream SVG files it copies
+(`clean_svg` in `icons-compose.py`): an empty `<pattern href="#x"/>` is written out with the attributes and content of the
+pattern it references, and a fill or stroke that points to a missing or contentless paint server is replaced by `none`, so
+that Qt's renderer can read the file. Nothing else in the drawings changes; the changed files are found by comparing the
+pack with the pinned upstream sources. The same notice is in `/usr/share/licenses/grassfield-icons/NOTICE`.
 - MacTahoe icon theme, `https://github.com/vinceliuice/MacTahoe-icon-theme` at commit
   `839848b9a8a38a92a6936e30c4abe35cc6f2546d`, author Vince Liuice (AUTHORS). Licence: `COPYING` (GPL version 3, unmodified
   text) is present; the README states no licence and no file carries an "or later" notice: GPL-3.0-only. COPYING and AUTHORS

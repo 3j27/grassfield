@@ -79,38 +79,103 @@ KINDS = ("apple-logo", "finder-face", "doubt", "appstore")
 
 
 _IDS = re.compile(rb'\sid="([^"]+)"')
-_EMPTY_PATTERN = re.compile(rb'<pattern\b[^>]*/>')
+_PATTERN_EMPTY = re.compile(rb'<pattern\b([^>]*?)\s*/>')
+_PATTERN_FULL = re.compile(rb'<pattern\b([^>]*[^/>])>(.*?)</pattern>', re.S)
+_ATTR = re.compile(rb'\s((?:xlink:)?[A-Za-z:-]+)="([^"]*)"')
 _PAINT_REF = re.compile(rb'((?:fill|stroke)\s*[=:]\s*"?)url\(#([^)"\s]+)\)')
 
 
-def clean_svg(path):
-    """Replace paint references Qt's SVG renderer cannot resolve by `none`, in place; report whether the file changed.
+def _attrs(raw):
+    return {m.group(1): m.group(2) for m in _ATTR.finditer(b" " + raw)}
 
-    Some upstream exports (Penpot and others) fill a shape with url(#x) where x is missing from the document or is an empty
-    <pattern/>. Qt logs "Could not resolve property: x" on every load and draws nothing for the shape; `none` is the same
-    picture without the noise (and what a browser draws for a missing reference). Only fill/stroke references are touched.
+
+def _href(attrs):
+    v = attrs.get(b"xlink:href") or attrs.get(b"href")
+    return v[1:] if v and v.startswith(b"#") else None
+
+
+def _render_attrs(attrs):
+    return b"".join(b' %s="%s"' % (k, v) for k, v in attrs.items())
+
+
+def clean_svg(path):
+    """Make the paint servers of an upstream SVG usable by Qt's renderer, in place; report whether the file changed.
+
+    Qt takes a <pattern>'s content only from the pattern itself, while the specification (and librsvg, browsers) lets a
+    self-closed <pattern href="#other"/> inherit the attributes and children of the pattern it references. So:
+      * an empty pattern whose href chain ends in a pattern with content becomes that pattern, written out (the target's
+        attributes, overridden by its own, and the target's children): librsvg draws exactly what it drew before, and Qt now
+        draws it too;
+      * an empty pattern whose chain ends nowhere (a missing id, a gradient, another empty pattern) paints nothing in a
+        browser; fills and strokes that use it become `none` (Qt drew nothing as well, but logged it on every load);
+      * a fill/stroke url(#x) with no element x in the document becomes `none` as well.
+    Only fill/stroke references are rewritten, and only <pattern> elements are expanded.
     """
     with open(path, "rb") as fh:
         data = fh.read()
     if b"url(#" not in data:
         return False
     ids = set(_IDS.findall(data))
-    # Qt takes a pattern's content only from the pattern itself, never through href (browsers inherit it): a self-closed
-    # <pattern/> is a paint server Qt cannot use, whether its href is missing (Penpot), a gradient (Inkscape) or another
-    # pattern. Such a fill is replaced by none; Qt drew nothing for it either.
-    dangling = set()
-    for m in _EMPTY_PATTERN.finditer(data):
-        own = _IDS.search(m.group(0))
-        if own:
-            dangling.add(own.group(1))
+    full = {}
+    for m in _PATTERN_FULL.finditer(data):
+        own = _ATTR.findall(b" " + m.group(1))
+        pid = dict(own).get(b"id")
+        if pid:
+            full[pid] = (_attrs(m.group(1)), m.group(2))
+    empty = {}
+    for m in _PATTERN_EMPTY.finditer(data):
+        at = _attrs(m.group(1))
+        if b"id" in at:
+            empty[at[b"id"]] = at
+
+    def resolve(pid):
+        """Expanded (attrs, inner) of an empty pattern, or None when its chain has no content."""
+        merged = {}
+        seen = set()
+        cur = pid
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            if cur in full:
+                at, inner = full[cur]
+                for k, v in at.items():
+                    if k not in (b"id", b"href", b"xlink:href"):
+                        merged.setdefault(k, v)
+                return merged, inner
+            if cur not in empty:
+                return None
+            for k, v in empty[cur].items():
+                if k not in (b"id", b"href", b"xlink:href"):
+                    merged.setdefault(k, v)
+            cur = _href(empty[cur])
+        return None
+
+    expanded = {}
+    unusable = set()
+    for pid in empty:
+        r = resolve(pid)
+        if r is None:
+            unusable.add(pid)
+        else:
+            expanded[pid] = r
+
+    def expand(m):
+        at = _attrs(m.group(1))
+        pid = at.get(b"id")
+        if pid not in expanded:
+            return m.group(0)
+        merged, inner = expanded[pid]
+        out = {b"id": pid}
+        out.update(merged)
+        return b"<pattern%s>%s</pattern>" % (_render_attrs(out), inner)
 
     def fix(m):
         ref = m.group(2)
-        if ref in ids and ref not in dangling:
+        if ref in ids and ref not in unusable:
             return m.group(0)
         return m.group(1) + b"none"
 
-    new = _PAINT_REF.sub(fix, data)
+    new = _PATTERN_EMPTY.sub(expand, data)
+    new = _PAINT_REF.sub(fix, new)
     if new == data:
         return False
     with open(path, "wb") as fh:
@@ -475,12 +540,15 @@ def compose(a):
     os.makedirs(out)
     present_dirs = {"scalable/apps"}
     cleaned = 0
+    upstream_hashes = {}  # output path -> SHA-256 of the source bytes (clean_svg edits the copy)
     for r in sorted(out_entries):
         kind, val = out_entries[r]
         dst = os.path.join(out, r)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         present_dirs.add(posixpath.dirname(r))
         if kind == "f":
+            with open(val, "rb") as fh:
+                upstream_hashes[r] = hashlib.sha256(fh.read()).hexdigest()
             shutil.copyfile(val, dst)
             os.chmod(dst, 0o644)
             if dst.endswith(".svg") and clean_svg(dst):
@@ -530,7 +598,7 @@ def compose(a):
             base = mt_root if layer == "mactahoe" else a.pebble
             with open(os.path.join(base, rel), "rb") as fh:
                 listed_hashes[hashlib.sha256(fh.read()).hexdigest()] = "%s:%s" % (layer, rel)
-    verify_signatures(out, a.signatures, listed_hashes)
+    verify_signatures(out, a.signatures, listed_hashes, upstream_hashes)
 
     # ---- report
     print("icons-compose: %d SVGs had unresolvable paint references replaced by none (clean_svg)" % cleaned)
@@ -599,7 +667,7 @@ def raster_bytes(b64):
         return None
 
 
-def verify_signatures(out, sig_file, listed_hashes):
+def verify_signatures(out, sig_file, listed_hashes, upstream_hashes=None):
     """Fail when the output carries a listed Apple mark:
       * a regular SVG draws a path whose signature is a fingerprint of the file (plain SHA-256 lines);
       * a PNG file, or a raster embedded in an SVG (also a hidden one: display none), has a `raster:` fingerprint;
@@ -619,7 +687,8 @@ def verify_signatures(out, sig_file, listed_hashes):
             rel = os.path.relpath(p, out)
             with open(p, "rb") as fh:
                 raw = fh.read()
-            whole = hashlib.sha256(raw).hexdigest()
+            # The copy check uses the bytes of the source file, not of the cleaned copy (clean_svg changes some SVGs).
+            whole = (upstream_hashes or {}).get(rel) or hashlib.sha256(raw).hexdigest()
             if whole in listed_hashes:
                 die("%s is a copy of the listed file %s" % (rel, listed_hashes[whole]))
             if f.endswith(".png"):

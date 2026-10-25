@@ -17,6 +17,17 @@ int main(int argc, char **argv)
     qputenv("QT_QPA_PLATFORM", "offscreen");
     QGuiApplication app(argc, argv);
     qInstallMessageHandler(handler);
+    // --render IN.svg OUT.png: draw one file at 128x128 (used to compare a cleaned icon with its original).
+    if (argc == 4 && QString::fromLocal8Bit(argv[1]) == QLatin1String("--render")) {
+        QSvgRenderer r;
+        if (!r.load(QString::fromLocal8Bit(argv[2]))) return 1;
+        QImage img(128, 128, QImage::Format_ARGB32);
+        img.fill(0);
+        QPainter p(&img);
+        r.render(&p);
+        p.end();
+        return img.save(QString::fromLocal8Bit(argv[3])) ? 0 : 1;
+    }
     int bad = 0;
     for (int i = 1; i < argc; ++i) {
         lastWarning.clear();
