@@ -118,9 +118,16 @@ case $surface in
         vs_sleep 3
       done
       shot "gallery-$tag-$ap-center"
-      vs_pointer abs ${F2C_PILL:-1715 742} sleep 300 click >/dev/null
-      vs_sleep 2
-      shot "gallery-$tag-$ap-gallery"
+      # The "Edit Widgets" pill sits under the last widget, so its row depends on how many notices the Center holds (a start-up
+      # notice such as "Compositor extension not loaded" adds a row, 142 px lower): try each known row and keep the first
+      # click that changes the picture (the gallery covers a large part of the screen). F2C_PILL overrides the first row.
+      for pill in "${F2C_PILL:-1715 742}" "1715 884" "1715 600"; do
+        vs_pointer abs $pill sleep 300 click >/dev/null
+        vs_sleep 2
+        shot "gallery-$tag-$ap-gallery"
+        [[ $(vs_px_diff "$out/gallery-$tag-$ap-center.png" "$out/gallery-$tag-$ap-gallery.png") =~ ^[0-9]+$ ]] &&
+          (($(vs_px_diff "$out/gallery-$tag-$ap-center.png" "$out/gallery-$tag-$ap-gallery.png") >= 3000)) && break
+      done
       close_center
       vs_ipc notifications clearAll >/dev/null
     done ;;
