@@ -18,9 +18,10 @@ QtObject {
     property bool seconds: false
     property date date: new Date()
 
-    readonly property int unitMs: seconds ? 1000 : 60000
-
     function refresh(): void {
+        // The unit is read here, not from a binding on `seconds`: onSecondsChanged can run before such a binding is
+        // re-evaluated (a Clock widget created small and then made medium kept a minute schedule for up to 10 s).
+        const unitMs = seconds ? 1000 : 60000;
         const now = Date.now();
         if (Tick.unitIndex(now, unitMs) !== Tick.unitIndex(date.getTime(), unitMs))
             date = new Date(now);

@@ -45,6 +45,18 @@ TestCase {
         verify(Tick.msToNext(-1, minute, cap) >= 1, "an instant before the epoch still gives a positive wait");
     }
 
+    // Review of cf6d3df: a missing cap (a mismatched Tokens) gave NaN, an interval of 0 and a spinning timer.
+    function test_badInputsNeverSpin() {
+        const t = Date.UTC(2026, 9, 25, 1, 25, 30, 250);
+        compare(Tick.msToNext(t, minute, undefined), 29750 + 2);
+        compare(Tick.msToNext(t, minute, NaN), 29750 + 2);
+        compare(Tick.msToNext(t, minute, 0), 29750 + 2);
+        compare(Tick.msToNext(t, 0, cap), cap);
+        verify(Tick.msToNext(NaN, second, cap) >= 1);
+        verify(Tick.msToNext(Infinity, minute, cap) >= 1);
+        verify(Tick.msToNext(undefined, undefined, undefined) >= 1);
+    }
+
     function test_unitIndexChangesOnTheBoundary() {
         const t = Date.UTC(2026, 9, 25, 1, 59, 59, 999);
         verify(Tick.unitIndex(t, minute) !== Tick.unitIndex(t + 1, minute));
