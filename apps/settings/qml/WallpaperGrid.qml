@@ -109,7 +109,7 @@ Item {
                 height: root.tileHeight
                 radius: Tokens.settingsWallpaperTileRadius
                 clip: true
-                color: tile.modelData.kind === "color" ? tile.modelData.color : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                color: tile.modelData.kind === "color" ? tile.modelData.color : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
 
                 GrassfieldArtwork {
                     anchors.fill: parent
@@ -142,7 +142,7 @@ Item {
                     width: Tokens.settingsListIconSize + Tokens.spacingXs
                     height: width
                     radius: width / 2
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
 
                     Icon {
                         anchors.centerIn: parent
