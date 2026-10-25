@@ -363,6 +363,7 @@
  {"path": "tests/visual/dock-drag-interrupt.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-drag-stress.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-drops.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/visual/dock-hit.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-feel.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-geometry.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-attention.sh", "layer": "visual", "runner": "bare"},

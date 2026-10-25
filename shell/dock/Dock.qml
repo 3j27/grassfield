@@ -715,6 +715,19 @@ Scope {
             return win ? win.tileCentre(index) : "";
         }
 
+        // "x y w h" of the drawn icon of tile `index` on `screen`, output coordinates (fixtures only).
+        function iconrect(index: int, screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            let win = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    win = all[i];
+            }
+            return win ? win.tileIconRect(index) : "";
+        }
+
         function keyboard(): void {
             root.enterKeyboardMode();
         }
@@ -1103,6 +1116,15 @@ Scope {
                 const along = t.isSeparator;
                 const p = t.mapToItem(null, along && !win.vertical ? t.width / 2 : t.iconPos.x + t.iconPx / 2, along && win.vertical ? t.height / 2 : t.iconPos.y + t.iconPx / 2);
                 return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y);
+            }
+
+            // "x y w h" of the icon of tile `index` as drawn (magnification, hover rise and drag included), in output coordinates (test hook).
+            function tileIconRect(index: int): string {
+                const t = tileRepeater.itemAt(index);
+                if (!t || t.isSeparator)
+                    return "";
+                const p = t.mapToItem(null, t.iconPos.x, t.iconPos.y);
+                return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y) + " " + Math.round(t.iconPx) + " " + Math.round(t.iconPx);
             }
 
             // Where a popup of tile `index` opens (the Dock menu's anchor).
@@ -2193,6 +2215,8 @@ Scope {
                                     onTapped: {
                                         if (tile.menuByHold)
                                             return;
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: tapped", tile.tileId, Date.now());
                                         // Press taken away from the Dock (a shell surface or popup opened, the lock, or Qt cancelled it; see root.clickCancels): nothing happens.
                                         if (root.clickCancels !== tile.pressMark || tile.pressCancelled) {
                                             if (VisualFixtures.active)
