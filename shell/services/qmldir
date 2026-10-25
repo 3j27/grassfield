@@ -25,3 +25,4 @@ singleton WallpaperState 1.0 WallpaperState.qml
 singleton WallpaperOnline 1.0 WallpaperOnline.qml
 singleton RecentItems 1.0 RecentItems.qml
 singleton ThemeIcons 1.0 ThemeIcons.qml
+WallClock 1.0 WallClock.qml

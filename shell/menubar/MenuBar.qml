@@ -721,9 +721,8 @@ Scope {
                 onTriggered: win.hideMachine = AutoHide.step(win.hideMachine, win.hideInhibitors, win.autoHides, win.hideTiming, Math.min(frameTime * 1000, 100))
             }
 
-            SystemClock {
+            WallClock {
                 id: clock
-                precision: SystemClock.Minutes
             }
 
             // macOS: with several displays the menu bar of the one that is not active is dimmed (band and content). A single

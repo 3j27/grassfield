@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
-import Quickshell
 import Grassfield.Ui
 import qs.desktop
 import qs.security
@@ -59,9 +58,10 @@ Item {
 
     Component.onCompleted: focusField()
 
-    SystemClock {
+    // Created with each lock surface, so it shows the right time as the lock appears (WallClock.refresh at completion);
+    // not SystemClock, which spins in the repeated hour of a daylight saving fall-back (WallClock.qml).
+    WallClock {
         id: clock
-        precision: SystemClock.Minutes
     }
 
     // Soft drop shadow under the white text (decoration only, see the header).
