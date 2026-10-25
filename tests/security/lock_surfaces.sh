@@ -179,7 +179,7 @@ def nocomments(text):
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     return "\n".join(re.sub(r"(^|\s)//.*$", r"\1", l) for l in text.split("\n"))
 allowed_dates = {
-    "shell/security/lock/LockView.qml": ["SystemClock {\n        id: clock\n        precision: SystemClock.Minutes\n    }"],
+    "shell/security/lock/LockView.qml": ["WallClock {\n        id: clock\n    }"],
     "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = active ? new Date() : null;"],
     "shell/security/polkit/AuthDialogModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
 }
@@ -195,10 +195,11 @@ for base, _, files in os.walk(f"{root}/shell/security"):
             i = text.find(snippet)
             if i >= 0:
                 spans.append((i, i + len(snippet)))
-        for m in re.finditer(r"\bDate\b|\bSystemClock\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
+        for m in re.finditer(r"\bDate\b|\bSystemClock\b|\bWallClock\b|\bgetTime\s*\(|\bperformance\s*\.\s*now\b|\bvalueOf\s*\(", text):
             if not any(a <= m.start() < b for a, b in spans):
                 clock_hits.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} {m.group(0)}")
-# The lock screen's SystemClock (review of eee45cc) only feeds the two displayed texts.
+# The lock screen's clock (review of eee45cc; WallClock since cf6d3df, and a WallClock anywhere else in shell/security is a
+# wall clock too) only feeds the two displayed texts.
 lockview = nocomments(read("shell/security/lock/LockView.qml"))
 clock_uses = re.findall(r"\bclock\s*\.\s*\w+", lockview)
 if not (len(clock_uses) == 2 and lockview.count("FixedTime.date(clock.date)") == 2):

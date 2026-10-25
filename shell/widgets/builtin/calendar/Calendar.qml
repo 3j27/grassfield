@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Quickshell
 import Grassfield.Ui
 import qs.services
 import qs.widgets
@@ -17,10 +16,9 @@ WidgetBase {
     readonly property var order: CalendarMath.weekdayOrder(firstDay)
     readonly property string monthText: Qt.locale().toString(now, "MMMM yyyy")
 
-    SystemClock {
+    WallClock {
         id: clock
         enabled: root.active
-        precision: SystemClock.Minutes
     }
 
     Accessible.role: Accessible.StaticText

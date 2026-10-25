@@ -223,6 +223,8 @@ QtObject {
     readonly property real menubarInsetLeft: 20.5
     // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetRight: 18.5
+    // estimate: longest wait of a minute clock between two checks (WallClock); a Timer stops counting while the machine sleeps, so this bounds how long the time can be stale after a wake, at 6 wakeups a minute per clock [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property int menubarClockMaxWaitMs: 10000
     // adaptive bar: a bar showing the dark foreground switches to light when the wallpaper strip relative luminance falls below this; black text keeps 4.5:1 or more down to it (0.175), so the band is as wide as A2 allows (tested in test_contrast_tokens.py) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarToneLightBelow: 0.175
     // adaptive bar: a bar showing the light foreground switches to dark when the wallpaper strip relative luminance rises above this; white text keeps 4.5:1 or more up to it (0.18). The gap to toneLightBelow is the hysteresis [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]

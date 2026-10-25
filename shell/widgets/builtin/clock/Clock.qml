@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Quickshell
 import Grassfield.Ui
 import qs.services
 import qs.widgets
@@ -14,11 +13,11 @@ WidgetBase {
     readonly property string timeText: Qt.locale().toString(now, Qt.locale().timeFormat(Locale.ShortFormat))
     readonly property string dateText: Qt.locale().toString(now, qsTr("dddd, MMMM d"))
 
-    SystemClock {
+    WallClock {
         id: clock
         enabled: root.active
         // The seconds hand only exists on the analog face.
-        precision: root.analog ? SystemClock.Seconds : SystemClock.Minutes
+        seconds: root.analog
     }
 
     Accessible.role: Accessible.StaticText
