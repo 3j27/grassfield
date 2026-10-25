@@ -832,6 +832,11 @@ Consequences:
 - An app set to draw no frame of its own (Chromium's "Use system title bar and borders") is still tagged and then has no
   controls: it has to leave the list. A new app that draws its own frame has to join it. Neither is automatic until
   Hyprland exposes a decoration signal.
+- Known limit: the listed GTK apps and Chromium draw the buttons the GTK layout names. A user layout without minimize or
+  zoom (a `button-layout` set in the user's dconf database beats the Grassfield default, which is not a lock) leaves
+  those windows a partial set, and one without any button leaves none; the plugin's titlebar does not come back for them.
+  Obsidian ignores the layout. Owner check in a real Grassfield session:
+  `gsettings get org.gnome.desktop.wm.preferences button-layout` answers `'close,minimize,maximize:'`.
 - Degradation (C1-C3): without the plugin there is no titlebar and no P8: a client sees Hyprland's own capabilities, so
   GTK4's minimize button is greyed again, as macOS greys an unavailable action (nested: plugin unload with Nautilus open,
   `wm_capabilities(array[8])` and a full configure, the button greys and the window stays active at its size; load,

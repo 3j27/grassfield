@@ -34,7 +34,9 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- Hyprland offers no minimize and GTK4 greys it). Others join only once verified. Same tag as Grassfield's apps: no
 -- plugin titlebar, no band in Overview and Stages, the app's own minimize and zoom work (exempt from the maximize
 -- suppression above). An app set to use the system title bar (Chromium's "Use system title bar and borders") draws no
--- controls: take it out of this list.
+-- controls: take it out of this list. Known limit (ADR-0015 amendment 2026-10-25): the GTK apps and Chromium draw the
+-- buttons of the GTK button layout, so a user layout without minimize or zoom leaves them a partial set (none without
+-- any button).
 hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, tag = "+grassfield-client-chrome" })
 
 -- Get Info and Customize Folder draw the titlebar-only style (role "info"): radius 12 like every titlebar window; the
