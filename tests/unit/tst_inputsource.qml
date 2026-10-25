@@ -1,55 +1,41 @@
 import QtQuick
 import QtTest
-import "../../shell/platform/InputSource.js" as InputSource
+import "../../shell/overlay/InputSource.js" as IS
 
-// Input source HUD logic (the layout change events of the compositor).
+// The keyboard-versus-pointer tracking behind the Quick Settings focus ring.
 TestCase {
     name: "InputSource"
 
-    function test_parse() {
-        compare(InputSource.parse("at-translated-set-2-keyboard,English (US)"), {keyboard: "at-translated-set-2-keyboard", layout: "English (US)"});
-        compare(InputSource.parse("kb,French, with dead keys").layout, "French, with dead keys");
-        compare(InputSource.parse(""), null);
-        compare(InputSource.parse("nocomma"), null);
-        compare(InputSource.parse(",x"), null);
-        compare(InputSource.parse("x,"), null);
-        compare(InputSource.parse(undefined), null);
-        compare(InputSource.parse("k," + "a".repeat(200)), null);
+    function test_startsWithThePointer() {
+        compare(IS.start().keyboard, false);
     }
 
-    function test_firstLayoutIsRememberedWithoutAHud() {
-        const r = InputSource.step({last: {}}, {keyboard: "k", layout: "English (US)"});
-        verify(!r.show);
-        compare(r.state.last.k, "English (US)");
+    function test_aKeyboardFocusTurnsTheRingOn() {
+        let s = IS.focusMoved(IS.start(), true);
+        compare(s.keyboard, true);
+        compare(IS.ringShown(s, true), true);
+        compare(IS.ringShown(s, false), false, "a control without a visual focus has no ring");
     }
 
-    function test_aSingleLayoutNeverShows() {
-        let s = {last: {}};
-        for (let i = 0; i < 4; i++) {
-            const r = InputSource.step(s, {keyboard: "k", layout: "English (US)"});
-            verify(!r.show);
-            s = r.state;
-        }
+    function test_aPointerFocusDoesNotTurnItOn() {
+        compare(IS.focusMoved(IS.start(), false).keyboard, false);
+        compare(IS.focusMoved(IS.start(), undefined).keyboard, false);
     }
 
-    function test_aChangeShows() {
-        const s = InputSource.step({last: {}}, {keyboard: "k", layout: "English (US)"}).state;
-        let r = InputSource.step(s, {keyboard: "k", layout: "French"});
-        verify(r.show);
-        r = InputSource.step(r.state, {keyboard: "k", layout: "English (US)"});
-        verify(r.show);
+    function test_hoverNeverChangesIt() {
+        // Tab, then the mouse moves (and redraws send hover updates), then Return: the ring is still there.
+        let s = IS.focusMoved(IS.start(), true);
+        for (let i = 0; i < 5; i++)
+            s = IS.hovered(s);
+        compare(IS.ringShown(s, true), true);
     }
 
-    function test_keyboardsAreIndependent() {
-        const s = InputSource.step({last: {}}, {keyboard: "a", layout: "English (US)"}).state;
-        const r = InputSource.step(s, {keyboard: "b", layout: "French"});
-        verify(!r.show);
-    }
-
-    function test_stepDoesNotModifyItsInput() {
-        const s = {last: {k: "x"}};
-        InputSource.step(s, {keyboard: "k", layout: "y"});
-        compare(s.last.k, "x");
-        compare(InputSource.step(null, {keyboard: "k", layout: "y"}).show, false);
+    function test_aPressHandsTheFocusToThePointer() {
+        let s = IS.focusMoved(IS.start(), true);
+        s = IS.pressed(s);
+        compare(s.keyboard, false);
+        compare(IS.ringShown(s, true), false);
+        s = IS.focusMoved(s, true);
+        compare(s.keyboard, true, "the next keyboard focus brings the ring back");
     }
 }

@@ -6,6 +6,7 @@ import qs.platform
 import qs.services
 import qs.overlay.controlcenter
 import "controlcenter/Model.js" as Model
+import "InputSource.js" as IS
 
 // Quick Settings (spec controlcenter.md; internal name Control Center): floating glass modules on a
 // 4-column grid, the macOS model. Every module is its own frosted surface (no shared panel): the
@@ -47,9 +48,10 @@ FocusScope {
     }
 
     // Whether the control that has the focus got it by the keyboard (a visible ring): the focus moved on by a click or a
-    // pointer-opened section shows none (macOS: the ring is for the keyboard only).
-    // The focus last moved by the keyboard and the pointer has not moved over the panel since: a click leaves no ring, and the focus that follows it (a section opened, Back) shows none either.
-    property bool keyboardNav: false
+    // pointer-opened section shows none (macOS: the ring is for the keyboard only). The ring of a keyboard-focused control stays whatever
+    // the pointer does over it; only a pointer PRESS clears it (InputSource.js, tests/unit/tst_inputsource.qml), never a hover.
+    property var input: IS.start()
+    readonly property bool keyboardNav: input.keyboard
 
     // The focus moved to a control with a keyboard reason (Tab, the arrows): keyboard navigation.
     Connections {
@@ -57,18 +59,20 @@ FocusScope {
 
         function onActiveFocusItemChanged(): void {
             const item = root.Window.window.activeFocusItem;
-            if (item && item.visualFocus === true)
-                root.keyboardNav = true;
+            root.input = IS.focusMoved(root.input, !!item && item.visualFocus === true);
         }
     }
 
-    HoverHandler {
-        onPointChanged: root.keyboardNav = false
+    // A passive handler: it sees the press and leaves it to the controls.
+    PointHandler {
+        acceptedButtons: Qt.AllButtons
+        grabPermissions: PointerHandler.ApprovesTakeOverByAnything
+        onActiveChanged: if (active) root.input = IS.pressed(root.input)
     }
 
     function keyboardFocused(): bool {
         const item = root.Window.window ? root.Window.window.activeFocusItem : null;
-        return root.keyboardNav && !!item && item.visualFocus === true;
+        return IS.ringShown(root.input, !!item && item.visualFocus === true);
     }
 
     function open(id: string): void {
