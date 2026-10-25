@@ -81,3 +81,30 @@ function handleKey(items, index, key, isSubmenu) {
     }
     return {index: index, action: ""};
 }
+
+// Which rows reserve the leading icon / check slot (macOS: the text starts at the plain inset, and a section whose rows
+// have an icon or a check pushes the text of that whole section, separators bound sections). Returns one boolean per
+// item; separators and swatch rows get false.
+function leadSlots(items) {
+    const out = [];
+    let start = 0;
+    const flush = end => {
+        let any = false;
+        for (let i = start; i < end; i++) {
+            const it = items[i];
+            if (it && !it.separator && ((typeof it.iconName === "string" && it.iconName !== "") || it.checked === true))
+                any = true;
+        }
+        for (let i = start; i < end; i++)
+            out.push(any && !!items[i] && !items[i].separator);
+    };
+    for (let i = 0; i < items.length; i++) {
+        if (items[i] && items[i].separator) {
+            flush(i);
+            out.push(false);
+            start = i + 1;
+        }
+    }
+    flush(items.length);
+    return out;
+}

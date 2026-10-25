@@ -9,6 +9,8 @@ Item {
     property string iconName: ""
     property bool highlighted: false
     property bool checked: false
+    // False: no icon / check slot (macOS: the text of a section without icons or checks starts at the plain inset).
+    property bool reserveSlot: true
     property bool hasSubmenu: false
     property bool destructive: false
 
@@ -51,6 +53,7 @@ Item {
         spacing: Tokens.spacingSm
 
         Item {
+            visible: root.reserveSlot
             width: Tokens.menuIconSize
             height: Tokens.menuIconSize
             anchors.verticalCenter: parent.verticalCenter

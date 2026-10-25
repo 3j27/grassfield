@@ -48,6 +48,8 @@ FocusScope {
 
     // Widest row; a Column sizes by width, not implicitWidth, so rows report through measure().
     property real rowsWidth: 0
+    // Rows that reserve the icon / check slot (MenuNav.leadSlots): the others start their text at the plain inset.
+    readonly property var leadSlots: MenuNav.leadSlots(root.model)
 
     width: Math.max(Tokens.menuMinWidth, rowsWidth + 2 * Tokens.menuPadding)
     height: column.implicitHeight + 2 * Tokens.menuPadding
@@ -307,6 +309,7 @@ FocusScope {
                         shortcut: row.modelData.shortcut !== undefined ? row.modelData.shortcut : ""
                         iconName: row.modelData.iconName !== undefined ? row.modelData.iconName : ""
                         checked: row.modelData.checked === true
+                        reserveSlot: root.leadSlots[row.index] === true
                         destructive: row.modelData.destructive === true
                         enabled: row.modelData.enabled !== false
                         hasSubmenu: MenuNav.hasSubmenu(row.modelData)
