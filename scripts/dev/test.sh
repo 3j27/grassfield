@@ -266,6 +266,11 @@ if want logic; then
   python3 -I tests/ci/import_graph.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/import_graph.py "$rc" PASS
+  # Only shell/lib reads GRASSFIELD_* (ADR-0019): the rule on synthetic trees; the tree is checked by `just check-shell`.
+  rc=0
+  python3 -I tests/ci/run_mode.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/run_mode.py "$rc" PASS
   # Symbolic glyph stroke width (ADR-0003, audit GF-124): the scanner on samples, then every shipped glyph.
   rc=0
   python3 -I tests/ci/icon_strokes.py --selftest || rc=1
