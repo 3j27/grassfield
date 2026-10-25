@@ -1485,9 +1485,11 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
 - Appmenu: only Wayland clients that implement `org_kde_kwin_appmenu` (Qt 6.11, Chromium 152) and only when
   `com.canonical.AppMenu.Registrar` is on their bus at start-up; X11 apps, GTK and Electron apps are not covered
   (T0 menus). The plugin only links windows to DBusMenu addresses; reading and showing the menus is step B.
-- Appmenu runtime unload with client objects alive keeps the plugin library in memory (FR23): a rebuilt plugin
-  at the same path loads only after Hyprland restarts; those clients' menus are not re-announced by a reloaded
-  plugin until they create new appmenu objects.
+- The plugin library is never unloaded at runtime: its GNU_UNIQUE symbols keep the image mapped after `PLUGIN_EXIT`
+  (and appmenu pins it as well when client objects are alive, FR23), so a load of the same path runs the image already
+  in memory: a rebuilt plugin runs only after Hyprland restarts (in development: restart the nested session; details in
+  compositor/README.md, "Unload"). Appmenu clients' menus are not re-announced by a reloaded plugin until they create
+  new appmenu objects.
 - Window addresses are reused by Hyprland after a window is destroyed (seen in S5 runs): the shell must apply
   `appmenu` events in order, and a clear always precedes a reuse.
 - Hyprland itself never releases the buttons of a removed pointer device: after an abandoned drag (device

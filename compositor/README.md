@@ -271,9 +271,21 @@ commit listeners and any pending desktop grant, and
 `appmenuServer::stop()` makes sure no Wayland object points into the library after `dlclose`: at compositor
 shutdown it destroys every appmenu resource and the global; on a runtime unload with client objects still alive
 it pins the library in memory (`dlopen(RTLD_NOLOAD | RTLD_NODELETE)`), removes the global and leaves those
-objects inert, because destroying them would make libwayland disconnect the client at its next request on them
-(a rebuilt plugin at the same path then loads only after Hyprland restarts). Last, a capabilities event with an empty
-feature list is posted so the shell returns to its fallbacks.
+objects inert, because destroying them would make libwayland disconnect the client at its next request on them.
+Last, a capabilities event with an empty feature list is posted so the shell returns to its fallbacks.
+
+The library is never really unloaded at runtime, appmenu objects or not: the `.so` holds GNU_UNIQUE symbols (264 in
+the 0.56.2 build; `readelf -sW grassfield-compositor.so | grep -c UNIQUE`: inline variables and template statics), which
+glibc's `dlclose` never drops, so the image stays mapped after `PLUGIN_EXIT`, and a later load of the same path gets
+that same image back (no new copy is read from disk; static and function-local state is not initialized again, so each
+module's `stop()` leaves its state as its `start()` expects it). What it means:
+- Testing a rebuilt plugin: unload and load run the old code. Restart the nested session instead
+  (`scripts/dev/nested-down.sh`, then `scripts/dev/nested-up.sh`), which loads the new build at start. Observed with
+  GF-056 P8: a rebuilt plugin loaded after an unload kept the previous build's behaviour until the restart.
+- C2 (and the unload and reload cases of the nested tests): what an unload checks is real, since Hyprland calls nothing in
+  the library after `PLUGIN_EXIT` and every hook, decoration, listener and Wayland object has been removed or made
+  inert; the mapped image is only dead code. A reload checks that `start()` works again after `stop()` on the same
+  image, not a fresh load from disk.
 
 ## IPC (gfc/1)
 
