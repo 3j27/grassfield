@@ -46,7 +46,15 @@ fi
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 rc=0
-printf '%s\n' "${files[@]}" | xargs -P "$(nproc)" -n 1 clang-tidy -p build --quiet >"$out" 2>&1 || rc=$?
+# Inside the owner's real Grassfield session (every terminal there inherits GRASSFIELD_SESSION=1) clang-tidy runs at the
+# lowest priority on two jobs, so a check never makes the session stall (2026-10-25: load 32 on 8 threads during a full run).
+jobs=$(nproc)
+prio=()
+if [[ ${GRASSFIELD_SESSION:-} == 1 ]]; then
+  jobs=2
+  prio=(nice -n 19)
+fi
+printf '%s\n' "${files[@]}" | "${prio[@]}" xargs -P "$jobs" -n 1 clang-tidy -p build --quiet >"$out" 2>&1 || rc=$?
 findings=$(grep -c -E ': (warning|error): ' "$out" || true)
 if ((findings > 0 || rc != 0)); then
   grep -v -E '^[0-9]+ warnings? generated|^Suppressed [0-9]+|^Use -header-filter|^\[[0-9]+/[0-9]+\] Processing' "$out" || true
