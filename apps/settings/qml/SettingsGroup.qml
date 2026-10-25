@@ -27,7 +27,7 @@ Item {
         // (real session 2026-10-22, "Binding loop detected for property height").
         bottomPadding: Tokens.spacingSm
         text: root.caption
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyCaptionSize
         font.weight: Tokens.typographyMenuBoldWeight
@@ -38,7 +38,7 @@ Item {
         anchors.fill: column
         radius: Tokens.radiusMenu
         // macOS: a feather-light group (about 3 % of the fill colour), no border.
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.settingsGroupFillOpacity)
+        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.materialFillOpacity : Tokens.settingsGroupFillOpacity)
     }
 
     Column {
@@ -58,7 +58,7 @@ Item {
         leftPadding: Tokens.spacingMd
         rightPadding: Tokens.spacingMd
         text: root.footnote
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyCaptionSize
         wrapMode: Text.Wrap

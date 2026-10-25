@@ -58,10 +58,13 @@ QtObject {
     function windowPalette(base: var): var {
         const c = Object.assign({}, base);
         c.materialTint = base.windowBackground;
-        if (!increaseContrast)
-            c.textSecondary = base.windowTextSecondary;
         return c;
     }
+
+    // Secondary text drawn directly on the opaque window surface or on its group fill (Settings): the lighter app-only grey, as
+    // macOS. Text on a field, tab or chip fill keeps `colors.textSecondary`, which holds 4.5:1 on those fills (A2); outside an
+    // app window this is textSecondary, and Increase Contrast makes it the primary text colour.
+    readonly property color windowSecondary: increaseContrast ? colors.text : (windowSurface ? colors.windowTextSecondary : colors.textSecondary)
 
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.
     readonly property var darkColors: devGlyphMode !== "" ? glyphColors(accentedDark) : accentedDark

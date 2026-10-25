@@ -27,7 +27,7 @@ QtObject {
         destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#1D1F24",  // Opaque app window background in the dark appearance: the same as materialTint (no dark reference); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
-        windowTextSecondary: "#A0A0A8",  // Secondary text in opaque app windows, dark appearance: 4.5:1 or more on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        windowTextSecondary: "#DCDCE4",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
         chipFill: "#FFFFFF"  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
     })
 
@@ -53,7 +53,7 @@ QtObject {
         destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#FFFFFF",  // Opaque app window background (Settings, Files), macOS 255 against materialTint 244; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
-        windowTextSecondary: "#6E6E73",  // Secondary text in opaque app windows: lighter than textSecondary (which A2 darkens for material surfaces), 5:1 on windowBackground, tested in tests/visual/test_contrast_tokens.py; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Settings and Files) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+        windowTextSecondary: "#6E6E73",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
         chipFill: "#FFFFFF"  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
     })
 
@@ -221,8 +221,8 @@ QtObject {
 
     // task spec / macOS convention, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarHeight: 24
-    // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property int menubarItemPadding: 11
+    // Title padding 10 per side (ink to ink 20; macOS 22.5 measured, audit 25 before); with menubar.insetLeft 19 the app name starts at 55 and the mark is centred at 27, as macOS; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property int menubarItemPadding: 10
     // Status glyphs 16 (macOS ink 12-13.5 tall; was 14); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarIconSize: 16
     // The open-title capsule floats: 1 from the screen edge (macOS ~23 tall on a taller bar); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
@@ -231,8 +231,8 @@ QtObject {
     readonly property int menubarHoverInsetBottom: 1
     // Status glyphs 18.5-20 apart in macOS; with the 16-pt glyph a pitch of 33; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarStatusItemPadding: 8.5
-    // F1 gap 3: screen edge to the system mark [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property real menubarInsetLeft: 20.5
+    // Screen edge to the system mark: 19 with itemPadding 10 puts the mark's centre at 27 and the app name at 55 (macOS); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property int menubarInsetLeft: 19
     // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetRight: 18.5
     // estimate: longest wait of a minute clock between two checks (WallClock); a Timer stops counting while the machine sleeps, so this bounds how long the time can be stale after a wake, at 6 wakeups a minute per clock [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
@@ -269,6 +269,10 @@ QtObject {
     readonly property int menubarRevealDuration: 200
     // The Wi-Fi glyph is wider than the others: 16 x 1.3 gives an ink about 16.5 wide, macOS 17; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarWifiIconScale: 1.3
+    // The speaker glyph is drawn 1.25 x the status size: its ink is about 12.5 tall, macOS 12-13.5 (was 10); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property real menubarVolumeIconScale: 1.25
+    // Between the clock's date and time: an en space and a space, about 10 pt against 5 before (macOS 9.5); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property string menubarClockGap: "\u2002 "
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockIconSize: 48
@@ -633,8 +637,8 @@ QtObject {
     readonly property int quicksettingsAirplaneSettleMs: 3000
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
-    // Quick Settings slider track: the shadow colour at this opacity (a darker translucent track under the white fill); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Quick Settings: integrator decision, macOS model: knobless white fill) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
-    readonly property real quicksettingsSliderTrackOpacity: 0.22
+    // Quick Settings slider track: the shadow colour at this opacity, so the white fill holds 3:1 (WCAG 1.4.11) against it over the lightest module, light and dark, tested; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property real quicksettingsSliderTrackOpacity: 0.42
     // Glyph at the low end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
     readonly property int quicksettingsEndGlyphSmall: 12
     // Glyph at the high end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
@@ -727,8 +731,6 @@ QtObject {
     readonly property int searchRowHeight: 56
     // F1 gap 8: result icon ~32 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRowIconSize: 32
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchHeaderHeight: 28
     // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchChipTop: 10
     // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
@@ -750,11 +752,11 @@ QtObject {
     // estimate: recent documents shown for an empty query [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRecentCount: 5
     // Result row title, macOS ~17 +-1 against 13 before; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
-    readonly property int searchTitleSize: 17
+    readonly property int searchTitleSize: Math.round(17 * Appearance.textScale)
     // Result row subtitle, macOS ~15 +-1 against 11 before; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
-    readonly property int searchSubtitleSize: 15
-    // Result row text left inset from the panel edge, macOS 72.5; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
-    readonly property int searchTextInset: 72
+    readonly property int searchSubtitleSize: Math.round(15 * Appearance.textScale)
+    // Result row text box left inset from the panel edge: the ink of the 17-pt text starts about 2 further (side bearing), macOS ink at 72.5; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property real searchTextInset: 70.5
     // Query text left inset from the panel edge, macOS 61; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]
     readonly property int searchQueryInset: 61
     // Magnifier and hairline inset from the panel edge, macOS 19.4-20.4; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Search) [ref: docs/testing/f1-reference-gaps.md; docs/specs/search.md]

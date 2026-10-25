@@ -159,7 +159,7 @@ SettingsPage {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Normal")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
             }
@@ -180,7 +180,7 @@ SettingsPage {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Large")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
             }

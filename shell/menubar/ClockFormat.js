@@ -49,12 +49,10 @@ function dateKind(showDate, showDay) {
     return showDate ? "date" : "none";
 }
 
-// The gap between the date and the time: an en space and a space (macOS: 9.5 pt between them against 6 for a word gap).
-const DATE_TIME_GAP = "\u2002 ";
-
-// Date part and time part joined by the gap; an empty date part leaves the time alone.
-function join(dateText, timeText) {
-    return dateText !== "" ? dateText + DATE_TIME_GAP + timeText : timeText;
+// Date part and time part joined by `gap` (Tokens.menubarClockGap: an en space and a space, macOS 9.5 pt between them against 6 for a
+// word gap); an empty date part leaves the time alone.
+function join(dateText, timeText, gap) {
+    return dateText !== "" ? dateText + (gap === undefined ? " " : gap) + timeText : timeText;
 }
 
 // "When Space Allows": the date is shown when the whole status area fits with it. `fullHidden` = the optional items

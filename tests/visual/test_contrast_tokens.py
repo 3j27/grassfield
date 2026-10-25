@@ -555,6 +555,57 @@ class ContrastTokens(unittest.TestCase):
             self.assertGreaterEqual(wcag(mark, hex_rgb(self.tok.path("files.tag" + name))), 3.0, name)
 
 
+class WindowSurfacePairs(unittest.TestCase):
+    """Visual audit 2026-10-25 (review of visual-audit-1): every foreground/background pair the opaque-window and Quick Settings
+    changes introduced, in both appearances. `Appearance.windowSecondary` (windowTextSecondary) is for text drawn directly on the
+    window surface or on a Settings group; fields, tabs and chips keep textSecondary on their own fills."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tok = Tokens(load_tokens())
+
+    def window(self, ap):
+        return self.tok.color("colors", ap, "windowBackground")
+
+    def test_window_secondary_text_on_the_window_and_on_a_settings_group(self):
+        group = {"light": self.tok.path("settings.groupFillOpacity"), "dark": self.tok.path("material.fillOpacity")}
+        for ap in APPEARANCES:
+            fg = self.tok.color("colors", ap, "windowTextSecondary")
+            win = self.window(ap)
+            on_group = over(self.tok.color("colors", ap, "fill"), group[ap], win)
+            for bg, what in ((win, "the window"), (on_group, "a Settings group")):
+                self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
+                self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
+
+    def test_text_secondary_on_the_fields_and_tabs_of_a_window(self):
+        # The sidebar and toolbar search placeholders, the inactive Files tab titles, a rename field: the translucent fill over the window.
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            fill = over(self.tok.color("colors", ap, "fill"), self.tok.path("material.fillOpacity"), win)
+            fg = self.tok.color("colors", ap, "textSecondary")
+            for bg, what in ((win, "the window"), (fill, "a 0.14 fill")):
+                self.assertGreaterEqual(wcag(fg, bg), 4.5, "textSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
+
+    def test_dark_settings_groups_stay_visible_against_the_window(self):
+        win = self.window("dark")
+        group = over(self.tok.color("colors", "dark", "fill"), self.tok.path("material.fillOpacity"), win)
+        self.assertGreaterEqual(wcag(group, win), 1.3, "dark group against the window: %.2f:1" % wcag(group, win))
+
+    def test_quick_settings_slider_fill_against_its_track(self):
+        # WCAG 1.4.11: the white fill against the track, over the lightest module (every wallpaper colour, every transparency).
+        for ap in APPEARANCES:
+            fill = self.tok.color("colors", ap, "knob")
+            shadow = self.tok.color("colors", ap, "shadow")
+            worst = None
+            for t in TRANSPARENCIES:
+                for wp in WALLPAPER_COLORS:
+                    module = over(self.tok.color("colors", ap, "materialTint"), self.tok.tint_alpha(t), wp)
+                    track = over(shadow, self.tok.path("quicksettings.sliderTrackOpacity"), module)
+                    r = wcag(fill, track)
+                    worst = r if worst is None else min(worst, r)
+            self.assertGreaterEqual(worst, 3.0, "slider fill against the track, %s appearance: %.2f:1" % (ap, worst))
+
+
 if __name__ == "__main__":
     _tok = Tokens(load_tokens())
     _roles = load_roles()

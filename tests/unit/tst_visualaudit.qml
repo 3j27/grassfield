@@ -19,7 +19,8 @@ TestCase {
     function test_searchRowMetrics() {
         compare(Tokens.searchTitleSize, 17);
         compare(Tokens.searchSubtitleSize, 15);
-        compare(Tokens.searchTextInset, 72);
+        // The text box starts 70.5 in; the ink of the 17-pt glyphs about 2 further, macOS ink at 72.5.
+        compare(Tokens.searchTextInset, 70.5);
         compare(Tokens.searchQueryInset, 61);
         compare(Tokens.searchRowRadius, 18);
         compare(Tokens.searchRowInset, 10);
@@ -78,6 +79,12 @@ TestCase {
     // only the stroke changed), a wider Wi-Fi glyph, a floating capsule, desktop icons 10 from the edge.
     function test_menuBarMetrics() {
         compare(Tokens.menubarIconSize, 16);
+        // The app name starts at 55 and the mark is centred at 27 (macOS): inset + icon + two paddings.
+        compare(Tokens.menubarInsetLeft + Tokens.menubarIconSize + 2 * Tokens.menubarItemPadding, 55);
+        compare(Tokens.menubarInsetLeft + Tokens.menubarIconSize / 2, 27);
+        // The speaker is drawn larger than the others: ink 12-13.5 tall (the drawing is 15/24 of the box).
+        const speakerInk = Tokens.menubarIconSize * Tokens.menubarVolumeIconScale * 15 / 24;
+        verify(speakerInk >= 12 && speakerInk <= 13.5, String(speakerInk));
         verify(Tokens.menubarIconSize * Tokens.menubarWifiIconScale * 19 / 24 >= 16);
         verify(Tokens.menubarHoverInsetTop >= 1 && Tokens.menubarHoverInsetBottom >= 1);
         compare(Tokens.desktopIconMargin, 10);
@@ -95,8 +102,8 @@ TestCase {
     }
 
     function test_menuBarClockGap() {
-        verify(Clock.DATE_TIME_GAP.length >= 2);
-        compare(Clock.join("Sat Oct 17", "09:41"), "Sat Oct 17" + Clock.DATE_TIME_GAP + "09:41");
+        verify(Tokens.menubarClockGap.length >= 2);
+        compare(Clock.join("Sat Oct 17", "09:41", Tokens.menubarClockGap), "Sat Oct 17" + Tokens.menubarClockGap + "09:41");
     }
 
     // WCAG relative luminance and contrast of two "#rrggbb" colours.
@@ -125,6 +132,25 @@ TestCase {
         verify(lum(Tokens.colorLight.windowTextSecondary) > lum(Tokens.colorLight.textSecondary));
     }
 
+    // Dark appearance keeps its previous values (no dark macOS reference): the window secondary text is the old textSecondary.
+    function test_darkWindowValuesAreTheOldOnes() {
+        compare(Tokens.colorDark.windowTextSecondary, Tokens.colorDark.textSecondary);
+        compare(Tokens.colorDark.windowBackground, Tokens.colorDark.materialTint);
+    }
+
+    // Search rows follow Accessibility > Text Size like every other text.
+    function test_searchTextFollowsTheTextSize() {
+        const saved = Appearance.textScale;
+        Appearance.textScale = 1;
+        compare(Tokens.searchTitleSize, 17);
+        compare(Tokens.searchSubtitleSize, 15);
+        Appearance.textScale = 1.3;
+        compare(Tokens.searchTitleSize, 22);
+        compare(Tokens.searchSubtitleSize, 20);
+        verify((Tokens.searchTitleSize + Tokens.searchSubtitleSize) * 1.2 < Tokens.searchRowHeight);
+        Appearance.textScale = saved;
+    }
+
     function test_windowSurfaceSwitch() {
         const saved = Appearance.windowSurface;
         const dark = Appearance.dark;
@@ -133,7 +159,12 @@ TestCase {
         compare(String(Appearance.colors.materialTint).toLowerCase(), Tokens.colorLight.materialTint.toLowerCase());
         Appearance.windowSurface = true;
         compare(String(Appearance.colors.materialTint).toLowerCase(), "#ffffff");
-        compare(String(Appearance.colors.textSecondary).toLowerCase(), Tokens.colorLight.windowTextSecondary.toLowerCase());
+        // The lighter grey is its own role: textSecondary (fields, tabs, chips) is untouched.
+        compare(String(Appearance.windowSecondary).toLowerCase(), Tokens.colorLight.windowTextSecondary.toLowerCase());
+        compare(String(Appearance.colors.textSecondary).toLowerCase(), Tokens.colorLight.textSecondary.toLowerCase());
+        Appearance.windowSurface = false;
+        compare(String(Appearance.windowSecondary).toLowerCase(), Tokens.colorLight.textSecondary.toLowerCase());
+        Appearance.windowSurface = true;
         Appearance.windowSurface = saved;
         Appearance.dark = dark;
     }

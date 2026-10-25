@@ -68,6 +68,12 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
   the Trash lines together and is heavier than the menu bar glyphs of the reference, so the shipped 1.75 is kept and
   the rule is now the measured one. `tests/ci/icon_strokes.py` fails on any glyph with another stroke width. App
   icons come from the user's icon theme; Grassfield ships no app icons that imitate Apple's.
+  Amended 2026-10-25 (visual audit, integrator decision, macOS model): the **menu bar status items only** (system mark,
+  Wi-Fi, Sound, Battery, Focus, Now Playing, Search, Quick Settings) use a heavier set, `ui/Grassfield/Ui/icons-bar/`,
+  **stroke 2.4 on the 24 grid** (1.6 px at 16 pt). Reason: the audit measured the macOS status symbols as solid (12-13.5 pt tall,
+  Wi-Fi 17 wide) against ours at 1.17 px strokes, 8-11 pt tall and thin; a larger glyph alone (16 pt) is still too light. Each
+  glyph is its 1.75 twin with only the stroke width changed (`Icon.heavy`); in-app and in-panel glyphs stay at 1.75, the rule above
+  is unchanged for them. `tests/ci/icon_strokes.py` checks both sets, the second against its twins.
 - **Traffic lights**: own glyphs and own colors (close #E5534B, minimize #D9A93B, zoom #4FA64F), shown
   without symbols until hover, then own symbols (×, −, ⤢). Recorded in `docs/legal/visual-review.md`.
 - **Material**: frosted "restrained glass" (§5.5): blur from ext-background-effect-v1 (`BackgroundEffect`)

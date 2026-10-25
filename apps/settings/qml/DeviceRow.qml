@@ -89,7 +89,7 @@ Item {
             width: parent.width
             text: root.subtitle
             elide: Text.ElideRight
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
@@ -109,7 +109,7 @@ Item {
             visible: root.actionText !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: root.actionText
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
@@ -126,7 +126,7 @@ Item {
             visible: root.trailing !== ""
             name: root.trailing
             size: Tokens.settingsListIconSize
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             anchors.verticalCenter: parent.verticalCenter
         }
     }

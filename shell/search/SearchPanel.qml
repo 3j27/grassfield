@@ -350,7 +350,7 @@ Variants {
                     const sel = root.controller.selected;
                     const r = root.controller.rows;
                     for (let i = 0; i < r.length; i++) {
-                        if (!r[i].header && r[i].itemIndex === sel)
+                        if (r[i].itemIndex === sel)
                             return i;
                     }
                     return -1;
@@ -358,10 +358,6 @@ Variants {
                 onCurrentIndexChanged: {
                     if (currentIndex < 0)
                         return;
-                    // Show the group header above the first item of a group.
-                    const r = root.controller.rows;
-                    const header = currentIndex > 0 && r[currentIndex - 1].header ? currentIndex - 1 : currentIndex;
-                    positionViewAtIndex(header, ListView.Contain);
                     positionViewAtIndex(currentIndex, ListView.Contain);
                 }
 
@@ -371,29 +367,15 @@ Variants {
                     required property var modelData
                     required property int index
 
-                    readonly property bool isHeader: modelData.header
-                    readonly property bool selected: !isHeader && modelData.itemIndex === root.controller.selected
-                    readonly property var info: isHeader ? ({}) : modelData.item
+                    readonly property bool selected: modelData.itemIndex === root.controller.selected
+                    readonly property var info: modelData.item
 
                     width: list.width
-                    height: isHeader ? Tokens.searchHeaderHeight : Tokens.searchRowHeight
-                    Accessible.role: isHeader ? Accessible.StaticText : Accessible.ListItem
-                    Accessible.name: isHeader ? modelData.title : info.title + ", " + info.subtitle
+                    height: Tokens.searchRowHeight
+                    Accessible.role: Accessible.ListItem
+                    Accessible.name: info.title + ", " + info.subtitle
                     Accessible.selected: selected
                     Accessible.onPressAction: root.controller.activate(info, false)
-
-                    Text {
-                        visible: row.isHeader
-                        x: Tokens.spacingMd
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: Tokens.spacingXs
-                        text: row.isHeader ? row.modelData.title : ""
-                        textFormat: Text.PlainText
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                        font.weight: Tokens.typographyMenuBoldWeight
-                    }
 
                     Rectangle {
                         visible: row.selected
@@ -404,7 +386,6 @@ Variants {
 
                     Item {
                         id: iconBox
-                        visible: !row.isHeader
                         x: Tokens.searchFieldInset - Tokens.searchRowInset
                         anchors.verticalCenter: parent.verticalCenter
                         width: Tokens.searchRowIconSize
@@ -415,28 +396,28 @@ Variants {
                             size: Tokens.searchRowIconSize
                             oversample: Tokens.searchIconOversample
                             overAccent: row.selected
-                            visible: !row.isHeader && row.info.iconSource !== undefined
-                            source: row.isHeader || row.info.iconSource === undefined ? "" : (row.info.appIcon !== undefined ? ThemeIcons.appIcon(row.info.appIcon, "application-x-executable") : row.info.iconSource)
+                            visible: row.info.iconSource !== undefined
+                            source: row.info.iconSource === undefined ? "" : (row.info.appIcon !== undefined ? ThemeIcons.appIcon(row.info.appIcon, "application-x-executable") : row.info.iconSource)
                             asynchronous: true
                         }
 
                         Icon {
                             anchors.centerIn: parent
-                            visible: !row.isHeader && row.info.glyph !== undefined
+                            visible: row.info.glyph !== undefined
                             size: Tokens.searchRowIconSize * Tokens.searchGlyphScale
-                            name: !row.isHeader && row.info.glyph !== undefined ? row.info.glyph : ""
+                            name: row.info.glyph !== undefined ? row.info.glyph : ""
                             color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
                         }
 
                         Rectangle {
                             anchors.fill: parent
-                            visible: !row.isHeader && row.info.badge !== undefined
+                            visible: row.info.badge !== undefined
                             radius: Tokens.radiusControl
                             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
                             Text {
                                 anchors.centerIn: parent
-                                text: !row.isHeader && row.info.badge !== undefined ? row.info.badge : ""
+                                text: row.info.badge !== undefined ? row.info.badge : ""
                                 textFormat: Text.PlainText
                                 color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
                                 font.family: Appearance.fontFamily
@@ -446,7 +427,6 @@ Variants {
                     }
 
                     Column {
-                        visible: !row.isHeader
                         anchors {
                             left: parent.left
                             leftMargin: Tokens.searchTextInset - Tokens.searchRowInset
@@ -457,7 +437,7 @@ Variants {
 
                         Text {
                             width: parent.width
-                            text: row.isHeader ? "" : row.info.title
+                            text: row.info.title
                             textFormat: Text.PlainText
                             elide: Text.ElideRight
                             color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
@@ -468,7 +448,7 @@ Variants {
 
                         Text {
                             width: parent.width
-                            text: row.isHeader ? "" : row.info.subtitle
+                            text: row.info.subtitle
                             textFormat: Text.PlainText
                             elide: Text.ElideMiddle
                             color: row.selected ? Appearance.withAlpha(Appearance.colors.accentText, Tokens.searchSelectedSubtitleOpacity) : Appearance.colors.textSecondary
@@ -479,7 +459,6 @@ Variants {
 
                     MouseArea {
                         anchors.fill: parent
-                        enabled: !row.isHeader
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton
                         onPositionChanged: root.controller.selected = row.modelData.itemIndex

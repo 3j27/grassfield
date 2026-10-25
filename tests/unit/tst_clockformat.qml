@@ -59,7 +59,8 @@ TestCase {
     }
 
     function test_join() {
-        compare(Clock.join("Sun Oct 25", "13:46"), "Sun Oct 25\u2002 13:46");
-        compare(Clock.join("", "13:46"), "13:46");
+        compare(Clock.join("Sun Oct 25", "13:46", "\u2002 "), "Sun Oct 25\u2002 13:46");
+        compare(Clock.join("Sun Oct 25", "13:46"), "Sun Oct 25 13:46");
+        compare(Clock.join("", "13:46", "\u2002 "), "13:46");
     }
 }

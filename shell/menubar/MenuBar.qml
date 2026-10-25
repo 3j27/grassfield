@@ -304,13 +304,15 @@ Scope {
                 else if (kind === "date")
                     dateText = Qt.locale().toString(d, qsTr("MMM d"));
                 const t = Qt.formatTime(d, ClockFormat.timePattern(Qt.locale().timeFormat(Locale.ShortFormat), Settings.menubarClockHours, Settings.menubarClockShowSeconds, Settings.menubarClockShowAmPm));
-                return ClockFormat.join(dateText, ClockFormat.flash(t, off));
+                return ClockFormat.join(dateText, ClockFormat.flash(t, off), Tokens.menubarClockGap);
             }
             readonly property bool clockFlashOff: Settings.menubarClockFlashSeparators && clock.date.getSeconds() % 2 === 1
             // Widths of the clock with and without the date (never of what is drawn now, so the choice cannot feed back).
             readonly property real clockFullWidth: clockFullMetrics.width
             readonly property real clockShortWidth: clockShortMetrics.width
-            readonly property real clockPadding: Math.max(0, clockButton.implicitWidth - clockText.implicitWidth)
+            // The button's own padding, not its implicit width minus the text's: that read the text, which follows clockDateShown
+            // (a binding loop).
+            readonly property real clockPadding: 2 * clockButton.padding
             // "When Space Allows": the date stays while the whole status area fits with it.
             readonly property bool clockDateShown: {
                 const mode = Settings.menubarClockDate;
@@ -1062,7 +1064,7 @@ Scope {
                             onScrolled: delta => Audio.adjust(delta > 0 ? 0.05 : -0.05)
 
                             Icon {
-                                size: Tokens.menubarIconSize
+                                size: Tokens.menubarIconSize * Tokens.menubarVolumeIconScale
                                 heavy: true
                                 color: win.barText
                                 name: Audio.iconName

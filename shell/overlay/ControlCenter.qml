@@ -48,9 +48,27 @@ FocusScope {
 
     // Whether the control that has the focus got it by the keyboard (a visible ring): the focus moved on by a click or a
     // pointer-opened section shows none (macOS: the ring is for the keyboard only).
+    // The focus last moved by the keyboard and the pointer has not moved over the panel since: a click leaves no ring, and the focus that follows it (a section opened, Back) shows none either.
+    property bool keyboardNav: false
+
+    // The focus moved to a control with a keyboard reason (Tab, the arrows): keyboard navigation.
+    Connections {
+        target: root.Window.window
+
+        function onActiveFocusItemChanged(): void {
+            const item = root.Window.window.activeFocusItem;
+            if (item && item.visualFocus === true)
+                root.keyboardNav = true;
+        }
+    }
+
+    HoverHandler {
+        onPointChanged: root.keyboardNav = false
+    }
+
     function keyboardFocused(): bool {
         const item = root.Window.window ? root.Window.window.activeFocusItem : null;
-        return !!item && item.visualFocus === true;
+        return root.keyboardNav && !!item && item.visualFocus === true;
     }
 
     function open(id: string): void {
