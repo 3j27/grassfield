@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Grassfield.Ui
-import qs.desktop
+import qs.desktop // layering-exception: GF-087
 import qs.security
 import qs.services
 import "../LockMachine.js" as Machine

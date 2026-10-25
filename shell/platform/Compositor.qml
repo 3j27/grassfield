@@ -6,7 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
-import qs.services
+import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice

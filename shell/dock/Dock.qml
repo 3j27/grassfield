@@ -10,7 +10,7 @@ import qs.platform
 import qs.services
 import "DockModel.js" as DockModel
 import "Launch.js" as Launch
-import "../desktop/IconsLogic.js" as Icons
+import "../desktop/IconsLogic.js" as Icons // layering-exception: GF-087
 import "AutoHide.js" as AutoHide
 import "Attention.js" as Attention
 import "Magnify.js" as Magnify

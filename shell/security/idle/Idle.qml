@@ -4,7 +4,7 @@ pragma ComponentBehavior: Bound
 // LICENSE, basecamp/omarchy v4.0.4; notice shipped as packaging/licenses/omarchy-MIT.txt).
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
+import Quickshell.Hyprland // layering-exception: ADR-0021 security
 import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui

@@ -3,9 +3,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.platform
-import "../launchpad/Model.js" as Model
+import "../launchpad/Model.js" as Model // layering-exception: GF-087
 import "AppLaunch.js" as AppLaunch
-import "../dock/DockModel.js" as DockModel
+import "../dock/DockModel.js" as DockModel // layering-exception: GF-087
 
 // Desktop entry resolution shared by the menu bar and the Dock, and the list of entries that
 // Search and Apps may show. Apps are identified by their foreign-toplevel app id mapped to a

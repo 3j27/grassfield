@@ -12,7 +12,7 @@ import "Filters.js" as Filters
 import "Ranking.js" as Ranking
 import "SettingsPages.js" as SettingsPages
 import "Units.js" as Units
-import "../launchpad/Model.js" as Model
+import "../launchpad/Model.js" as Model // layering-exception: GF-087
 
 // Search (spec docs/specs/search.md): a centered floating field with grouped results.
 // This Scope owns the state and all providers; SearchPanel renders it, one overlay window per

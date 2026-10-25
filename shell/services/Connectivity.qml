@@ -5,7 +5,7 @@ import Quickshell.Io
 import Quickshell.Networking
 import Grassfield.Ui
 import "Airplane.js" as Airplane
-import "../overlay/controlcenter/Model.js" as Model
+import "../overlay/controlcenter/Model.js" as Model // layering-exception: GF-087
 
 // Connectivity summary for the menu bar (NetworkManager through Quickshell.Networking).
 Singleton {

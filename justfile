@@ -55,6 +55,8 @@ check-shell:
     scripts/dev/qmllint.sh
     python3 -I tests/ci/qmldir_types.py --selftest
     python3 -I tests/ci/qmldir_types.py
+    python3 -I tests/ci/import_graph.py --selftest
+    python3 -I tests/ci/import_graph.py
 
 # The committed .qsb shaders are current with their .frag sources (rebuild: scripts/dev/build-shaders.sh).
 check-shaders:

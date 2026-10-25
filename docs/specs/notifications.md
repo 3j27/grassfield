@@ -208,7 +208,8 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   Grassfield.I18n (`ui/i18n/iconsearchpaths.h`, applied when grassfield-shell imports the module, before any binding)
   sets Qt's theme and fallback search paths to the usual ones minus every directory the user can write or replace (the
   canonical path and each ancestor must belong to root, or to the overflow uid inside a user namespace, and not be
-  writable by the user): in practice /usr/share/icons and /usr/share/pixmaps; ~/.icons, $XDG_DATA_HOME/icons and
+  writable by the user), and only the packaged /usr/share/icons and /usr/share/pixmaps (review of dce68c2: flatpak and
+  snap system exports are root-owned but written by app installs; see security-images.md); ~/.icons, $XDG_DATA_HOME/icons and
   user-writable $XDG_DATA_DIRS entries (a flatpak user export) are out. The shell logs the result once
   (`grassfield-icons: theme search paths ...`). No environment variable changes, so applications launched from the shell
   keep their own icon paths and Quickshell's DesktopEntries still lists user applications. A theme name is looked up

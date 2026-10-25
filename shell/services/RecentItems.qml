@@ -3,8 +3,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "RecentItemsLogic.js" as Logic
-import "../search/Files.js" as Files
-import "../dock/DockModel.js" as DockModel
+import "../search/Files.js" as Files // layering-exception: GF-087
+import "../dock/DockModel.js" as DockModel // layering-exception: GF-087
 
 // Recent Items of the Grassfield menu (macOS Apple menu > Recent Items): the applications the shell launched (every
 // launch goes through Apps.launch: Dock, Apps, Search, menus) and the recently used documents (recently-used.xbel, read

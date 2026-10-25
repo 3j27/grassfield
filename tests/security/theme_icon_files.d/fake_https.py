@@ -1,12 +1,16 @@
 # A local HTTPS server for tests/security/theme_icon_files.sh, part 6 (media art over https, offline): argv is <cert>
-# <key> <request log> <FIFO an SVG names>. It listens on 127.0.0.1 only (an ephemeral port, printed first), with a plain
-# HTTP twin on another port (so that a redirect to http would succeed if it were followed), logs each request as a JSON
-# line (scheme, path, Cookie, Authorization, User-Agent) and quits after 300 s. Routes:
+# <key> <request log> <FIFO an SVG names> [<loopback address>] [<host:port for /redir-dot>]. It listens on a loopback
+# address only (127.0.0.1 by default; an ephemeral port, printed first), with a plain HTTP twin on another port (so that
+# a redirect to http would succeed if it were followed), logs each request as a JSON line (scheme, Host, path, Cookie,
+# Authorization, User-Agent) and quits after 300 s. Routes:
 #   /ok.png /a.png /b.png /c.png /locked.png  a PNG          /svgref.svg  an SVG naming the FIFO (absolute href)
 #   /html            text/html, not an image                  /redir-http  302 to http://127.0.0.1:<twin>/ok.png
 #   /redir-file      302 to file:///etc/hostname               /redir/<n>   n more 302s, then /ok.png
 #   /cookie          302 to /ok.png with Set-Cookie             /big-length  6 MiB announced and sent
 #   /big-chunked     6 MiB without a length (chunked)           /slow        nothing for 8 s, then a PNG
+#   /slow3           nothing for 3 s, then a PNG                /flaky       503 twice, then a PNG
+#   /dead            always 404                                 /redir-loop  302 to https://loop.test:<port>/ok.png
+#   /redir-numeric   302 to https://127.0.0.1:<port>/ok.png  /redir-dot   302 to https://<dot target host>.:<port>/ok.png
 import base64
 import http.server
 import json
@@ -17,10 +21,14 @@ import threading
 import time
 
 cert, key, log_path, fifo = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+# Optional: the address to listen on (default 127.0.0.1), and "host:port" for /redir-dot (a Location with a trailing dot).
+bind = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else "127.0.0.1"
+dot_target = sys.argv[6] if len(sys.argv) > 6 else ""
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 SVG = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="32">'
        '<rect width="64" height="32" fill="red"/><image xlink:href="%s" width="8" height="8"/></svg>' % fifo).encode()
 lock = threading.Lock()
+counts = {}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -48,10 +56,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         with lock, open(log_path, "a") as f:
-            f.write(json.dumps({"scheme": self.server.scheme, "path": self.path, "cookie": self.headers.get("Cookie"), "auth": self.headers.get("Authorization"),
+            f.write(json.dumps({"scheme": self.server.scheme, "host": self.headers.get("Host"), "path": self.path, "cookie": self.headers.get("Cookie"), "auth": self.headers.get("Authorization"),
                                 "agent": self.headers.get("User-Agent")}) + "\n")
         p = self.path
-        if p in ("/ok.png", "/a.png", "/b.png", "/c.png", "/locked.png"):
+        port = self.server.server_address[1]
+        if p == "/flaky":
+            with lock:
+                counts[p] = counts.get(p, 0) + 1
+                n = counts[p]
+            self.send(503 if n <= 2 else 200, b"busy" if n <= 2 else PNG, "text/plain" if n <= 2 else "image/png")
+        elif p.startswith("/dead"):
+            self.send(404, b"gone", "text/plain")
+        elif p.startswith("/slow3"):
+            time.sleep(3)
+            try:
+                self.send(200, PNG)
+            except OSError:
+                pass
+        elif p == "/redir-loop":
+            self.redirect("https://loop.test:%d/ok.png" % port)
+        elif p == "/redir-dot" and dot_target:
+            host, _, tport = dot_target.rpartition(":")
+            self.redirect("https://%s.:%s/ok.png" % (host, tport))
+        elif p == "/redir-numeric":
+            self.redirect("https://127.0.0.1:%d/ok.png" % port)
+        elif p in ("/ok.png", "/a.png", "/b.png", "/c.png", "/locked.png"):
             self.send(200, PNG)
         elif p == "/svgref.svg":
             self.send(200, SVG, "image/svg+xml")
@@ -94,9 +123,9 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 
-plain = Server(("127.0.0.1", 0), Handler)
+plain = Server((bind, 0), Handler)
 plain.scheme = "http"
-server = Server(("127.0.0.1", 0), Handler)
+server = Server((bind, 0), Handler)
 server.scheme = "https"
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 ctx.load_cert_chain(cert, key)
