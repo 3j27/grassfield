@@ -63,6 +63,8 @@ GF050_TARGET = "notifications"
 
 
 MULTI = "multi-import line"
+QMLDIR_ENTRY = re.compile(r"^(?:internal\s+[A-Z]\w*\s+|(?:singleton\s+)?[A-Z]\w*\s+\d+(?:\.\d+)?\s+)([A-Za-z0-9_]+\.(?:qml|js))$")
+QMLDIR_MODULE = re.compile(r"^module\s+[A-Za-z_][\w.]*$")
 IMPORT_SCANNER = "/usr/lib/qt6/qmlimportscanner"
 QMLDOM = "/usr/lib/qt6/bin/qmldom"
 QT_QML = "/usr/lib/qt6/qml"
@@ -226,6 +228,29 @@ def module_of_path(shell, mods, path):
         d = d.parent
 
 
+def qmldir_failures(shell):
+    """The qmldir files are read too, because the engine follows them: a qmldir `import qs.dock` or `import Quickshell.Hyprland`,
+    a `depends`, a plugin, or a type entry that points outside its directory loads and would pass unseen. Only `module <uri>` and
+    type entries (`[singleton] Name 1.0 File.qml|js`, `internal Name File.qml|js`) naming a plain file of the same directory that
+    exists are accepted; any other line is refused (none of the others is used)."""
+    out = []
+    for q in listing(shell.parent, shell.name):
+        if q.name != "qmldir":
+            continue
+        for n, raw in enumerate(file_lines(q), 1):
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            m = QMLDIR_ENTRY.match(line)
+            if QMLDIR_MODULE.match(line):
+                continue
+            if m is None:
+                out.append((q, f"{q.parent.name}/qmldir:{n}: `{line}` is not a plain `module` line or a type entry naming a file of this directory"))
+            elif not (q.parent / m.group(1)).is_file():
+                out.append((q, f"{q.parent.name}/qmldir:{n}: `{line}` names a file that does not exist in this directory"))
+    return out
+
+
 def scan(shell):
     """Every import of every .qml/.js file of shell/ from Qt's import scanner: ([(file, source module, kind, target, key)], failures).
     kind is module or unknown (an `import qs.<name>` without a qmldir); a directory or file import is resolved against the
@@ -233,7 +258,7 @@ def scan(shell):
     mods = modules_of(shell)
     files = shell_sources(shell)
     prefetch_imports(files)
-    out, failures = [], []
+    out, failures = [], list(qmldir_failures(shell))
     for path in files:
         src = module_of_path(shell, mods, path)
         try:
@@ -583,6 +608,15 @@ def selftest():
     def svc(text):
         return {**clean, "services/Apps.qml": text}
 
+    qd = "is not a plain `module` line or a type entry"
+    run("a qmldir singleton entry naming its own file passes", {**clean, "lib/qmldir": "module qs.lib\n# a comment\nsingleton Mode 1.0 Mode.qml\n"}, None)
+    run("a qmldir `import qs.dock` is refused", {**clean, "services/qmldir": "module qs.services\nimport qs.dock\n"}, qd)
+    run("a qmldir `import Quickshell.Hyprland` is refused", {**clean, "search/qmldir": "module qs.search\nimport Quickshell.Hyprland\n"}, qd)
+    run("a qmldir `depends` is refused", {**clean, "search/qmldir": "module qs.search\ndepends qs.dock\n"}, qd)
+    run("a qmldir plugin line is refused", {**clean, "search/qmldir": "module qs.search\nplugin Evil\n"}, qd)
+    run("a qmldir type entry pointing outside its directory is refused", {**clean, "search/qmldir": "module qs.search\nEvil 1.0 ../dock/X.qml\n"}, qd)
+    run("a qmldir entry with another extension is refused", {**clean, "search/qmldir": "module qs.search\nEvil 1.0 Evil.qmlx\n"}, qd)
+    run("a qmldir entry naming a missing file is refused", {**clean, "search/qmldir": "module qs.search\nEvil 1.0 Evil.qml\n"}, "names a file that does not exist")
     run("an import spelled `qs .dock` is seen", svc("import qs .dock\nItem {}\n"), low)
     run("an import spelled `qs .dock`, marked, passes (the marker finds the import by its parsed name)", svc("import qs .dock // layering-exception: GF-087\nItem {}\n"), None)
     run("an import with a comment inside the dotted name is seen", svc("import qs/**/.dock\nItem {}\n"), low)
