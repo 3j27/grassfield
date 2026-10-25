@@ -204,7 +204,7 @@ grassfield-compositor-0.4.0-10-x86_64.pkg.tar.zst` from `packaging/arch`, then l
       Windows has the three switches.
 - [ ] Menu bar: the icons of your apps (Spotify, Discord, Steam...) with their menus; Now Playing while music plays
       (artwork and controls); the Search magnifier; it reveals over a full-screen window at the top edge; Settings >
-      Desktop & Dock > Menu Bar > "Automatically hide and show the menu bar".
+      Menu Bar > "Automatically hide and show the menu bar".
 - [ ] Menu bar: a second click on an open menu title closes it even without moving the mouse.
 - [ ] Grassfield menu > Recent Items: the apps you launched and your recent documents; Clear Menu.
 - [ ] Dock: its menu lists the app's windows; Option (Alt) shows Force Quit and Hide Others; Trash > Empty Trash…;

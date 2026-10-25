@@ -68,6 +68,21 @@ ShellRoot {
         check("Shift+Tab before the first group enters the last chip", search.zone === "chips" && search.chipIndex === 2);
         search.hide();
         check("hide leaves the chips", search.zone === "field");
+
+        // macOS: an empty field lists nothing (no recent documents); the first keystroke brings the results.
+        search.recentList = [{path: "/home/u/report.txt"}, {path: "/home/u/notes.txt"}];
+        search.fileHits = [];
+        search.query = "";
+        search.compute();
+        check("empty query lists no group", search.groups.length === 0 && search.items.length === 0);
+        search.query = "   ";
+        search.compute();
+        check("blank query lists no group", search.groups.length === 0);
+        search.query = "report";
+        search.compute();
+        const ids = search.groups.map(g => g.id);
+        check("a keystroke brings the matching recent document", ids.indexOf("recent") >= 0 || ids.indexOf("top") >= 0);
+        check("non-matching recents stay out", JSON.stringify(search.groups).indexOf("notes.txt") < 0);
     }
 
     Timer {

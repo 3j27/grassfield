@@ -35,7 +35,27 @@ Module {
         }
     }
 
+    // macOS: the artwork and the title open the app that plays; the panel closes.
+    function openApp(): void {
+        Popups.close();
+        Media.openPlayerApp(true);
+    }
+
+    MouseArea {
+        x: root.pad
+        y: art.y
+        width: root.width - 2 * root.pad
+        height: art.height + titles.height + Tokens.spacingXs
+        enabled: Media.available
+        cursorShape: Qt.ArrowCursor
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Open the app that is playing")
+        Accessible.onPressAction: root.openApp()
+        onClicked: root.openApp()
+    }
+
     Column {
+        id: titles
         x: root.pad
         y: art.y + art.height + Tokens.spacingXs
         width: root.width - 2 * root.pad

@@ -29,7 +29,35 @@ T.ComboBox {
     valueRole: "id"
     currentIndex: root.valueIndex
     displayText: root.valueIndex >= 0 ? (root.model)[root.valueIndex].text : ""
-    implicitWidth: Tokens.settingsPickerWidth
+    // Wide enough for the longest choice (a long translation is never cut to "Si la place le pe…").
+    implicitWidth: Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)
+    property real widest: 0
+    function measureItems(): void {
+        let w = 0;
+        for (let i = 0; i < sizer.count; i++) {
+            const t = sizer.itemAt(i) as Text;
+            if (t)
+                w = Math.max(w, t.implicitWidth);
+        }
+        root.widest = w;
+    }
+    Repeater {
+        id: sizer
+        model: root.model
+        onItemAdded: root.measureItems()
+        onItemRemoved: root.measureItems()
+
+        delegate: Text {
+            required property var modelData
+            visible: false
+            textFormat: Text.PlainText
+            text: modelData.text !== undefined ? modelData.text : ""
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyMenuSize
+            font.weight: Tokens.typographyMenuWeight
+            onImplicitWidthChanged: root.measureItems()
+        }
+    }
     implicitHeight: Tokens.menuItemHeight + Tokens.spacingSm
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus

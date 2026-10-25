@@ -29,7 +29,7 @@ PopupMenu {
     readonly property var windowRows: Launch.menuWindows((info.windows ? info.windows : []).map(t => {
         const w = Compositor.windowInfo(t);
         return {ref: t, title: t.title, minimized: w.minimized, stamp: w.stamp};
-    }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()))
+    }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()), appId())
 
     readonly property bool isTrash: info.kind === "trash"
     readonly property bool isFolder: info.kind === "folder"

@@ -11,6 +11,7 @@ import qs.services
 import "BarHide.js" as BarHide
 import "../dock/AutoHide.js" as AutoHide
 import "StatusLogic.js" as Logic
+import "ClockFormat.js" as ClockFormat
 
 // Top bar, one per screen. Left: Grassfield menu (leaf mark), the focused app name with its
 // application menu, then the app's own menus when it exports them (T1/T2 through MenuBridge) or the
@@ -290,35 +291,72 @@ Scope {
             // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths
             // only: a hidden item never changes the decision.
             readonly property real statusIconWidth: Tokens.menubarIconSize + 2 * Tokens.menubarStatusItemPadding
-            readonly property var statusItems: {
+            // The clock's text: date part by the setting (the date setting resolves to `withDate`), time part by the hour format,
+            // seconds and AM/PM options; `off` is the dark beat of the flashing separators.
+            function clockString(withDate: bool, off: bool): string {
+                const kind = ClockFormat.dateKind(withDate, Settings.menubarClockShowDayOfWeek);
+                const d = FixedTime.date(clock.date);
+                let dateText = "";
+                if (kind === "both")
+                    dateText = Qt.locale().toString(d, qsTr("ddd d MMM"));
+                else if (kind === "day")
+                    dateText = Qt.locale().toString(d, qsTr("ddd"));
+                else if (kind === "date")
+                    dateText = Qt.locale().toString(d, qsTr("d MMM"));
+                const t = Qt.formatTime(d, ClockFormat.timePattern(Qt.locale().timeFormat(Locale.ShortFormat), Settings.menubarClockHours, Settings.menubarClockShowSeconds, Settings.menubarClockShowAmPm));
+                return ClockFormat.join(dateText, ClockFormat.flash(t, off));
+            }
+            readonly property bool clockFlashOff: Settings.menubarClockFlashSeparators && clock.date.getSeconds() % 2 === 1
+            // Widths of the clock with and without the date (never of what is drawn now, so the choice cannot feed back).
+            readonly property real clockFullWidth: clockFullMetrics.width
+            readonly property real clockShortWidth: clockShortMetrics.width
+            readonly property real clockPadding: Math.max(0, clockButton.implicitWidth - clockText.implicitWidth)
+            // "When Space Allows": the date stays while the whole status area fits with it.
+            readonly property bool clockDateShown: {
+                const mode = Settings.menubarClockDate;
+                if (mode !== "auto")
+                    return mode === "always";
+                const items = statusList(clockFullWidth);
+                let total = 0;
+                for (const it of items)
+                    total += it.width;
+                return ClockFormat.dateFits(mode, Logic.hiddenItems(statusAvailable, items, 0), total, statusAvailable);
+            }
+            readonly property var statusItems: statusList(clockDateShown ? clockFullWidth : clockShortWidth)
+            function statusList(clockWidth: real): var {
                 const list = [];
-                const trays = TrayHost.items;
+                const trays = Settings.menubarShowTrayItems ? TrayHost.items : [];
                 for (let i = 0; i < trays.length; i++)
                     list.push({key: "tray" + i, width: statusIconWidth, optional: true});
                 if (showNowPlaying)
                     list.push({key: "nowplaying", width: statusIconWidth, optional: true});
-                list.push({key: "system", width: (Notifications.dnd ? dndButton.implicitWidth : 0) + networkButton.implicitWidth + volumeButton.implicitWidth + (hasBattery ? batteryButton.implicitWidth : 0), optional: false});
+                list.push({key: "system", width: (showFocus ? dndButton.implicitWidth : 0) + (Settings.menubarShowWifi ? networkButton.implicitWidth : 0) + (Settings.menubarShowSound ? volumeButton.implicitWidth : 0) + (showBattery ? batteryButton.implicitWidth : 0), optional: false});
                 if (Settings.menubarShowSearch)
                     list.push({key: "search", width: statusIconWidth, optional: true});
-                list.push({key: "core", width: ccButton.implicitWidth + clockButton.implicitWidth, optional: false});
+                list.push({key: "core", width: ccButton.implicitWidth + clockPadding + clockWidth, optional: false});
                 return list;
             }
-            // Width of the status items that never give way (system items, Quick Settings, clock).
-            readonly property real statusMandatoryWidth: {
+            // Width of the status items that never give way (system items, Quick Settings, clock without its date: the
+            // narrowest, so the application name's room never depends on the date decision).
+            readonly property real statusMandatoryShortWidth: {
+                const items = statusList(clockShortWidth);
                 let sum = 0;
-                for (let i = 0; i < statusItems.length; i++) {
-                    if (!statusItems[i].optional)
-                        sum += statusItems[i].width;
+                for (let i = 0; i < items.length; i++) {
+                    if (!items[i].optional)
+                        sum += items[i].width;
                 }
                 return sum;
             }
             // Room for the application name: the bar minus the insets, the fixed titles and the mandatory status items.
             readonly property real appTitleMax: Math.max(0, win.width - (Tokens.menubarInsetLeft - Tokens.menubarItemPadding) - (Tokens.menubarInsetRight - Tokens.menubarItemPadding)
                 - systemButton.implicitWidth - (hasFileMenu ? fileButton.implicitWidth : 0) - (hasApp ? windowButton.implicitWidth : 0)
-                - 2 * Tokens.menubarItemPadding - statusMandatoryWidth - 2 * Tokens.menubarItemPadding)
+                - 2 * Tokens.menubarItemPadding - statusMandatoryShortWidth - 2 * Tokens.menubarItemPadding)
             readonly property real statusAvailable: win.width - (Tokens.menubarInsetRight - Tokens.menubarItemPadding) - (leftRow.x + leftRow.width) - Tokens.menubarItemPadding
             readonly property var hiddenStatus: Logic.hiddenItems(statusAvailable, statusItems, 0)
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
+            // Settings > Menu Bar: which system items the bar shows (Focus only while it is on, as before).
+            readonly property bool showBattery: hasBattery && Settings.menubarShowBattery
+            readonly property bool showFocus: Notifications.dnd && Settings.menubarShowFocus
 
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
             onShownAppIdChanged: {
@@ -620,13 +658,15 @@ Scope {
                     openFor("appwindow", windowButton, "left", {appId: win.shownAppId});
                     break;
                 case "network":
-                    openFor("network", networkButton, "right", {});
+                    if (Settings.menubarShowWifi)
+                        openFor("network", networkButton, "right", {});
                     break;
                 case "volume":
-                    openFor("volume", volumeButton, "right", {});
+                    if (Settings.menubarShowSound)
+                        openFor("volume", volumeButton, "right", {});
                     break;
                 case "battery":
-                    if (win.hasBattery)
+                    if (win.showBattery)
                         openFor("battery", batteryButton, "right", {});
                     break;
                 case "controlcenter":
@@ -723,6 +763,20 @@ Scope {
 
             WallClock {
                 id: clock
+                // One tick a second only while the bar is in view (hidden: the minute tick, right again on the reveal).
+                seconds: (Settings.menubarClockShowSeconds || Settings.menubarClockFlashSeparators) && !win.away
+            }
+
+            TextMetrics {
+                id: clockFullMetrics
+                font: clockText.font
+                text: win.clockString(true, false)
+            }
+
+            TextMetrics {
+                id: clockShortMetrics
+                font: clockText.font
+                text: win.clockString(false, false)
             }
 
             // macOS: with several displays the menu bar of the one that is not active is dimmed (band and content). A single
@@ -911,7 +965,7 @@ Scope {
 
                         // Third-party status items (StatusNotifierItem), leftmost: macOS keeps them left of the system's.
                         Repeater {
-                            model: TrayHost.items
+                            model: Settings.menubarShowTrayItems ? TrayHost.items : []
 
                             delegate: TrayButton {
                                 required property var modelData
@@ -956,7 +1010,7 @@ Scope {
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
-                            visible: Notifications.dnd
+                            visible: win.showFocus
                             accessibleName: qsTr("Do Not Disturb is on")
                             onActivated: Notifications.setDnd(false)
 
@@ -969,6 +1023,7 @@ Scope {
 
                         BarButton {
                             id: networkButton
+                            visible: Settings.menubarShowWifi
                             menuKind: "network"
                             tint: win.barTint
                             shadowed: !win.showBackground
@@ -989,6 +1044,7 @@ Scope {
 
                         BarButton {
                             id: volumeButton
+                            visible: Settings.menubarShowSound
                             menuKind: "volume"
                             tint: win.barTint
                             shadowed: !win.showBackground
@@ -1015,7 +1071,7 @@ Scope {
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
-                            visible: win.hasBattery
+                            visible: win.showBattery
                             accessibleName: qsTr("Battery %1%").arg(win.battery ? Math.round(win.battery.percentage * 100) : 0)
                             active: win.isOpen("battery")
                             onActivated: win.popup("battery")
@@ -1030,6 +1086,7 @@ Scope {
 
                             Text {
                                 textFormat: Text.PlainText
+                                visible: Settings.menubarShowBatteryPercentage
                                 text: win.battery ? qsTr("%1%").arg(Math.round(win.battery.percentage * 100)) : ""
                                 color: win.barText
                                 font.family: Appearance.fontFamily
@@ -1090,8 +1147,7 @@ Scope {
                             Text {
                                 textFormat: Text.PlainText
                                 id: clockText
-                                text: Qt.locale().toString(FixedTime.date(clock.date), qsTr("ddd d MMM")) + " "
-                                    + Qt.formatTime(FixedTime.date(clock.date), Qt.locale().timeFormat(Locale.ShortFormat))
+                                text: win.clockString(win.clockDateShown, win.clockFlashOff)
                                 color: win.barText
                                 font.family: Appearance.fontFamily
                                 font.pixelSize: Tokens.typographyMenuSize
