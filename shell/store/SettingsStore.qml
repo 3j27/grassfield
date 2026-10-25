@@ -29,28 +29,72 @@ Scope {
     property bool writeBlocked: false
     // True once a file was read and is valid (an empty file counts); false before any read and while the file on disk is
     // malformed or unreadable. Consumers that act destructively on "the settings are the defaults" wait for this, not for
-    // `loaded` (which is also true for a malformed file, whose values are then only the adapter's leftovers).
+    // `loaded` (which is also true for a malformed file, whose values are then only the last good ones).
     property bool validRead: false
     // True while the file on disk is valid JSON that cannot be rewritten safely (JsonSafety.unsafeReason): its values are
     // not used, the defaults are (see read()).
     property bool unsafeFile: false
 
+    // The last document read from the file (JSON.parse of its text, the same path a fresh start takes) with the shell's own
+    // pending changes on top. Every view reads from it, never from the adapter's properties: the adapter does not replace a
+    // property whose new value loosely equals the old one (0 and false, 10 and "10", 1 and true), so on a running shell an
+    // edit of lock.idleMinutes from 0 to false left the auto-lock off while Settings and a restarted shell read 5.
+    property var parsedFile: ({})
+    property int parsedFileRevision: 0
+
+    // The stored (raw) value of a dotted key in parsedFile, undefined when the file has none.
+    function rawValue(path: string): var {
+        root.parsedFileRevision;
+        let node = root.parsedFile;
+        for (const part of path.split(".")) {
+            if (node === null || node === undefined || typeof node !== "object" || Array.isArray(node))
+                return undefined;
+            node = node[part];
+        }
+        return node;
+    }
+
     // The value of a dotted key as every reader of grassfield.json sees it (ui/Grassfield/Ui/SettingsContract.js, generated from
     // the schema; ADR-0020): a number out of range is clamped (an integer rounded first), any other invalid value, a number
-    // written as a string or a boolean included, is the key's default. The adapter keeps the stored values untouched (its
-    // leaves are vars), so a hand-edited file may hold anything and still reads the same here and in the Settings app.
+    // written as a string or a boolean included, is the key's default (lock.idleMinutes: only an exact 0 is "never"; false,
+    // "0", a negative number and 0.4 read 5; a value above 240 reads 240, the lock still fires). A hand-edited file may hold
+    // anything and reads the same here, in a restarted shell and in the Settings app, after every reload.
     function read(path: string): var {
         // A file the Settings app refuses to edit (an integer beyond 2^53, a duplicate key: JsonSafety) shows its defaults
         // there under a banner: the shell reads the same, never the values of a file it could not rewrite safely either.
-        if (root.unsafeFile && SettingsContract.DEFAULTS[path] !== undefined)
+        if (root.unsafeFile && SettingsContract.DEFAULTS[path] !== undefined) {
+            root.parsedFileRevision;
             return JSON.parse(JSON.stringify(SettingsContract.DEFAULTS[path]));
-        let node = config;
-        for (const part of path.split("."))
-            node = node === null || node === undefined ? undefined : node[part];
-        // A list comes out of the adapter as an array-like (a QVariantList): the contract checks real arrays.
-        if (node !== null && typeof node === "object" && !Array.isArray(node) && typeof node.length === "number")
-            node = Array.prototype.slice.call(node);
-        return SettingsContract.normalize(path, node);
+        }
+        return SettingsContract.normalize(path, rawValue(path));
+    }
+
+    // Sets a dotted key of parsedFile (a local change, or one put back on top of a fresh load).
+    function setParsed(path: string, value: var): void {
+        const parts = path.split(".");
+        let node = root.parsedFile;
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (node[parts[i]] === null || typeof node[parts[i]] !== "object" || Array.isArray(node[parts[i]]))
+                node[parts[i]] = ({});
+            node = node[parts[i]];
+        }
+        node[parts[parts.length - 1]] = value;
+        root.parsedFileRevision++;
+    }
+
+    // After each load: the file's own text is the document. An empty file is an empty document (every key its default); a file
+    // that is not a JSON object leaves the last good document in place (validRead tells it is malformed).
+    function takeDocument(text: string): void {
+        let parsed = null;
+        try {
+            parsed = text.trim() === "" ? {} : JSON.parse(text);
+        } catch (e) {
+            return;
+        }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+            return;
+        root.parsedFile = parsed;
+        root.parsedFileRevision++;
     }
 
     readonly property string appearance: read("appearance")
@@ -78,12 +122,16 @@ Scope {
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
     // user's own, is returned as it is. Nothing is written back. The Dock owns this key and its recent list and stack options.
     readonly property var dockPinned: {
-        const list = stringList(config.dock.pinned);
+        const stored = rawValue("dock.pinned");
+        const list = stringList(stored === undefined ? SettingsContract.ALL_DEFAULTS["dock.pinned"] : stored);
         return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
     }
-    readonly property var dockRecent: stringList(config.dock.recent)
+    readonly property var dockRecent: stringList(rawValue("dock.recent"))
     readonly property var dockFolders: read("dock.folders")
-    readonly property var dockStackOptions: config.dock.stackOptions && typeof config.dock.stackOptions === "object" ? config.dock.stackOptions : ({})
+    readonly property var dockStackOptions: {
+        const stored = rawValue("dock.stackOptions");
+        return stored !== null && typeof stored === "object" && !Array.isArray(stored) ? stored : ({});
+    }
     readonly property string titlebarDoubleClick: read("windows.titlebarDoubleClick")
     readonly property bool windowsTilingEdges: read("windows.tilingEdges")
     readonly property bool windowsTilingMenuBar: read("windows.tilingMenuBar")
@@ -124,15 +172,15 @@ Scope {
     // The wallpaper settings, complete and valid (WallpaperConfig.normalize: an invalid field reads as its default).
     // The shell only reads them; the Settings app writes them.
     readonly property var wallpaper: root.unsafeFile ? WallpaperConfig.normalize({}) : WallpaperConfig.normalize({
-        source: config.wallpaper.source,
-        path: config.wallpaper.path,
-        color: config.wallpaper.color,
-        fit: config.wallpaper.fit,
-        interval: config.wallpaper.interval,
-        shuffle: config.wallpaper.shuffle,
-        videoOnBattery: config.wallpaper.videoOnBattery,
-        online: config.wallpaper.online,
-        outputs: config.wallpaper.outputs
+        source: rawValue("wallpaper.source"),
+        path: rawValue("wallpaper.path"),
+        color: rawValue("wallpaper.color"),
+        fit: rawValue("wallpaper.fit"),
+        interval: rawValue("wallpaper.interval"),
+        shuffle: rawValue("wallpaper.shuffle"),
+        videoOnBattery: rawValue("wallpaper.videoOnBattery"),
+        online: rawValue("wallpaper.online"),
+        outputs: rawValue("wallpaper.outputs")
     })
     // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:
     // false or "0" in a hand-edited file must not switch the auto-lock off).
@@ -306,6 +354,7 @@ Scope {
     // Setter helper: update the in-memory adapter and remember the key for the next merge.
     function change(path: string, value: var): void {
         applyPath(path, value);
+        setParsed(path, value);
         const d = dirty;
         d[path] = value;
         dirty = d;
@@ -326,8 +375,10 @@ Scope {
 
     // A reload from disk replaces the adapter values; put pending local changes back on top.
     function reapplyDirty(): void {
-        for (const path in dirty)
+        for (const path in dirty) {
             applyPath(path, dirty[path]);
+            setParsed(path, dirty[path]);
+        }
     }
 
     // Merge the dirty keys into the file as it is on disk right now (fresh read) and write the
@@ -426,10 +477,11 @@ Scope {
         file.reload();
     }
 
-    // The adapter keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so a
-    // key deleted by hand (or by a reset elsewhere) would leave the old value active while the Settings app shows the default.
-    // A missing key is the default: put it back after each load, for every key of the contract (SettingsContract.ALL_DEFAULTS;
-    // unsaved local changes go on top again in reapplyDirty). A file that cannot be parsed is left alone.
+    // The views read parsedFile, not the adapter; the adapter only WRITES the file (file.writeAdapter() for a new or empty one).
+    // It keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so an emptied
+    // file would be rewritten with stale values. A missing key is the default there too: put it back after each load, for every
+    // key of the contract (SettingsContract.ALL_DEFAULTS; unsaved local changes go on top again in reapplyDirty). A file that
+    // cannot be parsed is left alone.
     function resetMissingKeys(text: string): void {
         let parsed = null;
         try {
@@ -523,6 +575,7 @@ Scope {
         onSaved: root.saved()
         onLoaded: {
             root.checkText(file.text());
+            root.takeDocument(file.text());
             root.resetMissingKeys(file.text());
             root.reapplyDirty();
             root.loadedFile();
