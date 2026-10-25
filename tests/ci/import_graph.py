@@ -27,6 +27,7 @@ outlives its violation.
 """
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -48,6 +49,26 @@ def line_text(path, n):
     return path.read_text(encoding="utf-8").splitlines()[n - 1]
 
 
+def listing(root, sub):
+    """The files (and symlinks) under root/sub: what the checkout tracks when root is its top level (an untracked scratch
+    file or build tree is not the source; same rule as scripts/dev/upstream-drift.sh), every plain file otherwise (an
+    export without .git, a fixture tree inside another checkout)."""
+    top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if top.returncode == 0 and Path(top.stdout.strip()).resolve() == Path(root).resolve():
+        names = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--", sub], check=True, capture_output=True, text=True).stdout
+        return sorted(p for p in (Path(root) / n for n in names.split("\0") if n) if os.path.lexists(p))
+    out = []
+    for dirpath, dirnames, filenames in os.walk(Path(root) / sub):
+        dirnames[:] = [d for d in dirnames if d not in (".git", ".dev")]
+        out += [Path(dirpath) / n for n in filenames]
+        out += [Path(dirpath) / d for d in dirnames if (Path(dirpath) / d).is_symlink()]
+    return sorted(out)
+
+
+def shell_sources(shell):
+    return [p for p in listing(shell.parent, shell.name) if p.suffix in (".qml", ".js")]
+
+
 def layer_of(module):
     if module == "shell":
         return ROOT_LAYER
@@ -60,7 +81,7 @@ def is_security(module):
 
 def modules_of(shell):
     """Directory (relative, '' for shell/ itself) of every module: a directory holding a qmldir."""
-    return {str(p.parent.relative_to(shell)) if p.parent != shell else "" for p in shell.rglob("qmldir")}
+    return {str(p.parent.relative_to(shell)) if p.parent != shell else "" for p in listing(shell.parent, shell.name) if p.name == "qmldir"}
 
 
 def module_of_path(shell, mods, path):
@@ -83,7 +104,7 @@ def scan(shell):
     """Every import of every .qml/.js file of shell/: (file, line number, line text, source module, kind, target)."""
     mods = modules_of(shell)
     out = []
-    for path in sorted(list(shell.rglob("*.qml")) + list(shell.rglob("*.js"))):
+    for path in shell_sources(shell):
         src = module_of_path(shell, mods, path)
         raw = []  # one raw-event record per file: the Hyprland import line, else the first use
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -190,7 +211,7 @@ def analyze(shell):
         tag = m.group(1) if m else None
         violations.append((path, n, reason, tag))
     # Markers on lines that are not violations (stale), checked over every line of every file.
-    for path in sorted(list(shell.rglob("*.qml")) + list(shell.rglob("*.js"))):
+    for path in shell_sources(shell):
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             m = MARKER.search(line)
             if m and (path, n) not in flagged:
@@ -227,10 +248,11 @@ def tree_problems(root):
     shell = (root / "shell").resolve()
     lib = shell / "lib"
     out = []
-    for dirpath, dirnames, filenames in os.walk(root / "tests"):
-        dirnames[:] = [d for d in dirnames if d != ".dev" and not (Path(dirpath) / d).is_symlink()]
-        here = Path(dirpath)
-        links = [here / n for n in os.listdir(here) if (here / n).is_symlink()]
+    by_dir = {}
+    for p in listing(root, "tests"):
+        if p.is_symlink():
+            by_dir.setdefault(p.parent, []).append(p)
+    for here, links in sorted(by_dir.items()):
         targets = {}
         for link in links:
             real = link.resolve()
@@ -378,6 +400,33 @@ def selftest():
         (other / "Dock.qml").symlink_to("../../../shell/dock/Dock.qml")
         if any("files_only" in p for p in tree_problems(tmp)):
             failures.append("a tree with file links only needs no lib")
+
+    # In a checkout top level only tracked files count: an untracked stray file with a violating import, or a stray test tree
+    # without lib, is not the source.
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        shell = build(tmp, {**base_mods, **clean})
+        tree = tmp / "tests" / "shell" / "case"
+        tree.mkdir(parents=True)
+        (tree / "services").symlink_to("../../../shell/services")
+        (tree / "lib").symlink_to("../../../shell/lib")
+
+        def vcs(*a):
+            return subprocess.run(["git", "-C", str(tmp), *a], capture_output=True, text=True)
+
+        if vcs("init", "-q").returncode != 0:
+            failures.append("git init failed in the selftest tree")
+        else:
+            vcs("add", "-A")
+            (shell / "services" / "Stray.qml").write_text("import qs.dock\nItem {}\n", encoding="utf-8")
+            stray = tmp / "tests" / "shell" / "stray"
+            stray.mkdir()
+            (stray / "services").symlink_to("../../../shell/services")
+            if problems(shell, tmp) or tree_problems(tmp):
+                failures.append(f"an untracked stray file counts: {problems(shell, tmp) + tree_problems(tmp)}")
+            vcs("add", "-A")
+            if not any("Stray.qml" in x for x in problems(shell, tmp)) or not any("stray" in x for x in tree_problems(tmp)):
+                failures.append("a tracked stray file is not seen")
 
     # The strongly connected components: the whole graph, then the feature graph without layer violations.
     with tempfile.TemporaryDirectory() as t:
