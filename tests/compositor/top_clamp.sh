@@ -21,6 +21,13 @@
 #         menu bar, which only the plugin's own titlebar drags take as a tiling place, FR47);
 #      C1 after the release its top is at the menu bar's bottom (the clamp after Hyprland ended the drag);
 #      C2 it can be grabbed again by its tab strip: a drag down moves it down.
+#   R  foot placed with its titlebar under the menu bar (as an app or a script may place it), then resized from its
+#      bottom edge (Hyprland's resize on the border; review of e0a3734: a resize that does not move the top edge must
+#      never move or cut the window):
+#      R0 the bottom edge was dragged (the window grew);
+#      R1 its top did not move.
+# The multi-output cases of the same review (stacked and bottom-aligned outputs) are unit cases (tests/TopClampTest.cpp):
+# the nested session has one output.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
 set -uo pipefail
 
@@ -133,6 +140,26 @@ sleep 0.4
 read -r _ y2 _ _ < <(geom '^foot$')
 (( y2 >= y1 + 195 && y2 <= y1 + 205 ))
 check "P3 it can be grabbed again: a drag down by 200 moves it down" $? "y $y1 -> $y2"
+pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null
+sleep 1
+
+# ---- R: a resize from the bottom edge never moves the window ----
+say "R foot with its titlebar under the menu bar, resized from its bottom edge"
+p=$(client_run foot foot --window-size-pixels=700x400); pids+=("$p")
+wait_mapped '^foot$' || { say "setup error: foot did not map"; exit 2; }
+place '^foot$' 300 "$mb"
+sleep 0.4
+read -r rx0 ry0 _ rh0 < <(geom '^foot$')
+click_at "$((rx0 + 350))" "$((ry0 + 200))" # focus (a click in the terminal)
+# 3 px below the surface: Hyprland's border grab area (resize_on_border, extend_border_grab_area 8).
+drag_bg "$((rx0 + 350))" "$((ry0 + rh0 + 3))" "$((rx0 + 350))" "$((ry0 + rh0 + 103))" 300
+wait "$bg"
+sleep 0.4
+read -r _ ry1 _ rh1 < <(geom '^foot$')
+(( rh1 >= rh0 + 50 ))
+check "R0 the bottom edge was dragged (the window grew)" $? "height $rh0 -> $rh1"
+(( ry1 == ry0 ))
+check "R1 its top did not move (a resize from another edge is never held)" $? "top $ry0 -> $ry1, titlebar top $((ry1 - band)), menu bar bottom $mb"
 pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null
 sleep 1
 

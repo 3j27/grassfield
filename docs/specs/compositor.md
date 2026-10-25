@@ -593,15 +593,22 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR56** A window's titlebar never goes under the menu bar (macOS; owner report from the 1.0.0-rc1 real session:
   Chromium dragged up until its tab strip was under the menu bar could not be grabbed again). For floating windows (not
   full screen or zoomed), on every output, with the plugin's titlebar (a 32 px band above the surface) or the app's own
-  (client chrome, ADR-0015: no band, the surface top): the frame's top is held at the bottom of the menu bar strip of the
-  output the pointer is on (that output's top reserved area; the output under the frame's top centre when the pointer is
-  on none), so a window can always be grabbed again. Only the top is held: a window may hang off the sides or the
-  bottom. A titlebar drag by the plugin holds it at every step (the window stops at the menu bar while the pointer goes
-  on, and follows it again on the way down); a pointer on the menu bar still tiles to fill (FR47). Hyprland's own
+  (client chrome, ADR-0015: no band, the surface top): the frame's top is held at the bottom of the menu bar strip (the
+  output's top reserved area) of the output the frame's top edge is on (the one sharing most of its width when the edge
+  crosses several; when the edge is on no output, above the outputs or in a gap between them, the nearest output below it
+  that shares some of its width; the output under the pointer only when neither exists), so a window can always be
+  grabbed again. The top edge decides, not the pointer: a SUPER+drag (`config/hypr/grassfield/bindings.lua`) or a resize
+  grips the window anywhere (review of e0a3734: with the output under the pointer, a window sitting correctly on an upper
+  output was moved onto the lower one, or cut, at the release). Only the top is held: a window may hang off the sides or
+  the bottom. A titlebar drag by the plugin holds it at every step (the window stops at the menu bar while the pointer
+  goes on, and follows it again on the way down); a pointer on the menu bar still tiles to fill (FR47). Hyprland's own
   interactive move and resize (an app's `xdg_toplevel.move`/`resize`, a mouse binding) have no hook during the drag: the
   release of the button that ends one (seen before Hyprland handles it) schedules one callback after Hyprland ended the
-  drag, which moves the window down (a move) or stops its top edge at the menu bar, the bottom edge kept (a resize).
-  Hyprland's drag itself is left alone. Not covered: windows placed by keyboard moves, by the app or at map. Pure:
+  drag, which moves the window down (a move) or stops its top edge at the menu bar, the bottom edge kept (a resize that
+  moved the top edge: the window's box at the drag's first motion, recorded by the plugin's motion listener, is compared
+  with the box at the end; a resize from the bottom or a side edge, or one never seen moving, is left alone). Hyprland's
+  drag itself is left alone. Not covered: windows placed by keyboard moves or resizes (they never reach the clamp), by
+  the app or at map. Pure:
   `core/TopClamp.*` (`tests/TopClampTest.cpp`); glue `TopClamp.*`; nested `tests/compositor/top_clamp.sh`. Without the
   plugin (C2) nothing holds the top: Hyprland's behaviour.
 - **FR51** Pointer focus on the shell's layers (feature `layer-pointer`, plugin 0.12.0-pointer; integrator finding 2026-10-22,
@@ -703,6 +710,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR47-FR50 | unit `TilingDrag.*`, `TilingPlace.*`, `TilingNames.*` (7); QML `tst_appmenumodel` `test_windowMenuTilingItems`, `settings_apply` (tiling keys); nested `tests/compositor/tiling.sh` | L0 / L1 | 2026-10-22, plugin 0.11.0-tiling (integrator): unit 280/280; `tiling.sh` **10/10 PASS** on GF-REF (left edge shared with WAYLAND-1, right edge free): right edge -> 948x926 at 2404,64, drag-out -> 800x500 back, top of the right edge -> 948x443 quarter, shared left edge -> no tiling, menu bar -> 1904x926 at 1448,64, IPC `left` then `previous`, `tilingEdges false` -> no tiling; preview captures viewed (right half, fill); Window > Move & Resize capture viewed. Not run: C2 without the plugin, soak, R13 |
 | FR51-FR52 | unit `LayerPointer.*` (9; also under `-fsanitize=address,undefined`); nested `tests/compositor/layer_pointer.sh` (`check`, `--output WAYLAND-1`, `--expect plugin` against an older build and with the plugin unloaded, C2) | L0 / L1 | Final, after the merge with window tiling (plugin 0.12.0-pointer, Hyprland v0.56.2 efb50993, host load 0.8-4.6): unit 290/290 and the ASan/UBSan build 290/290 (0 reports); `layer_pointer.sh check` **PASS** on a fresh instance (`.dev/layer-pointer/run-20261022-231314-check`) and after the soak (`run-20261022-232723-check`); C2 `nested-up.sh --no-plugin`: `hyprctl grassfield` "unknown request", shell "ready degraded", 0 QML errors, `layer_pointer.sh check` PASS with the 3 map cases KNOWN (`run-20261022-232743-check`); regressions PASS: `menubar-macos.sh` 10/10, `click_focus.sh` 43/43, `chrome.sh`, `window_reachable.sh` 12/12, `tiling.sh` 10/10, `soak.sh 600` (C1 below). Before the merge, plugin 0.11.0-pointer (the same code), GF-REF at x = 1440 next to WAYLAND-1 at 0,0, host load ~3: unit 283/283 (ASan/UBSan build 283/283, 0 sanitizer reports); `layer_pointer.sh check` **PASS** on GF-REF (`.dev/layer-pointer/run-20261022-223323-check`): a second click without motion closes the menu opened by a press (same pointer, and a new pointer device sending no motion), and the menu opened by IPC under the still pointer; 1-px control and the click after a menu closed over foot PASS; `--output WAYLAND-1` PASS. Defect shown: the 0.10.0-chrome build (loaded from another path with `scripts/nestctl plugin load`) with `--expect plugin` **FAIL** 3/3 map cases (`run-20261022-223421-check`), the plugin unloaded likewise (`run-20261022-223339-check`); without the plugin the map cases pass on WAYLAND-1 (at the origin) and fail on GF-REF (baseline probes `run-20261022-221741-probe`, `run-20261022-221846-probe`). First fix (map only) left the menu opened by a press failing: diagnostic lines showed the overlay maps while the button is still down with keyboard None and takes the keyboard after the release (`CLayerSurface::onCommit`, same miscomputed position): hence the keyboard trigger and the wait for the release. Runtime unload / load: rc 0 both, Hyprland alive, `layer-pointer` withdrawn and advertised again, check PASS after the reload (`run-20261022-223449-check`) |
 | FR53 | unit `Protocol.AppearanceConfigAndFeature`, `Theme.PaletteComesFromTheTokensForBothAppearances`; `gen-tokens.py --check`; QML `tst_minimized` `configCallAppearance`; nested `tests/compositor/chrome.sh` step 3b (light bar, lights, grey inactive, back to dark) | L0 / L1 | unit PASS (2026-10-23, this branch); nested chrome.sh 3b NOT RUN yet (no nested session in the agent sandbox) |
+| FR56 | unit `TopClamp.*` (11: the move and resize rules, the output under the frame's top edge, the review cases of e0a3734 on stacked and bottom-aligned outputs: SUPER+drag ending on the lower output, bottom-edge and right-edge resizes, a top-edge resize and a move into the lower output's menu bar); nested `tests/compositor/top_clamp.sh` (P foot titlebar drag, C Chromium tab strip, R bottom-edge resize with the titlebar under the menu bar) | L0 / L1 | unit 393/393 PASS (2026-10-25, branch m7-clamp-fix); nested: see below the next run |
 
 ## Interfaces / contracts (versions)
 
@@ -1422,6 +1430,10 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
   activation that follows user input take the focus. Not doable with Hyprland 0.56.2's plugin surface.
 
 - Titlebar join (FR3): a thin 1-px arc remains on XWayland windows and translucent windows show lighter corner squares.
+- Titlebar below the menu bar (FR56): during one of Hyprland's own moves (an app's move request, as Chromium's tab strip
+  asks, or SUPER+drag) the window passes under the menu bar and is moved down at the release (about 23 px for Chromium's
+  strip); macOS holds the title bar below the menu bar for the whole drag. Hyprland 0.56.2 offers no hook during its drag.
+  Keyboard moves and resizes are not held.
 - Layer pointer focus (FR51): only the shell's own `grassfield-*` layers are corrected; another client's layer surface that
   takes the keyboard on an output away from the layout origin (a third-party launcher) keeps Hyprland's wrong position until
   the pointer moves. The cause is in Hyprland 0.56.2 (`CLayerSurface::onMap` / `onCommit` add the monitor position to a
