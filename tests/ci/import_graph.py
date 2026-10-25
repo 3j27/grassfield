@@ -46,6 +46,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -253,10 +254,19 @@ def scan(shell):
                 module = name[3:]
                 out.append((path, src, "module" if module.replace(".", "/") in mods else "unknown", module if module.replace(".", "/") in mods else name, name))
             elif kind in ("directory", "javascript"):
-                tgt = Path(os.path.normpath(path.parent / name))
-                dst = module_of_path(shell, mods, tgt) if tgt.exists() or tgt.parent.exists() else None
-                if dst is not None:
-                    out.append((path, src, "module", dst, name))
+                # A quoted import is a plain relative path that resolves inside shell/: anything else (a URL scheme such as
+                # `root:/` or `file:///`, an absolute path, a path that does not exist or leaves the tree) is refused, never
+                # skipped. Percent escapes are decoded before resolving, as the engine does (`../%64ock/Helper.js` is dock).
+                decoded = urllib.parse.unquote(name)
+                if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", decoded) or decoded.startswith("/") or "\\" in decoded:
+                    failures.append((path, f"{path.name}: unresolvable import \"{name}\" (not a plain relative path)"))
+                    continue
+                tgt = Path(os.path.normpath(path.parent / decoded))
+                dst = module_of_path(shell, mods, tgt) if tgt.exists() else None
+                if dst is None:
+                    failures.append((path, f"{path.name}: unresolvable import \"{name}\" (no such file or directory inside shell/)"))
+                    continue
+                out.append((path, src, "module", dst, name))
     return out, failures
 
 
@@ -576,6 +586,15 @@ def selftest():
     run("an import spelled `qs .dock` is seen", svc("import qs .dock\nItem {}\n"), low)
     run("an import spelled `qs .dock`, marked, passes (the marker finds the import by its parsed name)", svc("import qs .dock // layering-exception: GF-087\nItem {}\n"), None)
     run("an import with a comment inside the dotted name is seen", svc("import qs/**/.dock\nItem {}\n"), low)
+    unres = "unresolvable import"
+    run("a root: directory import is refused", svc('import "root:/dock"\nItem {}\n'), unres)
+    run("a root: file import is refused", svc('import "root:/dock/DockModel.js" as M\nItem {}\n'), unres)
+    run("a file: URL import is refused", svc('import "file:///somewhere/dock"\nItem {}\n'), unres)
+    run("an absolute path import is refused", svc('import "/etc"\nItem {}\n'), unres)
+    run("an import of a path that does not exist is refused", svc('import "../nothing"\nItem {}\n'), unres)
+    run("an import that leaves the tree is refused", svc('import "../../outside"\nItem {}\n'), unres)
+    run("a percent-escaped path is decoded and seen", svc('import "../%64ock/DockModel.js" as M\nItem {}\n'), low)
+    run("a percent-escaped path, marked, passes", svc('import "../%64ock/DockModel.js" as M // layering-exception: GF-087\nItem {}\n'), None)
     run("a directory import with a doubled slash is seen", svc('import "..//dock"\nItem {}\n'), low)
     run("a directory import with a doubled slash, marked, passes", svc('import "..//dock" // layering-exception: GF-087\nItem {}\n'), None)
     run("a string holding /* in a pragma does not swallow the next import", svc('pragma Translator: "a/*"\nimport qs.dock\nItem {}\n'), low)
