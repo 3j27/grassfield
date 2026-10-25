@@ -205,6 +205,7 @@
  {"path": "tests/shell/apps_nested.sh", "layer": "nested"},
  {"path": "tests/shell/cc_sliders_ipc.sh", "layer": "nested"},
  {"path": "tests/shell/apps_start_fail.sh", "layer": "headless"},
+ {"path": "tests/shell/menu_bridge_run_mode.sh", "layer": "headless"},
  {"path": "tests/shell/controls_style.sh", "layer": "headless"},
  {"path": "tests/shell/wall_clock_only.sh", "layer": "data"},
  {"path": "tests/shell/wallpaper_online_start_fail.sh", "layer": "headless"},

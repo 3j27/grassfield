@@ -51,10 +51,13 @@ top-level menus (Left/Right).
   `bridges/menu-bridge/dbus/org.grassfield.MenuBridge1.xml`): `Version() → s` ("0.1.0 menu/1"), `Status() → a{sv}`
   `{state: "standby"|"active"|"busy"|"degraded", registrar: b, degraded: b, shell: b, menus: u}`. Owning this name also makes the bridge a
   single instance per bus.
-- **MB10 Start-up guards.** Refuses (exit 3) unless `GRASSFIELD_SESSION=1` or `GRASSFIELD_DEV=1`. With
-  `GRASSFIELD_DEV=1` it refuses the owner's default session bus (empty address, `unix:path=/run/user/<uid>/bus`,
-  `unix:runtime=yes`, `autolaunch:`) before connecting, refuses a bus where `org.freedesktop.systemd1` is present, and
-  requires an explicit socket path.
+- **MB10 Start-up guards.** Refuses (exit 3) unless `GRASSFIELD_SESSION=1` or a development run. A development run
+  follows the run-mode rule (ADR-0019): `GRASSFIELD_DEV=1` while `GRASSFIELD_SESSION` is not `1`; a `GRASSFIELD_DEV=1`
+  that leaked into the Grassfield session is ignored (logged) and the bridge runs as in any session (before refactor
+  slice M7 it took the development branch there, refused the session's bus, and global menus stopped). A development run
+  refuses the owner's default session bus (empty address, `unix:path=/run/user/<uid>/bus`, `unix:runtime=yes`,
+  `autolaunch:`) before connecting, refuses a bus where `org.freedesktop.systemd1` is present, and requires an explicit
+  socket path.
 - **MB11 Shell side** (`shell/platform/MenuBridge.{qml,js}`, `shell/menubar/`): keeps `window → {service, path, pid}`
   from gfc/1 `appmenu` events (validated: bus name, object path, pid); after the capabilities handshake it calls
   `hl.plugin.grassfield.appmenu(address)` for every window (FR22) so a restarted shell learns existing registrations.
@@ -214,6 +217,7 @@ top-level menus (Left/Right).
 | MB16 (D-Bus) | `tests/integration/screensaver_inhibit.sh` (bare; private bus, bridge, socket tap, `tests/fixtures/screensaver-client.py`): name owned, first state, Inhibit on both paths, other/unknown cookies, owner release, sender leaving, NotSupported members, 16-cookie limit, replay to a new shell, bridge exit | L1 | NOT VERIFIED (needs Unix sockets: bare, outside the sandbox) |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
+| MB10 run mode (M7) | the rule against the shared vectors (`tests/unit/menu-bridge`, `Safety.RunMode*`); the built bridge on a private bus (`tests/shell/menu_bridge_run_mode.sh`): `GRASSFIELD_DEV=1` with `GRASSFIELD_SESSION=1` starts as a session bridge on the session socket; a development run without its socket is refused; with it, starts as one; neither, refused | L0 | 2026-10-25 verified |
 | Unit hardening | `systemd-analyze --user verify packaging/systemd/grassfield-menu-bridge.service` | L0 | only finding: `/usr/bin/grassfield-menu-bridge` not installed; runtime under systemd NOT VERIFIED (owner L2) |
 
 ## Interfaces / contracts (versions)

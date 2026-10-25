@@ -5,9 +5,10 @@
 // Usage: grassfield-menu-bridge [--socket PATH] [--version]
 // Environment:
 //   GRASSFIELD_SESSION=1             required in the Grassfield session (set by session.lua; the systemd unit checks it)
-//   GRASSFIELD_DEV=1                 development run: refuses the owner's default session bus (/run/user/<uid>/bus)
-//                                    and requires GRASSFIELD_MENU_BRIDGE_SOCKET (scripts/dev/shell-run.sh sets both
-//                                    the private bus and the socket)
+//   GRASSFIELD_DEV=1                 development run (ADR-0019: only while GRASSFIELD_SESSION is not "1"; a value that
+//                                    leaked into the session is ignored): refuses the owner's default session bus
+//                                    (/run/user/<uid>/bus) and requires GRASSFIELD_MENU_BRIDGE_SOCKET
+//                                    (scripts/dev/shell-run.sh sets both the private bus and the socket)
 //   GRASSFIELD_MENU_BRIDGE_SOCKET    socket path (default $XDG_RUNTIME_DIR/grassfield/menu-bridge.sock)
 // Exit status: 0 stopped by a signal, 2 environment error, 3 refused by a safety check.
 
@@ -73,8 +74,12 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    const bool dev     = qgetenv("GRASSFIELD_DEV") == "1";
-    const bool session = qgetenv("GRASSFIELD_SESSION") == "1";
+    const QByteArray devValue     = qgetenv("GRASSFIELD_DEV");
+    const QByteArray sessionValue = qgetenv("GRASSFIELD_SESSION");
+    const bool       dev          = devRun(devValue, sessionValue);
+    const bool       session      = sessionRun(sessionValue);
+    if (session && devValue == "1")
+        log(QStringLiteral("GRASSFIELD_DEV=1 ignored: this is a Grassfield session (GRASSFIELD_SESSION=1)"));
     if (!dev && !session)
         return refuse(QStringLiteral("not in a Grassfield session (GRASSFIELD_SESSION=1) and not a development run (GRASSFIELD_DEV=1)"));
     if (dev) {
