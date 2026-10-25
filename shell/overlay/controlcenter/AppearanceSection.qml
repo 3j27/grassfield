@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Templates as T
 import Grassfield.Ui
 import qs.services
 import qs.overlay.controlcenter
@@ -51,7 +52,7 @@ Column {
                 {id: "auto", text: qsTr("Auto"), icons: ["sun", "moon"]}
             ]
 
-            delegate: Item {
+            delegate: T.Control {
                 id: choice
 
                 required property var modelData
@@ -60,6 +61,7 @@ Column {
                 width: (parent.width - 2 * Tokens.spacingSm) / 3
                 height: Tokens.panelTileHeight
                 activeFocusOnTab: true
+                focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: modelData.text
                 Accessible.checked: selected
@@ -75,7 +77,7 @@ Column {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
                     color: choice.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: choice.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.width: choice.visualFocus ? Tokens.controlFocusOutline : 0
                     border.color: Appearance.focusRingColor
                 }
 

@@ -46,17 +46,26 @@ FocusScope {
             open(id);
     }
 
+    // Whether the control that has the focus got it by the keyboard (a visible ring): the focus moved on by a click or a
+    // pointer-opened section shows none (macOS: the ring is for the keyboard only).
+    function keyboardFocused(): bool {
+        const item = root.Window.window ? root.Window.window.activeFocusItem : null;
+        return !!item && item.visualFocus === true;
+    }
+
     function open(id: string): void {
         expanded = id;
-        Qt.callLater(() => back.forceActiveFocus());
+        const reason = keyboardFocused() ? Qt.TabFocusReason : Qt.MouseFocusReason;
+        Qt.callLater(() => back.forceActiveFocus(reason));
     }
 
     function collapse(): void {
         const id = expanded;
         expanded = "";
+        const reason = keyboardFocused() ? Qt.TabFocusReason : Qt.MouseFocusReason;
         Qt.callLater(() => {
             const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceSide.visible ? appearanceSideRow : appearanceBottomRow;
-            target.forceActiveFocus();
+            target.forceActiveFocus(reason);
         });
     }
 
@@ -134,7 +143,8 @@ FocusScope {
         const i = Model.navTarget(rects, targets.indexOf(from), dx, dy);
         if (i < 0)
             return false;
-        targets[i].forceActiveFocus();
+        // Arrow keys moved it: a keyboard focus, with its ring.
+        targets[i].forceActiveFocus(Qt.TabFocusReason);
         return true;
     }
 
@@ -377,15 +387,16 @@ FocusScope {
                     Icon {
                         id: displayIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        size: Tokens.menuIconSize
-                        name: "display"
+                        size: Tokens.quicksettingsEndGlyphSmall
+                        name: "sun"
                     }
 
                     Slider {
                         id: displaySlider
                         trackHeight: Tokens.controlSliderTrackCompact
+                        knobless: true
                         verticalKeys: false
-                        width: parent.width - displayIcon.width - parent.spacing
+                        width: parent.width - displayIcon.width - displayIconMax.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Display brightness")
                         value: Brightness.level
@@ -397,6 +408,13 @@ FocusScope {
                                     root.showDevNote();
                             }
                         }
+                    }
+
+                    Icon {
+                        id: displayIconMax
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.quicksettingsEndGlyphLarge
+                        name: "sun"
                     }
                 }
             }
@@ -422,15 +440,16 @@ FocusScope {
                     Icon {
                         id: kbdIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        size: Tokens.menuIconSize
+                        size: Tokens.quicksettingsEndGlyphSmall
                         name: "keyboard"
                     }
 
                     Slider {
                         id: kbdSlider
                         trackHeight: Tokens.controlSliderTrackCompact
+                        knobless: true
                         verticalKeys: false
-                        width: parent.width - kbdIcon.width - parent.spacing
+                        width: parent.width - kbdIcon.width - kbdIconMax.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Keyboard brightness")
                         value: Brightness.kbdLevel
@@ -441,6 +460,13 @@ FocusScope {
                                     root.showDevNote();
                             }
                         }
+                    }
+
+                    Icon {
+                        id: kbdIconMax
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.quicksettingsEndGlyphLarge
+                        name: "keyboard"
                     }
                 }
             }
@@ -490,8 +516,9 @@ FocusScope {
                     Slider {
                         id: volumeSlider
                         trackHeight: Tokens.controlSliderTrackCompact
+                        knobless: true
                         verticalKeys: false
-                        width: parent.width - mute.width - soundChevron.width - 2 * parent.spacing
+                        width: parent.width - mute.width - volumeIconMax.width - soundChevron.width - 3 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Output volume")
                         value: Audio.volume
@@ -499,6 +526,13 @@ FocusScope {
                             if (!Audio.setVolume(v))
                                 volumeSlider.reset();
                         }
+                    }
+
+                    Icon {
+                        id: volumeIconMax
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.quicksettingsEndGlyphLarge
+                        name: "volume-3"
                     }
 
                     NavItem {

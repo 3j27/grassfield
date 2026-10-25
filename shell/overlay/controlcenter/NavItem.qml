@@ -1,11 +1,13 @@
 import QtQuick
+import QtQuick.Templates as T
 import Grassfield.Ui
 
 // Keyboard-reachable control (CC9): Tab follows the grid rows; Up/Down are not handled here, they bubble to the
 // host (ControlCenter), which moves focus to the module above or below; Left/Right move to the control beside
 // this one (or, with handlesArrow, report arrow(direction) and the host of the control decides); Space activates,
-// Return too (or confirmed() when returnActivates is false). Draws the focus ring; content is added by the user.
-Item {
+// Return too (or confirmed() when returnActivates is false). Draws the focus ring for keyboard focus only (visualFocus: a
+// click leaves none, as macOS); content is added by the user.
+T.Control {
     id: root
 
     property string accessibleName: ""
@@ -23,6 +25,7 @@ Item {
     signal arrow(int direction)
 
     activeFocusOnTab: true
+    focusPolicy: Qt.StrongFocus
     Accessible.role: checkable ? Accessible.CheckBox : Accessible.Button
     Accessible.name: accessibleName
     Accessible.focusable: true
@@ -67,7 +70,7 @@ Item {
         z: 10
         radius: root.ringRadius
         color: "transparent"
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.width: root.visualFocus ? Tokens.controlFocusOutline : 0
         border.color: Appearance.focusRingColor
     }
 }

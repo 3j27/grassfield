@@ -633,6 +633,12 @@ QtObject {
     readonly property int quicksettingsAirplaneSettleMs: 3000
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
+    // Quick Settings slider track: the shadow colour at this opacity (a darker translucent track under the white fill); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Quick Settings: integrator decision, macOS model: knobless white fill) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
+    readonly property real quicksettingsSliderTrackOpacity: 0.22
+    // Glyph at the low end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
+    readonly property int quicksettingsEndGlyphSmall: 12
+    // Glyph at the high end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
+    readonly property int quicksettingsEndGlyphLarge: 18
 
     // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19
