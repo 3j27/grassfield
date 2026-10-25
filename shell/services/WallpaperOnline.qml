@@ -129,6 +129,7 @@ Singleton {
 
     Process {
         id: latestProc
+        environment: WallpaperState.toolEnv
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -396,6 +397,7 @@ Singleton {
 
     Process {
         id: fetchProc
+        environment: WallpaperState.toolEnv
         // Set by started: a run that ends without it never started (see onRunningChanged).
         property bool didStart: false
         stdout: StdioCollector {

@@ -55,6 +55,7 @@ Scope {
     Process {
         id: proc
         command: job.command
+        environment: WallpaperState.toolEnv
         stdout: StdioCollector {
             // A streaming job (a transcode prints its progress as it goes): the text grows while the process runs and
             // `progressCallback(text)` hears every change; the final answer is still the whole text at the end.
