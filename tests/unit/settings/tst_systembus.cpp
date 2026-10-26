@@ -1318,3 +1318,152 @@ TEST(SystemBusPrinters, BadValuesNeverReachTheBusAndADevSessionSendsNothing)
     EXPECT_TRUE(bus.calls.isEmpty());
     EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.opensuse.CupsPkHelper.Mechanism"), QStringLiteral("org.opensuse.CupsPkHelper.Mechanism"), QStringLiteral("DevicesGet"), {}));
 }
+
+// ---- Privacy & Security: the portal permission store (session bus, ADR-0030 amendment 2026-10-26) ----
+
+namespace
+{
+using PermissionTable = QMap<QString, QStringList>;
+const QString kStore = QStringLiteral("org.freedesktop.impl.portal.PermissionStore");
+const QString kNotFound = QStringLiteral("org.freedesktop.portal.Error.NotFound: No entry for camera");
+
+// A store with a location table (one app allowed, one refused, one with a bad one-element value, a host app with no id), a
+// camera entry ("yes", "no", "ask"), no background table yet, and saved screen-sharing selections.
+struct PrivacyFixture {
+    FakeBus bus;
+    PrivacyFixture()
+    {
+        bus.handler = [](const Call &c) -> BusReply {
+            if (c.service != kStore || c.iface != kStore)
+                return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: no"));
+            const QString table = c.args.value(0).toString();
+            if (c.member == QLatin1String("Lookup")) {
+                const QString id = c.args.value(1).toString();
+                if (table == QLatin1String("location") && id == QLatin1String("location"))
+                    return ok({QVariant::fromValue(PermissionTable{{"org.example.Maps", {"EXACT", "1234"}}, {"org.example.Weather", {"NONE", "0"}},
+                                                                   {"org.example.Broken", {"EXACT"}}, {"", {"EXACT", "1"}}}),
+                               variant(QVariant())});
+                if (table == QLatin1String("devices") && id == QLatin1String("camera"))
+                    return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}, {"org.example.Photo", {"no"}}, {"org.example.Ask", {"ask"}}}),
+                               variant(QVariant())});
+                if (table == QLatin1String("screencast") && id == QLatin1String("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"))
+                    return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}}), variant(QVariant())});
+                return err(kNotFound);
+            }
+            if (c.member == QLatin1String("List")) {
+                if (table == QLatin1String("screencast"))
+                    return ok({QStringList{"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "../not/a/token"}});
+                return err(kNotFound);
+            }
+            if (c.member == QLatin1String("SetPermission") || c.member == QLatin1String("Delete"))
+                return ok();
+            return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: no"));
+        };
+    }
+};
+
+QList<QPair<QString, bool>> appsOf(const QJsonArray &a)
+{
+    QList<QPair<QString, bool>> out;
+    for (const QJsonValue &v : a)
+        out.append({v.toObject().value("app").toString(), v.toObject().value("allowed").toBool()});
+    return out;
+}
+} // namespace
+
+TEST(SystemBusPrivacy, TheStoreIsReadAsThePortalsReadIt)
+{
+    PrivacyFixture f;
+    const StateResult r = privacyState(f.bus);
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    // Location: allowed unless NONE; a one-element value is not a grant (the portal asks again); the host apps' "" is left out.
+    const auto location = appsOf(r.json.value("location").toArray());
+    EXPECT_EQ(location, (QList<QPair<QString, bool>>{{"org.example.Broken", false}, {"org.example.Maps", true}, {"org.example.Weather", false}}));
+    // Camera: only "yes" allows; "ask" asks every time.
+    const auto camera = appsOf(r.json.value("camera").toArray());
+    EXPECT_EQ(camera, (QList<QPair<QString, bool>>{{"org.example.Ask", false}, {"org.example.Meet", true}, {"org.example.Photo", false}}));
+    // No background table yet: empty, not an error.
+    EXPECT_TRUE(r.json.value("background").toArray().isEmpty());
+    // Saved selections: one per app and token; a malformed token is never looked up.
+    const QJsonArray shared = r.json.value("screencast").toArray();
+    ASSERT_EQ(shared.size(), 1);
+    EXPECT_EQ(shared[0].toObject().value("app").toString(), QStringLiteral("org.example.Meet"));
+    EXPECT_EQ(shared[0].toObject().value("token").toString(), QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"));
+    EXPECT_TRUE(r.json.value("remoteDesktop").toArray().isEmpty());
+    for (const Call &c : f.bus.calls) {
+        EXPECT_NE(c.args.value(1).toString(), QStringLiteral("../not/a/token"));
+        EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args)) << c.member.toStdString();
+    }
+}
+
+TEST(SystemBusPrivacy, NoStoreIsAReason)
+{
+    FakeBus bus; // nothing answers: the store is not installed
+    const StateResult r = privacyState(bus);
+    EXPECT_FALSE(r.ok);
+    EXPECT_FALSE(r.error.isEmpty());
+}
+
+TEST(SystemBusPrivacy, ASwitchSetsExactlyThatAppsGrant)
+{
+    PrivacyFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.allow"}, {"category", "location"}, {"app", "org.example.Maps"}, {"on", false}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.allow"}, {"category", "location"}, {"app", "org.example.Weather"}, {"on", true}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.allow"}, {"category", "camera"}, {"app", "org.example.Meet"}, {"on", false}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.allow"}, {"category", "background"}, {"app", "org.example.Sync"}, {"on", true}}), QString());
+    ASSERT_EQ(f.bus.calls.size(), 4);
+    for (const Call &c : f.bus.calls) {
+        EXPECT_EQ(c.service, kStore);
+        EXPECT_EQ(c.member, QStringLiteral("SetPermission"));
+    }
+    // Location keeps two elements: one would read as no entry and the app would be asked again.
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"location", true, "location", "org.example.Maps", QStringList{"NONE", "0"}}));
+    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{"location", true, "location", "org.example.Weather", QStringList{"EXACT", "0"}}));
+    EXPECT_EQ(f.bus.calls[2].args, (QVariantList{"devices", true, "camera", "org.example.Meet", QStringList{"no"}}));
+    EXPECT_EQ(f.bus.calls[3].args, (QVariantList{"background", true, "background", "org.example.Sync", QStringList{"yes"}}));
+    // Forgetting a saved selection deletes that entry only; one already gone is fine.
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}}), QString());
+    EXPECT_EQ(f.bus.calls[0].member, QStringLiteral("Delete"));
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"screencast", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}));
+    f.bus.handler = [](const Call &) { return err(kNotFound); };
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "remoteDesktop"}, {"token", "abc"}}), QString());
+    EXPECT_EQ(f.bus.calls[1].args.value(0).toString(), QStringLiteral("remote-desktop"));
+    EXPECT_TRUE(sessionAction({{"op", "privacy.allow"}}));
+    EXPECT_FALSE(privilegedAction({{"op", "privacy.allow"}}));
+    EXPECT_FALSE(isReadOnlyCall(kStore, kStore, QStringLiteral("SetPermission"), {}));
+    EXPECT_FALSE(isReadOnlyCall(kStore, kStore, QStringLiteral("Delete"), {}));
+    EXPECT_FALSE(isReadOnlyCall(kStore, kStore, QStringLiteral("DeletePermission"), {}));
+}
+
+TEST(SystemBusPrivacy, BadValuesNeverReachTheStore)
+{
+    PrivacyFixture f;
+    const QList<QVariantMap> bad{
+        {{"op", "privacy.allow"}, {"category", "microphone"}, {"app", "org.example.Meet"}, {"on", true}},
+        {{"op", "privacy.allow"}, {"category", "camera"}, {"app", ""}, {"on", true}},
+        {{"op", "privacy.allow"}, {"category", "camera"}, {"app", "../x"}, {"on", true}},
+        {{"op", "privacy.allow"}, {"category", "camera"}, {"app", "org.example.Meet\n"}, {"on", true}},
+        {{"op", "privacy.allow"}, {"category", "camera"}, {"app", "org.example.Meet"}, {"on", "true"}},
+        {{"op", "privacy.allow"}, {"category", "camera"}, {"app", 7}, {"on", true}},
+        {{"op", "privacy.forget"}, {"kind", "documents"}, {"token", "abc"}},
+        {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "../abc"}},
+        {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", ""}},
+    };
+    for (const QVariantMap &op : bad) {
+        EXPECT_FALSE(validAction(op)) << op.value("category").toString().toStdString() << op.value("kind").toString().toStdString();
+        EXPECT_FALSE(runAction(f.bus, op).isEmpty());
+    }
+    EXPECT_TRUE(f.bus.calls.isEmpty());
+}
+
+TEST(SystemBusPrivacy, ADevSessionReadsButNeverChangesAGrant)
+{
+    PrivacyFixture f;
+    GuardedCaller dev(f.bus, true);
+    EXPECT_TRUE(privacyState(dev).ok);
+    const int reads = f.bus.calls.size();
+    EXPECT_FALSE(runAction(dev, {{"op", "privacy.allow"}, {"category", "camera"}, {"app", "org.example.Meet"}, {"on", false}}).isEmpty());
+    EXPECT_FALSE(runAction(dev, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "abc"}}).isEmpty());
+    EXPECT_EQ(f.bus.calls.size(), reads);
+}

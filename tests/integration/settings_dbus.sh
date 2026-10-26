@@ -28,6 +28,10 @@
 #  14  Printers (ADR-0030, cups-pk-helper): Add makes an "everywhere" queue and switches it on and to accepting jobs, Remove
 #      deletes it; CUPS's message and a polkit refusal are the reason; the switches refused after an add leave the queue, and
 #      Resume makes the two calls; bad values and the dev guard send nothing
+#  15  Privacy & Security (the portal permission store, session bus): each category's applications (a malformed id dropped,
+#      "ask" not allowed, no entry is none), the saved screen-sharing selection; a switch is SetPermission with the value the
+#      portal reads (location [accuracy, timestamp], yes/no), Remove is Delete and an entry already gone is fine; bad values,
+#      the dev guard and the store's own error
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -61,10 +65,10 @@ python3 -I -c 'import gi; gi.require_version("Gio", "2.0")' 2>/dev/null || { say
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/gf-settings-dbus.XXXXXX") || die "no temp dir"
 chmod 700 "$work"
-bus_pid="" nm_pid="" bz_pid="" gen_pid="" up_pid="" cp_pid=""
+bus_pid="" nm_pid="" bz_pid="" gen_pid="" up_pid="" cp_pid="" ps_pid=""
 stop_all() {
   local p
-  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$up_pid" "$cp_pid" "$bus_pid"; do
+  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$up_pid" "$cp_pid" "$ps_pid" "$bus_pid"; do
     [[ -n $p ]] && kill "$p" 2>/dev/null
   done
   wait 2>/dev/null
@@ -122,18 +126,18 @@ penv=(env -i LC_ALL=C.UTF-8 PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DB
 # resolve its loopback TCP address (it asks getaddrinfo for AI_ADDRCONFIG), so such a run preloads a getaddrinfo that drops the flag.
 probe() { timeout 30 "${penv[@]}" ${GF_TEST_PRELOAD:+LD_PRELOAD=$GF_TEST_PRELOAD} "$work/probe" "$@" 2>&1; }
 
-start_service() { # nm|bluez|general|upower|cupspk [--fail ...]: sets nm_pid / bz_pid / gen_pid / up_pid / cp_pid
+start_service() { # nm|bluez|general|upower|cupspk|permstore [--fail ...]: sets nm_pid / bz_pid / gen_pid / up_pid / cp_pid / ps_pid
   local which=$1
   shift
   rm -f "$work/$which.ready"
   : >"$work/$which.log"
   setsid "${penv[@]}" python3 -I "$root/tests/fixtures/fake-system-service.py" "$which" --log "$work/$which.log" --ready "$work/$which.ready" "$@" >"$work/$which.err" 2>&1 </dev/null &
-  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; upower) up_pid=$! ;; cupspk) cp_pid=$! ;; *) gen_pid=$! ;; esac
+  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; upower) up_pid=$! ;; cupspk) cp_pid=$! ;; permstore) ps_pid=$! ;; *) gen_pid=$! ;; esac
   wait_until 10 test -e "$work/$which.ready" || { cat "$work/$which.err"; die "the fake $which did not start"; }
 }
-stop_service() { # nm|bluez|general
+stop_service() { # nm|bluez|general|upower|cupspk|permstore
   local pid
-  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; upower) pid=$up_pid up_pid="" ;; cupspk) pid=$cp_pid cp_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
+  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; upower) pid=$up_pid up_pid="" ;; cupspk) pid=$cp_pid cp_pid="" ;; permstore) pid=$ps_pid ps_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
   [[ -n $pid ]] && { kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; }
   sleep 0.3
 }
@@ -527,6 +531,58 @@ out=$(probe --dev act '{"op":"printer.resume","name":"GF_Office"}')
 made=$(members cupspk)
 check "in a dev session Resume is refused by the guard ($out), nothing more reached the helper" bash -c '[[ $1 == "failed: dev guard"* && $2 == PrinterSetEnabled,PrinterSetAcceptJobs ]]' _ "$out" "$made"
 stop_service cupspk
+
+say ""
+say "[15] Privacy & Security (the portal permission store)"
+out=$(probe privacy-state)
+check "no permission store: the reason says the service is not running ($out)" test "$out" = "failed: the service is not running"
+start_service permstore
+token=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
+st=$(probe privacy-state)
+check "location: Maps allowed (EXACT), Weather not (NONE), the malformed id dropped" py "$st" 'j["location"] == [{"app": "org.example.Maps", "allowed": True}, {"app": "org.example.Weather", "allowed": False}]'
+check "camera: Meet allowed, Booth's \"ask\" is not" py "$st" 'j["camera"] == [{"app": "org.example.Booth", "allowed": False}, {"app": "org.example.Meet", "allowed": True}]'
+check "no background entry and no remote desktop table: none (NotFound is not an error)" py "$st" 'j["background"] == [] and j["remoteDesktop"] == []'
+check "screen sharing: Meet's saved selection, with its token" py "$st" 'j["screencast"] == [{"app": "org.example.Meet", "token": "'"$token"'"}]'
+check "... read with Lookup and List only" bash -c '[[ -z $(grep -v "\"member\": \"\(Lookup\|List\)\"" "$1") ]]' _ "$work/permstore.log"
+out=$(probe act '{"op":"privacy.allow","category":"camera","app":"org.example.Booth","on":true}')
+check "allow Booth the camera: ok ($out)" test "$out" = ok
+check "... SetPermission('devices', create, 'camera', Booth, ['yes'])" logged permstore SetPermission /org/freedesktop/impl/portal/PermissionStore "'devices', true, 'camera', 'org.example.Booth', ['yes']"
+out=$(probe act '{"op":"privacy.allow","category":"location","app":"org.example.Maps","on":false}')
+check "Maps's location off: ok ($out), SetPermission of ['NONE', '0'] (two elements, as the portal reads it)" logged permstore SetPermission / "'location', true, 'location', 'org.example.Maps', ['NONE', '0']"
+out=$(probe act '{"op":"privacy.allow","category":"location","app":"org.example.Weather","on":true}')
+check "Weather's location on: ['EXACT', '0']" logged permstore SetPermission / "'location', true, 'location', 'org.example.Weather', ['EXACT', '0']"
+out=$(probe act '{"op":"privacy.allow","category":"background","app":"org.example.Meet","on":false}')
+check "Meet in the background off: ok ($out), a new background entry with ['no']" logged permstore SetPermission / "'background', true, 'background', 'org.example.Meet', ['no']"
+out=$(probe act '{"op":"privacy.forget","kind":"screencast","token":"'"$token"'"}')
+check "remove the saved selection: ok ($out), Delete('screencast', token)" logged permstore Delete / "'screencast', '$token'"
+st=$(probe privacy-state)
+check "... and the store now reads every change" py "$st" 'j["camera"][0] == {"app": "org.example.Booth", "allowed": True} and [a["allowed"] for a in j["location"]] == [False, True] and j["background"] == [{"app": "org.example.Meet", "allowed": False}] and j["screencast"] == []'
+out=$(probe act '{"op":"privacy.forget","kind":"screencast","token":"'"$token"'"}')
+check "removing it again (already gone): ok ($out)" test "$out" = ok
+before=$(calls permstore)
+fine=1
+for op in '{"op":"privacy.allow","category":"microphone","app":"org.example.Meet","on":true}' '{"op":"privacy.allow","category":"camera","app":"../x","on":true}' \
+  '{"op":"privacy.allow","category":"camera","app":"org.example.Meet","on":"yes"}' '{"op":"privacy.forget","kind":"screenshot","token":"abc"}' \
+  '{"op":"privacy.forget","kind":"screencast","token":"a b"}'; do
+  out=$(probe act "$op")
+  case $out in "failed: invalid request"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "an unknown category or kind, a malformed id or token, a switch that is not a boolean: refused before the bus" test "$fine" -eq 1
+check "... and none of these reached the store" test "$(calls permstore)" -eq "$before"
+check "in a dev session the state is read" py "$(probe --dev privacy-state)" 'len(j["location"]) == 2'
+before=$(grep -vc '"member": "\(Lookup\|List\)"' "$work/permstore.log")
+fine=1
+for op in '{"op":"privacy.allow","category":"camera","app":"org.example.Meet","on":false}' '{"op":"privacy.forget","kind":"screencast","token":"abc"}'; do
+  out=$(probe --dev act "$op")
+  case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "in a dev session a switch and Remove are refused by the guard" test "$fine" -eq 1
+check "... and the store got no write" test "$(grep -vc '"member": "\(Lookup\|List\)"' "$work/permstore.log")" -eq "$before"
+stop_service permstore
+start_service permstore --fail 'SetPermission=org.freedesktop.portal.Error.Failed|Unable to write the permission database'
+out=$(probe act '{"op":"privacy.allow","category":"camera","app":"org.example.Meet","on":false}')
+check "the store's own error is the reason ($out)" test "$out" = "failed: Unable to write the permission database"
+stop_service permstore
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi

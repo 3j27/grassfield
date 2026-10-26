@@ -13,11 +13,15 @@
 #include <QRegularExpression>
 #include <QThread>
 
+#include <algorithm>
+
 namespace grassfield::settings {
 
 namespace {
 using ConnectionSettings = QMap<QString, QVariantMap>;
 using ManagedObjects = QMap<QDBusObjectPath, ConnectionSettings>;
+// The permission store's grants of one entry: application id -> its values (a{sas}).
+using PermissionTable = QMap<QString, QStringList>;
 
 constexpr int kReadMs = 3000;
 constexpr int kActMs = 30000; // a Bluetooth connect or a Wi-Fi association can take a while
@@ -64,6 +68,35 @@ const QString kSystemdPath = QStringLiteral("/org/freedesktop/systemd1");
 const QString kSystemdManager = QStringLiteral("org.freedesktop.systemd1.Manager");
 const QString kSystemdUnit = QStringLiteral("org.freedesktop.systemd1.Unit");
 const QString kNmWired = QStringLiteral("org.freedesktop.NetworkManager.Device.Wired");
+// The xdg-desktop-portal permission store (session bus; its bus name is also its interface).
+const QString kPermStore = QStringLiteral("org.freedesktop.impl.portal.PermissionStore");
+const QString kPermStorePath = QStringLiteral("/org/freedesktop/impl/portal/PermissionStore");
+// At most this many saved selections are read per table (each is one Lookup).
+constexpr int kMaxSavedSelections = 64;
+
+// Privacy & Security's switches: the table and id each portal keeps its grant under, and the values the store holds for
+// allowed and not allowed (xdg-desktop-portal: camera.c, location.c, background.c; location keeps [accuracy, timestamp]).
+struct PrivacyGrant {
+    QString category, table, id;
+    QStringList allow, deny;
+};
+const QList<PrivacyGrant> &privacyGrants()
+{
+    static const QList<PrivacyGrant> grants{
+        {QStringLiteral("location"), QStringLiteral("location"), QStringLiteral("location"), {QStringLiteral("EXACT"), QStringLiteral("0")},
+         {QStringLiteral("NONE"), QStringLiteral("0")}},
+        {QStringLiteral("camera"), QStringLiteral("devices"), QStringLiteral("camera"), {QStringLiteral("yes")}, {QStringLiteral("no")}},
+        {QStringLiteral("background"), QStringLiteral("background"), QStringLiteral("background"), {QStringLiteral("yes")}, {QStringLiteral("no")}},
+    };
+    return grants;
+}
+// The saved selections of screen sharing and remote desktop: page key -> store table.
+const QList<QPair<QString, QString>> &privacySelections()
+{
+    static const QList<QPair<QString, QString>> tables{{QStringLiteral("screencast"), QStringLiteral("screencast")},
+                                                       {QStringLiteral("remoteDesktop"), QStringLiteral("remote-desktop")}};
+    return tables;
+}
 
 constexpr uint kDeviceTypeWifi = 2;
 constexpr uint kDeviceStateActivated = 100;
@@ -387,6 +420,7 @@ void registerBusTypes()
     static const bool once = [] {
         qDBusRegisterMetaType<ConnectionSettings>();
         qDBusRegisterMetaType<ManagedObjects>();
+        qDBusRegisterMetaType<PermissionTable>();
         return true;
     }();
     Q_UNUSED(once)
@@ -409,6 +443,10 @@ bool isReadOnlyCall(const QString &service, const QString &iface, const QString 
     if (service == kSystemd)
         return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
             || (iface == kSystemdManager && member == QLatin1String("ListUnitFilesByPatterns"));
+    // The permission store: its tables and entries.
+    if (service == kPermStore)
+        return iface == kPermStore
+            && (member == QLatin1String("Lookup") || member == QLatin1String("List") || member == QLatin1String("GetPermission"));
     if (service != kNmService && service != kBluez)
         return false;
     if (iface == kProps)
@@ -915,6 +953,71 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs)
     return r;
 }
 
+namespace {
+// A missing table or entry: the store has nothing for it yet.
+bool notFound(const BusReply &r)
+{
+    return !r.ok && r.error.startsWith(QLatin1String("org.freedesktop.portal.Error.NotFound"));
+}
+
+// Whether a stored value allows: location keeps [accuracy, timestamp] and an accuracy other than NONE allows (an unknown one
+// counts as NONE, as the portal reads it); the others allow only on "yes" ("ask" asks every time: not allowed here).
+bool privacyAllowed(const QString &category, const QStringList &value)
+{
+    if (category == QLatin1String("location")) {
+        static const QStringList allowing{QStringLiteral("COUNTRY"), QStringLiteral("CITY"), QStringLiteral("NEIGHBORHOOD"), QStringLiteral("STREET"),
+                                          QStringLiteral("EXACT")};
+        return value.size() >= 2 && allowing.contains(value.first());
+    }
+    return value == QStringList{QStringLiteral("yes")};
+}
+} // namespace
+
+StateResult privacyState(BusCaller &bus)
+{
+    StateResult r;
+    QJsonObject json;
+    for (const PrivacyGrant &g : privacyGrants()) {
+        const BusReply reply = bus.call(kPermStore, kPermStorePath, kPermStore, QStringLiteral("Lookup"), {g.table, g.id}, kReadMs);
+        if (!reply.ok && !notFound(reply)) {
+            r.error = reasonOf(reply.error);
+            return r;
+        }
+        QJsonArray apps;
+        const PermissionTable table = reply.ok ? cast<PermissionTable>(reply.args.value(0)) : PermissionTable{};
+        for (auto it = table.cbegin(); it != table.cend(); ++it) {
+            if (isPortalAppId(it.key()))
+                apps.append(QJsonObject{{QStringLiteral("app"), it.key()}, {QStringLiteral("allowed"), privacyAllowed(g.category, it.value())}});
+        }
+        json.insert(g.category, apps);
+    }
+    for (const auto &[key, tableName] : privacySelections()) {
+        QJsonArray saved;
+        const BusReply list = bus.call(kPermStore, kPermStorePath, kPermStore, QStringLiteral("List"), {tableName}, kReadMs);
+        if (!list.ok && !notFound(list)) {
+            r.error = reasonOf(list.error);
+            return r;
+        }
+        const QStringList tokens = list.ok ? cast<QStringList>(list.args.value(0)) : QStringList{};
+        for (const QString &token : tokens.mid(0, kMaxSavedSelections)) {
+            if (!isPortalToken(token))
+                continue;
+            const BusReply entry = bus.call(kPermStore, kPermStorePath, kPermStore, QStringLiteral("Lookup"), {tableName, token}, kReadMs);
+            if (!entry.ok)
+                continue;
+            const PermissionTable apps = cast<PermissionTable>(entry.args.value(0));
+            for (auto it = apps.cbegin(); it != apps.cend(); ++it) {
+                if (isPortalAppId(it.key()))
+                    saved.append(QJsonObject{{QStringLiteral("app"), it.key()}, {QStringLiteral("token"), token}});
+            }
+        }
+        json.insert(key, saved);
+    }
+    r.json = json;
+    r.ok = true;
+    return r;
+}
+
 QString hostNameFor(const QString &name)
 {
     QString out;
@@ -934,7 +1037,8 @@ QString hostNameFor(const QString &name)
 
 bool sessionAction(const QVariantMap &op)
 {
-    return op.value(QStringLiteral("op")).toString().startsWith(QLatin1String("user."));
+    const QString name = op.value(QStringLiteral("op")).toString();
+    return name.startsWith(QLatin1String("user.")) || name.startsWith(QLatin1String("privacy."));
 }
 
 bool privilegedAction(const QVariantMap &op)
@@ -983,6 +1087,17 @@ bool validAction(const QVariantMap &op)
             && isPrinterInfo(op.value(QStringLiteral("info")));
     if (name == QLatin1String("printer.delete") || name == QLatin1String("printer.resume"))
         return isPrinterName(op.value(QStringLiteral("name")).toString());
+    if (name == QLatin1String("privacy.allow")) {
+        const QString category = op.value(QStringLiteral("category")).toString();
+        const bool known = std::any_of(privacyGrants().cbegin(), privacyGrants().cend(), [&](const PrivacyGrant &g) { return g.category == category; });
+        return known && op.value(QStringLiteral("app")).metaType() == QMetaType::fromType<QString>() && isPortalAppId(op.value(QStringLiteral("app")).toString())
+            && isBool(op.value(QStringLiteral("on")));
+    }
+    if (name == QLatin1String("privacy.forget")) {
+        const QString kind = op.value(QStringLiteral("kind")).toString();
+        const bool known = std::any_of(privacySelections().cbegin(), privacySelections().cend(), [&](const QPair<QString, QString> &t) { return t.first == kind; });
+        return known && op.value(QStringLiteral("token")).metaType() == QMetaType::fromType<QString>() && isPortalToken(op.value(QStringLiteral("token")).toString());
+    }
     return false;
 }
 
@@ -1096,6 +1211,28 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
             return fail(r.error);
         const BusReply reload = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("Reload"), {}, kActMs);
         return reload.ok ? QString() : fail(reload.error);
+    }
+    // Privacy & Security (session bus, the user's own grants): one application's switch, or one saved selection forgotten.
+    if (name == QLatin1String("privacy.allow")) {
+        const QString category = op.value(QStringLiteral("category")).toString();
+        for (const PrivacyGrant &g : privacyGrants()) {
+            if (g.category != category)
+                continue;
+            const QStringList value = op.value(QStringLiteral("on")).toBool() ? g.allow : g.deny;
+            const BusReply r = bus.call(kPermStore, kPermStorePath, kPermStore, QStringLiteral("SetPermission"),
+                                        {g.table, true, g.id, op.value(QStringLiteral("app")).toString(), value}, kActMs);
+            return r.ok ? QString() : fail(r.error);
+        }
+    }
+    if (name == QLatin1String("privacy.forget")) {
+        const QString kind = op.value(QStringLiteral("kind")).toString();
+        for (const auto &[key, table] : privacySelections()) {
+            if (key != kind)
+                continue;
+            const BusReply r = bus.call(kPermStore, kPermStorePath, kPermStore, QStringLiteral("Delete"), {table, op.value(QStringLiteral("token")).toString()}, kActMs);
+            // Already gone (used and saved again under a new token meanwhile): nothing left to forget.
+            return r.ok || r.error.startsWith(QLatin1String("org.freedesktop.portal.Error.NotFound")) ? QString() : fail(r.error);
+        }
     }
     if (name == QLatin1String("wifi.radio"))
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());

@@ -107,7 +107,8 @@ public:
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
     // (read-only, also in a dev session); for General "host.state", "time.state", "time.zones", "locale.state" (system bus) and
-    // "user.units" (the session bus: the user's own services); for the network panes "net.state" (devices, addresses, VPNs). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
+    // "user.units" (the session bus: the user's own services); for the network panes "net.state" (devices, addresses, VPNs);
+    // for Privacy & Security "privacy.state" (the session bus: the portal permission store). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
     // and the like (systembus.h runAction); in a dev session nothing is sent (one "dev guard: <what> suppressed" line,
     // suppressed(what), false returned); an op that is not well formed is refused (false).
     Q_INVOKABLE void busQuery(const QString &what, const QString &tag);

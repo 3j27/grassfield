@@ -605,3 +605,16 @@ TEST(IconFile, OnlySmallRegularRasterFiles)
     EXPECT_FALSE(isIconFile(QStringLiteral("app.png")));
     EXPECT_FALSE(isIconFile(d));
 }
+
+TEST(PrivacyGuard, AppIdsAndTokensAsTheStoreKeysThem)
+{
+    for (const char *id : {"org.mozilla.firefox", "snap.spotify", "com.example.App_2", "foot", "org.gnome.Maps.Devel", "a+b"})
+        EXPECT_TRUE(isPortalAppId(QString::fromLatin1(id))) << id;
+    for (const char *id : {"", "../x", "a/b", ".hidden", "a..b", "x\n", "two words", "-x"})
+        EXPECT_FALSE(isPortalAppId(QString::fromLatin1(id))) << id;
+    EXPECT_FALSE(isPortalAppId(QString(256, QLatin1Char('a'))));
+    for (const char *t : {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "abc", "tok:1.2_3"})
+        EXPECT_TRUE(isPortalToken(QString::fromLatin1(t))) << t;
+    for (const char *t : {"", "../a", "a/b", "a b", "-a"})
+        EXPECT_FALSE(isPortalToken(QString::fromLatin1(t))) << t;
+}

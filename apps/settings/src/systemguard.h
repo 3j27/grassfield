@@ -123,4 +123,10 @@ QString mountPointOf(const QList<Mount> &mounts, const QString &path);
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);
 
+// Privacy & Security (the portal permission store, ADR-0030 amendment): an application id as the store keys a grant (a
+// Flatpak id such as org.example.App, snap.<name>, or a host application's desktop id), never "" (unsandboxed applications
+// without an id share that key) and never a path; and a saved screen-sharing or remote-desktop selection's token.
+bool isPortalAppId(const QString &s);
+bool isPortalToken(const QString &s);
+
 } // namespace grassfield::settings

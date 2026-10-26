@@ -24,6 +24,18 @@ bool isUuid(const QString &s)
     return re.match(s).hasMatch();
 }
 
+bool isPortalAppId(const QString &s)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_][A-Za-z0-9_.+-]{0,254}")));
+    return re.match(s).hasMatch() && !s.contains(QLatin1String(".."));
+}
+
+bool isPortalToken(const QString &s)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")));
+    return re.match(s).hasMatch();
+}
+
 QList<Mount> parseMounts(const QByteArray &text)
 {
     // fstab(5) escaping: \ooo (three octal digits) for a space, a tab, a newline or a backslash.

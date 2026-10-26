@@ -158,6 +158,38 @@ service ask the session's agent itself.
   - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets no `cups-pk-helper` method through
     (none of them is a read); the `lpoptions` actions are refused there like every action. A nested session can therefore
     never add, remove or change the owner's printers.
+- Desktop group, Privacy & Security (macOS 27 Privacy & Security, with the permissions the desktop portals keep; amendment of
+  2026-10-26). These are the user's own grants: no polkit action, the session bus, as the user's services above.
+  - The store: xdg-desktop-portal's permission store, `org.freedesktop.impl.portal.PermissionStore` (session bus, object
+    `/org/freedesktop/impl/portal/PermissionStore`, an interface of the same name; read in xdg-desktop-portal's sources at tag
+    1.22.1, the version Arch ships, and on main: `document-portal/xdg-permission-store.c`). It is D-Bus activated
+    (`xdg-permission-store`, in the `xdg-desktop-portal` package Omarchy installs). It checks no caller: any client of the
+    user's session bus may read and write it, so Settings asks for nothing more than any portal client has.
+  - Reads (`privacy.state`; `isReadOnlyCall` lets the store's `Lookup`, `List` and `GetPermission` through, so a dev session
+    reads it too): `Lookup` of `location`/`location`, `background`/`background` and `devices`/`camera`; `List` of the
+    `screencast` and `remote-desktop` tables, then one `Lookup` per saved selection (at most 64 per table). A missing table or
+    entry (`org.freedesktop.portal.Error.NotFound`) is "none", not an error. Application ids and restore tokens are checked
+    (`isPortalAppId`: no path, no `..`; `isPortalToken`), anything else is dropped.
+  - Values, as the portals read them: location keeps `[accuracy, timestamp]` (fewer than two elements is no entry, and the
+    portal asks again), allowed is any accuracy but `NONE`; the camera and the background keep `["yes"]`, `["no"]` or
+    `["ask"]` (asked every time: shown as not allowed). A saved selection (screen sharing, remote desktop) is one entry per
+    restore token with the application's row and the compositor's data: the application may reuse that screen, window or
+    device choice without the picker.
+  - Writes: `privacy.allow {category, app, on}` is `SetPermission(table, true, id, app, value)` with `["EXACT", "0"]` or
+    `["NONE", "0"]` for location and `["yes"]` or `["no"]` otherwise; `privacy.forget {kind, token}` is `Delete(table, token)`,
+    one action per token (an entry already gone, `NotFound`, is not a failure). Validated in QML (`Privacy.js`) and again in
+    C++ (`validAction`): a known category or table, a valid id or token, a boolean switch.
+  - What it cannot do, said in the pane: only sandboxed applications (Flatpak) go through these portals; the portal treats an
+    application of the host as allowed for location and the background without reading the store. A `no` for the background
+    stops a Flatpak that runs in the background only where the portal backend reports applications' state (its background
+    monitor); not verified with xdg-desktop-portal-hyprland (owner check).
+  - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets only the three reads through: a nested
+    session never changes the owner's grants.
+  - Tests: `tst_systembus.cpp` `SystemBusPrivacy.*` (the reads as the portals keep them, no store as a reason, the exact
+    `SetPermission` and `Delete`, bad values and the dev guard send nothing), `tst_systemguard.cpp` `PrivacyGuard.*`,
+    `settings_dbus.sh` section 15 (a fake store on the private bus: every call logged with its arguments),
+    `tests/unit/tst_settingsprivacy.qml` (the state checked again, the counts, a switch, the saved selections forgotten one
+    after the other, a failure's reason, the dev guard).
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
@@ -190,6 +222,9 @@ System Settings > General > About > Name and Date & Time change machine-wide set
   Printers (owner, real session with a network printer): Add Printer… (the dialog, then a test page), the default printer and
   the paper size (check `~/.cups/lpoptions` and a print dialog), Remove Printer… (cancel once, then confirm); `pacman -Q
   cups-pk-helper` shows it installed (Omarchy's base list).
+  Privacy & Security (owner, real session with a Flatpak that asks for the camera or the location, and one that shares a
+  screen): the pane lists them; switch one off and check the application is refused; remove a saved screen choice and check
+  the picker comes back; `flatpak permissions` shows the same grants.
 - A review by the security reviewer (opus) is required before merge. 2026-10-26: FAIL (an autostart write through a symlinked
   entry; no test of those writes; this ADR silent on what omarchy-language does; a region changing the words; the zone
   wording) → 55d87be → counter-review FAIL (a textual `link/..` path normalised past the folder check) → e0db168 →

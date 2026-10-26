@@ -108,6 +108,15 @@ StateResult timeZones(BusCaller &bus);
 StateResult localeState(BusCaller &bus);
 StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 
+// Privacy & Security (ADR-0030 amendment 2026-10-26): the xdg-desktop-portal permission store on the SESSION bus
+// (org.freedesktop.impl.portal.PermissionStore; no privilege: it is the user's own grants):
+//   privacyState  {"location": [...], "camera": [...], "background": [...]: one {"app", "allowed"} per application the store
+//                  holds a grant for (location: allowed unless its accuracy is NONE or unknown; camera and background: only
+//                  "yes"; "ask" reads as not allowed), "screencast": [...], "remoteDesktop": [...]: one {"app", "token"} per
+//                  saved screen-sharing or remote-desktop selection (not a grant: it lets the app skip the picker next time)}.
+//                 A table the store does not have yet reads as empty; unsandboxed applications without an id ("") are left out.
+StateResult privacyState(BusCaller &bus);
+
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
 //   wifi.radio {on}, wifi.connectKnown {uuid}, wifi.connectOpen {hex}, wifi.disconnect {}, wifi.scan {},
@@ -132,10 +141,15 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //   time.zone {zone}            timedate1 SetTimezone
 //   time.set {usec}             timedate1 SetTime (absolute, microseconds since the epoch as a string)
 //   user.enable {unit, on}      systemd (session bus) EnableUnitFiles / DisableUnitFiles, then Reload: no privilege
+// and Privacy & Security's, on the session bus, no privilege:
+//   privacy.allow {category, app, on}   the permission store's SetPermission for one application: location ["EXACT","0"] or
+//                               ["NONE","0"] (two elements: one would read as no entry and the app would be asked again),
+//                               camera and background ["yes"] or ["no"]
+//   privacy.forget {kind, token}        Delete of one saved screencast or remoteDesktop selection
 // `ownDirs`: the user's unit directories (user.enable acts only on a unit listed there, userUnits).
 QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs = {});
 
-// Whether an op goes to the session bus (user.*) rather than the system bus.
+// Whether an op goes to the session bus (user.*, privacy.*) rather than the system bus.
 bool sessionAction(const QVariantMap &op);
 
 // Whether an op asks for the user's authorization (it may wait for the polkit dialog).

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""A fake NetworkManager, BlueZ or the General pane's services for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
+"""A fake NetworkManager, BlueZ, the General pane's services or the portal permission store for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
 GF-049, ADR-0030).
 
-    fake-system-service.py nm|bluez|general|upower|cupspk --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
+    fake-system-service.py nm|bluez|general|upower|cupspk|permstore --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
 It owns org.freedesktop.NetworkManager (or org.bluez; or hostname1, timedate1, timesync1, locale1 and a systemd user manager) on
 the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
@@ -28,6 +28,11 @@ at 80 % that EnableChargeThreshold switches, a charge history), a mouse's batter
 The cups-pk-helper world (Printers, ADR-0030): org.opensuse.CupsPkHelper.Mechanism at "/", the methods Settings calls
 (PrinterAdd, PrinterSetEnabled, PrinterSetAcceptJobs, PrinterDelete) and DevicesGet (which it never calls); each answers "" (CUPS
 said yes) and keeps the queues it was given, a queue it does not know answers CUPS's "client-error-not-found".
+The permission store world (Privacy & Security; on the same private bus, which the test also names as the session bus):
+org.freedesktop.impl.portal.PermissionStore with Lookup, List, SetPermission and Delete as xdg-permission-store answers them
+(a missing entry is org.freedesktop.portal.Error.NotFound, an unknown table lists empty). Location: Maps allowed (EXACT), Weather
+not (NONE) and a malformed application id; the camera: Meet allowed, Booth "ask"; no background entry; one saved screen-sharing
+selection for Meet; no remote desktop table.
 """
 import argparse
 import json
@@ -82,6 +87,15 @@ def refuse_unless_private_bus():
     return addr
 
 
+class DBusError(Exception):
+    """A handler's answer with this D-Bus error name (as the real service names it)."""
+
+    def __init__(self, name, message):
+        super().__init__(message)
+        self.name = name
+        self.message = message
+
+
 def xml(text):
     return Gio.DBusNodeInfo.new_for_xml("<node>%s</node>" % text).interfaces[0]
 
@@ -118,6 +132,8 @@ class Service:
                 return
             try:
                 invocation.return_value(handler(params))
+            except DBusError as exc:
+                invocation.return_dbus_error(exc.name, exc.message)
             except GLib.Error as exc:
                 invocation.return_dbus_error("org.freedesktop.DBus.Error.Failed", exc.message)
 
@@ -395,6 +411,44 @@ def cupspk_world(svc):
     return name
 
 
+def permstore_world(svc):
+    tables = {
+        "location": {"location": {"org.example.Maps": ["EXACT", "1792800000"], "org.example.Weather": ["NONE", "0"], "../x": ["EXACT", "0"]}},
+        "devices": {"camera": {"org.example.Meet": ["yes"], "org.example.Booth": ["ask"]}},
+        "screencast": {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0": {"org.example.Meet": ["yes"]}},
+    }
+    name = "org.freedesktop.impl.portal.PermissionStore"
+
+    def entry(table, id_):
+        found = tables.get(table, {}).get(id_)
+        if found is None:
+            raise DBusError("org.freedesktop.portal.Error.NotFound", "No entry for %s" % id_)
+        return found
+
+    def lookup(p):
+        return V("(a{sas}v)", (entry(p[0], p[1]), V("y", 0)))
+
+    def set_permission(p):
+        table, create, id_, app, value = p.unpack()
+        if not create:
+            entry(table, id_)
+        tables.setdefault(table, {}).setdefault(id_, {})[app] = list(value)
+
+    def delete(p):
+        entry(p[0], p[1])
+        del tables[p[0]][p[1]]
+
+    s = '<arg direction="in" type="s"/>'
+    svc.register("/org/freedesktop/impl/portal/PermissionStore", '<interface name="%s">'
+                 '<method name="Lookup">%s%s<arg direction="out" type="a{sas}"/><arg direction="out" type="v"/></method>'
+                 '<method name="List">%s<arg direction="out" type="as"/></method>'
+                 '<method name="SetPermission">%s<arg direction="in" type="b"/>%s%s<arg direction="in" type="as"/></method>'
+                 '<method name="Delete">%s%s</method></interface>' % (name, s, s, s, s, s, s, s, s),
+                 methods={"Lookup": lookup, "List": lambda p: V("(as)", (sorted(tables.get(p[0], {})),)),
+                          "SetPermission": set_permission, "Delete": delete})
+    return name
+
+
 def general_world(svc):
     directory = os.environ["GF_TEST_BUS_DIR"]
     host, time_, sync, locale, systemd = ("/org/freedesktop/hostname1", "/org/freedesktop/timedate1", "/org/freedesktop/timesync1",
@@ -461,7 +515,7 @@ def general_world(svc):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("service", choices=["nm", "bluez", "general", "upower", "cupspk"])
+    ap.add_argument("service", choices=["nm", "bluez", "general", "upower", "cupspk", "permstore"])
     ap.add_argument("--log", required=True)
     ap.add_argument("--ready", required=True)
     ap.add_argument("--fail", action="append", default=[])
@@ -477,7 +531,8 @@ def main():
         fail[member] = (name, message)
     slow = {spec.partition("=")[0]: float(spec.partition("=")[2]) for spec in args.slow}
     svc = Service(conn, args.log, fail, slow)
-    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world, "upower": upower_world, "cupspk": cupspk_world}
+    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world, "upower": upower_world, "cupspk": cupspk_world,
+              "permstore": permstore_world}
     names = worlds[args.service](svc)
     names = names if isinstance(names, list) else [names]
     owned = set()
