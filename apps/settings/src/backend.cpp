@@ -413,6 +413,26 @@ QStringList Backend::systemAutostartDirs() const
     return out;
 }
 
+QStringList Backend::applicationDirs() const
+{
+    // The XDG Base Directory folders of the desktop entries: $XDG_DATA_HOME (default ~/.local/share) first, then $XDG_DATA_DIRS
+    // (default /usr/local/share:/usr/share), each with applications/.
+    const QString home = qEnvironmentVariableIsSet("XDG_DATA_HOME") ? qEnvironmentVariable("XDG_DATA_HOME") : QDir::homePath() + QStringLiteral("/.local/share");
+    const QString dirs = qEnvironmentVariableIsSet("XDG_DATA_DIRS") ? qEnvironmentVariable("XDG_DATA_DIRS") : QStringLiteral("/usr/local/share:/usr/share");
+    QStringList out;
+    for (const QString &d : (QStringList{home} + dirs.split(QLatin1Char(':'), Qt::SkipEmptyParts))) {
+        const QString dir = QDir::cleanPath(d + QStringLiteral("/applications"));
+        if (d.startsWith(QLatin1Char('/')) && !out.contains(dir))
+            out << dir;
+    }
+    return out;
+}
+
+QStringList Backend::currentDesktops() const
+{
+    return qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(QLatin1Char(':'), Qt::SkipEmptyParts);
+}
+
 QStringList Backend::desktopEntries(const QString &dir) const
 {
     // The .desktop files of one folder (no recursion, regular files only), sorted.

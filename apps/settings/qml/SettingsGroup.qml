@@ -7,6 +7,9 @@ Item {
     id: root
 
     property string caption: ""
+    // A line under the caption that says what the section is for (macOS 15 Login Items: "These items will open
+    // automatically when you log in.").
+    property string captionDetail: ""
     property string footnote: ""
     default property alias rows: column.data
 
@@ -35,6 +38,22 @@ Item {
         wrapMode: Text.Wrap
     }
 
+    Text {
+        id: detailText
+        textFormat: Text.PlainText
+        visible: captionText.visible && root.captionDetail !== ""
+        width: parent.width
+        y: captionText.y + captionText.baselineOffset + (captionText.lineCount - 1) * captionText.contentHeight / Math.max(1, captionText.lineCount)
+            + Tokens.settingsCaptionDetailGap - baselineOffset
+        leftPadding: Tokens.settingsRowInset
+        rightPadding: Tokens.settingsRowInset
+        text: root.captionDetail
+        color: Appearance.windowSecondary
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.settingsCaptionDetailSize
+        wrapMode: Text.Wrap
+    }
+
     Rectangle {
         anchors.fill: column
         radius: Tokens.radiusMenu
@@ -46,8 +65,10 @@ Item {
 
     Column {
         id: column
-        // settingsCaptionToGroup below the baseline of the caption's last line (a long caption wraps).
-        y: captionText.visible ? Math.round(root.captionBaseline + (captionText.lineCount - 1) * captionText.contentHeight / Math.max(1, captionText.lineCount) + Tokens.settingsCaptionToGroup) : 0
+        // settingsCaptionToGroup below the baseline of the caption's last line (a long caption wraps), or of its explanation's.
+        y: !captionText.visible ? 0 : detailText.visible
+            ? Math.round(detailText.y + detailText.baselineOffset + (detailText.lineCount - 1) * detailText.contentHeight / Math.max(1, detailText.lineCount) + Tokens.settingsCaptionToGroup)
+            : Math.round(root.captionBaseline + (captionText.lineCount - 1) * captionText.contentHeight / Math.max(1, captionText.lineCount) + Tokens.settingsCaptionToGroup)
         width: parent.width
     }
 

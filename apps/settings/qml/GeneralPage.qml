@@ -44,5 +44,10 @@ SettingsPage {
             tileColor: "blue"
             onClicked: root.open("language")
         }
+        NavigationRow {
+            text: qsTr("Login Items")
+            glyph: "list"
+            onClicked: root.open("login")
+        }
     }
 }

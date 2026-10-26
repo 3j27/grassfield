@@ -60,6 +60,7 @@ Window {
         {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
         {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
+        {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
         {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")}
     ]
     property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
@@ -628,6 +629,8 @@ Window {
                     return dateTimePage;
                 case "language":
                     return languagePage;
+                case "login":
+                    return loginItemsPage;
                 }
                 return appearancePage;
             }
@@ -769,6 +772,21 @@ Window {
     VolumesSheet {
         id: volumesSheet
         backend: root.backend
+    }
+
+    Component {
+        id: loginItemsPage
+        LoginItemsPage {
+            backend: root.backend
+            system: sys
+            onAddRequested: apps => appPicker.openWith(apps)
+        }
+    }
+
+    // Login Items > +: a sheet over the whole window; the page writes the choice.
+    AppPickerSheet {
+        id: appPicker
+        onChosen: app => (page.item as LoginItemsPage)?.add(app)
     }
 
     Component {

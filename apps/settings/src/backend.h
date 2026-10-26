@@ -36,9 +36,12 @@ class Backend : public QObject
     Q_PROPERTY(QString devRoot READ devRoot CONSTANT)
     Q_PROPERTY(QString wallpaperStatusFile READ wallpaperStatusFile CONSTANT)
     Q_PROPERTY(QString wallpaperRecentFile READ wallpaperRecentFile CONSTANT)
-    // Login Items: the user's autostart folder and the system's (read-only).
+    // Login Items: the user's autostart folder and the system's (read-only); the applications one can add ($XDG_DATA_HOME and
+    // $XDG_DATA_DIRS, each with applications/, the user's first); the session's desktops (XDG_CURRENT_DESKTOP, for OnlyShowIn).
     Q_PROPERTY(QString autostartDir READ autostartDir CONSTANT)
     Q_PROPERTY(QStringList systemAutostartDirs READ systemAutostartDirs CONSTANT)
+    Q_PROPERTY(QStringList applicationDirs READ applicationDirs CONSTANT)
+    Q_PROPERTY(QStringList currentDesktops READ currentDesktops CONSTANT)
     // Storage: the folders whose size the pane shows lie in the home.
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
 
@@ -60,6 +63,8 @@ public:
     QString wallpaperRecentFile() const;
     QString autostartDir() const;
     QStringList systemAutostartDirs() const;
+    QStringList applicationDirs() const;
+    QStringList currentDesktops() const;
     QString homeDir() const { return QDir::cleanPath(QDir::homePath()); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.

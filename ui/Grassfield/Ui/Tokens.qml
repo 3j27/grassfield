@@ -1234,6 +1234,20 @@ QtObject {
     readonly property int settingsPreviewFirstBaseline: 21
     // the preview's second line: its baseline 16 below the first [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewLineGap: 16
+    // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsCaptionDetailSize: 12
+    // the explanation's baseline 16.5 below the section title's [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property real settingsCaptionDetailGap: 16.5
+    // a list's + / − footer: 23.5 tall with its top line [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsFooterHeight: 24
+    // the footer's fill: 226 on the 233 list in macOS 15, the text colour at 0.034 over the group fill [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property real settingsFooterFillOpacity: 0.034
+    // the footer's + and − buttons: 24 wide each, a 1-pt divider after each [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsFooterButtonWidth: 24
+    // the footer's + and −: ink 9 x 9 (our plus spans 16 of its 24 units) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsFooterGlyphSize: 14
+    // estimate: Login Items' application list shows eight 38-tall rows in its sheet [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsPickerListHeight: 312
     // Storage's volume card: 87.5 tall, on the 1-pt grid [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
     readonly property int settingsStorageCardHeight: 88
     // the volume's name: its baseline 25.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]

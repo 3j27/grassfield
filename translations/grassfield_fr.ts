@@ -548,6 +548,37 @@
     </message>
 </context>
 <context>
+    <name>AppPickerSheet</name>
+    <message>
+        <source>Add a Login Item</source>
+        <translation>Ajouter un élément de connexion</translation>
+    </message>
+    <message>
+        <source>Choose an application to open when you log in.</source>
+        <translation>Choisissez une application à ouvrir lors de la connexion.</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Choose an application.</source>
+        <translation>Choisissez une application.</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>No applications</source>
+        <translation>Aucune application</translation>
+    </message>
+</context>
+<context>
     <name>AppearancePage</name>
     <message>
         <source>Appearance</source>
@@ -3255,6 +3286,10 @@
         <source>Language &amp; Region</source>
         <translation>Langue et région</translation>
     </message>
+    <message>
+        <source>Login Items</source>
+        <translation>Ouverture</translation>
+    </message>
 </context>
 <context>
     <name>Glance</name>
@@ -4020,6 +4055,61 @@
     </message>
 </context>
 <context>
+    <name>LoginItemsPage</name>
+    <message>
+        <source>Login Items</source>
+        <translation>Ouverture</translation>
+    </message>
+    <message>
+        <source>Open at Login</source>
+        <translation>Ouvrir à la connexion</translation>
+    </message>
+    <message>
+        <source>These items open automatically when you log in.</source>
+        <translation>Ces éléments s’ouvrent automatiquement lorsque vous vous connectez.</translation>
+    </message>
+    <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>La modification n’a pas pu être enregistrée : %1.</translation>
+    </message>
+    <message>
+        <source>Added by you</source>
+        <translation>Ajouté par vous</translation>
+    </message>
+    <message>
+        <source>No login items</source>
+        <translation>Aucun élément de connexion</translation>
+    </message>
+    <message>
+        <source>Add a login item</source>
+        <translation>Ajouter un élément de connexion</translation>
+    </message>
+    <message>
+        <source>Remove the selected login item</source>
+        <translation>Retirer l’élément de connexion sélectionné</translation>
+    </message>
+    <message>
+        <source>Allow in the Background</source>
+        <translation>Autoriser en arrière-plan</translation>
+    </message>
+    <message>
+        <source>Your own services keep running in the background after you log in.</source>
+        <translation>Vos propres services continuent de fonctionner en arrière-plan après la connexion.</translation>
+    </message>
+    <message>
+        <source>The change could not be made: %1.</source>
+        <translation>La modification n’a pas pu être faite : %1.</translation>
+    </message>
+    <message>
+        <source>Changing…</source>
+        <translation>Modification…</translation>
+    </message>
+    <message>
+        <source>No background items</source>
+        <translation>Aucun élément en arrière-plan</translation>
+    </message>
+</context>
+<context>
     <name>Main</name>
     <message>
         <source>Wi-Fi</source>
@@ -4156,6 +4246,14 @@
     <message>
         <source>clock time zone city automatic network time ntp 24-hour</source>
         <translation>horloge heure fuseau horaire ville automatique heure réseau ntp 24 heures</translation>
+    </message>
+    <message>
+        <source>Login Items</source>
+        <translation>Ouverture</translation>
+    </message>
+    <message>
+        <source>login items startup autostart open at login background services</source>
+        <translation>éléments de connexion ouverture démarrage automatique ouvrir à la connexion arrière-plan services</translation>
     </message>
     <message>
         <source>Language &amp; Region</source>

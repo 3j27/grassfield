@@ -190,6 +190,27 @@ TestCase {
         compare(copy, "[Desktop Entry]\nName=App\nExec=app\n[Desktop Action n]\nOnlyShowIn=x\n");
     }
 
+    function test_hiddenToggle() {
+        compare(General.setHidden("[Desktop Entry]\nName=Notes\nExec=notes\n", true), "[Desktop Entry]\nHidden=true\nName=Notes\nExec=notes\n");
+        compare(General.setHidden("[Desktop Entry]\nHidden=true\nName=Notes\n[Desktop Action a]\nHidden=x\n", false), "[Desktop Entry]\nName=Notes\n[Desktop Action a]\nHidden=x\n");
+        verify(General.onlyOverride(General.hiddenEntryText()));
+        verify(!General.onlyOverride("[Desktop Entry]\nType=Application\nHidden=true\nExec=custom\n"));
+    }
+
+    function test_applications() {
+        const apps = General.applications([
+            {file: "notes.desktop", text: "[Desktop Entry]\nType=Application\nName=Notes\nExec=notes\nIcon=notes\n"},
+            {file: "notes.desktop", text: "[Desktop Entry]\nType=Application\nName=Old Notes\nExec=old\n"},
+            {file: "helper.desktop", text: "[Desktop Entry]\nType=Application\nName=Helper\nExec=h\nNoDisplay=true\n"},
+            {file: "link.desktop", text: "[Desktop Entry]\nType=Link\nName=Link\nURL=https://x\n"},
+            {file: "gnome.desktop", text: "[Desktop Entry]\nType=Application\nName=Gnome\nExec=g\nOnlyShowIn=GNOME;\n"},
+            {file: "../x.desktop", text: "[Desktop Entry]\nType=Application\nName=X\nExec=x\n"},
+            {file: "atlas.desktop", text: "[Desktop Entry]\nType=Application\nName=Atlas\nExec=atlas\n"}
+        ], ["Hyprland"], "en");
+        compare(apps.map(a => a.name), ["Atlas", "Notes"]);
+        compare(apps[1].icon, "notes");
+    }
+
     function test_userUnits() {
         compare(General.userEnable("sync.service", false), {op: "user.enable", unit: "sync.service", on: false});
         compare(General.userEnable("sync.timer", true), null);
@@ -197,5 +218,7 @@ TestCase {
         compare(General.userEnable("x.service", "on"), null);
         compare(General.parseUnits('{"units":[{"unit":"a.service","path":"/p","state":"enabled"},{"unit":3}]}').length, 1);
         compare(General.parseUnits("x"), []);
+        compare(General.unitDescription("[Unit]\nDescription=File synchronisation\n[Service]\nDescription=x\n"), "File synchronisation");
+        compare(General.unitDescription("[Service]\nExecStart=x\n"), "");
     }
 }

@@ -143,6 +143,21 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      background for up to `settings.storageCountMs`; meanwhile the bar is one "used" segment and the legend says
      "Calculating…". All Volumes… is a sheet of every mounted volume (QStorageInfo: name, mount point, device, file system,
      read-only, "X available of Y"). Not built: Recommendations, the per-category detail sheets (the (i) buttons).
+   - Login Items (General > Login Items, "Ouverture" in French, since PR #4; the macOS 15 structure, the macOS 27 look;
+     `LoginItemsPage.qml`): "Open at Login" (a section title with its explanation, `SettingsGroup.captionDetail`) lists the XDG
+     autostart entries that start in this session (the user's folder over `$XDG_CONFIG_DIRS/autostart`, OnlyShowIn and
+     NotShowIn against XDG_CURRENT_DESKTOP; `General.loginItems`) with the app's icon (`image://icon`, the icon theme through
+     QIcon, `src/iconprovider.h`; an unknown icon shows a graphite tile), its name, "Added by you" for the user's own, and a
+     switch. Switching a system item off writes a user override (`Hidden=true`); back on removes that override when it held
+     nothing else, else clears Hidden in it. The list is one focus stop (Up/Down select, Space switches, Delete removes) with a
+     + / − footer (`ListFooter.qml`): + opens a sheet of the applications (the XDG applications folders, `General.applications`;
+     the field filters, Up/Down, Return or a double-click adds) and writes a copy of the chosen entry into the user's folder;
+     − removes a selected item the user added (a system item is switched off instead). "Allow in the Background" lists the
+     user's own systemd services (`user.units`, the session bus, units under the user's own unit folders only) with their
+     Description and a switch (`user.enable`: EnableUnitFiles / DisableUnitFiles, no privilege). Every write goes through
+     `Backend.writeAutostart` / `removeAutostart` (a plain `<name>.desktop` in the user's autostart folder; in a dev session
+     only under the worktree's .dev); a failure shows one line under the group. Not built: Extensions; Hyprland `exec` lines
+     in the user's own files are never read or edited.
    - Language & Region (General > Language & Region since PR #4; the macOS 15 structure, the macOS 27 look; `LanguagePage.qml`):
      "Preferred Languages": one "Primary language" row with an inline pop-up of Omarchy's languages (`omarchy-language list`,
      "Français — French"; the current one from `omarchy-language`). Choosing one runs `omarchy-language <code>` (an action:

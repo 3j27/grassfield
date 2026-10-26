@@ -411,11 +411,68 @@ function loginEntryText(appText) {
     return out.join("\n").replace(/\n*$/, "\n");
 }
 
+// A user autostart file with Hidden set or cleared in its [Desktop Entry] group (the rest kept as it is).
+function setHidden(text, hidden) {
+    const out = [];
+    let inGroup = false;
+    for (const raw of String(text).split("\n")) {
+        const line = raw.trim();
+        if (line.startsWith("[")) {
+            inGroup = line === "[Desktop Entry]";
+            out.push(raw);
+            if (inGroup && hidden)
+                out.push("Hidden=true");
+            continue;
+        }
+        if (inGroup && /^Hidden\s*=/.test(line))
+            continue;
+        out.push(raw);
+    }
+    return out.join("\n").replace(/\n*$/, "\n");
+}
+
+// What a user file that only switched a system item off holds once it is switched back on: nothing worth keeping (the file
+// goes, and the system entry applies again).
+function onlyOverride(text) {
+    return /^\[Desktop Entry\]\n(Type=Application\n)?$/.test(setHidden(text, false));
+}
+
+// The applications one can add as login items: [{file, text}] from the applications folders (the first folder wins for a file
+// name), without the hidden ones and those for another desktop, sorted by name. Returns [{file, name, icon, text}].
+function applications(entries, desktops, lang) {
+    const seen = {};
+    const out = [];
+    for (const a of entries) {
+        if (seen[a.file] || !validEntryFile(a.file))
+            continue;
+        seen[a.file] = true;
+        const e = parseDesktopEntry(a.text, lang);
+        if (e.type !== "Application" || e.noDisplay || e.hidden || e.name === "" || e.exec === "" || !startsHere(e, desktops))
+            continue;
+        out.push({file: a.file, name: e.name, icon: e.icon, text: a.text});
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+}
+
 // systemd (session bus) EnableUnitFiles / DisableUnitFiles of one of the user's own services.
 function userEnable(unit, on) {
     if (typeof unit !== "string" || unit.length > 200 || !/^[A-Za-z0-9:_.@-]+\.service$/.test(unit) || typeof on !== "boolean")
         return null;
     return {op: "user.enable", unit: unit, on: on};
+}
+
+// A unit file's Description= ([Unit] group), "" when it has none.
+function unitDescription(text) {
+    let inUnit = false;
+    for (const raw of String(text).split("\n")) {
+        const line = raw.trim();
+        if (line.startsWith("["))
+            inUnit = line === "[Unit]";
+        else if (inUnit && /^Description\s*=/.test(line))
+            return line.slice(line.indexOf("=") + 1).trim();
+    }
+    return "";
 }
 
 // systemd's user units state: [{unit, path, state}].
