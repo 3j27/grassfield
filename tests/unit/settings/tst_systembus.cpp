@@ -1210,3 +1210,83 @@ TEST(SystemBusPower, TheChargeLimitIsUPowersOwnMethod)
     for (const Call &call : f.bus.calls)
         EXPECT_NE(call.member, QStringLiteral("EnableChargeThreshold"));
 }
+
+// Printers (ADR-0026): cups-pk-helper, which asks polkit and then cupsd; each method answers with CUPS's message, "" when it worked.
+TEST(SystemBusPrinters, AddingMakesAnEverywhereQueueEnablesItAndAcceptsJobs)
+{
+    FakeBus bus;
+    bus.handler = [](const Call &) { return ok({QString()}); };
+    const QVariantMap add{{"op", "printer.add"}, {"name", "GF_Office"}, {"uri", "dnssd://GF%20Office._ipp._tcp.local/?uuid=1234"}, {"info", "GF Office"}};
+    EXPECT_TRUE(privilegedAction(add));
+    EXPECT_EQ(runAction(bus, add), QString());
+    ASSERT_EQ(bus.calls.size(), 3);
+    for (const Call &c : bus.calls) {
+        EXPECT_EQ(c.service, QStringLiteral("org.opensuse.CupsPkHelper.Mechanism"));
+        EXPECT_EQ(c.path, QStringLiteral("/"));
+        EXPECT_EQ(c.iface, QStringLiteral("org.opensuse.CupsPkHelper.Mechanism"));
+        EXPECT_EQ(c.timeoutMs, 120000);
+    }
+    EXPECT_EQ(bus.calls[0].member, QStringLiteral("PrinterAdd"));
+    EXPECT_EQ(bus.calls[0].args, (QVariantList{QStringLiteral("GF_Office"), QStringLiteral("dnssd://GF%20Office._ipp._tcp.local/?uuid=1234"),
+                                               QStringLiteral("everywhere"), QStringLiteral("GF Office"), QString()}));
+    EXPECT_EQ(bus.calls[1].member, QStringLiteral("PrinterSetEnabled"));
+    EXPECT_EQ(bus.calls[1].args, (QVariantList{QStringLiteral("GF_Office"), true}));
+    EXPECT_EQ(bus.calls[2].member, QStringLiteral("PrinterSetAcceptJobs"));
+    EXPECT_EQ(bus.calls[2].args, (QVariantList{QStringLiteral("GF_Office"), true, QString()}));
+}
+
+TEST(SystemBusPrinters, CupsMessagesAndRefusalsAreTheReasonAndStopTheAdd)
+{
+    FakeBus bus;
+    bus.handler = [](const Call &c) { return c.member == QLatin1String("PrinterAdd") ? ok({QStringLiteral("client-error-not-possible")}) : ok({QString()}); };
+    const QVariantMap add{{"op", "printer.add"}, {"name", "GF_Office"}, {"uri", "ipp://192.0.2.7/ipp/print"}, {"info", "GF Office"}};
+    EXPECT_EQ(runAction(bus, add), QStringLiteral("client-error-not-possible"));
+    EXPECT_EQ(bus.members(), (QStringList{QStringLiteral("Mechanism.PrinterAdd")}));
+    FakeBus refused;
+    refused.handler = [](const Call &) { return err(QStringLiteral("org.opensuse.CupsPkHelper.Mechanism.NotPrivileged: Not authorized")); };
+    EXPECT_EQ(runAction(refused, add), QStringLiteral("not allowed: the system refused the request"));
+    EXPECT_EQ(refused.calls.size(), 1);
+    FakeBus none;
+    EXPECT_EQ(runAction(none, {{"op", "printer.delete"}, {"name", "GF_Office"}}), QStringLiteral("the service is not running"));
+}
+
+TEST(SystemBusPrinters, RemovingIsPrinterDelete)
+{
+    FakeBus bus;
+    bus.handler = [](const Call &) { return ok({QString()}); };
+    EXPECT_EQ(runAction(bus, {{"op", "printer.delete"}, {"name", "GF_Office"}}), QString());
+    ASSERT_EQ(bus.calls.size(), 1);
+    EXPECT_EQ(bus.calls[0].member, QStringLiteral("PrinterDelete"));
+    EXPECT_EQ(bus.calls[0].args, (QVariantList{QStringLiteral("GF_Office")}));
+    EXPECT_TRUE(privilegedAction({{"op", "printer.delete"}}));
+}
+
+TEST(SystemBusPrinters, BadValuesNeverReachTheBusAndADevSessionSendsNothing)
+{
+    FakeBus bus;
+    bus.handler = [](const Call &) { return ok({QString()}); };
+    const QString uri = QStringLiteral("ipps://printer.local:631/ipp/print");
+    for (const QVariantMap &op : QList<QVariantMap>{
+             {{"op", "printer.add"}, {"name", "-x"}, {"uri", uri}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "a b"}, {"uri", uri}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "a/b"}, {"uri", uri}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", QString(128, QLatin1Char('a'))}, {"uri", uri}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", "usb://Brother/HL?serial=1"}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", "file:///dev/null"}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", "ipp://host/ipp print"}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", "ipp:///x"}, {"info", "X"}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", uri}, {"info", "line\nbreak"}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", uri}, {"info", ""}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", uri}, {"info", 7}},
+             {{"op", "printer.add"}, {"name", "Ok"}, {"uri", uri}},
+             {{"op", "printer.delete"}, {"name", ""}},
+             {{"op", "printer.delete"}, {"name", "x;y"}},
+             {{"op", "printer.setDefault"}, {"name", "Ok"}}})
+        EXPECT_EQ(runAction(bus, op), QStringLiteral("invalid request")) << op.value("name").toString().toStdString() << " " << op.value("uri").toString().toStdString();
+    EXPECT_TRUE(bus.calls.isEmpty());
+    GuardedCaller dev(bus, true);
+    EXPECT_TRUE(runAction(dev, {{"op", "printer.add"}, {"name", "Ok"}, {"uri", uri}, {"info", "Ok"}}).startsWith(QStringLiteral("dev guard")));
+    EXPECT_TRUE(runAction(dev, {{"op", "printer.delete"}, {"name", "Ok"}}).startsWith(QStringLiteral("dev guard")));
+    EXPECT_TRUE(bus.calls.isEmpty());
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.opensuse.CupsPkHelper.Mechanism"), QStringLiteral("org.opensuse.CupsPkHelper.Mechanism"), QStringLiteral("DevicesGet"), {}));
+}

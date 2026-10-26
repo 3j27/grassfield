@@ -347,6 +347,37 @@
     </message>
 </context>
 <context>
+    <name>AddPrinterSheet</name>
+    <message>
+        <source>Add Printer</source>
+        <translation>Ajouter une imprimante</translation>
+    </message>
+    <message>
+        <source>Printers on your network that print without a driver are listed. Adding one asks for an administrator&apos;s password.</source>
+        <translation>Les imprimantes de votre réseau qui impriment sans pilote sont listées. En ajouter une demande le mot de passe d’un administrateur.</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <source>Choose a printer.</source>
+        <translation>Choisissez une imprimante.</translation>
+    </message>
+    <message>
+        <source>Printers found</source>
+        <translation>Imprimantes trouvées</translation>
+    </message>
+    <message>
+        <source>No printers were found on your network.</source>
+        <translation>Aucune imprimante n’a été trouvée sur votre réseau.</translation>
+    </message>
+    <message>
+        <source>Looking for printers…</source>
+        <translation>Recherche d’imprimantes…</translation>
+    </message>
+</context>
+<context>
     <name>AppAboutPanel</name>
     <message>
         <source>About %1</source>
@@ -4738,6 +4769,14 @@
         <translation>pavé tactile touchpad pointeur vitesse déplacement défilement naturel toucher clic secondaire clic droit gestes balayer pincer</translation>
     </message>
     <message>
+        <source>Printers</source>
+        <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>printer printing print queue cups paper size default printer add remove airprint ipp everywhere</source>
+        <translation>imprimante impression imprimer file d’attente cups format de papier imprimante par défaut ajouter supprimer airprint ipp everywhere</translation>
+    </message>
+    <message>
         <source>About</source>
         <translation>Informations</translation>
     </message>
@@ -5721,6 +5760,120 @@
     </message>
 </context>
 <context>
+    <name>PrinterSheet</name>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>Location</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Queue</source>
+        <translation>File d’attente</translation>
+    </message>
+    <message>
+        <source>Remove Printer…</source>
+        <translation>Supprimer l’imprimante…</translation>
+    </message>
+</context>
+<context>
+    <name>PrintersPage</name>
+    <message>
+        <source>Printers</source>
+        <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>Printing</source>
+        <translation>Impression en cours</translation>
+    </message>
+    <message>
+        <source>Holding New Jobs</source>
+        <translation>Nouvelles tâches en attente</translation>
+    </message>
+    <message>
+        <source>Stopped</source>
+        <translation>Arrêtée</translation>
+    </message>
+    <message>
+        <source>Idle</source>
+        <translation>En veille</translation>
+    </message>
+    <message>
+        <source>%1, Default</source>
+        <translation>%1, par défaut</translation>
+    </message>
+    <message>
+        <source>Driverless (IPP Everywhere)</source>
+        <translation>Sans pilote (IPP Everywhere)</translation>
+    </message>
+    <message>
+        <source>USB</source>
+        <translation>USB</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>US Letter</source>
+        <translation>US Letter</translation>
+    </message>
+    <message>
+        <source>US Legal</source>
+        <translation>US Legal</translation>
+    </message>
+    <message>
+        <source>Tabloid</source>
+        <translation>Tabloïd</translation>
+    </message>
+    <message>
+        <source>Executive</source>
+        <translation>Executive</translation>
+    </message>
+    <message>
+        <source>JIS B5</source>
+        <translation>JIS B5</translation>
+    </message>
+    <message>
+        <source>Printing is not available: CUPS did not answer.</source>
+        <translation>L’impression n’est pas disponible : CUPS n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>Default printer</source>
+        <translation>Imprimante par défaut</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Default paper size</source>
+        <translation>Format de papier par défaut</translation>
+    </message>
+    <message>
+        <source>No printers</source>
+        <translation>Aucune imprimante</translation>
+    </message>
+    <message>
+        <source>Add Printer…</source>
+        <translation>Ajouter une imprimante…</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Files</source>
@@ -5803,6 +5956,21 @@
     <message>
         <source>Large</source>
         <translation>Grand</translation>
+    </message>
+</context>
+<context>
+    <name>RemovePrinterSheet</name>
+    <message>
+        <source>Remove “%1”?</source>
+        <translation>Supprimer « %1 » ?</translation>
+    </message>
+    <message>
+        <source>The printer is removed from this computer, with the print jobs waiting for it. To use it again, add it again.</source>
+        <translation>L’imprimante est supprimée de cet ordinateur, avec les tâches d’impression en attente. Pour l’utiliser de nouveau, ajoutez-la de nouveau.</translation>
+    </message>
+    <message>
+        <source>Remove Printer</source>
+        <translation>Supprimer l’imprimante</translation>
     </message>
 </context>
 <context>
@@ -6186,6 +6354,22 @@
     <message>
         <source>touchpad</source>
         <translation>pavé tactile</translation>
+    </message>
+    <message>
+        <source>Printers</source>
+        <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>printer</source>
+        <translation>imprimante</translation>
+    </message>
+    <message>
+        <source>paper size</source>
+        <translation>format de papier</translation>
+    </message>
+    <message>
+        <source>print</source>
+        <translation>imprimer</translation>
     </message>
     <message>
         <source>Keyboard</source>
@@ -6959,7 +7143,7 @@
     </message>
     <message>
         <source>The change could not be saved: %1.</source>
-        <translation>Le changement n’a pas pu être enregistré : %1.</translation>
+        <translation>Le changement n’a pas pu être enregistré&#xa0;: %1.</translation>
     </message>
     <message>
         <source>Point &amp; Click</source>

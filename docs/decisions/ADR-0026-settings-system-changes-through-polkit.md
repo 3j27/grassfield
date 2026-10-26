@@ -9,7 +9,7 @@ that are not the user's to make alone:
 - Date & Time: automatic time, the time zone and the time itself (timedate1 `SetNTP`, `SetTimezone`, `SetTime`).
 
 Later groups add printers (CUPS through `cups-pk-helper`) and power profiles. They get their own entry in this ADR, or their own ADR,
-before they land.
+before they land (Hardware group: NetworkManager, Battery and Printers below).
 
 Grassfield already runs the session's polkit agent (`shell/security/`, Quickshell Polkit, SEC6). Omarchy changes the time zone
 with `sudo timedatectl set-timezone` from a terminal menu, and generates locales through its own sudoers rule or `pkexec`
@@ -100,6 +100,43 @@ service ask the session's agent itself.
     limit (`ChargeThresholdSupported`).
   - Reads only: `power.state` (UPower's properties, `EnumerateDevices`, `GetHistory`), allowed in a dev session.
 
+- Hardware group, Printers (macOS 27 Printers & Scanners, without scanners and fax). Omarchy installs `cups`, `cups-filters`,
+  `cups-pk-helper`, `system-config-printer`, `avahi` and `nss-mdns`, and enables `cups.service` (read in Omarchy's
+  `install/omarchy-base.packages` and `install/config/enable-services.sh`, branch quattro; owner check on the installed 4.x).
+  - Reads are commands, run in the C locale like every tool of the app (English output): `lpstat -l -p` (the queues, their
+    state, Description and Location), `lpstat -d` (the default: CUPS reads the user's `~/.cups/lpoptions` first), `lpstat -v`
+    (each queue's device URI: its kind), `lpstat -l -e` (Add Printer: what the local cupsd and a second of DNS-SD browsing
+    find; a driverless printer not yet queued is a `network` line with its URI) and `lpoptions -p <queue> -l` (its PageSize
+    choices, the one in effect marked `*`). Exactly these argument lists are allowed (`isReadOnlyQuery`); a queue name is
+    validated first. They read, they change nothing, so a dev session runs them too.
+  - The default printer and the default paper size are the user's, as on macOS, and need no password: `lpoptions -d <queue>`
+    and `lpoptions -p <queue> -o PageSize=<size>` (for every queue that offers that size) write the user's `~/.cups/lpoptions`,
+    nothing else (CUPS writes `/etc/cups/lpoptions` only for root, which Settings never is). Actions (`isAllowedAction`: these
+    two forms, a valid queue name, a PPD size keyword), never in a dev session.
+  - Adding and removing a printer change the system. They go to `cups-pk-helper` (system bus,
+    `org.opensuse.CupsPkHelper.Mechanism`, object `/`, the same interface; read in Debian's 0.2.6 sources, Arch ships 0.2.7),
+    which asks polkit with user interaction and then asks cupsd as root:
+    - Add (`printer.add`): `PrinterAdd(name, uri, "everywhere", info, "")`, then `PrinterSetEnabled(name, true)` and
+      `PrinterSetAcceptJobs(name, true, "")` (a new queue starts stopped and refusing jobs, as `lpadmin` without `-E`). The
+      model "everywhere" makes cupsd build the queue's PPD itself from the printer's IPP attributes, in the background, for a
+      `dnssd:`, `ipp:`, `ipps:` or `ippusb:` URI (CUPS `scheduler/ipp.c`, `add_printer`); a printer that does not describe its
+      media is dropped again by cupsd. Only such driverless printers are offered (macOS adds AirPrint printers the same way);
+      a printer that needs a driver is out of scope (Omarchy's `system-config-printer` does that).
+    - Remove (`printer.delete`): `PrinterDelete(name)`, after a confirmation sheet ("Remove …?").
+    - Polkit: `org.opensuse.cupspkhelper.mechanism.all-edit`, `.printeraddremove`, then `.printer-local-edit` or
+      `.printer-remote-edit` (and `.printer-enable` for the two switches): all `auth_admin_keep` for the active session. The
+      helper asks interactively for the last one only; the authorisation kept for a few minutes lets the two calls after an add
+      through without a second dialog. 120 s for each call, as above (`kPrivilegedMs`). The helper returns CUPS's own message
+      on failure (shown under the list); a polkit refusal comes back as its `NotPrivileged` error, "not allowed".
+    - Validated in QML (`Printers.js`) and again in C++ (`validAction`): a queue name of 1 to 127 characters
+      `[A-Za-z0-9_.+@-]` not starting with `-`; a URI of one of the four schemes, at most 1024 characters, without spaces or
+      control characters; the description (`info`, the name with `_` shown as spaces) printable, at most 127 characters.
+  - `PrinterSetDefault` is not used: the default printer is the user's (above). Note for a later use: in 0.2.6 it checks an
+    action id (`printer-default`) that its own policy does not define (`printer-set-default`).
+  - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets no `cups-pk-helper` method through
+    (none of them is a read); the `lpoptions` actions are refused there like every action. A nested session can therefore
+    never add, remove or change the owner's printers.
+
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
 (the lock, or a sheet) and remember it for a while. Nothing else in the window changes while the system asks.
@@ -119,10 +156,18 @@ System Settings > General > About > Name and Date & Time change machine-wide set
   - `tests/integration/settings_dbus.sh`: fake hostname1, timedate1 and systemd services on a private bus. Each method, a polkit
     refusal and the dev guard.
   - `tests/unit/tst_settingsgeneral.qml`: the QML-side builders.
+  - Printers: `tst_systembus.cpp` `SystemBusPrinters.*` (the three calls of an add, in order, the delete, CUPS's message and a
+    polkit refusal as the reason, bad values and the dev guard send nothing), `tst_systemguard.cpp` `PrinterGuard.*` (the exact
+    reads, the two lpoptions forms, names, URIs and paper keywords), `settings_dbus.sh` section 14 (a fake cups-pk-helper on the
+    private bus), `tests/unit/tst_settingsprinters.qml` (CUPS's output, the ops, the paper size written only to the queues that
+    have it, a dev session reads and changes nothing).
 - The real polkit dialog cannot be shown in a nested session (the agent cannot register there, `docs/specs/security.md` L5). The
   owner checks it in the real session (L2): change the name and the time zone, cancel once, enter a wrong password once, and
   leave the dialog open for 60 s before answering (the service's own polkit query must still apply the change); switch the
   language to one whose locale is not generated yet (Omarchy's prompt or grant, then log out and in) and back.
+  Printers (owner, real session with a network printer): Add Printer… (the dialog, then a test page), the default printer and
+  the paper size (check `~/.cups/lpoptions` and a print dialog), Remove Printer… (cancel once, then confirm); `pacman -Q
+  cups-pk-helper` shows it installed (Omarchy's base list).
 - A review by the security reviewer (opus) is required before merge. 2026-10-26: FAIL (an autostart write through a symlinked
   entry; no test of those writes; this ADR silent on what omarchy-language does; a region changing the words; the zone
   wording) → 55d87be → counter-review FAIL (a textual `link/..` path normalised past the folder check) → e0db168 →

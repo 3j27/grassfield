@@ -26,7 +26,7 @@ Window {
     readonly property var tileColors: ({
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
-            mouse: "graphite", trackpad: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
+            mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             datetime: "blue", language: "blue", login: "graphite"
         })
     // The title of the shown section (the toolbar's title; the page itself repeats nothing). A hub shows its own header card
@@ -63,6 +63,7 @@ Window {
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "mouse", group: 5, title: qsTr("Mouse"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural wheel bluetooth")},
         {id: "trackpad", group: 5, title: qsTr("Trackpad"), icon: "trackpad", keywords: qsTr("touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch")},
+        {id: "printers", group: 5, title: qsTr("Printers"), icon: "printer", keywords: qsTr("printer printing print queue cups paper size default printer add remove airprint ipp everywhere")},
         {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
         {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
@@ -716,6 +717,8 @@ Window {
                     return mousePage;
                 case "trackpad":
                     return trackpadPage;
+                case "printers":
+                    return printersPage;
                 case "keyboard":
                     return keyboardPage;
                 case "general":
@@ -918,6 +921,41 @@ Window {
         TrackpadPage {
             backend: root.backend
             onOpenRequested: id => root.select(id)
+        }
+    }
+
+    Component {
+        id: printersPage
+        PrintersPage {
+            backend: root.backend
+            system: sys
+            onDetailsRequested: printer => printerSheet.openFor(printer)
+            onAddRequested: {
+                (page.item as PrintersPage)?.startSearching();
+                addPrinter.openWith();
+            }
+        }
+    }
+
+    // Printers: a printer's sheet, Remove Printer…'s confirmation and Add Printer…; the page acts on the answers.
+    PrinterSheet {
+        id: printerSheet
+        onRemoveRequested: printer => removePrinter.openFor(printer)
+    }
+
+    RemovePrinterSheet {
+        id: removePrinter
+        onRemove: name => (page.item as PrintersPage)?.remove(name)
+    }
+
+    AddPrinterSheet {
+        id: addPrinter
+        found: (page.item as PrintersPage)?.found ?? []
+        answered: (page.item as PrintersPage)?.foundAnswered ?? false
+        onPicked: printer => (page.item as PrintersPage)?.add(printer)
+        onShownChanged: {
+            if (!addPrinter.shown)
+                (page.item as PrintersPage)?.stopSearching();
         }
     }
 

@@ -25,6 +25,8 @@
 #      the charge history; EnableChargeThreshold, which then reads enabled; no battery service: the reason; the dev guard
 #  12  Bluetooth discovery and pairing: the adapter's name, the nearby device (an RSSI) and a paired one's battery; discovery on and
 #      off; Pair, Trusted and Connect on the nearby device, which is then paired; Forget removes a device; the dev guard
+#  14  Printers (ADR-0026, cups-pk-helper): Add makes an "everywhere" queue and switches it on and to accepting jobs, Remove
+#      deletes it; CUPS's message and a polkit refusal are the reason; bad values and the dev guard send nothing
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -58,10 +60,10 @@ python3 -I -c 'import gi; gi.require_version("Gio", "2.0")' 2>/dev/null || { say
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/gf-settings-dbus.XXXXXX") || die "no temp dir"
 chmod 700 "$work"
-bus_pid="" nm_pid="" bz_pid="" gen_pid="" up_pid=""
+bus_pid="" nm_pid="" bz_pid="" gen_pid="" up_pid="" cp_pid=""
 stop_all() {
   local p
-  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$up_pid" "$bus_pid"; do
+  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$up_pid" "$cp_pid" "$bus_pid"; do
     [[ -n $p ]] && kill "$p" 2>/dev/null
   done
   wait 2>/dev/null
@@ -119,18 +121,18 @@ penv=(env -i LC_ALL=C.UTF-8 PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DB
 # resolve its loopback TCP address (it asks getaddrinfo for AI_ADDRCONFIG), so such a run preloads a getaddrinfo that drops the flag.
 probe() { timeout 30 "${penv[@]}" ${GF_TEST_PRELOAD:+LD_PRELOAD=$GF_TEST_PRELOAD} "$work/probe" "$@" 2>&1; }
 
-start_service() { # nm|bluez|general|upower [--fail ...]: sets nm_pid / bz_pid / gen_pid / up_pid
+start_service() { # nm|bluez|general|upower|cupspk [--fail ...]: sets nm_pid / bz_pid / gen_pid / up_pid / cp_pid
   local which=$1
   shift
   rm -f "$work/$which.ready"
   : >"$work/$which.log"
   setsid "${penv[@]}" python3 -I "$root/tests/fixtures/fake-system-service.py" "$which" --log "$work/$which.log" --ready "$work/$which.ready" "$@" >"$work/$which.err" 2>&1 </dev/null &
-  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; upower) up_pid=$! ;; *) gen_pid=$! ;; esac
+  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; upower) up_pid=$! ;; cupspk) cp_pid=$! ;; *) gen_pid=$! ;; esac
   wait_until 10 test -e "$work/$which.ready" || { cat "$work/$which.err"; die "the fake $which did not start"; }
 }
 stop_service() { # nm|bluez|general
   local pid
-  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; upower) pid=$up_pid up_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
+  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; upower) pid=$up_pid up_pid="" ;; cupspk) pid=$cp_pid cp_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
   [[ -n $pid ]] && { kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; }
   sleep 0.3
 }
@@ -470,6 +472,44 @@ check "in a dev session the charge limit is refused by the guard ($out)" bash -c
 check "... a dev session still reads the battery" py "$(probe --dev power-state)" 'j["present"] is True'
 check "... and no EnableChargeThreshold reached UPower" bash -c 'tail -n +$(($2 + 1)) "$1" | grep -q EnableChargeThreshold && exit 1 || exit 0' _ "$work/upower.log" "$before"
 stop_service upower
+
+say ""
+say "[14] Printers (cups-pk-helper)"
+add='{"op":"printer.add","name":"GF_Studio","uri":"dnssd://GF%20Studio._ipp._tcp.local/?uuid=0f1e2d3c","info":"GF Studio"}'
+out=$(probe act "$add")
+check "no cups-pk-helper: the reason says the service is not running ($out)" test "$out" = "failed: the service is not running"
+start_service cupspk
+out=$(probe act "$add")
+check "Add Printer: ok ($out)" test "$out" = ok
+check "... PrinterAdd with the name, the URI, the model everywhere, the description and no location" logged cupspk PrinterAdd / "'GF_Studio', 'dnssd://GF%20Studio._ipp._tcp.local/?uuid=0f1e2d3c', 'everywhere', 'GF Studio', ''"
+check "... then PrinterSetEnabled('GF_Studio', true)" logged cupspk PrinterSetEnabled / "'GF_Studio', true"
+check "... and PrinterSetAcceptJobs('GF_Studio', true, '')" logged cupspk PrinterSetAcceptJobs / "'GF_Studio', true, ''"
+members() { python3 -I -c 'import json, sys; print(",".join(json.loads(l)["member"] for l in open(sys.argv[1])))' "$work/$1.log"; }
+check "... in that order, and nothing else" test "$(members cupspk)" = "PrinterAdd,PrinterSetEnabled,PrinterSetAcceptJobs"
+out=$(probe act '{"op":"printer.delete","name":"GF_Studio"}')
+check "Remove Printer: ok ($out)" test "$out" = ok
+check "... PrinterDelete('GF_Studio')" logged cupspk PrinterDelete / "'GF_Studio'"
+out=$(probe act '{"op":"printer.delete","name":"GF_Studio"}')
+check "removing it again: CUPS's own message is the reason ($out)" test "$out" = "failed: client-error-not-found"
+before=$(calls cupspk)
+fine=1
+for op in '{"op":"printer.add","name":"-x","uri":"ipp://192.0.2.7/ipp/print","info":"X"}' '{"op":"printer.add","name":"X","uri":"usb://Brother/HL","info":"X"}'   '{"op":"printer.add","name":"X","uri":"ipp://192.0.2.7/ipp/print","info":""}' '{"op":"printer.delete","name":"a b"}'; do
+  out=$(probe act "$op")
+  case $out in "failed: invalid request"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "a bad name, a URI cupsd would not make driverless, no description: refused before the bus" test "$fine" -eq 1
+fine=1
+for op in "$add" '{"op":"printer.delete","name":"GF_Office"}'; do
+  out=$(probe --dev act "$op")
+  case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "in a dev session Add and Remove are refused by the guard" test "$fine" -eq 1
+check "... and none of these reached cups-pk-helper" test "$(calls cupspk)" -eq "$before"
+stop_service cupspk
+start_service cupspk --fail 'PrinterAdd=org.opensuse.CupsPkHelper.Mechanism.NotPrivileged|Not Authorized'
+out=$(probe act "$add")
+check "a polkit refusal: not allowed, and the queue is neither enabled nor opened ($out)" bash -c '[[ $1 == "failed: not allowed: the system refused the request" ]] && ! grep -q PrinterSetEnabled "$2"' _ "$out" "$work/cupspk.log"
+stop_service cupspk
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi

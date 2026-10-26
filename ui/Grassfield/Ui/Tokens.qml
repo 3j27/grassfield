@@ -1650,6 +1650,28 @@ QtObject {
     readonly property int settingsGesturePauseMs: 700
     // estimate: a click or a tap of the gesture, the fingers' dots a fifth smaller in the middle of the stroke [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property real settingsGesturePressScale: 0.2
+    // a printer's row, 51 tall [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterRowHeight: 51
+    // the printer's picture at 11 from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterPictureX: 11
+    // the printer's picture 16 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterPictureTop: 16
+    // the printer's picture 30 wide [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterPictureWidth: 30
+    // the printer's picture 20.5 tall [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property real settingsPrinterPictureHeight: 20.5
+    // the printer's name: ink at 53 (the text 1 to its left: the glyph's side bearing) [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterNameX: 52
+    // the printer's name (13 pt): cap top 13.5, baseline 23 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterNameBaseline: 23
+    // the status dot at 54 [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterDotX: 54
+    // the status dot, 6 across [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterDotSize: 6
+    // the status: ink at 64 (the text 1 to its left) [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterStatusX: 63
+    // the status (11 pt, secondary): baseline 38 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterStatusBaseline: 38
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
 

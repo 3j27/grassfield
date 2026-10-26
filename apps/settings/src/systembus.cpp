@@ -46,6 +46,9 @@ const QString kUPower = QStringLiteral("org.freedesktop.UPower");
 const QString kUPowerPath = QStringLiteral("/org/freedesktop/UPower");
 const QString kUPowerDevice = QStringLiteral("org.freedesktop.UPower.Device");
 const QString kUPowerDisplay = QStringLiteral("/org/freedesktop/UPower/devices/DisplayDevice");
+// cups-pk-helper (ADR-0026): its bus name is also its interface; one object, "/".
+const QString kCupsPk = QStringLiteral("org.opensuse.CupsPkHelper.Mechanism");
+const QString kCupsPkPath = QStringLiteral("/");
 // The General pane's services (ADR-0026).
 const QString kHostService = QStringLiteral("org.freedesktop.hostname1");
 const QString kHostPath = QStringLiteral("/org/freedesktop/hostname1");
@@ -341,6 +344,14 @@ bool isComputerName(const QString &s)
     return !s.trimmed().isEmpty() && s.size() <= 64 && !control.match(s).hasMatch();
 }
 
+// A printer's description (CUPS printer-info): 1 to 127 characters, no control character.
+bool isPrinterInfo(const QVariant &v)
+{
+    static const QRegularExpression control(QStringLiteral("[\\x00-\\x1f\\x7f]"));
+    const QString s = v.toString();
+    return v.metaType() == QMetaType::fromType<QString>() && !s.trimmed().isEmpty() && s.size() <= 127 && !control.match(s).hasMatch();
+}
+
 // Microseconds since the epoch, as a decimal string, between 2000-01-01 and 2200-01-01.
 bool isUsec(const QVariant &v, qint64 *out)
 {
@@ -424,7 +435,8 @@ QString reasonOf(const QString &error)
         return QCoreApplication::translate("SystemBus", "the service is not running");
     if (error.contains(QLatin1String("NoReply")) || error.contains(QLatin1String("Timeout")) || error.contains(QLatin1String("timed out"))) // i18n-ignore: a match on the error text
         return QCoreApplication::translate("SystemBus", "timed out");
-    if (error.contains(QLatin1String("AccessDenied")) || error.contains(QLatin1String("NotAuthorized")) || error.contains(QLatin1String("PermissionDenied")))
+    if (error.contains(QLatin1String("AccessDenied")) || error.contains(QLatin1String("NotAuthorized")) || error.contains(QLatin1String("PermissionDenied"))
+        || error.contains(QLatin1String("NotPrivileged")))
         return QCoreApplication::translate("SystemBus", "not allowed: the system refused the request");
     if (error.contains(QLatin1String("NoServer")))
         return QCoreApplication::translate("SystemBus", "no connection to the system bus");
@@ -930,7 +942,7 @@ bool privilegedAction(const QVariantMap &op)
     const QString name = op.value(QStringLiteral("op")).toString();
     return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget")
         || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure") || name == QLatin1String("bt.pair")
-        || name == QLatin1String("power.chargeLimit");
+        || name == QLatin1String("power.chargeLimit") || name.startsWith(QLatin1String("printer."));
 }
 
 bool validAction(const QVariantMap &op)
@@ -966,10 +978,24 @@ bool validAction(const QVariantMap &op)
         return isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("bt.pair") || name == QLatin1String("bt.forget"))
         return isMac(op.value(QStringLiteral("mac")).toString());
+    if (name == QLatin1String("printer.add"))
+        return isPrinterName(op.value(QStringLiteral("name")).toString()) && isPrinterUri(op.value(QStringLiteral("uri")).toString())
+            && isPrinterInfo(op.value(QStringLiteral("info")));
+    if (name == QLatin1String("printer.delete"))
+        return isPrinterName(op.value(QStringLiteral("name")).toString());
     return false;
 }
 
 namespace {
+// One cups-pk-helper method: it asks polkit (with the dialog), then cupsd, and answers with CUPS's own message, "" when it worked.
+QString cupsPk(BusCaller &bus, const QString &member, const QVariantList &args)
+{
+    const BusReply r = bus.call(kCupsPk, kCupsPkPath, kCupsPk, member, args, kPrivilegedMs);
+    if (!r.ok)
+        return fail(r.error);
+    return clean(r.args.value(0)).left(kMaxReason);
+}
+
 constexpr uint kKeyMgmtPsk = 0x100;
 constexpr uint kKeyMgmtSae = 0x400;
 constexpr int kJoinPollMs = 250;
@@ -1084,6 +1110,22 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         const BusReply r = bus.call(kUPower, battery, kUPowerDevice, QStringLiteral("EnableChargeThreshold"), {op.value(QStringLiteral("on")).toBool()}, kPrivilegedMs);
         return r.ok ? QString() : fail(r.error);
     }
+    // Printers (ADR-0026). A new queue for a driverless printer: cupsd builds its PPD from the printer's IPP attributes
+    // ("everywhere"), then the queue is enabled and accepts jobs (it starts stopped, as lpadmin without -E). After the first
+    // dialog, polkit's kept authorisation lets the two other calls through.
+    if (name == QLatin1String("printer.add")) {
+        const QString printer = op.value(QStringLiteral("name")).toString();
+        QString error = cupsPk(bus, QStringLiteral("PrinterAdd"),
+                               {printer, op.value(QStringLiteral("uri")).toString(), QStringLiteral("everywhere"), op.value(QStringLiteral("info")).toString(), QString()}); // i18n-ignore: CUPS's model name
+        if (error.isEmpty())
+            error = cupsPk(bus, QStringLiteral("PrinterSetEnabled"), {printer, true});
+        if (error.isEmpty())
+            error = cupsPk(bus, QStringLiteral("PrinterSetAcceptJobs"), {printer, true, QString()});
+        return error;
+    }
+    if (name == QLatin1String("printer.delete"))
+        return cupsPk(bus, QStringLiteral("PrinterDelete"), {op.value(QStringLiteral("name")).toString()});
+
     // Forget This Network: the saved Wi-Fi profile with that uuid goes. NetworkManager asks polkit itself for a profile of the
     // whole system (settings.modify.system, ADR-0026), so the call waits for the user's answer.
     if (name == QLatin1String("wifi.forget")) {

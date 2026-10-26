@@ -51,7 +51,39 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Battery: the power profiles this machine offers (Omarchy's list of power-profiles-daemon's).
     if (program == QLatin1String("omarchy-powerprofiles-list"))
         return args.isEmpty();
+    // Printers (ADR-0026): the queues with their state, description and location; the default (the user's first); the device
+    // URIs; what cupsd and DNS-SD find (Add Printer); one queue's options (its paper sizes). `lpoptions -p <queue> -l` lists,
+    // it changes nothing; any other lpoptions form may write and is an action.
+    if (program == QLatin1String("lpstat"))
+        return args == QStringList{QStringLiteral("-l"), QStringLiteral("-p")} || args == QStringList{QStringLiteral("-d")}
+            || args == QStringList{QStringLiteral("-v")} || args == QStringList{QStringLiteral("-l"), QStringLiteral("-e")};
+    if (program == QLatin1String("lpoptions"))
+        return args.size() == 3 && args.at(0) == QLatin1String("-p") && isPrinterName(args.at(1)) && args.at(2) == QLatin1String("-l");
     return false;
+}
+
+bool isPrinterName(const QString &name)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_.+@][A-Za-z0-9_.+@-]{0,126}")));
+    return re.match(name).hasMatch();
+}
+
+bool isPaperKeyword(const QString &keyword)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9][A-Za-z0-9._-]{0,39}")));
+    return re.match(keyword).hasMatch() && !keyword.startsWith(QLatin1String("Custom."));
+}
+
+bool isPrinterUri(const QString &uri)
+{
+    if (uri.size() > 1024)
+        return false;
+    for (const QChar c : uri) {
+        if (c.isSpace() || c.unicode() < 0x20 || c.unicode() == 0x7f || c.category() == QChar::Other_Format)
+            return false;
+    }
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("(dnssd|ipp|ipps|ippusb)://[^/?#][^#]*")));
+    return re.match(uri).hasMatch();
 }
 
 bool isFolderSizeQuery(const QStringList &args)
@@ -203,7 +235,7 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
-        || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl");
+        || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions");
 }
 
 bool isBacklightName(const QString &name)
@@ -276,6 +308,11 @@ bool isAllowedAction(const QStringList &argv)
         return argv.size() == 6 && argv.at(1) == QLatin1String("-q") && argv.at(2) == QLatin1String("-d") && isBacklightName(argv.at(3))
             && argv.at(4) == QLatin1String("set") && percent.match(argv.at(5)).hasMatch();
     }
+    // Printers: the user's default printer, or one queue's paper size (~/.cups/lpoptions).
+    if (argv.first() == QLatin1String("lpoptions"))
+        return (argv.size() == 3 && argv.at(1) == QLatin1String("-d") && isPrinterName(argv.at(2)))
+            || (argv.size() == 5 && argv.at(1) == QLatin1String("-p") && isPrinterName(argv.at(2)) && argv.at(3) == QLatin1String("-o")
+                && argv.at(4).startsWith(QLatin1String("PageSize=")) && isPaperKeyword(argv.at(4).mid(9)));
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

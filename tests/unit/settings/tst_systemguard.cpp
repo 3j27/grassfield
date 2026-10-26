@@ -261,6 +261,67 @@ TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
     EXPECT_FALSE(isReadOnlyQuery(cmd("intel_backlight", "50%")));
 }
 
+// Printers (ADR-0026): the CUPS reads are exact; the user's defaults are the only lpoptions actions.
+TEST(PrinterGuard, TheReadsAreExactAndChangeNothing)
+{
+    const auto q = [](std::initializer_list<const char *> args) {
+        QStringList out;
+        for (const char *a : args)
+            out << QString::fromLatin1(a);
+        return out;
+    };
+    for (const QStringList &ok : {q({"lpstat", "-l", "-p"}), q({"lpstat", "-d"}), q({"lpstat", "-v"}), q({"lpstat", "-l", "-e"}), q({"lpoptions", "-p", "GF_Office", "-l"})})
+        EXPECT_TRUE(isReadOnlyQuery(ok)) << ok.join(QLatin1Char(' ')).toStdString();
+    for (const QStringList &no : {q({"lpstat"}), q({"lpstat", "-p", "-l"}), q({"lpstat", "-t"}), q({"lpstat", "-h", "evil.example", "-p"}), q({"lpstat", "-e"}), q({"lpstat", "-e", "-l"}),
+                                  q({"lpoptions", "-l"}), q({"lpoptions", "-p", "GF_Office"}), q({"lpoptions", "-d", "GF_Office"}), q({"lpoptions", "-p", "-x", "-l"}),
+                                  q({"lpoptions", "-p", "GF_Office", "-o", "PageSize=A4"}), q({"lpadmin", "-x", "GF_Office"}), q({"lp", "/etc/passwd"}), q({"cancel", "-a"})})
+        EXPECT_FALSE(isReadOnlyQuery(no)) << no.join(QLatin1Char(' ')).toStdString();
+    EXPECT_FALSE(isActionProgram(QStringLiteral("lpstat")));
+    EXPECT_FALSE(isActionProgram(QStringLiteral("lpadmin")));
+    EXPECT_FALSE(isActionProgram(QStringLiteral("lp")));
+}
+
+TEST(PrinterGuard, OnlyTheUsersDefaultsAreActions)
+{
+    const QString o = QStringLiteral("lpoptions");
+    EXPECT_TRUE(isAllowedAction({o, QStringLiteral("-d"), QStringLiteral("GF_Office")}));
+    EXPECT_TRUE(isAllowedAction({o, QStringLiteral("-d"), QStringLiteral("HP_LaserJet_M15w@host")}));
+    for (const char *size : {"A4", "Letter", "Legal", "A5", "na_letter_8.5x11in", "B5"})
+        EXPECT_TRUE(isAllowedAction({o, QStringLiteral("-p"), QStringLiteral("GF_Office"), QStringLiteral("-o"), QStringLiteral("PageSize=") + QString::fromLatin1(size)})) << size;
+    for (const char *size : {"", "A4 B5", "-A4", "A4\n", "Custom.4x6in,x", "a;b"})
+        EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-p"), QStringLiteral("GF_Office"), QStringLiteral("-o"), QStringLiteral("PageSize=") + QString::fromLatin1(size)})) << size;
+    // Another option, another destination form, a name that is an option, more arguments, the root-only forms: refused.
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-p"), QStringLiteral("GF_Office"), QStringLiteral("-o"), QStringLiteral("job-sheets=none")}));
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-p"), QStringLiteral("GF_Office"), QStringLiteral("-o"), QStringLiteral("PageSize=A4"), QStringLiteral("-o"), QStringLiteral("x=y")}));
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-d"), QStringLiteral("-E")}));
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-d"), QStringLiteral("a b")}));
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-d"), QStringLiteral("GF_Office/instance")}));
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-x"), QStringLiteral("GF_Office")}));
+    EXPECT_FALSE(isAllowedAction({o, QStringLiteral("-h"), QStringLiteral("evil.example"), QStringLiteral("-d"), QStringLiteral("GF_Office")}));
+    EXPECT_FALSE(isAllowedAction({o}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/lpoptions"), QStringLiteral("-d"), QStringLiteral("GF_Office")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("lpadmin"), QStringLiteral("-x"), QStringLiteral("GF_Office")}));
+}
+
+TEST(PrinterGuard, NamesAndUrisAreThoseCupsdTurnsIntoADriverlessQueue)
+{
+    const QByteArray longest(127, 'a'), tooLong(128, 'a'), longKeyword(41, 'a');
+    for (const char *ok : {"GF_Office", "a", "HP-LaserJet.2", "x@host", longest.constData()})
+        EXPECT_TRUE(isPrinterName(QString::fromLatin1(ok))) << ok;
+    for (const char *no : {"", "-a", "a b", "a/b", "a#b", "a\\b", "a\"b", tooLong.constData(), "a\n"})
+        EXPECT_FALSE(isPrinterName(QString::fromLatin1(no))) << no;
+    for (const char *ok : {"dnssd://GF%20Office._ipp._tcp.local/?uuid=1234", "ipp://192.0.2.7/ipp/print", "ipps://printer.local:631/ipp/print", "ippusb://Brother?serial=1"})
+        EXPECT_TRUE(isPrinterUri(QString::fromLatin1(ok))) << ok;
+    for (const char *no : {"", "usb://Brother/HL", "socket://192.0.2.7", "file:///dev/null", "ipp://", "ipp:///x", "ipp://host/a b", "ipp://host/\t", "IPP://host/x", "ipp://host/x#y"})
+        EXPECT_FALSE(isPrinterUri(QString::fromLatin1(no))) << no;
+    EXPECT_FALSE(isPrinterUri(QStringLiteral("ipp://h/") + QString(1100, QLatin1Char('a'))));
+    EXPECT_FALSE(isPrinterUri(QStringLiteral("ipp://h/\u202Ex")));
+    for (const char *ok : {"A4", "Letter", "na_letter_8.5x11in", "B5"})
+        EXPECT_TRUE(isPaperKeyword(QString::fromLatin1(ok))) << ok;
+    for (const char *no : {"", "-A4", "A 4", "A4,B5", "Custom.4x6in,x", "Custom.WIDTHxHEIGHT", longKeyword.constData()})
+        EXPECT_FALSE(isPaperKeyword(QString::fromLatin1(no))) << no;
+}
+
 // ADR-0027: the lines Settings may write to displays.conf and to a trial, the rule config/hypr/grassfield/displays.lua applies.
 TEST(DisplayFiles, LinesAreCheckedFieldByField)
 {
@@ -326,7 +387,7 @@ TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
     // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell); omarchy-language is
     // Language & Region's (one code, ActionGuard.OmarchyLanguageTakesOneCodeOnly).
-    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language", "omarchy-powerprofiles-set"})
+    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language", "omarchy-powerprofiles-set", "lpoptions"})
         EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
     // nmcli and bluetoothctl are gone: Wi-Fi and Bluetooth are D-Bus calls (systembus.h), never commands.
     for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env", "nmcli", "bluetoothctl"})

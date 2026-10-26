@@ -120,6 +120,9 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //   power.chargeLimit {on}      UPower EnableChargeThreshold on the battery (its polkit action, kPrivilegedMs)
 //   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0026)
 //   vpn.connect {uuid, on}      a VPN or WireGuard profile: ActivateConnection on no device, or its DeactivateConnection
+//   printer.add {name, uri, info}   cups-pk-helper PrinterAdd (model "everywhere": cupsd builds the queue from the printer's IPP
+//                               attributes), then PrinterSetEnabled and PrinterSetAcceptJobs (polkit, kPrivilegedMs each, ADR-0026)
+//   printer.delete {name}       cups-pk-helper PrinterDelete (polkit, kPrivilegedMs)
 // and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait
 // for the user's answer (kPrivilegedMs):
 //   host.setName {name}         hostname1 SetPrettyHostname, then SetStaticHostname with the name made a valid host name

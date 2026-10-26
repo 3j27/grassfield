@@ -20,6 +20,7 @@ const PAGES = [
     {id: "lock", icon: "lock"},
     {id: "mouse", icon: "mouse"},
     {id: "trackpad", icon: "trackpad"},
+    {id: "printers", icon: "printer"},
     {id: "keyboard", icon: "keyboard"},
     {id: "about", icon: "grassfield-logo"}
 ];

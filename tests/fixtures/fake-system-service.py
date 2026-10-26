@@ -2,7 +2,7 @@
 """A fake NetworkManager, BlueZ or the General pane's services for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
 GF-049, ADR-0026).
 
-    fake-system-service.py nm|bluez|general|upower --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
+    fake-system-service.py nm|bluez|general|upower|cupspk --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
 It owns org.freedesktop.NetworkManager (or org.bluez; or hostname1, timedate1, timesync1, locale1 and a systemd user manager) on
 the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
@@ -25,6 +25,9 @@ the user's own services under GF_TEST_BUS_DIR/units, one a package ships; Enable
 hostname1 and timedate1 keep what they were given, so a read afterwards shows it.
 The UPower world: on battery; a laptop battery (70 %, discharging, 91.5 % of its design capacity, 212 cycles, a charge limit
 at 80 % that EnableChargeThreshold switches, a charge history), a mouse's battery (not the computer's) and the display device.
+The cups-pk-helper world (Printers, ADR-0026): org.opensuse.CupsPkHelper.Mechanism at "/", the methods Settings calls
+(PrinterAdd, PrinterSetEnabled, PrinterSetAcceptJobs, PrinterDelete) and DevicesGet (which it never calls); each answers "" (CUPS
+said yes) and keeps the queues it was given, a queue it does not know answers CUPS's "client-error-not-found".
 """
 import argparse
 import json
@@ -358,6 +361,40 @@ def upower_world(svc):
     return "org.freedesktop.UPower"
 
 
+def cupspk_world(svc):
+    queues = {"GF_Office": {"enabled": True, "accepting": True}}
+    name = "org.opensuse.CupsPkHelper.Mechanism"
+    s = '<arg direction="in" type="s"/>'
+    out = '<arg direction="out" type="s"/>'
+
+    def add(p):
+        queues[p[0]] = {"enabled": False, "accepting": False, "uri": p[1], "ppd": p[2]}
+        return V("(s)", ("",))
+
+    def setter(key):
+        def run(p):
+            if p[0] not in queues:
+                return V("(s)", ("client-error-not-found",))
+            queues[p[0]][key] = p[1]
+            return V("(s)", ("",))
+        return run
+
+    def delete(p):
+        return V("(s)", ("",) if queues.pop(p[0], None) is not None else ("client-error-not-found",))
+
+    svc.register("/", '<interface name="%s">'
+                      '<method name="PrinterAdd">%s%s%s%s%s%s</method>'
+                      '<method name="PrinterSetEnabled">%s<arg direction="in" type="b"/>%s</method>'
+                      '<method name="PrinterSetAcceptJobs">%s<arg direction="in" type="b"/>%s%s</method>'
+                      '<method name="PrinterDelete">%s%s</method>'
+                      '<method name="DevicesGet"><arg direction="in" type="i"/><arg direction="in" type="i"/><arg direction="in" type="as"/>'
+                      '<arg direction="in" type="as"/>%s<arg direction="out" type="a{ss}"/></method></interface>'
+                      % (name, s, s, s, s, s, out, s, out, s, s, out, s, out, out),
+                 methods={"PrinterAdd": add, "PrinterSetEnabled": setter("enabled"), "PrinterSetAcceptJobs": setter("accepting"),
+                          "PrinterDelete": delete, "DevicesGet": lambda p: V("(sa{ss})", ("", {}))})
+    return name
+
+
 def general_world(svc):
     directory = os.environ["GF_TEST_BUS_DIR"]
     host, time_, sync, locale, systemd = ("/org/freedesktop/hostname1", "/org/freedesktop/timedate1", "/org/freedesktop/timesync1",
@@ -424,7 +461,7 @@ def general_world(svc):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("service", choices=["nm", "bluez", "general", "upower"])
+    ap.add_argument("service", choices=["nm", "bluez", "general", "upower", "cupspk"])
     ap.add_argument("--log", required=True)
     ap.add_argument("--ready", required=True)
     ap.add_argument("--fail", action="append", default=[])
@@ -440,7 +477,7 @@ def main():
         fail[member] = (name, message)
     slow = {spec.partition("=")[0]: float(spec.partition("=")[2]) for spec in args.slow}
     svc = Service(conn, args.log, fail, slow)
-    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world, "upower": upower_world}
+    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world, "upower": upower_world, "cupspk": cupspk_world}
     names = worlds[args.service](svc)
     names = names if isinstance(names, list) else [names]
     owned = set()

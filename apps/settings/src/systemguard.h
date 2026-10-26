@@ -44,8 +44,9 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
-// & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays). Anything else is refused: Wi-Fi, Bluetooth and
-// the General pane's system changes are D-Bus calls (Backend::busAct).
+// & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays, lpoptions for Printers: the user's own CUPS
+// defaults). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system changes and adding or removing a printer
+// are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
 // A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
@@ -58,9 +59,18 @@ bool isDisplayLine(const QString &line);
 // A trial's id: 1 to 32 ASCII letters and digits.
 bool isDisplayTrialId(const QString &id);
 
+// Settings > Printers (ADR-0026): a CUPS queue name as Settings takes it, 1 to 127 of [A-Za-z0-9_.+@-], not starting with "-"
+// (CUPS allows more; a queue named otherwise is shown but cannot be chosen); a PPD paper size keyword ("A4", "Letter",
+// "Custom.WIDTHxHEIGHT" is not one), 1 to 40 of [A-Za-z0-9._-] starting with a letter or a digit; a URI cupsd turns into an
+// IPP Everywhere queue (dnssd, ipp, ipps or ippusb), at most 1024 characters, without spaces or control characters.
+bool isPrinterName(const QString &name);
+bool isPaperKeyword(const QString &keyword);
+bool isPrinterUri(const QString &uri);
+
 // A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
-// exactly `-q -d <backlight> set <0-100>%`.
+// exactly `-q -d <backlight> set <0-100>%`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
+// ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions).
 bool isAllowedAction(const QStringList &argv);
 
 // How long an allowed action may run: `requested`, or 130 s for Omarchy's language switch, which may wait for its own
