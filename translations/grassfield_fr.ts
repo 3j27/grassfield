@@ -2181,7 +2181,7 @@
     </message>
     <message>
         <source>Signal %1 %</source>
-        <translation>Signal %1 %</translation>
+        <translation>Signal %1&#xa0;%</translation>
     </message>
     <message>
         <source>Details…</source>
@@ -3236,7 +3236,7 @@
     <name>ForgetNetworkSheet</name>
     <message>
         <source>Forget Wi-Fi network “%1”?</source>
-        <translation>Oublier le réseau Wi-Fi « %1 » ?</translation>
+        <translation>Oublier le réseau Wi-Fi «&#xa0;%1&#xa0;»&#xa0;?</translation>
     </message>
     <message>
         <source>This computer will no longer join this network on its own, and its saved password is removed.</source>
@@ -4258,6 +4258,22 @@
         <translation>Clavier</translation>
     </message>
     <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>ethernet wired ip address router dns firewall</source>
+        <translation>ethernet filaire adresse ip routeur dns coupe-feu pare-feu</translation>
+    </message>
+    <message>
+        <source>VPN</source>
+        <translation>VPN</translation>
+    </message>
+    <message>
+        <source>vpn wireguard openvpn tunnel</source>
+        <translation>vpn wireguard openvpn tunnel réseau privé virtuel</translation>
+    </message>
+    <message>
         <source>shortcuts keys bindings</source>
         <translation>raccourcis touches clavier</translation>
     </message>
@@ -4702,6 +4718,69 @@
     </message>
 </context>
 <context>
+    <name>NetworkDetailsSheet</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Wi-Fi band</source>
+        <translation>Bande Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Link rate</source>
+        <translation>Débit de la liaison</translation>
+    </message>
+    <message>
+        <source>%1 Mbit/s</source>
+        <translation>%1 Mbit/s</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Vitesse</translation>
+    </message>
+    <message>
+        <source>Security</source>
+        <translation>Sécurité</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>IP address</source>
+        <translation>Adresse IP</translation>
+    </message>
+    <message>
+        <source>Subnet mask</source>
+        <translation>Masque de sous-réseau</translation>
+    </message>
+    <message>
+        <source>Router</source>
+        <translation>Routeur</translation>
+    </message>
+    <message>
+        <source>DNS servers</source>
+        <translation>Serveurs DNS</translation>
+    </message>
+    <message>
+        <source>IPv6 address</source>
+        <translation>Adresse IPv6</translation>
+    </message>
+    <message>
+        <source>MAC address</source>
+        <translation>Adresse MAC</translation>
+    </message>
+    <message>
+        <source>No address: not connected</source>
+        <translation>Aucune adresse : non connecté</translation>
+    </message>
+    <message>
+        <source>Forget This Network…</source>
+        <translation>Oublier ce réseau…</translation>
+    </message>
+</context>
+<context>
     <name>NetworkMenu</name>
     <message>
         <source>Network</source>
@@ -4722,6 +4801,69 @@
     <message>
         <source>Ethernet: connected</source>
         <translation>Ethernet&#xa0;: connecté</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPage</name>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Ethernet %1</source>
+        <translation>Ethernet %1</translation>
+    </message>
+    <message>
+        <source>Ethernet</source>
+        <translation>Ethernet</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Cable unplugged</source>
+        <translation>Câble débranché</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Firewall</source>
+        <translation>Coupe-feu</translation>
+    </message>
+    <message>
+        <source>Not installed</source>
+        <translation>Non installé</translation>
+    </message>
+    <message>
+        <source>Active</source>
+        <translation>Actif</translation>
+    </message>
+    <message>
+        <source>Inactive</source>
+        <translation>Inactif</translation>
+    </message>
+    <message>
+        <source>Other Services</source>
+        <translation>Autres services</translation>
+    </message>
+    <message>
+        <source>The network is not available: NetworkManager did not answer.</source>
+        <translation>Le réseau n’est pas disponible : NetworkManager n’a pas répondu.</translation>
     </message>
 </context>
 <context>
@@ -6431,6 +6573,41 @@
     </message>
 </context>
 <context>
+    <name>VpnPage</name>
+    <message>
+        <source>VPN</source>
+        <translation>VPN</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>WireGuard</source>
+        <translation>WireGuard</translation>
+    </message>
+    <message>
+        <source>Changing…</source>
+        <translation>Modification…</translation>
+    </message>
+    <message>
+        <source>VPN is not available: NetworkManager did not answer.</source>
+        <translation>Le VPN n’est pas disponible : NetworkManager n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>No VPN configurations</source>
+        <translation>Aucune configuration VPN</translation>
+    </message>
+</context>
+<context>
     <name>WallpaperPage</name>
     <message>
         <source>Wallpaper</source>
@@ -6947,61 +7124,6 @@
     </message>
 </context>
 <context>
-    <name>WifiDetailsSheet</name>
-    <message>
-        <source>OK</source>
-        <translation>OK</translation>
-    </message>
-    <message>
-        <source>Wi-Fi band</source>
-        <translation>Bande Wi-Fi</translation>
-    </message>
-    <message>
-        <source>Link rate</source>
-        <translation>Débit de la liaison</translation>
-    </message>
-    <message>
-        <source>%1 Mbit/s</source>
-        <translation>%1 Mbit/s</translation>
-    </message>
-    <message>
-        <source>Security</source>
-        <translation>Sécurité</translation>
-    </message>
-    <message>
-        <source>None</source>
-        <translation>Aucune</translation>
-    </message>
-    <message>
-        <source>IP address</source>
-        <translation>Adresse IP</translation>
-    </message>
-    <message>
-        <source>Subnet mask</source>
-        <translation>Masque de sous-réseau</translation>
-    </message>
-    <message>
-        <source>Router</source>
-        <translation>Routeur</translation>
-    </message>
-    <message>
-        <source>DNS servers</source>
-        <translation>Serveurs DNS</translation>
-    </message>
-    <message>
-        <source>IPv6 address</source>
-        <translation>Adresse IPv6</translation>
-    </message>
-    <message>
-        <source>MAC address</source>
-        <translation>Adresse MAC</translation>
-    </message>
-    <message>
-        <source>Forget This Network…</source>
-        <translation>Oublier ce réseau…</translation>
-    </message>
-</context>
-<context>
     <name>WifiList</name>
     <message>
         <source>a password is required</source>
@@ -7076,15 +7198,15 @@
     </message>
     <message>
         <source>“%1” cannot be joined from here: its name is not plain text.</source>
-        <translation>« %1 » ne peut pas être rejoint d’ici : son nom n’est pas du texte simple.</translation>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être rejoint d’ici&#xa0;: son nom n’est pas du texte simple.</translation>
     </message>
     <message>
         <source>“%1” needs a sign-in (802.1X), which Grassfield does not set up yet.</source>
-        <translation>« %1 » demande une identification (802.1X), que Grassfield ne configure pas encore.</translation>
+        <translation>«&#xa0;%1&#xa0;» demande une identification (802.1X), que Grassfield ne configure pas encore.</translation>
     </message>
     <message>
         <source>“%1” uses WEP, which is not secure: Grassfield does not join it.</source>
-        <translation>« %1 » utilise le WEP, qui n’est pas sûr : Grassfield ne le rejoint pas.</translation>
+        <translation>«&#xa0;%1&#xa0;» utilise le WEP, qui n’est pas sûr&#xa0;: Grassfield ne le rejoint pas.</translation>
     </message>
     <message>
         <source>Details…</source>
@@ -7159,7 +7281,7 @@
     <name>WifiPasswordSheet</name>
     <message>
         <source>Enter the password for “%1”</source>
-        <translation>Saisissez le mot de passe de « %1 »</translation>
+        <translation>Saisissez le mot de passe de «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
         <source>This network is secured. Its password is saved on this computer once it is joined.</source>

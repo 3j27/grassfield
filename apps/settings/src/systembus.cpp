@@ -54,6 +54,8 @@ const QString kLocalePath = QStringLiteral("/org/freedesktop/locale1");
 const QString kSystemd = QStringLiteral("org.freedesktop.systemd1");
 const QString kSystemdPath = QStringLiteral("/org/freedesktop/systemd1");
 const QString kSystemdManager = QStringLiteral("org.freedesktop.systemd1.Manager");
+const QString kSystemdUnit = QStringLiteral("org.freedesktop.systemd1.Unit");
+const QString kNmWired = QStringLiteral("org.freedesktop.NetworkManager.Device.Wired");
 
 constexpr uint kDeviceTypeWifi = 2;
 constexpr uint kDeviceStateActivated = 100;
@@ -570,6 +572,22 @@ QMap<QString, QPair<QString, uint>> activeConnections(BusCaller &bus)
 }
 } // namespace
 
+namespace {
+// The firewall: ufw (Omarchy's) or firewalld, whichever systemd has loaded, and whether its unit is active. systemd serves a
+// unit's object at its escaped name even before it is loaded; a unit that is not installed reads LoadState "not-found".
+QJsonObject firewallState(BusCaller &bus)
+{
+    static const QList<QPair<QString, QString>> units{{QStringLiteral("ufw"), QStringLiteral("/org/freedesktop/systemd1/unit/ufw_2eservice")},
+                                                      {QStringLiteral("firewalld"), QStringLiteral("/org/freedesktop/systemd1/unit/firewalld_2eservice")}};
+    for (const auto &unit : units) {
+        const Props p = allProperties(bus, kSystemd, unit.second, kSystemdUnit);
+        if (p.ok && p.map.value(QStringLiteral("LoadState")).toString() == QLatin1String("loaded")) // i18n-ignore: a systemd state
+            return {{QStringLiteral("name"), unit.first}, {QStringLiteral("active"), p.map.value(QStringLiteral("ActiveState")).toString() == QLatin1String("active")}}; // i18n-ignore: a systemd state
+    }
+    return {{QStringLiteral("name"), QString()}, {QStringLiteral("active"), false}};
+}
+} // namespace
+
 StateResult networkState(BusCaller &bus)
 {
     StateResult r;
@@ -596,6 +614,10 @@ StateResult networkState(BusCaller &bus)
                 dev.insert(QStringLiteral("connection"), clean(a.map.value(QStringLiteral("Id"))));
                 dev.insert(QStringLiteral("uuid"), clean(a.map.value(QStringLiteral("Uuid"))));
             }
+        }
+        if (type == kDeviceTypeEthernet) {
+            const Result speed = property(bus, kNmService, p.path(), kNmWired, QStringLiteral("Speed"));
+            dev.insert(QStringLiteral("speed"), static_cast<qint64>(speed.ok ? speed.value.toUInt() : 0));
         }
         if (state == kDeviceStateActivated) {
             addIpConfig(bus, cast<QDBusObjectPath>(d.map.value(QStringLiteral("Ip4Config"))).path(), false, &dev);
@@ -624,7 +646,7 @@ StateResult networkState(BusCaller &bus)
         vpns.append(QJsonObject{{QStringLiteral("uuid"), p.uuid}, {QStringLiteral("name"), p.id},
                                 {QStringLiteral("kind"), p.type}, {QStringLiteral("state"), a == active.cend() ? QStringLiteral("disconnected") : connectionState(a->second)}}); // i18n-ignore: a state the page reads
     }
-    r.json = QJsonObject{{QStringLiteral("devices"), devices}, {QStringLiteral("vpns"), vpns}};
+    r.json = QJsonObject{{QStringLiteral("devices"), devices}, {QStringLiteral("vpns"), vpns}, {QStringLiteral("firewall"), firewallState(bus)}};
     r.ok = true;
     return r;
 }

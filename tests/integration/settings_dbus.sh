@@ -372,7 +372,8 @@ say "[11] network panes (net-state, password join, Forget, VPN)"
 start_service nm
 st=$(probe net-state)
 check "net-state: wlan0 connected with its address, router, name servers, band and link rate" py "$st" '[(d["name"], d["state"], d["ip4"], d["router"], d["dns"], d["ip6"], d["frequency"], d["bitrate"], d["connection"]) for d in j["devices"] if d["type"] == "wifi"] == [("wlan0", "connected", ["192.168.20.34/24"], "192.168.20.1", ["192.168.20.1", "9.9.9.9"], ["fd00:20::34/64"], 5180, 866000, "Maison")]'
-check "... eth0 without a cable is unavailable" py "$st" '[d["state"] for d in j["devices"] if d["type"] == "ethernet"] == ["unavailable"]'
+check "... eth0 without a cable is unavailable, its speed read from Device.Wired" py "$st" '[(d["state"], d["speed"]) for d in j["devices"] if d["type"] == "ethernet"] == [("unavailable", 1000)]'
+check "... no systemd on this bus: no firewall, and the state is still read" py "$st" 'j["firewall"] == {"name": "", "active": False}'
 check "... the VPN (connected) and the WireGuard profile (off), not the Wi-Fi or Ethernet ones" py "$st" 'sorted((v["name"], v["kind"], v["state"]) for v in j["vpns"]) == [("Home WireGuard", "wireguard", "disconnected"), ("Office VPN", "vpn", "connected")]'
 out=$(probe act '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"correct horse"}')
 check "join Home with its password: ok ($out)" test "$out" = ok

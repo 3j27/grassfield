@@ -186,6 +186,8 @@ def nm_world(svc):
     svc.register(NM + "/Devices/1", device_xml, methods={"Disconnect": lambda p: None},
                  props={"DeviceType": V("u", 1), "Interface": V("s", "eth0"), "State": V("u", 20), "HwAddress": V("s", "3C:52:82:00:00:01"),
                         "ActiveConnection": V("o", "/"), "Ip4Config": V("o", "/"), "Ip6Config": V("o", "/")})
+    svc.register(NM + "/Devices/1", '<interface name="org.freedesktop.NetworkManager.Device.Wired"><property name="Speed" type="u" access="read"/></interface>',
+                 props={"Speed": V("u", 1000)})
     svc.register(wifi_dev, device_xml,
                  methods={"Disconnect": lambda p: (setprop(wifi_dev, "org.freedesktop.NetworkManager.Device", "State", V("u", 30)),
                                                    setprop(wifi_dev, "org.freedesktop.NetworkManager.Device.Wireless", "ActiveAccessPoint", V("o", "/")), None)[2]},

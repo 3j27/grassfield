@@ -1370,6 +1370,18 @@ QtObject {
     readonly property int settingsWifiScanMs: 8000
     // the pane asks for a new scan this often while it is open, as macOS keeps scanning [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property int settingsWifiRescanMs: 30000
+    // a Network service (Wi-Fi, Ethernet, Firewall): its own group, 52 tall, the groups 10 apart [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsServiceRowHeight: 52
+    // the service's status line (11 pt): baseline 39 below the group top; the name's baseline 23, as the header row's title [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsServiceStatusBaseline: 39
+    // the service's status dot: 8 across [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsServiceDotSize: 8
+    // the status dot at 48.5 from the group edge, under the name [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property real settingsServiceDotInset: 48.5
+    // the status text at 61.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property real settingsServiceStatusInset: 61.5
+    // an empty list's group (VPN: No VPN configurations): 36 tall, the text centred in the secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsEmptyListHeight: 36
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

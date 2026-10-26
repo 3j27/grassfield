@@ -13,6 +13,8 @@ Item {
     property string footnote: ""
     // Something of the section is under way (macOS 27 Wi-Fi > Other Networks while it scans): a spinner at the caption's right.
     property bool busy: false
+    // No group fill: the rows are groups of their own (macOS 27 Network > Other Services).
+    property bool plain: false
     default property alias rows: column.data
 
     width: parent ? parent.width : implicitWidth
@@ -69,6 +71,7 @@ Item {
     }
 
     Rectangle {
+        visible: !root.plain
         anchors.fill: column
         radius: Tokens.radiusMenu
         color: Appearance.colors.groupFill

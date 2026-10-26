@@ -29,7 +29,12 @@ TestCase {
             property var actions: []
             property var busQueries: []
             property var busActions: []
+            // Files readText answers with (the Network pane reads /etc/ufw/ufw.conf).
+            property var files: ({})
             signal finished(string tag, bool ok, string output)
+            function readText(path: string): var {
+                return {exists: files[path] !== undefined, ok: true, text: files[path] ?? ""};
+            }
             signal failed(string tag, string reason)
             function query(argv: var, tag: string): void {
                 queries.push(argv);
@@ -646,6 +651,77 @@ TestCase {
         compare(System.wifiClickKind({hex: "41", active: false, secured: true, security: "WPA3 WPA2", enterprise: false}, {}), "password");
         compare(System.wifiClickKind({hex: "41", active: false, secured: true, security: "802.1X", enterprise: true}, {}), "account");
         compare(System.wifiClickKind({hex: "41", active: false, secured: true, security: "WEP", enterprise: false}, {}), "unsupported");
+    }
+
+    function netJson(devices, vpns, firewall) {
+        return JSON.stringify({devices: devices, vpns: vpns ?? [], firewall: firewall ?? {name: "", active: false}});
+    }
+
+    function test_networkServicesAndFirewall() {
+        const st = System.parseNetState(netJson([{name: "wlo1", type: "wifi", state: "connected"}, {name: "enp1", type: "ethernet", state: "unavailable"},
+                                                 {name: "enp2", type: "ethernet", state: "disconnected"}, {name: "enp3", type: "ethernet", state: "connecting"}],
+                                                [], {name: "ufw", active: true}));
+        const s = System.networkServices(st, null);
+        // Connected and connecting first, the rest under Other Services; several Ethernet devices are numbered.
+        compare(s.active.map(x => [x.id, x.status, x.number]), [["wlo1", "connected", 0], ["enp3", "connecting", 3]]);
+        compare(s.other.map(x => [x.id, x.status, x.number]), [["enp1", "unplugged", 1], ["enp2", "notConnected", 2]]);
+        // The Wi-Fi radio off: the Wi-Fi service is Off, under Other Services.
+        compare(System.networkServices(System.parseNetState(netJson([{name: "wlo1", type: "wifi", state: "unavailable"}])), null).other[0].status, "off");
+        compare(System.networkServices(null, null), {active: [], other: []});
+        compare(st.firewall, {name: "ufw", active: true});
+        compare(System.parseNetState(netJson([], [], {name: "iptables", active: true})).firewall, {name: "", active: false});
+        compare(System.parseNetState(JSON.stringify({devices: [], vpns: []})).firewall, {name: "", active: false});
+        // ufw's own switch.
+        compare(System.ufwEnabled("# comment\nENABLED=yes\nLOGLEVEL=low\n"), true);
+        compare(System.ufwEnabled("ENABLED=no"), false);
+        compare(System.ufwEnabled("ENABLED=\"yes\""), true);
+        compare(System.ufwEnabled("#ENABLED=yes"), null);
+        compare(System.ufwEnabled(""), null);
+    }
+
+    function test_networkPageListsServicesAndOpensThem() {
+        const t = makeService(false);
+        const page = openPage("NetworkPage.qml", t);
+        compare(t.backend.busQueries[0], {what: "net.state", tag: "net.state"});
+        t.backend.finished("net.state", true, netJson([{name: "wlo1", type: "wifi", state: "connected"}, {name: "enp1", type: "ethernet", state: "unavailable", ip4: []}],
+                                                      [], {name: "firewalld", active: true}));
+        verify(page.firewallOn, "an active firewalld unit is on");
+        const opened = [], details = [];
+        page.openRequested.connect(id => opened.push(id));
+        page.detailsRequested.connect((name, dev) => details.push([name, dev.name]));
+        page.open("wlo1", "wifi", 0);
+        page.open("enp1", "ethernet", 0);
+        compare(opened, ["wifi"]);
+        compare(details, [["Ethernet", "enp1"]]);
+        compare(page.statusText("unplugged"), "Cable unplugged");
+        // ufw: its unit is active either way, ENABLED= decides; no file (or no such line): unknown, so not shown as on.
+        t.backend.finished("net.state", true, netJson([], [], {name: "ufw", active: true}));
+        compare(page.ufwEnabled, null);
+        verify(!page.firewallOn);
+        t.backend.files = {"/etc/ufw/ufw.conf": "ENABLED=yes\n"};
+        t.backend.finished("net.state", true, netJson([], [], {name: "ufw", active: true}));
+        verify(page.firewallOn);
+        t.backend.files = {"/etc/ufw/ufw.conf": "ENABLED=no\n"};
+        t.backend.finished("net.state", true, netJson([], [], {name: "ufw", active: true}));
+        verify(!page.firewallOn);
+        compare(t.backend.actions.length + t.backend.busActions.length, 0, "the Network pane changes nothing");
+    }
+
+    function test_vpnPageSwitchesThroughDBus() {
+        const t = makeService(false);
+        const page = openPage("VpnPage.qml", t);
+        compare(t.backend.busQueries[0], {what: "net.state", tag: "vpn.state"});
+        t.backend.finished("vpn.state", true, netJson([], [{uuid: uuidA, name: "Office", kind: "vpn", state: "disconnected"}]));
+        verify(page.available);
+        page.toggle(uuidA, true);
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "vpn.connect", uuid: uuidA, on: true});
+        compare(page.pending, uuidA);
+        t.backend.finished("vpn.act", true, "");
+        compare(page.pending, "");
+        // NetworkManager not answering: the empty group says so.
+        t.backend.finished("vpn.state", false, "");
+        verify(!page.available);
+        verify(page.answered);
     }
 
     function test_netStateParser() {

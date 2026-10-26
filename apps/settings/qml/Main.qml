@@ -22,7 +22,7 @@ Window {
     property bool canMinimize: true
     // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
     readonly property var tileColors: ({
-            wifi: "blue", bluetooth: "blue", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
+            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
             mouse: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             datetime: "blue", language: "blue", login: "graphite"
@@ -45,6 +45,8 @@ Window {
     readonly property var sections: [
         {id: "wifi", group: 1, title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
         {id: "bluetooth", group: 1, title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
+        {id: "network", group: 1, title: qsTr("Network"), icon: "globe", keywords: qsTr("ethernet wired ip address router dns firewall")},
+        {id: "vpn", group: 1, title: qsTr("VPN"), icon: "vpn", keywords: qsTr("vpn wireguard openvpn tunnel")},
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
@@ -599,6 +601,10 @@ Window {
                     return wifiPage;
                 case "bluetooth":
                     return bluetoothPage;
+                case "network":
+                    return networkPage;
+                case "vpn":
+                    return vpnPage;
                 case "sound":
                     return soundPage;
                 case "displays":
@@ -644,19 +650,37 @@ Window {
             system: sys
             onPasswordRequested: net => wifiPassword.openFor(net)
             onForgetRequested: net => forgetNetwork.openFor(net)
-            onDetailsRequested: (net, device) => wifiDetails.openFor(net, device)
+            onDetailsRequested: (net, device) => networkDetails.openFor(net, device)
+        }
+    }
+
+    Component {
+        id: networkPage
+        NetworkPage {
+            backend: root.backend
+            system: sys
+            onOpenRequested: id => root.select(id)
+            onDetailsRequested: (name, device) => networkDetails.openForService(name, device)
+        }
+    }
+
+    Component {
+        id: vpnPage
+        VpnPage {
+            backend: root.backend
+            system: sys
         }
     }
 
     // Wi-Fi: a secured network's password, Details…, Forget This Network…: sheets over the whole window; the page acts on the
-    // answers.
+    // answers. Network shows an Ethernet service's addresses in the same details sheet.
     WifiPasswordSheet {
         id: wifiPassword
         onJoin: (net, psk) => (page.item as WifiPage)?.join(net, psk)
     }
 
-    WifiDetailsSheet {
-        id: wifiDetails
+    NetworkDetailsSheet {
+        id: networkDetails
         onForgetRequested: net => forgetNetwork.openFor(net)
     }
 

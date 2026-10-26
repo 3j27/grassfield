@@ -278,7 +278,8 @@ function parseNetState(text) {
             name: printable(d.name), type: d.type, state: states.indexOf(d.state) >= 0 ? d.state : "unavailable", mac: str(d.mac),
             connection: str(d.connection), uuid: validUuid(d.uuid) ? d.uuid : "", ip4: strs(d.ip4), router: str(d.router), dns: strs(d.dns),
             ip6: strs(d.ip6), router6: str(d.router6), bitrate: Number(d.bitrate) > 0 ? Number(d.bitrate) : 0,
-            frequency: Number(d.frequency) > 0 ? Number(d.frequency) : 0, ssid: typeof d.ssid === "string" ? hexToText(d.ssid).text : ""
+            frequency: Number(d.frequency) > 0 ? Number(d.frequency) : 0, ssid: typeof d.ssid === "string" ? hexToText(d.ssid).text : "",
+            speed: Number(d.speed) > 0 ? Number(d.speed) : 0
         });
     }
     const vpns = [];
@@ -288,7 +289,39 @@ function parseNetState(text) {
                        state: states.indexOf(v.state) >= 0 ? v.state : "disconnected"});
     }
     vpns.sort((a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0));
-    return {devices: devices, vpns: vpns};
+    const fw = j.firewall !== null && typeof j.firewall === "object" ? j.firewall : {};
+    const firewall = fw.name === "ufw" || fw.name === "firewalld" ? fw.name : "";
+    return {devices: devices, vpns: vpns, firewall: {name: firewall, active: firewall !== "" && fw.active === true}};
+}
+
+// ufw's own switch: ENABLED= of /etc/ufw/ufw.conf (yes or no; ufw.service is active either way). null when the file says neither.
+function ufwEnabled(text) {
+    const m = /^[ \t]*ENABLED[ \t]*=[ \t]*"?(yes|no)"?[ \t]*$/m.exec(String(text));
+    return m ? m[1] === "yes" : null;
+}
+
+// The services of the Network pane (macOS 27), from parseNetState and the Wi-Fi radio (true, false or null): one per device,
+// {id, kind ("wifi" | "ethernet"), name, status ("connected", "connecting", "notConnected", "unplugged", "off"), device}.
+// Connected ones (and connecting) first, in device order: `active`; the rest: `other`. Several Ethernet devices are numbered.
+function networkServices(state, radio) {
+    const out = {active: [], other: []};
+    if (!state)
+        return out;
+    let ethernet = 0;
+    const count = state.devices.filter(d => d.type === "ethernet").length;
+    for (const d of state.devices) {
+        const wifi = d.type === "wifi";
+        if (!wifi)
+            ethernet++;
+        let status = d.state === "connected" ? "connected" : d.state === "connecting" ? "connecting" : "notConnected";
+        if (d.state === "unavailable")
+            status = wifi ? "off" : "unplugged";
+        if (wifi && radio === false)
+            status = "off";
+        const service = {id: d.name, kind: wifi ? "wifi" : "ethernet", number: wifi || count < 2 ? 0 : ethernet, status: status, device: d};
+        (status === "connected" || status === "connecting" ? out.active : out.other).push(service);
+    }
+    return out;
 }
 
 // ---- Bluetooth (BlueZ over D-Bus) ----------------------------------------------------------------------------------

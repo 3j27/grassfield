@@ -887,6 +887,14 @@ struct NetFixture {
                     return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Home")}, {"Uuid", QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")}, {"State", u32(2)}})});
                 return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Office")}, {"Uuid", QStringLiteral("AAAAAAAA-0000-0000-0000-000000000001")}, {"State", u32(2)}})});
             }
+            if (m == QLatin1String("Get") && c.args.value(1).toString() == QLatin1String("Speed"))
+                return ok({variant(u32(1000))});
+            // systemd: ufw is not installed, firewalld is (and active).
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.systemd1.Unit")) {
+                if (c.path.endsWith(QLatin1String("/ufw_2eservice")))
+                    return ok({QVariant::fromValue(QVariantMap{{"LoadState", QStringLiteral("not-found")}, {"ActiveState", QStringLiteral("inactive")}})});
+                return ok({QVariant::fromValue(QVariantMap{{"LoadState", QStringLiteral("loaded")}, {"ActiveState", QStringLiteral("active")}})});
+            }
             if (m == QLatin1String("Get") && c.args.value(1).toString() == QLatin1String("ActiveConnections"))
                 return ok({variant(QVariant::fromValue(QList<QDBusObjectPath>{QDBusObjectPath(QStringLiteral("/active/1")), QDBusObjectPath(QStringLiteral("/active/2"))}))});
             if (m == QLatin1String("ListConnections"))
@@ -929,6 +937,15 @@ TEST(SystemBusNetwork, StateListsEthernetAndWifiWithTheirAddressesAndTheVpns)
     EXPECT_EQ(wifi["frequency"].toInt(), 5180);
     EXPECT_EQ(wifi["ssid"].toString(), QStringLiteral("486F6D65"));
     const QJsonObject eth = devices[1].toObject();
+    EXPECT_EQ(eth["speed"].toInt(), 1000);
+    EXPECT_FALSE(wifi.contains(QStringLiteral("speed")));
+    // The firewall systemd has loaded, read through Properties only.
+    EXPECT_EQ(r.json["firewall"].toObject()["name"].toString(), QStringLiteral("firewalld"));
+    EXPECT_TRUE(r.json["firewall"].toObject()["active"].toBool());
+    for (const Call &c : f.bus.calls) {
+        if (c.service == QLatin1String("org.freedesktop.systemd1"))
+            EXPECT_EQ(c.iface, QStringLiteral("org.freedesktop.DBus.Properties")) << qPrintable(c.member);
+    }
     EXPECT_EQ(eth["state"].toString(), QStringLiteral("disconnected"));
     EXPECT_FALSE(eth.contains(QStringLiteral("ip4"))); // no addresses read for a device that is not connected
     const QJsonArray vpns = r.json["vpns"].toArray();

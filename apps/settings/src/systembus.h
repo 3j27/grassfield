@@ -75,10 +75,13 @@ StateResult bluetoothState(BusCaller &bus);
 // The Hardware group's network panes (Wi-Fi details, Network, VPN), NetworkManager read in one go:
 //   networkState: {"devices": [{"name", "type" ("ethernet" | "wifi"), "state" ("connected" | "connecting" | "disconnected" |
 //                  "unavailable"), "mac", "connection" (the active profile's name), "uuid", "ip4": ["a.b.c.d/n"], "router",
-//                  "dns": [...], "ip6": [...], "router6", "bitrate" (kbit/s, Wi-Fi), "frequency" (MHz, Wi-Fi), "ssid" (hex)}],
+//                  "dns": [...], "ip6": [...], "router6", "bitrate" (kbit/s, Wi-Fi), "frequency" (MHz, Wi-Fi), "ssid" (hex),
+//                  "speed" (Mbit/s, Ethernet)}],
 //                  "vpns": [{"uuid", "name", "kind" ("vpn" | "wireguard"), "state" ("connected" | "connecting" |
-//                  "disconnected")}]}
-// Ethernet and Wi-Fi devices only (loopback, bridges, tun and the like are not services the person chose).
+//                  "disconnected")}],
+//                  "firewall": {"name" ("ufw" | "firewalld" | ""), "active" (its systemd unit is active)}}
+// Ethernet and Wi-Fi devices only (loopback, bridges, tun and the like are not services the person chose). The firewall is
+// read from systemd (Properties only: a dev session reads it too).
 StateResult networkState(BusCaller &bus);
 
 // The General pane's system services (PR #4, ADR-0026), on the system bus:
