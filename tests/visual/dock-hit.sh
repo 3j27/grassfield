@@ -175,7 +175,9 @@ for edge in "${edges[@]}"; do
       sleep 1.5
       st=$(vs_ipc apps status 2>/dev/null)
       vs_ipc apps close >/dev/null 2>&1
-      if [[ $(jq -r '.open' <<<"$st" 2>/dev/null) == true ]]; then pass "$edge x$scale: a click on the outer part of the Apps icon opened the Apps panel ($st)"; else fail "$edge x$scale: the Apps panel did not open from the outer part of its icon (status '$st')"; fi
+      # Only .open is printed: the status also lists the installed apps, and the shell runs with the real HOME.
+      open=$(jq -r '.open' <<<"$st" 2>/dev/null)
+      if [[ $open == true ]]; then pass "$edge x$scale: a click on the outer part of the Apps icon opened the Apps panel"; else fail "$edge x$scale: the Apps panel did not open from the outer part of its icon (open: '$open')"; fi
       vs_ipc dock noactivate true >/dev/null
     fi
     vs_pointer abs 960 300 >/dev/null 2>&1
