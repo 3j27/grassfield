@@ -79,10 +79,11 @@ QtObject {
         const focusedMinimized = fw ? ctx.windows.some(w => w.ref === fw && w.minimized) : false;
         // displayOnly: the app is named from the Stages event while no window is key (macOS greys window commands then).
         const canAct = fw !== null && fw !== undefined && !focusedMinimized && ctx.displayOnly !== true;
-        const spaces = ctx.spaces.map(s => ({
+        // Desktops are numbered by position, as in Overview (macOS), never by the compositor's workspace id.
+        const spaces = ctx.spaces.map((s, i) => ({
             id: "moveTo",
             space: s.id,
-            text: qsTr("Desktop %1").arg(s.id),
+            text: qsTr("Desktop %1").arg(i + 1),
             checked: s.id === ctx.windowSpaceId,
             enabled: s.id !== ctx.windowSpaceId
         }));

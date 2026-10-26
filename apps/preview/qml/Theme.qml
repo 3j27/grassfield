@@ -33,4 +33,11 @@ Item {
         property: "accentSetting"
         value: root.backend.accentColor
     }
+
+    // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26).
+    Binding {
+        target: Appearance
+        property: "shortcutStyle"
+        value: root.backend.shortcutStyle
+    }
 }

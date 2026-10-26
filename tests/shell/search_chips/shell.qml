@@ -84,7 +84,7 @@ ShellRoot {
         check("a keystroke brings the matching recent document", ids.indexOf("recent") >= 0 || ids.indexOf("top") >= 0);
         check("non-matching recents stay out", JSON.stringify(search.groups).indexOf("notes.txt") < 0);
         // macOS: no group headers, every row is a result.
-        check("rows carry no group header", search.rows.length > 0 && search.rows.every(r => r.header === false));
+        check("rows carry no group header", search.rows.length > 0 && search.rows.every(r => !r.header));
     }
 
     Timer {

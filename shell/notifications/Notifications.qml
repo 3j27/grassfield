@@ -435,7 +435,7 @@ Singleton {
         };
     }
 
-    // The Center model holds only the rows that are DISPLAYED (first `notificationCenterGroupCollapsed`
+    // The Center model holds only the rows that are DISPLAYED (first `groupCollapsed`
     // of each app group, all of an expanded group), so collapsed rows never get a delegate. The full
     // order lives in two JS arrays (row i = centerKeys[i], centerApps[i]; grouped by app, newest group
     // first, newest row first inside a group); the shown rows are kept in sync by syncShown(), which
@@ -447,6 +447,10 @@ Singleton {
     property var shownSig: []
     // App names whose group is expanded ("Show All"); reset when the Center closes.
     property var expandedApps: ({})
+    // Rows a collapsed group shows: 1, a stack (macOS 27). The focus tests set it to 3 to drive their scenes with several
+    // cards of one collapsed group (the focus invariant does not depend on the count).
+    property int groupCollapsed: Tokens.notificationCenterGroupCollapsed
+    onGroupCollapsedChanged: syncShown()
     // Same for bannerStore (keys, newest first).
     property var bannerKeys: []
 
@@ -462,7 +466,7 @@ Singleton {
     // header), headFirst (that group is the top one), toggleCount (> 0 on the row that carries
     // Show All / Show Less). A role is only written when its value changed.
     function syncShown(): void {
-        const collapsed = Tokens.notificationCenterGroupCollapsed;
+        const collapsed = root.groupCollapsed;
         const sizes = {};
         for (const a of centerApps)
             sizes[a] = (sizes[a] || 0) + 1;

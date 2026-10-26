@@ -94,6 +94,12 @@ Shell side only, no plugin change: the plugin does not transform windows parked 
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
 - Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
+  macOS details (ADR-0024 lot 5, C-19; docs/audits/visual-tahoe-2026-10-25.md § Overview): N is the tile's position
+  (Desktop 1, 2, ... from the left), never the Hyprland workspace id (the Window menu's Move to Desktop numbers them the
+  same way); the selection ring is drawn outside the 138 x 90 thumbnail, 1 clear of it (`overview.selectionWidth` 3,
+  `ringGap` 1), whose top is `overview.barTopMargin` 21 below the bar; the name is `overview.tileLabelGap` 6 below; the "+"
+  button is a bare 30-pt `plus` glyph at rest (macOS 27), a light glass circle under the pointer or the keyboard focus
+  (white at `overview.addFillOpacity` 0.5 light / `addFillOpacityDark` 0.18 dark).
 - Click a window: focus it and close. The keyboard grab is released before the focus lands (the plugin waits for the last
   Exclusive layer; without it the shell focuses after the release and checks), otherwise Hyprland refocuses the previous
   window (and workspace) when the exclusive layer goes away and undoes the switch.
@@ -104,7 +110,8 @@ Shell side only, no plugin change: the plugin does not transform windows parked 
   snapshot per window when opening.
 - v2 branch point: `Overview.thumbnailMode` (`!Capabilities.has("overview")`, always true in v1).
 - Backdrop: the wallpaper is a separate layer surface, so the overlay dims and blurs everything below it (real
-  windows included, blurred) instead of showing a wallpaper-only backdrop; with Reduce Transparency the dim is
+  windows included, blurred) instead of showing a wallpaper-only backdrop; there is no dim (`overview.backdropOpacity`
+  0: macOS 27 does not dim the wallpaper behind the windows; it was 0.45); with Reduce Transparency the dim is
   near-opaque. A wallpaper-only backdrop needs the wallpaper art shared with the overlay (follow-up).
 - Blur timing: the compositor re-blurs the full-screen region every frame while the surface animates (nested
   swap up to 1 s). `BackgroundEffect.blurRegion` is set only once the zoom-in has finished and dropped when the

@@ -117,6 +117,8 @@ PanelWindow {
                 visible: active
 
                 sourceComponent: Banner {
+                    // The stack's area on the output (the window is anchored top-right): the backdrop of the glass (G-3).
+                    backdropRect: Qt.rect(win.targetScreen ? win.targetScreen.width - win.pad - Tokens.notificationBannerWidth : 0, column.y, Tokens.notificationBannerWidth, column.height)
                     key: slot.key
                     nid: slot.nid
                     appName: slot.appName

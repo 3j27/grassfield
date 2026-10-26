@@ -248,6 +248,49 @@ Scope {
                 }
             }
 
+            // The luminance grid of what this output shows (ADR-0024 G-3 per surface: the backdrop under each glass surface,
+            // GlassTint.gridRange): the shown slot is grabbed small and read back cell by cell when a wallpaper becomes dominant,
+            // never per frame. None for a colour (its one luminance is exact), a video or the dev image override.
+            property var gridGrab: null
+            function measureGrid(desc: var): void {
+                if (!win.modelData)
+                    return;
+                if (!desc || desc.kind === "color" || (desc.video !== undefined && desc.video !== "") || VisualFixtures.wallpaperFile !== "" || !win.shown || win.width <= 0) {
+                    Backdrop.reportGrid(win.modelData.name, null);
+                    return;
+                }
+                win.shown.grabToImage(result => {
+                    win.gridGrab = result;
+                    if (gridProbe.isImageLoaded(result.url))
+                        gridProbe.requestPaint();
+                    else
+                        gridProbe.loadImage(result.url);
+                }, Qt.size(gridProbe.width, gridProbe.height));
+            }
+
+            Canvas {
+                id: gridProbe
+                z: -1
+                width: Tokens.glassGridColumns * Tokens.glassGridSample
+                height: Tokens.glassGridRows * Tokens.glassGridSample
+                renderTarget: Canvas.Image
+                renderStrategy: Canvas.Immediate
+                onImageLoaded: requestPaint()
+                onPaint: {
+                    const grab = win.gridGrab;
+                    if (!grab || !isImageLoaded(grab.url))
+                        return;
+                    const ctx = getContext("2d");
+                    ctx.clearRect(0, 0, width, height);
+                    ctx.drawImage(grab.url, 0, 0, width, height);
+                    const grid = GlassTint.gridOf(ctx.getImageData(0, 0, width, height).data, width, height, Tokens.glassGridColumns, Tokens.glassGridRows, win.width, win.height);
+                    unloadImage(grab.url);
+                    win.gridGrab = null;
+                    // Not inside the paint: the glass bindings must change outside the render sync.
+                    Qt.callLater(() => Backdrop.reportGrid(win.modelData.name, grid));
+                }
+            }
+
             // What the output is to show (the artwork, a colour, a prepared picture), decided from the settings.
             WallpaperFeed {
                 id: feed
@@ -448,7 +491,12 @@ Scope {
             }
 
             function reportTone(desc: var): void {
-                if (VisualFixtures.wallpaperFile !== "" || !win.modelData)
+                if (!win.modelData)
+                    return;
+                // The backdrop of the adaptive glass (ADR-0024 G-3): the luminance range of what is on screen, when known.
+                Backdrop.reportWallpaper(win.modelData.name, VisualFixtures.wallpaperFile !== "" ? null : Backdrop.rangeOf(desc, slotA.art));
+                win.measureGrid(desc);
+                if (VisualFixtures.wallpaperFile !== "")
                     return;
                 if (desc.kind === "picture")
                     BarTone.reportStrip(win.modelData.name, desc.strip);

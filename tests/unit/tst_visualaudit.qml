@@ -15,22 +15,22 @@ TestCase {
         verify(inset + Tokens.menuIconSize + Tokens.spacingSm >= 37);
     }
 
-    // Priority 2: Search rows.
+    // Priority 2: Search rows; since the owner's decision of 2026-10-26 the macOS 27 layout (docs/audits/ui-finesse-2026-10-25/
+    // f1-macos27.md § Search): 63-pt rows in a results panel under the search capsule, the text 80 in.
     function test_searchRowMetrics() {
         compare(Tokens.searchTitleSize, 17);
         compare(Tokens.searchSubtitleSize, 15);
-        // ADR-0024 lot 2: the text starts 72 in (macOS ink at 72.5).
-        compare(Tokens.searchRowTextInset, 72);
-        compare(Tokens.searchQueryInset, 61);
+        compare(Tokens.searchRowTextInset, 80);
         compare(Tokens.searchRowRadius, 18);
-        compare(Tokens.searchRowInset, 10);
-        // Two lines of the row type fit the 56-pt row.
+        compare(Tokens.searchRowInset, 12);
+        compare(Tokens.searchRowHeight, 63);
+        // Two lines of the row type fit the row.
         verify(Tokens.searchTitleSize * 1.2 + Tokens.searchSubtitleSize * 1.2 < Tokens.searchRowHeight);
         // The icon ends before the text starts, with a gap.
-        const iconEnd = Tokens.searchFieldInset + Tokens.searchRowIconSize;
+        const iconEnd = Tokens.searchRowIconInset + Tokens.searchRowIconSize;
         verify(Tokens.searchRowTextInset - iconEnd >= Tokens.spacingMd);
-        // The query starts after the magnifier.
-        verify(Tokens.searchQueryInset >= Tokens.searchFieldInset + Tokens.searchFieldIconSize);
+        // The query starts after the glyph of the capsule.
+        verify(Tokens.searchCapsuleTextInset >= Tokens.searchCapsuleGlyphInset + Tokens.searchCapsuleGlyph);
     }
 
     // Priority 3: notifications. Cards 6 apart, banners start at the column's top, equal 22-pt capsules.
@@ -40,11 +40,12 @@ TestCase {
         verify(Tokens.notificationCenterInset >= Tokens.notificationBannerGap);
     }
 
-    // Priority 5: Dock. No band under the icons, the dot inside the padding with its centre 5 above the shelf edge.
+    // Priority 5: Dock. No band under the icons, the dot inside the padding with its centre 6 above the shelf edge (macOS 27,
+    // docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock; macOS 26 read 5).
     function test_dockMetrics() {
         compare(Tokens.dockIndicatorArea, 0);
-        compare(Tokens.dockPadding - Tokens.dockIndicatorSize, 2 * Tokens.dockIndicatorGap);
-        compare(Tokens.dockPadding - Tokens.dockIndicatorGap - Tokens.dockIndicatorSize / 2, 5);
+        verify(Tokens.dockIndicatorGap >= 0 && Tokens.dockIndicatorGap + Tokens.dockIndicatorSize <= Tokens.dockPadding);
+        compare(Tokens.dockPadding - Tokens.dockIndicatorGap - Tokens.dockIndicatorSize / 2, 6);
         verify(Tokens.dockSeparatorSpace > 2 * Tokens.dockSpacing + Tokens.dockSeparatorWidth);
         verify(Tokens.dockSeparatorOpacity >= 0.25);
         // The room above the shelf holds the label (24 + 7 tail) and the 8-pt gap to the shelf.
@@ -76,13 +77,17 @@ TestCase {
         verify(Tokens.quicksettingsCell > 0);
     }
 
-    // Priority 9: Apps header row. A borderless 56-pt row, 24-pt glyph and type; the first icon row about 30 under the chips.
+    // Priority 9: Apps; since the owner's decision of 2026-10-26 the macOS 27 layout (docs/audits/ui-finesse-2026-10-25/
+    // f1-macos27.md § Apps): a 520 x 85 search capsule 11 above the panel, the panel starts with 26-pt chips 20 below its top,
+    // the first icon row about 34 under the chips.
     function test_appsHeaderMetrics() {
-        compare(Tokens.launcherHeaderHeight, 56);
-        compare(Tokens.launcherGlassSize, 24);
-        compare(Tokens.launcherQueryFontSize, 24);
-        // chips, their hairline gap, the gap to the grid and the grid's own top margin (spacing.sm): about 30 to the first icon.
-        const toIcons = Tokens.launcherChipHairlineGap + 1 + Tokens.launcherChipToGrid + Tokens.spacingSm;
+        compare(Tokens.searchCapsuleWidth, 520);
+        compare(Tokens.searchCapsuleHeight, 85);
+        compare(Tokens.searchCapsuleGap, 11);
+        compare(Tokens.launcherChipsTop, 20);
+        compare(Tokens.launcherChipHeight, 26);
+        // The gap to the grid and the grid's own top margin (spacing.sm): about 34 to the first icon.
+        const toIcons = Tokens.launcherGridGap + Tokens.spacingSm;
         verify(toIcons >= 30 && toIcons <= 42, String(toIcons));
     }
 
@@ -103,9 +108,10 @@ TestCase {
         verify(Tokens.filesSearchWidth >= 180);
     }
 
-    // Priority 12: Overview. The wallpaper is barely dimmed (about 0.1, macOS), a desktop is a miniature of its windows.
+    // Priority 12: Overview. The wallpaper is not dimmed (macOS 27, docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission
+    // Control; macOS 26 read about 0.1), a desktop is a miniature of its windows.
     function test_overviewMetrics() {
-        verify(Tokens.overviewBackdropOpacity <= 0.12 && Tokens.overviewBackdropOpacity >= 0.05);
+        compare(Tokens.overviewBackdropOpacity, 0);
         // Reduce Transparency keeps its opaque dim.
         verify(Tokens.overviewBackdropOpacityOpaque > 0.8);
         verify(Tokens.overviewMiniMaxWindows >= 4);
@@ -141,7 +147,8 @@ TestCase {
             const base = readFile(Qt.resolvedUrl("../../ui/Grassfield/Ui/icons/" + n + ".svg"));
             const bar = readFile(Qt.resolvedUrl("../../ui/Grassfield/Ui/icons-bar/" + n + ".svg"));
             verify(base.length > 0, n);
-            compare(bar, base.replace(/stroke-width="1\.75"/g, 'stroke-width="2.4"'), n);
+            // The symbol set is drawn at stroke 2 (ADR-0003 as amended by ADR-0024 lot 3d), the bar copies at 2.4.
+            compare(bar, base.replace(/stroke-width="2"/g, 'stroke-width="2.4"'), n);
         }
     }
 

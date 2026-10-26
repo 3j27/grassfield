@@ -239,6 +239,7 @@ void FilesApp::readAppearance()
     if (!QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                      QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(accent))
         accent = QStringLiteral("multicolor");
+    const QString shortcuts = grassfield::apps::shortcutStyle(root.value(QStringLiteral("keyboard")).toObject().value(QStringLiteral("shortcutStyle")).toString(), m_macDevice);
     // Same rule as the compositor plugin: anything but "minimize" and "none" is the default, "zoom".
     QString doubleClick = root.value(QStringLiteral("windows")).toObject().value(QStringLiteral("titlebarDoubleClick")).toString();
     if (doubleClick != QLatin1String("minimize") && doubleClick != QLatin1String("none"))
@@ -249,8 +250,10 @@ void FilesApp::readAppearance()
         m_canMinimize = canMinimize;
         emit appearanceChanged();
     }
-    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor || accent != m_accentColor) {
+    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor || accent != m_accentColor
+        || shortcuts != m_shortcutStyle) {
         m_accentColor = accent;
+        m_shortcutStyle = shortcuts;
         m_folderColor = folderColor;
         m_dark = dark;
         m_reduceMotion = reduce;

@@ -54,3 +54,5 @@ internal WindowGlyph WindowGlyph.qml
 AutoAppearance 1.0 AutoAppearance.js
 NotificationPrefs 1.0 NotificationPrefs.js
 SettingsContract 1.0 SettingsContract.js
+MenuShortcut 1.0 MenuShortcut.js
+GlassTint 1.0 GlassTint.js

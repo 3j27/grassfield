@@ -39,12 +39,21 @@ function apply(base, setting, dark, tokens) {
 
 // Selection: macOS draws white text on its accent fill in both appearances (a selected row, a default button, a checked box).
 // The dark palette's accent is bright for glyphs, rings and indicators and holds 4.5:1 only with dark text, so a fill that
-// carries text or a mark uses the light appearance's accent and its text colour in both appearances (ADR-0024 section 1;
-// white on every light accent but yellow is 5.3:1 or more). `light` is the light palette with the same accent applied.
-function withSelection(palette, light) {
+// carries text or a mark has its own pair (ADR-0024 section 1): the light appearance's accent and text colour in the light
+// appearance; in the dark one a lighter shade of it that keeps white at 4.85:1 or more (`color.selectionDark`: the
+// Grassfield green #2E8049, the owner's pick of 2026-10-26, and one shade per accent; yellow keeps its light pair). `light`
+// is the light palette with the same accent applied.
+function selectionPair(setting, dark, light, tokens) {
+    if (!dark)
+        return {selection: light.accent, selectionText: light.accentText};
+    const name = normalize(setting);
+    return {selection: tokens.colorSelectionDark[name], selectionText: tokens.colorSelectionDark[name + "Text"]};
+}
+
+function withSelection(palette, pair) {
     const c = Object.assign({}, palette);
-    c.selection = light.accent;
-    c.selectionText = light.accentText;
+    c.selection = pair.selection;
+    c.selectionText = pair.selectionText;
     return c;
 }
 

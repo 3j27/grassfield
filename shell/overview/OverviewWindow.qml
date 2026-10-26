@@ -594,7 +594,8 @@ Variants {
                         x: isPlus ? win.width - Tokens.overviewAddSize - Tokens.overviewAddEdgeInset : (win.width - rowWidth) / 2 + index * (Tokens.overviewTileWidth + Tokens.overviewTileGap)
                         y: isPlus ? Tokens.overviewBarTopMargin + (Tokens.overviewTileHeight - Tokens.overviewAddSize) / 2 : Tokens.overviewBarTopMargin
                         Accessible.role: Accessible.Button
-                        Accessible.name: isPlus ? qsTr("Add Desktop") : qsTr("Desktop %1").arg(modelData.id)
+                        // Desktops are numbered by position (macOS), never by the compositor's workspace id.
+                        Accessible.name: isPlus ? qsTr("Add Desktop") : qsTr("Desktop %1").arg(index + 1)
                         Accessible.onPressAction: win.activateTile(index)
 
                         Rectangle {
@@ -602,10 +603,23 @@ Variants {
                             height: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
                             width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
-                            color: tile.isPlus && !Appearance.dark ? Appearance.withAlpha(Appearance.colors.chipFill, tileMouse.containsMouse ? Tokens.materialChipFillOpacityLight : Tokens.materialWellFillOpacityLight)
-                                : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
-                            border.width: tile.modelData.active || tile.focused || tile.dropTarget ? Tokens.overviewSelectionWidth : 1
-                            border.color: tile.modelData.active || tile.focused || tile.dropTarget ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+                            // The add button is a bare plus at rest (macOS 27), a light glass circle under the pointer; a thumbnail
+                            // the material's fill.
+                            readonly property bool plusLit: tile.isPlus && (tileMouse.containsMouse || tile.focused)
+                            color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent") : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            border.width: tile.isPlus && !face.plusLit ? 0 : 1
+                            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+
+                            // Selection ring outside the thumbnail (macOS), so the picture keeps its size.
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: -Tokens.overviewSelectionWidth - Tokens.overviewRingGap
+                                radius: parent.radius + Tokens.overviewSelectionWidth + Tokens.overviewRingGap
+                                color: "transparent"
+                                visible: tile.modelData.active || tile.focused || tile.dropTarget
+                                border.width: Tokens.overviewSelectionWidth
+                                border.color: Appearance.colors.accent
+                            }
 
                             // A real miniature of the desktop: its windows at their place, captured (macOS), not a grey tile with icons.
                             MiniDesktop {
@@ -618,15 +632,12 @@ Variants {
                                 capture: !tile.modelData.active
                             }
 
-                            Text {
+                            Icon {
                                 visible: tile.isPlus
                                 anchors.centerIn: parent
-                                text: "+"
-                                textFormat: Text.PlainText
+                                size: Tokens.overviewAddGlyphSize
+                                name: "plus"
                                 color: Appearance.colors.text
-                                font.family: Appearance.fontFamily
-                                font.pixelSize: Tokens.typographyTitleSize * 2
-                                font.weight: Tokens.typographySmallWeight
                             }
                         }
 
@@ -638,7 +649,7 @@ Variants {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
-                            text: qsTr("Desktop %1").arg(tile.modelData.id)
+                            text: qsTr("Desktop %1").arg(tile.index + 1)
                             textFormat: Text.PlainText
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily

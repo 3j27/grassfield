@@ -44,9 +44,14 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 - Rows (ADR-0024 lot 2, macOS 27 Spotlight; measured in `docs/audits/visual-tahoe-2026-10-25.md` § Search — partly close, 6/10
   and `docs/audits/ui-finesse-2026-10-25.md` § 7.1 macOS 27 changed the target): one row per result, no header rows (the groups
   still order the list, Tab moves between them and `status()` reports them); 17 / 15 type (Inter sizes with the cap height of
-  macOS's 17.7 / 15); title and subtitle 72 from the panel edge; the selected row 10 from the panel sides, radius 18, a neutral
-  fill (`colors.fill` at `search.selectionFillOpacity`, ordinary text colours, inside the A2 material fill overlay). Field:
-  magnifier, hairline and chips 20 from the edges, query 61, panel top at 0.20 of the screen.
+  macOS's 17.7 / 15); rows 63 tall (two lines), the 36-pt icon 26 and the title and subtitle 80 from the panel edge; the
+  selected row 12 from the panel sides, radius 18, a neutral fill (`colors.fill` at `search.selectionFillOpacity`, ordinary
+  text colours, inside the A2 material fill overlay).
+- Capsule (macOS 27, owner decision 2026-10-26; `docs/audits/ui-finesse-2026-10-25/f1-macos27.md` § Search): the query sits in
+  a glass capsule (`search.capsule*`: 520 x 85, fully round, top at 0.157 of the screen, the 26-pt magnifier 32 and the query
+  at 22 pt, Inter Display, 75 from its edge), with its own blur region. The chips and results come in a 520-wide panel
+  (`search.width`) `capsuleGap` 11 under it, chips 20 from its top and 20 from its sides; the panel exists only when it has
+  something to show (chips, results or "No Results").
 - Latency is logged by the shell: `search open->visible N ms` (IPC call to first frame) and `search keystroke->results N ms`.
 
 - Filter chips (F2c): with a query that has results in two or more of Applications, Commands and Documents (files and recents), a chip row sits under the field (`Filters.js`; the capsule is the Apps category chip). A click narrows the results to that kind (the Top Hit joins its kind; inline answers are hidden) and a second click clears it; a new query clears it. IPC `search filter <apps|commands|documents|"">` is the test hook. The field keeps the text focus; the chips are reachable by keyboard: Tab past the last result group (Shift+Tab before the first) moves the focus ring to the first (last) chip, Left/Right/Home/End move along them, Space or Return selects or clears, Esc or Tab past the end returns to the field, and any other key (typing, Up, Down) leaves the chips and acts on the field. The ring is the shared outside accent ring (`control.focusOutline`). Test: `tests/shell/search_chips`. The `filter` hook answers only in a visual fixture session (`VisualFixtures.active`).

@@ -140,6 +140,7 @@ Variants {
 
             Material {
                 id: pillSurface
+                glassClass: "notification"
                 anchors.fill: parent
                 radius: height / 2
                 shadowEnabled: false
@@ -154,10 +155,10 @@ Variants {
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 text: pill.text
-                color: Appearance.colors.text
+                color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyCaptionSize
-                font.weight: Tokens.typographyMenuBoldWeight
+                font.pixelSize: Tokens.notificationPillTextSize
+                font.weight: Tokens.typographyMenuWeight
             }
 
             Rectangle {
@@ -394,6 +395,9 @@ Variants {
                 // swept the column across the whole screen from the left (owner, real session 2026-10-22).
                 property real slideOffset: host.shown ? 0 : width + Tokens.notificationCenterInset
                 property bool glide: false
+                // The column at rest on the output (the window covers it): every card's glass is judged over this area, wherever
+                // the list scrolls it (G-3 per surface).
+                readonly property rect restRect: Qt.rect(host.width - width - Tokens.notificationCenterInset, y, width, height)
                 x: host.width - width - Tokens.notificationCenterInset + slideOffset
                 y: Tokens.menubarHeight + Tokens.notificationCenterInset
                 width: Tokens.notificationCenterWidth
@@ -425,10 +429,87 @@ Variants {
                     }
                 }
 
+                // "Notification Center" title row above the cards while there are any (macOS 27, owner decision 2026-10-26), with a
+                // round x that clears them all. The title sits straight on the wallpaper in the ink that keeps 4.5:1 over what is
+                // under it (GlassTint.inkOn over the output's luminance grid); on a glass plate when that is unknown or mixed (A2).
+                Item {
+                    id: titleRow
+
+                    readonly property bool shown: list.count > 0
+                    readonly property rect area: Qt.rect(panel.restRect.x, panel.restRect.y, panel.width, Tokens.notificationTitleRowHeight)
+                    readonly property var known: Appearance.backdrops[Screen.name] ?? null
+                    readonly property var range: known ? (known.grid ? (GlassTint.gridRange(known.grid, area, Tokens.glassBackdropPad) ?? known) : known) : null
+                    readonly property string ink: GlassTint.inkOn(range, [String(Appearance.darkColors.text), String(Appearance.lightColors.text)], Tokens.menubarToneNeededContrast)
+                    readonly property bool plated: ink === ""
+
+                    visible: shown
+                    width: parent.width
+                    height: shown ? Tokens.notificationTitleRowHeight : 0
+
+                    Material {
+                        id: titlePlate
+                        glassClass: "notification"
+                        x: 0
+                        y: titleText.y - Tokens.spacingXs
+                        width: titleRow.plated && titleRow.shown ? titleText.implicitWidth + 2 * Tokens.notificationTitlePlatePadding : 0
+                        height: titleText.height + 2 * Tokens.spacingXs
+                        radius: height / 2
+                        shadowEnabled: false
+                        visible: width > 0
+                        Component.onCompleted: host.addSurface(titlePlate, false, Math.floor(height / 2), null)
+                    }
+
+                    Text {
+                        id: titleText
+                        x: titleRow.plated ? Tokens.notificationTitlePlatePadding : Tokens.notificationTitleInset
+                        y: 0
+                        text: qsTr("Notification Center")
+                        textFormat: Text.PlainText
+                        color: titleRow.plated ? Appearance.colors.text : titleRow.ink
+                        font.family: Appearance.fontFamilyFor(Tokens.notificationTitleSize)
+                        font.pixelSize: Tokens.notificationTitleSize
+                        font.weight: Tokens.typographyMenuBoldWeight
+                        Accessible.role: Accessible.Heading
+                        Accessible.name: text
+                    }
+
+                    Item {
+                        id: clearAllButton
+                        x: parent.width - width
+                        y: titleText.y + (titleText.height - height) / 2
+                        width: Tokens.notificationTitleCloseSize
+                        height: width
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Clear All")
+                        Accessible.onPressAction: if (titleRow.shown)
+                            Notifications.clearAll()
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+                            border.width: 1
+                            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                        }
+
+                        Icon {
+                            anchors.centerIn: parent
+                            size: parent.width - Tokens.notificationCloseGlyphInset
+                            name: "close-glyph"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.ArrowCursor
+                            onClicked: Notifications.clearAll()
+                        }
+                    }
+                }
+
                 NotificationList {
                     id: list
                     x: -panel.gutter
-                    y: -panel.gutter
+                    y: titleRow.height - panel.gutter
                     width: parent.width + panel.gutter
                     host: host
                     panel: panel
@@ -532,6 +613,7 @@ Variants {
 
                         Material {
                             id: closeSurface
+                            glassClass: "notification"
                             anchors.fill: parent
                             radius: width / 2
                             shadowEnabled: false
