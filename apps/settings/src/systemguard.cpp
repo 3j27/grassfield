@@ -23,6 +23,21 @@ bool isUuid(const QString &s)
     return re.match(s).hasMatch();
 }
 
+QString xdgHome(const QString &value, const QString &fallback)
+{
+    return value.startsWith(QLatin1Char('/')) ? QDir::cleanPath(value) : fallback;
+}
+
+QStringList xdgDirs(const QString &value, const QString &fallback)
+{
+    QStringList out;
+    for (const QString &d : value.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+        if (d.startsWith(QLatin1Char('/')))
+            out << QDir::cleanPath(d);
+    }
+    return out.isEmpty() && value != fallback ? xdgDirs(fallback, fallback) : out;
+}
+
 bool isReadOnlyQuery(const QStringList &argv)
 {
     if (argv.isEmpty())

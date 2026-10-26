@@ -71,6 +71,13 @@ bool isAutostartWrite(const QString &path, const QString &autostartDir, const QS
 // references QtSvg follows) named .png is refused there. Anything else shows the page's own tile.
 bool isIconFile(const QString &path);
 
+// The XDG Base Directory rule (Login Items, the user's services, the applications): a variable that is unset, empty or not an
+// absolute path counts as not set (an empty XDG_CONFIG_HOME must not make ~/.config/autostart "/autostart", or the user's units
+// "/systemd/user"). xdgHome: one folder, `value` when absolute, else `fallback`. xdgDirs: the absolute entries of a ':' list,
+// else those of `fallback`.
+QString xdgHome(const QString &value, const QString &fallback);
+QStringList xdgDirs(const QString &value, const QString &fallback);
+
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);
 

@@ -298,8 +298,9 @@ void Backend::busQuery(const QString &what, const QString &tag)
 QStringList Backend::userUnitDirs() const
 {
     // The user's own unit directories (systemd.unit(5), the user manager's search path): config, then data.
-    const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");
-    const QString data = qEnvironmentVariableIsSet("XDG_DATA_HOME") ? qEnvironmentVariable("XDG_DATA_HOME") : QDir::homePath() + QStringLiteral("/.local/share");
+    using grassfield::settings::xdgHome;
+    const QString config = xdgHome(qEnvironmentVariable("XDG_CONFIG_HOME"), QDir::homePath() + QStringLiteral("/.config"));
+    const QString data = xdgHome(qEnvironmentVariable("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
     return {QDir::cleanPath(config + QStringLiteral("/systemd/user")), QDir::cleanPath(data + QStringLiteral("/systemd/user"))};
 }
 
@@ -443,19 +444,16 @@ bool Backend::omarchyLanguage() const
 
 QString Backend::autostartDir() const
 {
-    const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");
+    const QString config = grassfield::settings::xdgHome(qEnvironmentVariable("XDG_CONFIG_HOME"), QDir::homePath() + QStringLiteral("/.config"));
     return QDir::cleanPath(config + QStringLiteral("/autostart"));
 }
 
 QStringList Backend::systemAutostartDirs() const
 {
     // $XDG_CONFIG_DIRS (default /etc/xdg), each with autostart/ (the XDG Autostart specification).
-    const QString dirs = qEnvironmentVariableIsSet("XDG_CONFIG_DIRS") ? qEnvironmentVariable("XDG_CONFIG_DIRS") : QStringLiteral("/etc/xdg");
     QStringList out;
-    for (const QString &d : dirs.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
-        if (d.startsWith(QLatin1Char('/')))
-            out << QDir::cleanPath(d + QStringLiteral("/autostart"));
-    }
+    for (const QString &d : grassfield::settings::xdgDirs(qEnvironmentVariable("XDG_CONFIG_DIRS"), QStringLiteral("/etc/xdg")))
+        out << QDir::cleanPath(d + QStringLiteral("/autostart"));
     return out;
 }
 
@@ -463,12 +461,12 @@ QStringList Backend::applicationDirs() const
 {
     // The XDG Base Directory folders of the desktop entries: $XDG_DATA_HOME (default ~/.local/share) first, then $XDG_DATA_DIRS
     // (default /usr/local/share:/usr/share), each with applications/.
-    const QString home = qEnvironmentVariableIsSet("XDG_DATA_HOME") ? qEnvironmentVariable("XDG_DATA_HOME") : QDir::homePath() + QStringLiteral("/.local/share");
-    const QString dirs = qEnvironmentVariableIsSet("XDG_DATA_DIRS") ? qEnvironmentVariable("XDG_DATA_DIRS") : QStringLiteral("/usr/local/share:/usr/share");
+    using namespace grassfield::settings;
+    const QString home = xdgHome(qEnvironmentVariable("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
     QStringList out;
-    for (const QString &d : (QStringList{home} + dirs.split(QLatin1Char(':'), Qt::SkipEmptyParts))) {
+    for (const QString &d : QStringList{home} + xdgDirs(qEnvironmentVariable("XDG_DATA_DIRS"), QStringLiteral("/usr/local/share:/usr/share"))) {
         const QString dir = QDir::cleanPath(d + QStringLiteral("/applications"));
-        if (d.startsWith(QLatin1Char('/')) && !out.contains(dir))
+        if (!out.contains(dir))
             out << dir;
     }
     return out;

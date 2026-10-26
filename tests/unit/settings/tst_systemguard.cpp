@@ -355,6 +355,26 @@ TEST(AutostartGuard, ATextualDotDotThroughALinkIsRefused)
 
 // Login Items' image://icon with an absolute Icon= path: only a small regular raster file (a FIFO, a device, a link to one,
 // an SVG, a huge file or an unclean path shows the page's own tile).
+TEST(XdgDirs, EmptyOrRelativeMeansNotSet)
+{
+    // Integrator review of PR #6: an empty XDG_CONFIG_HOME made the autostart folder "/autostart" and the user's units
+    // "/systemd/user". Unset, empty or relative: the default (XDG Base Directory specification).
+    const QString config = QStringLiteral("/home/u/.config");
+    EXPECT_EQ(xdgHome(QString(), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral(""), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral("relative/dir"), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral("/srv/cfg/"), config), QStringLiteral("/srv/cfg"));
+    EXPECT_EQ(xdgHome(QStringLiteral("/srv//cfg/../x"), config), QStringLiteral("/srv/x"));
+    const QString data = QStringLiteral("/usr/local/share:/usr/share");
+    const QStringList defaults{QStringLiteral("/usr/local/share"), QStringLiteral("/usr/share")};
+    EXPECT_EQ(xdgDirs(QString(), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral(""), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("::"), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("rel:also/rel"), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("/opt/share::rel:/usr/share/"), data), (QStringList{QStringLiteral("/opt/share"), QStringLiteral("/usr/share")}));
+    EXPECT_EQ(xdgDirs(QString(), QStringLiteral("/etc/xdg")), QStringList{QStringLiteral("/etc/xdg")});
+}
+
 TEST(IconFile, OnlySmallRegularRasterFiles)
 {
     QTemporaryDir tmp;
