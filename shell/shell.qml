@@ -371,12 +371,14 @@ ShellRoot {
     }
     AuthAgent {}
     Idle {
+        id: idle
         // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
         busInhibited: MenuBridge.screenSaverInhibited
     }
-    // The screen saver (ADR-0032): the same inhibitors keep it off.
+    // The screen saver (ADR-0032): the same inhibitors keep it off; its slideshow stops while the displays are off.
     Saver {
         busInhibited: MenuBridge.screenSaverInhibited
+        displaysOff: idle.displayOff
     }
     Overview {
         id: overviewSurface

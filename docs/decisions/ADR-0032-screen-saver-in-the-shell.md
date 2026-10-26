@@ -43,10 +43,12 @@ black; and the waking key or click consumed, as on macOS.
   after the unlock until the delay passes again. It shows no field, no prompt and no window content: only the artwork, the
   user's wallpaper or pictures and the time.
 - **The savers**: the artwork (`GrassfieldArtwork`, slowly panned and scaled); the wallpaper with a clock (the picture each
-  display shows, from `WallpaperState`, or its colour, or the artwork, under a dimming scrim, the time and date large); a
+  display shows, read as the lock reads it, `WallpaperState.lockStill`: ready and under the helper's folders; or its colour, or
+  the artwork, under a dimming scrim, the time and date large); a
   slideshow (the folder's pictures, jpg/png/webp, shuffled without repeat, a crossfade every few seconds, decoded at the
-  screen's size; an empty or missing folder shows the artwork); the clock alone (the time and date on black, moving to a new
-  place every minute so no pixel stays lit). Reduce Motion: no drift or pan, crossfades only.
+  screen's size; an empty or missing folder shows the artwork; while the idle module has switched the displays off it
+  prepares nothing more, and each display's cache pruning keeps the other displays' slides); the clock alone (the time and
+  date on black, moving to a new place every minute so no pixel stays lit). Reduce Motion: no drift or pan, crossfades only.
 - **Settings**: Wallpaper > Screen Saver… opens a sheet: "Start screen saver when inactive" (Never, 1 to 30 minutes, 1
   hour), the four savers as tiles, the slideshow's folder with Choose…, and macOS's note when the display turns off or the
   session locks before the saver would start, with Lock Screen Settings….
@@ -58,7 +60,8 @@ black; and the waking key or click consumed, as on macOS.
 - The saver takes the keyboard while shown. It is never up while the session is locked; a prompt that appears meanwhile
   (the polkit agent's dialog) gets the keyboard once the first input has ended the saver. An opus review covers this input
   handling before merge.
-- `tests/shell/ipc_inventory.sh` lists the new `saver` IPC target; `SaverModel.js` has unit tests.
+- The `saver` IPC target is in `docs/specs/security.md` § IPC surface (checked by `tests/security/ipc_inventory.sh`);
+  `SaverModel.js` has unit tests.
 
 ## To verify in a nested session (owner checks before merge)
 1. Set a delay of 1 minute; wait: the saver starts on every display; move the mouse: it ends and the window under it gets

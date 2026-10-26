@@ -43,7 +43,8 @@ function clockPlace(minute, width, height, boxWidth, boxHeight, margin) {
 
 // What the wallpaper-with-clock saver draws under its clock for one display: the picture the desktop shows there (a file the
 // wallpaper helper prepared: the shell decodes only those, ADR-0016), else the wallpaper's colour, else the artwork.
-// `published` is WallpaperState.outputs[name] (or undefined), `cfg` the display's resolved wallpaper settings.
+// `published` is {file: WallpaperState.lockStill(name)} (the checked picture, "" when there is none) or undefined, `cfg` the
+// display's resolved wallpaper settings.
 function backdrop(published, cfg) {
     if (published && typeof published.file === "string" && published.file !== "")
         return {kind: "picture", file: published.file, color: ""};

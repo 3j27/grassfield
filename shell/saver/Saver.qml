@@ -22,6 +22,11 @@ Scope {
 
     // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
     property bool busInhibited: false
+    // The idle module switched the displays off (bound in shell.qml): nobody sees the saver, the slideshow stops preparing
+    // pictures until the input that ends it.
+    property bool displaysOff: false
+    // Each display's slide (screen name -> prepared file), so one display's cache pruning keeps the others' pictures.
+    property var slideFiles: ({})
 
     // Dev session only (Mode.dev, ADR-0019): the dev hooks answer, and the delay is the test's (0 = never) rather than the
     // user's, so a nested session never starts the saver on its own.
@@ -40,7 +45,17 @@ Scope {
 
     readonly property bool shown: !Lock.locked && !root.dismissed && (root.devShown || (monitor.enabled && monitor.isIdle))
 
-    onShownChanged: console.info("grassfield-saver: " + (shown ? "shown (" + kind + ")" : "hidden"))
+    onShownChanged: {
+        console.info("grassfield-saver: " + (shown ? "shown (" + kind + ")" : "hidden"));
+        if (!shown)
+            root.slideFiles = {};
+    }
+
+    function noteSlide(screenName: string, file: string): void {
+        const next = Object.assign({}, root.slideFiles);
+        next[screenName] = file;
+        root.slideFiles = next;
+    }
 
     function dismiss(): void {
         if (!root.shown)
@@ -111,6 +126,9 @@ Scope {
                 kind: root.kind
                 folder: root.folder
                 active: root.shown
+                paused: root.displaysOff
+                keepFiles: Object.keys(root.slideFiles).filter(n => n !== win.modelData.name).map(n => root.slideFiles[n])
+                onSlideShown: file => root.noteSlide(win.modelData.name, file)
                 // Fades in (macOS fades the saver in); the window itself goes at once on input.
                 opacity: root.shown ? 1 : 0
 

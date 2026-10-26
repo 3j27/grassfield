@@ -16,6 +16,8 @@ Scope {
     required property var screenInfo
     property string folder: ""
     property bool running: false
+    // Prepared files the cache pruning must keep besides the wallpapers' and this display's slide (the other displays').
+    property var keepAlso: []
 
     readonly property real scale: screenInfo && screenInfo.devicePixelRatio > 0 ? screenInfo.devicePixelRatio : 1
     readonly property int pixelWidth: Math.max(1, Math.round((screenInfo ? screenInfo.width : 0) * scale))
@@ -83,7 +85,7 @@ Scope {
             return;
         }
         carousel = r.state;
-        const keep = WallpaperState.currentFiles();
+        const keep = WallpaperState.currentFiles().concat(keepAlso.filter(f => typeof f === "string" && f !== ""));
         if (currentFile !== "")
             keep.push(currentFile);
         startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, r.file, pixelWidth, pixelHeight, "fill", "#000000", WallpaperState.preparedDir, 0, Tokens.wallpaperCacheMaxBytes, keep), Tokens.wallpaperToolTimeoutMs);

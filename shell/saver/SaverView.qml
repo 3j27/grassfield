@@ -15,6 +15,13 @@ Rectangle {
     property string kind: "artwork"
     property string folder: ""
     property bool active: false
+    // The displays are off: the slideshow prepares nothing more (nobody sees it; the input that wakes them ends the saver).
+    property bool paused: false
+    // The other displays' slides, kept when this one's pruning trims the cache.
+    property var keepFiles: []
+
+    // A new slide is shown (its prepared file), for the other displays' `keepFiles`.
+    signal slideShown(string file)
 
     // The slideshow shows the artwork until its first picture is ready, and when its folder has none.
     readonly property string effectiveKind: kind === "slideshow" && (slides.empty || slides.url === "") ? "artwork" : kind
@@ -110,7 +117,10 @@ Rectangle {
         id: slides
         screenInfo: root.screenInfo
         folder: root.folder
-        running: root.active && root.kind === "slideshow"
+        keepAlso: root.keepFiles
+        running: root.active && root.kind === "slideshow" && !root.paused
+        onCurrentFileChanged: if (currentFile !== "")
+            root.slideShown(currentFile)
     }
 
     // ---- the artwork ----
@@ -127,7 +137,9 @@ Rectangle {
     Item {
         id: wallpaperClock
 
-        readonly property var backdrop: SaverModel.backdrop(root.screenInfo ? WallpaperState.outputs[root.screenInfo.name] : undefined,
+        // The display's picture through the lock's reader (ready, and under the helper's own folders: ADR-0016), not the raw
+        // published entry.
+        readonly property var backdrop: SaverModel.backdrop(root.screenInfo ? {file: WallpaperState.lockStill(root.screenInfo.name)} : undefined,
             WallpaperConfig.resolve(Settings.wallpaper, {name: root.screenInfo ? root.screenInfo.name : "", model: root.screenInfo ? root.screenInfo.model : "", serial: root.screenInfo ? root.screenInfo.serialNumber : ""}))
 
         anchors.fill: parent

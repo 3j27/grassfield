@@ -188,7 +188,8 @@ does not check its gate.
 | lock | lock | action | SUPER+CTRL+Q, screen corner, Grassfield menu (in process). Only ever locks |
 | lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
 | lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
-| idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
+| idle | status, devSleep, devDisplayOff, devInactiveOff | dev | `reload_locked.sh`, `lock_privacy.sh`; `devInactiveOff` sets the display-off delay while unlocked, off in a dev session otherwise (ADR-0010) |
+| saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
 | search | toggle | action | SUPER+SPACE |
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
