@@ -3,7 +3,9 @@
 // The one definition of the run-mode rule (ADR-0019, GF-089). Pure: every function takes the raw values of the
 // environment variables (Quickshell.env(...): a string, undefined or null when unset) and nothing else, so the rule is
 // unit-tested without a shell (tests/unit/tst_runmode.qml) against the vectors the C++ side is held to as well
-// (tests/fixtures/run-mode-vectors.json). shell/lib/Mode.qml is the only reader of GRASSFIELD_*.
+// (tests/fixtures/run-mode-vectors.json). Readers of GRASSFIELD_* that feed it: shell/lib/Mode.qml for the shell's modules,
+// and the security modules (shell/security/**), which import this file by a relative path and pass it GRASSFIELD_DEV and
+// GRASSFIELD_SESSION themselves (ADR-0019 amendment, slice M2: no QML import path can replace that import).
 //
 // dev = GRASSFIELD_DEV exactly "1" AND GRASSFIELD_SESSION not "1". "dev" means both "test hooks allowed" and "never act on
 // the owner's machine". The packaged session config sets GRASSFIELD_SESSION=1 (config/hypr/session.lua), so a

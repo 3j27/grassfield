@@ -4,7 +4,8 @@ import Grassfield.I18n
 
 // Live language switch (docs/specs/i18n.md): the Translator singleton must hold the engine (it is created by
 // its factory), so changing `language` re-evaluates the bindings of the running UI. Starts in English
-// (GRASSFIELD_LANG=en), switches to fr, back to en. Run by scripts/dev/test.sh (offscreen); prints
+// (GRASSFIELD_LANG=en), switches to fr, back to en. Run by scripts/dev/test.sh (offscreen) as a dev session (the
+// `dev-session` marker: the loader honours GRASSFIELD_TRANSLATIONS_DIR, this tree's catalogs, only in dev); prints
 // "i18n-live: PASS" or the failures. Uses a string of the shipped catalog (context IconMenu).
 ShellRoot {
     id: root

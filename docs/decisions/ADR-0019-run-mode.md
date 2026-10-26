@@ -54,7 +54,7 @@ Variable classes:
 
 | Class | Variables | Rule |
 |---|---|---|
-| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET`, `SHELL_DIR` | honoured only when `dev`; inert otherwise |
+| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET`, `SHELL_DIR` (also `config/hypr/grassfield/bindings.lua`), `TRANSLATIONS_DIR` (C++ loader `ui/i18n/translationloader.h`, since the re-review of 2b8e13a), `LID_LOCK`, `LID_FALLBACK`, `LID_PROC`, `DRM` (`packaging/bin/grassfield-lid`), `LID_TOOL` (the clamshell stand-in; these five and bindings.lua's `SHELL_DIR` since the follow-up of the re-review of bf9e280: a lock request must not be redirected by the session environment) | honoured only when `dev`; inert otherwise |
 | Always honoured | `CONFIG_HOME`, `STATE_HOME`, `APPS_TRACE` | as today |
 | Mode inputs | `DEV`, `SESSION`, `VISUAL_FIXTURES`, private bus selection | read only by `Mode` / `runmode.h` |
 
@@ -91,4 +91,3 @@ mode" that disables Quick Settings toggles, power actions or global menus. The r
 - Slices (plan §2): M1 (qs.lib, Mode, vectors), M2 (gate flip, security), M3 (services), M4 (platform, menubar),
   M5a/M5b (desktop, widgets, notifications, search, overview), M6 (C++ runmode.h), M7 (bridge and testFault),
   M8 (enforcement).
-- Unverified: that `hl.env` sets Hyprland's own environ (needed for M7).
