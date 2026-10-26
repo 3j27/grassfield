@@ -11,7 +11,8 @@ TestCase {
     readonly property var base: ({
             iconSize: 48,
             padding: 10,
-            spacing: 7,
+            indicatorSize: 4,
+            spacing: 4,
             bottomMargin: 6,
             separatorHeight: 49,
             badgeSize: 20,
@@ -37,7 +38,7 @@ TestCase {
         compare(m.separatorHeight, 49);
         compare(m.badgeSize, 20);
         fuzzyCompare(m.iconRadius, 11, 1e-9);
-        // No band under the icons: the running dot sits in the padding (macOS).
+        // No band under the icons (audit 2026-10-25: 76 -> 68): the running dot sits in the bottom padding.
         compare(DockModel.shelfHeight(m), 48 + 20);
         compare(DockModel.reservedHeight(m, false), 68 + 6);
     }
@@ -121,7 +122,7 @@ TestCase {
     }
 
     function test_hitRectIsTheStripWhileAwayAndTheShelfOtherwise() {
-        const base = {revealed: false, dragging: false, pointerActive: false, shelfMain0: 300, shelfLength: 400, thickness: 76, margin: 6, overhang: 29, room: 36, zone: 2};
+        const base = {revealed: false, dragging: false, pointerActive: false, shelfMain0: 300, shelfLength: 400, thickness: 68, margin: 6, overhang: 29, room: 44, zone: 2};
         const strip = Geometry.hitRect("bottom", 1000, 200, base);
         compare(strip.w, 1000);
         compare(strip.h, 2);
@@ -136,31 +137,93 @@ TestCase {
         const shelf = Geometry.hitRect("right", 200, 1000, idle);
         compare(shelf.y, 300);
         compare(shelf.h, 400);
-        compare(shelf.w, 76 + 6);
+        compare(shelf.w, 68 + 6);
         const hover = Geometry.hitRect("left", 200, 1000, Object.assign({}, idle, {pointerActive: true}));
-        compare(hover.w, 76 + 6 + 29 + 36);
+        compare(hover.w, 68 + 6 + 29 + 44);
         const drag = Geometry.hitRect("left", 200, 1000, Object.assign({}, idle, {dragging: true}));
         compare(drag.w, 200);
     }
 
+    // The whole drawn icon takes the pointer (owner report 2026-10-25): the tile stays iconSize + indicator across, the icon grows
+    // beyond it, and the hit box joins both. Tile boxes as Dock.qml sets them (bottom: iconPx x tileCross; side: tileCross x iconPx).
+    function test_hitBoxCoversTheWholeMagnifiedIcon() {
+        const area = base.indicatorSize + base.spacing;
+        const cross = base.iconSize + area;
+        const eps = 1e-9;
+        for (const scale of [1, 1.6, 2.5]) {
+            const px = base.iconSize * scale;
+            // Bottom: the icon grows up (negative y in the tile); the tile's own box (dot area below) stays part of it.
+            let b = Geometry.hitBox("bottom", base.iconSize, px, area, px, cross);
+            let o = Geometry.iconOrigin("bottom", base.iconSize, px, area);
+            verify(b.x <= o.x + eps && b.y <= o.y + eps && b.x + b.w >= o.x + px - eps && b.y + b.h >= o.y + px - eps, "bottom " + scale);
+            compare(b.x, 0);
+            compare(b.w, px);
+            compare(b.y, Math.min(0, base.iconSize - px));
+            compare(b.y + b.h, cross);
+            // Left: the icon grows to the right, beyond the tile.
+            b = Geometry.hitBox("left", base.iconSize, px, area, cross, px);
+            o = Geometry.iconOrigin("left", base.iconSize, px, area);
+            verify(b.x <= o.x + eps && b.y <= o.y + eps && b.x + b.w >= o.x + px - eps && b.y + b.h >= o.y + px - eps, "left " + scale);
+            compare(b.x, 0);
+            compare(b.y, 0);
+            compare(b.h, px);
+            compare(b.w, Math.max(cross, area + px));
+            // Right: the icon grows to the left.
+            b = Geometry.hitBox("right", base.iconSize, px, area, cross, px);
+            o = Geometry.iconOrigin("right", base.iconSize, px, area);
+            verify(b.x <= o.x + eps && b.y <= o.y + eps && b.x + b.w >= o.x + px - eps && b.y + b.h >= o.y + px - eps, "right " + scale);
+            compare(b.x, Math.min(0, base.iconSize - px));
+            compare(b.x + b.w, cross);
+            compare(b.h, px);
+        }
+        // Unmagnified, the hit box is the tile: nothing grows.
+        const t = Geometry.hitBox("bottom", base.iconSize, base.iconSize, area, base.iconSize, cross);
+        compare(t.y, 0);
+        compare(t.h, cross);
+        // The share of the icon that the tile alone covered (the dead part): 1 - 1/scale.
+        const dead = Geometry.hitBox("bottom", base.iconSize, base.iconSize * 2.5, area, base.iconSize * 2.5, cross);
+        fuzzyCompare(-dead.y / (base.iconSize * 2.5), 0.6, 1e-9);
+    }
+
+    // Where hit boxes share a point the tile drawn on top owns it (higher z, equal z the later tile); touching boxes share none.
+    function test_hitOwnerIsTheTileDrawnOnTop() {
+        const boxes = [{x: 0, y: 0, w: 100, h: 100, z: 0}, {x: 100, y: 0, w: 100, h: 100, z: 0}, null, {x: 150, y: 0, w: 100, h: 100, z: 0}];
+        compare(Geometry.hitOwner(boxes, 50, 50), 0);
+        // Touching boxes: 100 belongs to the second only.
+        compare(Geometry.hitOwner(boxes, 99.9, 50), 0);
+        compare(Geometry.hitOwner(boxes, 100, 50), 1);
+        // 160 is in boxes 1 and 3 (the same z): the later one is drawn on top.
+        compare(Geometry.hitOwner(boxes, 160, 50), 3);
+        // A dragged tile (z 100) wins over a later neighbour.
+        boxes[1].z = 100;
+        compare(Geometry.hitOwner(boxes, 160, 50), 1);
+        compare(Geometry.hitOwner(boxes, 240, 50), 3);
+        // Outside every box (or over null): nobody.
+        compare(Geometry.hitOwner(boxes, 300, 50), -1);
+        compare(Geometry.hitOwner(boxes, 50, 150), -1);
+        compare(Geometry.hitOwner([], 1, 1), -1);
+        compare(Geometry.hitOwner([null], 1, 1), -1);
+    }
+
     function test_iconAndDotSitOnOppositeSidesOfTheTile() {
-        // Unmagnified: the icon fills the tile.
-        compare(Geometry.iconOrigin("bottom", 48, 48).y, 0);
-        compare(Geometry.iconOrigin("left", 48, 48).x, 0);
-        compare(Geometry.iconOrigin("right", 48, 48).x, 0);
+        const area = 0;
+        // Unmagnified: the icon is at the tile's origin on the outward side of the dot.
+        compare(Geometry.iconOrigin("bottom", 48, 48, area).y, 0);
+        compare(Geometry.iconOrigin("left", 48, 48, area).x, area);
+        compare(Geometry.iconOrigin("right", 48, 48, area).x, 0);
         // Magnified 1.5x: it grows away from the screen edge, its edge-side stays put.
-        const bottom = Geometry.iconOrigin("bottom", 48, 72);
+        const bottom = Geometry.iconOrigin("bottom", 48, 72, area);
         compare(bottom.y + 72, 48);
-        const right = Geometry.iconOrigin("right", 48, 72);
+        const right = Geometry.iconOrigin("right", 48, 72, area);
         compare(right.x + 72, 48);
-        const left = Geometry.iconOrigin("left", 48, 72);
-        compare(left.x, 0);
-        // The dot is outside the tile, in the shelf's padding on the screen-edge side, `gap` (3) from the icon; the hover lift is
-        // cancelled. With padding 10 and a 4-px dot its centre is 5 from the shelf's edge.
+        const left = Geometry.iconOrigin("left", 48, 72, area);
+        compare(left.x, area);
+        // The dot is on the screen-edge side, spacing away from the icon, and the hover lift is cancelled.
+        // It sits in the padding, dock.indicatorGap (3) from the icon: with a 10-pt padding and a 4-pt dot its centre is 5 from the shelf edge.
         const dotB = Geometry.dotOrigin("bottom", 48, 48, 48, 3, 4, 0);
         compare(dotB.y, 51);
         compare(dotB.x, 22);
-        compare(base.padding - (dotB.y + 2 - 48), 5);
+        compare(dotB.y + 2 - (48 + 10), -5);
         compare(Geometry.dotOrigin("right", 48, 48, 48, 3, 4, 0).x, 51);
         compare(Geometry.dotOrigin("left", 48, 48, 48, 3, 4, 0).x, -7);
         compare(Geometry.dotOrigin("left", 48, 48, 48, 3, 4, 5).x, -12);
@@ -169,42 +232,47 @@ TestCase {
     }
 
     function test_tooltipIsOnTheOutwardSideOfTheIcon() {
-        // The label clears the shelf (the icon plus the padding beyond it), its tail tip 8 from the shelf's edge (macOS).
-        const reach = 48 + base.padding;
-        // Bottom: above the shelf, centred.
-        const b = Geometry.tooltipOrigin("bottom", 48, 48, 48, reach, 8, 100, 30);
+        const area = 0;
+        // Bottom: above the icon, centred (the formula the Dock always used).
+        const b = Geometry.tooltipOrigin("bottom", 48, 56, 48, 48, area, 8, 100, 30);
         compare(b.x, -26);
-        compare(b.y, 48 - 58 - 8 - 30);
-        // Left: right of the shelf, vertically centred on the tile; right: left of it.
-        const l = Geometry.tooltipOrigin("left", 48, 48, 48, reach, 8, 100, 30);
-        compare(l.x, 58 + 8);
+        compare(b.y, 56 - area - 48 - 8 - 30);
+        // With the shelf padding the tail tip is `gap` beyond the shelf edge, not beside the icon (audit 2026-10-25: it sat
+        // 1.5 inside the shelf): shelf edge = icon top - padding.
+        const shelfTop = 56 - 48 - 10;
+        compare(Geometry.tooltipOrigin("bottom", 48, 56, 48, 48, area, 8, 100, 30, 10).y + 30, shelfTop - 8);
+        // Left: right of the icon, vertically centred on the tile; right: left of it.
+        const l = Geometry.tooltipOrigin("left", 56, 48, 48, 48, area, 8, 100, 30);
+        compare(l.x, area + 48 + 8);
         compare(l.y, 9);
-        const r = Geometry.tooltipOrigin("right", 48, 48, 48, reach, 8, 100, 30);
-        compare(r.x, 48 - 58 - 8 - 100);
+        verify(l.x > area + 48);
+        const r = Geometry.tooltipOrigin("right", 56, 48, 48, 48, area, 8, 100, 30);
+        compare(r.x, 48 - 48 - 8 - 100);
         compare(r.y, 9);
         compare(Geometry.tooltipTailSide("left"), "left");
         compare(Geometry.tooltipTailSide("right"), "right");
         compare(Geometry.tooltipTailSide("bottom"), "bottom");
         // A magnified icon pushes the label out with it.
-        verify(Geometry.tooltipOrigin("left", 48, 72, 48, 72, 8, 100, 30).x > l.x);
-        verify(Geometry.tooltipOrigin("right", 48, 72, 48, 72, 8, 100, 30).x < r.x);
+        verify(Geometry.tooltipOrigin("left", 56, 72, 48, 72, area, 8, 100, 30).x > l.x);
+        verify(Geometry.tooltipOrigin("right", 56, 72, 48, 72, area, 8, 100, 30).x < r.x);
     }
 
     function test_iconInsideTheShelfIsTheMinimizeTarget() {
         // The icon of tile n, placed the way the Dock places it (shelf, padding, tile box, icon origin), is the rectangle the
         // compositor animates to.
         const thick = DockModel.shelfHeight(m48);
+        const area = 0;
         for (const edge of Geometry.EDGES) {
             const w = Geometry.isVertical(edge) ? 300 : 1000;
             const h = Geometry.isVertical(edge) ? 1000 : 300;
             const shelf = Geometry.shelfRect(edge, w, h, 400, thick, 6, 0);
-            const icon = Geometry.iconOrigin(edge, 48, 48);
+            const icon = Geometry.iconOrigin(edge, 48, 48, area);
             // The tile row starts `padding` into the shelf and the tile is 150 px along the main axis from there.
             const main = 150;
             const x = shelf.x + base.padding + (Geometry.isVertical(edge) ? 0 : main) + icon.x;
             const y = shelf.y + base.padding + (Geometry.isVertical(edge) ? main : 0) + icon.y;
             const mainCenter = Geometry.mainOf(edge, shelf.x, shelf.y) + base.padding + main + 24;
-            const target = Geometry.tileRect(edge, w, h, mainCenter, 48, 6, base.padding);
+            const target = Geometry.tileRect(edge, w, h, mainCenter, 48, 6, base.padding, area);
             compare(target.x, x, edge);
             compare(target.y, y, edge);
             compare(target.w, 48);
@@ -405,7 +473,7 @@ TestCase {
 
     function slotOptions(extra) {
         return Object.assign({index: 0, adding: false, iconSize: 48, spacing: 4, separatorWidth: 12, edge: "bottom", screenW: 1920, screenH: 1080,
-                depth: 140, margin: 6, padding: 10}, extra);
+                depth: 140, margin: 6, padding: 10, indicatorArea: 8}, extra);
     }
 
     function inside(r, w, h) {

@@ -18,18 +18,32 @@
 # lock stays grassfield-shell's WlSessionLock + PamContext, no other locker). That matters when logind does not suspend
 # on the lid (HandleLidSwitch=ignore or lock): nothing else would lock then.
 #
-# Test hooks: GRASSFIELD_LID_PROC (default /proc/acpi/button/lid), GRASSFIELD_DRM (default /sys/class/drm),
-# GRASSFIELD_LID_LOCK (the lock command), GRASSFIELD_LID_FALLBACK (the stand-in), XDG_RUNTIME_DIR (marker and lock file).
+# Test hooks (dev plumbing, ADR-0019): GRASSFIELD_LID_PROC (default /proc/acpi/button/lid), GRASSFIELD_DRM (default
+# /sys/class/drm), GRASSFIELD_LID_LOCK (the lock command), GRASSFIELD_LID_FALLBACK (the stand-in), honoured only in a dev
+# session (GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"). Outside it a stray value is ignored: the lid always
+# asks the installed shell, falls back to the installed stand-in and reads the real lid and display state, so the session
+# environment cannot redirect or drop the lock request (follow-up of the re-review of bf9e280; a fake "external display
+# connected" would have skipped the fallback). XDG_RUNTIME_DIR holds the marker and the lock file.
 
 set -u
+# The lock request must not be defeatable by the session's environment: a stray QS_MANIFEST or QS_CONFIG_NAME made
+# `qs ipc -p` exit 108 ("--path excludes --manifest") and the lid did not lock (re-review of bf9e280, M1). The list is the
+# one grassfield-shell.service clears (tests/security/lock_request_env.sh); the stand-in below inherits the cleared set.
+unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
 
-LID_PROC=${GRASSFIELD_LID_PROC:-/proc/acpi/button/lid}
-DRM=${GRASSFIELD_DRM:-/sys/class/drm}
+LID_PROC=/proc/acpi/button/lid
+DRM=/sys/class/drm
 RUNTIME=${XDG_RUNTIME_DIR:-/tmp}
 MARKER=$RUNTIME/grassfield-lid-internal-off
 LOCKFILE=$RUNTIME/grassfield-lid.lock
-LOCK_CMD=${GRASSFIELD_LID_LOCK:-qs ipc -p /usr/share/grassfield/shell call lock lid}
-FALLBACK=${GRASSFIELD_LID_FALLBACK:-/usr/lib/grassfield/omarchy-shims/omarchy-shell}
+LOCK_CMD="qs ipc -p /usr/share/grassfield/shell call lock lid"
+FALLBACK=/usr/lib/grassfield/omarchy-shims/omarchy-shell
+if [[ ${GRASSFIELD_DEV:-} == 1 && ${GRASSFIELD_SESSION:-} != 1 ]]; then
+  LID_PROC=${GRASSFIELD_LID_PROC:-$LID_PROC}
+  DRM=${GRASSFIELD_DRM:-$DRM}
+  LOCK_CMD=${GRASSFIELD_LID_LOCK:-$LOCK_CMD}
+  FALLBACK=${GRASSFIELD_LID_FALLBACK:-$FALLBACK}
+fi
 
 # Ask the shell to lock (it decides about clamshell mode). Its answers: ok, already-locked, docked, refused: <why>.
 lock_on_close() {

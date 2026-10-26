@@ -585,7 +585,6 @@ Variants {
                         readonly property bool isPlus: modelData.plus === true
                         readonly property bool dropTarget: win.dragKey !== "" && win.dropIndex === index && !isPlus && !modelData.active
                         readonly property bool focused: win.spaceFocus === index
-                        readonly property int shownIcons: isPlus ? 0 : Math.min(modelData.appIds.length, Tokens.overviewTileMaxIcons)
                         readonly property int count: win.tiles.length - 1
                         readonly property real rowWidth: count * Tokens.overviewTileWidth + Math.max(0, count - 1) * Tokens.overviewTileGap
 
@@ -622,22 +621,15 @@ Variants {
                                 border.color: Appearance.colors.accent
                             }
 
-                            Row {
+                            // A real miniature of the desktop: its windows at their place, captured (macOS), not a grey tile with icons.
+                            MiniDesktop {
                                 visible: !tile.isPlus
-                                anchors.centerIn: parent
-                                spacing: Tokens.spacingXs
-
-                                Repeater {
-                                    model: tile.shownIcons
-
-                                    delegate: TintedIcon {
-                                        id: tileIcon
-                                        required property int index
-                                        size: Tokens.overviewTileIconSize
-                                        source: ThemeIcons.appIcon(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
-                                        asynchronous: true
-                                    }
-                                }
+                                anchors.fill: parent
+                                anchors.margins: face.border.width
+                                windows: tile.isPlus ? [] : tile.modelData.windows
+                                screenW: tile.isPlus ? 0 : tile.modelData.screenW
+                                screenH: tile.isPlus ? 0 : tile.modelData.screenH
+                                capture: !tile.modelData.active
                             }
 
                             Icon {

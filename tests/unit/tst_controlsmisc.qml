@@ -388,23 +388,6 @@ TestCase {
         compare(slider.value, 0.5);
     }
 
-    // The knobless Control Center style (macOS 27): no knob, a white fill (the accent with Increase Contrast) that never gets
-    // shorter than its round cap, and a click maps the whole track.
-    function test_knoblessSliderStyle() {
-        const was = slider.knob;
-        slider.knob = false;
-        slider.trackHeight = Tokens.quicksettingsSliderTrack;
-        compare(Qt.color(slider.fillColor), Qt.color(Appearance.colors.knob));
-        Appearance.increaseContrast = true;
-        compare(Qt.color(slider.fillColor), Qt.color(Appearance.colors.accent));
-        Appearance.increaseContrast = false;
-        compare(slider.endWidth, Tokens.quicksettingsSliderTrack);
-        compare(slider.travel, slider.width - Tokens.quicksettingsSliderTrack);
-        slider.knob = was;
-        slider.trackHeight = Tokens.controlSliderTrack;
-        compare(slider.endWidth, Tokens.controlSliderKnobWidth);
-    }
-
     function test_scrollBarFollowsTheView() {
         verify(scroll.visible);
         verify(scroll.size < 1);

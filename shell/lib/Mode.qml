@@ -7,7 +7,7 @@ import "RunMode.js" as RunMode
 // Mode; the rule itself is RunMode.js. Integrator decision for M2: the security modules (shell/security/**) do not use
 // this singleton or the qs.lib module (a qs/lib directory on QML_IMPORT_PATH would replace it); they import RunMode.js by
 // a relative path and pass it the two environment values themselves (tests/security/ipc_inventory.sh checks both forms).
-// Migrated so far: VisualFixtures, BarTone, FixedTime, Capabilities, Widgets (M2).
+// Consumers: every module of the shell outside shell/security (tests/ci/run_mode.py refuses a GRASSFIELD_ read anywhere else).
 Singleton {
     id: root
 
@@ -26,6 +26,10 @@ Singleton {
     readonly property string configDir: RunMode.configDir(Quickshell.env("GRASSFIELD_CONFIG_HOME"), Quickshell.env("XDG_CONFIG_HOME"), Quickshell.env("HOME"))
     readonly property string stateDir: RunMode.stateDir(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_STATE_HOME"), Quickshell.env("HOME"))
     readonly property string shellDir: Quickshell.shellDir
+    // Raw GRASSFIELD_STATE_HOME ("" when unset): honoured always, like stateDir; for the two readers that need to know whether it is set.
+    readonly property string stateHome: RunMode.homeOverride(Quickshell.env("GRASSFIELD_STATE_HOME"))
+    // GRASSFIELD_APPS_TRACE "1" (always honoured).
+    readonly property bool appsTrace: RunMode.appsTrace(Quickshell.env("GRASSFIELD_APPS_TRACE"))
 
     // A dev-plumbing variable GRASSFIELD_<name> (ADR-0019 table): its value in dev, "" otherwise.
     function devValue(name) {

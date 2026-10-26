@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Quickshell.Services.Notifications
 import Grassfield.Ui
@@ -66,21 +67,14 @@ Singleton {
     // runs the nested shell on its own bus, see docs/specs/notifications.md). The shell's one dev gate (SEC-03,
     // follow-up N6): a GRASSFIELD_DEV=1 leaked into a real session (GRASSFIELD_SESSION=1) must not switch the
     // notification server off there.
-    readonly property bool devSession: VisualFixtures.dev
-    readonly property bool privateBus: Quickshell.env("GRASSFIELD_PRIVATE_BUS") === "1"
-    readonly property bool serverEnabled: !devSession || privateBus
+    readonly property bool devSession: Mode.dev
+    readonly property bool serverEnabled: Mode.ownBus
     // Test-only IPC hooks (invoke, clearAll, dismissAll): same gate as the visual fixtures (GRASSFIELD_DEV=1 and
     // GRASSFIELD_VISUAL_FIXTURES=1, never with GRASSFIELD_SESSION=1), so nothing outside a test session can drive them.
     readonly property bool testHooks: VisualFixtures.active
 
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string historyPath: stateDir + "/notifications.json"
 
     // Live Notification objects by entry key (not reactive).

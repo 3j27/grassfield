@@ -395,7 +395,7 @@ Variants {
                                 anchors.fill: parent
                                 verticalAlignment: Text.AlignVCenter
                                 visible: field.text === "" && field.preeditText === ""
-                                text: qsTr("Search")
+                                text: qsTr("Apps")
                                 textFormat: Text.PlainText
                                 color: Appearance.colors.textSecondary
                                 font: field.font

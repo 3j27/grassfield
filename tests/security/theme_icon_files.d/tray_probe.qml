@@ -126,7 +126,13 @@ ShellRoot {
             if (root.phase === "settle") {
                 // Every copy asked for answered, then a second more for a stalled read to begin.
                 const pending = Object.keys(ThemeIcons.copies).some(k => ThemeIcons.copies[k].state === "pending");
-                if ((pending || root.waited < 1500) && root.waited < 20000)
+                // The Images load asynchronously: an answered copy can still be loading (status 2); wait for none to be
+                // (same 20 s bound: a load that never ends still shows as status 2).
+                const loading = root.buttons.some(b => {
+                    const image = root.iconImage(b.button);
+                    return image && image.status === Image.Loading;
+                });
+                if ((pending || loading || root.waited < 1500) && root.waited < 20000)
                     return;
                 for (const b of root.buttons) {
                     const image = root.iconImage(b.button);

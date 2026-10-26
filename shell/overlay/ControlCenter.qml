@@ -30,16 +30,14 @@ FocusScope {
     readonly property real pad: Tokens.quicksettingsPadding
     // Inset of the icon disk inside a capsule (the disk is vertically centred, so it is centred in a 1x1 too).
     readonly property real diskInset: (cell - Tokens.quicksettingsIconDisk) / 2
-    // Stages (only with the plugin's `stages-available`) sits beside Airplane Mode; while Now Playing takes that slot it gets a row of its own.
-    // macOS 27 keeps the Now Playing module in its 2x2 slot while nothing plays ("Not Playing", the transport dimmed).
-    readonly property bool nowPlayingShown: true
-    readonly property bool stagesRow: StagesLink.available && nowPlayingShown
-    readonly property real groupHeight: stagesRow ? 4 * cell + 3 * gap : 3 * cell + 2 * gap
+    // Airplane Mode and Stages (only with the plugin's `stages-available`) are 1x1 circles side by side under Bluetooth; Now Playing
+    // keeps its 2x2 slot at the right whether or not a player runs (macOS shows "Not Playing").
+    readonly property real groupHeight: 3 * cell + 2 * gap
     readonly property real gridBottom: sliders.height > 0 ? sliders.y + sliders.height : groupHeight
     readonly property real bodyHeight: expanded === "" ? gridBottom : detail.height
 
     // The visible glass surfaces, for the Overlay's blur regions.
-    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, appearanceSide, stagesToggle, display, keyboard, sound, appearanceBottom, battery, detail, note].filter(m => m.visible)
+    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, stagesToggle, display, keyboard, sound, appearanceBottom, battery, detail, note].filter(m => m.visible)
 
     function toggleSection(id: string): void {
         if (expanded === id)
@@ -65,7 +63,7 @@ FocusScope {
         expanded = "";
         const reason = focusReason();
         Qt.callLater(() => {
-            const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceSide.visible ? appearanceSideRow : appearanceBottomRow;
+            const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceBottomRow;
             target.forceActiveFocus(reason);
         });
     }
@@ -282,45 +280,20 @@ FocusScope {
 
         NowPlaying {
             id: nowPlaying
-            visible: root.nowPlayingShown
             x: 2 * root.pitch
             y: root.pitch
-        }
-
-        // Appearance sits beside Do Not Disturb while there is no player, below the sliders otherwise.
-        Module {
-            id: appearanceSide
-            visible: !root.nowPlayingShown
-            x: 2 * root.pitch
-            y: root.pitch
-            cols: 2
-
-            RadioRow {
-                id: appearanceSideRow
-                width: parent.width
-                height: parent.height
-                inset: root.diskInset
-                iconName: Appearance.dark ? "moon" : "sun"
-                title: qsTr("Appearance")
-                subtitle: Model.appearanceLabel(Settings.appearance, {light: qsTr("Light"), dark: qsTr("Dark"), auto: qsTr("Auto")})
-                on: root.expanded === "appearance"
-                expandable: true
-                expanded: root.expanded === "appearance"
-                onToggled: root.toggleSection("appearance")
-                onExpandToggled: root.toggleSection("appearance")
-            }
         }
 
         Module {
             id: airplane
             y: 2 * root.pitch
-            // Full width while no player takes the 2x2 slot at the right.
-            cols: root.nowPlayingShown || StagesLink.available ? 2 : 4
+            visible: Connectivity.airplaneAvailable
+            cols: 1
 
             RadioRow {
                 width: parent.width
                 height: parent.height
-                inset: root.diskInset
+                circleModule: true
                 iconName: "airplane"
                 title: qsTr("Airplane Mode")
                 subtitle: Connectivity.airplane ? qsTr("On") : qsTr("Off")
@@ -332,9 +305,9 @@ FocusScope {
 
         StagesToggle {
             id: stagesToggle
-            x: root.nowPlayingShown ? 0 : 2 * root.pitch
-            y: root.nowPlayingShown ? 3 * root.pitch : 2 * root.pitch
-            inset: root.diskInset
+            // A hidden Airplane module leaves no empty slot: Stages moves to the first (macOS reflows the modules).
+            x: airplane.visible ? root.pitch : 0
+            y: 2 * root.pitch
         }
 
         Column {
@@ -384,20 +357,19 @@ FocusScope {
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight
 
-                    // macOS 27: a small sun at the low end, a large one at the high end, a knobless white fill.
                     Icon {
                         id: displayIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        size: Tokens.quicksettingsSliderGlyphSmall
+                        size: Tokens.quicksettingsEndGlyphSmall
                         name: "sun"
                     }
 
                     Slider {
                         id: displaySlider
-                        knob: false
-                        trackHeight: Tokens.quicksettingsSliderTrack
+                        trackHeight: Tokens.controlSliderTrackCompact
+                        knobless: true
                         verticalKeys: false
-                        width: parent.width - displayIcon.width - displayIconHigh.width - 2 * parent.spacing
+                        width: parent.width - displayIcon.width - displayIconMax.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Display brightness")
                         value: Brightness.level
@@ -412,9 +384,9 @@ FocusScope {
                     }
 
                     Icon {
-                        id: displayIconHigh
+                        id: displayIconMax
                         anchors.verticalCenter: parent.verticalCenter
-                        size: Tokens.quicksettingsSliderGlyphLarge
+                        size: Tokens.quicksettingsEndGlyphLarge
                         name: "sun"
                     }
                 }
@@ -441,16 +413,16 @@ FocusScope {
                     Icon {
                         id: kbdIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        size: Tokens.menuIconSize
+                        size: Tokens.quicksettingsEndGlyphSmall
                         name: "keyboard"
                     }
 
                     Slider {
                         id: kbdSlider
-                        knob: false
-                        trackHeight: Tokens.quicksettingsSliderTrack
+                        trackHeight: Tokens.controlSliderTrackCompact
+                        knobless: true
                         verticalKeys: false
-                        width: parent.width - kbdIcon.width - parent.spacing
+                        width: parent.width - kbdIcon.width - kbdIconMax.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Keyboard brightness")
                         value: Brightness.kbdLevel
@@ -461,6 +433,13 @@ FocusScope {
                                     root.showDevNote();
                             }
                         }
+                    }
+
+                    Icon {
+                        id: kbdIconMax
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.quicksettingsEndGlyphLarge
+                        name: "keyboard"
                     }
                 }
             }
@@ -509,10 +488,10 @@ FocusScope {
 
                     Slider {
                         id: volumeSlider
-                        knob: false
-                        trackHeight: Tokens.quicksettingsSliderTrack
+                        trackHeight: Tokens.controlSliderTrackCompact
+                        knobless: true
                         verticalKeys: false
-                        width: parent.width - mute.width - soundChevron.width - 2 * parent.spacing
+                        width: parent.width - mute.width - volumeIconMax.width - soundChevron.width - 3 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Output volume")
                         value: Audio.volume
@@ -520,6 +499,13 @@ FocusScope {
                             if (!Audio.setVolume(v))
                                 volumeSlider.reset();
                         }
+                    }
+
+                    Icon {
+                        id: volumeIconMax
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.quicksettingsEndGlyphLarge
+                        name: "volume-3"
                     }
 
                     NavItem {
@@ -625,7 +611,6 @@ FocusScope {
 
             Module {
                 id: appearanceBottom
-                visible: root.nowPlayingShown
                 cols: 4
 
                 RadioRow {

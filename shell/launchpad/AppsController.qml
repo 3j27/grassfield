@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
@@ -48,7 +49,7 @@ Scope {
     // True while the list is rebuilt because the installed apps changed (the view keeps its scroll position).
     property bool listRefresh: false
     // GRASSFIELD_APPS_TRACE=1 logs every keystroke latency (dev measurements); otherwise only slow ones.
-    readonly property bool trace: Quickshell.env("GRASSFIELD_APPS_TRACE") === "1"
+    readonly property bool trace: Mode.appsTrace
 
     // Records of the installed, listed apps (Apps service) and the display item of each: {key, id, name, rec}.
     property var records: []
@@ -96,13 +97,7 @@ Scope {
 
     readonly property string home: Quickshell.env("HOME")
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"
 
     // ---- state changes -------------------------------------------------------------------

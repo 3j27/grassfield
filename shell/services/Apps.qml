@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import qs.platform
 import "../launchpad/Model.js" as Model // layering-exception: GF-087
@@ -130,12 +131,12 @@ Singleton {
     // owner's profiles: apps launched by the shell get their own XDG config, cache, state and data homes
     // (docs/specs/dock.md, dev notes). Production launches keep the user's environment (and get a scope of their own,
     // scopedLaunch).
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
-    readonly property string appsHome: AppLaunch.appsHomeFor(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+    readonly property bool devSession: Mode.dev
+    readonly property string appsHome: AppLaunch.appsHomeFor(Mode.stateHome, Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
 
     // A real Grassfield session (uwsm, GRASSFIELD_SESSION=1, not a dev session) with uwsm's app launcher: every
     // application the shell starts gets a scope of its own (AppLaunch.scopedArgv), never the shell's unit.
-    readonly property bool realSession: Quickshell.env("GRASSFIELD_SESSION") === "1" && !devSession
+    readonly property bool realSession: Mode.session && !devSession
     property bool uwsmApp: false
     readonly property bool scopedLaunch: realSession && uwsmApp
 
@@ -462,7 +463,7 @@ Singleton {
     // Dev open policy (ADR-0011, scripts/dev/open-policy.sh): folders open in Grassfield Files, files Preview can show
     // in Grassfield Preview, both started directly with the isolated environment; everything else is refused. Set by
     // scripts/dev/shell-run.sh. Without it a dev session opens nothing.
-    readonly property string openPolicy: Quickshell.env("GRASSFIELD_OPEN_POLICY") || ""
+    readonly property string openPolicy: Mode.devValue("OPEN_POLICY")
 
     // A real Grassfield session opens every folder in Grassfield Files, whatever the user's default handler is (macOS: the
     // Finder is the file manager of the system). `gio open` and `xdg-open` argv become services/open-real.sh calls there;

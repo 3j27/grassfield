@@ -28,7 +28,9 @@ QtObject {
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#292929",  // opaque app window, dark appearance: macOS 27 System Settings 39-42 grey, neutral (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
         groupFill: "#313131",  // inset group of an app window, dark appearance: macOS 27 System Settings groups #313030 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
-        sidebarFill: "#232323"  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
+        sidebarFill: "#232323",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
+        windowTextSecondary: "#DCDCE4",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+        chipFill: "#FFFFFF"  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
     })
 
     // color roles, light appearance
@@ -54,7 +56,9 @@ QtObject {
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#FFFFFF",  // opaque app window, light appearance: macOS 27 System Settings content 255 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
         groupFill: "#F7F7F7",  // inset group of an app window, light appearance: macOS 27 System Settings groups 247 on 255, no border (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
-        sidebarFill: "#ECECEC"  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        sidebarFill: "#ECECEC",  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        windowTextSecondary: "#6E6E73",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+        chipFill: "#FFFFFF"  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
     })
 
     // color roles, accentDark appearance
@@ -244,23 +248,27 @@ QtObject {
     readonly property real materialFillOpacityLight: 0.06
     // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialSeparatorOpacityLight: Appearance.increaseContrast ? 0.45 : 0.08
+    // Light appearance: chips (Search, Apps) are white at this opacity; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
+    readonly property real materialChipFillOpacityLight: 0.85
+    // Light appearance: the Apps field, the Force Quit list and the Overview add button are white at this opacity; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
+    readonly property real materialWellFillOpacityLight: 0.7
 
     // task spec / macOS convention, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarHeight: 24
-    // titles 22.5 apart ink to ink (2 x 10 plus the side bearings; was 11, 25 apart), system mark to app name the same [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    // Title padding 10 per side (ink to ink 20; macOS 22.5 measured, audit 25 before); with menubar.insetLeft 19 the app name starts at 55 and the mark is centred at 27, as macOS; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
     readonly property int menubarItemPadding: 10
-    // status glyphs 12-13.5 tall (Wi-Fi 17 wide) and a system mark about 15 tall: 16-pt glyphs (were 14: 8-11 tall) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    // Status glyphs 16 (macOS ink 12-13.5 tall; was 14); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarIconSize: 16
-    // the open-title capsule floats, 1 from the top and the bottom of the 24-pt bar (it hung from the screen edge at 0) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    // The open-title capsule floats: 1 from the screen edge (macOS ~23 tall on a taller bar); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHoverInsetTop: 1
-    // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    // The open-title capsule floats: 1 above the bar's bottom edge; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHoverInsetBottom: 1
-    // status glyphs 18.5-20 apart ink to ink with 16-pt glyphs (were 21-23 at 9.5); also the clock's left padding (last glyph to the clock 17.5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    // Status glyphs 18.5-20 apart in macOS; with the 16-pt glyph a pitch of 33; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarStatusItemPadding: 8.5
     // the open-title capsule reaches 13.7-15 beyond the text, past the 10-pt padding (only one capsule shows at a time) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
     readonly property int menubarHighlightOutset: 4
-    // screen edge to the system mark's 16-pt box: the mark centred at 26.5 (reference 27) and the app name at 55 [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
-    readonly property real menubarInsetLeft: 18.5
+    // Screen edge to the system mark: 19 with itemPadding 10 puts the mark's centre at 27 and the app name at 55 (macOS); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
+    readonly property int menubarInsetLeft: 19
     // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetRight: 18.5
     // estimate: longest wait of a minute clock between two checks (WallClock); a Timer stops counting while the machine sleeps, so this bounds how long the time can be stale after a wake, at 6 wakeups a minute per clock [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
@@ -295,6 +303,12 @@ QtObject {
     readonly property real menubarInactiveOpacity: 0.65
     // estimate: slide in, ms (Reduce Motion: shown at once) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarRevealDuration: 200
+    // The Wi-Fi glyph is wider than the others: 16 x 1.3 gives an ink about 16.5 wide, macOS 17; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property real menubarWifiIconScale: 1.3
+    // The speaker glyph is drawn 1.25 x the status size: its ink is about 12.5 tall, macOS 12-13.5 (was 10); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
+    readonly property real menubarVolumeIconScale: 1.25
+    // Between the clock's date and time: an en space and a space, about 10 pt against 5 before (macOS 9.5); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/unit/tst_visualaudit.qml)
+    readonly property string menubarClockGap: "\u2002 "
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockIconSize: 48
@@ -340,18 +354,12 @@ QtObject {
     readonly property int dockRevealDuration: 240
     // the separator hairline, 1 wide [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property int dockSeparatorWidth: 1
-    // the running dot's centre 6 above the shelf's screen-side edge, inside its padding (no band under the icons; macOS 26 about 5) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
-    readonly property int dockDotCentre: 6
-    // room on each side of the separator hairline inside its slot: app body to separator 18.5 (3.5 bearing + 7 spacing + 8; macOS 26 measured 20.5) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
-    readonly property int dockSeparatorGap: 8
-    // separator about 34 percent darker than the shelf (was 8 percent: four times fainter): 0.3 of black, white in dark [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
-    readonly property real dockSeparatorOpacity: 0.3
     // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockSeparatorHeight: 49
     // the label's tail tip 8 +-1 above the shelf (or above a magnified icon) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property int dockTooltipGap: 8
-    // estimate: height reserved above the shelf for the label [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
-    readonly property int dockTooltipArea: 36
+    // Height reserved above the shelf for the label: the tail tip now sits tooltipGap above the shelf edge, so the label (24 + 7 tail) and the gap need 39+; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockTooltipArea: 44
     // estimate: width reserved beside the shelf of a Dock on the left or right edge for the label of a tile (the label sits beside the tile, so it needs its width) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipSideArea: 240
     // estimate: app badge on a minimized-window tile [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -466,6 +474,14 @@ QtObject {
     readonly property int dockMenuTailHeight: 13
     // reference gs-014-019: tail tip 16 above the shelf top [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuTailGap: 16
+    // running dot in the bottom padding, its centre 6 above the shelf's edge (padding 10 - 6 - half the dot); macOS 26 read about 5 [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
+    readonly property int dockIndicatorGap: 2
+    // Room the tile reserves for the running dot: none, the dot sits in the padding (shelf 76 -> 68); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockIndicatorArea: 0
+    // width of the separator tile: an app body 18.5 from the line (3.5 bearing + 7 spacing + 8) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
+    readonly property int dockSeparatorSpace: 17
+    // Separator line: the separator colour at 0.3 (was the generic 0.16), macOS about -34 % luminance; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property real dockSeparatorOpacity: 0.3
 
     // task spec: pointer dwell before a hot corner fires [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int hotCornerDwellMs: 150
@@ -661,7 +677,19 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsNoteHeight: 26
-    // glyph inside the 36-pt disk of a 2x1 module, about 20 x 14 (macOS 26 composites; the macOS 27 capture draws it as large) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    // knobless module slider track 4 thick, fill and track (macOS 26 composites read 4.7) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Quick Settings]
+    readonly property int quicksettingsSliderTrack: 4
+    // ms after Airplane Mode is switched on, or at start, before a persisted on that no radio backs is erased: the rfkill and NetworkManager state settle in this time (behaviour pinned by tests/unit/tst_airplane.qml) [ref: docs/specs/controlcenter.md § Functional requirements]
+    readonly property int quicksettingsAirplaneSettleMs: 3000
+    // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
+    readonly property int quicksettingsRfkillDebounce: 150
+    // Quick Settings slider track: the shadow colour at this opacity, (light appearance) so the white fill holds 3:1 (WCAG 1.4.11) against it over the lightest module, tested (the dark appearance uses sliderTrackOpacityDark); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property real quicksettingsSliderTrackOpacity: 0.42
+    // Glyph at the low end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
+    readonly property int quicksettingsEndGlyphSmall: 12
+    // Glyph at the high end of a module slider; audit 2026-10-25 (Quick Settings sliders: a glyph at both ends, macOS model) [ref: docs/testing/f1-reference-gaps.md; docs/specs/controlcenter.md]
+    readonly property int quicksettingsEndGlyphLarge: 18
+    // Glyph inside the 36-pt icon disk of a capsule and the glyph of a 1x1 circle module: about 20 (macOS ~20 x 14, was the 14-pt menu icon); audit 2026-10-25 priority 8 (Quick Settings; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsDiskGlyph: 20
     // disk to title gap 6.2 [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
     readonly property int quicksettingsDiskTextGap: 6
@@ -673,16 +701,8 @@ QtObject {
     readonly property int quicksettingsSliderTitleTop: 10
     // slider track centre 41.7 below the module top (macOS 27 capture about 40.5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
     readonly property int quicksettingsSliderTrackCentre: 42
-    // knobless module slider track 4 thick, fill and track (macOS 26 composites read 4.7) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Quick Settings]
-    readonly property int quicksettingsSliderTrack: 4
-    // estimate: the glyph at the low end of a module slider (macOS 27: a small sun, about 14) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
-    readonly property int quicksettingsSliderGlyphSmall: 14
-    // estimate: the glyph at the high end of a module slider (macOS 27: a large sun, about 18) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
-    readonly property int quicksettingsSliderGlyphLarge: 18
-    // ms after Airplane Mode is switched on, or at start, before a persisted on that no radio backs is erased: the rfkill and NetworkManager state settle in this time (behaviour pinned by tests/unit/tst_airplane.qml) [ref: docs/specs/controlcenter.md § Functional requirements]
-    readonly property int quicksettingsAirplaneSettleMs: 3000
-    // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
-    readonly property int quicksettingsRfkillDebounce: 150
+    // Quick Settings slider track in the dark appearance: the fill colour (white) at this opacity, a lighter groove: 2.0:1 or more against the module (non-text), the white fill 4.5:1 against it, tested (docs/testing/f1-reference-gaps.md § Quick Settings; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+    readonly property real quicksettingsSliderTrackOpacityDark: 0.25
 
     // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19
@@ -713,12 +733,6 @@ QtObject {
     readonly property int notificationBannerMaxVisible: 5
     // close badge of a banner and of a card on hover, 20 [ref: docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10]
     readonly property int notificationCloseSize: 20
-    // action buttons: equal-width capsules 22 tall spanning the card [ref: docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10]
-    readonly property int notificationActionHeight: 22
-    // gap between the action capsules 8 [ref: docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10]
-    readonly property int notificationActionGap: 8
-    // timestamp 15 from the card edge: the 12-pt card padding plus 2 (measured 12.8 before) [ref: docs/audits/visual-tahoe-2026-10-25.md § Notifications column — partly close, 5/10]
-    readonly property int notificationTimeInset: 2
     // footer pill label about 12, regular, secondary [ref: docs/audits/visual-tahoe-2026-10-25.md § Notifications column — partly close, 5/10]
     readonly property int notificationPillTextSize: Math.round(12 * Appearance.textScale)
     // the Notification Center title above the cards, about 19 pt bold (cap 13.5) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
@@ -765,6 +779,8 @@ QtObject {
     readonly property int notificationStackLayers: 2
     // estimate: pixels of rows kept alive beyond the viewport (keyboard reach) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterCache: 2000
+    // Banner and card action capsules, macOS 22 tall, equal width across the card (audit 2026-10-25, Banners) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
+    readonly property int notificationActionHeight: 22
 
     // estimate: compact pill [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdWidth: 220
@@ -938,10 +954,6 @@ QtObject {
     readonly property int overviewTileLabelGap: 6
     // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddEdgeInset: 18
-    // estimate: app icons in a Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property int overviewTileIconSize: 24
-    // estimate: icons shown per Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property int overviewTileMaxIcons: 4
     // estimate: window name pill [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewLabelHeight: 34
     // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -992,6 +1004,12 @@ QtObject {
     readonly property real overviewAddFillOpacity: 0.5
     // estimate: the add button's circle under the pointer, white at this opacity in dark [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
     readonly property real overviewAddFillOpacityDark: 0.18
+    // Windows drawn in a desktop miniature (the topmost ones); audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property int overviewMiniMaxWindows: 6
+    // Corner radius of a window in a desktop miniature; audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property int overviewMiniWindowRadius: 2
+    // App icon of a miniature window that has no captured frame yet, as a share of its smaller side; audit 2026-10-25 priority 12 (Overview; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
+    readonly property real overviewMiniIconScale: 0.5
 
     // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/apps.md]
     readonly property int appsBorderWidth: 1
@@ -1158,8 +1176,8 @@ QtObject {
     readonly property int desktopIconCellWidth: 112
     // estimate: desktop icons v1, px height of a grid slot [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconCellHeight: 112
-    // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
-    readonly property int desktopIconMargin: 16
+    // Desktop icon column from the screen edge: 10 (macOS centre 66 from the edge; was 16); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Menu bar and Desktop) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
+    readonly property int desktopIconMargin: 10
     // estimate: desktop icons v1, icon edge [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSize: 64
     // estimate: desktop icons v1, label font size [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
@@ -1215,12 +1233,12 @@ QtObject {
     readonly property real filesSidebarSelectionOpacity: 0.09
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarHeight: 52
-    // toolbar buttons fill the 36-pt capsules (were 28 bare buttons) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
-    readonly property int filesToolbarButtonSize: 36
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
+    readonly property int filesToolbarButtonSize: 28
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarIconSize: 16
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesSearchWidth: 180
+    // Expanded width of the search capsule (macOS ~200); collapsed it is a 36-pt circle; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesSearchWidth: 200
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesTabHeight: 28
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -1333,6 +1351,10 @@ QtObject {
     readonly property int filesColumnRowHeight: 22
     // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
+    // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesToolbarCapsule: 36
+    // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int filesToolbarGroupButton: 34
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150
@@ -1749,14 +1771,6 @@ QtObject {
     readonly property int windowItemsGap: 8
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     readonly property int windowItemsInset: 8
-    // toolbar items sit in glass capsules 36 tall: back and forward 72 x 36, the view group 146 x 36 [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
-    readonly property int windowGroupHeight: 36
-    // room between a toolbar capsule and its buttons along the row: 4 x 36 + 2 = 146 [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
-    readonly property int windowGroupInset: 1
-    // estimate: light toolbar capsules are white (macOS 26/27 floating capsules) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
-    readonly property real windowGroupFillLight: 1.0
-    // estimate: dark toolbar capsules are white at this opacity over the window [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
-    readonly property real windowGroupFillDark: 0.1
 
     // estimate: tile box the plugin fits a stage's windows into (macOS model: small live thumbnails in a left-edge strip)
     readonly property int stagesTileWidth: 160

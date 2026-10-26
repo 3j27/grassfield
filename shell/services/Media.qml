@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Services.Mpris
 import Grassfield.Ui
 import qs.platform
@@ -21,10 +22,9 @@ Singleton {
         return players.length > 0 ? players[0] : null;
     }
     // The nested dev session runs on its own bus (GRASSFIELD_PRIVATE_BUS=1): the owner's players are not on it, only a
-    // test player the test starts there.
-    readonly property bool privateBus: Quickshell.env("GRASSFIELD_PRIVATE_BUS") === "1"
+    // test player the test starts there (Mode.ownBus: not dev, or dev on a private bus).
     // No player in the visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES), unless the bus is private.
-    readonly property bool available: (!VisualFixtures.active || privateBus) && player !== null
+    readonly property bool available: (!VisualFixtures.active || Mode.ownBus) && player !== null
     readonly property string title: available ? player.trackTitle : ""
     readonly property string artist: available ? player.trackArtist : ""
     readonly property string artUrl: available ? player.trackArtUrl : ""
@@ -36,7 +36,7 @@ Singleton {
 
     // A GRASSFIELD_DEV session runs on the owner's machine: the transport never drives the real player there. On the
     // private bus only a test player can answer, so the transport is live there.
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1" && !privateBus
+    readonly property bool devSession: !Mode.ownBus
 
     onArtUrlChanged: artDebounce.restart()
     // A player may reuse its art file for the next track: the PNG the shell shows is made again (the current one shows

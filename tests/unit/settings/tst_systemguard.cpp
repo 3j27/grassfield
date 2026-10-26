@@ -181,12 +181,25 @@ TEST(WallpaperGuard, NamesTheHelperByItsFileName)
     EXPECT_FALSE(namesWallpaperTool(QStringLiteral("/x/grassfield-wallpaper2")));
 }
 
+// Wi-Fi and Bluetooth are read over D-Bus now: the only queries left are Sound's, the About pane's.
+TEST(QueryGuard, NoNetworkOrBluetoothCommandIsAQuery)
+{
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("status")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("lspci")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Q"), QStringLiteral("hyprland")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.5")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("nmcli"), QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("WIFI"), QStringLiteral("radio")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("bluetoothctl"), QStringLiteral("show")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("bluetoothctl"), QStringLiteral("devices"), QStringLiteral("Paired")}));
+}
+
 TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
     // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell).
-    for (const char *ok : {"nmcli", "bluetoothctl", "wpctl", "xdg-open"})
+    for (const char *ok : {"wpctl", "xdg-open"})
         EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
-    for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env"})
+    // nmcli and bluetoothctl are gone: Wi-Fi and Bluetooth are D-Bus calls (systembus.h), never commands.
+    for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env", "nmcli", "bluetoothctl"})
         EXPECT_FALSE(isActionProgram(QString::fromLatin1(no))) << no;
 }
 
@@ -203,7 +216,9 @@ TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)
     EXPECT_FALSE(isAllowedAction({open}));
     EXPECT_FALSE(isAllowedAction({open, QStringLiteral("https://example.org/"), QStringLiteral("https://example.org/")}));
     // The other programs keep their whole argument vectors (their pages build them).
-    EXPECT_TRUE(isAllowedAction({QStringLiteral("nmcli"), QStringLiteral("radio"), QStringLiteral("wifi"), QStringLiteral("on")}));
+    EXPECT_TRUE(isAllowedAction({QStringLiteral("wpctl"), QStringLiteral("set-mute"), QStringLiteral("52"), QStringLiteral("1")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("nmcli"), QStringLiteral("radio"), QStringLiteral("wifi"), QStringLiteral("on")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("bluetoothctl"), QStringLiteral("power"), QStringLiteral("off")}));
     EXPECT_FALSE(isAllowedAction({QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("xdg-open https://x.org")}));
     EXPECT_FALSE(isAllowedAction({}));
 }

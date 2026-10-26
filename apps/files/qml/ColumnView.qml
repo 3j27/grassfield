@@ -404,7 +404,7 @@ FocusScope {
                     anchors.right: chevron.left
                     anchors.rightMargin: Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
-                    ringColor: entry.emphasized ? Appearance.colors.selection : Appearance.colors.materialTint
+                    ringColor: entry.emphasized ? Appearance.colors.selection : Appearance.windowFill
                 }
 
                 Icon {

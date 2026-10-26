@@ -69,5 +69,4 @@ add UnifiedToolbar
 add SettingsContract
 add MenuShortcut
 add GlassTint
-add ToolbarGroup
 ```

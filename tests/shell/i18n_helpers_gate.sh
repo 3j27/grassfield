@@ -258,4 +258,75 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
+# Part (f): the Settings C++. 25 variants of visible English text in the table below plus one literal on the line after its call: each
+# must fail on its own line; the good file
+# (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
+cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
+cppcase() { # NAME LINE-OF-CODE...: the file holds those lines (line 1 is the first); the gate must report exactly line 1
+  mkdir -p "$tmp/cpp-$1"
+  shift_name=$1
+  shift
+  printf '%s\n' "$@" >"$tmp/cpp-$shift_name/f.cpp"
+}
+declare -A variants=(
+  [stringliteral]='QString a() { return QStringLiteral("that network is gone"); }'
+  [qstring]='QString a() { return QString("that network is gone"); }'
+  [implicit]='const char *a() { return "that network is gone"; }'
+  [u_s]='QString a() { return u"that network is gone"_s; }'
+  [view]='QStringView a() { return QLatin1StringView("that network is gone"); }'
+  [word]='QString a() { return QStringLiteral("failed"); }'
+  [ternary]='QString a(bool b) { return b ? QStringLiteral("failed") : QString(); }'
+  [assign]='void a(QString &error) { error = QStringLiteral("failed"); }'
+  [latin1]='QString a() { QString reason; reason = QLatin1String("it broke"); return reason; }'
+  [logline]='QString a() { qWarning() << "fine"; return QStringLiteral("it broke"); }'
+  [callarg]='void a(const QString &tag) { emit failed(tag, QStringLiteral("failed")); }'
+  [callarg2]='void a(Label *l) { l->setText(QStringLiteral("Failed")); }'
+  [member]='void A::a() { m_reason = QStringLiteral("failed"); }'
+  [localvar]='void a() { const QString shown = QStringLiteral("failed"); use(shown); }'
+  [fromlatin1]='QString a() { return QString::fromLatin1("failed"); }'
+  [fromutf8var]='void a() { QString shown = QString::fromUtf8("failed"); use(shown); }'
+  [nestedsink]='void a() { reportError(QString(QStringLiteral("failed"))); }'
+  [braceinit]='void a() { QString reason{QStringLiteral("failed")}; use(reason); }'
+  [pluseq]='void a(QString &out) { out += QStringLiteral("failed"); }'
+  [argcall]='QString a() { return base().arg(QStringLiteral("failed")); }'
+  [insertvalue]='void a(QJsonObject &o) { o.insert(QStringLiteral("reason"), QStringLiteral("failed")); }'
+  [returnbrace]='Result a() { return {false, {}, QStringLiteral("failed")}; }'
+  [donecall]='void a(Done done) { done(QStringLiteral("failed"), QString()); }'
+  [settlecall]='void a() { settle(QStringLiteral("failed"), {}); }'
+  [finishedcall]='void a() { emit finished(tag, false, QStringLiteral("failed")); }'
+)
+for name in "${!variants[@]}"; do
+  cppcase "$name" "${variants[$name]}"
+  desc="part (f): $name is reported"
+  check grep -q "f.cpp:1: English text" <<<"$(cppgate "$tmp/cpp-$name")"
+done
+mkdir -p "$tmp/cpp-next"
+printf '%s\n' 'QString a(int x)' '{' '    return fail(x,' '        QStringLiteral("that network is gone"));' '}' >"$tmp/cpp-next/f.cpp"
+desc="part (f): a literal on the line after its call is reported (line 4)"
+check grep -q "f.cpp:4: English text" <<<"$(cppgate "$tmp/cpp-next")"
+mkdir -p "$tmp/cpp-good"
+cat >"$tmp/cpp-good/f.cpp" <<'CPP'
+QString a() { return QCoreApplication::translate("X", "that network is gone"); }
+QString b() { return tr("that network is gone"); }
+QString c() { return QStringLiteral("two words"); } // i18n-ignore: a test
+// i18n-ignore: the next line
+QString d() { return QStringLiteral("two words"); }
+QString e() { return QStringLiteral("org.example.Name"); }
+bool f(const QString &m) { return m == QLatin1String("Get") || m == QStringLiteral("GetAll"); }
+void g() { qWarning().noquote() << "dev guard: refused a command" << argv.first(); qInfo() << "dev guard:"; }
+void k(const QString &t) { emit failed(t, QCoreApplication::translate("X", "failed")); QString mode = tr("failed"); }
+void m(QJsonObject &o, Result &r) { o.insert(QStringLiteral("reason"), x); r.insert(QStringLiteral("radio"), true); }
+QJsonObject n() { return QJsonObject{{QStringLiteral("name"), v}, {QStringLiteral("connected"), w}}; }
+Result o() { return {false, {}, tr("failed")}; }
+void l(Bus &bus) { bus.call(a, QStringLiteral("Connect"), QStringLiteral("on")); const bool x = flag == QLatin1String("on"); }
+void h(Bus &bus) { bus.call(a, QStringLiteral("GetDevices"), QStringLiteral("on"), QStringLiteral("ready to go")); } // i18n-ignore: x
+/* a comment: that network is gone */ // and another one: no word is read here
+QString i() { return QStringLiteral("%1.%2").arg(a, b); }
+QString j() { return QCoreApplication::translate("X", "timed out") + QString::fromUtf8(R"(raw/path)"); }
+CPP
+desc="part (f): translated text, tokens, comparisons, log lines, comments and i18n-ignore pass"
+check bash -c '[[ -z $1 ]]' _ "$(cppgate "$tmp/cpp-good")"
+desc="part (f): apps/settings/src has no bare English literal"
+check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --cpp-only "$1/apps/settings/src" 2>&1) ]]' _ "$root"
+
 exit $fail

@@ -5,13 +5,9 @@
   Locations with volumes and the network, Tags), a unified toolbar (back/forward, folder title, view switcher for
   icons/list/columns/gallery, action menu, search field), the folder contents, and optional path and status bars
   at the bottom ("12 items, 120 GB available").
-- Toolbar (macOS 26/27, ADR-0024 lot 5, C-12; docs/audits/visual-tahoe-2026-10-25.md § Files): the items sit in floating
-  capsules 36 tall (`ToolbarGroup` of Grassfield.Ui, `window.groupHeight`): back and forward share one (74 x 36), the
-  four views another (146 x 36, the chosen view a pill inside it), the Action menu is a round one; search is a 36-pt
-  circle that widens into the field (`files.searchWidth`) while it has the focus or a query. Buttons are 36
-  (`files.toolbarButtonSize`), the last item 8 from the trailing edge (`window.itemsInset`). There is no line under the
-  toolbar until the icons or the list scroll under it (or a tab bar sits there). Light capsules are white with the
-  material hairline, dark ones a faint white; macOS also gives them a soft shadow, not drawn here.
+- Toolbar (macOS 26/27, ADR-0024 lot 5, C-12): the items sit in 36-pt capsules (see "Toolbar capsules" below); the last
+  item is 8 from the trailing edge (`window.itemsInset`), and there is no line under the toolbar until the icons or the
+  list scroll under it (or a tab bar sits there).
 - Window and sidebar (macOS 27 Finder, ADR-0024 lot 2): a white content area (#292929 in the dark appearance); the sidebar
   edge to edge in `color.*.sidebarFill` with no dividing line; 32-pt rows under 34-pt section headers; the current place
   a neutral fill (`files.sidebarSelectionOpacity`, 10 from both sidebar edges, radius 8) under a bold label, not the
@@ -320,3 +316,6 @@ macOS: the Finder is the first Dock tile, cannot be removed, and opens every fol
 - **Dock:** a fixed first "Files" tile before the Apps tile (docs/specs/dock.md item 20); own icon `org.grassfield.Files` (an original green folder, `branding/icons/apps/`, installed in hicolor; Settings and Preview have `org.grassfield.Settings` / `org.grassfield.Preview`). The generic `system-file-manager` is never used as the Files icon: the theme that was the base until 2026-10-21 (WhiteSur) drew it as a Finder-like face, which is Apple trade dress; Breeze draws a filing cabinet.
 - **Folders opened by the shell** (desktop double-click, Dock Trash, Search "Show in folder", Apps `revealExecutable`, any `gio open` / `xdg-open` of a folder) open in Grassfield Files in a REAL session (`GRASSFIELD_SESSION=1`, not dev), whatever the user's default handler is. `Apps.folderAware` / `AppLaunch.folderAwareArgv` rewrite `gio open T...` and `xdg-open T` into `bash shell/services/open-real.sh <opener> T...`, started through the app-scope launch path (`Apps.scoped`, uwsm-app): every folder target (a directory, a `file:` URL of one, `trash:///`) goes to one `grassfield-files` process, every other target to the opener the shell asked for (files keep the user's default handler). Without `grassfield-files` on PATH everything goes to the opener. `gtk-launch`, `gio trash` and the like are unchanged. A dev session keeps the dev open policy (ADR-0011, `scripts/dev/open-policy.sh`).
 - Tests: `tests/shell/open_real.sh` (the script with fake Files, gio and xdg-open), `tests/unit/tst_applaunch.qml` (`folderAwareArgv`), `tests/unit/tst_dockmodel.qml`.
+
+## Toolbar capsules (visual audit 2026-10-25, priority 11)
+macOS model, measured: back/forward are one 72 x 36 capsule (`files.toolbarGroupButton` 34 each), the view switcher a 36-pt capsule whose selected view is a lighter pill, the search a 36-pt circle that expands to `files.searchWidth` 200 while it has the focus or text. Settings has the same back/forward capsule over its detail pane (history of the panes, `apps/settings/qml/NavHistory.js`, `tst_navhistory.qml`). Fills are `Appearance.buttonFill` (6 % grey in light), the pill `Appearance.chipFill`; contrast in `WindowSurfacePairs`.

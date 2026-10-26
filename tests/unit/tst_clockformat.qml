@@ -67,11 +67,17 @@ TestCase {
         compare(Clock.orderDate("ddd d MMM", true), "ddd MMM d");
         compare(Clock.orderDate("d MMM", true), "MMM d");
         compare(Clock.orderDate("ddd d MMM", false), "ddd d MMM");
+        // The source pattern is month first (en-US): a day-first region turns it round.
+        compare(Clock.orderDate("ddd MMM d", false), "ddd d MMM");
+        compare(Clock.orderDate("MMM d", false), "d MMM");
+        compare(Clock.orderDate("ddd MMM d", true), "ddd MMM d");
+        compare(Clock.orderDate("MMM dd", false), "dd MMM");
         compare(Clock.orderDate("ddd", true), "ddd");
     }
 
     function test_join() {
-        compare(Clock.join("Sun 25 Oct", "13:46"), "Sun 25 Oct  13:46");
-        compare(Clock.join("", "13:46"), "13:46");
+        compare(Clock.join("Sun Oct 25", "13:46", "\u2002 "), "Sun Oct 25\u2002 13:46");
+        compare(Clock.join("Sun Oct 25", "13:46"), "Sun Oct 25 13:46");
+        compare(Clock.join("", "13:46", "\u2002 "), "13:46");
     }
 }

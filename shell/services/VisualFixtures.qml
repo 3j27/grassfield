@@ -37,7 +37,7 @@ Singleton {
     // (shell/desktop/Wallpaper.qml: GRASSFIELD_WALLPAPER_FILE at start, `qs ipc call wallpaper set <path>`), drawn by the
     // desktop wallpaper and, blurred, by the lock screen backdrop (shell/security/lock/LockView.qml), so that both are
     // measured over the same worst-case images. wallpaperFile is always "" outside dev, whatever wallpaperOverride holds.
-    property string wallpaperOverride: Quickshell.env("GRASSFIELD_WALLPAPER_FILE")
+    property string wallpaperOverride: Mode.devValue("WALLPAPER_FILE")
     readonly property string wallpaperFile: dev ? wallpaperOverride : ""
 
     Binding {

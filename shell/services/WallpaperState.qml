@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 
@@ -16,14 +17,14 @@ import Grassfield.Ui
 Singleton {
     id: root
 
-    readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_SESSION") !== "1"
+    readonly property bool dev: Mode.dev
     readonly property string repoRoot: dev ? WallpaperConfig.normalizePath(Quickshell.shellDir + "/..") : ""
     readonly property var environment: ({
             dev: root.dev,
             repoRoot: root.repoRoot,
             home: Quickshell.env("HOME"),
             xdgCache: Quickshell.env("XDG_CACHE_HOME"),
-            picturesDir: Quickshell.env("GRASSFIELD_PICTURES_DIR")
+            picturesDir: Mode.devValue("PICTURES_DIR")
         })
     readonly property string tool: WallpaperConfig.toolPath(environment)
     // The helper runs with a UTF-8 locale even when the session has none (FINDINGS 5: Qt warned on every start).
@@ -37,14 +38,8 @@ Singleton {
     // The transcoded video wallpapers, their posters and statistics (grassfield-wallpaper transcode).
     readonly property string videoDir: cacheDir + "/video"
 
-    // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
-    }
+    // GRASSFIELD_STATE_HOME wins; otherwise $XDG_STATE_HOME/grassfield.
+    readonly property string stateDir: Mode.stateDir
     readonly property string stateFile: stateDir + "/wallpaper.json"
     readonly property string statusFile: Settings.configDir + "/wallpaper-state.json"
 

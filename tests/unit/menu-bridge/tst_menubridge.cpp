@@ -22,8 +22,10 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QTemporaryDir>
 
 #include <gtest/gtest.h>
@@ -1085,6 +1087,40 @@ TEST(PenaltyState, FileIsReadWithoutFollowingSymlinksAndBounded) {
 }
 
 // ---- start-up guards -------------------------------------------------------------------------------------------
+
+// The run mode (ADR-0019) against the vectors the shell (shell/lib/RunMode.js), the apps and the compositor plugin are
+// held to (tests/fixtures/run-mode-vectors.json; a key missing from "env" is an unset variable, read as empty).
+TEST(Safety, RunModeFollowsTheSharedVectors) {
+    QFile file(QStringLiteral(GRASSFIELD_RUN_MODE_VECTORS));
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly)) << GRASSFIELD_RUN_MODE_VECTORS;
+    QJsonParseError error{};
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    ASSERT_EQ(error.error, QJsonParseError::NoError) << error.errorString().toStdString();
+    const QJsonArray modes = doc.object().value(QStringLiteral("modes")).toArray();
+    ASSERT_GE(modes.size(), 10) << "the vectors look truncated";
+    for (const QJsonValue& value : modes) {
+        const QJsonObject mode = value.toObject();
+        const QJsonObject env  = mode.value(QStringLiteral("env")).toObject();
+        const std::string name = mode.value(QStringLiteral("name")).toString().toStdString();
+        ASSERT_TRUE(mode.value(QStringLiteral("dev")).isBool() && mode.value(QStringLiteral("session")).isBool()) << name;
+        const QByteArray dev     = env.value(QStringLiteral("GRASSFIELD_DEV")).toString().toUtf8();
+        const QByteArray session = env.value(QStringLiteral("GRASSFIELD_SESSION")).toString().toUtf8();
+        EXPECT_EQ(devRun(dev, session), mode.value(QStringLiteral("dev")).toBool()) << name;
+        EXPECT_EQ(sessionRun(session), mode.value(QStringLiteral("session")).toBool()) << name;
+    }
+}
+
+// The real-session defect M7 fixes: a GRASSFIELD_DEV=1 that leaked into the Grassfield session made the bridge take the
+// development branch, refuse the session's default bus, and global menus stopped. It is a session run now.
+TEST(Safety, ALeakedDevInAGrassfieldSessionIsASessionRun) {
+    EXPECT_FALSE(devRun("1", "1"));
+    EXPECT_TRUE(sessionRun("1"));
+    EXPECT_TRUE(devRun("1", QByteArray())) << "a development run: GRASSFIELD_SESSION unset (devenv.sh unsets it)";
+    EXPECT_TRUE(devRun("1", "0"));
+    EXPECT_FALSE(devRun(QByteArray(), QByteArray()));
+    EXPECT_FALSE(devRun("true", QByteArray())) << "only the exact string \"1\"";
+    EXPECT_FALSE(sessionRun("true"));
+}
 
 TEST(Safety, DefaultSessionBusIsDetected) {
     EXPECT_TRUE(isDefaultSessionBus(QString(), 1000));

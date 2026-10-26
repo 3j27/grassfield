@@ -3,9 +3,9 @@
 .import "Magnify.js" as Magnify
 
 // Dock geometry (pure, unit-tested): the tile size (Settings > Desktop & Dock > Size) and what follows from it.
-// `base` is the dock token set {iconSize, padding, spacing, bottomMargin, separatorHeight, badgeSize, radiusIcon}; sizes
-// are px. The tokens describe the default size (base.iconSize); everything that is proportional to the tile scales with it,
-// the rest (padding, spacing, margin) stays.
+// `base` is the dock token set {iconSize, padding, indicatorSize, spacing, bottomMargin, separatorHeight, badgeSize,
+// radiusIcon}; sizes are px. The tokens describe the default size (base.iconSize); everything that is proportional to
+// the tile scales with it, the rest (padding, spacing, indicator, margin) stays.
 
 // A stored size read as a tile size: a whole number of px inside [min, max], `fallback` for anything else.
 function clampSize(value, min, max, fallback) {
@@ -23,6 +23,7 @@ function metrics(size, base) {
     return {
         iconSize: size,
         padding: base.padding,
+        indicatorSize: base.indicatorSize,
         spacing: base.spacing,
         bottomMargin: base.bottomMargin,
         separatorHeight: Math.round(base.separatorHeight * k),
@@ -142,35 +143,63 @@ function hitRect(edge, w, h, s) {
     return rect(edge, w, h, s.shelfMain0, s.shelfLength, 0, cross);
 }
 
-// Where the icon of a tile sits in the tile's own box. The tile is iconSize across and iconPx along; a magnified icon
-// (iconPx > iconSize) grows away from the edge.
-function iconOrigin(edge, iconSize, iconPx) {
+// Where the icon of a tile sits in the tile's own box. The tile is iconSize + indicatorArea across (the running dot on
+// the screen-edge side, then the icon) and iconPx along; a magnified icon (iconPx > iconSize) grows away from the edge.
+function iconOrigin(edge, iconSize, iconPx, indicatorArea) {
     if (edge === "left")
-        return {x: 0, y: 0};
+        return {x: indicatorArea, y: 0};
     if (edge === "right")
         return {x: iconSize - iconPx, y: 0};
     return {x: 0, y: iconSize - iconPx};
 }
 
-// The running dot in the tile's box, in the shelf's padding on the screen-edge side of the icon (macOS): `gap` from the
-// icon. `lift` is how far the tile has moved away from the edge (hover rise): the dot stays on the shelf.
-function dotOrigin(edge, tileW, tileH, iconSize, gap, dotSize, lift) {
+// The box of the tile that takes the pointer (press, hover, drag, drop, menu), in the tile's own coordinates: the tile's box
+// (`tileW` x `tileH`) joined with the drawn icon (`iconPx` square at iconOrigin). A magnified icon grows beyond the tile
+// across the Dock (away from the screen edge; the tile does not grow, so the Grid that lays tiles out stays put), and the
+// whole of it is clickable (macOS). Along the Dock it is the tile's own extent. {x, y, w, h}.
+function hitBox(edge, iconSize, iconPx, indicatorArea, tileW, tileH) {
+    const o = iconOrigin(edge, iconSize, iconPx, indicatorArea);
+    const x0 = Math.min(0, o.x);
+    const y0 = Math.min(0, o.y);
+    return {x: x0, y: y0, w: Math.max(tileW, o.x + iconPx) - x0, h: Math.max(tileH, o.y + iconPx) - y0};
+}
+
+// The tile that owns the point (x, y): of the hit boxes holding it, the one drawn on top (highest `z`, equal z: the later
+// tile, as Qt stacks siblings). `boxes`: one {x, y, w, h, z} per tile in a common space, null for a tile that cannot be
+// pressed. -1 when no box holds the point. Boxes are half-open (x <= px < x + w), so two that touch share no point.
+function hitOwner(boxes, x, y) {
+    let best = -1;
+    for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        if (!b || x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h)
+            continue;
+        if (best < 0 || (b.z || 0) >= (boxes[best].z || 0))
+            best = i;
+    }
+    return best;
+}
+
+// The running dot in the tile's box, in the shelf padding on the screen-edge side of the icon, `spacing` (dock.indicatorGap)
+// from it. `lift` is how far the tile has moved away from the edge (hover rise): the dot stays on the shelf.
+function dotOrigin(edge, tileW, tileH, iconSize, spacing, dotSize, lift) {
     if (edge === "left")
-        return {x: -gap - dotSize - lift, y: (tileH - dotSize) / 2};
+        return {x: -spacing - dotSize - lift, y: (tileH - dotSize) / 2};
     if (edge === "right")
-        return {x: iconSize + gap + lift, y: (tileH - dotSize) / 2};
-    return {x: (tileW - dotSize) / 2, y: iconSize + gap + lift};
+        return {x: iconSize + spacing + lift, y: (tileH - dotSize) / 2};
+    return {x: (tileW - dotSize) / 2, y: iconSize + spacing + lift};
 }
 
 // The label of a tile, in the tile's box: above the icon (bottom), beside it on the side away from the screen edge.
-// `reach` is how far from the tile's screen-side edge the label must clear (the shelf's far edge, iconSize + padding, or a
-// magnified icon beyond it), `ttW` x `ttH` the label (its tail included), `gap` the room between the two (macOS: 8).
-function tooltipOrigin(edge, tileW, tileH, iconSize, reach, gap, ttW, ttH) {
+// `ttW` x `ttH` is the label (its tail included), `gap` the room between its tip and the shelf edge (macOS: the tip is about 8
+// beyond the shelf, not beside the icon). `padding` (the shelf padding, 0 when omitted) puts the shelf edge beyond the icon; a
+// magnified icon that reaches past the shelf pushes the label out with it.
+function tooltipOrigin(edge, tileW, tileH, iconSize, iconPx, indicatorArea, gap, ttW, ttH, padding) {
+    const reach = Math.max(iconPx, iconSize + (padding || 0));
     if (edge === "left")
-        return {x: reach + gap, y: (tileH - ttH) / 2};
+        return {x: indicatorArea + reach + gap, y: (tileH - ttH) / 2};
     if (edge === "right")
         return {x: iconSize - reach - gap - ttW, y: (tileH - ttH) / 2};
-    return {x: (tileW - ttW) / 2, y: tileH - reach - gap - ttH};
+    return {x: (tileW - ttW) / 2, y: tileH - indicatorArea - reach - gap - ttH};
 }
 
 // Which side of the label the tail is on: the one toward the tile.
@@ -179,16 +208,16 @@ function tooltipTailSide(edge) {
 }
 
 // Rectangle (window coordinates) of the unmagnified icon of the tile centred at `mainCenter` on the main axis: the target
-// of the minimize animation. `margin`/`padding` as in the metrics.
-function tileRect(edge, w, h, mainCenter, iconSize, margin, padding) {
-    return rect(edge, w, h, mainCenter - iconSize / 2, iconSize, margin + padding, iconSize);
+// of the minimize animation. `margin`/`padding` as in the metrics, `indicatorArea` = indicator + spacing.
+function tileRect(edge, w, h, mainCenter, iconSize, margin, padding, indicatorArea) {
+    return rect(edge, w, h, mainCenter - iconSize / 2, iconSize, margin + padding + indicatorArea, iconSize);
 }
 
 // The rectangle, in the output's own coordinates, of the unmagnified icon of minimized slot `index` (0 = the first minimized
 // tile, after the divider and the folder stacks): where a window minimized into the Dock lands (`adding`: the tile does not
 // exist yet and is inserted before the Trash) or leaves from. Pure: it depends on the tiles, not on any window. `items` are
 // the Dock items ({kind, divider}), `o` = {index, adding, iconSize, spacing, separatorWidth, edge, screenW, screenH, depth,
-// margin, padding}. null when there is no divider, the slot does not exist or the numbers are not usable.
+// margin, padding, indicatorArea}. null when there is no divider, the slot does not exist or the numbers are not usable.
 function minimizedSlotRect(items, o) {
     const list = Array.from(items || []);
     const sep = list.findIndex(it => it.kind === "separator" && !it.divider);
@@ -205,7 +234,7 @@ function minimizedSlotRect(items, o) {
     const vertical = isVertical(o.edge);
     const winW = vertical ? o.depth : o.screenW;
     const winH = vertical ? o.screenH : o.depth;
-    const r = tileRect(o.edge, winW, winH, slot, o.iconSize, o.margin, o.padding);
+    const r = tileRect(o.edge, winW, winH, slot, o.iconSize, o.margin, o.padding, o.indicatorArea);
     const origin = windowOrigin(o.edge, o.screenW, o.screenH, winW, winH);
     return clampInto({x: origin.x + r.x, y: origin.y + r.y, w: r.w, h: r.h}, {x: 0, y: 0, w: o.screenW, h: o.screenH});
 }

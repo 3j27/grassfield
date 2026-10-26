@@ -144,6 +144,15 @@ timing=()
 # --unit-env: the Environment= line of packaging/systemd/grassfield-shell.service, so that a nested run reproduces the
 # packaged shell (devenv.sh clears these when they are only inherited from a live session).
 [[ ${GRASSFIELD_UNIT_ENV:-} == 1 ]] && timing+=(QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1)
+# ... and its UnsetEnvironment= (review of 360d6fa): the QML and Qt plugin search paths and Quickshell's config selectors
+# of the calling environment are dropped. QML_IMPORT_PATH below is then only this tree's own module roots, standing in
+# for the packaged shell's Qt built-in import path (/usr/lib/qt6/qml).
+unit_unset=()
+if [[ ${GRASSFIELD_UNIT_ENV:-} == 1 ]]; then
+  for var in $(sed -n 's/^UnsetEnvironment=//p' "$root/packaging/systemd/grassfield-shell.service"); do
+    unit_unset+=(-u "$var")
+  done
+fi
 
 # Grassfield.I18n (ui/i18n) and the compiled catalogs (scripts/dev/i18n-build.sh), rebuilt when stale.
 "$root/ui/i18n/build-direct.sh" >&2
@@ -175,7 +184,7 @@ fi
 
 # The open shims (gio, xdg-open, gtk-launch -> open-policy.sh) come first on the shell's PATH: QProcess resolves a program
 # on the PATH of its parent, so code that runs `gio open` in a Process (shell/desktop/DesktopFiles.qml) gets the policy too.
-env "${timing[@]}" "${bus_env[@]}" PATH="$root/scripts/dev/open-shims:$PATH" GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
+env "${unit_unset[@]}" "${timing[@]}" "${bus_env[@]}" PATH="$root/scripts/dev/open-shims:$PATH" GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
   GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \

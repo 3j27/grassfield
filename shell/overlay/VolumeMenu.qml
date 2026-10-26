@@ -90,8 +90,8 @@ FocusScope {
 
             Slider {
                 id: slider
-                knob: false
-                trackHeight: Tokens.quicksettingsSliderTrack
+                knobless: true
+                trackHeight: Tokens.controlSliderTrackCompact
                 width: parent.width - muteButton.width - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter
                 accessibleName: qsTr("Output volume")

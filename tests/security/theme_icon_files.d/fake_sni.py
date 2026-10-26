@@ -3,11 +3,13 @@
 # Run ONLY on the private bus the test starts: it refuses any bus address outside the directory named by
 # GF_PRIVATE_BUS_DIR, and the test runs it under `env -i` with that address alone.
 import os
+import re
 import sys
 
 address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
-bus_dir = os.environ.get("GF_PRIVATE_BUS_DIR", "")
-if not bus_dir.startswith("/") or not address.startswith("unix:path=" + bus_dir.rstrip("/") + "/"):
+bus_dir = os.environ.get("GF_PRIVATE_BUS_DIR", "").rstrip("/")
+whole = re.fullmatch(r"unix:path=" + re.escape(bus_dir) + r"/([A-Za-z0-9_-][A-Za-z0-9._-]*)(?:,guid=[0-9a-f]+)?", address)
+if not bus_dir.startswith("/") or ".." in bus_dir.split("/") or whole is None or ";" in address or ".." in whole.group(1):
     print("fake-sni: refusing a bus outside the test's private directory: " + address, flush=True)
     sys.exit(3)
 

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 
@@ -52,7 +53,7 @@ Singleton {
     // backendWrite(), the single exit: in a dev session it logs, signals devSuppressed and returns false
     // before any backend object is touched (no exception path, whatever `ready` is). backendWrites counts the
     // writes that were really made (tests/shell/audio_dev_guard.sh proves it stays 0 in dev).
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
     property int backendWrites: 0
     signal devSuppressed(string what)
 

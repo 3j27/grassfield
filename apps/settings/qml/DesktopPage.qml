@@ -28,7 +28,7 @@ SettingsPage {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Small")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -45,7 +45,7 @@ SettingsPage {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Large")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -80,7 +80,7 @@ SettingsPage {
                 width: Tokens.settingsShortcutKeyMinWidth + Tokens.spacingSm
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("%1x").arg(Qt.locale().toString(root.store.value("dock.magnification"), "f", 2))
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }

@@ -18,6 +18,9 @@ NavItem {
     property bool available: true
     // Left and right inset inside a 2x1 module (the row fills the whole capsule, so its focus ring does too).
     property real inset: 0
+    // A 1x1 circle module (macOS: Stage Manager, Airplane Mode): the disk is the whole module, white when on, plain glass when off,
+    // with the glyph centred and no text.
+    property bool circleModule: false
 
     signal toggled
     signal expandToggled
@@ -50,12 +53,12 @@ NavItem {
 
     Rectangle {
         id: circle
-        x: root.inset
+        x: root.circleModule ? 0 : root.inset
         anchors.verticalCenter: parent.verticalCenter
-        width: Tokens.panelCcIconButton
+        width: root.circleModule ? root.width : Tokens.panelCcIconButton
         height: width
         radius: width / 2
-        color: root.on ? Appearance.colors.knob : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.on ? Appearance.colors.knob : (root.circleModule ? "transparent" : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity))
 
         Behavior on color {
             ColorAnimation {
@@ -81,6 +84,7 @@ NavItem {
     }
 
     Item {
+        visible: !root.circleModule
         anchors.left: circle.right
         anchors.leftMargin: Tokens.quicksettingsDiskTextGap
         anchors.right: parent.right
@@ -99,8 +103,9 @@ NavItem {
                 text: root.title
                 // The title is the emphasized line, the state is regular (macOS model).
                 font.weight: Tokens.typographyMenuBoldWeight
-                // Long module titles wrap to a second line inside the tile at their own 13 bold (GF-097; macOS: Control
-                // Center wraps and never shrinks a title, visual-tahoe audit); a single word wider than the capsule is elided.
+                // Long module titles wrap to a second line inside the tile at the one size (GF-097, macOS: Control Center wraps and
+                // never shrinks the type, audit 2026-10-25: "Do Not Disturb" and "Airplane Mode" shrank to 11 and wrapped to three
+                // lines); a word wider than the capsule is elided.
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight

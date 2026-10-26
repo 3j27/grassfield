@@ -32,6 +32,12 @@ QtObject {
             property: "transparency"
             value: 0
         },
+        // The window's own white background and secondary text (Appearance.windowSurface).
+        Binding {
+            target: Appearance
+            property: "windowSurface"
+            value: true
+        },
         Binding {
             target: Appearance
             property: "reduceMotion"

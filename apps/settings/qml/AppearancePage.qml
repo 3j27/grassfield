@@ -176,7 +176,7 @@ SettingsPage {
                 width: Tokens.settingsShortcutKeyMinWidth + Tokens.spacingSm
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("%1%").arg(Math.round(root.store.value("material.transparency") * 100))
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }

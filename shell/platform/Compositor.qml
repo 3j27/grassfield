@@ -6,10 +6,12 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.lib
 import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice
+import "SpaceGeometry.js" as SpaceGeometry
 import "showdesktop"
 import "StagesFront.js" as StagesFront
 
@@ -614,13 +616,7 @@ Singleton {
     // All the decisions are in ShowDesktopFlow.js (a pure reducer) run by ShowDesktopController.qml, which listens to the
     // Hyprland events itself (tests/unit/tst_showdesktopflow.qml, tst_showdesktopreplay.qml, tst_showdesktopglue.qml). This file
     // only tells it how to read the window list and the Spaces, where to send the requests and where the record file is.
-    readonly property string desktopStateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
-    }
+    readonly property string desktopStateDir: Mode.stateDir
     readonly property string desktopStatePath: desktopStateDir + "/show-desktop.json"
 
     function toplevelData(): var {
@@ -915,21 +911,26 @@ Singleton {
     }
 
     // Regular workspaces (id > 0) of an output, ordered by id:
-    // [{id, name, active, windowCount, appIds}].
+    // [{id, name, active, windowCount, appIds, windows, screenW, screenH}]. `windows` (bottom to top as Hyprland lists them) are the
+    // windowsAcross entries of the Space, `screenW` x `screenH` the output size in logical pixels (SpaceGeometry.js): what a desktop miniature needs.
     function spacesOn(screenName: string, revision: int): var {
         const out = [];
         const mon = monitorByName(screenName);
         const all = Hyprland.workspaces ? Hyprland.workspaces.values : [];
         const wins = windowsAcross(screenName);
+        // Window geometry is logical, so is the size it is scaled against (an output at scale 1.5 or 2 reports device pixels).
+        const size = SpaceGeometry.logicalSize(Quickshell.screens, screenName, mon);
         for (let i = 0; i < all.length; i++) {
             const ws = all[i];
             if (ws.id <= 0 || !ws.monitor || ws.monitor.name !== screenName)
                 continue;
             const appIds = [];
+            const inSpace = [];
             let count = 0;
             for (let j = 0; j < wins.length; j++) {
                 if (wins[j].workspaceId !== ws.id)
                     continue;
+                inSpace.push(wins[j]);
                 count++;
                 if (appIds.indexOf(wins[j].appId) === -1)
                     appIds.push(wins[j].appId);
@@ -939,7 +940,10 @@ Singleton {
                 name: ws.name,
                 active: mon && mon.activeWorkspace ? mon.activeWorkspace.id === ws.id : false,
                 windowCount: count,
-                appIds: appIds
+                appIds: appIds,
+                windows: inSpace,
+                screenW: size.w,
+                screenH: size.h
             });
         }
         out.sort((a, b) => a.id - b.id);

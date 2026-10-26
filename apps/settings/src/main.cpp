@@ -5,6 +5,7 @@
 
 #include "translationloader.h"
 #include "backend.h"
+#include "busjobs.h"
 #include "globalmenu.h"
 #include "windowchrome.h"
 
@@ -21,7 +22,7 @@ int main(int argc, char *argv[])
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
     new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
-    app.setApplicationName(QStringLiteral("Grassfield Settings"));
+    app.setApplicationName(QStringLiteral("Grassfield Settings")); // i18n-ignore: the application name
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));
     // Wayland app_id: matches org.grassfield.Settings.desktop.
@@ -61,9 +62,13 @@ int main(int argc, char *argv[])
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
         Qt::QueuedConnection);
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("Main.qml"))));
-    if (engine.rootObjects().isEmpty())
+    if (engine.rootObjects().isEmpty()) {
+        grassfield::settings::BusJobs::setExitCode(1); // the same code if a D-Bus job were abandoned on the way out
         return 1;
+    }
     // The registrar may appear later (an app started before the bridge) or restart: the menus follow it.
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
-    return app.exec();
+    const int code = app.exec();
+    grassfield::settings::BusJobs::setExitCode(code); // a D-Bus job stuck at exit abandons the process with the app's own code
+    return code;
 }

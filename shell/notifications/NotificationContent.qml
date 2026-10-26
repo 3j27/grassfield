@@ -46,18 +46,15 @@ Item {
         return out;
     }
 
-    // Icon and text; the action capsules sit below them, across the card.
-    readonly property real textHeight: Math.max(Tokens.notificationBannerIconSize, column.implicitHeight)
-
     implicitWidth: Tokens.notificationBannerWidth
-    implicitHeight: root.textHeight + (actionLoader.active ? Tokens.spacingSm + actionLoader.height : 0)
+    implicitHeight: Math.max(Tokens.notificationBannerIconSize, column.implicitHeight)
 
     // Icon tile: image/app icon, or a bell on a neutral tile.
     Item {
         id: iconTile
         x: Tokens.notificationIconInset
-        // Centred on the icon and text block, as in the reference (also beside a five-line body).
-        y: Math.max(0, (root.textHeight - height) / 2)
+        // Centred on the whole card, as in the reference (also beside a five-line body).
+        y: Math.max(0, (root.implicitHeight - height) / 2)
         width: Tokens.notificationBannerIconSize
         height: Tokens.notificationBannerIconSize
 
@@ -102,7 +99,7 @@ Item {
                 textFormat: Text.PlainText
                 id: stamp
                 anchors.right: parent.right
-                anchors.rightMargin: root.trailingReserve + Tokens.notificationTimeInset
+                anchors.rightMargin: root.trailingReserve
                 text: root.timeText
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
@@ -112,7 +109,7 @@ Item {
 
             Text {
                 id: title
-                width: parent.width - stamp.implicitWidth - Tokens.spacingSm - stamp.anchors.rightMargin
+                width: parent.width - stamp.implicitWidth - Tokens.spacingSm - root.trailingReserve
                 text: root.summary !== "" ? root.summary : root.appName
                 textFormat: Text.PlainText
                 color: root.urgency === 2 ? Appearance.colors.danger : Appearance.colors.text
@@ -137,32 +134,33 @@ Item {
             font.pixelSize: Tokens.typographyBodySize
             font.weight: Tokens.typographyMenuWeight
         }
-    }
 
-    // No delegate exists unless the notification is live and has buttons: a sender's labels
-    // never instantiate for dead, expired or restored entries.
-    Loader {
-        id: actionLoader
-        y: root.textHeight + Tokens.spacingSm
-        width: root.width
-        active: root.buttons.length > 0
-        visible: active
-        sourceComponent: actionRow
-        onItemChanged: root.controlsChanged()
+        // No delegate exists unless the notification is live and has buttons: a sender's labels
+        // never instantiate for dead, expired or restored entries.
+        Loader {
+            id: actionLoader
+            width: parent.width
+            active: root.buttons.length > 0
+            visible: active
+            sourceComponent: actionRow
+            onItemChanged: root.controlsChanged()
+        }
     }
 
     Component {
         id: actionRow
 
-        // macOS: equal-width capsules side by side across the card; once More revealed the rest, rows of maxActions.
-        Grid {
+        Flow {
             id: actions
-            width: root.width
-            spacing: Tokens.notificationActionGap
-            columns: Math.max(1, more.visible ? rep.count + 1 : Math.min(rep.count, Tokens.notificationMaxActions))
+            width: column.width
+            spacing: Tokens.spacingSm
+            topPadding: Tokens.spacingXs
             readonly property Repeater repeater: rep
             readonly property Item moreButton: more
-            readonly property real cellWidth: Math.floor((width - (columns - 1) * spacing) / columns)
+
+            // macOS: equal-width capsules spanning the card, 22 tall.
+            readonly property int shownCount: rep.count + (more.visible ? 1 : 0)
+            readonly property real equalWidth: shownCount > 0 ? (width - (shownCount - 1) * spacing) / shownCount : width
 
             Repeater {
                 id: rep
@@ -172,9 +170,9 @@ Item {
 
                 delegate: Button {
                     required property var modelData
-                    capsule: true
-                    width: actions.cellWidth
+                    width: actions.equalWidth
                     height: Tokens.notificationActionHeight
+                    capsule: true
                     text: modelData.text
                     onClicked: root.actionTriggered(modelData.id)
                 }
@@ -182,11 +180,11 @@ Item {
 
             Button {
                 id: more
-                capsule: true
-                width: actions.cellWidth
-                height: Tokens.notificationActionHeight
                 visible: !root.moreOpen && root.buttons.length > Tokens.notificationMaxActions
                 onVisibleChanged: root.controlsChanged()
+                width: actions.equalWidth
+                height: Tokens.notificationActionHeight
+                capsule: true
                 text: qsTr("More")
                 onClicked: root.moreOpen = true
             }

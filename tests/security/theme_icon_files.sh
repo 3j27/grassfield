@@ -42,7 +42,8 @@
 # the review's hostile StatusNotifierItems (an IconThemePath full of FIFOs, an absolute or traversal IconName, a regular
 # file named by path, an SVG naming a FIFO in the app's folder, a regular icon in it, a pixmap, a plain user name); then
 # the same items as real StatusNotifierItems on a PRIVATE bus (dbus-daemon in the scratch directory, every process under
-# `env -i` with only that address, a guard refusing any other bus; SKIP where Unix sockets cannot be created).
+# `env -i` with only that address, a guard refusing any other bus; the session bus's default policy, checked first by
+# theme_icon_files.d/bus_check.py: a reply and a signal must arrive; SKIP where Unix sockets cannot be created).
 # Part 6, media art over https (coordinator, after the review of 80f0f19: macOS shows the artwork apps provide), offline:
 # a local HTTPS server on 127.0.0.1 with a throwaway CA (theme_icon_files.d/fake_https.py; no proxy variable, no other
 # host), reached as art.test through a test stand-in of the helper that changes only name resolution
@@ -543,7 +544,7 @@ tcheck() { # <label> <ok>
   if [[ $2 == 1 ]]; then pass "tray: $1"; else bad "tray: $1 (rc $rc; $(grep -o 'probe: .*' <<<"$out" | sed "s|$s|\$S|g" | tr '\n' '|' | cut -c1-700))"; fi
 }
 for c in themepath-fifo:generic themepath-dotdot:generic iconname-abs-fifo:generic iconname-traversal:generic iconname-abs-reg:generic; do
-  tcheck "${c%%:*}: the app's file is never read, the generic icon shows" "$(tray_expect "$out" "${c%%:*}" "${c#*:}" && echo 1)"
+  tcheck "${c%%:*}: the generic icon shows, nothing of the app's (that no FIFO is opened is checked below)" "$(tray_expect "$out" "${c%%:*}" "${c#*:}" && echo 1)"
 done
 tcheck "themepath-svgref: a gzip SVG naming FIFOs in the app's folder becomes a PNG the shell made" "$(tray_expect "$out" themepath-svgref copy && echo 1)"
 tcheck "themepath-reg: a regular icon in the app's own theme folder is shown as a PNG the shell made" "$(tray_expect "$out" themepath-reg copy && echo 1)"
@@ -558,20 +559,29 @@ note=$(fifos_untouched "$s") && copies_are_pngs "$s" >/dev/null && tcheck "no FI
 s=$tmp/traybus
 tray_scratch "$s"
 mkdir -m 700 "$tmp/bus"
+# The session bus's own default policy (/usr/share/dbus-1/session.conf): send to anyone, receive anything (method returns,
+# errors and signals included), own any name. With no receive rule (as here before), dbus-daemon drops every reply, the
+# Hello reply too: no client could even connect, and this part could never pass where it ran (follow-up of 061f599).
 cat >"$tmp/bus.conf" <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig><type>session</type><listen>unix:dir=$tmp/bus</listen><auth>EXTERNAL</auth>
-<policy context="default"><allow send_destination="*"/><allow own="*"/></policy></busconfig>
+<policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>
 EOF
 addr=$(env -i PATH=/usr/bin:/bin dbus-daemon --config-file="$tmp/bus.conf" --fork --print-address=1 --print-pid=3 3>"$tmp/bus.pid" 2>/dev/null || true)
 if [[ -z $addr ]]; then
   rm -f "$tmp/bus.pid"
   echo "SKIP: theme icon files, tray on a private bus: dbus-daemon cannot listen here (no Unix sockets in this environment): NOT VERIFIED"
-elif [[ $addr != "unix:path=$tmp/bus/"* || $addr == *"/run/user/"* || ( -n ${DBUS_SESSION_BUS_ADDRESS:-} && $addr == "$DBUS_SESSION_BUS_ADDRESS"* ) ]]; then
+elif ! { [[ $addr =~ ^unix:path=([^,\;]+)(,guid=[0-9a-f]+)?$ ]] && sock=${BASH_REMATCH[1]} && [[ $sock == "$tmp/bus/"* ]] \
+  && [[ ${sock#"$tmp/bus/"} =~ ^[A-Za-z0-9_-][A-Za-z0-9._-]*$ && ${sock#"$tmp/bus/"} != *..* ]]; } \
+  || [[ $addr == *"/run/user/"* || ( -n ${DBUS_SESSION_BUS_ADDRESS:-} && $addr == "$DBUS_SESSION_BUS_ADDRESS"* ) ]]; then
   bad "tray on a private bus: refusing a bus address outside the test's directory ($addr)"
 elif ! env -i PATH=/usr/bin:/bin python3 -I -c 'import gi; gi.require_version("Gio", "2.0"); from gi.repository import Gio' 2>/dev/null; then
   echo "SKIP: theme icon files, tray on a private bus: python3 gi (PyGObject) missing: NOT VERIFIED"
+elif ! check=$(env -i PATH=/usr/bin:/bin GF_PRIVATE_BUS_DIR="$tmp/bus" DBUS_SESSION_BUS_ADDRESS="$addr" \
+  timeout -k 2 20 python3 -I tests/security/theme_icon_files.d/bus_check.py 2>&1); then
+  bad "tray on a private bus: the bus does not carry a method reply and a signal, so no tray item could work on it ($(grep -o 'bus-check: .*' <<<"$check" || echo "${check:0:200}"))"
 else
+  pass "tray: private bus: the bus carries a method reply and a signal ($(grep -o 'bus-check: .*' <<<"$check"))"
   mkcfg "$tmp/tbcfg" tray_bus_probe.qml
   n=0
   for c in "themepath-fifo|sni|$s/outside" "themepath-svgref|snisvg|$s/outside" "themepath-reg|sniok|$s/tp" "iconname-abs-fifo|$s/outside/evil.png|" \
@@ -632,7 +642,7 @@ else
     answer() { grep -F -- "	$2" <<<"$1" | grep -E "^(ok|no)	url:" | head -n 1 | cut -f1; }
     requested() { python3 -I -c 'import json, sys; print(sum(1 for l in open(sys.argv[1]) if json.loads(l)["path"] == sys.argv[2]))' "$h/requests.log" "$1"; }
     acheck() { # <label> <ok>
-      if [[ $2 == 1 ]]; then pass "https art: $1"; else bad "https art: $1 ($(grep -E 'probe: |^(ok|no|later)	' <<<"$out" | tr '\n' '|' | sed "s|$B|\$B|g" | cut -c1-900); requests: $(python3 -I -c 'import json, sys; print(" ".join(json.loads(l)["path"] for l in open(sys.argv[1])))' "$h/requests.log" | tail -c 300))"; fi
+      if [[ $2 == 1 ]]; then pass "https art: $1"; else bad "https art: $1 ($(grep -E 'probe: |^(ok|no|later)	|grassfield-icons' <<<"$out" | tr '\n' '|' | sed "s|$B|\$B|g" | cut -c1-900); requests: $(python3 -I -c 'import json, sys; print(" ".join(json.loads(l)["path"] for l in open(sys.argv[1])))' "$h/requests.log" | tail -c 300)$([[ -s $s/art-trace.log ]] && echo "; helper trace: $(tail -n 6 "$s/art-trace.log" | sed "s|$B|\$B|g" | tr '\n' '|')"))"; fi
     }
     # Precondition for the pinning check: the system resolver does not know art.test.
     pinned=0
@@ -794,7 +804,9 @@ PY
     acheck "a response that does not come within 5 s is refused (${ms} ms)" "$([[ $(answer "$out" "url:$B/slow") == no ]] && ((ms < 8000)) && echo 1)"
     # No curl outlives the helper (review of 684ed6d): killed mid-fetch with SIGTERM (its handler kills curl's process
     # group first) or SIGKILL (curl has PR_SET_PDEATHSIG).
-    curls() { for d in /proc/[0-9]*; do tr '\0' ' ' <"$d/cmdline" 2>/dev/null | grep -q '^curl -q' && echo x || true; done | wc -l; }
+    # This test's curl processes only, by its server's unique address (a scan of /proc forked twice per process and, on a
+    # busy machine, missed a curl that lives about 5 s; it also counted any other curl -q of the machine).
+    curls() { pgrep -c -f -- "^curl -q .*://art\.test:$port/" || true; }
     for sig in TERM KILL; do
       rm -rf "$s/fetch-out" && mkdir -m 700 "$s/fetch-out"
       env -i PATH=/usr/bin:/bin HOME="$s/home" XDG_RUNTIME_DIR="$s/runtime" CURL_CA_BUNDLE="$h/cert.pem" GF_REAL_HELPER="$root/shell/services/image-copy.py" \
@@ -819,7 +831,10 @@ PY
     cp tests/security/theme_icon_files.d/image-copy-testnet.py "$tmp/acfg/services/image-copy.py"
     mapfile -t e < <(shellenv "$s")
     rc=0
-    out=$(env -u https_proxy -u HTTPS_PROXY -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY "${e[@]}" CURL_CA_BUNDLE="$h/cert.pem" PROBE_BASE="$B" \
+    # The helper and curl from the system (PATH), trusting only the throwaway CA (no inherited SSL_CERT_FILE or
+    # SSL_CERT_DIR reaches curl), as the helper_url runs above; GF_ART_TRACE says where a fetch stopped if one fails.
+    out=$(env -u https_proxy -u HTTPS_PROXY -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY -u SSL_CERT_FILE -u SSL_CERT_DIR "${e[@]}" \
+      PATH=/usr/bin:/bin CURL_CA_BUNDLE="$h/cert.pem" PROBE_BASE="$B" GF_ART_TRACE="$s/art-trace.log" \
       GF_REAL_HELPER="$root/shell/services/image-copy.py" timeout -k 3 120 qs -p "$tmp/acfg" --no-color 2>&1) || rc=$?
     acheck "the shell shows https art as a PNG it made" "$(grep -q 'probe: unlocked class=copy status=1' <<<"$out" && echo 1)"
     acheck "while locked no fetch starts (no request, no entry) and only art already made shows" \

@@ -44,7 +44,7 @@ SettingsPage {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Slow")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -61,7 +61,7 @@ SettingsPage {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Fast")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }

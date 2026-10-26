@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Grassfield.Ui
 import qs.store
 import "../dock/Geometry.js" as DockGeometry // layering-exception: GF-087
@@ -11,14 +12,8 @@ import "../dock/Geometry.js" as DockGeometry // layering-exception: GF-087
 Singleton {
     id: root
 
-    // GRASSFIELD_CONFIG_HOME (dev) wins; otherwise $XDG_CONFIG_HOME/grassfield.
-    readonly property string configDir: {
-        const dev = Quickshell.env("GRASSFIELD_CONFIG_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_CONFIG_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.config") + "/grassfield";
-    }
+    // GRASSFIELD_CONFIG_HOME wins; otherwise $XDG_CONFIG_HOME/grassfield.
+    readonly property string configDir: Mode.configDir
 
     // Validated by the store (out-of-range or unknown values fall back to the schema defaults).
     readonly property string appearance: store.appearance

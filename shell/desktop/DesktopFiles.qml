@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Qt.labs.folderlistmodel
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 import qs.services
@@ -20,13 +21,7 @@ Scope {
     id: root
 
     readonly property string home: Quickshell.env("HOME")
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string positionsPath: stateDir + "/desktop-icons.json"
 
     // Resolved desktop folder ("" until known).
@@ -56,12 +51,12 @@ Scope {
     // ---- desktop folder ------------------------------------------------------------------------
 
     function resolve(): void {
-        const override = Quickshell.env("GRASSFIELD_DESKTOP_DIR");
+        const override = Mode.devValue("DESKTOP_DIR");
         if (override) {
             dir = Logic.desktopDir(override, "", home);
             return;
         }
-        if (Quickshell.env("GRASSFIELD_DEV") === "1") {
+        if (Mode.dev) {
             // Never the real desktop in a development session.
             dir = stateDir + "/desktop-sandbox";
             return;
@@ -228,7 +223,7 @@ Scope {
         const list = paths.filter(p => typeof p === "string" && p.startsWith("/"));
         if (list.length === 0)
             return;
-        const cmd = (Quickshell.env("GRASSFIELD_FILES_CMD") || "grassfield-files").split(" ").filter(w => w !== "");
+        const cmd = (Mode.devValue("FILES_CMD") || "grassfield-files").split(" ").filter(w => w !== "");
         const argv = cmd.concat(["--info", "--"]).concat(list);
         Apps.whenScopeKnown(() => Quickshell.execDetached({
                 "command": Apps.scoped(argv),
@@ -489,13 +484,7 @@ Scope {
     // Files, so one watch covers both).
     property var folderAttributes: ({})
     property var folderStore: ({})
-    readonly property string configDir: {
-        const dev = Quickshell.env("GRASSFIELD_CONFIG_HOME");
-        if (dev)
-            return dev;
-        const xdgConfig = Quickshell.env("XDG_CONFIG_HOME");
-        return (xdgConfig ? xdgConfig : home + "/.config") + "/grassfield";
-    }
+    readonly property string configDir: Mode.configDir
 
     // The look of a desktop item by name ({color, glyph}, empty fields for files and folders without one).
     function folderStyle(name: string): var {
