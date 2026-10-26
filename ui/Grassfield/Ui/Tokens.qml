@@ -1449,10 +1449,10 @@ QtObject {
     readonly property int filesGroupGlyphStroke: 1
     // macOS 27 Finder: 1.5 between a rule and its squares, and between the two groups [ref: docs/specs/files.md § Views and selection]
     readonly property real filesGroupGlyphGap: 1.5
-    // macOS 27 Finder: the chevron box 6 after the glyph (its 7-wide mark 7.5 from the right end) [ref: docs/specs/files.md § Views and selection]
-    readonly property int filesGroupChevronGap: 6
-    // macOS 27 Finder: the chevron 7 x 4 (own chevron-down symbol in a 9 box) [ref: docs/specs/files.md § Views and selection]
-    readonly property int filesGroupChevronSize: 9
+    // macOS 27 Finder: the chevron's mark 6 after the glyph (its 12.5 box from 3 after; the 7-wide mark 7.5 from the right end) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupChevronGap: 3
+    // macOS 27 Finder: the chevron 7 x 4 (own chevron-down symbol, its mark 0.56 of the box) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupChevronSize: 12.5
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

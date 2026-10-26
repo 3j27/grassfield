@@ -700,6 +700,7 @@ Window {
                             ViewGlyph {
                                 x: Tokens.filesGroupButtonInset
                                 anchors.verticalCenter: parent.verticalCenter
+                                size: Tokens.filesGroupGlyphWidth
                                 kind: "group"
                                 color: groupButton.foreground
                             }
