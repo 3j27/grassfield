@@ -17,13 +17,36 @@
 #include <QTimer>
 #include <QTemporaryDir>
 
+#include <QProcess>
+
+#include <functional>
 #include <memory>
 #include <sys/stat.h>
+#include <unistd.h>
 
+#include "appicons.h"
 #include "imageproviders.h"
 
 namespace
 {
+// The icon decoder child is this very binary (AppIcons::loadIsolated runs QCoreApplication::applicationFilePath() with
+// "--decode-icon <w> <h>"): answer it before gtest's main starts.
+const int decodeChildHook = [] {
+    QFile cmdline(QStringLiteral("/proc/self/cmdline"));
+    if (!cmdline.open(QIODevice::ReadOnly))
+        return 0;
+    QList<QByteArray> parts = cmdline.readAll().split('\0');
+    if (!parts.isEmpty() && parts.last().isEmpty())
+        parts.removeLast();
+    std::vector<char *> argv;
+    for (QByteArray &a : parts)
+        argv.push_back(a.data());
+    argv.push_back(nullptr);
+    if (!AppIcons::isDecodeChildInvocation(int(parts.size()), argv.data()))
+        return 0;
+    ::_exit(AppIcons::decodeChildMain(int(parts.size()), argv.data()));
+}();
+
 QString writePng(const QString &path)
 {
     QImage image(16, 16, QImage::Format_ARGB32);
@@ -127,4 +150,108 @@ TEST(ImageProviders, TheGuiThreadsThemeLookupsRunBesideManyIconRequests)
     }
     for (const auto &spy : spies)
         EXPECT_TRUE(spy->wait());
+}
+
+namespace
+{
+bool waitUntil(const std::function<bool()> &condition, int ms = 5000)
+{
+    QElapsedTimer t;
+    t.start();
+    while (!condition() && t.elapsed() < ms)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    return condition();
+}
+} // namespace
+
+TEST(ImageProviders, ASlowDecodeIsKilledAtItsDeadlineAndDoesNotStarveTheOthers)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString root = QFileInfo(tmp.path()).canonicalFilePath();
+    const QString good = writePng(root + QStringLiteral("/good.png"));
+    // "sleep 30 <w> <h>": a decoder that never answers in time.
+    AppIcons::setDecoderForTests(QStringLiteral("/usr/bin/sleep"), {QStringLiteral("30")}, 400);
+    AppIconProvider provider;
+    std::vector<std::unique_ptr<QQuickImageResponse>> slow;
+    std::vector<std::unique_ptr<Spy>> spies;
+    QElapsedTimer timer;
+    timer.start();
+    for (int i = 0; i < 6; ++i) { // more than the pool has threads
+        const QString path = root + QStringLiteral("/s%1.png").arg(i);
+        writePng(path);
+        slow.emplace_back(provider.requestImageResponse(path, QSize(32, 32)));
+        spies.emplace_back(new Spy(slow.back().get()));
+    }
+    for (const auto &spy : spies)
+        EXPECT_TRUE(spy->wait(10000));
+    EXPECT_LT(timer.elapsed(), 6000); // 6 icons x 0.4 s on 3 threads, not 6 x 30 s
+    EXPECT_TRUE(waitUntil([] { return AppIcons::runningDecodes() == 0; }));
+    // The real decoder again: a good icon decodes at once after the slow ones.
+    AppIcons::setDecoderForTests(QString(), {}, 0);
+    std::unique_ptr<QQuickImageResponse> ok(provider.requestImageResponse(good, QSize(32, 32)));
+    Spy okSpy(ok.get());
+    ASSERT_TRUE(okSpy.wait());
+    std::unique_ptr<QQuickTextureFactory> factory(ok->textureFactory());
+    EXPECT_EQ(factory->image().size(), QSize(16, 16));
+}
+
+TEST(ImageProviders, ShutdownKillsTheRunningDecoders)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString root = QFileInfo(tmp.path()).canonicalFilePath();
+    const QString path = writePng(root + QStringLiteral("/a.png"));
+    AppIcons::setDecoderForTests(QStringLiteral("/usr/bin/sleep"), {QStringLiteral("60")}, 60000);
+    AppIconProvider provider;
+    std::unique_ptr<QQuickImageResponse> r(provider.requestImageResponse(path, QSize(32, 32)));
+    Spy spy(r.get());
+    ASSERT_TRUE(waitUntil([] { return AppIcons::runningDecodes() == 1; }));
+    QElapsedTimer timer;
+    timer.start();
+    AppIconProvider::shutdown();
+    EXPECT_LT(timer.elapsed(), 2500);
+    EXPECT_EQ(AppIcons::runningDecodes(), 0);
+    EXPECT_TRUE(spy.wait());
+    AppIcons::setDecoderForTests(QString(), {}, 0);
+}
+
+// Re-run by the test below as a child process: quit while decodes are running, as Files does (aboutToQuit ->
+// AppIconProvider::shutdown), then leave through exit() with static destruction. A crash (SIGSEGV as Qt is torn down: the
+// round 4 review) would show as a signal, not as the exit code.
+TEST(ImageProviders, ExitHelper)
+{
+    const QByteArray mode = qgetenv("GF_EXIT_HELPER");
+    if (mode.isEmpty())
+        GTEST_SKIP() << "run by QuitDuringADecodeIsClean";
+    QTemporaryDir tmp;
+    const QString root = QFileInfo(tmp.path()).canonicalFilePath();
+    const QString path = writePng(root + QStringLiteral("/a.png"));
+    // "sleep" holds the decoder busy the same way a slow document does, for the whole of the exit.
+    AppIcons::setDecoderForTests(QStringLiteral("/usr/bin/sleep"), {QStringLiteral("60")}, 60000);
+    AppIconProvider provider;
+    std::vector<std::unique_ptr<QQuickImageResponse>> r;
+    for (int i = 0; i < 4; ++i)
+        r.emplace_back(provider.requestImageResponse(path, QSize(32 + i, 32)));
+    waitUntil([] { return AppIcons::runningDecodes() >= 1; });
+    if (mode == "shutdown")
+        AppIconProvider::shutdown();
+    std::exit(mode == "shutdown" ? 7 : 8);
+}
+
+TEST(ImageProviders, QuitDuringADecodeIsClean)
+{
+    for (const char *mode : {"shutdown", "plain"}) {
+        QProcess p;
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert(QStringLiteral("GF_EXIT_HELPER"), QString::fromLatin1(mode));
+        env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
+        env.insert(QStringLiteral("QT_QPA_PLATFORMTHEME"), QStringLiteral("none"));
+        p.setProcessEnvironment(env);
+        p.start(QCoreApplication::applicationFilePath(), {QStringLiteral("--gtest_filter=ImageProviders.ExitHelper")});
+        ASSERT_TRUE(p.waitForStarted());
+        ASSERT_TRUE(p.waitForFinished(30000)) << mode;
+        EXPECT_EQ(p.exitStatus(), QProcess::NormalExit) << mode << " ended by a signal"; // a SIGSEGV is CrashExit
+        EXPECT_EQ(p.exitCode(), std::string(mode) == "shutdown" ? 7 : 8) << mode;
+    }
 }

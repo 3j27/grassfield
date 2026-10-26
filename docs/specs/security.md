@@ -445,7 +445,17 @@ gets (Return, double-click, File > Open, the context menu), before the scripted-
   TIFF, ICNS, JPEG, ...) is refused; the shell's out-of-process `image-copy.py` is not available to Files. Qt 6.11's SVG
   reader follows `<image href>` to any file and has no option against it (probed with `QtSvg::Options`: a href to a FIFO
   blocks with every option), so the document is checked before Qt sees it. A refused icon shows the generic application
-  icon. Tests: `tests/unit/files/tst_appicons.cpp` (FIFO named by hostile SVGs in 14 spellings, a PDF named .png, JPEG/GIF,
+  icon. The decode itself runs OUT OF PROCESS (`AppIcons::loadIsolated`): the checked bytes go to a child of the Files binary
+  (`grassfield-files --decode-icon <w> <h>`, stdin to a PNG on stdout) with RLIMIT_AS 3 GiB, RLIMIT_CPU 10 s, no core file and
+  PDEATHSIG; the parent only decodes the PNG its child made. A decode that has not ended after 3 s is killed (generic icon, not
+  tried again in the run) so a slow icon cannot starve the others; `aboutToQuit` and an `atexit` hook kill every child and wait
+  at most 1.5 s for the 3 workers, so a quit never races a decode (an in-process decode crashed Files at exit, SIGSEGV in
+  QtSvg, round 4 review). SVG work is bounded too: at most 5000 elements, and no `url()` inside a `<marker>` or `<pattern>`
+  (a marker using a marker took 7.5 s at 300 x 300 vertices and over 2 minutes at 3000 x 3000). Of the 31518 SVG icons
+  installed here the rule accepts 28128, the same as before; none of them has a `<marker>` element (the 25 marker icons of the
+  review were not found under /usr/share/icons). Tests: `tst_imageproviders.cpp` (deadline, no starvation, shutdown kills the
+  children, quit during a decode in a child process: normal exit code, no signal, with and without `shutdown()`),
+  `tests/unit/files/tst_appicons.cpp` (FIFO named by hostile SVGs in 14 spellings, a PDF named .png, JPEG/GIF,
   an 8100 x 8100 PNG, a header claiming 20000 x 20000, valid PNG and SVG). Copy puts the entry's file on the clipboard; Cut, Rename, Trash, Paste into it and drops are refused
   with the permission message.
 - The desktop already never runs `.desktop` files (`DesktopFiles.qml`, DT-11). The shell's `gio open` / `xdg-open` paths

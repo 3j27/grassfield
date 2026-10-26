@@ -2,11 +2,26 @@
 
 #include "applicationslogic.h"
 
+#include <QAtomicInt>
 #include <QBuffer>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QGuiApplication>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QSet>
 #include <QHash>
 #include <QList>
 #include <QImageReader>
 #include <QXmlStreamReader>
+
+#include <csignal>
+#include <cstring>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <unistd.h>
 
 namespace AppIcons
 {
@@ -58,6 +73,11 @@ bool svgIsSelfContained(const QByteArray &data)
     int elements = 0;
     int uses = 0;
     int styleDepth = 0;
+    // Inside a <marker> or a <pattern> no url() at all: a marker whose content uses another marker (or a pattern
+    // one) multiplies the drawing (300 x 300 vertices took 7.5 s, 1000 x 1000 30 s, 3000 x 3000 over two minutes). Gradients and
+    // filters there are lost with it; those icons show the generic one (a mask or clipPath inside another is a chain, not a multiplication: allowed).
+    int serverDepth = 0;
+    QList<bool> isServer;
     // <use> copies what it references: a use inside something that is itself used multiplies (63 chained uses are 9^7 copies,
     // minutes of CPU). Only a use of an element with no use inside it is accepted, so the expansion is at most kMaxSvgUses
     // copies of one element. Each open element is an index; `ids` maps an id to its index.
@@ -92,6 +112,11 @@ bool svgIsSelfContained(const QByteArray &data)
             const int index = int(containsUse.size());
             containsUse.append(false);
             isStyle.append(name == QLatin1String("style"));
+            const bool inServer = serverDepth > 0;
+            const bool server = name == QLatin1String("marker") || name == QLatin1String("pattern");
+            isServer.append(server);
+            if (server)
+                ++serverDepth;
             open.append(index);
             if (name == QLatin1String("style"))
                 ++styleDepth;
@@ -120,6 +145,8 @@ bool svgIsSelfContained(const QByteArray &data)
                     return false;
                 if (key.startsWith(QLatin1String("on")))
                     return false;
+                if (inServer && value.contains(QLatin1String("url("), Qt::CaseInsensitive))
+                    return false;
                 if (!urlsStayInside(value) || (key == QLatin1String("style") && !cssIsPlain(value)))
                     return false;
             }
@@ -130,6 +157,8 @@ bool svgIsSelfContained(const QByteArray &data)
             if (!open.isEmpty()) {
                 if (isStyle.at(open.last()))
                     --styleDepth;
+                if (isServer.at(open.last()))
+                    --serverDepth;
                 open.removeLast();
             }
             break;
@@ -191,6 +220,164 @@ QImage load(const QString &path, const QStringList &roots, const QSize &want)
     const qint64 cap = qMax(kMaxPngBytes, kMaxSvgBytes);
     const QByteArray data = ApplicationsLogic::readIconFile(path, roots, cap);
     return data.isEmpty() ? QImage() : decode(data, want);
+}
+
+// --- The decode in a process of its own -------------------------------------------------------------------------------
+
+namespace
+{
+QMutex g_mutex;
+QSet<qint64> g_pids;
+QSet<QString> g_failed; // paths whose decode timed out or failed in this run: not tried again
+QAtomicInt g_quitting;
+QString g_program;
+QStringList g_arguments;
+int g_deadlineMs = AppIcons::kDecodeDeadlineMs;
+constexpr qint64 kMaxChildOutput = 16 * 1024 * 1024;
+} // namespace
+
+bool isDecodeChildInvocation(int argc, char **argv)
+{
+    return argc >= 4 && std::strcmp(argv[1], "--decode-icon") == 0;
+}
+
+int decodeChildMain(int argc, char **argv)
+{
+    // The parent set QT_QPA_PLATFORM=offscreen; this process only decodes and has no window, no D-Bus, no settings.
+    QGuiApplication app(argc, argv);
+    const QSize want(QByteArray(argv[2]).toInt(), QByteArray(argv[3]).toInt());
+    QFile in;
+    QFile out;
+    if (!in.open(stdin, QIODevice::ReadOnly) || !out.open(stdout, QIODevice::WriteOnly))
+        return 2;
+    const QByteArray data = in.read(qMax(kMaxPngBytes, kMaxSvgBytes) + 1);
+    if (data.size() > qMax(kMaxPngBytes, kMaxSvgBytes))
+        return 1;
+    const QImage image = decode(data, want);
+    if (image.isNull() || !image.save(&out, "PNG"))
+        return 1;
+    out.flush();
+    return 0;
+}
+
+void setDecoderForTests(const QString &program, const QStringList &arguments, int deadlineMs)
+{
+    QMutexLocker lock(&g_mutex);
+    g_program = program;
+    g_arguments = arguments;
+    g_deadlineMs = deadlineMs > 0 ? deadlineMs : kDecodeDeadlineMs;
+    g_failed.clear();
+    g_quitting.storeRelease(0); // a test that called shutdown() starts over
+}
+
+int runningDecodes()
+{
+    QMutexLocker lock(&g_mutex);
+    return int(g_pids.size());
+}
+
+void shutdown()
+{
+    g_quitting.storeRelease(1);
+    QMutexLocker lock(&g_mutex);
+    for (const qint64 pid : std::as_const(g_pids))
+        ::kill(pid_t(pid), SIGKILL);
+}
+
+QImage loadIsolated(const QString &path, const QStringList &roots, const QSize &wanted)
+{
+    if (g_quitting.loadAcquire())
+        return {};
+    {
+        QMutexLocker lock(&g_mutex);
+        if (g_failed.contains(path))
+            return {};
+    }
+    const QByteArray data = ApplicationsLogic::readIconFile(path, roots, qMax(kMaxPngBytes, kMaxSvgBytes));
+    if (data.isEmpty())
+        return {};
+    const QSize want = wanted.expandedTo(QSize(1, 1)).boundedTo(QSize(kMaxSide, kMaxSide));
+
+    QString program;
+    QStringList arguments;
+    int deadline;
+    {
+        QMutexLocker lock(&g_mutex);
+        program = g_program.isEmpty() ? QCoreApplication::applicationFilePath() : g_program;
+        arguments = g_program.isEmpty() ? QStringList{QStringLiteral("--decode-icon")} : g_arguments;
+        deadline = g_deadlineMs;
+    }
+    arguments << QString::number(want.width()) << QString::number(want.height());
+
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove(QStringLiteral("WAYLAND_DISPLAY"));
+    env.remove(QStringLiteral("DISPLAY"));
+    env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
+    env.insert(QStringLiteral("QT_QPA_PLATFORMTHEME"), QStringLiteral("none"));
+    QProcess child;
+    child.setProcessEnvironment(env);
+    child.setProgram(program);
+    child.setArguments(arguments);
+    child.setProcessChannelMode(QProcess::SeparateChannels);
+    // Runs in the forked child before exec: only async-signal-safe calls. No core file (a killed decoder is no crash of Files),
+    // limits on memory and CPU time, and it dies with Files.
+    child.setChildProcessModifier([] {
+#ifndef __SANITIZE_ADDRESS__ // an ASan test build maps terabytes of shadow memory
+        struct rlimit as = {3UL << 30, 3UL << 30};
+        ::setrlimit(RLIMIT_AS, &as);
+#endif
+        struct rlimit cpu = {10, 10};
+        ::setrlimit(RLIMIT_CPU, &cpu);
+        struct rlimit core = {0, 0};
+        ::setrlimit(RLIMIT_CORE, &core);
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    });
+    child.start(QIODevice::ReadWrite);
+    if (!child.waitForStarted(2000))
+        return {};
+    const qint64 pid = child.processId();
+    {
+        QMutexLocker lock(&g_mutex);
+        g_pids.insert(pid);
+    }
+    auto forget = [&] {
+        QMutexLocker lock(&g_mutex);
+        g_pids.remove(pid);
+    };
+    // Quit raced with the start: the kill in shutdown() may have run before this pid was registered.
+    if (g_quitting.loadAcquire())
+        ::kill(pid_t(pid), SIGKILL);
+    child.write(data);
+    child.closeWriteChannel();
+    QElapsedTimer clock;
+    clock.start();
+    bool finished = false;
+    while (!finished && clock.elapsed() < deadline && !g_quitting.loadAcquire())
+        finished = child.waitForFinished(50);
+    if (!finished) {
+        ::kill(pid_t(pid), SIGKILL);
+        child.waitForFinished(1000);
+        forget();
+        if (!g_quitting.loadAcquire()) {
+            QMutexLocker lock(&g_mutex);
+            g_failed.insert(path);
+        }
+        return {};
+    }
+    forget();
+    if (child.exitStatus() != QProcess::NormalExit || child.exitCode() != 0) {
+        QMutexLocker lock(&g_mutex);
+        g_failed.insert(path);
+        return {};
+    }
+    const QByteArray png = child.readAllStandardOutput();
+    if (png.isEmpty() || png.size() > kMaxChildOutput)
+        return {};
+    // The parent decodes only the PNG its own child produced.
+    QImage image = QImage::fromData(png, "PNG");
+    if (image.width() > kMaxSide || image.height() > kMaxSide)
+        return {};
+    return image;
 }
 
 } // namespace AppIcons

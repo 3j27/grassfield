@@ -43,10 +43,12 @@ public:
 };
 
 // image://appicon/<absolute path of an application's Icon= file>: validated and decoded off the GUI thread by AppIcons::load
-// (PNG, or SVG that refers to nothing else; sizes capped; never a FIFO, device or other format) and never touching QIcon
-// there. What is refused answers the generic application icon (taken from the theme on the GUI thread, where QIcon is safe).
+// (PNG, or SVG that refers to nothing else; sizes capped; never a FIFO, device or other format) in a child process with a
+// deadline (AppIcons::loadIsolated), never touching QIcon there. What is refused answers the generic application icon (taken from the theme on the GUI thread, where QIcon is safe).
 class AppIconProvider : public QQuickAsyncImageProvider
 {
 public:
     QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize) override;
+    // Connect to aboutToQuit: kills the decoder children and waits (at most 1.5 s) for the workers, so a quit never races them.
+    static void shutdown();
 };

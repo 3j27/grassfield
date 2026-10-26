@@ -213,7 +213,8 @@ gtest_suite() {
   record logic "$label" "$([[ $rc == 0 ]] && echo pass || echo fail)"
 }
 # Grassfield Files pure logic (sort keys, sizes, dates, path segments, names).
-gtest_suite tests/unit/files "apps/files/build-direct.sh --tests" ".dev/build/files-unit-tests --gtest_brief=1"
+gtest_suite tests/unit/files "apps/files/build-direct.sh --tests >/dev/null && apps/files/build-direct.sh --tests --asan" \
+  ".dev/build/files-unit-tests --gtest_brief=1" ".dev/build/files-unit-tests-asan --gtest_brief=1"
 # Grassfield Preview pure logic (URL validation, size caps, file-type routing).
 gtest_suite tests/unit/preview "apps/preview/build-direct.sh --tests" ".dev/build/preview-unit-tests --gtest_brief=1"
 # grassfield-wallpaper (ADR-0016) logic: untrusted pictures (huge, corrupt, EXIF, FIFO, fit modes), listing, cache: built

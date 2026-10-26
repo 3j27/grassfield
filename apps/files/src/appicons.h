@@ -25,7 +25,7 @@ constexpr int kMaxSide = 1024;                      // largest side of an applic
 constexpr qint64 kMaxPngBytes = 4 * 1024 * 1024;    // a 1024 x 1024 PNG is far below
 constexpr qint64 kMaxSvgBytes = 512 * 1024;
 constexpr int kMaxSvgDepth = 64;
-constexpr int kMaxSvgElements = 20000;
+constexpr int kMaxSvgElements = 5000;
 constexpr int kMaxSvgUses = 64;                     // <use> can multiply: a chain of them is a CPU bomb
 
 // True when the SVG document `data` refers to nothing outside itself and has no construct that does: no DTD or entity, no
@@ -38,7 +38,23 @@ bool svgIsSelfContained(const QByteArray &data);
 // Decodes the bytes of an icon file by the rules above.
 QImage decode(const QByteArray &data, const QSize &want);
 
-// readIconFile + decode.
+// readIconFile + decode, in this process. Only for tests and for the decoder child: Files itself uses loadIsolated.
 QImage load(const QString &path, const QStringList &roots, const QSize &want);
+
+// The decode a running Files uses: the checked bytes go to a child process of Files itself ("--decode-icon", decodeChildMain)
+// that decodes them under an address-space and CPU limit and answers a PNG on stdout; the parent only ever decodes that PNG.
+// A decode that has not ended after kDecodeDeadlineMs is killed (the icon falls back to the generic one, and the path is not
+// tried again in this run), so a slow or hostile icon can neither starve the others nor outlive Files: shutdown() kills every
+// child at quit and the child also dies with its parent (PDEATHSIG). Blocking: call it off the GUI thread. A null image for
+// anything refused, too slow or failed.
+QImage loadIsolated(const QString &path, const QStringList &roots, const QSize &want);
+void shutdown();                 // quit: no new decode, every running child killed
+bool isDecodeChildInvocation(int argc, char **argv);
+int decodeChildMain(int argc, char **argv); // "--decode-icon <w> <h>": icon file bytes on stdin, PNG on stdout; 0 = ok, 1 = refused
+// Tests: another program (and its arguments before <w> <h>) as the decoder, a shorter deadline. Empty program = the default.
+void setDecoderForTests(const QString &program, const QStringList &arguments, int deadlineMs);
+int runningDecodes();            // children running now (tests)
+
+constexpr int kDecodeDeadlineMs = 3000;
 
 } // namespace AppIcons

@@ -160,6 +160,14 @@ TEST(AppIcons, SvgThatCannotBeCheckedIsRefused)
     EXPECT_FALSE(AppIcons::svgIsSelfContained(svg(chain)));
     EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<g id=\"a\"><use href=\"#a\"/></g>")));
     EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<use id=\"a\" href=\"#r\"/><use href=\"#a\"/><rect id=\"r\" width=\"1\" height=\"1\"/>")));
+    // A marker whose content uses a marker multiplies the drawing (300 x 300 vertices: 7.5 s, 3000 x 3000: over 2 minutes).
+    EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<defs><marker id=\"m2\"><rect width=\"1\" height=\"1\"/></marker>"
+                                                  "<marker id=\"m1\"><path d=\"M0 0 L5 5 L9 0\" marker-mid=\"url(#m2)\"/></marker></defs>"
+                                                  "<path d=\"M0 0 L9 9 L18 0\" marker-mid=\"url(#m1)\" fill=\"none\"/>")));
+    EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<defs><linearGradient id=\"g\"/><pattern id=\"p\" width=\"4\" height=\"4\">"
+                                                  "<rect width=\"2\" height=\"2\" fill=\"url(#g)\"/></pattern></defs><rect fill=\"url(#p)\" width=\"9\" height=\"9\"/>")));
+    EXPECT_TRUE(AppIcons::svgIsSelfContained(svg("<defs><marker id=\"m\" markerWidth=\"5\" markerHeight=\"5\"><rect width=\"1\" height=\"1\"/></marker></defs>"
+                                                 "<path d=\"M0 0 L9 9 L18 0\" marker-mid=\"url(#m)\" fill=\"none\"/>")));
     // @import after another child of <style> is refused too.
     EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<style>rect{fill:red}<![CDATA[ @import url(x); ]]></style>")));
     EXPECT_TRUE(AppIcons::svgIsSelfContained(svg("<rect width=\"1\" height=\"1\"/>")));

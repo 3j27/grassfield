@@ -8,6 +8,7 @@
 #include "filesapp.h"
 #include "globalmenu.h"
 #include "windowchrome.h"
+#include "appicons.h"
 #include "imageproviders.h"
 
 #ifndef GRASSFIELD_FILES_QML_DIR
@@ -19,6 +20,9 @@
 
 int main(int argc, char *argv[])
 {
+    // The icon decoder child (AppIcons::loadIsolated runs this binary): decode stdin to a PNG on stdout and nothing else.
+    if (AppIcons::isDecodeChildInvocation(argc, argv))
+        return AppIcons::decodeChildMain(argc, argv);
     // QApplication (not QGuiApplication): KIO's conflict, Open With and undo confirmation dialogs are widgets.
     QApplication app(argc, argv);
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
@@ -68,6 +72,7 @@ int main(int argc, char *argv[])
         engine.addImportPath(*it);
     engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
     engine.addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [] { AppIconProvider::shutdown(); });
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_FILES_QML");

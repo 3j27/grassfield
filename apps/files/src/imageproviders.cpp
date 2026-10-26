@@ -11,6 +11,7 @@
 #include <QPointer>
 #include <QThreadPool>
 
+#include <cstdlib>
 #include <memory>
 
 QMutex ThumbnailStore::s_mutex;
@@ -97,21 +98,36 @@ private:
     std::shared_ptr<QAtomicInt> m_cancelled = std::make_shared<QAtomicInt>(0);
 };
 
-// The decodes run on a pool of their own that is never destroyed: the global pool (or a pool object) is waited for at exit,
-// and a decode in progress would keep the process alive after Qt.quit. A worker is a plain thread: it ends with the process.
+// The decodes run on a pool of their own that is never destroyed (no join at exit); a worker only waits for its decoder child,
+// which has a deadline and is killed at quit (AppIconProvider::shutdown), so the workers are idle or ending when Qt shuts down.
 QThreadPool *decodePool()
 {
     static QThreadPool *pool = [] {
         auto *p = new QThreadPool;
-        p->setMaxThreadCount(2);
+        p->setMaxThreadCount(3);
         return p;
     }();
     return pool;
 }
 } // namespace
 
+void AppIconProvider::shutdown()
+{
+    // Quit: no new decode, the running children are killed (their workers return within milliseconds), then a bounded wait
+    // so no worker is still inside Qt when the static destruction starts.
+    AppIcons::shutdown();
+    decodePool()->waitForDone(1500);
+}
+
 QQuickImageResponse *AppIconProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
 {
+    // However the process ends (aboutToQuit, or exit() from anywhere), the decoders are killed and the workers are gone before
+    // Qt's static teardown: a worker still inside Qt at that point crashed Files on quit (round 4 review, SIGSEGV).
+    static const bool atExit = [] {
+        std::atexit([] { AppIconProvider::shutdown(); });
+        return true;
+    }();
+    Q_UNUSED(atExit)
     auto *response = new IconResponse;
     const QSize want = requestedSize.isValid() && !requestedSize.isEmpty() ? requestedSize : QSize(64, 64);
     // The roots are computed here (QStandardPaths), on the thread Qt calls the provider from, once.
@@ -121,7 +137,7 @@ QQuickImageResponse *AppIconProvider::requestImageResponse(const QString &id, co
     decodePool()->start([guard, cancelled, id, want] {
         QImage image;
         if (cancelled->loadRelaxed() == 0)
-            image = AppIcons::load(id, roots, want);
+            image = AppIcons::loadIsolated(id, roots, want);
         // Done on the GUI thread, always (also after cancel): the fallback needs the icon theme, and QIcon is only used there.
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
