@@ -93,7 +93,7 @@ QtObject {
     }
 
     // A browser window at `url`, or holding `tab` (a tab of another window) when given. It opens at the size of the
-    // last window resized or closed (ADR-0025 part 1).
+    // last window resized or closed (ADR-0026 part 1).
     function newWindow(url: url, tab: var): var {
         const props = {app: root.app, manager: root, startUrl: url, adoptTab: tab ? tab : null};
         if (root.app.windowWidth > 0 && root.app.windowHeight > 0) {

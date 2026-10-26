@@ -67,7 +67,7 @@ class FilesApp : public QObject
     Q_PROPERTY(bool galleryInfo READ galleryInfo WRITE setGalleryInfo NOTIFY prefsChanged)
     // View > Show Tab Bar (Finder, Shift+Cmd+T): the tab bar stays visible with one tab (view/tabBar, every window).
     Q_PROPERTY(bool tabBarShown READ tabBarShown WRITE setTabBarShown NOTIFY prefsChanged)
-    // The size of the last browser window resized or closed (ADR-0025 part 1), 0 when none was kept yet. Read when a
+    // The size of the last browser window resized or closed (ADR-0026 part 1), 0 when none was kept yet. Read when a
     // window opens only: a window never follows another one's size.
     Q_PROPERTY(int windowWidth READ windowWidth NOTIFY windowSizeChanged)
     Q_PROPERTY(int windowHeight READ windowHeight NOTIFY windowSizeChanged)

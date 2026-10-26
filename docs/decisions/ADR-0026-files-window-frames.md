@@ -1,4 +1,4 @@
-# ADR-0025: Files window frames: the size by Files, the position and the cascade by the compositor
+# ADR-0026: Files window frames: the size by Files, the position and the cascade by the compositor
 Status: Proposed (integrator, under owner delegation D-5); part 1 is applied with Files PR 1, part 2 waits for its nested
 verification · Date: 2026-10-26 · Decider: integrator
 

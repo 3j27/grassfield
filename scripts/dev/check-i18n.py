@@ -344,14 +344,19 @@ CPP_TRANSLATING = {"tr", "translate", "QT_TR_NOOP", "QT_TRANSLATE_NOOP", "QT_TR_
 CPP_NOT_TEXT = {"qDebug", "qInfo", "qWarning", "qCritical", "qFatal", "qCDebug", "qCInfo", "qCWarning", "qCCritical", "Q_ASSERT", "Q_ASSERT_X",
                 "static_assert", "QRegularExpression", "QRegExp", "Q_UNUSED", "QT_MESSAGE_PATTERN", "setObjectName", "setProperty", "property",
                 "qputenv", "qgetenv", "qEnvironmentVariable", "qEnvironmentVariableIsSet", "qEnvironmentVariableIsEmpty", "Q_LOGGING_CATEGORY"}
-CPP_WRAPPER_OPEN = re.compile(r"(?:\b(?:Q\w+::)?(?:QStringLiteral|QLatin1String|QLatin1StringView|QStringView|QUtf8StringView|QAnyStringView|QString|QByteArray|fromUtf8|fromLatin1|fromLocal8Bit|fromStdString)\s*)\($")
-CPP_WRAPPERS = {"QStringLiteral", "QLatin1String", "QLatin1StringView", "QStringView", "QUtf8StringView", "QAnyStringView", "QString", "QByteArray",
+CPP_WRAPPER_OPEN = re.compile(r"(?:\b(?:Q\w+::)?(?:QStringLiteral|QLatin1String|QLatin1StringView|QStringView|QUtf8StringView|QAnyStringView|QString|QByteArray|QJsonValue|QVariant|fromUtf8|fromLatin1|fromLocal8Bit|fromStdString)\s*)\($")
+CPP_WRAPPERS = {"QJsonValue", "QVariant", "QStringLiteral", "QLatin1String", "QLatin1StringView", "QStringView", "QUtf8StringView", "QAnyStringView", "QString", "QByteArray",
                 "fromUtf8", "fromLatin1", "fromLocal8Bit", "fromStdString", "QString::fromUtf8", "QString::fromLatin1", "QString::fromLocal8Bit"}
 CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|hint|notif|show|caption|tooltip|^arg$|^return$|^init$"
-                      r"|^(?:done|settle\w*|finish\w*)$", re.I)
+                      r"|^(?:on)?(?:done|settle\w*|finish\w*)$", re.I)
 # insert(KEY, VALUE): the VALUE is text that can reach the screen when the KEY says so (reason, error, message, text, title...)
 CPP_STORES = {"insert", "insertMulti"}
-CPP_TEXT_KEY = re.compile(r"reason|error|message|text|title|label|status|note|hint|description|summary|failure", re.I)
+CPP_TEXT_KEY = re.compile(r"reason|error|message|text|title|label|status|note|hint|description|summary|failure|msg|err|detail|body|caption|tooltip|info|warning", re.I)
+# list-building calls and `<<`: the text goes in when the receiver (the word before . or ->) names text; args/argv/cmd lists stay clean
+CPP_LIST_CALLS = re.compile(r"(\w+)\s*(?:\.|->)\s*(?:append|push_back|prepend|emplace_back|push)\s*\(")
+CPP_TEXT_RECEIVER = re.compile(r"reason|error|message|text|title|label|status|note|hint|warning|msg|err|detail|line", re.I)
+CPP_ARGV_RECEIVER = re.compile(r"arg|cmd|command|argv", re.I)
+CPP_INSERT_KEY = re.compile(r"insert(?:Multi)?\s*\(\s*([A-Za-z_][\w:.>-]*)\s*,$")
 CPP_DECL_TYPES = {"QString", "QByteArray", "QStringView", "QLatin1String", "QLatin1StringView", "QAnyStringView", "auto"}
 CPP_NOT_A_NAME = {"else", "do", "try", "const", "noexcept", "override", "final", "namespace", "struct", "class", "union", "enum", "mutable", "return"}
 CPP_LOG_STREAM = re.compile(r"\bq(?:C)?(?:Debug|Info|Warning|Critical|Fatal)\b")
@@ -506,7 +511,8 @@ def scan_cpp_text(rel, text):
         #  - an argument of a call or brace-init that reports or stores text: fail/error/reason/text/message/title/label/status/
         #    note/show..., done/settle/finished (results handed back), arg() (parts of a message), `return {...}`, name{...};
         #    a declaration `QString x(...)`/`QString x{...}`/`x = {...}` (name "init"), and the VALUE of insert(KEY, VALUE) when KEY
-        #    names text (reason, error, message...); append()/push_back() build argument lists and are not text,
+        #    names text (reason, error, message...), key literal or identifier, also a pair {KEY, VALUE}; append()/push_back()/<< only
+        #    when the receiver names text (reasons, m_errors, lines): argument lists (args, argv, cmd) are not text,
         #  - never an operand of ==, never an argument of other calls (D-Bus member names, JSON keys).
         tail = before.rstrip()
         while CPP_WRAPPER_OPEN.search(tail):
@@ -514,9 +520,21 @@ def scan_cpp_text(rel, text):
         pos = max((k for k, c in enumerate(calls) if c not in CPP_WRAPPERS), default=-1)
         argument_of = calls[pos] if pos >= 0 else ""
         name = argument_of.split("::")[-1]
-        stored = name in CPP_STORES and argument_indexes[pos] >= 1 and bool(CPP_TEXT_KEY.search(key))
+        # insert(KEY, VALUE) and a pair {KEY, VALUE} of a brace-init (QJsonObject{{"reason", "failed"}}): the VALUE is text when the KEY
+        # names text, whether the key is a literal or an identifier (kReasonKey)
+        key_name = key
+        identifier_key = CPP_INSERT_KEY.search(tail)
+        if identifier_key:
+            key_name = identifier_key.group(1)
+        stored = pos >= 0 and argument_indexes[pos] >= 1 and bool(CPP_TEXT_KEY.search(key_name)) and (name in CPP_STORES or (argument_of == "" and pos >= 0))
+        # list.append(TEXT), list.push_back(TEXT), list << TEXT when the list is named for text (reasons, m_errors, lines)
+        list_call = CPP_LIST_CALLS.findall(before)
+        receiver = list_call[-1] if list_call and name in {"append", "push_back", "prepend", "emplace_back", "push"} else ""
+        if not receiver and tail.endswith("<<"):
+            receiver = next((w for w in re.findall(r"[A-Za-z_]\w*", before) if CPP_TEXT_RECEIVER.search(w)), "")
+        listed = bool(receiver) and bool(CPP_TEXT_RECEIVER.search(receiver)) and not CPP_ARGV_RECEIVER.search(receiver)
         visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
-                   or bool(argument_of and CPP_SINK.search(name)) or stored)
+                   or bool(argument_of and CPP_SINK.search(name)) or stored or listed)
         wordlike = bool(CPP_WORDLIKE.match(literal))
         if phrase or (visible and wordlike):
             violations.append(f"{rel}:{line}: English text {literal[:40]!r} is not wrapped in tr()/QCoreApplication::translate")

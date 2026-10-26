@@ -79,6 +79,8 @@ Variants {
         readonly property bool hasMinimized: Compositor.dockScreenName === "" || Compositor.dockScreenName === screenName
         readonly property var liveMinimized: shown ? (hasMinimized ? Compositor.minimized : []) : null
         property var minimizedItems: []
+        // Test hook data: the capture sizes of the minimized tiles by window address (see statusData).
+        property var captureInfo: ({})
         readonly property var tileSpec: ({
                 w: Tokens.overviewMinimizedWidth,
                 h: Tokens.overviewMinimizedHeight,
@@ -89,7 +91,7 @@ Variants {
         readonly property real stripReserve: Layout.stripHeight(minimizedItems.length, tileSpec)
         onLiveMinimizedChanged: {
             if (liveMinimized)
-                minimizedItems = liveMinimized;
+                minimizedItems = Layout.capStrip(liveMinimized, Tokens.overviewMinimizedMax);
         }
         // Free region in this window's coordinates (the overlay starts below the menu bar). Taken
         // from the screen, never from the window size, which is 0 until the compositor configures
@@ -409,6 +411,7 @@ Variants {
                             address: m.address,
                             appId: m.appId,
                             title: m.title,
+                            capture: captureInfo[m.address] ?? null,
                             rect: strip.rects[i] ? {
                                 x: Math.round(strip.rects[i].x),
                                 y: Math.round(strip.rects[i].y + Tokens.menubarHeight),
@@ -899,7 +902,7 @@ Variants {
             }
 
             Repeater {
-                model: win.minimizedItems
+                    model: win.minimizedItems
 
                 delegate: Item {
                     id: mini
@@ -912,6 +915,12 @@ Variants {
                     readonly property string name: modelData.title !== "" ? modelData.title : Apps.nameFor(modelData.appId)
                     readonly property bool focused: win.minFocus === index
                     readonly property bool live: root.controller.profile === "full"
+                    readonly property var capture: miniView.capture
+                    onCaptureChanged: {
+                        const all = Object.assign({}, win.captureInfo);
+                        all[mini.modelData.address] = capture;
+                        win.captureInfo = all;
+                    }
 
                     x: box.x
                     y: box.y
@@ -940,9 +949,24 @@ Variants {
                             width: ratio >= room / roomH ? room : roomH * ratio
                             height: ratio >= room / roomH ? room / ratio : roomH
                             anchors.centerIn: parent
+                            id: miniView
+                            // A minimized window does not change: ONE frame is captured, not a live stream (a capture per frame of up to
+                            // Tokens.overviewMinimizedMax windows at full resolution was the cost). `constraintSize` is the
+                            // tile size for what it limits (the size Quickshell reports for the view; whether the compositor is
+                            // asked for a smaller buffer is measured by `overview status` -> minimized[].capture in a nested run).
+                            constraintSize: Qt.size(Math.ceil(parent.width), Math.ceil(parent.height))
                             captureSource: mini.live && win.shown ? mini.modelData.toplevel : null
-                            live: true
+                            live: false
                             paintCursor: false
+                            readonly property bool ready: captureSource !== null && sourceSize.width > 0 && sourceSize.height > 0
+                            onReadyChanged: if (ready)
+                                captureFrame()
+                            // Test hook data: what was asked and what came.
+                            readonly property var capture: ({
+                                    source: [sourceSize.width, sourceSize.height],
+                                    implicit: [Math.round(implicitWidth), Math.round(implicitHeight)],
+                                    constraint: [Math.round(constraintSize.width), Math.round(constraintSize.height)]
+                                })
                         }
 
                         TintedIcon {

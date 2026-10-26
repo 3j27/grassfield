@@ -60,7 +60,7 @@ Window {
             win.newTab(win.startUrl, null);
     }
 
-    // The size of a window in its normal state is kept for the next window (ADR-0025 part 1); a zoomed or full-screen
+    // The size of a window in its normal state is kept for the next window (ADR-0026 part 1); a zoomed or full-screen
     // size never is.
     function keepSize(): void {
         if (win.visibility === Window.Windowed)

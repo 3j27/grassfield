@@ -1,4 +1,4 @@
-# ADR-0028: Compress and Expand through bsdtar in a child process
+# ADR-0029: Compress and Expand through bsdtar in a child process
 Status: Proposed (integrator, under owner delegation D-5); applied with Files PR 4 · Date: 2026-10-26 · Decider: integrator
 
 ## Context
