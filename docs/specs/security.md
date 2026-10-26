@@ -845,7 +845,12 @@ is written. A symlinked `grassfield.json` is followed (its target is read and re
 of the link by a regular file is noticed within 10 s. A failed write keeps its change pending and is retried; a file that could not be used is read again every 10 s (its
 signature never equals the one of a usable file), so a repaired or removed file is noticed without a watch event, and a change
 that waited is written then. The write keeps the mode of the file it replaces (0666 minus the umask for a new one), syncs the
-temporary file before the rename, and refuses a target that became a directory. `IdleModel.timings` is a stricter backstop: anything that is not a number,
+temporary file before the rename, and refuses a target that became a directory. Both unusable-file paths (the load and the read before a write) mark the file as unread, so
+the poll reads it again whichever read found it unusable, and a change made while the file was unusable is written once the file
+is removed. The read holds the text (at most 1 MiB) in a shell variable and creates no temporary file, so a full or unwritable
+`$TMPDIR` cannot make every read incomplete. Behaviour change: a `grassfield.json` the user cannot write (mode 0444) is never
+written, because the mode is kept and the temporary file cannot be filled: the change stays pending, is retried at the 60 s
+backoff, and one warning is logged. `IdleModel.timings` is a stricter backstop: anything that is not a number,
 above 240 or not whole reads 5, and only a number that is exactly 0 is never.
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec

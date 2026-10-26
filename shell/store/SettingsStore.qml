@@ -37,9 +37,9 @@ Scope {
     // file leaves a file watch on the old target. A stat of the path, nothing more unless it changed.
     property int pollInterval: 10000
     // A directory searched before PATH for the tools the bounded read runs (head, stat, ...): tests put a stalled or a failing
-    // `head` there. Empty in the shell (never taken from the environment).
+    // `head` there. Empty in the shell (never taken from the environment); a relative path is ignored.
     property string toolDir: ""
-    readonly property var toolEnvironment: root.toolDir === "" ? ({}) : ({"PATH": root.toolDir + ":" + Quickshell.env("PATH")})
+    readonly property var toolEnvironment: root.toolDir.charAt(0) !== "/" ? ({}) : ({"PATH": root.toolDir + ":" + Quickshell.env("PATH")})
     // grassfield.json has been read at least once (also when it was malformed, too large or not a regular file).
     property bool loaded: false
     // True while the file on disk could not be parsed: nothing is written until it loads again.
@@ -132,6 +132,9 @@ Scope {
         root.validRead = false;
         root.parsedFileRevision++;
         root.reapplyDirty();
+        // A change made while the file could not be used waits no longer: the next write creates the file.
+        if (Object.keys(root.dirty).length > 0)
+            root.save();
     }
 
     // The file cannot be used as it is (not a regular file, larger than maxFileBytes, or not readable): read as malformed. The
@@ -142,6 +145,9 @@ Scope {
         root.writeBlocked = true;
         root.validRead = false;
         root.unsafeFile = false;
+        // The sentinel no signature equals: whichever read found the file unusable (the load, or the read before a write), the poll
+        // reads it again, so the store recovers when the file or the reader does, whatever the file's signature says.
+        root.lastSignature = "!";
         saveTimer.stop();
         retryTimer.stop();
         if ("lock" in root.parsedFile) {
@@ -527,22 +533,21 @@ Scope {
     // returned exactly the size the file had: a read that was cut, failed, or met a file that changed under it is
     // "incomplete" (it would otherwise look like an empty file, whose defaults a write would put over the user's settings).
     // A read that returned another size than the stat said is tried once more (an atomic replacement between the two); a cut or failed read is not.
+    // The text is held in a shell variable (at most maxFileBytes): no temporary file, so a full or unwritable $TMPDIR cannot make every read fail.
     readonly property string readScript: 'f=$1; max=$2\n'
         + 'if [ ! -e "$f" ]; then echo missing; exit 0; fi\n'
         + 'if [ ! -f "$f" ]; then echo bad; exit 0; fi\n'
-        + 'tmp=$(mktemp) || { echo incomplete; exit 0; }\n'
-        + 'trap \'rm -f "$tmp"\' EXIT\n'
         + 'for attempt in 1 2; do\n'
         + '  size=$(stat -L -c %s -- "$f" 2>/dev/null) || { echo bad; exit 0; }\n'
         + '  if [ "$size" -gt "$max" ]; then echo bad; exit 0; fi\n'
         + '  if [ ! -r "$f" ]; then echo unreadable; exit 0; fi\n'
         + '  sig=$(stat -L -c "%d:%i:%s:%y" -- "$f" 2>/dev/null) || sig=-\n'
-        + '  timeout 5 head -c "$max" -- "$f" > "$tmp" 2>/dev/null\n'
-        + '  rc=$?\n'
+        + '  out=$(timeout 5 head -c "$max" -- "$f" 2>/dev/null; printf "X%s" "$?")\n'
+        + '  rc=${out##*X}; data=${out%X*}\n'
         + '  if [ "$rc" -ne 0 ]; then echo incomplete; exit 0; fi\n'
-        + '  n=$(wc -c < "$tmp")\n'
+        + '  n=$(printf "%s" "$data" | wc -c)\n'
         + '  if [ "$n" -eq "$size" ]; then\n'
-        + '    echo ok; echo "$sig"; cat "$tmp"; exit 0\n'
+        + '    echo ok; echo "$sig"; printf "%s" "$data"; exit 0\n'
         + '  fi\n'
         + 'done\n'
         + 'echo incomplete\n'
@@ -626,7 +631,6 @@ Scope {
         } else {
             // A sentinel no signature equals: the poll reads such a file again every pollInterval, whether or not the watch
             // reported its removal or repair (it does not for a symlink to a device, a directory, a file it could not read).
-            root.lastSignature = "!";
             root.loaded = true;
             root.takeBadFile(root.badReason(read.status));
         }

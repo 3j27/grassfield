@@ -94,6 +94,22 @@ ShellRoot {
                 {run: 'rm -f "$B/grassfield.json"', want: [["writeBlocked", false]]},
                 {toggle: true, want: [["dockAutohide", true]], verify: 'grep -q \'"autohide": true\' "$B/grassfield.json" && grep -q \'"idleMinutes": 5\' "$B/grassfield.json"'}
             ]},
+        {name: "a stall on the read BEFORE a write: the store recovers when the reader does, and the waiting change is written", stages: [
+                {run: 'mkdir -p "$B/bin" && printf \'#!/bin/sh\\nsleep 8\\nexit 0\\n\' > "$B/bin/head" && chmod +x "$B/bin/head" && printf \'%s\' \'' + root.custom + '\' > "$B/grassfield.json" && cp "$B/grassfield.json" "$B/orig"',
+                    want: [["lockIdleMinutes", 10], ["dockSize", 70], ["validRead", true], ["writeBlocked", false]]},
+                {set: ["toolDir", "$B/bin"], toggle: true, want: [["dockAutohide", true], ["lockIdleMinutes", 5], ["writeBlocked", true]], verify: 'cmp -s "$B/grassfield.json" "$B/orig"'},
+                {set: ["toolDir", ""], want: [["lockIdleMinutes", 10], ["dockSize", 70], ["validRead", true], ["writeBlocked", false]],
+                    verify: 'grep -q \'"autohide": true\' "$B/grassfield.json" && grep -q \'"idleMinutes": 10\' "$B/grassfield.json" && grep -q \'"size": 70\' "$B/grassfield.json"'}
+            ]},
+        {name: "a change made while the file was unusable is written when the file is removed", stages: [
+                {run: 'mkdir -p "$B" && ln -s /dev/zero "$B/grassfield.json"', want: [["writeBlocked", true]]},
+                {toggle: true, want: [["dockAutohide", true], ["writeBlocked", true]], verify: '[ "$(readlink "$B/grassfield.json")" = /dev/zero ]'},
+                {run: 'rm -f "$B/grassfield.json"', want: [["writeBlocked", false]], verify: 'grep -q \'"autohide": true\' "$B/grassfield.json"'}
+            ]},
+        {name: "the read needs no temporary file (a mktemp that fails changes nothing)", tools: true, stages: [
+                {run: 'mkdir -p "$B/bin" && printf \'#!/bin/sh\\nexit 1\\n\' > "$B/bin/mktemp" && chmod +x "$B/bin/mktemp" && printf \'%s\' \'' + root.custom + '\' > "$B/grassfield.json"',
+                    want: [["lockIdleMinutes", 10], ["dockSize", 70], ["validRead", true], ["writeBlocked", false]]}
+            ]},
         {name: "a symlinked grassfield.json replaced by a regular file", stages: [
                 {run: 'mkdir -p "$B/t" && printf \'%s\' \'' + '{"version":1,"lock":{"idleMinutes":0}}' + '\' > "$B/t/a.json" && ln -s t/a.json "$B/grassfield.json"', want: [["lockIdleMinutes", 0]]},
                 {run: 'printf \'%s\' \'' + '{"version":1,"lock":{"idleMinutes":10}}' + '\' > "$B/new.json" && mv -fT "$B/new.json" "$B/grassfield.json"', want: [["lockIdleMinutes", 10]]},
@@ -186,7 +202,7 @@ ShellRoot {
     // path; then its readings are polled.
     function act(st: var): void {
         if (st.set !== undefined)
-            root.store[st.set[0]] = st.set[1];
+            root.store[st.set[0]] = typeof st.set[1] === "string" ? st.set[1].replace("$B", root.dir()) : st.set[1];
         if (st.toggle === true) {
             root.store.setDockAutohide(true);
             root.store.flush();
