@@ -1348,11 +1348,13 @@ struct PrivacyFixture {
                                variant(QVariant())});
                 if (table == QLatin1String("screencast") && id == QLatin1String("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}}), variant(QVariant())});
+                if (table == QLatin1String("screencast") && id == QLatin1String("_fsassULUxs_Z2LjLZjJHA"))
+                    return ok({QVariant::fromValue(PermissionTable{{"org.example.Studio", {"yes"}}}), variant(QVariant())});
                 return err(kNotFound);
             }
             if (c.member == QLatin1String("List")) {
                 if (table == QLatin1String("screencast"))
-                    return ok({QStringList{"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "../not/a/token"}});
+                    return ok({QStringList{"../not/a/token", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "_fsassULUxs_Z2LjLZjJHA"}});
                 return err(kNotFound);
             }
             if (c.member == QLatin1String("SetPermission") || c.member == QLatin1String("Delete"))
@@ -1384,11 +1386,14 @@ TEST(SystemBusPrivacy, TheStoreIsReadAsThePortalsReadIt)
     EXPECT_EQ(camera, (QList<QPair<QString, bool>>{{"org.example.Ask", false}, {"org.example.Meet", true}, {"org.example.Photo", false}}));
     // No background table yet: empty, not an error.
     EXPECT_TRUE(r.json.value("background").toArray().isEmpty());
-    // Saved selections: one per app and token; a malformed token is never looked up.
+    // Saved selections: one per app and token, a legacy UUID and a current token (one beginning with _, as one in 32 does); a
+    // malformed token is never looked up.
     const QJsonArray shared = r.json.value("screencast").toArray();
-    ASSERT_EQ(shared.size(), 1);
+    ASSERT_EQ(shared.size(), 2);
     EXPECT_EQ(shared[0].toObject().value("app").toString(), QStringLiteral("org.example.Meet"));
     EXPECT_EQ(shared[0].toObject().value("token").toString(), QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"));
+    EXPECT_EQ(shared[1].toObject().value("app").toString(), QStringLiteral("org.example.Studio"));
+    EXPECT_EQ(shared[1].toObject().value("token").toString(), QStringLiteral("_fsassULUxs_Z2LjLZjJHA"));
     EXPECT_TRUE(r.json.value("remoteDesktop").toArray().isEmpty());
     for (const Call &c : f.bus.calls) {
         EXPECT_NE(c.args.value(1).toString(), QStringLiteral("../not/a/token"));
@@ -1428,6 +1433,8 @@ TEST(SystemBusPrivacy, ASwitchSetsExactlyThatAppsGrant)
     EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"screencast", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}));
     f.bus.handler = [](const Call &) { return err(kNotFound); };
     EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "remoteDesktop"}, {"token", "abc"}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "_fsassULUxs_Z2LjLZjJHA"}}), QString());
+    EXPECT_EQ(f.bus.calls.last().args, (QVariantList{"screencast", "_fsassULUxs_Z2LjLZjJHA"}));
     EXPECT_EQ(f.bus.calls[1].args.value(0).toString(), QStringLiteral("remote-desktop"));
     EXPECT_TRUE(sessionAction({{"op", "privacy.allow"}}));
     EXPECT_FALSE(privilegedAction({{"op", "privacy.allow"}}));

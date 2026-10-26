@@ -15,7 +15,8 @@ QtObject {
     property bool loaded: false
     // Why the store could not be read, "" when it was.
     property string error: ""
-    // app id -> {name, icon}, from the first applications folder that has its desktop entry; its id when none has.
+    // app id -> {name, icon, host}, from the first applications folder that has its desktop entry (its id when none has; host:
+    // Privacy.hostApp).
     property var apps: ({})
     // An action is under way: the switches and − wait for it.
     property bool busy: false
@@ -27,22 +28,22 @@ QtObject {
     }
 
     function describe(app: string): var {
-        let found = {name: app, icon: ""};
+        let found = {name: app, icon: "", host: false};
         const file = Privacy.entryFile(app);
         for (const dir of file !== "" ? root.backend.applicationDirs : []) {
             const r = root.backend.readText(dir + "/" + file);
-            if (!r.ok)
+            if (!r.exists || !r.ok)
                 continue;
             const e = General.parseDesktopEntry(r.text, Qt.locale().name);
-            found = {name: e.name !== "" ? e.name : app, icon: e.icon};
+            found = {name: e.name !== "" ? e.name : app, icon: e.icon, host: Privacy.hostApp(app, dir)};
             break;
         }
         return found;
     }
 
-    // One category's applications by name: [{app, allowed} or {app, tokens}, with name and icon].
+    // One category's applications by name: [{app, allowed} or {app, tokens}, with name, icon and host].
     function list(key: string): var {
-        return (root.state[key] || []).map(e => Object.assign({}, e, root.apps[e.app] || {name: e.app, icon: ""}))
+        return (root.state[key] || []).map(e => Object.assign({}, e, root.apps[e.app] || {name: e.app, icon: "", host: false}))
             .sort((a, b) => a.name.localeCompare(b.name));
     }
 

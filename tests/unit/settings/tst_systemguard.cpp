@@ -613,8 +613,11 @@ TEST(PrivacyGuard, AppIdsAndTokensAsTheStoreKeysThem)
     for (const char *id : {"", "../x", "a/b", ".hidden", "a..b", "x\n", "two words", "-x"})
         EXPECT_FALSE(isPortalAppId(QString::fromLatin1(id))) << id;
     EXPECT_FALSE(isPortalAppId(QString(256, QLatin1Char('a'))));
-    for (const char *t : {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "abc", "tok:1.2_3"})
+    // The portal's tokens (base64 of 16 bytes with + and / made _, so some begin with _) and legacy UUIDs; nothing else.
+    for (const char *t : {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "abc", "_fsassULUxs_Z2LjLZjJHA", "Qm9va3NfYW5kX21vcmU", "_"})
         EXPECT_TRUE(isPortalToken(QString::fromLatin1(t))) << t;
-    for (const char *t : {"", "../a", "a/b", "a b", "-a"})
+    for (const char *t : {"", "../a", "a/b", "a b", "-a", "tok:1", "a.b", "a-b", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0x"})
         EXPECT_FALSE(isPortalToken(QString::fromLatin1(t))) << t;
+    EXPECT_TRUE(isPortalToken(QString(128, QLatin1Char('a'))));
+    EXPECT_FALSE(isPortalToken(QString(129, QLatin1Char('a'))));
 }

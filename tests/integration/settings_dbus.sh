@@ -538,11 +538,12 @@ out=$(probe privacy-state)
 check "no permission store: the reason says the service is not running ($out)" test "$out" = "failed: the service is not running"
 start_service permstore
 token=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
+token2=_fsassULUxs_Z2LjLZjJHA
 st=$(probe privacy-state)
 check "location: Maps allowed (EXACT), Weather not (NONE), the malformed id dropped" py "$st" 'j["location"] == [{"app": "org.example.Maps", "allowed": True}, {"app": "org.example.Weather", "allowed": False}]'
 check "camera: Meet allowed, Booth's \"ask\" is not" py "$st" 'j["camera"] == [{"app": "org.example.Booth", "allowed": False}, {"app": "org.example.Meet", "allowed": True}]'
 check "no background entry and no remote desktop table: none (NotFound is not an error)" py "$st" 'j["background"] == [] and j["remoteDesktop"] == []'
-check "screen sharing: Meet's saved selection, with its token" py "$st" 'j["screencast"] == [{"app": "org.example.Meet", "token": "'"$token"'"}]'
+check "screen sharing: Meet's and Studio's saved selections (a current token beginning with _ too)" py "$st" 'j["screencast"] == [{"app": "org.example.Meet", "token": "'"$token"'"}, {"app": "org.example.Studio", "token": "'"$token2"'"}]'
 check "... read with Lookup and List only" bash -c '[[ -z $(grep -v "\"member\": \"\(Lookup\|List\)\"" "$1") ]]' _ "$work/permstore.log"
 out=$(probe act '{"op":"privacy.allow","category":"camera","app":"org.example.Booth","on":true}')
 check "allow Booth the camera: ok ($out)" test "$out" = ok
@@ -555,6 +556,8 @@ out=$(probe act '{"op":"privacy.allow","category":"background","app":"org.exampl
 check "Meet in the background off: ok ($out), a new background entry with ['no']" logged permstore SetPermission / "'background', true, 'background', 'org.example.Meet', ['no']"
 out=$(probe act '{"op":"privacy.forget","kind":"screencast","token":"'"$token"'"}')
 check "remove the saved selection: ok ($out), Delete('screencast', token)" logged permstore Delete / "'screencast', '$token'"
+out=$(probe act '{"op":"privacy.forget","kind":"screencast","token":"'"$token2"'"}')
+check "remove the one with a current token: ok ($out), Delete('screencast', token)" logged permstore Delete / "'screencast', '$token2'"
 st=$(probe privacy-state)
 check "... and the store now reads every change" py "$st" 'j["camera"][0] == {"app": "org.example.Booth", "allowed": True} and [a["allowed"] for a in j["location"]] == [False, True] and j["background"] == [{"app": "org.example.Meet", "allowed": False}] and j["screencast"] == []'
 out=$(probe act '{"op":"privacy.forget","kind":"screencast","token":"'"$token"'"}')

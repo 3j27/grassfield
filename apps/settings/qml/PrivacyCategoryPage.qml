@@ -24,10 +24,10 @@ SettingsPage {
     // What a category's switch or list means, under the list.
     readonly property string explanation: ({
             location: qsTr("Apps you allow can find out where this computer is. An app you do not allow is refused without being asked; an app not listed asks the first time."),
-            background: qsTr("Apps you allow can keep running in the background. An app you do not allow is not allowed to; an app not listed is allowed the first time it asks."),
+            background: qsTr("Apps you allow may run in the background when they ask. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks."),
             camera: qsTr("Apps you allow can use the camera. An app you do not allow is refused without being asked; an app not listed asks the first time."),
-            remoteDesktop: qsTr("These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time."),
-            screencast: qsTr("These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time.")
+            remoteDesktop: qsTr("These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time; if it is in a session now, end the session first."),
+            screencast: qsTr("These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time; if it is sharing now, stop sharing first.")
         })[root.key] ?? ""
 
     function forgetSelected(): void {
@@ -51,10 +51,14 @@ SettingsPage {
 
             LoginItemRow {
                 required property var modelData
+                // An app of the host for a grant the portal does not read for it: no switch, it would change nothing.
+                readonly property bool unlimited: modelData.host && Privacy.HOST_READ.indexOf(root.key) < 0
+                readonly property string appId: modelData.name !== modelData.app ? modelData.app : ""
                 icon: modelData.icon
                 title: modelData.name
                 // An id that differs from the name says which app it is (a Flatpak id).
-                subtitle: modelData.name !== modelData.app ? modelData.app : ""
+                subtitle: !unlimited ? appId : appId !== "" ? appId + " · " + qsTr("Not sandboxed: not limited") : qsTr("Not sandboxed: not limited")
+                showToggle: !unlimited
                 checked: modelData.allowed
                 toggleEnabled: !grants.busy
                 onToggled: c => grants.setAllowed(root.key, modelData.app, c)
@@ -104,7 +108,9 @@ SettingsPage {
                         required property var modelData
                         icon: modelData.icon
                         title: modelData.name
-                        subtitle: modelData.tokens.length === 1 ? qsTr("1 saved choice") : qsTr("%1 saved choices").arg(modelData.tokens.length)
+                        readonly property string count: modelData.tokens.length === 1 ? qsTr("1 saved choice") : qsTr("%1 saved choices").arg(modelData.tokens.length)
+                        // An id that differs from the name says which app it is (a desktop entry can borrow a name).
+                        subtitle: modelData.name !== modelData.app ? modelData.app + " · " + count : count
                         showToggle: false
                         selected: modelData.app === root.selectedApp
                         onClicked: {

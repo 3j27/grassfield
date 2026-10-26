@@ -71,8 +71,8 @@ const QString kNmWired = QStringLiteral("org.freedesktop.NetworkManager.Device.W
 // The xdg-desktop-portal permission store (session bus; its bus name is also its interface).
 const QString kPermStore = QStringLiteral("org.freedesktop.impl.portal.PermissionStore");
 const QString kPermStorePath = QStringLiteral("/org/freedesktop/impl/portal/PermissionStore");
-// At most this many saved selections are read per table (each is one Lookup).
-constexpr int kMaxSavedSelections = 64;
+// At most this many saved selections are read per table (each is one Lookup), counted after the malformed ones are dropped.
+constexpr int kMaxSavedSelections = 128;
 
 // Privacy & Security's switches: the table and id each portal keeps its grant under, and the values the store holds for
 // allowed and not allowed (xdg-desktop-portal: camera.c, location.c, background.c; location keeps [accuracy, timestamp]).
@@ -998,10 +998,9 @@ StateResult privacyState(BusCaller &bus)
             r.error = reasonOf(list.error);
             return r;
         }
-        const QStringList tokens = list.ok ? cast<QStringList>(list.args.value(0)) : QStringList{};
+        QStringList tokens = list.ok ? cast<QStringList>(list.args.value(0)) : QStringList{};
+        tokens.removeIf([](const QString &t) { return !isPortalToken(t); });
         for (const QString &token : tokens.mid(0, kMaxSavedSelections)) {
-            if (!isPortalToken(token))
-                continue;
             const BusReply entry = bus.call(kPermStore, kPermStorePath, kPermStore, QStringLiteral("Lookup"), {tableName, token}, kReadMs);
             if (!entry.ok)
                 continue;

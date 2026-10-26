@@ -32,8 +32,10 @@ bool isPortalAppId(const QString &s)
 
 bool isPortalToken(const QString &s)
 {
-    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")));
-    return re.match(s).hasMatch();
+    // xdg-desktop-portal's own rule (xdp-session-persistence.c, restore token valid): xdp_is_valid_token, [A-Za-z0-9_]+ (its
+    // tokens are base64 of 16 random bytes with + and / made _, so one in 32 begins with _), or a legacy UUID.
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_]{1,128}")));
+    return re.match(s).hasMatch() || isUuid(s);
 }
 
 QList<Mount> parseMounts(const QByteArray &text)

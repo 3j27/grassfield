@@ -167,9 +167,11 @@ service ask the session's agent itself.
     user's session bus may read and write it, so Settings asks for nothing more than any portal client has.
   - Reads (`privacy.state`; `isReadOnlyCall` lets the store's `Lookup`, `List` and `GetPermission` through, so a dev session
     reads it too): `Lookup` of `location`/`location`, `background`/`background` and `devices`/`camera`; `List` of the
-    `screencast` and `remote-desktop` tables, then one `Lookup` per saved selection (at most 64 per table). A missing table or
-    entry (`org.freedesktop.portal.Error.NotFound`) is "none", not an error. Application ids and restore tokens are checked
-    (`isPortalAppId`: no path, no `..`; `isPortalToken`), anything else is dropped.
+    `screencast` and `remote-desktop` tables, then one `Lookup` per saved selection (the malformed ones dropped first, then at
+    most 128 per table). A missing table or entry (`org.freedesktop.portal.Error.NotFound`) is "none", not an error.
+    Application ids and restore tokens are checked (`isPortalAppId`: no path, no `..`; `isPortalToken`: the portal's own rule,
+    `[A-Za-z0-9_]` or a legacy UUID, so the one token in 32 that begins with `_` is kept), anything else is dropped; the host
+    applications without an id (the `""` key) are not listed.
   - Values, as the portals read them: location keeps `[accuracy, timestamp]` (fewer than two elements is no entry, and the
     portal asks again), allowed is any accuracy but `NONE`; the camera and the background keep `["yes"]`, `["no"]` or
     `["ask"]` (asked every time: shown as not allowed). A saved selection (screen sharing, remote desktop) is one entry per
@@ -179,17 +181,30 @@ service ask the session's agent itself.
     `["NONE", "0"]` for location and `["yes"]` or `["no"]` otherwise; `privacy.forget {kind, token}` is `Delete(table, token)`,
     one action per token (an entry already gone, `NotFound`, is not a failure). Validated in QML (`Privacy.js`) and again in
     C++ (`validAction`): a known category or table, a valid id or token, a boolean switch.
-  - What it cannot do, said in the pane: only sandboxed applications (Flatpak) go through these portals; the portal treats an
-    application of the host as allowed for location and the background without reading the store. A `no` for the background
-    stops a Flatpak that runs in the background only where the portal backend reports applications' state (its background
-    monitor); not verified with xdg-desktop-portal-hyprland (owner check).
+  - What it cannot do, said in the pane: only sandboxed applications (Flatpak) are limited by these grants. The portal allows
+    an application of the host its location and the background without reading the store (`location.c`, `background.c`; it
+    still writes a location row for it), so such a row (its desktop entry found outside a Flatpak export, not a Snap:
+    `Privacy.hostApp`) has no switch there and says "Not sandboxed: not limited"; the camera's grant is read for every
+    application, so its switch stays. A `no` for the background refuses the application's request; stopping a Flatpak that
+    already runs needs a portal backend that implements Background (the security review read xdg-desktop-portal-hyprland
+    1.4.1, which implements Screenshot, ScreenCast, GlobalShortcuts and InputCapture only, and xdg-desktop-portal-gtk, which
+    dropped Background and RemoteDesktop in 1.15.0: on Omarchy the Background and RemoteDesktop portals may not be exported
+    at all, owner check `busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop`). A saved
+    choice removed while the application is sharing is saved again when that session ends: the footnote says to stop
+    sharing first. `["ask"]` reads as not allowed (the portal asks every time).
   - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets only the three reads through: a nested
     session never changes the owner's grants.
   - Tests: `tst_systembus.cpp` `SystemBusPrivacy.*` (the reads as the portals keep them, no store as a reason, the exact
     `SetPermission` and `Delete`, bad values and the dev guard send nothing), `tst_systemguard.cpp` `PrivacyGuard.*`,
     `settings_dbus.sh` section 15 (a fake store on the private bus: every call logged with its arguments),
-    `tests/unit/tst_settingsprivacy.qml` (the state checked again, the counts, a switch, the saved selections forgotten one
-    after the other, a failure's reason, the dev guard).
+    `tests/unit/tst_settingsprivacy.qml` (the state checked again, the counts, a switch, the host's applications without one,
+    the saved selections forgotten one after the other, a failure's reason, the dev guard).
+  - Security review (opus), 2026-10-26: FAIL on 5223a69 + f8a6b65 (H1: the token rule rejected the portal's tokens that begin
+    with `_`, so those saved choices could neither be seen nor removed; M1 the cap counted malformed tokens; M2 a switch for
+    the host's applications that does nothing; M3 the background footnote claimed more than the portal does; L1 removal while
+    sharing; L4 the id beside a saved choice) → fixed in the commit after them; still open: M3's runtime probe of the
+    portals, L2 (`ask` shown as such), L3 (no row cap, names looked up on the GUI thread), L5 (a removal's queue lives in the
+    page). Counter-review pending.
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password

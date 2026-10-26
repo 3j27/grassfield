@@ -125,7 +125,8 @@ bool isUuid(const QString &s);
 
 // Privacy & Security (the portal permission store, ADR-0030 amendment): an application id as the store keys a grant (a
 // Flatpak id such as org.example.App, snap.<name>, or a host application's desktop id), never "" (unsandboxed applications
-// without an id share that key) and never a path; and a saved screen-sharing or remote-desktop selection's token.
+// without an id share that key) and never a path; and a saved screen-sharing or remote-desktop selection's restore token, as
+// the portal makes and accepts them ([A-Za-z0-9_], at most 128 here, or a legacy UUID).
 bool isPortalAppId(const QString &s);
 bool isPortalToken(const QString &s);
 

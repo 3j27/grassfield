@@ -14,9 +14,10 @@ function validApp(id) {
     return typeof id === "string" && /^[A-Za-z0-9_][A-Za-z0-9_.+-]{0,254}$/.test(id) && id.indexOf("..") < 0;
 }
 
-// A saved selection's restore token (systemguard.cpp isPortalToken).
+// A saved selection's restore token as the portal makes and accepts it (systemguard.cpp isPortalToken): [A-Za-z0-9_] (some
+// begin with _), or a legacy UUID.
 function validToken(token) {
-    return typeof token === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(token);
+    return typeof token === "string" && /^(?:[A-Za-z0-9_]{1,128}|[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12})$/.test(token);
 }
 
 // The state as the panes use it: {location, background, camera: [{app, allowed}], remoteDesktop, screencast: [{app,
@@ -68,6 +69,19 @@ function forget(key, token) {
         return null;
     return {op: "privacy.forget", kind: key, token: token};
 }
+
+// Whether the portal takes an application for one of the host's (not sandboxed): its desktop entry was found (in `entryDir`)
+// in an applications folder that is not a Flatpak export, and it is not a Snap. The portal allows such an application its
+// location and the background without reading the store (location.c, background.c), so a switch would do nothing; one whose
+// entry was not found is not known to be one.
+function hostApp(app, entryDir) {
+    if (typeof entryDir !== "string" || entryDir === "" || String(app).indexOf("snap.") === 0)
+        return false;
+    return !/\/flatpak\/exports\/share\/applications\/?$/.test(entryDir);
+}
+
+// The categories whose grant the portal reads for the host's applications too (camera.c).
+var HOST_READ = ["camera"];
 
 // The desktop entry an application id names (a Flatpak's id is its entry's name), "" for an id that is not valid.
 function entryFile(app) {

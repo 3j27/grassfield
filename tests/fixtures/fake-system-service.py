@@ -31,8 +31,8 @@ said yes) and keeps the queues it was given, a queue it does not know answers CU
 The permission store world (Privacy & Security; on the same private bus, which the test also names as the session bus):
 org.freedesktop.impl.portal.PermissionStore with Lookup, List, SetPermission and Delete as xdg-permission-store answers them
 (a missing entry is org.freedesktop.portal.Error.NotFound, an unknown table lists empty). Location: Maps allowed (EXACT), Weather
-not (NONE) and a malformed application id; the camera: Meet allowed, Booth "ask"; no background entry; one saved screen-sharing
-selection for Meet; no remote desktop table.
+not (NONE) and a malformed application id; the camera: Meet allowed, Booth "ask"; no background entry; saved screen-sharing
+selections for Meet (a legacy UUID) and Studio (a current token, beginning with _); no remote desktop table.
 """
 import argparse
 import json
@@ -415,7 +415,8 @@ def permstore_world(svc):
     tables = {
         "location": {"location": {"org.example.Maps": ["EXACT", "1792800000"], "org.example.Weather": ["NONE", "0"], "../x": ["EXACT", "0"]}},
         "devices": {"camera": {"org.example.Meet": ["yes"], "org.example.Booth": ["ask"]}},
-        "screencast": {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0": {"org.example.Meet": ["yes"]}},
+        "screencast": {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0": {"org.example.Meet": ["yes"]},
+                       "_fsassULUxs_Z2LjLZjJHA": {"org.example.Studio": ["yes"]}},
     }
     name = "org.freedesktop.impl.portal.PermissionStore"
 

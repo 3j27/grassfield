@@ -16,7 +16,8 @@ TestCase {
     when: windowShown
 
     readonly property string tokenA: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
-    readonly property string tokenB: "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d"
+    // The portal's current tokens: base64 with + and / made _, so some begin with _.
+    readonly property string tokenB: "_fsassULUxs_Z2LjLZjJHA"
     readonly property var stateJson: ({
             location: [{app: "org.example.Maps", allowed: true}, {app: "org.example.Weather", allowed: false}],
             background: [],
@@ -32,9 +33,14 @@ TestCase {
             property bool devSession: false
             property var busQueries: []
             property var busActions: []
-            readonly property var applicationDirs: ["/apps"]
-            // Booth has a desktop entry; the others are shown by their id.
-            property var files: ({"/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Photo Booth\nIcon=booth\n"})
+            readonly property var applicationDirs: ["/home/u/.local/share/flatpak/exports/share/applications", "/apps"]
+            // Booth and Weather are the host's (their entries in a plain applications folder), Studio a Flatpak; the others are
+            // shown by their id.
+            property var files: ({
+                    "/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Photo Booth\nIcon=booth\n",
+                    "/apps/org.example.Weather.desktop": "[Desktop Entry]\nType=Application\nName=Weather\n",
+                    "/home/u/.local/share/flatpak/exports/share/applications/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=Studio\n"
+                })
             signal finished(string tag, bool ok, string output)
             signal failed(string tag, string reason)
             function readText(path: string): var {
@@ -141,9 +147,31 @@ TestCase {
         compare(Privacy.forget("remoteDesktop", "abc").kind, "remoteDesktop");
         compare(Privacy.forget("camera", "abc"), null);
         compare(Privacy.forget("screencast", "a b"), null);
+        compare(Privacy.forget("screencast", "tok:1"), null, "only the portal's characters");
+        compare(Privacy.forget("screencast", "_fsassULUxs_Z2LjLZjJHA").token, "_fsassULUxs_Z2LjLZjJHA");
         compare(Privacy.forget("screencast", ""), null);
         compare(Privacy.entryFile("org.example.Meet"), "org.example.Meet.desktop");
         compare(Privacy.entryFile("../../x"), "");
+        verify(Privacy.hostApp("org.example.A", "/usr/share/applications"));
+        verify(!Privacy.hostApp("org.example.A", "/var/lib/flatpak/exports/share/applications"), "a Flatpak export");
+        verify(!Privacy.hostApp("org.example.A", "/home/u/.local/share/flatpak/exports/share/applications/"));
+        verify(!Privacy.hostApp("snap.firefox", "/usr/share/applications"), "a Snap");
+        verify(!Privacy.hostApp("org.example.A", ""), "no entry found: not known to be the host's");
+    }
+
+    // The portal allows the host's apps their location without reading the store: no switch for them there; the camera's
+    // grant it reads for every app, so the switch stays.
+    function test_hostApps() {
+        const t = make(categoryComp, {key: "location"});
+        answer(t);
+        const weather = find(t.page, i => i.title === "Weather" && i.showToggle !== undefined);
+        verify(!weather.showToggle);
+        compare(weather.subtitle, "org.example.Weather · Not sandboxed: not limited");
+        const maps = find(t.page, i => i.title === "org.example.Maps" && i.showToggle !== undefined);
+        verify(maps.showToggle, "no entry found: the switch stays");
+        const c = make(categoryComp, {key: "camera"});
+        answer(c);
+        verify(find(c.page, i => i.title === "Photo Booth" && i.showToggle !== undefined).showToggle, "the camera's grant is read for the host too");
     }
 
     // The hub asks the store once, then counts: Location's value, each category's "None", "1 app", "2 apps".
@@ -204,7 +232,7 @@ TestCase {
         const t = make(categoryComp, {key: "screencast"});
         answer(t);
         const meet = find(t.page, i => i.title === "org.example.Meet" && i.showToggle !== undefined);
-        compare(meet.subtitle, "2 saved choices");
+        compare(meet.subtitle, "2 saved choices", "no desktop entry: the id is the name");
         verify(!meet.showToggle);
         const remove = find(t.page, i => i.accessibleName === "Remove the selected app");
         verify(!remove.enabled, "nothing selected");

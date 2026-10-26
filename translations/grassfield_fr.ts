@@ -6023,31 +6023,35 @@
     <name>PrivacyCategoryPage</name>
     <message>
         <source>Apps you allow can find out where this computer is. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
-        <translation>Les apps que vous autorisez peuvent savoir où se trouve cet ordinateur. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée ; une app absente de la liste demande la première fois.</translation>
+        <translation>Les apps que vous autorisez peuvent savoir où se trouve cet ordinateur. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée&#xa0;; une app absente de la liste demande la première fois.</translation>
     </message>
     <message>
-        <source>Apps you allow can keep running in the background. An app you do not allow is not allowed to; an app not listed is allowed the first time it asks.</source>
-        <translation>Les apps que vous autorisez peuvent continuer à s’exécuter en arrière-plan. Une app que vous n’autorisez pas ne le peut pas ; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
+        <source>Apps you allow may run in the background when they ask. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks.</source>
+        <translation>Les apps que vous autorisez peuvent s’exécuter en arrière-plan quand elles le demandent. Une app que vous n’autorisez pas est refusée quand elle le demande ; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
     </message>
     <message>
         <source>Apps you allow can use the camera. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
-        <translation>Les apps que vous autorisez peuvent utiliser l’appareil photo. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée ; une app absente de la liste demande la première fois.</translation>
+        <translation>Les apps que vous autorisez peuvent utiliser l’appareil photo. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée&#xa0;; une app absente de la liste demande la première fois.</translation>
     </message>
     <message>
-        <source>These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time.</source>
-        <translation>Ces apps peuvent ouvrir de nouveau une session à distance avec les écrans et les appareils que vous avez choisis pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois.</translation>
+        <source>These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time; if it is in a session now, end the session first.</source>
+        <translation>Ces apps peuvent ouvrir de nouveau une session à distance avec les écrans et les appareils que vous avez choisis pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois&#xa0;; si elle est en session, terminez d’abord la session.</translation>
     </message>
     <message>
-        <source>These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time.</source>
-        <translation>Ces apps peuvent partager de nouveau l’écran ou la fenêtre que vous avez choisi pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois.</translation>
+        <source>These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time; if it is sharing now, stop sharing first.</source>
+        <translation>Ces apps peuvent partager de nouveau l’écran ou la fenêtre que vous avez choisi pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois&#xa0;; si elle partage en ce moment, arrêtez d’abord le partage.</translation>
     </message>
     <message>
         <source>The permissions cannot be read: %1.</source>
-        <translation>Les autorisations ne peuvent pas être lues : %1.</translation>
+        <translation>Les autorisations ne peuvent pas être lues&#xa0;: %1.</translation>
     </message>
     <message>
         <source>The change could not be made: %1.</source>
-        <translation>La modification n’a pas pu être effectuée : %1.</translation>
+        <translation>La modification n’a pas pu être effectuée&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Not sandboxed: not limited</source>
+        <translation>Non isolée : pas limitée</translation>
     </message>
     <message>
         <source>No apps have asked</source>
@@ -6106,11 +6110,11 @@
     </message>
     <message>
         <source>The permissions cannot be read: %1.</source>
-        <translation>Les autorisations ne peuvent pas être lues : %1.</translation>
+        <translation>Les autorisations ne peuvent pas être lues&#xa0;: %1.</translation>
     </message>
     <message>
         <source>Only sandboxed apps (Flatpak) ask for these permissions; other apps are not limited by them.</source>
-        <translation>Seules les apps isolées (Flatpak) demandent ces autorisations ; les autres apps n’en sont pas limitées.</translation>
+        <translation>Seules les apps isolées (Flatpak) demandent ces autorisations&#xa0;; les autres apps n’en sont pas limitées.</translation>
     </message>
     <message>
         <source>Background Apps</source>
