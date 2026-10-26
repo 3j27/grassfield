@@ -1,7 +1,7 @@
 .pragma library
 
 // Pure logic of the system sections (Wi-Fi, Bluetooth, Sound, Displays): parsers of the backends' answers, the actions as
-// the Backend takes them, display arrangement. No I/O here.
+// the Backend takes them. No I/O here (Displays' helpers are Displays.js).
 //   Wi-Fi and Bluetooth: NetworkManager and BlueZ over D-Bus (src/systembus.h); the Backend answers with a JSON state
 //   (Backend.busQuery) and takes actions as {op: ...} maps (Backend.busAct).
 //   Sound: `wpctl` (PipeWire and WirePlumber have no D-Bus interface): its read-only query and its action programs must stay
@@ -539,49 +539,9 @@ function setMute(id, muted) {
     return validId(id) ? ["wpctl", "set-mute", String(id), muted ? "1" : "0"] : null;
 }
 
-// ---- Displays ----------------------------------------------------------------------------------------------------
-
-// "1920 × 1080" (physical pixels) of a screen from Backend.screens().
-function resolutionText(s) {
-    return s.pixelWidth + " × " + s.pixelHeight;
-}
-
-// Refresh rate in hertz without trailing zeros ("60", "59.94"); "" when the compositor reports none.
-function refreshHz(s) {
-    if (!(s.refreshRate > 0))
-        return "";
-    const r = Math.round(s.refreshRate * 100) / 100;
-    return String(r);
-}
-
-// Scale in percent ("100", "150", "125").
-function scalePercent(s) {
-    return String(Math.round((s.scale > 0 ? s.scale : 1) * 100));
-}
-
-// Arrangement preview: the screens' logical rectangles fitted into a box, aspect kept, centred. [{name, x, y, w, h,
-// primary}] in box pixels; each rectangle is at least `minSide` pixels so that a tiny output stays visible.
-function arrangement(screens, boxW, boxH, gap, minSide) {
-    if (screens.length === 0 || boxW <= 0 || boxH <= 0)
-        return [];
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const s of screens) {
-        x0 = Math.min(x0, s.x);
-        y0 = Math.min(y0, s.y);
-        x1 = Math.max(x1, s.x + s.width);
-        y1 = Math.max(y1, s.y + s.height);
-    }
-    const w = Math.max(1, x1 - x0);
-    const h = Math.max(1, y1 - y0);
-    const k = Math.min((boxW - 2 * gap) / w, (boxH - 2 * gap) / h);
-    const ox = (boxW - w * k) / 2;
-    const oy = (boxH - h * k) / 2;
-    return screens.map(s => ({
-            name: s.name,
-            primary: s.primary === true,
-            x: ox + (s.x - x0) * k,
-            y: oy + (s.y - y0) * k,
-            w: Math.max(minSide, s.width * k),
-            h: Math.max(minSide, s.height * k)
-        }));
+// Displays > Brightness: the shell's own command (Brightness.qml), one backlight and a whole percentage.
+function setBrightness(device, level) {
+    if (typeof device !== "string" || !/^[A-Za-z0-9_.:][A-Za-z0-9_.:-]{0,63}$/.test(device) || typeof level !== "number" || isNaN(level))
+        return null;
+    return ["brightnessctl", "-q", "-d", device, "set", Math.round(Math.max(0, Math.min(1, level)) * 100) + "%"];
 }

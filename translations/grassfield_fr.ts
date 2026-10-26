@@ -834,6 +834,33 @@
     </message>
 </context>
 <context>
+    <name>ArrangeSheet</name>
+    <message>
+        <source>Arrange Displays</source>
+        <translation>Disposer les écrans</translation>
+    </message>
+    <message>
+        <source>Drag a display to place it beside another.</source>
+        <translation>Faites glisser un écran pour le placer à côté d’un autre.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Display arrangement</source>
+        <translation>Disposition des écrans</translation>
+    </message>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>At %1, %2</source>
+        <translation>À %1, %2</translation>
+    </message>
+</context>
+<context>
     <name>AttributionCard</name>
     <message>
         <source>About This Wallpaper</source>
@@ -2883,50 +2910,92 @@
     </message>
 </context>
 <context>
+    <name>DisplayHeader</name>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayKeepSheet</name>
+    <message>
+        <source>Keep these display settings?</source>
+        <translation>Conserver ces réglages d’affichage&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The previous settings come back in %1 s.</source>
+        <translation>Les réglages précédents reviennent dans %1&#xa0;s.</translation>
+    </message>
+    <message>
+        <source>Keep</source>
+        <translation>Conserver</translation>
+    </message>
+    <message>
+        <source>Revert</source>
+        <translation>Rétablir</translation>
+    </message>
+</context>
+<context>
     <name>DisplaysPage</name>
     <message>
         <source>Displays</source>
         <translation>Moniteurs</translation>
     </message>
     <message>
-        <source>No display information is available.</source>
-        <translation>Aucune information sur les moniteurs n’est disponible.</translation>
+        <source>The change could not be tried: %1</source>
+        <translation>Le changement n’a pas pu être essayé&#xa0;: %1</translation>
     </message>
     <message>
-        <source>Arrangement</source>
-        <translation>Disposition</translation>
+        <source>The display settings could not be kept: %1</source>
+        <translation>Les réglages d’affichage n’ont pas pu être conservés&#xa0;: %1</translation>
     </message>
     <message>
-        <source>Display arrangement</source>
-        <translation>Disposition des moniteurs</translation>
+        <source>The change was not applied: the Grassfield shell did not answer.</source>
+        <translation>Le changement n’a pas été appliqué&#xa0;: le shell Grassfield n’a pas répondu.</translation>
     </message>
     <message>
-        <source>%1 (%2)</source>
-        <translation>%1 (%2)</translation>
+        <source>Display settings are not available: the Grassfield shell has not described the displays.</source>
+        <translation>Les réglages des écrans ne sont pas disponibles&#xa0;: le shell Grassfield n’a pas décrit les écrans.</translation>
     </message>
     <message>
-        <source>Resolution, scale and arrangement cannot be changed from Settings yet. They come from your Hyprland monitor configuration.</source>
-        <translation>La résolution, l’échelle et la disposition ne peuvent pas encore être modifiées depuis les Réglages. Elles proviennent de la configuration des moniteurs de Hyprland.</translation>
+        <source>Brightness</source>
+        <translation>Luminosité</translation>
     </message>
     <message>
-        <source>Resolution</source>
-        <translation>Résolution</translation>
+        <source>This display has no name Grassfield can keep its settings under.</source>
+        <translation>Cet écran n’a pas de nom sous lequel Grassfield puisse conserver ses réglages.</translation>
     </message>
     <message>
-        <source>Refresh Rate</source>
+        <source>Refresh rate</source>
         <translation>Fréquence de rafraîchissement</translation>
     </message>
     <message>
-        <source>%1 Hz</source>
-        <translation>%1&#xa0;Hz</translation>
+        <source>Rotation</source>
+        <translation>Rotation</translation>
     </message>
     <message>
-        <source>Scale</source>
-        <translation>Échelle</translation>
+        <source>Standard</source>
+        <translation>Standard</translation>
     </message>
     <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
+        <source>90°</source>
+        <translation>90°</translation>
+    </message>
+    <message>
+        <source>180°</source>
+        <translation>180°</translation>
+    </message>
+    <message>
+        <source>270°</source>
+        <translation>270°</translation>
+    </message>
+    <message>
+        <source>Arrange…</source>
+        <translation>Disposer…</translation>
     </message>
 </context>
 <context>
@@ -5672,6 +5741,29 @@
     </message>
 </context>
 <context>
+    <name>ResolutionChoices</name>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Larger Text</source>
+        <translation>Texte plus grand</translation>
+    </message>
+    <message>
+        <source>More Space</source>
+        <translation>Plus d’espace</translation>
+    </message>
+    <message>
+        <source>Resolution</source>
+        <translation>Résolution</translation>
+    </message>
+    <message>
+        <source>looks like %1 × %2</source>
+        <translation>comme %1 × %2</translation>
+    </message>
+</context>
+<context>
     <name>Rfkill</name>
     <message>
         <source>rfkill is not available on this computer</source>
@@ -6527,6 +6619,30 @@
     <message>
         <source>cannot create the directory of %1</source>
         <translation>Impossible de créer le dossier de %1</translation>
+    </message>
+    <message>
+        <source>too many displays</source>
+        <translation>trop d’écrans</translation>
+    </message>
+    <message>
+        <source>a display line is not well formed</source>
+        <translation>une ligne d’écran est mal formée</translation>
+    </message>
+    <message>
+        <source>a display appears twice</source>
+        <translation>un écran apparaît deux fois</translation>
+    </message>
+    <message>
+        <source>no folder for the display settings in this session</source>
+        <translation>aucun dossier pour les réglages des écrans dans cette session</translation>
+    </message>
+    <message>
+        <source>no folder for a display trial in this session</source>
+        <translation>aucun dossier pour un essai d’affichage dans cette session</translation>
+    </message>
+    <message>
+        <source>the trial is not well formed</source>
+        <translation>l’essai est mal formé</translation>
     </message>
     <message>
         <source>empty reply</source>

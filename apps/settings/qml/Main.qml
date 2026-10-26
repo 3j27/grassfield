@@ -803,7 +803,23 @@ Window {
         id: displaysPage
         DisplaysPage {
             backend: root.backend
+            system: sys
+            onKeepRequested: until => displayKeep.openFor(until)
+            onTrialEnded: displayKeep.close()
+            onArrangeRequested: monitors => displayArrange.openFor(monitors)
         }
+    }
+
+    // Displays (ADR-0027): keep or revert a change while the shell counts down; Arrange… for several displays.
+    DisplayKeepSheet {
+        id: displayKeep
+        onKeep: (page.item as DisplaysPage)?.keep()
+        onRevert: (page.item as DisplaysPage)?.revert()
+    }
+
+    ArrangeSheet {
+        id: displayArrange
+        onArranged: positions => (page.item as DisplaysPage)?.arrange(positions)
     }
 
     Component {

@@ -5,7 +5,7 @@ import "System.js" as System
 
 // Sound as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Sound): Output & Input, an Output / Input
 // segmented control over the device table (Name, Type; the default device selected, a click or the arrow keys choose another),
-// then the volume of that side and Mute. PipeWire through `wpctl`: `wpctl status` is read, then `wpctl status -n` once a device
+// then the volume of that side (LevelRow) and Mute. PipeWire through `wpctl`: `wpctl status` is read, then `wpctl status -n` once a device
 // is new (its node name gives the Type); default device, volume and mute change only through SystemService, so never in a dev
 // session. No Sound Effects group: Grassfield plays no alert, start-up or interface sounds.
 SettingsPage {
@@ -169,16 +169,18 @@ SettingsPage {
     SettingsGroup {
         visible: root.available
 
-        VolumeRow {
+        LevelRow {
             id: volume
             system: root.system
             title: root.side === "output" ? qsTr("Output volume") : qsTr("Input volume")
             lowGlyph: root.side === "output" ? "speaker" : "microphone"
             highGlyph: root.side === "output" ? "volume-3" : "microphone"
             lowGlyphSize: root.side === "output" ? Tokens.settingsSliderRowGlyphSize : Tokens.settingsSliderRowSmallGlyphSize
-            deviceId: root.current ? root.current.id : -1
-            volume: root.current ? root.current.volume : 0
-            muted: root.current ? root.current.muted : false
+            settable: root.current !== null
+            value: root.current ? root.current.volume : 0
+            what: "volume"
+            tag: "audio.act"
+            command: v => System.setVolume(root.current ? root.current.id : -1, v)
         }
 
         SettingsRow {

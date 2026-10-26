@@ -241,6 +241,61 @@ TEST(ActionGuard, OmarchyLanguageTakesOneCodeOnly)
     EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-language"), QStringLiteral("fr")}));
 }
 
+TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
+{
+    const QString b = QStringLiteral("brightnessctl");
+    const auto cmd = [&](const char *dev, const char *value) {
+        return QStringList{b, QStringLiteral("-q"), QStringLiteral("-d"), QString::fromLatin1(dev), QStringLiteral("set"), QString::fromLatin1(value)};
+    };
+    for (const char *ok : {"0%", "5%", "50%", "100%"})
+        EXPECT_TRUE(isAllowedAction(cmd("intel_backlight", ok))) << ok;
+    EXPECT_TRUE(isAllowedAction(cmd("amdgpu_bl1", "40%")));
+    // The shell's relative steps, raw values, another device option, a name that is an option, more arguments: refused.
+    for (const char *no : {"101%", "5%+", "5%-", "50", "-5%", "050%", "50 %", "%", "50%\n"})
+        EXPECT_FALSE(isAllowedAction(cmd("intel_backlight", no))) << no;
+    for (const char *no : {"-x", "", "a/b", "../x", "intel backlight", "x;y", "intel_backlight\n"})
+        EXPECT_FALSE(isAllowedAction(cmd(no, "50%"))) << no;
+    EXPECT_FALSE(isAllowedAction({b, QStringLiteral("-d"), QStringLiteral("intel_backlight"), QStringLiteral("set"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({b, QStringLiteral("-q"), QStringLiteral("-d"), QStringLiteral("intel_backlight"), QStringLiteral("set"), QStringLiteral("50%"), QStringLiteral("-r")}));
+    EXPECT_FALSE(isAllowedAction({b, QStringLiteral("-q"), QStringLiteral("--class=leds"), QStringLiteral("intel_backlight"), QStringLiteral("set"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isReadOnlyQuery(cmd("intel_backlight", "50%")));
+}
+
+// ADR-0027: the lines Settings may write to displays.conf and to a trial, the rule config/hypr/grassfield/displays.lua applies.
+TEST(DisplayFiles, LinesAreCheckedFieldByField)
+{
+    const QString t = QStringLiteral("\t");
+    const auto line = [&](const QString &desc, const QString &mode, const QString &pos, const QString &scale, const QString &tr) {
+        return QStringLiteral("v1") + t + desc + t + mode + t + pos + t + scale + t + tr;
+    };
+    EXPECT_TRUE(isDisplayLine(line(QStringLiteral("desc:BOE 0x0BCA"), QStringLiteral("2880x1800@120.00"), QStringLiteral("0x0"), QStringLiteral("1.6"), QStringLiteral("0"))));
+    EXPECT_TRUE(isDisplayLine(line(QStringLiteral("desc:Dell Inc. DELL U2720Q 7XXXX"), QStringLiteral("3840x2160@60"), QStringLiteral("-1800x-200"), QStringLiteral("1.333333"), QStringLiteral("7"))));
+    EXPECT_TRUE(isDisplayLine(line(QStringLiteral("desc:") + QString(160, QLatin1Char('x')), QStringLiteral("1x1@1"), QStringLiteral("32768x-32768"), QStringLiteral("4"), QStringLiteral("0"))));
+    const QString ok = line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0"));
+    EXPECT_TRUE(isDisplayLine(ok));
+    for (const QString &bad : {QStringLiteral("v2") + ok.mid(2), ok + t, ok.left(ok.lastIndexOf(t)), ok + QStringLiteral("\n"),
+                               line(QStringLiteral("name:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A\nB"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A\x7f"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:") + QString(161, QLatin1Char('x')), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:") + QString(81, QChar(0xe9)), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("preferred"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("99999x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@0"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("auto"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x40000"), QStringLiteral("1"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("0.25"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("9"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("auto"), QStringLiteral("0")),
+                               line(QStringLiteral("desc:A"), QStringLiteral("1920x1080@60"), QStringLiteral("0x0"), QStringLiteral("1"), QStringLiteral("8"))})
+        EXPECT_FALSE(isDisplayLine(bad)) << qPrintable(bad);
+    EXPECT_TRUE(isDisplayTrialId(QStringLiteral("a1B2")));
+    for (const char *bad : {"", "a-b", "a b", "x\n", "123456789012345678901234567890123"})
+        EXPECT_FALSE(isDisplayTrialId(QString::fromLatin1(bad))) << bad;
+}
+
 TEST(ActionGuard, PowerProfilesTakeASourceAndAProfileOnly)
 {
     const QString set = QStringLiteral("omarchy-powerprofiles-set");

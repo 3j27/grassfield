@@ -352,23 +352,6 @@ TestCase {
         compare(a.sinks.length + a.sources.length, 0);
     }
 
-    // ---- Displays ----
-
-    function test_displays() {
-        const screens = [{name: "A", x: 0, y: 0, width: 1920, height: 1080, scale: 1, pixelWidth: 1920, pixelHeight: 1080, refreshRate: 59.94, primary: true}, {name: "B", x: 1920, y: 0, width: 1280, height: 720, scale: 1.5, pixelWidth: 1920, pixelHeight: 1080, refreshRate: 0, primary: false}];
-        compare(System.resolutionText(screens[0]), "1920 × 1080");
-        compare(System.refreshHz(screens[0]), "59.94");
-        compare(System.refreshHz(screens[1]), "");
-        compare(System.scalePercent(screens[1]), "150");
-        const r = System.arrangement(screens, 400, 150, 10, 20);
-        compare(r.length, 2);
-        // Same scale for both, side by side, inside the box, centred.
-        verify(r[1].x >= r[0].x + r[0].w - 0.001);
-        verify(r[0].x >= 10 - 0.001 && r[1].x + r[1].w <= 390 + 0.001);
-        verify(r[0].y >= 10 - 0.001 && r[0].y + r[0].h <= 140 + 0.001);
-        compare(System.arrangement([], 400, 150, 10, 20), []);
-    }
-
     // ---- Stable-id models: a refresh updates rows in place ----
 
     function keysOf(model) {

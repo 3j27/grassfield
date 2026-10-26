@@ -26,6 +26,9 @@ class Backend : public QObject
     Q_PROPERTY(QString bindingsFile READ bindingsFile CONSTANT)
     // The shell's capabilities file (apps/chromecaps.h, ADR-0015 Q4b), read from QML through readText() and watch().
     Q_PROPERTY(QString capabilitiesFile READ capabilitiesFile CONSTANT)
+    // Settings > Displays (ADR-0027): the state the shell publishes (shell/platform/DisplaysFile.js), read through readText();
+    // "" when its directory is not known.
+    Q_PROPERTY(QString displaysStateFile READ displaysStateFile CONSTANT)
     // GRASSFIELD_DEV=1: the system sections show state but never act on the owner's machine (systemguard.h).
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
     // Wallpaper (ADR-0016): the helper, its cache, the folder of the Pictures section and the files the shell and this app
@@ -56,6 +59,7 @@ public:
     QString appVersion() const;
     QString bindingsFile() const { return m_bindingsFile; }
     QString capabilitiesFile() const { return grassfield::apps::capabilitiesFile(); }
+    QString displaysStateFile() const;
     bool devSession() const { return m_dev; }
     QString wallpaperTool() const { return m_wallpaperTool; }
     QString wallpaperCache() const { return m_wallpaperCache; }
@@ -118,6 +122,16 @@ public:
     Q_INVOKABLE QString removeAutostart(const QString &path) const;
     // Emit fileChanged(path) whenever the file is created, replaced, changed or removed.
     Q_INVOKABLE bool watch(const QString &path);
+    // Settings > Displays (ADR-0027). displays.conf holds the kept choices (read at every parse by
+    // config/hypr/grassfield/displays.lua); the trial file a change on trial, which the shell applies and takes back. Only
+    // lines systemguard.h::isDisplayLine accepts are read or written, at most 16 and one per display; in a dev session only
+    // under GRASSFIELD_CONFIG_HOME and GRASSFIELD_STATE_HOME, never the owner's own files. The writes return "" or a reason.
+    Q_INVOKABLE QStringList displaysConf() const;
+    Q_INVOKABLE QString writeDisplaysConf(const QStringList &lines) const;
+    // `until`: the trial's deadline in Unix seconds, at most a minute ahead.
+    Q_INVOKABLE QString writeDisplayTrial(const QString &id, qint64 until, const QStringList &lines) const;
+    // `state`: "kept" (displays.conf written first) or "revert".
+    Q_INVOKABLE QString markDisplayTrial(const QString &state, const QString &id) const;
 
 signals:
     void fileChanged(const QString &path);
@@ -134,6 +148,10 @@ private:
     void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false);
     QStringList userUnitDirs() const;
     bool autostartWriteAllowed(const QString &path) const;
+    // ADR-0027 paths: "" when the directory is not known (or, in a dev session, not one of the dev directories).
+    QString displaysConfFile() const;
+    QString displayTrialFile() const;
+    QString displayLinesProblem(const QStringList &lines) const;
 
     QString m_configFile;
     QString m_bindingsFile;

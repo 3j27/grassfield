@@ -146,6 +146,7 @@
  {"path": "tests/unit/tst_settingscontract.qml", "layer": "headless"},
  {"path": "tests/unit/tst_mousetrackpad.qml", "layer": "headless"},
  {"path": "tests/unit/tst_updatenotice.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_settingsdisplays.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingspower.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingssystem.qml", "layer": "headless"},
  {"path": "tests/unit/tst_stagesfront.qml", "layer": "headless"},

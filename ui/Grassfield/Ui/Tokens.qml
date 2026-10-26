@@ -1494,6 +1494,72 @@ QtObject {
     readonly property real settingsSliderRowCenter: 19.5
     // a slider row's title 1.5 above the row's middle (its cap top 13.5, the slider centred 19.5) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
     readonly property real settingsSliderRowTitleOffset: -1.5
+    // the header band's separator 157 below the pane's top (209 below the window's, under a 52-pt toolbar) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplaySeparatorY: 157
+    // the first group 20 under the band's separator [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayFirstGroupY: 178
+    // the display's picture: its top 40.5 below the pane's top (92.5 below the window's) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayPictureTop: 40.5
+    // the display's picture 129 x 75 (a laptop with its base) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayPictureWidth: 129
+    // the display's picture 129 x 75 (a laptop with its base) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayPictureHeight: 75
+    // the display's name (13 pt bold): baseline 137 below the pane's top (189 below the window's) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayNameBaseline: 137
+    // estimate: between the pictures of two displays in the band (no macOS 27 capture with two displays) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayPictureGap: 32
+    // the band darkens to the text colour at this opacity at its bottom (244 on 255), from nothing at its top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayBandOpacity: 0.045
+    // the resolution choices' group 108 tall [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoicesHeight: 108
+    // the choices' cells share the group's width less 6 on each side [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoicesInset: 6
+    // a choice's window picture 47 x 47 [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceSize: 47
+    // a choice's picture 21.5 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceTop: 21.5
+    // estimate: a choice's window picture's corners (the capture's are about 5) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceRadius: 5
+    // the choice in use ringed in the accent, 2.5 wide, 1 outside the picture [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceRing: 2.5
+    // a choice's label (13 pt): baseline 86.5 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceLabelBaseline: 86.5
+    // a choice without a label: a hairline 80 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceLineY: 80
+    // a choice's hairline 8 in from its cell's sides [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceLineInset: 8
+    // a choice's hairline: the separator colour at 0.13 (214 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceLineOpacity: 0.13
+    // Grassfield's own window picture of a choice (lines for text): its controls and lines 4 from its sides at the default size, scaled with the choice's text [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceMargin: 4
+    // the window picture's controls, 4 wide at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceDot: 4
+    // the window picture's first line of text 12 below its top at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceTextTop: 12
+    // the window picture's lines of text 2.5 thick at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceText: 2.5
+    // the window picture's lines of text 3 apart at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceTextGap: 3
+    // Brightness's slider from 235 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessSliderX: 235
+    // Brightness's slider from 235 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessSliderWidth: 198
+    // Brightness's low-end sun: its ink 16 wide (Grassfield's sun fills 7/8 of its box) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessLowGlyphSize: 18
+    // Brightness's high-end sun: its ink 17.5 wide [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessHighGlyphSize: 20
+    // the push buttons under a pane's groups (Displays: Advanced…, Night Shift…) 20 under the last group [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsPushRowGap: 20
+    // macOS's 15 seconds before the previous display settings come back (ADR-0027) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayTrialSeconds: 15
+    // estimate: how long the shell may take to say that it applied a trial before the page calls it not applied (ADR-0027) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayAppliedMs: 4000
+    // estimate: the keep sheet's countdown is read again this often, so the seconds it shows are never late by more than a quarter (ADR-0027) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayTickMs: 250
+    // Arrange…: Shift and an arrow key move a display along its edge by this part of its size (keyboard arrangement) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayNudge: 0.1
+    // Arrange…: the menu bar drawn along the top of each display's tile [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayMenuBarHeight: 3
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

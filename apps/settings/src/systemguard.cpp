@@ -3,6 +3,7 @@
 #include "runmode.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include <QDir>
 #include <QFileInfo>
@@ -202,7 +203,53 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
-        || program == QLatin1String("omarchy-powerprofiles-set");
+        || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl");
+}
+
+bool isBacklightName(const QString &name)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_.:][A-Za-z0-9_.:-]{0,63}")));
+    return re.match(name).hasMatch();
+}
+
+bool isDisplayTrialId(const QString &id)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9]{1,32}")));
+    return re.match(id).hasMatch();
+}
+
+bool isDisplayLine(const QString &line)
+{
+    const QStringList f = line.split(QLatin1Char('\t'));
+    if (f.size() != 6 || f.at(0) != QLatin1String("v1") || !f.at(1).startsWith(QLatin1String("desc:")))
+        return false;
+    const QString desc = f.at(1).mid(5);
+    if (desc.isEmpty() || desc.toUtf8().size() > 160)
+        return false;
+    for (const QChar c : desc) {
+        if (c.unicode() < 0x20 || c.unicode() == 0x7f)
+            return false;
+    }
+    static const QRegularExpression mode(QRegularExpression::anchoredPattern(QStringLiteral("([0-9]{1,5})x([0-9]{1,5})@([0-9]{1,4})(\\.[0-9]{1,3})?")));
+    const QRegularExpressionMatch m = mode.match(f.at(2));
+    if (!m.hasMatch())
+        return false;
+    const int w = m.captured(1).toInt(), h = m.captured(2).toInt();
+    const double hz = (m.captured(3) + m.captured(4)).toDouble();
+    if (w < 1 || w > 16384 || h < 1 || h > 16384 || hz < 1 || hz > 1000)
+        return false;
+    static const QRegularExpression pos(QRegularExpression::anchoredPattern(QStringLiteral("(-?[0-9]{1,5})x(-?[0-9]{1,5})")));
+    const QRegularExpressionMatch p = pos.match(f.at(3));
+    if (!p.hasMatch() || std::abs(p.captured(1).toInt()) > 32768 || std::abs(p.captured(2).toInt()) > 32768)
+        return false;
+    static const QRegularExpression scale(QRegularExpression::anchoredPattern(QStringLiteral("[0-9](\\.[0-9]{1,6})?")));
+    if (!scale.match(f.at(4)).hasMatch())
+        return false;
+    const double sc = f.at(4).toDouble();
+    if (sc < 0.5 || sc > 4)
+        return false;
+    static const QRegularExpression transform(QRegularExpression::anchoredPattern(QStringLiteral("[0-7]")));
+    return transform.match(f.at(5)).hasMatch();
 }
 
 int actionTimeoutMs(const QStringList &argv, int requested)
@@ -223,6 +270,12 @@ bool isAllowedAction(const QStringList &argv)
     if (argv.first() == QLatin1String("omarchy-powerprofiles-set"))
         return argv.size() == 3 && (argv.at(1) == QLatin1String("ac") || argv.at(1) == QLatin1String("battery"))
             && (argv.at(2) == QLatin1String("power-saver") || argv.at(2) == QLatin1String("balanced") || argv.at(2) == QLatin1String("performance"));
+    // Displays > Brightness: the same command as the shell's Brightness.qml, one backlight and a whole percentage.
+    if (argv.first() == QLatin1String("brightnessctl")) {
+        static const QRegularExpression percent(QRegularExpression::anchoredPattern(QStringLiteral("(100|[1-9]?[0-9])%")));
+        return argv.size() == 6 && argv.at(1) == QLatin1String("-q") && argv.at(2) == QLatin1String("-d") && isBacklightName(argv.at(3))
+            && argv.at(4) == QLatin1String("set") && percent.match(argv.at(5)).hasMatch();
+    }
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

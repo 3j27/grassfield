@@ -1,23 +1,29 @@
 import QtQuick
 import Grassfield.Ui
-import "System.js" as System
 
-// Volume slider row of the Sound pane, laid out as macOS 27's Alert volume (docs/audits/settings-parity-2026-10-26.md § Sound):
-// the title, then a small glyph, the slider and a large glyph. Writes are coalesced (one wpctl call per throttle interval while
-// dragging) and go through SystemService, so a dev session suppresses them and the slider snaps back.
+// A level row laid out as macOS 27's slider rows (docs/audits/settings-parity-2026-10-26.md § Sound, § Displays): the title,
+// then a small glyph, the slider and a large glyph. Sound's volumes and Displays' brightness. Writes are coalesced (one command
+// per throttle interval while dragging) and go through SystemService, so a dev session suppresses them and the slider snaps back.
 SettingsRow {
     id: root
 
     required property var system
-    property int deviceId: -1
-    property real volume: 0
-    property bool muted: false
+    // The level, 0 to 1, as read.
+    property real value: 0
+    // The command that sets a level (an argument vector, or null when it cannot be set), what it is called in the log, and the
+    // tag its answer comes back with.
+    property var command: null
+    property string what: ""
+    property string tag: ""
+    property bool settable: true
     property string accessibleName: root.title
-    // The glyphs at the low and high ends.
+    // The glyphs at the low and high ends, their sizes (the low one centred where an 18-pt one sits), and the slider's span.
     property string lowGlyph: "speaker"
     property string highGlyph: "volume-3"
-    // The low-end glyph's size, centred where an 18-pt one sits (a microphone is drawn smaller there).
     property real lowGlyphSize: Tokens.settingsSliderRowGlyphSize
+    property real highGlyphSize: Tokens.settingsSliderRowGlyphSize
+    property real sliderX: Tokens.settingsSliderRowSliderX
+    property real sliderWidth: Tokens.settingsSliderRowSliderWidth
 
     // A drag is being applied: the page keeps its older reading out of the slider meanwhile.
     readonly property bool busy: !isNaN(root.pending) || throttle.running
@@ -32,7 +38,7 @@ SettingsRow {
     function flush(): void {
         const v = root.pending;
         root.pending = NaN;
-        if (!root.system.act("volume", System.setVolume(root.deviceId, v), "audio.act"))
+        if (!root.command || !root.system.act(root.what, root.command(v), root.tag))
             slider.local = NaN;
         throttle.start();
     }
@@ -50,16 +56,16 @@ SettingsRow {
     Slider {
         id: slider
         parent: root
-        x: Tokens.settingsSliderRowSliderX
+        x: root.sliderX
         y: root.center - height / 2
-        width: Tokens.settingsSliderRowSliderWidth
+        width: root.sliderWidth
         accessibleName: root.accessibleName
-        enabled: root.deviceId >= 0
+        enabled: root.settable && root.command !== null
         opacity: enabled ? 1 : Tokens.materialDisabledOpacity
         from: 0
         to: 1
         stepSize: 0.05
-        value: root.volume
+        value: root.value
         onMoved: v => {
             root.pending = v;
             if (!throttle.running)
@@ -70,9 +76,9 @@ SettingsRow {
     Icon {
         parent: root
         name: root.highGlyph
-        size: Tokens.settingsSliderRowGlyphSize
+        size: root.highGlyphSize
         color: Appearance.windowSecondary
-        x: root.width - Tokens.settingsSliderRowHighGlyphInset - width
+        x: root.width - Tokens.settingsSliderRowHighGlyphInset - width + (root.highGlyphSize - Tokens.settingsSliderRowGlyphSize) / 2
         y: root.center - height / 2
         opacity: slider.enabled ? 1 : Tokens.materialDisabledOpacity
     }

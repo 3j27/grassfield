@@ -13,7 +13,7 @@ bool devSession();
 
 // Exactly the read-only commands the pages issue (qml/System.js builds the same argument vectors; tst_settingssystem
 // checks that every System.QUERY entry is accepted here). Anything else, also a variation of these, is not a query:
-//   wpctl      1 fixed (status), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
+//   wpctl      2 fixed (status, status -n), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
 //   omarchy-language and omarchy-language list                       Language & Region (Omarchy's per-user language)
@@ -44,11 +44,23 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
-// & Region). Anything else is refused: Wi-Fi, Bluetooth and the General pane's system changes are D-Bus calls (Backend::busAct).
+// & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays). Anything else is refused: Wi-Fi, Bluetooth and
+// the General pane's system changes are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
+// A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
+bool isBacklightName(const QString &name);
+
+// Settings > Displays (ADR-0027): one line of displays.conf or of a display trial, the rule config/hypr/grassfield/displays.lua
+// applies: v1 <TAB> desc:<1 to 160 bytes, no control character> <TAB> <W>x<H>@<Hz> (1-16384, 1-1000 Hz) <TAB> <X>x<Y>
+// (-32768 to 32768) <TAB> <scale> (0.5 to 4) <TAB> <transform> (0 to 7).
+bool isDisplayLine(const QString &line);
+// A trial's id: 1 to 32 ASCII letters and digits.
+bool isDisplayTrialId(const QString &id);
+
 // A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
-// local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code.
+// local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
+// exactly `-q -d <backlight> set <0-100>%`.
 bool isAllowedAction(const QStringList &argv);
 
 // How long an allowed action may run: `requested`, or 130 s for Omarchy's language switch, which may wait for its own

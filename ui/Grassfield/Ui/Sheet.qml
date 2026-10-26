@@ -21,6 +21,8 @@ Item {
     property Item focusBack: null
     // False: only the confirm button (an options sheet whose changes apply at once, macOS "Done").
     property bool showCancel: true
+    // The cancel button's text (Displays' countdown sheet says "Revert").
+    property string cancelText: qsTr("Cancel")
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -172,7 +174,7 @@ Item {
 
                     Button {
                         visible: root.showCancel
-                        text: qsTr("Cancel")
+                        text: root.cancelText
                         onClicked: root.cancel()
                     }
 
