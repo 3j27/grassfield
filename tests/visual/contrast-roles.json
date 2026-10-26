@@ -97,8 +97,8 @@
     {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 7},
     {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1}
   ]},
-  {"id": "lock text on the scrim (date, clock, name, error and notice lines)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
-   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 5},
+  {"id": "lock text on the scrim (date, clock, the user's message, name, error and notice lines)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 6},
    {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 2},
    {"file": "shell/security/lock/Lock.qml", "class": "backdrop", "count": 1}
   ]},

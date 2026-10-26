@@ -512,8 +512,9 @@ class ContrastTokens(unittest.TestCase):
                      "color: root.fillColor",
                      "border.color: root.focusColor"):
             self.assertIn(line, field)
-        # Every text item on the scrim and the disc uses the primary text colour: date, clock, initials, name, error, notice.
-        self.assertEqual(view.count("color: root.colors.text\n"), 6)
+        # Every text item on the scrim and the disc uses the primary text colour: date, clock, the user's message, initials,
+        # name, error, notice.
+        self.assertEqual(view.count("color: root.colors.text\n"), 7)
         # The error and notice lines (the two AlertMessage items) carry no layer or effect: a failed effect would hide
         # "Authentication service unavailable" / "Crash recovery unavailable" (R12 review of 0513f6e).
         alerts = [i for i in range(len(view)) if view.startswith("Accessible.role: Accessible.AlertMessage", i)]
