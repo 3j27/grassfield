@@ -504,8 +504,9 @@ VERIFIED until run).
   `IdleMonitor` (`respectInhibitors: true`, armed only while unlocked and no ScreenSaver cookie is held,
   `IdleModel.inactiveOffArmed`) switches the displays off after `lock.displayOffBattery` / `lock.displayOffPower` minutes
   without input (the power source from UPower; 0 = never) and does not lock. The idle lock is untouched. A lock that follows
-  keeps the displays off until input (the monitor stays armed while it is idle, `offForInactivity`); any input switches them
-  on. Off in the nested dev session unless `idle devInactiveOff <s>` sets it. NOT VERIFIED on hardware or in nested here
+  lights the displays until it holds (the compositor confirms a lock only once it has drawn it), then they go dark again
+  until input (the monitor stays armed while it is idle, `offForInactivity`); any input, an unlock without input (fingerprint)
+  or a change of power source switches them on. Off in the nested dev session unless `idle devInactiveOff <s>` sets it. NOT VERIFIED on hardware or in nested here
   (no compositor in the cloud container; L2†).
 - The lock surface (2026-10-26): `lock.showUser` false hides the picture and the name, `lock.showMessage` shows
   `lock.message` (plain text, one line stored, at most two lines drawn) above them. Display only.

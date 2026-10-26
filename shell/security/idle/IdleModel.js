@@ -59,9 +59,14 @@ function inactiveOffArmed(seconds, locked, offForInactivity, rearming, busInhibi
     return seconds > 0 && (locked !== true || offForInactivity === true) && rearming !== true && busInhibited !== true;
 }
 
-// The displays are off: the lock screen's monitor is idle, or the unlocked one is.
-function displaysOff(lockedIdle, inactiveIdle) {
-    return lockedIdle === true || inactiveIdle === true;
+// The displays are off: the lock screen's monitor is idle, or the unlocked one turned them off (`inactiveOff`), but never
+// while a lock is being acquired (locked, not holding yet): the compositor confirms a lock only once it has drawn it on every
+// display, and a display that is off draws nothing (review of 6e61829: the sleep inhibitor would wait out its budget and the
+// ownership check would not run). Once the lock holds, a session that went dark for inactivity is dark again.
+function displaysOff(lockedIdle, inactiveOff, locked, holding) {
+    if (lockedIdle === true)
+        return true;
+    return inactiveOff === true && (locked !== true || holding === true);
 }
 
 // Sleep inhibitor and PrepareForSleep watcher restarts (GF-030: never given up silently). A child that exits within

@@ -43,10 +43,13 @@ Scope {
     property bool offForInactivity: false
     property bool rearmingInactive: false
 
-    // The compositor also switches the displays on at a key press or pointer motion, so the request is sent whenever the
-    // state is recomputed, never skipped as already done (a stale "off" would keep the next "off" from being sent).
+    // The compositor also switches the displays on at a key press or pointer motion, so "off" is sent whenever the state is
+    // recomputed, never skipped as already done (a stale "off" would keep the next "off" from being sent); "on" only when this
+    // module had them off (a repeated enable can flicker on some hardware).
     function setDisplays(on: bool): void {
-        if (on !== !displayOff)
+        if (on && !displayOff)
+            return;
+        if (on || !displayOff)
             console.info("grassfield-idle: displays " + (on ? "on" : (Lock.locked ? "off (locked, no input)" : "off (inactive)")));
         displayOff = !on;
         const action = on ? "enable" : "disable";
@@ -54,7 +57,23 @@ Scope {
     }
 
     function updateDisplays(): void {
-        setDisplays(!IdleModel.displaysOff(lockedMonitor.enabled && lockedMonitor.isIdle, inactiveMonitor.enabled && inactiveMonitor.isIdle));
+        setDisplays(!IdleModel.displaysOff(lockedMonitor.enabled && lockedMonitor.isIdle, root.offForInactivity && inactiveMonitor.enabled && inactiveMonitor.isIdle, Lock.locked, Lock.holding));
+    }
+
+    // A lock that starts lights the displays until it holds (IdleModel.displaysOff); an unlock without Wayland input (a
+    // fingerprint) lights a session that went dark for inactivity.
+    Connections {
+        target: Lock
+
+        function onLockedChanged(): void {
+            if (!Lock.locked)
+                root.offForInactivity = false;
+            root.updateDisplays();
+        }
+
+        function onHoldingChanged(): void {
+            root.updateDisplays();
+        }
     }
 
     function update(): void {
@@ -110,7 +129,8 @@ Scope {
     // No input while unlocked for inactiveOffSeconds: the displays go off; the session stays unlocked until the idle lock.
     IdleMonitor {
         id: inactiveMonitor
-        enabled: IdleModel.inactiveOffArmed(root.inactiveOffSeconds, Lock.locked, root.offForInactivity, root.rearmingInactive, root.busInhibited)
+        // Armed only once its timeout is the one wanted, so that turning the setting on never arms it with the placeholder 1 s.
+        enabled: timeout === root.inactiveOffSeconds && IdleModel.inactiveOffArmed(root.inactiveOffSeconds, Lock.locked, root.offForInactivity, root.rearmingInactive, root.busInhibited)
         timeout: Math.max(1, root.inactiveOffSeconds)
         respectInhibitors: true
         onIsIdleChanged: {

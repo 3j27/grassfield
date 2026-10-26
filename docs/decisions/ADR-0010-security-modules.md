@@ -103,14 +103,20 @@ It respects the same inhibitors as the idle lock (an application holding a Scree
 keeps the displays on) and reads the power source from UPower (`Battery.onBattery`; unknown reads as the power adapter). It
 never locks and never delays the lock: the idle lock still fires at `lock.idleMinutes` from the first monitor, unchanged
 (dim at T-10 s, lock at T), and a lock that follows a display-off keeps the displays off until input instead of lighting them
-for the lock screen's own delay. An invalid or 0 value means never (turning the displays off is not what keeps the session
-safe). `IdleModel.inactiveDisplayOffSeconds`, `inactiveOffArmed`, `displaysOff`; tests/security/tst_idlemodel.qml. The DPMS
-request is now sent whenever the wanted state is recomputed (the compositor may have switched the displays on by itself, so
-a remembered "off" must not suppress the next "off"). In the nested dev session it is off unless a test sets it
+for the lock screen's own delay. A lock being acquired is never kept dark: the displays come on until the compositor
+confirms it (`Lock.holding`; it confirms a lock only once it has drawn it on every display), then go dark again if no input
+came (review of 6e61829: kept dark, the lock before sleep would wait out its budget and the ownership check would not run).
+An unlock without Wayland input (fingerprint) lights a session that went dark for inactivity. A change of power source or of
+the setting re-arms the monitor and lights the displays (as a Mac wakes its display when the adapter is plugged in); while
+locked it then leaves the dark lock screen to its own 30 s delay. An invalid or 0 value means never (turning the displays off
+is not what keeps the session safe). `IdleModel.inactiveDisplayOffSeconds`, `inactiveOffArmed`, `displaysOff`; tests/security/tst_idlemodel.qml. "Off" is
+now sent whenever the wanted state is recomputed (the compositor may have switched the displays on by itself, so a remembered
+"off" must not suppress the next one); "on" only when this module had them off. In the nested dev session it is off unless a test sets it
 (`idle devInactiveOff <seconds>`), as the lock screen's display-off.
 
 **What the lock surface shows.** `lock.showUser` (default true) hides the account's picture and name (the password field
-stays); `lock.showMessage` with `lock.message` shows one line of plain text of the user's (at most 200 characters, no
-control characters, refused otherwise by the settings contract, rule `plainText`) above them, at most two lines on screen.
+stays); `lock.showMessage` with `lock.message` shows one line of plain text of the user's (at most 200 UTF-16 code units, no C0 or
+C1 control characters, line or paragraph separators, bidirectional overrides or isolates: refused otherwise by the settings
+contract, rule `plainText`) above them, at most two lines on screen.
 Display only: authentication, the lock state machine and every unlock path are unchanged, and the message is user text from
 the user's own configuration (no notification or window content: L4 holds).

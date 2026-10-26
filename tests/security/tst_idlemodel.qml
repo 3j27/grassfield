@@ -122,10 +122,16 @@ TestCase {
     }
 
     function test_displaysOff() {
-        verify(!IdleModel.displaysOff(false, false));
-        verify(IdleModel.displaysOff(true, false));
-        verify(IdleModel.displaysOff(false, true));
-        verify(!IdleModel.displaysOff(undefined, "yes"));
+        // Unlocked: dark after the inactivity delay.
+        verify(!IdleModel.displaysOff(false, false, false, false));
+        verify(IdleModel.displaysOff(false, true, false, false));
+        // The lock screen's own delay.
+        verify(IdleModel.displaysOff(true, false, true, true));
+        // A lock being acquired is never kept dark: the compositor must draw it to confirm it (review of 6e61829); once it
+        // holds, a session that went dark for inactivity is dark again.
+        verify(!IdleModel.displaysOff(false, true, true, false));
+        verify(IdleModel.displaysOff(false, true, true, true));
+        verify(!IdleModel.displaysOff(undefined, "yes", false, false));
     }
 
     function test_prepareForSleep() {
