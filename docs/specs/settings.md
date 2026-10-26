@@ -134,6 +134,15 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      tile and "Version 1.0.0-rc1", Omarchy's VERSION_ID, Hyprland and Quickshell from `pacman -Q`, Qt); Displays (one row per
      output: "14-inch (1920 × 1080)" from the size the output reports); Storage (the start-up volume, "742.81 GB available of
      1.00 TB", decimal units as macOS). Not shown: the serial number (root-only), coverage, System Report.
+   - Storage (General > Storage since PR #4; the macOS 15 structure, the macOS 27 look; `StoragePage.qml`): the start-up volume's
+     card (its name, else "Startup Disk"; "257.39 GB of 1.00 TB used" in decimal units; an "All Volumes…" capsule; a bar with
+     one segment per category, 1 apart, a tiny one still 1 wide, the free space last with its size; a legend that wraps), then
+     one row per category, largest first, with its tile and size: Installed Software (the sum of `pacman -Qi`'s installed
+     sizes), the user's Documents, Downloads, Desktop, Pictures, Music, Videos and Trash (`du -s -x --block-size=1 --`, the
+     guard's exact vector, folders inside the home only), and Other (what is used and not counted). Both counts run in the
+     background for up to `settings.storageCountMs`; meanwhile the bar is one "used" segment and the legend says
+     "Calculating…". All Volumes… is a sheet of every mounted volume (QStorageInfo: name, mount point, device, file system,
+     read-only, "X available of Y"). Not built: Recommendations, the per-category detail sheets (the (i) buttons).
    - Language & Region (General > Language & Region since PR #4; the macOS 15 structure, the macOS 27 look; `LanguagePage.qml`):
      "Preferred Languages": one "Primary language" row with an inline pop-up of Omarchy's languages (`omarchy-language list`,
      "Français — French"; the current one from `omarchy-language`). Choosing one runs `omarchy-language <code>` (an action:

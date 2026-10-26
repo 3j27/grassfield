@@ -52,6 +52,14 @@ TestCase {
         compare(General.diagonalInches(undefined, undefined), 0);
     }
 
+    function test_startupVolume() {
+        compare(General.startupVolume([{root: "/"}, {root: "/home"}]).root, "/");
+        // A list from the Backend need not be a JavaScript Array.
+        compare(General.startupVolume({length: 1, 0: {root: "/"}}).root, "/");
+        compare(General.startupVolume([]), null);
+        compare(General.startupVolume(undefined), null);
+    }
+
     function test_storage() {
         const du = General.parseDu("18400000000\t/home/u/Documents\n41700000000\t/home/u/Pictures\ndu: cannot read\n");
         compare(du["/home/u/Documents"], 18400000000);
@@ -69,6 +77,16 @@ TestCase {
         // What is counted never makes System negative.
         compare(General.categories({total: 100, available: 90}, {"/home/u/Documents": 50}, 0, "/home/u").pop().bytes, 0);
         compare(General.categories(null, {}, 0, "/home/u"), []);
+    }
+
+    function test_barWidths() {
+        compare(General.barWidths([100, 300, 600], 102, 1, 1), [10, 30, 60]);
+        // A tiny segment stays visible; the free space (last) takes the rest.
+        compare(General.barWidths([1, 999], 101, 1, 1), [1, 99]);
+        compare(General.barWidths([0, 0, 50], 52, 1, 1), [1, 1, 48]);
+        compare(General.barWidths([], 100, 1, 1), []);
+        const w = General.barWidths([123, 456, 789, 1000], 438, 1, 1);
+        compare(w.reduce((a, b) => a + b, 0) + 3, 438);
     }
 
     function test_time() {

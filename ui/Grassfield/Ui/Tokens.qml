@@ -1234,6 +1234,36 @@ QtObject {
     readonly property int settingsPreviewFirstBaseline: 21
     // the preview's second line: its baseline 16 below the first [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewLineGap: 16
+    // Storage's volume card: 87.5 tall, on the 1-pt grid [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageCardHeight: 88
+    // the volume's name: its baseline 25.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property real settingsStorageNameBaseline: 25.5
+    // All Volumes…: a push button centred 21.5 below the card's top, beside the name [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property real settingsStorageButtonTop: 9.5
+    // the bar: 40 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageBarTop: 40
+    // the bar: 21 tall [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageBarHeight: 21
+    // the bar's corners: radius 3 [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageBarRadius: 3
+    // the bar: 1 between two segments, in the separator colour [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageSegmentGap: 1
+    // the bar: a category of a few bytes still shows 1 wide (macOS: the 1-wide orange Applications) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageSegmentMin: 1
+    // the bar's free space: 202 on the 233 group in macOS 15, the same step on our group fill as the text colour at 0.14 [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property real settingsStorageFreeOpacity: 0.14
+    // the legend: its baseline 78 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendBaseline: 78
+    // the legend: 10-pt text (caps 7 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendSize: 10
+    // the legend: an 8-pt dot in the category's colour [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendDot: 8
+    // the legend: 5 from the dot to its name [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendDotGap: 5
+    // the legend: 11 from a name to the next dot [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendItemGap: 11
+    // behaviour: du and pacman -Qi may take long on a large home; the counts run in the background for up to 2 minutes [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageCountMs: 120000
     // the preview's second line: 18 to 18.5 between the inks of the date, the amount and the number, 17 between the text boxes [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewItemGap: 17
 

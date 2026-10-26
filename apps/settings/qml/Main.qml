@@ -58,6 +58,7 @@ Window {
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "mouse", group: 5, title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
         {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
+        {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")}
     ]
@@ -621,6 +622,8 @@ Window {
                     return generalPage;
                 case "about":
                     return aboutPage;
+                case "storage":
+                    return storagePage;
                 case "datetime":
                     return dateTimePage;
                 case "language":
@@ -752,6 +755,20 @@ Window {
             store: cfg
             onSetRequested: wall => timeSheet.openAt(wall)
         }
+    }
+
+    Component {
+        id: storagePage
+        StoragePage {
+            backend: root.backend
+            onAllVolumesRequested: volumesSheet.open()
+        }
+    }
+
+    // Storage > All Volumes…: a sheet over the whole window.
+    VolumesSheet {
+        id: volumesSheet
+        backend: root.backend
     }
 
     Component {

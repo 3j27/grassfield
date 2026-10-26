@@ -23,6 +23,11 @@ SettingsPage {
             glyph: "laptop"
             onClicked: root.open("about")
         }
+        NavigationRow {
+            text: qsTr("Storage")
+            glyph: "drive"
+            onClicked: root.open("storage")
+        }
     }
 
     // macOS 27 keeps Date & Time, Language & Region and Login Items together (after AutoFill & Passwords, not built).

@@ -3244,6 +3244,10 @@
         <translation>Informations</translation>
     </message>
     <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
         <source>Date &amp; Time</source>
         <translation>Date et heure</translation>
     </message>
@@ -4136,6 +4140,14 @@
     <message>
         <source>About</source>
         <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>disk space volume free used documents downloads pictures music videos trash</source>
+        <translation>disque espace volume libre utilisé documents téléchargements images musique vidéos corbeille</translation>
     </message>
     <message>
         <source>Date &amp; Time</source>
@@ -5769,6 +5781,65 @@
     </message>
 </context>
 <context>
+    <name>StoragePage</name>
+    <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>Installed Software</source>
+        <translation>Logiciels installés</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Downloads</source>
+        <translation>Téléchargements</translation>
+    </message>
+    <message>
+        <source>Desktop</source>
+        <translation>Bureau</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <source>Videos</source>
+        <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Trash</source>
+        <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autres</translation>
+    </message>
+    <message>
+        <source>Startup Disk</source>
+        <translation>Disque de démarrage</translation>
+    </message>
+    <message>
+        <source>%1 of %2 used</source>
+        <translation>%1 utilisés sur %2</translation>
+    </message>
+    <message>
+        <source>All Volumes…</source>
+        <translation>Tous les volumes…</translation>
+    </message>
+    <message>
+        <source>Calculating…</source>
+        <translation>Calcul en cours…</translation>
+    </message>
+</context>
+<context>
     <name>Store</name>
     <message>
         <source>the file is not valid JSON (%1)</source>
@@ -6176,6 +6247,29 @@
     <message>
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>VolumesSheet</name>
+    <message>
+        <source>All Volumes</source>
+        <translation>Tous les volumes</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Startup Disk</source>
+        <translation>Disque de démarrage</translation>
+    </message>
+    <message>
+        <source>read-only</source>
+        <translation>lecture seule</translation>
+    </message>
+    <message>
+        <source>%1 available of %2</source>
+        <translation>%1 disponibles sur %2</translation>
     </message>
 </context>
 <context>

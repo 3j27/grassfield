@@ -84,7 +84,8 @@ function diagonalInches(widthMm, heightMm) {
 
 // The start-up volume of Backend.volumes() (the first), null when there is none.
 function startupVolume(volumes) {
-    return Array.isArray(volumes) && volumes.length > 0 ? volumes[0] : null;
+    // Any list (a QVariantList from the Backend need not be a JavaScript Array).
+    return volumes && volumes.length > 0 ? volumes[0] : null;
 }
 
 // --- Storage -------------------------------------------------------------------------------------------------------------
@@ -154,6 +155,20 @@ function categories(volume, folderBytes, applicationsBytes, home) {
     }
     out.sort((a, b) => b.bytes - a.bytes);
     out.push({id: "system", bytes: Math.max(0, used - counted)});
+    return out;
+}
+
+// The widths of the bar's segments: `sizes` (bytes, the free space last) shared out over `width` less a `gap` between two
+// segments, each at least `min` wide; the last segment takes what rounding leaves. Whole points, so the gaps stay sharp.
+function barWidths(sizes, width, gap, min) {
+    const n = sizes.length;
+    if (n === 0)
+        return [];
+    const room = Math.max(0, width - gap * (n - 1));
+    const total = sizes.reduce((a, b) => a + Math.max(0, Number(b) || 0), 0);
+    const out = sizes.map(b => total > 0 ? Math.max(min, Math.floor(room * Math.max(0, Number(b) || 0) / total)) : 0);
+    const used = out.slice(0, n - 1).reduce((a, b) => a + b, 0);
+    out[n - 1] = Math.max(0, room - used);
     return out;
 }
 
