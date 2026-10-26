@@ -202,11 +202,14 @@ service ask the session's agent itself.
     saying no app can ask for it (owner decision 2026-10-26: keep the category, with a line). A saved
     choice removed while the application is sharing is saved again when that session ends: the footnote says to stop
     sharing first. `["ask"]` reads as not allowed (the portal asks every time).
-  - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets only the three reads through: a nested
-    session never changes the owner's grants.
+  - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets only the reads through (the store's
+    `Lookup`, `List` and `GetPermission`, `NameHasOwner` for the portal, the two portals' `version`): a nested session never
+    changes the owner's grants.
   - Tests: `tst_systembus.cpp` `SystemBusPrivacy.*` (the reads as the portals keep them, no store as a reason, the exact
     `SetPermission` and `Delete`, bad values and the dev guard send nothing), `tst_systemguard.cpp` `PrivacyGuard.*`,
-    `settings_dbus.sh` section 15 (a fake store on the private bus: every call logged with its arguments),
+    `settings_dbus.sh` section 15 (a fake store on the private bus: every call logged with its arguments; the Backend's
+    caller never starts the desktop portal, a service the bus can start being started; the bus has its own configuration
+    and starts only the test's own services, never the machine's store or portal),
     `tests/unit/tst_settingsprivacy.qml` (the state checked again, the counts, a switch, the host's applications without one,
     the saved selections forgotten one after the other, a failure's reason, the dev guard).
   - Security review (opus), 2026-10-26: FAIL on 5223a69 + f8a6b65 (H1: the token rule rejected the portal's tokens that begin
@@ -224,6 +227,15 @@ service ask the session's agent itself.
     sandbox's), L2 (an export entry that exists but cannot be read counts, in doubt), L3 (the Flatpak export folders are
     read for the host check even when XDG_DATA_DIRS leaves them out), L4 (the portal read's timeout is 1 s), L5 (tests: a
     failure stays in its category, every "missing" error name, the dev read of the portals): fixed in the commit after.
+    Re-check of that commit: PASS, with MEDIUM-2 (the D-Bus test's bus used the system's session.conf and the caller's
+    environment, so on Arch it started the real permission store with the owner's home and failed), LOW-1 (nothing tested
+    that the caller never auto-starts the portal) and LOW-2 (nothing tested the export folders outside XDG_DATA_DIRS):
+    fixed in the commit after (the test bus's own configuration and clean environment, an activation check with a control,
+    a QML case). Still open, for the owner: MEDIUM-1, the dev session's private bus (scripts/dev/shell-run.sh, ADR-0011)
+    uses the standard service folders and the owner's XDG_RUNTIME_DIR, so Qt's gtk3 platform theme (ReadAll on
+    org.freedesktop.portal.Settings, auto-start on) starts the desktop portal there and with it the document portal, which
+    unmounts the owner's `$XDG_RUNTIME_DIR/doc`; pre-existing, not Settings' read, and probably the same for the dev shell
+    (a Quickshell build with gtk3 started it on a test bus; not run nested).
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password

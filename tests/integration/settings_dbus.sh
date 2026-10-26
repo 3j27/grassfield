@@ -31,7 +31,8 @@
 #  15  Privacy & Security (the portal permission store, session bus): each category's applications (a malformed id dropped,
 #      "ask" not allowed, no entry is none), the saved screen-sharing selection; a switch is SetPermission with the value the
 #      portal reads (location [accuracy, timestamp], yes/no), Remove is Delete and an entry already gone is fine; bad values,
-#      the dev guard and the store's own error
+#      the dev guard and the store's own error; the Backend's caller never starts the desktop portal (a service the bus can
+#      start, the control, is started)
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -75,6 +76,8 @@ stop_all() {
   rm -rf "$work"
 }
 trap stop_all EXIT
+# The scratch path goes into the bus configuration (XML) and a service file's Exec line: nothing there that needs quoting.
+case $work in *[[:space:]\&\<\>\"\'\\]*) die "the scratch directory '$work' needs quoting (TMPDIR)" ;; esac
 
 src=$root/apps/settings/src
 g++ -std=c++17 -O1 -fPIC -Wno-sfinae-incomplete -I"$src" -I"$root/apps" -I/usr/include/qt6 -I/usr/include/qt6/QtCore -I/usr/include/qt6/QtDBus \
@@ -82,23 +85,20 @@ g++ -std=c++17 -O1 -fPIC -Wno-sfinae-incomplete -I"$src" -I"$root/apps" -I/usr/i
   { cat "$work/build.log"; die "the probe did not build"; }
 
 # The private bus: a unix socket in the test's own directory; else loopback TCP with anonymous authentication (a sandbox that
-# forbids unix sockets): a bus that lives for this test and serves only the fakes below.
-start_bus() {
-  setsid dbus-daemon --session --nofork --address="unix:path=$work/bus.sock" --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
-  bus_pid=$!
-  if wait_until 3 test -s "$work/bus.address"; then
-    bus=$(head -n 1 "$work/bus.address")
-    return 0
-  fi
-  kill "$bus_pid" 2>/dev/null
-  wait "$bus_pid" 2>/dev/null
-  cat >"$work/tcp.conf" <<'EOF'
+# forbids unix sockets): a bus that lives for this test and serves only the fakes below. Its own configuration, never the
+# system's session.conf: the only services it can start are the test's own ($work/services), and it runs with a clean
+# environment, so no service of the machine (the real permission store or desktop portal) is ever started with the caller's
+# home or runtime directory (review of 06da80f, MEDIUM-2).
+mkdir -p "$work/services"
+bus_conf() { # <listen address> <auth mechanism>: the bus configuration, on stdout
+  cat <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig>
   <type>session</type>
-  <listen>tcp:host=127.0.0.1,port=0</listen>
-  <auth>ANONYMOUS</auth>
-  <allow_anonymous/>
+  <listen>$1</listen>
+  <auth>$2</auth>
+  $([[ $2 == ANONYMOUS ]] && echo '<allow_anonymous/>')
+  <servicedir>$work/services</servicedir>
   <policy context="default">
     <allow send_destination="*" eavesdrop="true"/>
     <allow eavesdrop="true"/>
@@ -106,8 +106,20 @@ start_bus() {
   </policy>
 </busconfig>
 EOF
+}
+start_bus() {
+  bus_conf "unix:path=$work/bus.sock" EXTERNAL >"$work/bus.conf"
+  setsid env -i PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" dbus-daemon --config-file="$work/bus.conf" --nofork --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
+  bus_pid=$!
+  if wait_until 3 test -s "$work/bus.address"; then
+    bus=$(head -n 1 "$work/bus.address")
+    return 0
+  fi
+  kill "$bus_pid" 2>/dev/null
+  wait "$bus_pid" 2>/dev/null
+  bus_conf "tcp:host=127.0.0.1,port=0" ANONYMOUS >"$work/tcp.conf"
   : >"$work/bus.address"
-  setsid dbus-daemon --config-file="$work/tcp.conf" --nofork --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
+  setsid env -i PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" dbus-daemon --config-file="$work/tcp.conf" --nofork --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
   bus_pid=$!
   wait_until 5 test -s "$work/bus.address" || return 1
   bus=$(head -n 1 "$work/bus.address")
@@ -536,6 +548,17 @@ say ""
 say "[15] Privacy & Security (the portal permission store)"
 out=$(probe privacy-state)
 check "no permission store: the reason says the service is not running ($out)" test "$out" = "failed: the service is not running"
+# The desktop portal is never started by Settings (qtbuscaller.h; review of 06da80f, LOW-1): this bus can start a service (the
+# control, a marker written by its activation), and the same call to the portal starts nothing. The service writes its marker
+# and exits 1, which the bus answers at once (an exit 0 it answers only when the activation times out).
+for name in org.grassfield.test.Activatable org.freedesktop.portal.Desktop; do
+  printf "[D-BUS Service]\nName=%s\nExec=%s -c 'touch %s; exit 1'\n" "$name" "$(command -v sh)" "$work/started.$name" >"$work/services/$name.service"
+done
+out=$(probe autostart-get org.grassfield.test.Activatable)
+check "the control: this bus starts a service it can activate ($out)" test -e "$work/started.org.grassfield.test.Activatable"
+out=$(probe autostart-get org.freedesktop.portal.Desktop)
+check "... the Backend's caller never starts the desktop portal ($out)" test ! -e "$work/started.org.freedesktop.portal.Desktop"
+rm -f "$work/services/"*.service
 start_service permstore
 token=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
 token2=_fsassULUxs_Z2LjLZjJHA
@@ -573,7 +596,7 @@ for op in '{"op":"privacy.allow","category":"microphone","app":"org.example.Meet
 done
 check "an unknown category or kind, a malformed id or token, a switch that is not a boolean: refused before the bus" test "$fine" -eq 1
 check "... and none of these reached the store" test "$(calls permstore)" -eq "$before"
-check "in a dev session the state is read, the portals with it (NameHasOwner and Get only)" py "$(probe --dev privacy-state)" 'len(j["location"]) == 2 and j["portals"] == {"background": True, "remoteDesktop": False}'
+check "in a dev session the state is read, the portals with it" py "$(probe --dev privacy-state)" 'len(j["location"]) == 2 and j["portals"] == {"background": True, "remoteDesktop": False}'
 before=$(grep -vc '"member": "\(Lookup\|List\)"' "$work/permstore.log")
 fine=1
 for op in '{"op":"privacy.allow","category":"camera","app":"org.example.Meet","on":false}' '{"op":"privacy.forget","kind":"screencast","token":"abc"}'; do

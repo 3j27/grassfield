@@ -37,7 +37,7 @@ TestCase {
             property var busQueries: []
             property var busActions: []
             // The user's folder first, as XDG_DATA_HOME comes first.
-            readonly property var applicationDirs: ["/apps", "/home/u/.local/share/flatpak/exports/share/applications"]
+            property var applicationDirs: ["/apps", "/home/u/.local/share/flatpak/exports/share/applications"]
             // Booth and Weather are the host's (their entries in a plain applications folder only); Studio a Flatpak with the
             // user's own copy of its entry; Ghost only a hidden stub (not known to be the host's); the others are shown by
             // their id.
@@ -216,6 +216,24 @@ TestCase {
         t.backend.unreadable = ["/home/u/.local/share/flatpak/exports/share/applications/org.example.Maps.desktop"];
         answer(t);
         verify(find(t.page, i => i.title === "Maps" && i.showToggle !== undefined).showToggle);
+    }
+
+    // The Flatpak export folders count even when the session's folders leave them out (Privacy.hostCheckDirs): the user's,
+    // beside the user's applications folder, and the system's. A visible copy of the entry in the user's folder keeps the switch.
+    function test_exportsOutsideDataDirs() {
+        const t = make(categoryComp, {key: "location"});
+        t.backend.applicationDirs = ["/home/u/.local/share/applications", "/usr/share/applications"];
+        t.backend.files = {
+            "/home/u/.local/share/applications/org.example.Maps.desktop": "[Desktop Entry]\nType=Application\nName=Maps\n",
+            "/home/u/.local/share/flatpak/exports/share/applications/org.example.Maps.desktop": "[Desktop Entry]\nType=Application\nName=Maps\n",
+            "/home/u/.local/share/applications/org.example.Weather.desktop": "[Desktop Entry]\nType=Application\nName=Weather\n",
+            "/var/lib/flatpak/exports/share/applications/org.example.Weather.desktop": "[Desktop Entry]\nType=Application\nName=Weather\n",
+            "/usr/share/applications/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=Studio\n"
+        };
+        answer(t);
+        verify(find(t.page, i => i.title === "Maps" && i.showToggle !== undefined).showToggle, "the user's Flatpak export");
+        verify(find(t.page, i => i.title === "Weather" && i.showToggle !== undefined).showToggle, "the system's Flatpak export");
+        verify(!find(t.page, i => i.title === "Studio" && i.showToggle !== undefined).showToggle, "an entry in a plain folder only: the host's");
     }
 
     // A failure shows under its own category only (the tags differ), not under another one's list.
