@@ -28,6 +28,7 @@ if [[ ${1:-} == "--tests" ]]; then
   fi
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${extra[@]}" -I"$here/src" -DGRASSFIELD_MENU_BRIDGE_DBUS_XML="\"$here/dbus/org.grassfield.MenuBridge1.xml\"" \
+    -DGRASSFIELD_RUN_MODE_VECTORS="\"$root/tests/fixtures/run-mode-vectors.json\"" \
     $(pkg-config --cflags Qt6Core Qt6DBus) \
     "$root/tests/unit/menu-bridge/tst_menubridge.cpp" "$root/tests/unit/menu-bridge/tst_screensaver.cpp" "$here/src/MenuClient.cpp" "$out/menu-bridge-moc/moc_MenuClient.cpp" "${logic[@]}" \
     $(pkg-config --libs Qt6Core Qt6DBus) -lgtest -pthread \

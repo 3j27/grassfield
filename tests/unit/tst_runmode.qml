@@ -38,6 +38,16 @@ TestCase {
         }
     }
 
+    function test_homeAndTraceVectors() {
+        const v = vectors();
+        for (const h of v.homes)
+            compare(RunMode.homeOverride(h.env.GRASSFIELD_STATE_HOME), h.stateHome, h.name + " (stateHome)");
+        for (const t of v.traces)
+            compare(RunMode.appsTrace(t.env.GRASSFIELD_APPS_TRACE), t.appsTrace, t.name + " (appsTrace)");
+        for (const x of [undefined, null, "", "true", "yes", " 1", 1, true])
+            verify(!RunMode.appsTrace(x), JSON.stringify(x));
+    }
+
     function test_plumbingVectors() {
         const rows = vectors().plumbing;
         verify(rows.length >= 4, "vectors read: " + rows.length);

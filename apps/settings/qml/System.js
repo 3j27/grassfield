@@ -1,29 +1,19 @@
 .pragma library
 
-// Pure logic of the system sections (Wi-Fi, Bluetooth, Sound, Displays): parsers of the backend tools' output,
-// argument vectors of the actions, display arrangement. No I/O here. The read-only queries and the action
-// programs must stay in step with apps/settings/src/systemguard.cpp: tests/shell/settings_system_guard.sh runs every
-// QUERY entry (and a profile-SSID query) through the real guard and fails if one is refused.
-// Every tool runs in the C locale (Backend forces LC_ALL=C): the parsers read the English output.
+// Pure logic of the system sections (Wi-Fi, Bluetooth, Sound, Displays): parsers of the backends' answers, the actions as
+// the Backend takes them, display arrangement. No I/O here.
+//   Wi-Fi and Bluetooth: NetworkManager and BlueZ over D-Bus (src/systembus.h); the Backend answers with a JSON state
+//   (Backend.busQuery) and takes actions as {op: ...} maps (Backend.busAct).
+//   Sound: `wpctl` (PipeWire and WirePlumber have no D-Bus interface): its read-only query and its action programs must stay
+//   in step with apps/settings/src/systemguard.cpp: tests/shell/settings_system_guard.sh runs every QUERY entry through the real
+//   guard and fails if one is refused. wpctl runs in the C locale (Backend forces LC_ALL=C): the parser reads the English output.
 
-// ---- Read-only queries (the only commands a dev session may run; see systemguard.cpp) ----------------------------
+// ---- Read-only queries ---------------------------------------------------------------------------------------------
 
+// The only command-line query of the system sections (the Sound page); Wi-Fi and Bluetooth are read over D-Bus (SystemService.queryBus).
 var QUERY = {
-    wifiRadio: ["nmcli", "-t", "-f", "WIFI", "radio"],
-    // SSID-HEX, not SSID: a network name may hold any byte (newline, ':', backslash); hex can never fake a row or a field.
-    wifiList: ["nmcli", "-t", "-f", "IN-USE,SSID-HEX,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "no"],
-    wifiProfiles: ["nmcli", "-t", "-f", "UUID,TYPE", "connection", "show"],
-    wifiDevices: ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"],
-    btShow: ["bluetoothctl", "show"],
-    btPaired: ["bluetoothctl", "devices", "Paired"],
-    btConnected: ["bluetoothctl", "devices", "Connected"],
     audio: ["wpctl", "status"]
 };
-
-// SSID of one saved profile (a UUID of parseWifiProfiles); null for anything else.
-function wifiProfileSsidQuery(uuid) {
-    return validUuid(uuid) ? ["nmcli", "-t", "-f", "802-11-wireless.ssid", "connection", "show", "uuid", uuid] : null;
-}
 
 function validUuid(s) {
     return typeof s === "string" && /^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(s);
@@ -70,33 +60,7 @@ function syncModel(model, items, keyName) {
     }
 }
 
-// ---- nmcli -------------------------------------------------------------------------------------------------------
-
-// Fields of one `nmcli -t` line: ':' separates, "\:" and "\\" are escapes.
-function splitTerse(line) {
-    const out = [];
-    let cur = "";
-    for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (c === "\\" && i + 1 < line.length) {
-            cur += line[i + 1];
-            i++;
-        } else if (c === ":") {
-            out.push(cur);
-            cur = "";
-        } else {
-            cur += c;
-        }
-    }
-    out.push(cur);
-    return out;
-}
-
-// "enabled" / "disabled" of `nmcli -t -f WIFI radio`; null when the output is not that (no NetworkManager).
-function parseWifiRadio(text) {
-    const v = String(text).trim();
-    return v === "enabled" ? true : v === "disabled" ? false : null;
-}
+// ---- Wi-Fi (NetworkManager over D-Bus) -----------------------------------------------------------------------------
 
 // Text of a hex string of UTF-8 bytes ("486F"): {text, valid}. Bad sequences become U+FFFD and valid is false; so is it
 // for malformed hex. Never throws.
@@ -163,86 +127,79 @@ function printable(text) {
     return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, "\uFFFD");
 }
 
-// Visible networks of `nmcli -t -f IN-USE,SSID-HEX,SIGNAL,SECURITY dev wifi list`: one per SSID and security (the
-// strongest access point; the connected one wins), connected first, then by signal. Flat objects with the stable id
-// `key` (SSID bytes + security): {key, hex, ssid, label, strength (0-100), security, secured, enterprise, active,
-// valid (the name can be passed to nmcli as it is)}. Hidden networks (empty SSID) are skipped.
-function parseWifiList(text) {
+// NetworkManager's access point flags as the label nmcli printed (the old SECURITY column): "" for an open network, else
+// "WPA3", "WPA2", "WPA1", "802.1X", "OWE", "WEP", joined by spaces. `flags` is the AP's Flags (bit 0: privacy), `wpa` and
+// `rsn` its WpaFlags and RsnFlags (key management bits 0x100 PSK, 0x200 802.1X, 0x400 SAE, 0x800 OWE).
+function wifiSecurity(flags, wpa, rsn) {
+    const out = [];
+    if (rsn & 0x400)
+        out.push("WPA3");
+    if (rsn & 0x100)
+        out.push("WPA2");
+    if (wpa & 0x100)
+        out.push("WPA1");
+    if ((rsn | wpa) & 0x200)
+        out.push("802.1X");
+    if (rsn & 0x800)
+        out.push("OWE");
+    if (out.length === 0 && (rsn !== 0 || wpa !== 0))
+        out.push("WPA");
+    if (out.length === 0 && (flags & 1))
+        out.push("WEP");
+    return out.join(" ");
+}
+
+// The `wifi.state` JSON of the Backend (src/systembus.h wifiState): {radio, device: {name, connected} | null, networks,
+// profiles: {SSID hex: UUID of the first saved profile with that SSID}}; null when the text is not that. `networks` are the
+// visible networks, one per SSID and security (the strongest access point; the connected one wins), connected first, then by
+// signal, as flat objects with the stable id `key` (SSID bytes + security): {key, hex, ssid, label, strength (0-100),
+// security, secured, enterprise, active, valid (the name can be passed on as it is)}. Hidden networks (empty SSID) are skipped.
+function parseWifiState(text) {
+    let j;
+    try {
+        j = JSON.parse(String(text));
+    } catch (e) {
+        return null;
+    }
+    if (j === null || typeof j !== "object" || typeof j.radio !== "boolean" || !Array.isArray(j.aps) || !Array.isArray(j.profiles))
+        return null;
     const best = {};
-    for (const line of String(text).split("\n")) {
-        if (line.trim() === "")
+    for (const ap of j.aps) {
+        if (ap === null || typeof ap !== "object" || typeof ap.hex !== "string" || ap.hex.trim() === "")
             continue;
-        const f = splitTerse(line);
-        if (f.length !== 4 || f[1].trim() === "")
-            continue;
-        const name = hexToText(f[1]);
+        const name = hexToText(ap.hex);
         if (name.text === "")
             continue;
-        const security = f[3].trim() === "--" ? "" : f[3].trim();
-        const hex = f[1].trim().toUpperCase();
+        const security = wifiSecurity(ap.flags | 0, ap.wpa | 0, ap.rsn | 0);
+        const hex = ap.hex.trim().toUpperCase();
         const net = {
             key: hex + "|" + security,
             hex: hex,
             ssid: name.text,
             label: printable(name.text),
-            strength: Math.max(0, Math.min(100, parseInt(f[2], 10) || 0)),
+            strength: Math.max(0, Math.min(100, ap.strength | 0)),
             security: security,
             secured: security !== "",
             enterprise: security.indexOf("802.1X") >= 0,
-            active: f[0].trim() === "*",
+            active: ap.active === true,
             valid: name.valid && plainName(name.text)
         };
         const old = best[net.key];
         if (!old || (net.active && !old.active) || (net.active === old.active && net.strength > old.strength))
             best[net.key] = net;
     }
-    const list = Object.keys(best).map(k => best[k]);
-    list.sort((a, b) => (a.active === b.active ? b.strength - a.strength || (a.key < b.key ? -1 : 1) : a.active ? -1 : 1));
-    return list;
-}
-
-// UUIDs of the saved Wi-Fi profiles of `nmcli -t -f UUID,TYPE connection show`.
-function parseWifiProfiles(text) {
-    const out = [];
-    for (const line of String(text).split("\n")) {
-        const f = splitTerse(line);
-        if (f.length === 2 && f[1] === "802-11-wireless" && validUuid(f[0]))
-            out.push(f[0]);
-    }
-    return out;
-}
-
-// SSID, as uppercase hex of its UTF-8 bytes (comparable with a list row's `hex`), from the output of
-// `nmcli -t -f 802-11-wireless.ssid connection show uuid <uuid>`; "" when the output is not that. One field only, so
-// the whole rest of the output is the value: a name with a newline or a colon cannot be mistaken for anything else.
-function parseProfileSsid(text) {
-    const prefix = "802-11-wireless.ssid:";
-    let t = String(text);
-    if (t.indexOf(prefix) !== 0)
-        return "";
-    t = t.slice(prefix.length);
-    if (t.slice(-1) === "\n")
-        t = t.slice(0, -1);
-    let value = "";
-    for (let i = 0; i < t.length; i++) {
-        if (t[i] === "\\" && i + 1 < t.length) {
-            value += t[i + 1];
-            i++;
-        } else {
-            value += t[i];
+    const networks = Object.keys(best).map(k => best[k]);
+    networks.sort((a, b) => (a.active === b.active ? b.strength - a.strength || (a.key < b.key ? -1 : 1) : a.active ? -1 : 1));
+    const known = {};
+    for (const p of j.profiles) {
+        if (p !== null && typeof p === "object" && validUuid(p.uuid) && typeof p.hex === "string" && p.hex !== "") {
+            const hex = p.hex.toUpperCase();
+            if (known[hex] === undefined)
+                known[hex] = p.uuid;
         }
     }
-    return value === "" ? "" : textToHex(value);
-}
-
-// The first Wi-Fi interface of `nmcli -t -f DEVICE,TYPE,STATE device`: {name, connected}, null when there is none.
-function parseWifiDevice(text) {
-    for (const line of String(text).split("\n")) {
-        const f = splitTerse(line);
-        if (f.length >= 3 && f[1] === "wifi")
-            return {name: f[0], connected: f[2] === "connected"};
-    }
-    return null;
+    const device = j.device !== null && typeof j.device === "object" && typeof j.device.name === "string" ? {name: j.device.name, connected: j.device.connected === true} : null;
+    return {radio: j.radio, device: device, networks: networks, known: known};
 }
 
 // Signal glyph of the shell's icon set for a 0-100 strength.
@@ -261,38 +218,26 @@ function wifiClickKind(net, known) {
     return net.secured ? "password" : "open";
 }
 
-// ---- bluetoothctl ------------------------------------------------------------------------------------------------
+// ---- Bluetooth (BlueZ over D-Bus) ----------------------------------------------------------------------------------
 
-function stripTerminal(text) {
-    return String(text).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/[\x01\x02\r]/g, "");
-}
-
-// {present, powered} of `bluetoothctl show`.
-function parseBtShow(text) {
-    const t = stripTerminal(text);
-    const present = /^Controller\s+[0-9A-Fa-f:]{17}/m.test(t);
-    return {present: present, powered: present && /^\s*Powered:\s*yes\s*$/m.test(t)};
-}
-
-// [{mac, name}] of `bluetoothctl devices [Paired|Connected]`.
-function parseBtDevices(text) {
-    const out = [];
-    for (const line of stripTerminal(text).split("\n")) {
-        const m = /^Device\s+([0-9A-Fa-f:]{17})\s*(.*)$/.exec(line.trim());
-        if (m)
-            out.push({mac: m[1].toUpperCase(), name: m[2].trim() !== "" ? m[2].trim() : m[1].toUpperCase()});
+// The `bt.state` JSON of the Backend (src/systembus.h bluetoothState): {present, powered, devices: [{mac, name, connected}]}
+// with the paired devices connected first, then by name; null when the text is not that.
+function parseBtState(text) {
+    let j;
+    try {
+        j = JSON.parse(String(text));
+    } catch (e) {
+        return null;
     }
-    return out;
-}
-
-// Paired devices with their connection state, connected first then by name.
-function bluetoothDevices(paired, connected) {
-    const on = {};
-    for (const d of connected)
-        on[d.mac] = true;
-    const list = paired.map(d => ({mac: d.mac, name: d.name, connected: on[d.mac] === true}));
+    if (j === null || typeof j !== "object" || typeof j.present !== "boolean" || typeof j.powered !== "boolean" || !Array.isArray(j.devices))
+        return null;
+    const list = [];
+    for (const d of j.devices) {
+        if (d !== null && typeof d === "object" && typeof d.mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(d.mac))
+            list.push({mac: d.mac.toUpperCase(), name: typeof d.name === "string" && d.name.trim() !== "" ? printable(d.name.trim()) : d.mac.toUpperCase(), connected: d.connected === true});
+    }
     list.sort((a, b) => (a.connected === b.connected ? (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1) : a.connected ? -1 : 1));
-    return list;
+    return {present: j.present, powered: j.present && j.powered, devices: list};
 }
 
 // ---- wpctl -------------------------------------------------------------------------------------------------------
@@ -342,34 +287,44 @@ function volumeGlyph(volume, muted) {
     return muted || volume <= 0 ? "volume-mute" : volume < 0.34 ? "volume-1" : volume < 0.67 ? "volume-2" : "volume-3";
 }
 
-// ---- Actions (argument vectors; null for anything invalid, so a bad value never reaches a process) --------------------
+// ---- Actions (wpctl argument vectors and D-Bus action maps; null for anything invalid, so a bad value never reaches a process) ----
 
 function plainName(s) {
     return typeof s === "string" && s !== "" && s.length <= 255 && s[0] !== "-" && !/[\x00-\x1f]/.test(s);
 }
 
+// Wi-Fi and Bluetooth actions are maps the Backend takes (Backend.busAct, validated again in src/systembus.cpp).
 function wifiRadio(on) {
-    return ["nmcli", "radio", "wifi", on ? "on" : "off"];
+    return {op: "wifi.radio", on: on === true};
 }
 
 function wifiConnectKnown(uuid) {
-    return validUuid(uuid) ? ["nmcli", "connection", "up", "uuid", uuid] : null;
+    return validUuid(uuid) ? {op: "wifi.connectKnown", uuid: uuid} : null;
 }
 
+// An open network by its (clean, at most 32 bytes) name.
 function wifiConnectOpen(ssid) {
-    return plainName(ssid) && ssid.indexOf("\uFFFD") < 0 ? ["nmcli", "device", "wifi", "connect", ssid] : null;
+    if (!plainName(ssid) || ssid.indexOf("\uFFFD") >= 0)
+        return null;
+    const hex = textToHex(ssid);
+    return hex.length <= 64 ? {op: "wifi.connectOpen", hex: hex} : null;
 }
 
+// Disconnect the Wi-Fi device (the Backend takes the first Wi-Fi device; `device` is the one the page knows, a valid name).
 function wifiDisconnect(device) {
-    return typeof device === "string" && /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}$/.test(device) ? ["nmcli", "device", "disconnect", device] : null;
+    return typeof device === "string" && /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}$/.test(device) ? {op: "wifi.disconnect"} : null;
+}
+
+function wifiScan() {
+    return {op: "wifi.scan"};
 }
 
 function btPower(on) {
-    return ["bluetoothctl", "power", on ? "on" : "off"];
+    return {op: "bt.power", on: on === true};
 }
 
 function btConnect(mac, connect) {
-    return typeof mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(mac) ? ["bluetoothctl", connect ? "connect" : "disconnect", mac] : null;
+    return typeof mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(mac) ? {op: "bt.connect", mac: mac.toUpperCase(), connect: connect === true} : null;
 }
 
 function validId(id) {

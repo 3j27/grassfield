@@ -6,6 +6,7 @@
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "Tiling.hpp"
+#include "TopClamp.hpp"
 #include "core/ClientChrome.hpp"
 #include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
@@ -293,6 +294,8 @@ namespace {
             untileUnderPointer(grab, w, target, pointer);
         CBox box = grab.startBox;
         box.translate(pointer - grab.pressPos);
+        // The titlebar stops at the menu bar while the pointer goes on, and follows it again on the way down (macOS).
+        box = gf::topClamp::heldMove(w, box, pointer);
         g_layoutManager->setTargetGeom(box, target);
         updateSnap(grab, w, pointer);
     }

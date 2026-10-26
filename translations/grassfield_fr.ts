@@ -5507,6 +5507,73 @@
     </message>
 </context>
 <context>
+    <name>SystemBus</name>
+    <message>
+        <source>timed out</source>
+        <translation>Délai dépassé</translation>
+    </message>
+    <message>
+        <source>no answer</source>
+        <translation>Aucune réponse</translation>
+    </message>
+    <message>
+        <source>cannot create the directory of %1</source>
+        <translation>Impossible de créer le dossier de %1</translation>
+    </message>
+    <message>
+        <source>empty reply</source>
+        <translation>Réponse vide</translation>
+    </message>
+    <message>
+        <source>failed</source>
+        <translation>Échec</translation>
+    </message>
+    <message>
+        <source>the service is not running</source>
+        <translation>Le service n’est pas démarré</translation>
+    </message>
+    <message>
+        <source>not allowed: the system refused the request</source>
+        <translation>Non autorisé&#xa0;: le système a refusé la demande</translation>
+    </message>
+    <message>
+        <source>no connection to the system bus</source>
+        <translation>Pas de connexion au bus système</translation>
+    </message>
+    <message>
+        <source>invalid request</source>
+        <translation>Demande non valide</translation>
+    </message>
+    <message>
+        <source>no Wi-Fi adapter</source>
+        <translation>Aucune carte Wi-Fi</translation>
+    </message>
+    <message>
+        <source>that network is no longer saved</source>
+        <translation>Ce réseau n’est plus enregistré</translation>
+    </message>
+    <message>
+        <source>that network needs a password</source>
+        <translation>Ce réseau nécessite un mot de passe</translation>
+    </message>
+    <message>
+        <source>that network is no longer in range</source>
+        <translation>Ce réseau n’est plus à portée</translation>
+    </message>
+    <message>
+        <source>no Bluetooth adapter</source>
+        <translation>Aucun adaptateur Bluetooth</translation>
+    </message>
+    <message>
+        <source>that device is not paired yet</source>
+        <translation>Cet appareil n’est pas encore associé</translation>
+    </message>
+    <message>
+        <source>that device is no longer paired</source>
+        <translation>Cet appareil n’est plus associé</translation>
+    </message>
+</context>
+<context>
     <name>SystemInfo</name>
     <message>
         <source>%1 (1 thread)</source>

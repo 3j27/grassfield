@@ -47,6 +47,14 @@ sha256sums=('4d91771b305c25b6a81e8a24e7c3d4ae49cce9754db199437191fa30cb9c60b0'
 
 # The source tree every step reads: the snapshot of HEAD made by prepare(), never the live working tree.
 _root() { echo "$srcdir/snapshot"; }
+# _no_hidden <dir>: fails, naming them, when <dir> holds a file or directory whose name starts with a dot.
+_no_hidden() {
+  local found
+  found=$(find "$1" -mindepth 1 -name '.*' -print | head -n 5)
+  [[ -z $found ]] && return 0
+  echo "PKGBUILD: hidden paths refused in $1: $found" >&2
+  return 1
+}
 
 prepare() {
   local repo
@@ -114,8 +122,10 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
-  # networkmanager (nmcli), bluez-utils (bluetoothctl), wireplumber (wpctl) and wl-clipboard (wl-copy) are run by Settings
-  # and the shell (GF-049, ARCH-08): declared, not assumed to come with Omarchy.
+  # networkmanager and bluez-utils (which pulls bluez) are the D-Bus services the Settings Wi-Fi and Bluetooth pages talk to (GF-049:
+  # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
+  # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
+  # with Omarchy.
   depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
@@ -138,10 +148,14 @@ package_grassfield-desktop() {
   install -d "$pkgdir/usr/share/grassfield"
   cp -a --no-preserve=ownership "$root/shell" "$pkgdir/usr/share/grassfield/shell"
   find "$pkgdir/usr/share/grassfield/shell" \( -name '.qmlls.ini' -o -name '*.qmlc' \) -delete
+  # No hidden path ships in a QML root: QML loads one by name (Loader { source: ".x.qml" }) and a glob-based lint skips it
+  # (tests/security/ipc_inventory.sh and tests/ci/import_graph.py refuse them in the tree; this refuses them in the package).
+  _no_hidden "$pkgdir/usr/share/grassfield/shell" || return 1
 
   # Design system as a regular QML module; icons copied into the module (repo symlink resolved).
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui"
   cp -a --no-preserve=ownership "$root/ui/Grassfield/Ui/." "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/"
+  _no_hidden "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui" || return 1
   rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"

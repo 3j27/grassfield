@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import qs.platform
 
@@ -60,7 +61,7 @@ Singleton {
     }
 
     function start(files: var): void {
-        const cmd = (Quickshell.env("GRASSFIELD_PREVIEW_CMD") || "grassfield-preview").split(" ").filter(w => w !== "" && w !== "--glance");
+        const cmd = (Mode.devValue("PREVIEW_CMD") || "grassfield-preview").split(" ").filter(w => w !== "" && w !== "--glance");
         root.shownKey = files.join("\n");
         // "open" is true from here on (a second toggle while the scope detection is pending closes nothing twice).
         root.starting = true;

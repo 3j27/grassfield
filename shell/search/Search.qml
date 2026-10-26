@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
@@ -94,20 +95,14 @@ Scope {
     readonly property string home: Quickshell.env("HOME")
     // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
     // another database, so tests do not depend on the owner's index.
-    readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home
-    readonly property string plocateDb: Quickshell.env("GRASSFIELD_SEARCH_PLOCATE_DB")
+    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
+    readonly property string plocateDb: Mode.devValue("SEARCH_PLOCATE_DB")
     readonly property string dataHome: {
         const xdg = Quickshell.env("XDG_DATA_HOME");
         return xdg ? xdg : home + "/.local/share";
     }
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"
 
     // ---- state changes -------------------------------------------------------------------
