@@ -257,7 +257,8 @@ printf '%s' "$png" | base64 -d >"$flat/org.example.App.png"
 ln -s "$flat/org.example.App.png" "$s/data/icons/hicolor/48x48/apps/org.example.App.png"
 # A user icon that is a symlink to an image outside every allowed root (a PNG of this repository, outside the scratch
 # HOME and the system folders): refused. Only meaningful when the checkout itself lies outside the allowed roots.
-outside_png=$(git ls-files '*.png' | head -n 1)
+# sed reads the whole list: `head -n 1` would close the pipe early and, under pipefail, git's SIGPIPE ends the test.
+outside_png=$(git ls-files '*.png' | sed -n 1p)
 outside_case=0
 case $root in /tmp/* | /var/tmp/* | /usr/* | /opt/* | /srv/* | /mnt/* | /media/* | /run/*) ;; *) [[ -n $outside_png ]] && outside_case=1 ;; esac
 if ((outside_case)); then
@@ -305,7 +306,7 @@ l=$(dline "pictures loaded"); dcheck "the PNGs made from them load" "$([[ $l == 
 dcheck "Launchpad cells, desktop icons, the About panel, art and the avatar never stalled the loader or the GUI thread" "$([[ $rc == 0 && $(dline done) == "probe: done ctl=1" ]] && echo 1)"
 note=$(fifos_untouched "$s") && copies_are_pngs "$s" >/dev/null && dcheck "no FIFO was opened; every copy is a PNG the shell made" 1 || dcheck "no FIFO was opened; every copy is a PNG the shell made: $note" 0
 site_ok=1
-for site in 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(Apps.lookup(tile.modelData.appIds[index])' 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(mini.entry ? mini.entry.icon' \
+for site in 'shell/overview/MiniDesktop.qml:ThemeIcons.appIcon(Apps.lookup(card.modelData.appId) ? Apps.lookup(card.modelData.appId).icon' 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(mini.entry ? mini.entry.icon' \
   'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(label.entry ? label.entry.icon' 'shell/overlay/ForceQuitPanel.qml:return ThemeIcons.appIcon(e ? e.icon' \
   'shell/overlay/AppAboutPanel.qml:ThemeIcons.appIcon(root.entry ? root.entry.icon' 'shell/switcher/SwitcherWindow.qml:ThemeIcons.appIcon(tile.modelData.icon' \
   'shell/search/SearchPanel.qml:ThemeIcons.appIcon(row.info.appIcon' 'shell/search/Search.qml:iconSource: "", appIcon: r.app.icon' \
@@ -318,7 +319,7 @@ for site in 'shell/overview/OverviewWindow.qml:ThemeIcons.appIcon(Apps.lookup(ti
   'shell/menubar/TrayButton.qml:readonly property string own: ThemeIcons.trayIcon(root.item ? root.item.icon : "")'; do
   grep -qF -- "${site#*:}" "${site%%:*}" || { echo "missing: $site"; site_ok=0; }
 done
-for f in shell/overview/OverviewWindow.qml shell/overlay/ForceQuitPanel.qml shell/overlay/AppAboutPanel.qml shell/switcher/SwitcherWindow.qml shell/search/SearchPanel.qml shell/launchpad/AppsCell.qml shell/desktop/DesktopIcon.qml shell/dock/Dock.qml shell/dock/StackIcon.qml shell/stages/Stages.qml; do
+for f in shell/overview/OverviewWindow.qml shell/overview/MiniDesktop.qml shell/overlay/ForceQuitPanel.qml shell/overlay/AppAboutPanel.qml shell/switcher/SwitcherWindow.qml shell/search/SearchPanel.qml shell/launchpad/AppsCell.qml shell/desktop/DesktopIcon.qml shell/dock/Dock.qml shell/dock/StackIcon.qml shell/stages/Stages.qml; do
   grep -q 'Quickshell.iconPath(.*\(\.icon\b\|iconTheme\)' "$f" && { echo "unchecked: $f"; site_ok=0; }
 done
 # Nothing else hands a player's art URL, a tray item's icon URL or the account picture's path to an Image.
