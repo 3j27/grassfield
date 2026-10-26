@@ -18,6 +18,7 @@
 #include <QTemporaryDir>
 
 #include <QProcess>
+#include <QThread>
 
 #include <functional>
 #include <memory>
@@ -253,5 +254,105 @@ TEST(ImageProviders, QuitDuringADecodeIsClean)
         ASSERT_TRUE(p.waitForFinished(30000)) << mode;
         EXPECT_EQ(p.exitStatus(), QProcess::NormalExit) << mode << " ended by a signal"; // a SIGSEGV is CrashExit
         EXPECT_EQ(p.exitCode(), std::string(mode) == "shutdown" ? 7 : 8) << mode;
+    }
+}
+
+// A big icon is written to the decoder child in pieces (a pipe holds 64 KiB): the child must read to EOF. One read() returned
+// only the first piece, so every icon over ~64 KiB (aether.png 352 KB, an OBS icon of 130 KB) showed the generic icon.
+namespace
+{
+QByteArray noisePng(int w, int h)
+{
+    QImage image(w, h, QImage::Format_RGB32);
+    quint32 x = 12345;
+    for (int y = 0; y < h; ++y)
+        for (int i = 0; i < w; ++i) {
+            x = x * 1664525u + 1013904223u;
+            image.setPixel(i, y, 0xff000000u | (x >> 8));
+        }
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    return bytes;
+}
+
+QByteArray bigSvg(int rects)
+{
+    QByteArray s = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 64 64\">";
+    for (int i = 0; i < rects; ++i)
+        s += "<rect x=\"" + QByteArray::number(i % 60) + "\" y=\"" + QByteArray::number((i * 7) % 60) +
+             "\" width=\"3\" height=\"3\" fill=\"#" + QByteArray::number(100000 + (i * 37) % 899999) + "\" opacity=\"0.5\"/>\n";
+    return s + "</svg>";
+}
+
+// Runs the decoder child by hand; `chunk` bytes per write with a pause so that the child sees them one by one.
+int runChild(const QByteArray &data, int chunk, QByteArray *out)
+{
+    QProcess p;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
+    env.insert(QStringLiteral("QT_QPA_PLATFORMTHEME"), QStringLiteral("none"));
+    p.setProcessEnvironment(env);
+    p.start(QCoreApplication::applicationFilePath(), {QStringLiteral("--decode-icon"), QStringLiteral("64"), QStringLiteral("64")});
+    if (!p.waitForStarted())
+        return -1;
+    for (qsizetype at = 0; at < data.size() && p.state() == QProcess::Running; at += chunk) {
+        p.write(data.mid(at, chunk));
+        p.waitForBytesWritten(2000);
+        QThread::msleep(20);
+    }
+    p.closeWriteChannel();
+    if (!p.waitForFinished(20000))
+        return -2;
+    if (out)
+        *out = p.readAllStandardOutput();
+    return p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -3;
+}
+} // namespace
+
+TEST(ImageProviders, TheDecoderChildReadsAnIconWrittenInPiecesToTheEnd)
+{
+    const QByteArray png = noisePng(300, 300);
+    ASSERT_GT(png.size(), 200 * 1024);
+    const QByteArray svg = bigSvg(1800);
+    ASSERT_GT(svg.size(), 100 * 1024);
+    ASSERT_LE(svg.size(), AppIcons::kMaxSvgBytes);
+    for (const QByteArray *icon : {&png, &svg}) {
+        for (const int chunk : {int(icon->size()), 16 * 1024, 5000}) {
+            QByteArray out;
+            EXPECT_EQ(runChild(*icon, chunk, &out), 0) << icon->size() << " bytes in pieces of " << chunk;
+            const QImage image = QImage::fromData(out, "PNG");
+            EXPECT_FALSE(image.isNull()) << icon->size() << " bytes in pieces of " << chunk;
+            EXPECT_LE(image.width(), 64);
+        }
+    }
+}
+
+TEST(ImageProviders, AnIconOverTheCapIsRefusedByTheChild)
+{
+    // PNG magic and then more than the cap: refused, and the child does not wait for more than cap + 1 bytes.
+    QByteArray big = QByteArray("\x89PNG\r\n\x1a\n", 8) + QByteArray(AppIcons::kMaxPngBytes + 100, 'x');
+    EXPECT_EQ(runChild(big, 256 * 1024, nullptr), 1);
+}
+
+TEST(ImageProviders, ABigIconFileGoesThroughLoadIsolated)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString root = QFileInfo(tmp.path()).canonicalFilePath();
+    QFile f(root + QStringLiteral("/big.png"));
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(noisePng(300, 300));
+    f.close();
+    QFile g(root + QStringLiteral("/big.svg"));
+    ASSERT_TRUE(g.open(QIODevice::WriteOnly));
+    g.write(bigSvg(1800));
+    g.close();
+    AppIcons::setDecoderForTests(QString(), {}, 0);
+    for (const char *name : {"big.png", "big.svg"}) {
+        const QImage image = AppIcons::loadIsolated(root + QLatin1Char('/') + QLatin1String(name), {root}, QSize(64, 64));
+        EXPECT_FALSE(image.isNull()) << name;
+        EXPECT_LE(image.width(), 64) << name;
     }
 }

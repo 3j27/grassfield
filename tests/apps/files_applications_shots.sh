@@ -62,6 +62,16 @@ open(sys.argv[1], "w").write(
     '<marker id="m" markerWidth="5" markerHeight="5"><rect width="1" height="1"/></marker></defs>'
     '<path d="M0 0 %s" marker-mid="url(#m)" fill="none" stroke="#000"/></svg>' % pts)
 EOF
+# Over 64 KiB (a pipe holds 64 KiB; the decoder child once read only the first piece and showed the generic icon).
+magick -size 300x300 xc: +noise Random -depth 8 "$icons/bignoise.png"
+python3 -I - "$icons/bigdots.svg" <<'EOF'
+import sys
+rects = "".join('<rect x="%d" y="%d" width="4" height="4" fill="#%06x" opacity="0.8"/>\n' % ((i * 11) % 60, (i * 7) % 60, 0x100000 + (i * 997) % 0xe00000) for i in range(1800))
+open(sys.argv[1], "w").write('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">' + rects + '</svg>')
+EOF
+for f in bignoise.png bigdots.svg; do
+  [[ $(stat -c %s "$icons/$f") -gt 65536 ]] || { echo "FAIL: fixture $f is not over 64 KiB"; exit 1; }
+done
 entry() { # name file icon
   printf '[Desktop Entry]\nType=Application\nName=%s\nExec=true\nIcon=%s\n' "$1" "$3" >"$apps/$2.desktop"
 }
@@ -72,6 +82,8 @@ entry "Delta PDF" delta "$icons/pdf.png"
 entry "Echo Huge" echo "$icons/huge.png"
 entry "Foxtrot Slow" foxtrot "$icons/slow.svg"
 entry "Golf Theme" golf "text-editor"
+entry "Hotel Big PNG" hotel "$icons/bignoise.png"
+entry "India Big SVG" india "$icons/bigdots.svg"
 
 env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY="$sock" GRASSFIELD_DEV=1 HOME="$iso/home" \
   XDG_CONFIG_HOME="$iso/config" XDG_CACHE_HOME="$iso/cache" XDG_STATE_HOME="$iso/state" XDG_DATA_HOME="$iso/data" \

@@ -452,7 +452,10 @@ gets (Return, double-click, File > Open, the context menu), before the scripted-
   tried again in the run) so a slow icon cannot starve the others; `aboutToQuit` and an `atexit` hook kill every child and wait
   at most 1.5 s for the 3 workers, so a quit never races a decode (an in-process decode crashed Files at exit, SIGSEGV in
   QtSvg, round 4 review). SVG work is bounded too: at most 5000 elements, and no `url()` inside a `<marker>` or `<pattern>`
-  (a marker using a marker took 7.5 s at 300 x 300 vertices and over 2 minutes at 3000 x 3000). Of the 31518 SVG icons
+  (a marker using a marker took 7.5 s at 300 x 300 vertices and over 2 minutes at 3000 x 3000). Limits that are NOT static: other
+  multipliers pass the allowlist (a mask under 60 `<use>`, filters, deep gradients); only the child's 3 s deadline, 10 s CPU limit
+  and memory limit bound them, by design. The child reads the icon to EOF (up to the 4 MiB cap), so icons over the 64 KiB
+  pipe size decode; `tst_imageproviders.cpp` writes a 270 KB PNG and a 100 KB SVG in pieces. Of the 31518 SVG icons
   installed here the rule accepts 28128, the same as before; none of them has a `<marker>` element (the 25 marker icons of the
   review were not found under /usr/share/icons). Tests: `tst_imageproviders.cpp` (deadline, no starvation, shutdown kills the
   children, quit during a decode in a child process: normal exit code, no signal, with and without `shutdown()`),

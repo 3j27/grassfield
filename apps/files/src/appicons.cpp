@@ -250,9 +250,18 @@ int decodeChildMain(int argc, char **argv)
     QFile out;
     if (!in.open(stdin, QIODevice::ReadOnly) || !out.open(stdout, QIODevice::WriteOnly))
         return 2;
-    const QByteArray data = in.read(qMax(kMaxPngBytes, kMaxSvgBytes) + 1);
-    if (data.size() > qMax(kMaxPngBytes, kMaxSvgBytes))
-        return 1;
+    // Until EOF (the parent writes a big icon in pieces: one read() returned only the first pipe-full, 64 KiB, and every larger
+    // icon showed the generic one), but never more than the cap plus one byte.
+    const qint64 cap = qMax(kMaxPngBytes, kMaxSvgBytes);
+    QByteArray data;
+    for (;;) {
+        const QByteArray chunk = in.read(cap + 1 - data.size());
+        if (chunk.isEmpty())
+            break; // EOF (a blocking read of a pipe returns data or 0 at the end)
+        data += chunk;
+        if (data.size() > cap)
+            return 1;
+    }
     const QImage image = decode(data, want);
     if (image.isNull() || !image.save(&out, "PNG"))
         return 1;
