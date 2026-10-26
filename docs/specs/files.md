@@ -581,10 +581,11 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
   running when it quits. Each file is opened once without following links (`O_NOFOLLOW`) and handled through that
   descriptor. A JPEG turns through its EXIF orientation tag, changed in place (two bytes, then `fsync`), or a minimal
   EXIF segment holding only the orientation when it has none; PNG and BMP are decoded, turned and written again in their
-  own lossless format through a new file renamed over the old one, keeping its permissions, user extended attributes
-  (tags) and ACLs, synced before the rename. A rewrite is refused, and the file left as it is, when it would harm it: an
-  animated PNG, a file owned by someone else or with other names (hard links), one whose tags or ACLs cannot be read or
-  kept, a picture whose own orientation tag would no longer match. WebP, HEIF, GIF and TIFF get no quick action (a lossy
+  own lossless format through a new file renamed over the old one, keeping its group, permissions, user extended
+  attributes (tags) and ACLs (a folder's default ACL is not taken), synced before the rename. A rewrite is refused, and
+  the file left as it is, when it would harm it: an animated PNG, a file owned by someone else or with other names (hard
+  links), one whose group, tags, ACLs or other attributes cannot be kept, a picture whose own orientation tag would no
+  longer match, a file renamed, replaced or changed while it was being turned. WebP, HEIF, GIF and TIFF get no quick action (a lossy
   re-encode, a lost animation, or TIFF's compression and tags, which Qt does not write back, are never risked). Markup is
   not offered: Grassfield has no annotation editor (`docs/specs/preview.md` non-goals). A turn is not part of Undo.
 - Tests: `tests/unit/files/tst_imagerotate.cpp` (the EXIF table, the kinds, the minimal segment, little-endian tags,
@@ -616,8 +617,10 @@ Finder-Home and Finder-Search (toolbar), the macOS
   little as it takes to show the item (down the page, then along its line; a first line comes with its header). The
   sections are placed from the group sizes (`Nav.groupedIconTops`, `groupedIconCell`, `groupedIconCells`), so the band and
   the keyboard menu work from the same numbers; a section keeps its cells and its sideways scroll while the folder
-  changes, and only the cells near the view are made (a group of thousands shown in full included). Groups are cached per
-  item and dropped item by item when an item changes (KDirModel reports each type it finds).
+  changes or is sorted again, and only the cells near the view are made (a group of thousands shown in full included). An
+  icon cell takes drops on its icon and name, like clicks; elsewhere a drop goes to the shown folder. Groups are cached
+  per item and dropped item by item when an item changes, goes or is renamed (KDirModel reports each type it finds); at
+  midnight (or the first grouping after it) the date groups are made again.
 - **Group By button** (FP-19, measured on Finder-Home at 2 px/pt): a 46.5 x 36 capsule after the view switcher, the
   groups glyph (two rules over three 5-pt squares, 18 x 17.5, rules 1.5, outlines 1) 8 from its left end and a chevron;
   its menu lists Group By, then Sort By. Disabled in the column view and the gallery. Tokens `files.group*`.
@@ -633,12 +636,13 @@ Finder-Home and Finder-Search (toolbar), the macOS
   included: an icon cell takes clicks on its icon and name only), list view (from the empty space or a row outside its
   icon and name; a click there selects the row), column view (from a column's empty space; the columns after it follow
   the new selection). Shift or Cmd add to the selection. The gallery has none (as in the Finder). A band whose press is
-  taken (or whose list row is scrolled far away) ends there.
+  taken ends there; so does a list band started on a row when that row scrolls out of the cached rows (about 20 rows
+  away) while it runs.
 - **Spring-loaded folders** (FP-42): a drag resting on a folder of the icon, list or column view, or on a sidebar place,
   opens it in the tab after `files.springDelay`. When a drag Files started ends without a drop (released outside the
   windows, cancelled), the tab goes back to where it was; a drop or the user's own navigation keeps it. A drag from
-  another application springs too; when it leaves the window (or is cancelled over it) the window's tabs go back
-  (`FilesApp.outsideDragLeft`). The folder opened under a resting pointer becomes the drop target at once
+  another application springs too; when it leaves the window (or is cancelled over it) the window's tabs go back, and a
+  drop on the window keeps them where they are, whichever view took it (`FilesApp.outsideDragEnded`). The folder opened under a resting pointer becomes the drop target at once
   (`FilesApp.refreshDrag` sends the last drag move again), so a release without moving drops into it. Space does not open
   at once: Qt's platform drag takes every key press.
 - **Drop modifiers** (FP-66, ⌘ as Ctrl, `FileLogic::dropAction`): a plain drop moves within a volume and copies across
@@ -649,7 +653,7 @@ Finder-Home and Finder-Search (toolbar), the macOS
   the file changes (watched with its folder, a burst read once). Sorted by Date Last Opened, newest first, until arranged
   otherwise; the time is the latest the list records for the file. Read only: a drop there is refused. A recent file
   renamed or moved while a Recents view is open keeps its place under the new path (`Recents::noteRenamed`, for the
-  session); to the Trash it leaves the list.
+  session; an entry used after the rename is the new file at the old path); to the Trash it leaves the list.
 - **Glance and Redo**: Cmd+Y opens Glance like Space (Finder's Quick Look shortcut); Redo is Shift+Cmd+Z only, as in
   the Finder (Ctrl+Y was a second Redo).
 - **Bars** (FP-23, decision F-11): View > Show Path Bar (Alt+Cmd+P), Show Status Bar (Cmd+/), Hide Sidebar (Ctrl+Cmd+S, the
