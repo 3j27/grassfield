@@ -74,11 +74,18 @@ service ask the session's agent itself.
     A profile of the whole system needs `org.freedesktop.NetworkManager.settings.modify.system`, `auth_admin_keep` or `yes`
     depending on how the distribution built NetworkManager, so the call may wait for the dialog: 120 s, as above. A profile
     of any other type is refused (a VPN uuid is not a network to forget).
+  - Joining a new network (`wifi.connectOpen`, and `wifi.connectSecure` with a WPA/WPA3 personal password):
+    `AddAndActivateConnection` adds a profile of the whole system (the same action, `settings.modify.system`), so it waits 120 s
+    too. The password goes from the sheet's field to that one call: it is validated (8 to 63 printable ASCII characters or 64
+    hex digits) in QML and in C++, never logged (a dev session logs only "wifi join"), and the field is emptied on Join and on
+    Cancel; NetworkManager stores it in the profile, as nmcli does. A join that does not come up within 30 s deletes the
+    profile it added, so a wrong password leaves no saved network behind.
   - VPN switches: `ActivateConnection` of a `vpn` or `wireguard` profile on no device, `DeactivateConnection` of its active
     connection (`vpn.connect`; `network-control`, `yes` for the active session by default). A VPN that needs a secret it does
     not store needs NetworkManager's secret agent, which Grassfield does not provide: the activation fails with
     NetworkManager's own reason, shown under the list.
-  Both are validated twice (a uuid, a boolean) and are refused by `GuardedCaller` in a dev session.
+  All are validated twice (a uuid, an SSID, a password, a boolean) and are refused by `GuardedCaller` in a dev session
+  (`tests/unit/settings/tst_systembus.cpp`, `tests/integration/settings_dbus.sh` section 11).
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password

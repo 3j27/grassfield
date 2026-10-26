@@ -8,11 +8,13 @@ T.Control {
 
     property bool checked: false
     property string accessibleName: ""
+    // The large switch of a pane's header row (macOS 27 Wi-Fi, Bluetooth): a 44 x 20 track, a 26 x 16 knob.
+    property bool large: false
 
     signal toggled(bool checked)
 
-    implicitWidth: Tokens.controlToggleWidth
-    implicitHeight: Tokens.controlToggleHeight
+    implicitWidth: root.large ? Tokens.controlToggleLargeWidth : Tokens.controlToggleWidth
+    implicitHeight: root.large ? Tokens.controlToggleLargeHeight : Tokens.controlToggleHeight
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox
@@ -58,9 +60,9 @@ T.Control {
     }
 
     Rectangle {
-        readonly property real inset: (Tokens.controlToggleHeight - Tokens.controlToggleKnobHeight) / 2
-        width: Tokens.controlToggleKnobWidth
-        height: Tokens.controlToggleKnobHeight
+        readonly property real inset: (root.height - height) / 2
+        width: root.large ? Tokens.controlToggleLargeKnobWidth : Tokens.controlToggleKnobWidth
+        height: root.large ? Tokens.controlToggleLargeKnobHeight : Tokens.controlToggleKnobHeight
         radius: height / 2
         y: inset
         x: root.checked ? root.width - width - inset : inset

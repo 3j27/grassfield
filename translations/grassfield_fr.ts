@@ -2170,6 +2170,25 @@
     </message>
 </context>
 <context>
+    <name>CurrentNetworkRow</name>
+    <message>
+        <source>Secured</source>
+        <translation>Sécurisé</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvert</translation>
+    </message>
+    <message>
+        <source>Signal %1 %</source>
+        <translation>Signal %1 %</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
+    </message>
+</context>
+<context>
     <name>CustomizeFolderWindow</name>
     <message>
         <source>Default</source>
@@ -3211,6 +3230,21 @@
     <message>
         <source>Cancel</source>
         <translation>Annuler</translation>
+    </message>
+</context>
+<context>
+    <name>ForgetNetworkSheet</name>
+    <message>
+        <source>Forget Wi-Fi network “%1”?</source>
+        <translation>Oublier le réseau Wi-Fi « %1 » ?</translation>
+    </message>
+    <message>
+        <source>This computer will no longer join this network on its own, and its saved password is removed.</source>
+        <translation>Cet ordinateur ne rejoindra plus ce réseau de lui-même, et son mot de passe enregistré est supprimé.</translation>
+    </message>
+    <message>
+        <source>Forget</source>
+        <translation>Oublier</translation>
     </message>
 </context>
 <context>
@@ -4691,6 +4725,13 @@
     </message>
 </context>
 <context>
+    <name>NetworkRow</name>
+    <message>
+        <source>Actions for %1</source>
+        <translation>Actions pour %1</translation>
+    </message>
+</context>
+<context>
     <name>NoticeDialog</name>
     <message>
         <source>OK</source>
@@ -5830,6 +5871,13 @@
     </message>
 </context>
 <context>
+    <name>Spinner</name>
+    <message>
+        <source>In progress</source>
+        <translation>En cours</translation>
+    </message>
+</context>
+<context>
     <name>StackPopup</name>
     <message>
         <source>%1 more in Files</source>
@@ -6051,6 +6099,18 @@
     <message>
         <source>that network is no longer in range</source>
         <translation>Ce réseau n’est plus à portée</translation>
+    </message>
+    <message>
+        <source>the network could not be joined</source>
+        <translation>Impossible de rejoindre le réseau</translation>
+    </message>
+    <message>
+        <source>that network does not take a password</source>
+        <translation>Ce réseau ne prend pas de mot de passe</translation>
+    </message>
+    <message>
+        <source>that VPN is no longer saved</source>
+        <translation>Ce VPN n’est plus enregistré</translation>
     </message>
     <message>
         <source>no Bluetooth adapter</source>
@@ -6887,6 +6947,61 @@
     </message>
 </context>
 <context>
+    <name>WifiDetailsSheet</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Wi-Fi band</source>
+        <translation>Bande Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Link rate</source>
+        <translation>Débit de la liaison</translation>
+    </message>
+    <message>
+        <source>%1 Mbit/s</source>
+        <translation>%1 Mbit/s</translation>
+    </message>
+    <message>
+        <source>Security</source>
+        <translation>Sécurité</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>IP address</source>
+        <translation>Adresse IP</translation>
+    </message>
+    <message>
+        <source>Subnet mask</source>
+        <translation>Masque de sous-réseau</translation>
+    </message>
+    <message>
+        <source>Router</source>
+        <translation>Routeur</translation>
+    </message>
+    <message>
+        <source>DNS servers</source>
+        <translation>Serveurs DNS</translation>
+    </message>
+    <message>
+        <source>IPv6 address</source>
+        <translation>Adresse IPv6</translation>
+    </message>
+    <message>
+        <source>MAC address</source>
+        <translation>Adresse MAC</translation>
+    </message>
+    <message>
+        <source>Forget This Network…</source>
+        <translation>Oublier ce réseau…</translation>
+    </message>
+</context>
+<context>
     <name>WifiList</name>
     <message>
         <source>a password is required</source>
@@ -6960,6 +7075,30 @@
         <translation>Wi-Fi</translation>
     </message>
     <message>
+        <source>“%1” cannot be joined from here: its name is not plain text.</source>
+        <translation>« %1 » ne peut pas être rejoint d’ici : son nom n’est pas du texte simple.</translation>
+    </message>
+    <message>
+        <source>“%1” needs a sign-in (802.1X), which Grassfield does not set up yet.</source>
+        <translation>« %1 » demande une identification (802.1X), que Grassfield ne configure pas encore.</translation>
+    </message>
+    <message>
+        <source>“%1” uses WEP, which is not secure: Grassfield does not join it.</source>
+        <translation>« %1 » utilise le WEP, qui n’est pas sûr : Grassfield ne le rejoint pas.</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
+    <message>
+        <source>Forget This Network…</source>
+        <translation>Oublier ce réseau…</translation>
+    </message>
+    <message>
         <source>Connecting…</source>
         <translation>Connexion…</translation>
     </message>
@@ -6968,52 +7107,79 @@
         <translation>Connecté</translation>
     </message>
     <message>
-        <source>Needs a sign-in. Set it up in Quick Settings.</source>
-        <translation>Connexion requise. Configurez-la dans les Réglages rapides.</translation>
+        <source>No Wi-Fi hardware was found.</source>
+        <translation>Aucun matériel Wi-Fi n’a été trouvé.</translation>
     </message>
     <message>
-        <source>Needs a password. Join it from Quick Settings.</source>
-        <translation>Mot de passe requis. Rejoignez-le depuis les Réglages rapides.</translation>
+        <source>Connect this computer to the internet without a cable. Turn on Wi-Fi, then choose a network to join.</source>
+        <translation>Connectez cet ordinateur à Internet sans câble. Activez le Wi-Fi, puis choisissez un réseau à rejoindre.</translation>
+    </message>
+    <message>
+        <source>Known Network</source>
+        <translation>Réseau connu</translation>
+    </message>
+    <message>
+        <source>Known Networks</source>
+        <translation>Réseaux connus</translation>
+    </message>
+    <message>
+        <source>Other Networks</source>
+        <translation>Autres réseaux</translation>
+    </message>
+    <message>
+        <source>Looking for networks…</source>
+        <translation>Recherche de réseaux…</translation>
+    </message>
+    <message>
+        <source>No other networks found</source>
+        <translation>Aucun autre réseau trouvé</translation>
     </message>
     <message>
         <source>Known network</source>
         <translation>Réseau connu</translation>
     </message>
     <message>
+        <source>Needs a sign-in</source>
+        <translation>Demande une identification</translation>
+    </message>
+    <message>
+        <source>WEP, not joined</source>
+        <translation>WEP, non rejoint</translation>
+    </message>
+    <message>
         <source>Wi-Fi is not available: NetworkManager did not answer.</source>
         <translation>Le Wi-Fi n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
-    </message>
-    <message>
-        <source>Off</source>
-        <translation>Désactivé</translation>
-    </message>
-    <message>
-        <source>Not connected</source>
-        <translation>Non connecté</translation>
-    </message>
-    <message>
-        <source>Networks</source>
-        <translation>Réseaux</translation>
-    </message>
-    <message>
-        <source>No networks found.</source>
-        <translation>Aucun réseau trouvé.</translation>
     </message>
     <message>
         <source>Disconnect</source>
         <translation>Déconnecter</translation>
     </message>
+</context>
+<context>
+    <name>WifiPasswordSheet</name>
     <message>
-        <source>Secured</source>
-        <translation>Sécurisé</translation>
+        <source>Enter the password for “%1”</source>
+        <translation>Saisissez le mot de passe de « %1 »</translation>
     </message>
     <message>
-        <source>Open</source>
-        <translation>Ouvert</translation>
+        <source>This network is secured. Its password is saved on this computer once it is joined.</source>
+        <translation>Ce réseau est sécurisé. Son mot de passe est enregistré sur cet ordinateur une fois le réseau rejoint.</translation>
     </message>
     <message>
-        <source>Signal %1 %</source>
-        <translation>Signal %1&#xa0;%</translation>
+        <source>Join</source>
+        <translation>Rejoindre</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>A Wi-Fi password has 8 to 63 characters (letters, digits and symbols), or 64 hexadecimal digits.</source>
+        <translation>Un mot de passe Wi-Fi compte de 8 à 63 caractères (lettres, chiffres et symboles), ou 64 chiffres hexadécimaux.</translation>
+    </message>
+    <message>
+        <source>Show password</source>
+        <translation>Afficher le mot de passe</translation>
     </message>
 </context>
 <context>

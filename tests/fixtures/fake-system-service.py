@@ -14,6 +14,8 @@ what the Settings app sent. With --fail, the named method answers with that D-Bu
 
 The NetworkManager world: radio on; an Ethernet device and a Wi-Fi device wlan0 (connected, active AP 1); access points
 "Home" (secured, strong, active), "Home" (secured, weak), "Cafe" (open), a saved Wi-Fi profile for "Home" and an Ethernet one.
+For the network panes: wlan0's addresses (IP4Config, IP6Config), its active connection, a VPN profile (connected) and a WireGuard
+one; Delete on a profile removes it; a join with the password "wrong horse" goes down (its active connection's State 4).
 The BlueZ world: adapter hci0 powered; paired Headphones (connected), paired Mouse, an unpaired device.
 The General world (one process, five names): hostname1 (the reference machine, a laptop), timedate1 (Europe/Paris, NTP on, a fixed
 time; ListTimezones), timesync1 (a server and the fallback list), locale1 (LANG=en_US.UTF-8), systemd1 (the user manager: one of
@@ -139,47 +141,100 @@ def nm_world(svc):
     def setprop(path, iface, name, value):
         svc.props[(path, iface)][name] = value
 
+    profiles = [NM + "/Settings/1", NM + "/Settings/2", NM + "/Settings/3", NM + "/Settings/4"]
+    active_iface = "org.freedesktop.NetworkManager.Connection.Active"
+    vpn_uuid = "5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8e"
+
+    def add_and_activate(p):
+        settings = p.unpack()[0]
+        psk = settings.get("802-11-wireless-security", {}).get("psk", "")
+        # A wrong password: NetworkManager takes the profile, the connection goes down (no agent gives it another password).
+        setprop(NM + "/ActiveConnection/2", active_iface, "State", V("u", 4 if psk == "wrong horse" else 2))
+        if psk != "wrong horse":
+            setprop(wifi_dev, "org.freedesktop.NetworkManager.Device", "State", V("u", 100))
+        return V("(oo)", (NM + "/Settings/9", NM + "/ActiveConnection/2"))
+
+    def deactivate(p):
+        path = p.unpack()[0]
+        if (path, active_iface) not in svc.props:
+            raise GLib.Error("not an active connection")
+        setprop(path, active_iface, "State", V("u", 4))
+        setprop(NM, "org.freedesktop.NetworkManager", "ActiveConnections",
+                V("ao", [a for a in prop(NM, "org.freedesktop.NetworkManager", "ActiveConnections").unpack() if a != path]))
+
     svc.register(NM, '<interface name="org.freedesktop.NetworkManager">'
                      '<property name="WirelessEnabled" type="b" access="readwrite"/>'
+                     '<property name="ActiveConnections" type="ao" access="read"/>'
                      '<method name="GetDevices"><arg direction="out" type="ao"/></method>'
                      '<method name="ActivateConnection"><arg direction="in" type="o"/><arg direction="in" type="o"/><arg direction="in" type="o"/><arg direction="out" type="o"/></method>'
+                     '<method name="DeactivateConnection"><arg direction="in" type="o"/></method>'
                      '<method name="AddAndActivateConnection"><arg direction="in" type="a{sa{sv}}"/><arg direction="in" type="o"/><arg direction="in" type="o"/>'
                      '<arg direction="out" type="o"/><arg direction="out" type="o"/></method></interface>',
                  methods={
                      "GetDevices": lambda p: V("(ao)", ([NM + "/Devices/1", wifi_dev],)),
                      "ActivateConnection": lambda p: (setprop(wifi_dev, "org.freedesktop.NetworkManager.Device", "State", V("u", 100)), V("(o)", (NM + "/ActiveConnection/1",)))[1],
-                     "AddAndActivateConnection": lambda p: (setprop(wifi_dev, "org.freedesktop.NetworkManager.Device", "State", V("u", 100)),
-                                                            V("(oo)", (NM + "/Settings/9", NM + "/ActiveConnection/2")))[1],
+                     "DeactivateConnection": lambda p: deactivate(p),
+                     "AddAndActivateConnection": add_and_activate,
                  },
-                 props={"WirelessEnabled": V("b", True)}, writable=("WirelessEnabled",))
+                 props={"WirelessEnabled": V("b", True), "ActiveConnections": V("ao", [NM + "/ActiveConnection/1", NM + "/ActiveConnection/3"])},
+                 writable=("WirelessEnabled",))
     device_xml = ('<interface name="org.freedesktop.NetworkManager.Device"><property name="DeviceType" type="u" access="read"/>'
                   '<property name="Interface" type="s" access="read"/><property name="State" type="u" access="read"/>'
+                  '<property name="HwAddress" type="s" access="read"/><property name="ActiveConnection" type="o" access="read"/>'
+                  '<property name="Ip4Config" type="o" access="read"/><property name="Ip6Config" type="o" access="read"/>'
                   '<method name="Disconnect"/></interface>')
     svc.register(NM + "/Devices/1", device_xml, methods={"Disconnect": lambda p: None},
-                 props={"DeviceType": V("u", 1), "Interface": V("s", "eth0"), "State": V("u", 100)})
+                 props={"DeviceType": V("u", 1), "Interface": V("s", "eth0"), "State": V("u", 20), "HwAddress": V("s", "3C:52:82:00:00:01"),
+                        "ActiveConnection": V("o", "/"), "Ip4Config": V("o", "/"), "Ip6Config": V("o", "/")})
     svc.register(wifi_dev, device_xml,
                  methods={"Disconnect": lambda p: (setprop(wifi_dev, "org.freedesktop.NetworkManager.Device", "State", V("u", 30)),
                                                    setprop(wifi_dev, "org.freedesktop.NetworkManager.Device.Wireless", "ActiveAccessPoint", V("o", "/")), None)[2]},
-                 props={"DeviceType": V("u", 2), "Interface": V("s", "wlan0"), "State": V("u", 100)})
+                 props={"DeviceType": V("u", 2), "Interface": V("s", "wlan0"), "State": V("u", 100), "HwAddress": V("s", "3C:52:82:00:00:02"),
+                        "ActiveConnection": V("o", NM + "/ActiveConnection/1"), "Ip4Config": V("o", NM + "/IP4Config/2"), "Ip6Config": V("o", NM + "/IP6Config/2")})
     svc.register(wifi_dev, '<interface name="org.freedesktop.NetworkManager.Device.Wireless">'
-                           '<property name="ActiveAccessPoint" type="o" access="read"/>'
+                           '<property name="ActiveAccessPoint" type="o" access="read"/><property name="Bitrate" type="u" access="read"/>'
                            '<method name="GetAllAccessPoints"><arg direction="out" type="ao"/></method>'
                            '<method name="RequestScan"><arg direction="in" type="a{sv}"/></method></interface>',
                  methods={"GetAllAccessPoints": lambda p: V("(ao)", (sorted(aps),)), "RequestScan": lambda p: None},
-                 props={"ActiveAccessPoint": V("o", NM + "/AccessPoint/1")})
+                 props={"ActiveAccessPoint": V("o", NM + "/AccessPoint/1"), "Bitrate": V("u", 866000)})
     for path, (ssid, strength, flags, wpa, rsn) in aps.items():
         svc.register(path, '<interface name="org.freedesktop.NetworkManager.AccessPoint"><property name="Ssid" type="ay" access="read"/>'
                            '<property name="Strength" type="y" access="read"/><property name="Flags" type="u" access="read"/>'
-                           '<property name="WpaFlags" type="u" access="read"/><property name="RsnFlags" type="u" access="read"/></interface>',
-                     props={"Ssid": V("ay", ssid), "Strength": V("y", strength), "Flags": V("u", flags), "WpaFlags": V("u", wpa), "RsnFlags": V("u", rsn)})
+                           '<property name="WpaFlags" type="u" access="read"/><property name="RsnFlags" type="u" access="read"/>'
+                           '<property name="Frequency" type="u" access="read"/></interface>',
+                     props={"Ssid": V("ay", ssid), "Strength": V("y", strength), "Flags": V("u", flags), "WpaFlags": V("u", wpa), "RsnFlags": V("u", rsn),
+                            "Frequency": V("u", 5180)})
+    svc.register(NM + "/IP4Config/2", '<interface name="org.freedesktop.NetworkManager.IP4Config"><property name="AddressData" type="aa{sv}" access="read"/>'
+                                      '<property name="Gateway" type="s" access="read"/><property name="NameserverData" type="aa{sv}" access="read"/></interface>',
+                 props={"AddressData": V("aa{sv}", [{"address": V("s", "192.168.20.34"), "prefix": V("u", 24)}]), "Gateway": V("s", "192.168.20.1"),
+                        "NameserverData": V("aa{sv}", [{"address": V("s", "192.168.20.1")}, {"address": V("s", "9.9.9.9")}])})
+    svc.register(NM + "/IP6Config/2", '<interface name="org.freedesktop.NetworkManager.IP6Config"><property name="AddressData" type="aa{sv}" access="read"/>'
+                                      '<property name="Gateway" type="s" access="read"/></interface>',
+                 props={"AddressData": V("aa{sv}", [{"address": V("s", "fd00:20::34"), "prefix": V("u", 64)}]), "Gateway": V("s", "fe80::1")})
+    active_xml = ('<interface name="org.freedesktop.NetworkManager.Connection.Active"><property name="Id" type="s" access="read"/>'
+                  '<property name="Uuid" type="s" access="read"/><property name="State" type="u" access="read"/></interface>')
+    svc.register(NM + "/ActiveConnection/1", active_xml, props={"Id": V("s", "Maison"), "Uuid": V("s", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"), "State": V("u", 2)})
+    svc.register(NM + "/ActiveConnection/2", active_xml, props={"Id": V("s", "Home"), "Uuid": V("s", "99999999-0000-4000-8000-000000000009"), "State": V("u", 1)})
+    svc.register(NM + "/ActiveConnection/3", active_xml, props={"Id": V("s", "Office VPN"), "Uuid": V("s", vpn_uuid), "State": V("u", 2)})
     svc.register(NM + "/Settings", '<interface name="org.freedesktop.NetworkManager.Settings"><method name="ListConnections"><arg direction="out" type="ao"/></method></interface>',
-                 methods={"ListConnections": lambda p: V("(ao)", ([NM + "/Settings/1", NM + "/Settings/2"],))})
-    conn_xml = '<interface name="org.freedesktop.NetworkManager.Settings.Connection"><method name="GetSettings"><arg direction="out" type="a{sa{sv}}"/></method></interface>'
-    svc.register(NM + "/Settings/1", conn_xml, methods={"GetSettings": lambda p: V("(a{sa{sv}})", ({
-        "connection": {"type": V("s", "802-11-wireless"), "uuid": V("s", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"), "id": V("s", "Maison")},
-        "802-11-wireless": {"ssid": V("ay", b"Home")}},))})
-    svc.register(NM + "/Settings/2", conn_xml, methods={"GetSettings": lambda p: V("(a{sa{sv}})", ({
-        "connection": {"type": V("s", "802-3-ethernet"), "uuid": V("s", "11111111-2222-3333-4444-555555555555"), "id": V("s", "Wired")}},))})
+                 methods={"ListConnections": lambda p: V("(ao)", (list(profiles),))})
+    conn_xml = ('<interface name="org.freedesktop.NetworkManager.Settings.Connection"><method name="GetSettings"><arg direction="out" type="a{sa{sv}}"/></method>'
+                '<method name="Delete"/></interface>')
+
+    def delete(path):
+        if path in profiles:
+            profiles.remove(path)
+
+    def connection(path, settings):
+        svc.register(path, conn_xml, methods={"GetSettings": lambda p: V("(a{sa{sv}})", (settings,)), "Delete": lambda p: delete(path)})
+
+    connection(NM + "/Settings/1", {"connection": {"type": V("s", "802-11-wireless"), "uuid": V("s", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"), "id": V("s", "Maison")},
+                                    "802-11-wireless": {"ssid": V("ay", b"Home")}})
+    connection(NM + "/Settings/2", {"connection": {"type": V("s", "802-3-ethernet"), "uuid": V("s", "11111111-2222-3333-4444-555555555555"), "id": V("s", "Wired")}})
+    connection(NM + "/Settings/3", {"connection": {"type": V("s", "vpn"), "uuid": V("s", vpn_uuid), "id": V("s", "Office VPN")}})
+    connection(NM + "/Settings/4", {"connection": {"type": V("s", "wireguard"), "uuid": V("s", "6c7d8e9f-0011-4b2c-9d3e-4f5a6b7c8d9f"), "id": V("s", "Home WireGuard")}})
+    # The profile a join adds (AddAndActivateConnection): only its Delete is called.
+    connection(NM + "/Settings/9", {"connection": {"type": V("s", "802-11-wireless"), "uuid": V("s", "99999999-0000-4000-8000-000000000009"), "id": V("s", "Home")}})
     return "org.freedesktop.NetworkManager"
 
 

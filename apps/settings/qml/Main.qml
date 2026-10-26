@@ -642,7 +642,27 @@ Window {
         WifiPage {
             backend: root.backend
             system: sys
+            onPasswordRequested: net => wifiPassword.openFor(net)
+            onForgetRequested: net => forgetNetwork.openFor(net)
+            onDetailsRequested: (net, device) => wifiDetails.openFor(net, device)
         }
+    }
+
+    // Wi-Fi: a secured network's password, Details…, Forget This Network…: sheets over the whole window; the page acts on the
+    // answers.
+    WifiPasswordSheet {
+        id: wifiPassword
+        onJoin: (net, psk) => (page.item as WifiPage)?.join(net, psk)
+    }
+
+    WifiDetailsSheet {
+        id: wifiDetails
+        onForgetRequested: net => forgetNetwork.openFor(net)
+    }
+
+    ForgetNetworkSheet {
+        id: forgetNetwork
+        onForget: net => (page.item as WifiPage)?.forget(net)
     }
 
     Component {

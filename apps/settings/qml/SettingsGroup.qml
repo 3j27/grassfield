@@ -11,6 +11,8 @@ Item {
     // automatically when you log in.").
     property string captionDetail: ""
     property string footnote: ""
+    // Something of the section is under way (macOS 27 Wi-Fi > Other Networks while it scans): a spinner at the caption's right.
+    property bool busy: false
     default property alias rows: column.data
 
     width: parent ? parent.width : implicitWidth
@@ -36,6 +38,18 @@ Item {
         font.pixelSize: Tokens.typographyBodySize
         font.weight: Tokens.typographyMenuBoldWeight
         wrapMode: Text.Wrap
+    }
+
+    Spinner {
+        visible: captionText.visible && root.busy
+        x: root.width - width - Tokens.settingsSpinnerInset
+        // Centred on the caption's capitals.
+        y: captionText.y + captionText.baselineOffset - captionMetrics.capitalHeight / 2 - height / 2
+    }
+
+    FontMetrics {
+        id: captionMetrics
+        font: captionText.font
     }
 
     Text {

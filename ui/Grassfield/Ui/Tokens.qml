@@ -28,6 +28,9 @@ QtObject {
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#292929",  // opaque app window, dark appearance: macOS 27 System Settings 39-42 grey, neutral (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
         groupFill: "#313131",  // inset group of an app window, dark appearance: macOS 27 System Settings groups #313030 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
+        statusOn: "#45C565",  // own green of a status dot, dark appearance: 5.8:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusWarn: "#E0B000",  // own yellow of a status dot, dark appearance: 6.4:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#232323",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
         windowTextSecondary: "#DCDCE4",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
         chipFill: "#FFFFFF"  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
@@ -56,6 +59,9 @@ QtObject {
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#FFFFFF",  // opaque app window, light appearance: macOS 27 System Settings content 255 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
         groupFill: "#F7F7F7",  // inset group of an app window, light appearance: macOS 27 System Settings groups 247 on 255, no border (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        statusOn: "#2E9E48",  // own green of a status dot (Wi-Fi Connected, a service that is up): 3.2:1 on the light group fill (a graphic: 3:1), the text beside it says the same [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusWarn: "#B78300",  // own yellow of a status dot (a service that is up without an address): 3.1:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusOff: "#D7372F",  // own red of a status dot (a service that is not connected): 4.4:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#ECECEC",  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
         windowTextSecondary: "#6E6E73",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
         chipFill: "#FFFFFF"  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
@@ -535,6 +541,14 @@ QtObject {
     readonly property int controlSliderHeight: 22
     // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleWidth: 36
+    // the large switch of a pane's header row: track 44 x 20 [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeWidth: 44
+    // the large switch's track height [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeHeight: 20
+    // the large switch's knob: 26 x 16, inset 2 [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeKnobWidth: 26
+    // the large switch's knob height [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeKnobHeight: 16
     // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleHeight: 16
     // inner border of the security surfaces only (lock password field, polkit dialog; their spec pins it, reviewed separately); every other surface draws the one ring, control.focusOutline [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -561,6 +575,8 @@ QtObject {
     readonly property int controlSliderTrackCompact: 4
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
+    // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int controlPushPadding: 12
     // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -1280,6 +1296,80 @@ QtObject {
     readonly property int settingsStorageCountMs: 120000
     // the preview's second line: 18 to 18.5 between the inks of the date, the amount and the number, 17 between the text boxes [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewItemGap: 17
+    // a pane's header row (Wi-Fi, Bluetooth): its tile [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTileSize: 28
+    // the header row's tile: 11.5 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsHeaderRowTileTop: 11.5
+    // the header row's title and text start 48 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextInset: 48
+    // the header row's title (13 pt): baseline 23 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTitleBaseline: 23
+    // the header row's text (11 pt): first baseline 38 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextBaseline: 38
+    // the header row's text: lines 14 apart [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextLineHeight: 14
+    // the header row: 13.5 under the text's last baseline [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsHeaderRowBottom: 13.5
+    // the header row's large switch: top 9 below the group top, right edge 10 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowSwitchTop: 9
+    // the header row's text stops 12 before the switch [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextGap: 12
+    // the current network's row without Apple's Privacy Warning line (macOS 26) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiCurrentRowHeight: 54
+    // the current network's name: baseline 23.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentNameBaseline: 23.5
+    // the current network's status line: baseline 41.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentStatusBaseline: 41.5
+    // the lock, the signal glyph and Details…: centred 22 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiCurrentControlsCenter: 22
+    // the status dot: 9.5 across [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiStatusDotSize: 9.5
+    // the status dot's left edge from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiStatusDotInset: 12
+    // the status text: its ink at 29 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiStatusTextInset: 28.5
+    // the lock's box to the signal glyph's in the current network's row: their inks 17 apart (the lock's drawing has side bearings) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentLockGap: 13.5
+    // the signal glyph's ink to Details… [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentSignalGap: 15.5
+    // a Known Network row [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiKnownRowHeight: 40
+    // an Other Networks row (+ its 1-pt separator: pitch 45) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiOtherRowHeight: 44
+    // the check mark's box: its ink (2.5 inside the box) at 21 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCheckInset: 18.5
+    // a network's name at 40.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiNameInset: 40.5
+    // lock, signal glyph and (…): 11.5 between their inks [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiGlyphGap: 11.5
+    // the lock's box to the signal glyph's in a list row: their inks 11.5 apart (the lock's drawing has side bearings) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiLockGap: 8.5
+    // the (…) circle's right edge from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiMoreInset: 22
+    // the (…) circle: 16.5 across (the glyph's ring fills its box) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiMoreSize: 17
+    // lock (ink 9 x 12.5) and check mark (ink 9.5 x 9) glyphs [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiGlyphSize: 15
+    // the signal glyph: ink 14.5 x 10.5 (14 x 10.7 at 14) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiSignalSize: 14
+    // the progress spinner beside a section title: 8 spokes 2 wide, from 2.25 to 7.75 off its centre [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerSize: 15.5
+    // the spinner's spokes [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsSpinnerSpokes: 8
+    // a spoke's width (round ends) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsSpinnerSpokeWidth: 2
+    // a spoke's length [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerSpokeLength: 5.5
+    // the lightest spoke, behind the darkest (the secondary colour) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerTailOpacity: 0.2
+    // the spinner's right edge from the group edge, centred on the section title [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerInset: 12.5
+    // the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsSpinnerStepMs: 125
+    // how long a requested scan shows the spinner (NetworkManager answers RequestScan at once and scans for a few seconds) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiScanMs: 8000
+    // the pane asks for a new scan this often while it is open, as macOS keeps scanning [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiRescanMs: 30000
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

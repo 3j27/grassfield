@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QMap>
 
+#include <algorithm>
 #include <functional>
 
 #include "systembus.h"
@@ -295,6 +296,87 @@ TEST(SystemBusWifi, AnOpenAndASecuredNetworkOfTheSameNameAreToldApartBySecurity)
     // Only the secured ones left: refused with the password reason, never joined.
     NmFixture g;
     EXPECT_EQ(runAction(g.bus, {{"op", "wifi.connectOpen"}, {"hex", "486F6D65"}}), QStringLiteral("that network needs a password"));
+}
+
+TEST(SystemBusWifi, ASecuredNetworkIsJoinedWithItsPassphraseAndKeptOnlyOnceUp)
+{
+    NmFixture f;
+    QList<uint> states{1, 1, 2}; // activating twice, then activated
+    f.bus.handler = [&f, &states](const Call &c) {
+        if (c.member == QLatin1String("Get") && c.path == QLatin1String("/active/1") && c.args.value(1).toString() == QLatin1String("State"))
+            return ok({variant(u32(states.isEmpty() ? 2 : states.takeFirst()))});
+        return f.answer(c);
+    };
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", "correct horse"}}), QString());
+    const auto add = std::find_if(f.bus.calls.cbegin(), f.bus.calls.cend(), [](const Call &c) { return c.member == QLatin1String("AddAndActivateConnection"); });
+    ASSERT_NE(add, f.bus.calls.cend());
+    const ConnectionSettings s = qvariant_cast<ConnectionSettings>(add->args[0]);
+    EXPECT_EQ(s["802-11-wireless"]["ssid"].toByteArray(), QByteArray("Home"));
+    EXPECT_EQ(s["802-11-wireless-security"]["key-mgmt"].toString(), QStringLiteral("wpa-psk"));
+    EXPECT_EQ(s["802-11-wireless-security"]["psk"].toString(), QStringLiteral("correct horse"));
+    EXPECT_EQ(qvariant_cast<QDBusObjectPath>(add->args[2]).path(), QStringLiteral("/ap/1")); // the stronger "Home"
+    EXPECT_EQ(add->timeoutMs, 120000); // a profile of the whole system: NetworkManager may ask polkit
+    EXPECT_FALSE(f.bus.members().contains(QStringLiteral("Connection.Delete")));
+    EXPECT_TRUE(states.isEmpty());
+    EXPECT_TRUE(privilegedAction({{"op", "wifi.connectSecure"}}));
+    EXPECT_TRUE(privilegedAction({{"op", "wifi.connectOpen"}}));
+
+    // WPA3 only (SAE, no PSK): key-mgmt sae.
+    NmFixture w;
+    w.apProps[QStringLiteral("/ap/1")][QStringLiteral("RsnFlags")] = u32(0x488);
+    w.bus.handler = [&w](const Call &c) {
+        if (c.member == QLatin1String("Get") && c.args.value(1).toString() == QLatin1String("State"))
+            return ok({variant(u32(2))});
+        return w.answer(c);
+    };
+    EXPECT_EQ(runAction(w.bus, {{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", "correct horse"}}), QString());
+    const auto sae = std::find_if(w.bus.calls.cbegin(), w.bus.calls.cend(), [](const Call &c) { return c.member == QLatin1String("AddAndActivateConnection"); });
+    ASSERT_NE(sae, w.bus.calls.cend());
+    EXPECT_EQ(qvariant_cast<QDBusObjectPath>(sae->args[2]).path(), QStringLiteral("/ap/1"));
+    EXPECT_EQ(qvariant_cast<ConnectionSettings>(sae->args[0])["802-11-wireless-security"]["key-mgmt"].toString(), QStringLiteral("sae"));
+}
+
+TEST(SystemBusWifi, AFailedJoinDeletesItsNewProfileAndSaysSo)
+{
+    // The connection went down (a wrong password), or went away: the new profile is deleted.
+    for (const bool gone : {false, true}) {
+        NmFixture f;
+        f.bus.handler = [&f, gone](const Call &c) {
+            if (c.member == QLatin1String("Get") && c.path == QLatin1String("/active/1") && c.args.value(1).toString() == QLatin1String("State"))
+                return gone ? err(QStringLiteral("org.freedesktop.DBus.Error.UnknownObject: gone")) : ok({variant(u32(4))});
+            if (c.member == QLatin1String("Delete"))
+                return ok();
+            return f.answer(c);
+        };
+        EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", "wrong horse"}}), QStringLiteral("the network could not be joined"));
+        EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("Delete"));
+        EXPECT_EQ(f.bus.calls.last().path, QStringLiteral("/conn/new"));
+    }
+    // An open network takes no password, a missing one is not joined at all.
+    NmFixture o;
+    EXPECT_EQ(runAction(o.bus, {{"op", "wifi.connectSecure"}, {"hex", "43616665"}, {"psk", "correct horse"}}), QStringLiteral("that network does not take a password"));
+    EXPECT_EQ(runAction(o.bus, {{"op", "wifi.connectSecure"}, {"hex", "4E6F7065"}, {"psk", "correct horse"}}), QStringLiteral("that network is no longer in range"));
+    EXPECT_FALSE(o.bus.members().contains(QStringLiteral("NetworkManager.AddAndActivateConnection")));
+}
+
+TEST(SystemBusWifi, APassphraseIsEightToSixtyThreePrintableCharactersOrSixtyFourHexDigits)
+{
+    NmFixture f;
+    const QString hex64(64, QLatin1Char('a'));
+    EXPECT_TRUE(validAction({{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", "12345678"}}));
+    EXPECT_TRUE(validAction({{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", QString(63, QLatin1Char('~'))}}));
+    EXPECT_TRUE(validAction({{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", hex64}}));
+    for (const QVariant &psk : {QVariant(QStringLiteral("1234567")), QVariant(QString(64, QLatin1Char('g'))), QVariant(QString(65, QLatin1Char('a'))),
+                                QVariant(QStringLiteral("line\nbreak")), QVariant(QStringLiteral("caf\u00e9 au lait")), QVariant(12345678), QVariant()}) {
+        f.bus.calls.clear();
+        EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", psk}}), QStringLiteral("invalid request")) << qPrintable(psk.toString());
+        EXPECT_TRUE(f.bus.calls.isEmpty());
+    }
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectSecure"}, {"hex", "zz"}, {"psk", "12345678"}}), QStringLiteral("invalid request"));
+    GuardedCaller dev(f.bus, true);
+    f.bus.calls.clear();
+    EXPECT_TRUE(runAction(dev, {{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", "12345678"}}).startsWith(QStringLiteral("dev guard")));
+    EXPECT_FALSE(f.bus.members().contains(QStringLiteral("NetworkManager.AddAndActivateConnection")));
 }
 
 TEST(SystemBusWifi, EnhancedOpenIsJoinedWithoutAPasswordAndWithKeyMgmtOwe)

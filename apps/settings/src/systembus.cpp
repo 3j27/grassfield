@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QMap>
 #include <QRegularExpression>
+#include <QThread>
 
 namespace grassfield::settings {
 
@@ -238,6 +239,18 @@ bool isSsidHex(const QString &s)
 {
     static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("([0-9A-Fa-f]{2}){1,32}")));
     return re.match(s).hasMatch();
+}
+
+// A WPA/WPA3 personal passphrase as NetworkManager takes it: 8 to 63 printable ASCII characters, or the 64 hex digits of a
+// raw key.
+bool isPassphrase(const QVariant &v)
+{
+    if (v.metaType() != QMetaType::fromType<QString>())
+        return false;
+    static const QRegularExpression ascii(QRegularExpression::anchoredPattern(QStringLiteral("[\\x20-\\x7E]{8,63}")));
+    static const QRegularExpression raw(QRegularExpression::anchoredPattern(QStringLiteral("[0-9A-Fa-f]{64}")));
+    const QString s = v.toString();
+    return ascii.match(s).hasMatch() || raw.match(s).hasMatch();
 }
 
 bool isBool(const QVariant &v)
@@ -482,12 +495,12 @@ QList<QVariantMap> mapList(const QVariant &v)
 QString deviceState(uint state)
 {
     if (state == kDeviceStateActivated)
-        return QStringLiteral("connected");
+        return QStringLiteral("connected"); // i18n-ignore: a state the page reads, not shown
     if (state >= 40 && state < 100)
-        return QStringLiteral("connecting");
+        return QStringLiteral("connecting"); // i18n-ignore: a state the page reads, not shown
     if (state <= 20)
-        return QStringLiteral("unavailable");
-    return QStringLiteral("disconnected");
+        return QStringLiteral("unavailable"); // i18n-ignore: a state the page reads, not shown
+    return QStringLiteral("disconnected"); // i18n-ignore: a state the page reads, not shown
 }
 
 // An IP4Config or IP6Config object: its addresses ("a/n"), its gateway and (IPv4) its name servers.
@@ -505,7 +518,7 @@ void addIpConfig(BusCaller &bus, const QString &path, bool v6, QJsonObject *out)
             addresses << address + QLatin1Char('/') + QString::number(unwrap(a.value(QStringLiteral("prefix"))).toUInt());
     }
     out->insert(v6 ? QStringLiteral("ip6") : QStringLiteral("ip4"), jsonStrings(addresses));
-    out->insert(v6 ? QStringLiteral("router6") : QStringLiteral("router"), clean(p.map.value(QStringLiteral("Gateway"))));
+    out->insert(v6 ? QStringLiteral("router6") : QStringLiteral("router"), clean(p.map.value(QStringLiteral("Gateway")))); // i18n-ignore: JSON keys of net.state
     if (!v6) {
         QStringList dns;
         for (const QVariantMap &n : mapList(p.map.value(QStringLiteral("NameserverData")))) {
@@ -520,7 +533,7 @@ void addIpConfig(BusCaller &bus, const QString &path, bool v6, QJsonObject *out)
 QString connectionState(uint state)
 {
     // NM_ACTIVE_CONNECTION_STATE: 1 activating, 2 activated, 3 deactivating, 4 deactivated.
-    return state == 2 ? QStringLiteral("connected") : state == 1 ? QStringLiteral("connecting") : QStringLiteral("disconnected");
+    return state == 2 ? QStringLiteral("connected") : state == 1 ? QStringLiteral("connecting") : QStringLiteral("disconnected"); // i18n-ignore: states the page reads, not shown
 }
 
 // A saved profile of any type: its object path, uuid, name and type.
@@ -573,7 +586,7 @@ StateResult networkState(BusCaller &bus)
             continue;
         const uint state = d.map.value(QStringLiteral("State")).toUInt();
         QJsonObject dev{{QStringLiteral("name"), clean(d.map.value(QStringLiteral("Interface")))},
-                        {QStringLiteral("type"), type == kDeviceTypeWifi ? QStringLiteral("wifi") : QStringLiteral("ethernet")},
+                        {QStringLiteral("type"), type == kDeviceTypeWifi ? QStringLiteral("wifi") : QStringLiteral("ethernet")}, // i18n-ignore: device types the page reads
                         {QStringLiteral("state"), deviceState(state)},
                         {QStringLiteral("mac"), clean(d.map.value(QStringLiteral("HwAddress")))}};
         const QString activePath = cast<QDBusObjectPath>(d.map.value(QStringLiteral("ActiveConnection"))).path();
@@ -609,7 +622,7 @@ StateResult networkState(BusCaller &bus)
             continue;
         const auto a = active.constFind(p.uuid.toLower());
         vpns.append(QJsonObject{{QStringLiteral("uuid"), p.uuid}, {QStringLiteral("name"), p.id},
-                                {QStringLiteral("kind"), p.type}, {QStringLiteral("state"), a == active.cend() ? QStringLiteral("disconnected") : connectionState(a->second)}});
+                                {QStringLiteral("kind"), p.type}, {QStringLiteral("state"), a == active.cend() ? QStringLiteral("disconnected") : connectionState(a->second)}}); // i18n-ignore: a state the page reads
     }
     r.json = QJsonObject{{QStringLiteral("devices"), devices}, {QStringLiteral("vpns"), vpns}};
     r.ok = true;
@@ -780,7 +793,8 @@ bool sessionAction(const QVariantMap &op)
 bool privilegedAction(const QVariantMap &op)
 {
     const QString name = op.value(QStringLiteral("op")).toString();
-    return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget");
+    return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget")
+        || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure");
 }
 
 bool validAction(const QVariantMap &op)
@@ -804,6 +818,8 @@ bool validAction(const QVariantMap &op)
         return isSsidHex(op.value(QStringLiteral("hex")).toString());
     if (name == QLatin1String("wifi.disconnect") || name == QLatin1String("wifi.scan"))
         return true;
+    if (name == QLatin1String("wifi.connectSecure"))
+        return isSsidHex(op.value(QStringLiteral("hex")).toString()) && isPassphrase(op.value(QStringLiteral("psk")));
     if (name == QLatin1String("wifi.forget"))
         return isUuid(op.value(QStringLiteral("uuid")).toString());
     if (name == QLatin1String("vpn.connect"))
@@ -812,6 +828,65 @@ bool validAction(const QVariantMap &op)
         return isMac(op.value(QStringLiteral("mac")).toString()) && isBool(op.value(QStringLiteral("connect")));
     return false;
 }
+
+namespace {
+constexpr uint kKeyMgmtPsk = 0x100;
+constexpr uint kKeyMgmtSae = 0x400;
+constexpr int kJoinPollMs = 250;
+
+// Waits (kActMs at most) for a connection NetworkManager is activating: "" once it is up. A connection that went down or away
+// failed (a wrong password: no agent gives NetworkManager another one); its new profile is deleted, so a failed join leaves no
+// saved network behind (as nmcli does).
+QString awaitJoin(BusCaller &bus, const QString &profile, const QString &active)
+{
+    for (int waited = 0; waited <= kActMs; waited += kJoinPollMs) {
+        const Result state = property(bus, kNmService, active, kNmActive, QStringLiteral("State"));
+        const uint value = state.ok ? state.value.toUInt() : 4;
+        if (value == 2)
+            return QString();
+        if (value >= 3)
+            break;
+        QThread::msleep(kJoinPollMs);
+    }
+    bus.call(kNmService, profile, kNmConnection, QStringLiteral("Delete"), {}, kActMs);
+    return QCoreApplication::translate("SystemBus", "the network could not be joined");
+}
+
+// Joins a WPA/WPA2/WPA3 personal network with its passphrase: the strongest access point of that SSID that takes one (PSK or
+// SAE), with a new profile of the whole system (NetworkManager may ask polkit, ADR-0026). WPA3-only access points get
+// key-mgmt sae, the others wpa-psk (which NetworkManager also uses for WPA2/WPA3 transition). An enterprise (802.1X), WEP or
+// open network is not joined this way.
+QString joinWithPassphrase(BusCaller &bus, const QString &devicePath, const QByteArray &ssid, const QString &psk)
+{
+    bool seen = false;
+    bool found = false;
+    AccessPoint ap;
+    for (const AccessPoint &candidate : accessPoints(bus, devicePath)) {
+        if (candidate.ssid != ssid)
+            continue;
+        seen = true;
+        if (((candidate.wpa | candidate.rsn) & (kKeyMgmtPsk | kKeyMgmtSae)) != 0 && (!found || candidate.strength > ap.strength)) {
+            ap = candidate;
+            found = true;
+        }
+    }
+    if (!found)
+        return seen ? QCoreApplication::translate("SystemBus", "that network does not take a password") : QCoreApplication::translate("SystemBus", "that network is no longer in range");
+    const bool saeOnly = ((ap.wpa | ap.rsn) & kKeyMgmtPsk) == 0;
+    ConnectionSettings settings;
+    settings.insert(QStringLiteral("connection"), QVariantMap{{QStringLiteral("id"), QString::fromUtf8(ssid)}, {QStringLiteral("type"), QStringLiteral("802-11-wireless")}});
+    settings.insert(QStringLiteral("802-11-wireless"), QVariantMap{{QStringLiteral("ssid"), ssid}, {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
+    settings.insert(QStringLiteral("802-11-wireless-security"),
+                    QVariantMap{{QStringLiteral("key-mgmt"), saeOnly ? QStringLiteral("sae") : QStringLiteral("wpa-psk")}, {QStringLiteral("psk"), psk}}); // i18n-ignore: NetworkManager key-mgmt values
+    const BusReply r = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("AddAndActivateConnection"),
+                                {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(devicePath)), QVariant::fromValue(QDBusObjectPath(ap.path))}, kPrivilegedMs);
+    if (!r.ok)
+        return fail(r.error);
+    if (r.args.size() < 2)
+        return QString();
+    return awaitJoin(bus, cast<QDBusObjectPath>(r.args.value(0)).path(), cast<QDBusObjectPath>(r.args.value(1)).path());
+}
+} // namespace
 
 QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs)
 {
@@ -920,7 +995,10 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
             }
             return QCoreApplication::translate("SystemBus", "that network is no longer saved");
         }
-        // wifi.connectOpen: only an access point that needs no password; anything else is joined from Quick Settings.
+        if (name == QLatin1String("wifi.connectSecure"))
+            return joinWithPassphrase(bus, dev.path, QByteArray::fromHex(op.value(QStringLiteral("hex")).toString().toLatin1()),
+                                      op.value(QStringLiteral("psk")).toString());
+        // wifi.connectOpen: only an access point that needs no password (wifi.connectSecure joins the others).
         // The page asks for the row it shows, a network without a password: an access point with the same SSID that is secured is
         // another row. So the choice is made on the security of the access point: the strongest one that needs no password (open
         // or Enhanced Open); only secured ones: refused.
@@ -945,8 +1023,9 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
             settings.insert(QStringLiteral("802-11-wireless"), QVariantMap{{QStringLiteral("ssid"), ssid}, {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
             if (isOwe(ap)) // NetworkManager joins an OWE access point only with key-mgmt owe (no secret: there is none)
                 settings.insert(QStringLiteral("802-11-wireless-security"), QVariantMap{{QStringLiteral("key-mgmt"), QStringLiteral("owe")}});
+            // A new profile of the whole system: NetworkManager may ask polkit (settings.modify.system, ADR-0026).
             const BusReply r = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("AddAndActivateConnection"),
-                                        {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(dev.path)), QVariant::fromValue(QDBusObjectPath(ap.path))}, kActMs);
+                                        {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(dev.path)), QVariant::fromValue(QDBusObjectPath(ap.path))}, kPrivilegedMs);
             return r.ok ? QString() : fail(r.error);
         }
         return QCoreApplication::translate("SystemBus", "that network is no longer in range");

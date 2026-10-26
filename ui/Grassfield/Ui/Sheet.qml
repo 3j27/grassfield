@@ -13,6 +13,8 @@ Item {
     property bool destructive: false
     property bool withField: false
     property string placeholder: ""
+    // The field hides what is typed (a password); the host may show it again (a "Show password" check box).
+    property bool fieldPassword: false
     property string errorText: ""
     // function(text) returning an error message to keep the sheet open, or "" to close it.
     property var confirmHandler: null
@@ -140,6 +142,7 @@ Item {
                     width: parent.width
                     focus: root.withField
                     placeholderText: root.placeholder
+                    echoMode: root.fieldPassword ? TextInput.Password : TextInput.Normal
                     accessibleName: root.title
                     onTextChanged: root.errorText = ""
                 }

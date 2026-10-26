@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../apps/settings/qml/System.js" as System
+import "../../apps/settings/qml" as SettingsQml
 
 // Settings system sections (Wi-Fi, Bluetooth, Sound, Displays): the parsers of the D-Bus states and of wpctl's output, the
 // D-Bus action maps and wpctl argument vectors, arrangement, and the dev guard of SystemService (an action never reaches the
@@ -10,6 +12,8 @@ TestCase {
     name: "SettingsSystem"
     width: 700
     height: 900
+    // Shown, so that a sheet is visible once it opens.
+    visible: true
     when: windowShown
 
     Component {
@@ -275,7 +279,7 @@ TestCase {
         compare(System.wifiClickKind(home, known), "known");
         compare(System.wifiClickKind({hex: System.textToHex("Home"), active: true, secured: true}, known), "current");
         compare(System.wifiClickKind({hex: "43616665", active: false, secured: false}, known), "open");
-        compare(System.wifiClickKind({hex: "4F74686572", active: false, secured: true}, known), "password");
+        compare(System.wifiClickKind({hex: "4F74686572", active: false, secured: true, security: "WPA2", enterprise: false}, known), "password");
         compare(System.wifiGlyph(90), "wifi-3");
         compare(System.wifiGlyph(40), "wifi-2");
         compare(System.wifiGlyph(5), "wifi-1");
@@ -478,10 +482,192 @@ TestCase {
         t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188), ap("43616665", 60, 0, 0, 0), ap("4F6666696365", 40, 1, 0, 0x188, true)], [{uuid: uuidA, hex: "486F6D65"}]));
         page.activate(page.networks.find(n => n.ssid === "Home"));
         page.activate(page.networks.find(n => n.ssid === "Cafe"));
+        // A click on the current network changes nothing (macOS); Disconnect is in its (…) menu.
         page.activate(page.networks.find(n => n.ssid === "Office"));
+        page.menuChosen(page.networks.find(n => n.ssid === "Office"), "disconnect");
         // Opening the pane asks for a fresh scan first (never in a dev session); then one action per click.
         compare(t.backend.busActions.map(a => a.op), [{op: "wifi.scan"}, {op: "wifi.connectKnown", uuid: uuidA}, {op: "wifi.connectOpen", hex: "43616665"}, {op: "wifi.disconnect"}]);
         compare(t.backend.actions.length, 0);
+    }
+
+    function test_wifiSecuredNetworkAsksForItsPasswordAndJoinsWithIt() {
+        const t = makeService(false);
+        const page = openPage("WifiPage.qml", t);
+        const asked = [];
+        page.passwordRequested.connect(net => asked.push(net.ssid));
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188), ap("436F7270", 40, 1, 0, 0x288), ap("4F6C64", 30, 1, 0, 0)]));
+        page.activate(page.networks.find(n => n.ssid === "Home"));
+        compare(asked, ["Home"]);
+        // The sheet's answer: one wifi.connectSecure with the SSID's bytes and the password, the row busy until it ends.
+        page.join(page.networks.find(n => n.ssid === "Home"), "correct horse");
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "wifi.connectSecure", hex: "486F6D65", psk: "correct horse"});
+        compare(page.pending, page.networks.find(n => n.ssid === "Home").key);
+        t.backend.finished("wifi.act", true, "");
+        compare(page.pending, "");
+        // A password NetworkManager would refuse never leaves the page.
+        const before = t.backend.busActions.length;
+        page.join(page.networks.find(n => n.ssid === "Home"), "short");
+        compare(t.backend.busActions.length, before);
+        // 802.1X (a sign-in) and WEP: no sheet, a line that says why.
+        page.activate(page.networks.find(n => n.ssid === "Corp"));
+        verify(page.notice.indexOf("802.1X") >= 0, page.notice);
+        page.activate(page.networks.find(n => n.ssid === "Old"));
+        verify(page.notice.indexOf("WEP") >= 0, page.notice);
+        compare(asked, ["Home"]);
+        compare(t.backend.busActions.length, before);
+    }
+
+    function test_wifiListsKnownAndOtherNetworksWithTheirMenus() {
+        const t = makeService(false);
+        const page = openPage("WifiPage.qml", t);
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188, true), ap("43616665", 60, 0, 0, 0), ap("576F726B", 40, 1, 0, 0x188)],
+                                                       [{uuid: uuidA, hex: "486F6D65"}, {uuid: "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d", hex: "576F726B"}]));
+        // Known Network: the current one first, checked; Other Networks: the rest.
+        const home = rowByTitle(page, "Home");
+        verify(home && home.checked);
+        compare(home.rowHeight, Tokens.settingsWifiKnownRowHeight);
+        compare(rowByTitle(page, "Cafe").rowHeight, Tokens.settingsWifiOtherRowHeight);
+        verify(!rowByTitle(page, "Work").checked);
+        compare(rowByTitle(page, "Work").rowHeight, Tokens.settingsWifiKnownRowHeight);
+        // The (…) menus: the current network can be disconnected, shown and forgotten; a known one joined or forgotten; an
+        // unknown one only joined.
+        compare(home.menuItems.filter(i => !i.separator).map(i => i.id), ["disconnect", "details", "forget"]);
+        compare(rowByTitle(page, "Work").menuItems.filter(i => !i.separator).map(i => i.id), ["connect", "forget"]);
+        compare(rowByTitle(page, "Cafe").menuItems.map(i => i.id), ["connect"]);
+        // Forget This Network…: Main.qml asks first; the answer forgets the profile of that SSID.
+        const forget = [];
+        page.forgetRequested.connect(net => forget.push(net.ssid));
+        page.menuChosen(page.networks.find(n => n.ssid === "Work"), "forget");
+        compare(forget, ["Work"]);
+        page.forget(page.networks.find(n => n.ssid === "Work"));
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "wifi.forget", uuid: "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d"});
+        // Details… reads net.state once (not on every refresh) and hands its Wi-Fi device to the sheet.
+        const details = [];
+        page.detailsRequested.connect((net, dev) => details.push([net.ssid, dev ? dev.ip4[0] : null]));
+        compare(t.backend.busQueries.filter(q => q.what === "net.state").length, 0);
+        page.menuChosen(page.networks.find(n => n.ssid === "Home"), "details");
+        compare(t.backend.busQueries[t.backend.busQueries.length - 1], {what: "net.state", tag: "wifi.details"});
+        compare(details.length, 0);
+        t.backend.finished("wifi.details", true, JSON.stringify({devices: [{name: "wlo1", type: "wifi", state: "connected", ip4: ["10.0.0.5/24"]}], vpns: []}));
+        compare(details, [["Home", "10.0.0.5/24"]]);
+        // A late or repeated answer opens nothing more; a failed read still opens the sheet, without addresses.
+        t.backend.finished("wifi.details", true, "{}");
+        compare(details.length, 1);
+        page.menuChosen(page.networks.find(n => n.ssid === "Home"), "details");
+        t.backend.finished("wifi.details", false, "");
+        compare(details, [["Home", "10.0.0.5/24"], ["Home", null]]);
+    }
+
+    Component {
+        id: passwordHost
+        Item {
+            width: 700
+            height: 600
+            property alias sheet: sheet
+            SettingsQml.WifiPasswordSheet {
+                id: sheet
+            }
+        }
+    }
+
+    function test_wifiPasswordSheetKeepsThePasswordNowhere() {
+        const host = createTemporaryObject(passwordHost, testCase);
+        verify(host);
+        const sheet = host.sheet;
+        const joined = [];
+        sheet.join.connect((net, psk) => joined.push([net.ssid, psk]));
+        sheet.openFor({ssid: "Home", label: "Home"});
+        verify(sheet.shown);
+        verify(sheet.fieldPassword, "the password is hidden while it is typed");
+        // A password NetworkManager would refuse keeps the sheet open with the reason.
+        sheet.setField("short");
+        sheet.confirm();
+        verify(sheet.shown);
+        verify(sheet.errorText !== "");
+        compare(joined.length, 0);
+        // Join hands it back once and empties the field.
+        sheet.setField("correct horse");
+        sheet.confirm();
+        verify(!sheet.shown);
+        compare(joined, [["Home", "correct horse"]]);
+        compare(sheet.fieldText, "");
+        // Cancel empties it too.
+        sheet.openFor({ssid: "Home", label: "Home"});
+        sheet.setField("half typed");
+        sheet.cancel();
+        compare(sheet.fieldText, "");
+        compare(joined.length, 1);
+    }
+
+    function test_wifiOffShowsTheHeaderOnly() {
+        const t = makeService(false);
+        const page = openPage("WifiPage.qml", t);
+        t.backend.finished("wifi.state", true, wifiJson([], [], false));
+        verify(page.available);
+        verify(!page.listsShown);
+        compare(rowsOf(page, []).length, 0);
+        // No Wi-Fi device at all: the header says so.
+        t.backend.finished("wifi.state", true, wifiJson([], [], true, null));
+        verify(!page.listsShown);
+    }
+
+    function test_wifiSectionsPassphraseBandAndMask() {
+        const known = {"486F6D65": uuidA};
+        const nets = [{hex: "486F6D65", active: false}, {hex: "43616665", active: true}, {hex: "5A6564", active: false}];
+        const s = System.wifiSections(nets, known);
+        compare(s.known.map(n => n.hex), ["486F6D65", "43616665"]);
+        compare(s.other.map(n => n.hex), ["5A6564"]);
+        verify(System.validPassphrase("12345678"));
+        verify(System.validPassphrase("~".repeat(63)));
+        verify(System.validPassphrase("a".repeat(64)));
+        verify(!System.validPassphrase("1234567"));
+        verify(!System.validPassphrase("g".repeat(64)));
+        verify(!System.validPassphrase("a".repeat(65)));
+        verify(!System.validPassphrase("caf\u00e9 au lait"));
+        verify(!System.validPassphrase("line\nbreak"));
+        verify(!System.validPassphrase(12345678));
+        compare(System.wifiConnectSecure("Home", "correct horse"), {op: "wifi.connectSecure", hex: "486F6D65", psk: "correct horse"});
+        compare(System.wifiConnectSecure("Home", "short"), null);
+        compare(System.wifiConnectSecure("bad\nname", "correct horse"), null);
+        compare(System.wifiForget(uuidA), {op: "wifi.forget", uuid: uuidA});
+        compare(System.wifiForget("nope"), null);
+        compare(System.vpnConnect(uuidA, true), {op: "vpn.connect", uuid: uuidA, on: true});
+        compare(System.vpnConnect("nope", true), null);
+        compare(System.wifiBand(2437), "2.4 GHz");
+        compare(System.wifiBand(5180), "5 GHz");
+        compare(System.wifiBand(5955), "6 GHz");
+        compare(System.wifiBand(0), "");
+        compare(System.subnetMask(24), "255.255.255.0");
+        compare(System.subnetMask(20), "255.255.240.0");
+        compare(System.subnetMask(0), "0.0.0.0");
+        compare(System.subnetMask(32), "255.255.255.255");
+        compare(System.subnetMask(33), "");
+        // The click kinds of the secured networks: a password (WPA), a sign-in (802.1X only), WEP.
+        compare(System.wifiClickKind({hex: "41", active: false, secured: true, security: "WPA3 WPA2", enterprise: false}, {}), "password");
+        compare(System.wifiClickKind({hex: "41", active: false, secured: true, security: "802.1X", enterprise: true}, {}), "account");
+        compare(System.wifiClickKind({hex: "41", active: false, secured: true, security: "WEP", enterprise: false}, {}), "unsupported");
+    }
+
+    function test_netStateParser() {
+        const st = System.parseNetState(JSON.stringify({
+            devices: [{name: "enp3s0", type: "ethernet", state: "connected", mac: "AA:BB:CC:DD:EE:FF", connection: "Wired", uuid: uuidA,
+                       ip4: ["192.168.1.2/24", 5], router: "192.168.1.1", dns: ["1.1.1.1"], ip6: [], bitrate: 0},
+                      {name: "wlo1", type: "wifi", state: "bogus", ssid: "486F6D65", frequency: 5180, bitrate: 866000},
+                      {name: "lo", type: "loopback"}, null, {type: "wifi"}],
+            vpns: [{uuid: uuidA, name: "Zed", kind: "wireguard", state: "connected"}, {uuid: "x", name: "bad"}, {uuid: "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d", name: "Alpha", kind: "openvpn", state: "connecting"}]
+        }));
+        compare(st.devices.length, 2);
+        compare(st.devices[0].ip4, ["192.168.1.2/24"]);
+        compare(st.devices[0].router, "192.168.1.1");
+        compare(st.devices[1].state, "unavailable");
+        compare(st.devices[1].ssid, "Home");
+        compare(st.devices[1].dns, []);
+        // Sorted by name; an unknown kind is a plain VPN; a bad uuid is dropped.
+        compare(st.vpns.map(v => v.name), ["Alpha", "Zed"]);
+        compare(st.vpns[0].kind, "vpn");
+        compare(st.vpns[1].kind, "wireguard");
+        compare(System.parseNetState("{}"), null);
+        compare(System.parseNetState("nope"), null);
     }
 
     function test_actionFailureShowsReason() {

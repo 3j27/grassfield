@@ -1,7 +1,7 @@
 // The Settings app's Wi-Fi and Bluetooth code (apps/settings/src/systembus.cpp) on a REAL D-Bus connection, for the
 // integration test tests/integration/settings_dbus.sh. It talks to the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test
 // sets to a PRIVATE dbus-daemon with fake services, and REFUSES to run on anything else (exit 2), before it connects:
-//   probe [--dev] wifi-state | bt-state | host-state | time-state | time-zones | locale-state | units-state | act '<json of an action map>'
+//   probe [--dev] wifi-state | bt-state | net-state | host-state | time-state | time-zones | locale-state | units-state | act '<json of an action map>'
 // Prints the state JSON, or for an action "ok" / "failed: <reason>". Exit 0 ok, 1 failed, 2 refused to run. The user's own
 // services (units-state, user.* actions) are on the session bus, as in the app (Backend: a second connection): the test points
 // DBUS_SESSION_BUS_ADDRESS at the same private bus, and the probe refuses any other session bus too. Their own folder is
@@ -130,7 +130,8 @@ int main(int argc, char **argv)
     QtBusCaller real(connection);
     GuardedCaller bus(real, dev);
     const QMap<QString, StateResult (*)(BusCaller &)> states{{QStringLiteral("host-state"), hostState}, {QStringLiteral("time-state"), timeState},
-                                                             {QStringLiteral("time-zones"), timeZones}, {QStringLiteral("locale-state"), localeState}};
+                                                             {QStringLiteral("time-zones"), timeZones}, {QStringLiteral("locale-state"), localeState},
+                                                             {QStringLiteral("net-state"), networkState}};
     if (states.contains(verb) || verb == QLatin1String("units-state")) {
         const StateResult r = verb == QLatin1String("units-state") ? userUnits(bus, ownDirs) : states.value(verb)(bus);
         if (!r.ok) {

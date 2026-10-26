@@ -99,6 +99,8 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
 //   wifi.radio {on}, wifi.connectKnown {uuid}, wifi.connectOpen {hex}, wifi.disconnect {}, wifi.scan {},
+//   wifi.connectSecure {hex, psk}  a WPA/WPA3 personal network with its passphrase (8 to 63 printable ASCII characters or 64
+//                                  hex digits): a new profile, kept only once the connection is up (awaitJoin);
 //   bt.power {on}, bt.connect {mac, connect},
 //   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0026)
 //   vpn.connect {uuid, on}      a VPN or WireGuard profile: ActivateConnection on no device, or its DeactivateConnection

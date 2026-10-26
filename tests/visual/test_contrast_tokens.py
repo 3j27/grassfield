@@ -745,6 +745,14 @@ class WindowSurfacePairs(unittest.TestCase):
             for bg, what in ((win, "the window"), (fill, "a 0.14 fill")):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "textSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
 
+    def test_status_dots_on_a_settings_group(self):
+        # Wi-Fi's "Connected", the Network pane's services: a dot in front of the status text (a graphic, 3:1).
+        for ap in APPEARANCES:
+            group = self.tok.color("colors", ap, "groupFill")
+            for name in ("statusOn", "statusWarn", "statusOff"):
+                r = wcag(self.tok.color("colors", ap, name), group)
+                self.assertGreaterEqual(r, 3.0, "%s on a Settings group, %s: %.2f:1" % (name, ap, r))
+
     def test_dark_settings_groups_stay_visible_against_the_window(self):
         win = self.window("dark")
         group = self.tok.color("colors", "dark", "groupFill")

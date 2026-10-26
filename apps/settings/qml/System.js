@@ -209,14 +209,86 @@ function wifiGlyph(signal) {
 }
 
 // What a click on a network does; `known` maps the SSID hex of each saved profile to its UUID.
-// "current" (already connected), "known" (saved profile with that SSID), "open" (no password) or
-// "password" (secured and new: the password flow lives in Quick Settings).
+// "current" (already connected), "known" (saved profile with that SSID), "open" (no password), "password" (WPA/WPA3
+// personal: the page asks for the passphrase), "account" (802.1X only: a sign-in Settings does not set up) or "unsupported"
+// (WEP).
 function wifiClickKind(net, known) {
     if (net.active)
         return "current";
     if (known[net.hex] !== undefined)
         return "known";
-    return net.secured ? "password" : "open";
+    if (!net.secured)
+        return "open";
+    return /WPA/.test(net.security) ? "password" : net.enterprise ? "account" : "unsupported";
+}
+
+// The two lists of the pane (macOS 27): Known Network (the networks in range with a saved profile, the current one first)
+// and Other Networks (the rest, strongest first). `networks` as parseWifiState gives them.
+function wifiSections(networks, known) {
+    const out = {known: [], other: []};
+    for (const n of networks)
+        (n.active || known[n.hex] !== undefined ? out.known : out.other).push(n);
+    return out;
+}
+
+// A WPA/WPA3 personal passphrase as NetworkManager takes it (src/systembus.cpp isPassphrase): 8 to 63 printable ASCII
+// characters, or 64 hex digits.
+function validPassphrase(psk) {
+    return typeof psk === "string" && (/^[\x20-\x7E]{8,63}$/.test(psk) || /^[0-9A-Fa-f]{64}$/.test(psk));
+}
+
+// Wi-Fi band of a frequency in MHz ("2.4 GHz", "5 GHz", "6 GHz"); "" when unknown.
+function wifiBand(mhz) {
+    const f = Number(mhz);
+    return f >= 5925 ? "6 GHz" : f >= 4900 ? "5 GHz" : f >= 2400 ? "2.4 GHz" : "";
+}
+
+// IPv4 subnet mask of a prefix length (24 -> "255.255.255.0"); "" when out of range.
+function subnetMask(prefix) {
+    const n = Number(prefix);
+    if (!Number.isInteger(n) || n < 0 || n > 32)
+        return "";
+    const parts = [];
+    for (let i = 0; i < 4; i++) {
+        const bits = Math.max(0, Math.min(8, n - 8 * i));
+        parts.push(256 - Math.pow(2, 8 - bits));
+    }
+    return parts.join(".");
+}
+
+// The `net.state` JSON of the Backend (src/systembus.h networkState): {devices, vpns} with only well-formed entries (strings
+// where strings are due, lists of strings, the states the Backend gives); null when the text is not that.
+function parseNetState(text) {
+    let j;
+    try {
+        j = JSON.parse(String(text));
+    } catch (e) {
+        return null;
+    }
+    if (j === null || typeof j !== "object" || !Array.isArray(j.devices) || !Array.isArray(j.vpns))
+        return null;
+    const str = v => (typeof v === "string" ? printable(v) : "");
+    const strs = v => (Array.isArray(v) ? v.filter(x => typeof x === "string" && x !== "").map(printable) : []);
+    const states = ["connected", "connecting", "disconnected", "unavailable"];
+    const devices = [];
+    for (const d of j.devices) {
+        if (d === null || typeof d !== "object" || (d.type !== "ethernet" && d.type !== "wifi") || typeof d.name !== "string" || d.name === "")
+            continue;
+        devices.push({
+            name: printable(d.name), type: d.type, state: states.indexOf(d.state) >= 0 ? d.state : "unavailable", mac: str(d.mac),
+            connection: str(d.connection), uuid: validUuid(d.uuid) ? d.uuid : "", ip4: strs(d.ip4), router: str(d.router), dns: strs(d.dns),
+            ip6: strs(d.ip6), router6: str(d.router6), bitrate: Number(d.bitrate) > 0 ? Number(d.bitrate) : 0,
+            frequency: Number(d.frequency) > 0 ? Number(d.frequency) : 0, ssid: typeof d.ssid === "string" ? hexToText(d.ssid).text : ""
+        });
+    }
+    const vpns = [];
+    for (const v of j.vpns) {
+        if (v !== null && typeof v === "object" && validUuid(v.uuid) && typeof v.name === "string")
+            vpns.push({uuid: v.uuid, name: printable(v.name !== "" ? v.name : v.uuid), kind: v.kind === "wireguard" ? "wireguard" : "vpn",
+                       state: states.indexOf(v.state) >= 0 ? v.state : "disconnected"});
+    }
+    vpns.sort((a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0));
+    return {devices: devices, vpns: vpns};
 }
 
 // ---- Bluetooth (BlueZ over D-Bus) ----------------------------------------------------------------------------------
@@ -309,6 +381,24 @@ function wifiConnectOpen(ssid) {
         return null;
     const hex = textToHex(ssid);
     return hex.length <= 64 ? {op: "wifi.connectOpen", hex: hex} : null;
+}
+
+// A WPA/WPA3 personal network by its (clean, at most 32 bytes) name, with its passphrase.
+function wifiConnectSecure(ssid, psk) {
+    if (!plainName(ssid) || ssid.indexOf("\uFFFD") >= 0 || !validPassphrase(psk))
+        return null;
+    const hex = textToHex(ssid);
+    return hex.length <= 64 ? {op: "wifi.connectSecure", hex: hex, psk: psk} : null;
+}
+
+// Forget This Network: the saved profile with that UUID.
+function wifiForget(uuid) {
+    return validUuid(uuid) ? {op: "wifi.forget", uuid: uuid} : null;
+}
+
+// A VPN or WireGuard profile switched on or off.
+function vpnConnect(uuid, on) {
+    return validUuid(uuid) ? {op: "vpn.connect", uuid: uuid, on: on === true} : null;
 }
 
 // Disconnect the Wi-Fi device (the Backend takes the first Wi-Fi device; `device` is the one the page knows, a valid name).

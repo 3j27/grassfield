@@ -17,6 +17,10 @@
 #  10  General (ADR-0026): hostname1, timedate1, timesync1, locale1 read; the name, NTP, the zone and the time set with
 #      interactive = true (the service asks polkit); a polkit refusal's reason; a bad zone refused before the bus; the user's own
 #      services (the session bus) listed and switched, a shipped one refused; the dev guard sends none of these changes
+#  11  the network panes (ADR-0026, NetworkManager): net-state (wlan0's addresses, router, name servers, band, link rate; the VPN
+#      and WireGuard profiles with their state); a join with a password (key-mgmt wpa-psk, the password, the access point) kept
+#      when it comes up, its new profile deleted when it goes down; Forget This Network deletes that profile and nothing else;
+#      a VPN switched off and on; the dev guard sends none of these
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -195,7 +199,7 @@ check "the open network has no security flags, the others carry RSN flags" py "$
 check "only the Wi-Fi profile is listed (the Ethernet one is not), with its SSID" py "$st" 'j["profiles"] == [{"uuid": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "hex": "486F6D65"}]'
 reads=$(calls nm)
 check "reading made only read calls (no Set, no Activate, no Disconnect, no scan)" bash -c '! grep -qE "\"member\": \"(Set|ActivateConnection|AddAndActivateConnection|Disconnect|RequestScan)\"" "$1"' _ "$work/nm.log"
-check "the fake saw the 5 method reads (GetDevices, GetAllAccessPoints, ListConnections, 2 x GetSettings; property reads are served by GDBus itself): $reads" test "$reads" -eq 5
+check "the fake saw the 7 method reads (GetDevices, GetAllAccessPoints, ListConnections, 4 x GetSettings; property reads are served by GDBus itself): $reads" test "$reads" -eq 7
 
 say ""
 say "[3] Bluetooth state"
@@ -362,6 +366,53 @@ check "in a dev session every General change is refused by the guard" test "$fin
 check "... a dev session still reads hostname1 and timedate1" py "$(probe --dev time-state)" 'j["zone"] == "Europe/Paris"'
 check "... and no Set*, Enable or Disable call reached the services" bash -c '! grep -qE "\"member\": \"(Set[A-Za-z]*|EnableUnitFiles|DisableUnitFiles|Reload)\"" "$1"' _ "$work/general.log"
 stop_service general
+
+say ""
+say "[11] network panes (net-state, password join, Forget, VPN)"
+start_service nm
+st=$(probe net-state)
+check "net-state: wlan0 connected with its address, router, name servers, band and link rate" py "$st" '[(d["name"], d["state"], d["ip4"], d["router"], d["dns"], d["ip6"], d["frequency"], d["bitrate"], d["connection"]) for d in j["devices"] if d["type"] == "wifi"] == [("wlan0", "connected", ["192.168.20.34/24"], "192.168.20.1", ["192.168.20.1", "9.9.9.9"], ["fd00:20::34/64"], 5180, 866000, "Maison")]'
+check "... eth0 without a cable is unavailable" py "$st" '[d["state"] for d in j["devices"] if d["type"] == "ethernet"] == ["unavailable"]'
+check "... the VPN (connected) and the WireGuard profile (off), not the Wi-Fi or Ethernet ones" py "$st" 'sorted((v["name"], v["kind"], v["state"]) for v in j["vpns"]) == [("Home WireGuard", "wireguard", "disconnected"), ("Office VPN", "vpn", "connected")]'
+out=$(probe act '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"correct horse"}')
+check "join Home with its password: ok ($out)" test "$out" = ok
+check "... AddAndActivateConnection with key-mgmt wpa-psk, the password, on the stronger Home" bash -c 'grep AddAndActivateConnection "$1" | grep "wpa-psk" | grep "correct horse" | grep -q "AccessPoint/1"' _ "$work/nm.log"
+check "... and its new profile is kept (no Delete)" bash -c '! grep -q "\"member\": \"Delete\"" "$1"' _ "$work/nm.log"
+out=$(probe act '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"wrong horse"}')
+check "a wrong password: the join fails with a reason ($out)" test "$out" = "failed: the network could not be joined"
+check "... and the profile it added is deleted" logged nm Delete /Settings/9 ""
+out=$(probe act '{"op":"wifi.connectSecure","hex":"43616665","psk":"correct horse"}')
+check "an open network takes no password ($out)" test "$out" = "failed: that network does not take a password"
+out=$(probe act '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"short"}')
+check "a password NetworkManager would refuse never reaches it ($out)" test "$out" = "failed: invalid request"
+out=$(probe act '{"op":"wifi.forget","uuid":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}')
+check "Forget This Network: ok ($out)" test "$out" = ok
+check "... Delete reached Home's profile" logged nm Delete /Settings/1 ""
+check "... and Home is no longer a saved network" py "$(probe wifi-state)" 'j["profiles"] == []'
+out=$(probe act '{"op":"wifi.forget","uuid":"5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8e"}')
+check "a VPN's uuid is not a network to forget ($out)" test "$out" = "failed: that network is no longer saved"
+check "... and its profile was not deleted" bash -c '! grep "\"member\": \"Delete\"" "$1" | grep -q Settings/3' _ "$work/nm.log"
+out=$(probe act '{"op":"vpn.connect","uuid":"5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8e","on":false}')
+check "switch the VPN off: ok ($out)" test "$out" = ok
+check "... DeactivateConnection of its active connection" logged nm DeactivateConnection /org/freedesktop/NetworkManager "ActiveConnection/3"
+check "... and it reads off" py "$(probe net-state)" '[v["state"] for v in j["vpns"] if v["name"] == "Office VPN"] == ["disconnected"]'
+out=$(probe act '{"op":"vpn.connect","uuid":"6c7d8e9f-0011-4b2c-9d3e-4f5a6b7c8d9f","on":true}')
+check "switch the WireGuard profile on: ok ($out)" test "$out" = ok
+check "... ActivateConnection(its profile, no device, no object)" logged nm ActivateConnection /org/freedesktop/NetworkManager "'/org/freedesktop/NetworkManager/Settings/4', objectpath '/', objectpath '/'"
+# A fresh world: Home's profile is saved again, so a Forget gets as far as the guard.
+stop_service nm
+start_service nm
+before=$(calls nm)
+fine=1
+for op in '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"correct horse"}' '{"op":"wifi.forget","uuid":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}' \
+  '{"op":"vpn.connect","uuid":"5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8e","on":true}'; do
+  out=$(probe --dev act "$op")
+  case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "in a dev session a join, a Forget and a VPN switch are refused by the guard" test "$fine" -eq 1
+check "... a dev session still reads net-state" py "$(probe --dev net-state)" 'len(j["devices"]) == 2'
+check "... and none of them reached NetworkManager" bash -c 'tail -n +$(($2 + 1)) "$1" | grep -qE "\"member\": \"(AddAndActivateConnection|Delete|ActivateConnection|DeactivateConnection)\"" && exit 1 || exit 0' _ "$work/nm.log" "$before"
+stop_service nm
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi
