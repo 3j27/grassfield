@@ -7630,6 +7630,10 @@
         <translation>En ligne</translation>
     </message>
     <message>
+        <source>Wikimedia</source>
+        <translation>Wikimedia</translation>
+    </message>
+    <message>
         <source>Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.</source>
         <translation>Grassfield télécharge l’image du jour de Wikimedia Commons une fois par jour. Il contacte commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org, uniquement lorsque vous êtes en ligne sur une connexion non limitée. Ces services voient votre adresse IP et l’image demandée. Rien n’est contacté tant que vous ne choisissez pas Utiliser l’image du jour.</translation>
     </message>
@@ -7690,10 +7694,6 @@
         <translation>Écran</translation>
     </message>
     <message>
-        <source>The wallpaper of every display that has none of its own.</source>
-        <translation>Le fond d’écran de chaque écran qui n’en a pas un propre.</translation>
-    </message>
-    <message>
         <source>This display has a wallpaper of its own.</source>
         <translation>Cet écran a son propre fond d’écran.</translation>
     </message>
@@ -7704,14 +7704,6 @@
     <message>
         <source>All Displays</source>
         <translation>Tous les écrans</translation>
-    </message>
-    <message>
-        <source>Follow All Displays</source>
-        <translation>Suivre Tous les écrans</translation>
-    </message>
-    <message>
-        <source>Removes the wallpaper of this display.</source>
-        <translation>Supprime le fond d’écran de cet écran.</translation>
     </message>
     <message>
         <source>Use the All Displays Wallpaper</source>
@@ -7728,10 +7720,6 @@
     <message>
         <source>Preparing the video</source>
         <translation>Préparation de la vidéo</translation>
-    </message>
-    <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
     </message>
     <message>
         <source>Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.</source>
@@ -7786,24 +7774,12 @@
         <translation>Aucune image n’a été trouvée dans le dossier Images.</translation>
     </message>
     <message>
-        <source>Show Fewer</source>
-        <translation>Afficher moins</translation>
-    </message>
-    <message>
-        <source>Show All (%1)</source>
-        <translation>Tout afficher (%1)</translation>
-    </message>
-    <message>
         <source>Colours</source>
         <translation>Couleurs</translation>
     </message>
     <message>
         <source>Folders and Pictures</source>
         <translation>Dossiers et images</translation>
-    </message>
-    <message>
-        <source>Add a folder to change the picture at an interval, or a single picture.</source>
-        <translation>Ajoutez un dossier pour changer d’image à intervalle régulier, ou une seule image.</translation>
     </message>
     <message>
         <source>Shuffle %1</source>
@@ -7820,10 +7796,6 @@
     <message>
         <source>Videos</source>
         <translation>Vidéos</translation>
-    </message>
-    <message>
-        <source>Add a video to play it as the wallpaper. It is prepared once, and pauses on battery, when you are away and under a full-screen window.</source>
-        <translation>Ajoutez une vidéo pour la lire comme fond d’écran. Elle est préparée une seule fois, et se met en pause sur batterie, quand vous êtes absent et sous une fenêtre en plein écran.</translation>
     </message>
     <message>
         <source>Add Video…</source>
@@ -7848,6 +7820,17 @@
     <message>
         <source>Pictures (%1)</source>
         <translation>Images (%1)</translation>
+    </message>
+</context>
+<context>
+    <name>WallpaperSection</name>
+    <message>
+        <source>Show Fewer</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show All (%1)</source>
+        <translation>Tout afficher (%1)</translation>
     </message>
 </context>
 <context>

@@ -1124,18 +1124,60 @@ QtObject {
     readonly property int settingsPointerBuildTimeoutMs: 60000
     // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerBuildKillMs: 3000
-    // estimate: Settings > Wallpaper, width of the Fit and Change picture pickers (French 'Toutes les 15 minutes' did not fit the 150 px picker) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperPickerWidth: 210
-    // ADR-0016: Settings > Wallpaper, thumbnails per row (macOS: 4)
-    readonly property int settingsWallpaperTileColumns: 4
-    // estimate: Settings > Wallpaper, gap between thumbnails [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperTileGap: 12
-    // estimate: Settings > Wallpaper, thumbnail corner radius [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperTileRadius: 6
-    // estimate: Settings > Wallpaper, height of the preview of the current wallpaper (width follows the display's aspect ratio) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperPreviewHeight: 170
+    // macOS 27: between two wallpaper thumbnails (117.5 apart) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTileGap: 10
+    // macOS 27: a wallpaper thumbnail's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTileRadius: 4
+    // macOS 27: the current wallpaper's preview, top left of the pane [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperPreviewHeight: 100
     // ADR-0016: width in pixels of the cached thumbnails the helper writes (about 2.6 times the tile width, sharp on a 2x display)
     readonly property int settingsWallpaperThumbWidth: 320
+    // macOS 27: the current wallpaper's preview [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperPreviewWidth: 160
+    // macOS 27: the preview's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperPreviewRadius: 6
+    // macOS 27: a wallpaper thumbnail [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperTileWidth: 107.5
+    // macOS 27: a wallpaper thumbnail [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTileHeight: 71
+    // macOS 27: the top block's distance from the pane's edges [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperHeaderInset: 16
+    // macOS 27: the preview and its group below the content's top (68) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperHeaderTop: 4
+    // macOS 27: the top group's left edge from the preview's [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperGroupX: 170
+    // macOS 27: the push buttons (Screen Saver…) 10 under the top group [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperButtonsGap: 10
+    // macOS 27: Screen Saver… and Clock Appearance… 8 apart [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperButtonSpacing: 8
+    // macOS 27: the pane-wide separator under the buttons [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperSeparatorGap: 16
+    // macOS 27: the pane-wide separator under the preview [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperSeparatorPreviewGap: 25
+    // macOS 27: the first section title's baseline under the separator [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperTitleBaseline: 33.5
+    // macOS 27: a section's thumbnails below its title's baseline [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTilesTop: 13
+    // macOS 27: a thumbnail's name, its baseline below the picture [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperLabelBaseline: 13.5
+    // macOS 27: the next title's baseline below the names' baseline [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperSectionGap: 47.5
+    // macOS 27: the next title's baseline below a row without names (Add Photo…) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperAddSectionGap: 43
+    // macOS 27: the light ring of the chosen wallpaper [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperRingWidth: 2
+    // macOS 27: the ring's outer edge outside the thumbnail [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperRingOutset: 1
+    // macOS 27: the chosen wallpaper's picture inside its thumbnail (0.5 clear inside the ring) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperChosenInset: 1.5
+    // macOS 27: the ring, the text colour at this opacity (about #D9D9D9 on white) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperRingOpacity: 0.15
+    // macOS 27: the Add Photo… symbol inks 30 x 23.5; the 24-grid add glyphs ink 22.5 x 18 units, so drawn at 32 [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperAddIconSize: 32
+    // macOS 27: the symbol's ink 13 under the tile's top; the glyph box starts 5.5 above its ink (4 of 24 units at 32) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperAddIconTop: 7.5
+    // macOS 27: the tile's name, its baseline below the tile's top [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperAddLabelBaseline: 58.5
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
