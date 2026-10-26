@@ -214,6 +214,22 @@ TestCase {
         verify(model.arrivesHeld(true), "locked again: held");
     }
 
+    // Re-check of b5d7657 (MEDIUM-1): a request that arrives right after the previous one ended (`pkexec a; pkexec b`) is held
+    // like one after an unlock, for heldAfterUnlockMs, timed by a Timer.
+    function test_heldJustAfterAnotherRequest() {
+        tryVerify(() => !model.arrivesHeld(false), 4000, "no hold left from an earlier test");
+        verify(!model.followsAnother());
+        const start = Date.now();
+        model.noteEnded();
+        verify(model.arrivesHeld(false), "the instant the previous one ended");
+        verify(model.followsAnother());
+        wait(500);
+        verify(model.arrivesHeld(false), "half a second later");
+        tryVerify(() => !model.arrivesHeld(false), 4000, "the hold ends");
+        verify(!model.followsAnother());
+        verify(Date.now() - start >= 900, "not before about heldAfterUnlockMs (Qt coarse timers: 5%)");
+    }
+
     function test_newFlowResetsState() {
         flow.isResponseRequired = true;
         model.submit("pw");

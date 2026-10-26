@@ -394,13 +394,22 @@ shell no longer relies on that alone:
   field does nothing). The saver keeps the keyboard meanwhile (the held sheet takes none). Fail mode: a wrong
   `saverShown` never releases a hold; a wrong false (the Binding lost) brings back a sheet that takes the keyboard over the
   saver, a wrong true holds every request and swallows every press on the sheet until the requester gives up (only the
-  shell.qml Binding writes it; `lock_surfaces.sh` checks it). A queued request that follows another in the same sheet
-  (Quickshell switches the flow from one to the next without `active` changing) is a new arrival and is held, its field
-  empty and its guard started over, "…right after another one" (review of f513b3b, MEDIUM-2: keys typed after answering
-  the first landed in the next one's field). Tests:
+  shell.qml Binding writes it; `lock_surfaces.sh` checks it). Two requests close together (reviews of f513b3b and
+  b5d7657): Quickshell 0.3.1 never queues; a request that arrives while one is open replaces it at once (the flow
+  switches without `active` changing; the replaced one is abandoned, never answered, which fails closed), and one that
+  arrives after the previous ended passes through no request. Both are held, "…right after another one": the replacing
+  one with its field emptied and its guard started over, and, if the user was typing into the sheet, with the keyboard
+  kept on a key sink, so the rest of a password and its Return reach neither field nor the window underneath; the next
+  one within 1 s (`AuthDialogModel.afterRequest`) like one after an unlock. A replacement behind the lock or the saver keeps
+  saying why it waited. Upstream (for the upstream researcher, not verified at runtime): the replaced request's
+  `AuthRequest` is deleted without its GTask being returned or its cancellable disconnected; the client hangs, and a
+  later cancel may read freed memory in the shell. Tests:
   `tst_authdialogmodel` `test_heldGuard` (with `noteUncovered`), `test_heldJustAfterUnlock` (real timers), `tst_authdialog`
-  `test_11_heldNotice`, `tests/security/lock_surfaces.sh` (wiring, the saver's Binding, one place that gives the keyboard,
-  three that set the hold, no `Date` in the hold functions, twenty-one polkit mutations). Seen on screen: NOT VERIFIED (L5).
+  `test_11_heldNotice`, `test_heldJustAfterAnotherRequest`, `tests/security/lock_surfaces.sh` (wiring, the saver's Binding,
+  one place that gives the keyboard and three that take it back, three that set the hold, the stacking of the sheet and its
+  two guards, each hold Timer used only in its own functions, the key sink, no `Date` in the hold functions, twenty-six
+  polkit mutations). A behavioural test of AuthAgent itself (the reviewers' harness: the real file with the Quickshell
+  types replaced, every flow order) is not in the repository yet. Seen on screen: NOT VERIFIED (L5).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").

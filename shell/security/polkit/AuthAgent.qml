@@ -43,10 +43,10 @@ Scope {
 
         // A request arrived, or none is left.
         onActiveChanged: root.arrive(false)
-        // The next queued request follows the one just answered in the same sheet: Quickshell switches its flow straight from
-        // one to the next (agentimpl.cpp finishAuthenticationRequest), so `active` does not change. It is a new arrival, held
-        // (review of f513b3b, MEDIUM-2): keys typed after answering the first, or a password typed again, must not land in
-        // the next one's field.
+        // Another request replaces the one in the sheet: Quickshell 0.3.1 activates a new request at once, abandoning the open
+        // one (agentimpl.cpp initiateAuthentication; re-check of b5d7657), so `active` does not change. It is a new arrival,
+        // held (review of f513b3b, MEDIUM-2): keys typed for the first must not land in its field. One that arrives after the
+        // first ended passes through no request and is held by AuthDialogModel.afterRequest.
         onFlowChanged: {
             const follows = root.shownFlow !== null && flow !== null && flow !== root.shownFlow;
             root.shownFlow = flow;
@@ -58,13 +58,21 @@ Scope {
     // The request now in the sheet (the last flow seen), to tell the next queued one from it.
     property var shownFlow: null
 
-    // A request arrives (`follows`: right after another in the same sheet) or none is left: whether it is held and why, the
-    // keyboard not given yet, the time its notice prints. One that follows starts empty and its click guard starts over.
+    // A request arrives (`follows`: it replaced the one in the sheet) or none is left: whether it is held and why, the
+    // keyboard not given yet, the time its notice prints. One that follows starts empty and its click guard starts over; if
+    // the sheet had the keyboard (the user was typing the first one's password), it keeps it on the key sink, so the rest of
+    // what is typed reaches neither its field nor the window underneath (re-check of b5d7657, MEDIUM-2). No request left:
+    // the next one within heldAfterUnlockMs is held (noteEnded).
     function arrive(follows: bool): void {
-        root.heldWhy = follows ? "queued" : SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : "unlock";
+        const typing = follows && win.takesKeys;
+        const queued = follows || (dialogModel.active && dialogModel.followsAnother());
+        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : queued ? "queued" : "unlock";
         root.heldByLock = dialogModel.active && (follows || dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
         root.userFocused = false;
+        root.sinkingKeys = typing;
         root.requestStartedAt = dialogModel.active ? new Date() : null;
+        if (!dialogModel.active)
+            dialogModel.noteEnded();
         if (follows) {
             dialogModel.clearRequested();
             dialogModel.noteShown();
@@ -80,6 +88,10 @@ Scope {
     // wall-clock time the notice prints (display, never compared).
     property bool heldByLock: false
     property string heldWhy: "unlock"
+    // A held request whose sheet keeps the keyboard on the key sink (it replaced the one being typed into).
+    property bool sinkingKeys: false
+    onSinkingKeysChanged: if (sinkingKeys)
+        keySink.forceActiveFocus()
     property bool userFocused: false
     property var requestStartedAt: null
 
@@ -93,6 +105,7 @@ Scope {
                 root.heldByLock = true;
                 root.heldWhy = "locked";
                 root.userFocused = false;
+                root.sinkingKeys = false;
             }
         }
 
@@ -107,6 +120,7 @@ Scope {
                     root.heldWhy = "saver";
                 root.heldByLock = true;
                 root.userFocused = false;
+                root.sinkingKeys = false;
                 dialogModel.clearRequested();
             } else if (root.heldByLock) {
                 dialogModel.noteUncovered();
@@ -134,8 +148,9 @@ Scope {
         // once the user is back): the sheet is mapped, and takes the keyboard, only after the unlock (GF-116). The request
         // itself stays pending; nothing is answered or approved meanwhile.
         readonly property bool shown: dialogModel.active && !SessionState.locked
-        // The sheet holds the keyboard: shown, and not a held request the user has not clicked yet.
-        readonly property bool takesKeys: shown && (!root.heldByLock || root.userFocused)
+        // The sheet holds the keyboard: shown, and not a held request the user has not clicked yet (unless it keeps the keys on
+        // the sink).
+        readonly property bool takesKeys: shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)
 
         visible: shown
         // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: a request that was not
@@ -172,6 +187,14 @@ Scope {
             radius: Tokens.radiusDialog
         }
 
+        // The keys of a held request that kept the keyboard (sinkingKeys) stop here: no field, no Esc, nothing underneath,
+        // until a click past the guard gives the sheet its field.
+        Item {
+            id: keySink
+            Keys.onPressed: event => event.accepted = true
+            Keys.onReleased: event => event.accepted = true
+        }
+
         // Clicks outside the sheet do nothing (no click-outside cancel for authentication).
         MouseArea {
             anchors.fill: parent
@@ -205,6 +228,7 @@ Scope {
                 if (!dialogModel.heldClickAccepted())
                     return;
                 root.userFocused = true;
+                root.sinkingKeys = false;
                 const dialog = holder.item as AuthDialog;
                 if (dialog)
                     dialog.focusField();

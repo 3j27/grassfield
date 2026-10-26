@@ -62,8 +62,10 @@ black; and the waking key or click consumed, as on macOS.
   0231b44 M1): the sheet shows over the saver without the keyboard, its field empty, says it waited while the screen saver
   was on, and takes the keyboard only after a click that comes at least `heldGuardMs` after the saver ended (a click before
   that still reaches the control it hits: Cancel at worst); a press or the wheel on the sheet while the saver shows goes
-  nowhere. Opus review of f513b3b: PASS; its findings (the lint did not check the saver's Binding; a queued request
-  inherited the previous one's hold and focus, pre-existing; every button and the wheel) are fixed in the commit after. `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the
+  nowhere. Opus review of f513b3b: PASS; its findings (the lint did not check the saver's Binding; a second request
+  inherited the first one's hold and focus, pre-existing; every button and the wheel) fixed in b5d7657. Its re-check:
+  PASS; its findings (a request right after another ended was not held; a replacement while typing let the rest of a
+  password reach the window underneath, new in b5d7657; lint gaps) fixed in the commit after (docs/specs/security.md). `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the
   saver's state to `shell/security/polkit`, the one change there (docs/specs/security.md § Nothing opens over the lock); it
   can only hold a request, never release one. An opus review covers this input handling before merge.
 - Only the waking key or click is consumed: the keys typed after it reach the focused window, as on macOS (owner decision
