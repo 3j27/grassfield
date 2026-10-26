@@ -187,6 +187,8 @@ TestCase {
         verify(model.heldNotice(Date.now(), "unlock").indexOf("just as the screen was unlocked") !== -1);
         // ADR-0032: held while the screen saver showed.
         verify(model.heldNotice(Date.now(), "saver").indexOf("while the screen saver was on") !== -1);
+        // Review of f513b3b: a queued request that follows another in the same sheet is held too.
+        verify(model.heldNotice(Date.now(), "queued").indexOf("right after another one") !== -1);
         // AuthAgent passes the arrival time as a Date (display only; shell/security reads no Date.now).
         compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), "locked"), notice);
         // The screen saver ended over a held sheet: the guard starts over, so the click that woke the screen never counts.

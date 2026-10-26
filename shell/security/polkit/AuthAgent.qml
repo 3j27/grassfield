@@ -41,20 +41,42 @@ Scope {
         flow: agent.isActive ? agent.flow : null
         // qmllint enable unresolved-type
 
-        onActiveChanged: {
-            root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : "unlock";
-            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown);
-            root.userFocused = false;
-            root.requestStartedAt = active ? new Date() : null;
+        // A request arrived, or none is left.
+        onActiveChanged: root.arrive(false)
+        // The next queued request follows the one just answered in the same sheet: Quickshell switches its flow straight from
+        // one to the next (agentimpl.cpp finishAuthenticationRequest), so `active` does not change. It is a new arrival, held
+        // (review of f513b3b, MEDIUM-2): keys typed after answering the first, or a password typed again, must not land in
+        // the next one's field.
+        onFlowChanged: {
+            const follows = root.shownFlow !== null && flow !== null && flow !== root.shownFlow;
+            root.shownFlow = flow;
+            if (follows)
+                root.arrive(true);
+        }
+    }
+
+    // The request now in the sheet (the last flow seen), to tell the next queued one from it.
+    property var shownFlow: null
+
+    // A request arrives (`follows`: right after another in the same sheet) or none is left: whether it is held and why, the
+    // keyboard not given yet, the time its notice prints. One that follows starts empty and its click guard starts over.
+    function arrive(follows: bool): void {
+        root.heldWhy = follows ? "queued" : SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : "unlock";
+        root.heldByLock = dialogModel.active && (follows || dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
+        root.userFocused = false;
+        root.requestStartedAt = dialogModel.active ? new Date() : null;
+        if (follows) {
+            dialogModel.clearRequested();
+            dialogModel.noteShown();
         }
     }
 
     // The request arrived, or was open, while the session was locked (review of 1d2c856) or the screen saver showed (ADR-0032,
-    // owner decision 2026-10-26: over the opaque saver the sheet looked like the lock's prompt and took the keys at once), or
-    // arrived within AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the
-    // keyboard until the user clicks it (AuthDialogModel.heldGuardMs after it appeared, or after the saver ended), so keys
-    // typed right after the unlock or the wake never reach its field; it says when the request arrived and why it waited
-    // (`heldWhy`). Both delays are timed by the model's Timers (monotonic, review of 6e24d36); requestStartedAt is only the
+    // owner decision 2026-10-26: over the opaque saver the sheet looked like the lock's prompt and took the keys at once),
+    // arrived within AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c), or followed another request in the
+    // same sheet: the sheet is shown without the keyboard until the user clicks it (AuthDialogModel.heldGuardMs after it
+    // appeared, after the saver ended or after the request before it), so keys typed right after the unlock, the wake or the
+    // previous answer never reach its field; it says when the request arrived and why it waited (`heldWhy`). Both delays are timed by the model's Timers (monotonic, review of 6e24d36); requestStartedAt is only the
     // wall-clock time the notice prints (display, never compared).
     property bool heldByLock: false
     property string heldWhy: "unlock"
@@ -75,7 +97,8 @@ Scope {
         }
 
         // The screen saver came up over an open request: held as by the lock, its field emptied; the saver holds the keyboard
-        // meanwhile. It ended over a held one: the click guard starts over (the waking click never answers the sheet).
+        // meanwhile. It ended over a held one: the click guard starts over, so no click in the next heldGuardMs gives the sheet
+        // the keyboard (such a click still reaches the control it hits, as after an unlock: Cancel at worst).
         function onSaverShownChanged(): void {
             if (!dialogModel.active || SessionState.locked)
                 return;
@@ -188,12 +211,14 @@ Scope {
             }
         }
 
-        // While the screen saver shows, a press on the sheet goes nowhere: it is the click that wakes the screen (the saver
-        // ends on it), never an answer (Cancel, Allow) or the field's focus.
+        // While the screen saver shows, a press (any button) or the wheel on the sheet goes nowhere: it is the input that wakes
+        // the screen (the saver ends on it), never an answer, the field's focus or a middle-click paste into it.
         MouseArea {
             anchors.fill: parent
             enabled: SessionState.saverShown
+            acceptedButtons: Qt.AllButtons
             onPressed: mouse => mouse.accepted = true
+            onWheel: wheel => wheel.accepted = true
         }
     }
 

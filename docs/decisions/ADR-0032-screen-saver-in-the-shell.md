@@ -60,8 +60,10 @@ black; and the waking key or click consumed, as on macOS.
 - The saver takes the keyboard while shown. It is never up while the session is locked. A polkit request that arrives
   while it shows, or is open when it comes up, is held as behind the lock (owner decision 2026-10-26, opus review of
   0231b44 M1): the sheet shows over the saver without the keyboard, its field empty, says it waited while the screen saver
-  was on, and takes the keyboard only after a click that comes at least `heldGuardMs` after the saver ended; a press on the
-  sheet while the saver shows goes nowhere. `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the
+  was on, and takes the keyboard only after a click that comes at least `heldGuardMs` after the saver ended (a click before
+  that still reaches the control it hits: Cancel at worst); a press or the wheel on the sheet while the saver shows goes
+  nowhere. Opus review of f513b3b: PASS; its findings (the lint did not check the saver's Binding; a queued request
+  inherited the previous one's hold and focus, pre-existing; every button and the wheel) are fixed in the commit after. `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the
   saver's state to `shell/security/polkit`, the one change there (docs/specs/security.md § Nothing opens over the lock); it
   can only hold a request, never release one. An opus review covers this input handling before merge.
 - Only the waking key or click is consumed: the keys typed after it reach the focused window, as on macOS (owner decision

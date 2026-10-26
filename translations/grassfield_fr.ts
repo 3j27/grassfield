@@ -988,6 +988,10 @@
         <translation>Cette demande est arrivée à %1 et a attendu pendant que l’économiseur d’écran était affiché. Cliquez sur la fenêtre pour y répondre.</translation>
     </message>
     <message>
+        <source>This request arrived at %1, right after another one. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1, juste après une autre. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
     </message>
@@ -6063,7 +6067,7 @@
     </message>
     <message>
         <source>Not sandboxed: may use the camera directly</source>
-        <translation>Non isolée : peut utiliser l’appareil photo directement</translation>
+        <translation>Non isolée&#xa0;: peut utiliser l’appareil photo directement</translation>
     </message>
     <message>
         <source>No apps have asked</source>
@@ -6130,7 +6134,7 @@
     </message>
     <message>
         <source>Only sandboxed apps (Flatpak, Snap) are limited by these permissions; other apps are not.</source>
-        <translation>Seules les apps isolées (Flatpak, Snap) sont limitées par ces autorisations ; les autres apps ne le sont pas.</translation>
+        <translation>Seules les apps isolées (Flatpak, Snap) sont limitées par ces autorisations&#xa0;; les autres apps ne le sont pas.</translation>
     </message>
     <message>
         <source>Background Apps</source>

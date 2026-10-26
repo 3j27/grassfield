@@ -155,14 +155,14 @@ expect("polkit sheet: a held request takes the keyboard only after a click past 
        re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?if\s*\(!dialogModel\.heldClickAccepted\(\)\)\s*return;.*?root\.userFocused\s*=\s*true", agent, re.S) is not None
        and re.search(r"onShownChanged:\s*\{\s*if\s*\(shown\)\s*dialogModel\.noteShown\(\);", agent) is not None)
 expect("polkit sheet: a request arriving while locked, or just after an unlock, is held",
-       re.search(r"heldByLock\s*=\s*active\s*&&\s*dialogModel\.arrivesHeld\(SessionState\.locked\s*\|\|\s*SessionState\.saverShown\);", agent) is not None
+       re.search(r"heldByLock\s*=\s*dialogModel\.active\s*&&\s*\(follows\s*\|\|\s*dialogModel\.arrivesHeld\(SessionState\.locked\s*\|\|\s*SessionState\.saverShown\)\);", agent) is not None
        and re.search(r"if\s*\(!SessionState\.locked\)\s*\{\s*dialogModel\.noteUnlock\(\);", agent) is not None)
 # Review of 6e24d36: the unlock hold and the click guard are timed by Timers (monotonic), never by the wall clock; the
 # agent reads Date.now() only for the arrival time the notice shows.
 model = code(read("shell/security/polkit/AuthDialogModel.qml"))
 bodies = {n: code(function(model, n) or "") for n in ("noteUnlock", "noteShown", "heldClickAccepted", "arrivesHeld")}
 expect("polkit holds: timed by Timers, never by the wall clock",
-       len(re.findall(r"\bDate\b", agent)) == 1 and re.search(r"requestStartedAt\s*=\s*active\s*\?\s*new Date\(\)\s*:\s*null", agent) is not None
+       len(re.findall(r"\bDate\b", agent)) == 1 and re.search(r"requestStartedAt\s*=\s*dialogModel\.active\s*\?\s*new Date\(\)\s*:\s*null", agent) is not None
        and not any(re.search(r"\bDate\b", b) for b in bodies.values())
        and re.search(r"property Timer unlockHold:\s*Timer\s*\{\s*interval:\s*root\.heldAfterUnlockMs\s*\}", model) is not None
        and re.search(r"property Timer clickGuard:\s*Timer\s*\{\s*interval:\s*root\.heldGuardMs\s*\}", model) is not None
@@ -174,12 +174,28 @@ expect("polkit holds: timed by Timers, never by the wall clock",
 # ADR-0032 (owner decision 2026-10-26): the screen saver holds a request as the lock does, its waking click answers nothing,
 # and the click guard starts over when it ends.
 saver_hold = code(function(agent, "onSaverShownChanged") or "")
-expect("polkit sheet: a request open when the screen saver comes up is held, its field emptied",
-       re.search(r"if\s*\(SessionState\.saverShown\)\s*\{.*?root\.heldByLock\s*=\s*true;\s*root\.userFocused\s*=\s*false;\s*dialogModel\.clearRequested\(\);", saver_hold, re.S) is not None)
+expect("polkit sheet: a request open when the screen saver comes up is held, its field emptied (nothing but the lock and no request return first)",
+       re.match(r"\s*if\s*\(!dialogModel\.active\s*\|\|\s*SessionState\.locked\)\s*return;\s*if\s*\(SessionState\.saverShown\)\s*\{", saver_hold) is not None
+       and re.search(r"if\s*\(SessionState\.saverShown\)\s*\{.*?root\.heldByLock\s*=\s*true;\s*root\.userFocused\s*=\s*false;\s*dialogModel\.clearRequested\(\);", saver_hold, re.S) is not None)
+# Review of f513b3b (MEDIUM-1): the link that carries the saver's state, and who may give the keyboard or set the hold.
+expect("shell.qml binds SessionState.saverShown to the screen saver's shown",
+       re.search(r"Binding\s*\{\s*target:\s*SessionState\s*property:\s*\"saverShown\"\s*value:\s*saver\.shown\s*\}", shell) is not None
+       and re.search(r"\bSaver\s*\{\s*id:\s*saver\b", shell) is not None)
+expect("polkit sheet: only a click past the guard gives the keyboard (one userFocused = true)",
+       len(re.findall(r"userFocused\s*=\s*true", agent)) == 1)
+expect("polkit sheet: the hold is set only on an arrival, a lock and the screen saver",
+       len(re.findall(r"\bheldByLock\s*=(?!=)", agent)) == 3)
+# Review of f513b3b (MEDIUM-2): a queued request that follows another in the same sheet is a new arrival, held.
+flow_changed = code(block_after(agent, re.search(r"onFlowChanged:", agent).end()) if re.search(r"onFlowChanged:", agent) else "")
+arrive = code(function(agent, "arrive") or "")
+expect("polkit sheet: a queued request that follows another is held, emptied, its guard started over",
+       re.search(r"const follows\s*=\s*root\.shownFlow\s*!==\s*null\s*&&\s*flow\s*!==\s*null\s*&&\s*flow\s*!==\s*root\.shownFlow;\s*root\.shownFlow\s*=\s*flow;\s*if\s*\(follows\)\s*root\.arrive\(true\);", flow_changed) is not None
+       and re.search(r"onActiveChanged:\s*root\.arrive\(false\)", agent) is not None
+       and re.search(r"if\s*\(follows\)\s*\{\s*dialogModel\.clearRequested\(\);\s*dialogModel\.noteShown\(\);\s*\}", arrive) is not None)
 expect("polkit sheet: the click guard starts over when the screen saver ends",
        re.search(r"else if\s*\(root\.heldByLock\)\s*\{\s*dialogModel\.noteUncovered\(\);", saver_hold) is not None)
 expect("polkit sheet: a press goes nowhere while the screen saver shows",
-       re.search(r"MouseArea\s*\{\s*anchors\.fill:\s*parent\s*enabled:\s*SessionState\.saverShown\s*onPressed:\s*mouse\s*=>\s*mouse\.accepted\s*=\s*true\s*\}", agent) is not None)
+       re.search(r"MouseArea\s*\{\s*anchors\.fill:\s*parent\s*enabled:\s*SessionState\.saverShown\s*acceptedButtons:\s*Qt\.AllButtons\s*onPressed:\s*mouse\s*=>\s*mouse\.accepted\s*=\s*true\s*onWheel:\s*wheel\s*=>\s*wheel\.accepted\s*=\s*true\s*\}", agent) is not None)
 expect("polkit sheet: a request open when the lock engages is held", re.search(r"else if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true", agent) is not None)
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
@@ -193,7 +209,7 @@ def nocomments(text):
     return "\n".join(re.sub(r"(^|\s)//.*$", r"\1", l) for l in text.split("\n"))
 allowed_dates = {
     "shell/security/lock/LockView.qml": ["WallClock {\n        id: clock\n    }"],
-    "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = active ? new Date() : null;"],
+    "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = dialogModel.active ? new Date() : null;"],
     "shell/security/polkit/AuthDialogModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
 }
 clock_hits = []
@@ -294,6 +310,13 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#                root.heldByLock = true;\n                root.userFocused = false;\n                dialogModel.clearRequested();#                root.userFocused = false;' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteUncovered();#;' \
   'shell/security/polkit/AuthAgent.qml#enabled: SessionState.saverShown#enabled: false' \
+  'shell/security/polkit/AuthAgent.qml#acceptedButtons: Qt.AllButtons#acceptedButtons: Qt.LeftButton' \
+  'shell/shell.qml#        property: "saverShown"\n        value: saver.shown#        property: "saverShown"\n        value: false' \
+  'shell/security/polkit/AuthAgent.qml#if (!dialogModel.active || SessionState.locked)#if (!dialogModel.active || SessionState.locked || !SessionState.saverShown)' \
+  'shell/security/polkit/AuthAgent.qml#        root.userFocused = false;\n        root.requestStartedAt#        root.userFocused = true;\n        root.requestStartedAt' \
+  'shell/security/polkit/AuthAgent.qml#const follows = root.shownFlow !== null#const follows = false && root.shownFlow !== null' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.active && (follows || #dialogModel.active && (' \
+  'shell/security/polkit/AuthAgent.qml#            dialogModel.clearRequested();\n            dialogModel.noteShown();#            dialogModel.clearRequested();' \
   'shell/security/polkit/AuthDialogModel.qml#        clickGuard.restart();\n    }\n\n    // A request is held#    }\n\n    // A request is held' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteUnlock();#root.unlockedAt = Date.now();' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteShown();#root.shownAt = Date.now();' \

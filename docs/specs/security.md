@@ -387,13 +387,20 @@ shell no longer relies on that alone:
   (only the message, which names the program for pkexec). The screen saver holds a request the same way (ADR-0032, owner
   decision 2026-10-26: over the opaque saver an unheld sheet looked like the lock's prompt and took the keys at once): one
   that arrives while `SessionState.saverShown` (a mirror of the saver, set in shell.qml), or is open when the saver comes up
-  (its field emptied), is held and says "…and waited while the screen saver was on"; while the saver shows a press on the
-  sheet goes nowhere (the waking click), and when the saver ends the click guard starts over (`noteUncovered`), so the
-  click that woke the screen never answers the sheet, whichever of the press and the saver's end comes first. The saver
-  keeps the keyboard meanwhile (the held sheet takes none). A wrong `saverShown` can only hold a request. Tests:
+  (its field emptied), is held and says "…and waited while the screen saver was on"; while the saver shows a press (any
+  button) or the wheel on the sheet goes nowhere (the waking input), and when the saver ends the click guard starts over
+  (`noteUncovered`), so no click in the next 500 ms gives the sheet the keyboard, whichever of the press and the saver's end
+  comes first (such a click still reaches the control it hits, as after an unlock: Cancel at worst; Allow with an empty
+  field does nothing). The saver keeps the keyboard meanwhile (the held sheet takes none). Fail mode: a wrong
+  `saverShown` never releases a hold; a wrong false (the Binding lost) brings back a sheet that takes the keyboard over the
+  saver, a wrong true holds every request and swallows every press on the sheet until the requester gives up (only the
+  shell.qml Binding writes it; `lock_surfaces.sh` checks it). A queued request that follows another in the same sheet
+  (Quickshell switches the flow from one to the next without `active` changing) is a new arrival and is held, its field
+  empty and its guard started over, "…right after another one" (review of f513b3b, MEDIUM-2: keys typed after answering
+  the first landed in the next one's field). Tests:
   `tst_authdialogmodel` `test_heldGuard` (with `noteUncovered`), `test_heldJustAfterUnlock` (real timers), `tst_authdialog`
-  `test_11_heldNotice`, `tests/security/lock_surfaces.sh` (wiring, no `Date` in the hold functions, fourteen polkit
-  mutations). Seen on screen: NOT VERIFIED (L5).
+  `test_11_heldNotice`, `tests/security/lock_surfaces.sh` (wiring, the saver's Binding, one place that gives the keyboard,
+  three that set the hold, no `Date` in the hold functions, twenty-one polkit mutations). Seen on screen: NOT VERIFIED (L5).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").
