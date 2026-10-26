@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
-import "Keyboard.js" as Keyboard
 
 // Input Sources > +: choose an xkb layout or variant (Keyboard.parseLayouts of base.lst, by name); the field filters them. Add (or
 // Return, or a double-click) hands the choice back (`chosen`); the ones already in use are left out.

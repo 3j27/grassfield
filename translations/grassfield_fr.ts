@@ -3654,6 +3654,13 @@
     </message>
 </context>
 <context>
+    <name>GestureHeader</name>
+    <message>
+        <source>Gestures</source>
+        <translation>Gestes</translation>
+    </message>
+</context>
+<context>
     <name>Glance</name>
     <message>
         <source>Glance</source>
@@ -4269,7 +4276,7 @@
     </message>
     <message>
         <source>The change could not be saved: %1.</source>
-        <translation>Le changement n’a pas pu être enregistré : %1.</translation>
+        <translation>Le changement n’a pas pu être enregistré&#xa0;: %1.</translation>
     </message>
     <message>
         <source>Key repeat rate</source>
@@ -4348,7 +4355,7 @@
     </message>
     <message>
         <source>The shortcuts file could not be read: %1</source>
-        <translation>Le fichier des raccourcis n’a pas pu être lu : %1</translation>
+        <translation>Le fichier des raccourcis n’a pas pu être lu&#xa0;: %1</translation>
     </message>
     <message>
         <source>Done</source>
@@ -4679,14 +4686,6 @@
         <translation>inactivité verrouillage mot de passe</translation>
     </message>
     <message>
-        <source>Mouse &amp; Trackpad</source>
-        <translation>Souris et trackpad</translation>
-    </message>
-    <message>
-        <source>pointer tracking speed scrolling natural tap click secondary right click touchpad</source>
-        <translation>pointeur vitesse de déplacement défilement naturel toucher cliquer clic secondaire droit pavé tactile</translation>
-    </message>
-    <message>
         <source>version system hardware processor memory computer name graphics serial</source>
         <translation>version système matériel processeur mémoire nom ordinateur graphisme série</translation>
     </message>
@@ -4721,6 +4720,22 @@
     <message>
         <source>shortcuts keys bindings</source>
         <translation>raccourcis touches clavier</translation>
+    </message>
+    <message>
+        <source>Mouse</source>
+        <translation>Souris</translation>
+    </message>
+    <message>
+        <source>pointer tracking speed scrolling natural wheel bluetooth</source>
+        <translation>pointeur vitesse déplacement défilement naturel molette bluetooth</translation>
+    </message>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch</source>
+        <translation>pavé tactile touchpad pointeur vitesse déplacement défilement naturel toucher clic secondaire clic droit gestes balayer pincer</translation>
     </message>
     <message>
         <source>About</source>
@@ -5090,76 +5105,24 @@
 <context>
     <name>MousePage</name>
     <message>
-        <source>Mouse &amp; Trackpad</source>
-        <translation>Souris et trackpad</translation>
-    </message>
-    <message>
-        <source>Pointer</source>
-        <translation>Pointeur</translation>
-    </message>
-    <message>
         <source>The change could not be saved: %1.</source>
         <translation>La modification n’a pas pu être enregistrée&#xa0;: %1.</translation>
     </message>
     <message>
-        <source>Changes apply the next time you log in. Settings you write in your own input.lua take precedence.</source>
-        <translation>Les modifications s’appliquent à votre prochaine ouverture de session. Les réglages de votre propre input.lua restent prioritaires.</translation>
+        <source>Content tracks finger movement</source>
+        <translation>Le contenu suit le mouvement des doigts</translation>
     </message>
     <message>
-        <source>Tracking speed</source>
-        <translation>Vitesse de déplacement</translation>
-    </message>
-    <message>
-        <source>Slow</source>
-        <translation>Lente</translation>
-    </message>
-    <message>
-        <source>Fast</source>
-        <translation>Rapide</translation>
-    </message>
-    <message>
-        <source>Trackpad</source>
-        <translation>Trackpad</translation>
+        <source>Set Up Bluetooth Mouse…</source>
+        <translation>Configurer une souris Bluetooth…</translation>
     </message>
     <message>
         <source>Natural scrolling</source>
         <translation>Défilement naturel</translation>
     </message>
     <message>
-        <source>Content follows your fingers.</source>
-        <translation>Le contenu suit vos doigts.</translation>
-    </message>
-    <message>
-        <source>Tap to click</source>
-        <translation>Toucher pour cliquer</translation>
-    </message>
-    <message>
-        <source>Tap the trackpad with one finger to click.</source>
-        <translation>Touchez le trackpad avec un doigt pour cliquer.</translation>
-    </message>
-    <message>
-        <source>Secondary click</source>
-        <translation>Clic secondaire</translation>
-    </message>
-    <message>
-        <source>Two fingers</source>
-        <translation>Deux doigts</translation>
-    </message>
-    <message>
-        <source>Bottom right corner</source>
-        <translation>Coin inférieur droit</translation>
-    </message>
-    <message>
         <source>Mouse</source>
         <translation>Souris</translation>
-    </message>
-    <message>
-        <source>Content follows the wheel.</source>
-        <translation>Le contenu suit la molette.</translation>
-    </message>
-    <message>
-        <source>Natural scrolling, mouse</source>
-        <translation>Défilement naturel, souris</translation>
     </message>
 </context>
 <context>
@@ -5901,6 +5864,18 @@
         <translation>Verrouiller l’écran</translation>
     </message>
     <message>
+        <source>Mouse</source>
+        <translation>Souris</translation>
+    </message>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>gestures</source>
+        <translation>gestes</translation>
+    </message>
+    <message>
         <source>lock</source>
         <translation>verrouiller</translation>
     </message>
@@ -6195,10 +6170,6 @@
     <message>
         <source>password</source>
         <translation>mot de passe</translation>
-    </message>
-    <message>
-        <source>Mouse &amp; Trackpad</source>
-        <translation>Souris et trackpad</translation>
     </message>
     <message>
         <source>tracking speed</source>
@@ -6963,6 +6934,104 @@
     <message>
         <source>Page %1</source>
         <translation>Page %1</translation>
+    </message>
+</context>
+<context>
+    <name>TrackingSpeedRow</name>
+    <message>
+        <source>Tracking speed</source>
+        <translation>Vitesse de déplacement</translation>
+    </message>
+    <message>
+        <source>Slow</source>
+        <translation>Lente</translation>
+    </message>
+    <message>
+        <source>Fast</source>
+        <translation>Rapide</translation>
+    </message>
+</context>
+<context>
+    <name>TrackpadPage</name>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>Le changement n’a pas pu être enregistré : %1.</translation>
+    </message>
+    <message>
+        <source>Point &amp; Click</source>
+        <translation>Pointer et cliquer</translation>
+    </message>
+    <message>
+        <source>Scroll &amp; Zoom</source>
+        <translation>Défiler et zoomer</translation>
+    </message>
+    <message>
+        <source>More Gestures</source>
+        <translation>Autres gestes</translation>
+    </message>
+    <message>
+        <source>Secondary click</source>
+        <translation>Clic secondaire</translation>
+    </message>
+    <message>
+        <source>Click or Tap with Two Fingers</source>
+        <translation>Cliquer ou toucher avec deux doigts</translation>
+    </message>
+    <message>
+        <source>Click with Two Fingers</source>
+        <translation>Cliquer avec deux doigts</translation>
+    </message>
+    <message>
+        <source>Click in Bottom Right Corner</source>
+        <translation>Cliquer dans le coin inférieur droit</translation>
+    </message>
+    <message>
+        <source>Tap to click</source>
+        <translation>Toucher pour cliquer</translation>
+    </message>
+    <message>
+        <source>Tap with one finger</source>
+        <translation>Toucher avec un doigt</translation>
+    </message>
+    <message>
+        <source>Natural scrolling</source>
+        <translation>Défilement naturel</translation>
+    </message>
+    <message>
+        <source>Content tracks finger movement</source>
+        <translation>Le contenu suit le mouvement des doigts</translation>
+    </message>
+    <message>
+        <source>Swipe between desktops</source>
+        <translation>Balayer entre les bureaux</translation>
+    </message>
+    <message>
+        <source>Swipe left or right with three fingers</source>
+        <translation>Balayer vers la gauche ou la droite avec trois doigts</translation>
+    </message>
+    <message>
+        <source>Overview</source>
+        <translation>Vue d’ensemble</translation>
+    </message>
+    <message>
+        <source>Swipe up with three fingers</source>
+        <translation>Balayer vers le haut avec trois doigts</translation>
+    </message>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
+        <source>Pinch with thumb and three fingers</source>
+        <translation>Pincer avec le pouce et trois doigts</translation>
+    </message>
+    <message>
+        <source>Set Up Bluetooth Trackpad…</source>
+        <translation>Configurer un trackpad Bluetooth…</translation>
     </message>
 </context>
 <context>

@@ -14,7 +14,8 @@ T.Control {
     property string accessibleName: ""
     // The segments share the control's width equally (macOS 27 Battery's Last 24 Hours / Last 10 Days).
     property bool fill: false
-    // The selected segment in the selection colour with its text colour, instead of the raised pill (macOS 27 Battery).
+    // The selected segment in the selection colour with its text colour, filling its place, instead of the raised pill, and a
+    // hairline between two unselected segments (macOS 27 Battery, Sound, Trackpad).
     property bool prominent: false
 
     signal picked(string id)
@@ -103,8 +104,9 @@ T.Control {
                 background: Item {
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: root.pillInset
-                        radius: Tokens.radiusControl - root.pillInset
+                        // Prominent (macOS 27 tabs): the selected segment fills its whole place, with the track's corners.
+                        anchors.margins: root.prominent ? 0 : root.pillInset
+                        radius: Tokens.radiusControl - anchors.margins
                         // Selected: a raised pill (white in the light appearance, a lighter grey in the dark one) with a fine
                         // edge; otherwise the hover and press shades.
                         color: segment.selected && root.prominent ? Appearance.colors.selection
@@ -113,6 +115,15 @@ T.Control {
                         border.width: segment.selected && !root.prominent ? Tokens.controlBorderWidth : 0
                         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Appearance.separatorOpacity)
                         visible: segment.selected || (root.enabled && (segment.hovered || segment.down))
+                    }
+
+                    // Prominent: a hairline between two unselected segments (macOS 27 tabs).
+                    Rectangle {
+                        visible: root.prominent && segment.index > 0 && !segment.selected && segment.index - 1 !== root.currentIndex
+                        y: Math.round((parent.height - height) / 2)
+                        width: Tokens.controlBorderWidth
+                        height: Tokens.controlSegmentDividerHeight
+                        color: Appearance.withAlpha(Appearance.colors.text, Tokens.controlSegmentDividerOpacity)
                     }
                 }
 

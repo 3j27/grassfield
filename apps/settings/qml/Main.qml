@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "MouseTrackpad.js" as MouseTrackpad
 import "NavHistory.js" as NavHistory
 import "Power.js" as Power
 
@@ -25,7 +26,7 @@ Window {
     readonly property var tileColors: ({
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
-            mouse: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
+            mouse: "graphite", trackpad: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             datetime: "blue", language: "blue", login: "graphite"
         })
     // The title of the shown section (the toolbar's title; the page itself repeats nothing). A hub shows its own header card
@@ -60,20 +61,26 @@ Window {
         {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
-        {id: "mouse", group: 5, title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
+        {id: "mouse", group: 5, title: qsTr("Mouse"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural wheel bluetooth")},
+        {id: "trackpad", group: 5, title: qsTr("Trackpad"), icon: "trackpad", keywords: qsTr("touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch")},
         {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
         {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
         {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")}
     ]
-    property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
+    property string selectedId: root.startSection !== "" ? root.pointerPane(root.startSection) : "appearance"
     property string query: ""
     // The state a pane shows under its title in the toolbar (Battery), "" for none.
     readonly property string pageSubtitle: (page.item as BatteryPage)?.subtitle ?? ""
     // Battery is there only on a computer with a laptop battery (macOS shows it on a laptop only).
     property bool hasBattery: false
-    readonly property var available: root.sections.filter(s => s.id !== "battery" || root.hasBattery)
+    // Mouse while a mouse is connected and Trackpad where there is one (macOS): MouseTrackpad.pointers of the kernel's input
+    // devices, read again with the system state while the window is active.
+    property bool hasMouse: false
+    property bool hasTouchpad: false
+    readonly property var available: root.sections.filter(s => (s.id !== "battery" || root.hasBattery) && (s.id !== "mouse" || root.hasMouse)
+        && (s.id !== "trackpad" || root.hasTouchpad))
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
         if (q === "")
@@ -113,6 +120,7 @@ Window {
     }
 
     Component.onCompleted: {
+        root.readPointers();
         root.navState = NavHistory.start(root.selectedId);
         root.backend.watch(root.backend.capabilitiesFile);
         root.readCapabilities();
@@ -228,8 +236,29 @@ Window {
     property var navState: ({back: [], forward: [], current: ""})
 
     function select(id: string): void {
-        root.navState = NavHistory.visit(root.navState, id);
-        root.selectedId = id;
+        const shown = root.pointerPane(id);
+        root.navState = NavHistory.visit(root.navState, shown);
+        root.selectedId = shown;
+    }
+
+    // Asked for Mouse without a mouse, or for Trackpad without a touchpad, the other is shown when it is there.
+    function pointerPane(id: string): string {
+        return MouseTrackpad.paneFor(id, {mouse: root.hasMouse, touchpad: root.hasTouchpad});
+    }
+
+    function readPointers(): void {
+        const found = MouseTrackpad.pointers(root.backend.readText("/proc/bus/input/devices").text);
+        root.hasMouse = found.mouse;
+        root.hasTouchpad = found.touchpad;
+        if (root.pointerPane(root.selectedId) !== root.selectedId)
+            root.select(root.selectedId);
+    }
+
+    Timer {
+        interval: Tokens.settingsSystemRefreshMs
+        running: root.active
+        repeat: true
+        onTriggered: root.readPointers()
     }
 
     function navBack(): void {
@@ -685,6 +714,8 @@ Window {
                     return lockPage;
                 case "mouse":
                     return mousePage;
+                case "trackpad":
+                    return trackpadPage;
                 case "keyboard":
                     return keyboardPage;
                 case "general":
@@ -878,6 +909,15 @@ Window {
         id: mousePage
         MousePage {
             backend: root.backend
+            onOpenRequested: id => root.select(id)
+        }
+    }
+
+    Component {
+        id: trackpadPage
+        TrackpadPage {
+            backend: root.backend
+            onOpenRequested: id => root.select(id)
         }
     }
 

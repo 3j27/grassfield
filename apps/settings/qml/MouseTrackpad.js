@@ -1,9 +1,11 @@
 .pragma library
 
-// The Grassfield-owned Mouse & Trackpad file (GF-066): <config dir>/mouse-trackpad.lua, a Lua chunk that returns a table of
-// plain values. The compositor config reads it before the user's own ~/.config/hypr/input.lua
-// (config/hypr/grassfield/input.lua documents the keys and validates them again). This file is generated: the page
-// rewrites it whole; the reader below accepts only what the writer produces.
+// The Grassfield-owned Mouse and Trackpad file (GF-066): <config dir>/mouse-trackpad.lua, a Lua chunk that returns a table of
+// plain values, written by both panes. The compositor config reads it before the user's own ~/.config/hypr/input.lua
+// (config/hypr/grassfield/input.lua documents the keys and validates them again). This file is generated: the pages
+// rewrite it whole; the reader below accepts only what the writer produces. Also the pointing devices of
+// /proc/bus/input/devices (which pane the sidebar shows) and the gestures the panes draw. Pure functions, unit-tested
+// (tests/unit/tst_mousetrackpad.qml).
 
 const DEFAULTS = {
     sensitivity: 0,
@@ -18,6 +20,18 @@ const DEFAULTS = {
 // The boolean keys (the trackpad's and the mouse's switches, then More Gestures').
 const BOOLEANS = ["natural_scroll", "mouse_natural_scroll", "tap_to_click", "gesture_spaces", "gesture_overview", "gesture_apps"];
 const SECONDARY = ["two_finger", "corner"];
+// Tracking speed's 10 stops (macOS 27), Hyprland's input:sensitivity: the session's 0 is the fourth, as macOS's default.
+var TRACKING = [-1, -0.67, -0.33, 0, 0.17, 0.33, 0.5, 0.67, 0.83, 1];
+
+// The stop nearest to a sensitivity (a file written by hand or by an older Settings may hold any value of -1..1).
+function trackingIndex(sensitivity) {
+    let best = 0;
+    for (let i = 1; i < TRACKING.length; i++) {
+        if (Math.abs(TRACKING[i] - sensitivity) < Math.abs(TRACKING[best] - sensitivity))
+            best = i;
+    }
+    return best;
+}
 
 function defaults() {
     return Object.assign({}, DEFAULTS);
@@ -60,7 +74,7 @@ function with_(settings, key, value) {
     switch (key) {
     case "sensitivity":
         if (typeof value === "number" && isFinite(value))
-            out.sensitivity = Math.max(-1, Math.min(1, Math.round(value * 20) / 20));
+            out.sensitivity = Math.max(-1, Math.min(1, Math.round(value * 100) / 100));
         break;
     case "natural_scroll":
     case "mouse_natural_scroll":
@@ -98,4 +112,101 @@ function serializeRaw(s) {
         + "  gesture_overview = " + (s.gesture_overview ? "true" : "false") + ",\n"
         + "  gesture_apps = " + (s.gesture_apps ? "true" : "false") + ",\n"
         + "}\n";
+}
+
+// ---- Devices ---------------------------------------------------------------------------------------------------------
+
+// Linux input codes (linux/input-event-codes.h, linux/input.h).
+const BTN_LEFT = 0x110;
+const BTN_TOOL_PEN = 0x140;
+const BTN_TOOL_FINGER = 0x145;
+const REL_X = 0;
+const REL_Y = 1;
+const PROP_DIRECT = 1;
+const PROP_POINTING_STICK = 5;
+// Buses of a device one plugs in: USB, Bluetooth.
+const PLUGGED_BUSES = ["0003", "0005"];
+
+// Whether bit `n` is set in a kernel bitmap line ("e520 10000 0 0 0 0": 64-bit words, the most significant first). Read
+// digit by digit: a word does not fit a JavaScript number.
+function bit(words, n) {
+    const word = words[words.length - 1 - Math.floor(n / 64)];
+    if (word === undefined)
+        return false;
+    const digit = word[word.length - 1 - Math.floor((n % 64) / 4)];
+    return digit !== undefined && ((parseInt(digit, 16) >> (n % 4)) & 1) === 1;
+}
+
+// {mouse, touchpad}: whether a mouse is connected and whether the computer has a touchpad (macOS shows Mouse only while a
+// mouse is connected, Trackpad where there is one). From /proc/bus/input/devices, the pointers (a mouseN handler): a touchpad
+// has a finger tool and no relative axes, and is neither a pen tablet nor a touch screen; a mouse has relative X and Y and a left
+// button, is on USB or Bluetooth (the built-in ones are part of the computer) and is not a pointing stick, nor the mouse node
+// of a touchpad (I2C and USB touchpads often have both, with the same identity).
+function pointers(text) {
+    const touchpads = [], mice = [];
+    for (const block of String(text || "").split(/\n\s*\n/)) {
+        const id = /^I: Bus=([0-9a-f]{4}) Vendor=([0-9a-f]{4}) Product=([0-9a-f]{4})/mi.exec(block);
+        const handlers = /^H: Handlers=(.*)$/m.exec(block);
+        if (!id || !handlers || !/\bmouse\d+\b/.test(handlers[1]))
+            continue;
+        const words = name => {
+            const m = new RegExp("^B: " + name + "=([0-9a-f ]+)$", "mi").exec(block);
+            return m ? m[1].trim().split(/\s+/) : [];
+        };
+        const key = words("KEY"), rel = words("REL"), prop = words("PROP");
+        const identity = id[1] + ":" + id[2].toLowerCase() + ":" + id[3].toLowerCase();
+        const relative = bit(rel, REL_X) && bit(rel, REL_Y);
+        if (bit(key, BTN_TOOL_FINGER) && !relative && !bit(key, BTN_TOOL_PEN) && !bit(prop, PROP_DIRECT))
+            touchpads.push(identity);
+        else if (relative && bit(key, BTN_LEFT) && !bit(prop, PROP_POINTING_STICK) && PLUGGED_BUSES.indexOf(id[1]) >= 0)
+            mice.push(identity);
+    }
+    return {mouse: mice.some(m => touchpads.indexOf(m) < 0), touchpad: touchpads.length > 0};
+}
+
+// The pane Settings shows for a section id (Main.qml): asked for Mouse without a mouse, or for Trackpad without a touchpad, the
+// other one when it is there; any other id as it is.
+function paneFor(id, found) {
+    if (id === "mouse" && !found.mouse && found.touchpad)
+        return "trackpad";
+    if (id === "trackpad" && !found.touchpad && found.mouse)
+        return "mouse";
+    return id;
+}
+
+// ---- Gestures --------------------------------------------------------------------------------------------------------
+
+// What the device card draws for a row (Grassfield's own drawing; macOS plays a video): the fingers as points of the drawing
+// (fractions of its width and height), where one stroke moves them (`move`, a fraction of the drawing, or `pinch`, a fraction
+// of the way to their centre) and whether they press (a click or a tap: the dots shrink and come back).
+var GESTURES = {
+    "tracking": {fingers: [[0.38, 0.6]], move: [0.24, -0.2]},
+    "secondary": {fingers: [[0.44, 0.5], [0.56, 0.5]], press: true},
+    "corner": {fingers: [[0.84, 0.8]], press: true},
+    "tap": {fingers: [[0.5, 0.5]], press: true},
+    "scroll": {fingers: [[0.44, 0.35], [0.56, 0.35]], move: [0, 0.3]},
+    "spaces": {fingers: [[0.32, 0.45], [0.44, 0.4], [0.56, 0.42]], move: [0.24, 0]},
+    "overview": {fingers: [[0.38, 0.65], [0.5, 0.6], [0.62, 0.63]], move: [0, -0.3]},
+    "apps": {fingers: [[0.28, 0.75], [0.42, 0.25], [0.56, 0.22], [0.7, 0.28]], pinch: 0.55},
+    "mouse-tracking": {fingers: [[0.3, 0.18]]},
+    "mouse-scroll": {fingers: [[0.5, 0.18]], move: [0, 0.1]}
+};
+
+// The points of a gesture's fingers `t` of the way through one stroke (0 at rest): [[x, y]], fractions of the drawing.
+function fingersAt(gesture, t) {
+    const g = GESTURES[gesture];
+    if (!g)
+        return [];
+    const n = g.fingers.length;
+    const cx = g.fingers.reduce((a, f) => a + f[0], 0) / n, cy = g.fingers.reduce((a, f) => a + f[1], 0) / n;
+    return g.fingers.map(f => {
+        if (g.pinch)
+            return [f[0] + (cx - f[0]) * g.pinch * t, f[1] + (cy - f[1]) * g.pinch * t];
+        return g.move ? [f[0] + g.move[0] * t, f[1] + g.move[1] * t] : [f[0], f[1]];
+    });
+}
+
+// Whether the gesture presses (the dots shrink in the middle of the stroke).
+function presses(gesture) {
+    return !!(GESTURES[gesture] && GESTURES[gesture].press);
 }

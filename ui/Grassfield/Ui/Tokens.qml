@@ -579,6 +579,10 @@ QtObject {
     readonly property real controlSliderStopOffset: 6.5
     // a stepped slider's stops: the text colour at 0.27 (183 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property real controlSliderStopOpacity: 0.27
+    // a prominent segmented control (macOS 27 tabs): a hairline 1 wide and 14 tall, centred, between two unselected segments [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int controlSegmentDividerHeight: 14
+    // the tabs' hairline in the text colour at 0.23 (181 on 236) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real controlSegmentDividerOpacity: 0.23
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
@@ -1580,6 +1584,72 @@ QtObject {
     readonly property int settingsKeyboardRepeatSecondX: 244
     // a repeat slider's end labels: baseline 62 below the group's top (cap top 54.5) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsKeyboardRepeatLabelBaseline: 62
+    // Mouse and Trackpad: the two cards at the pane's top, 142 tall (window 52-194) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureCardHeight: 142
+    // the cards 4 in from the groups' edges (256 and 716 in the window, the groups 252-720) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureCardInset: 4
+    // the device card and the gesture's picture 10 apart [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureCardGap: 10
+    // the gesture's picture: corner 3 (circle-equivalent 2.3-3.6) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGesturePreviewRadius: 3
+    // the tabs' top 158 below the pane's top (window 210) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureTabsY: 158
+    // the first group's top 200 below the pane's top (window 252), 18 under the tabs [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureFirstGroupY: 200
+    // estimate: a pane without tabs (Grassfield's Mouse) puts its first group where the tabs would be [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureNoTabsGroupY: 158
+    // a row with an explanation under its title: 52 tall, its separator above it apart [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureRowHeight: 52
+    // a gesture row's title (13 pt): cap top 13, baseline 22.5 below the row's top (Tracking speed, Tap to click) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureTitleBaseline: 22.5
+    // a gesture row's explanation (11 pt, secondary): cap top 30.5, baseline 38.5 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureSubtitleBaseline: 38.5
+    // a gesture row's switch centred 19.25 below the row's top, beside the title [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureControlCenter: 19.25
+    // the row under the pointer: the text colour at 0.03 (240 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureHoverOpacity: 0.03
+    // Tracking speed's row, 50 tall [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackingRowHeight: 50
+    // Tracking speed's slider from 211.5 to 458 (10 from the group's right edge) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsTrackingSliderX: 211.5
+    // Tracking speed's track centred 17 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackingSliderCenter: 17
+    // Slow and Fast under the slider's ends: cap top 29.5, baseline 37 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackingLabelBaseline: 37
+    // the trackpad drawing 97 wide [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackpadWidth: 97
+    // the trackpad drawing 73.5 tall [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsTrackpadHeight: 73.5
+    // the trackpad drawing's top 35.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsTrackpadTop: 35.5
+    // the trackpad drawing's corner, about 9 [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackpadRadius: 9
+    // the mouse drawing 46 wide, a capsule [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseWidth: 46
+    // the mouse drawing 87.5 tall [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsMouseHeight: 87.5
+    // the mouse drawing's top 28.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsMouseTop: 28.5
+    // estimate: Grassfield's two-button mouse, the buttons' line 32 below the drawing's top (its own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseButtonsHeight: 32
+    // estimate: Grassfield's mouse wheel, 5 wide (its own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseWheelWidth: 5
+    // estimate: Grassfield's mouse wheel, 12 tall, centred between the top and the buttons' line (its own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseWheelHeight: 12
+    // the device drawings' line, 2 wide [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsDeviceLineWidth: 2
+    // the device drawings' line in the text colour at 0.25 (185 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsDeviceLineOpacity: 0.25
+    // a finger of the gesture: a dot 9 across [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureDotSize: 9
+    // a finger of the gesture in the accent at about 0.68 (80, 160, 255 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureDotOpacity: 0.68
+    // estimate: the fingers' travel, one stroke of the gesture (macOS plays a video) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureTravelMs: 900
+    // estimate: the pause between two strokes of the gesture [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGesturePauseMs: 700
+    // estimate: a click or a tap of the gesture, the fingers' dots a fifth smaller in the middle of the stroke [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGesturePressScale: 0.2
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
 

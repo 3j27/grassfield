@@ -83,7 +83,7 @@ else
   })
 end
 
--- GF-066: Grassfield's pointer defaults and the Mouse & Trackpad choices saved by Settings go BEFORE the user's own
+-- GF-066: Grassfield's pointer defaults and the Mouse, Trackpad and Keyboard choices saved by Settings go BEFORE the user's own
 -- input.lua, so the user's file wins (macOS: these settings belong to the user). Applied here, not in core.lua.
 local gi_ok, gi_err = pcall(require, "grassfield.input")
 M.input_applied = gi_ok
