@@ -181,8 +181,14 @@ FocusScope {
     // A view chosen for the shown folder: it opens in that view from now on (F-3).
     function setViewMode(mode: string): void {
         const m = Nav.normalizeViewMode(mode);
+        const leavingColumns = root.viewMode === "columns" && m !== "columns";
         root.viewMode = m;
         root.app.setFolderView(root.url, {mode: m});
+        // Column view kept one arrangement for all its columns: the folder now shown alone takes its own.
+        if (leavingColumns) {
+            const sort = Nav.sortFor(root.app.folderView(root.url), root.app.sortKey, root.app.sortDescending, key => root.app.defaultDescending(key));
+            root.setArrangement(sort.key, sort.descending);
+        }
         Qt.callLater(root.focusView);
     }
 

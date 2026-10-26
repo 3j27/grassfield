@@ -72,7 +72,7 @@ Window {
 
     Timer {
         id: sizeTimer
-        interval: Tokens.motionNormal
+        interval: Tokens.filesWindowSizeDelay
         onTriggered: win.keepSize()
     }
 
@@ -472,8 +472,8 @@ Window {
     DropArea {
         anchors.fill: parent
         keys: [TabsLogic.tabMimeType]
-        onEntered: win.manager.tabDragInside = true
-        onExited: win.manager.tabDragInside = false
+        onEntered: win.manager.tabDragAreas++
+        onExited: win.manager.tabDragAreas = Math.max(0, win.manager.tabDragAreas - 1)
         onDropped: drop => {
             const id = TabsLogic.tabIdFrom(drop.getDataAsString(TabsLogic.tabMimeType), win.app.processId);
             if (id >= 0)

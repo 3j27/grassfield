@@ -3000,6 +3000,10 @@
 <context>
     <name>FolderViews</name>
     <message>
+        <source>another Files window is saving its view settings</source>
+        <translation>une autre fenêtre de Fichiers enregistre ses réglages de présentation</translation>
+    </message>
+    <message>
         <source>the view settings file can&apos;t be read, so it is left as it is</source>
         <translation>le fichier des réglages de présentation est illisible, il est laissé tel quel</translation>
     </message>

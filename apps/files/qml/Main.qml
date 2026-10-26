@@ -24,8 +24,9 @@ QtObject {
     property var windows: []
     // Tabs closed in this session, newest first: snapshots for File > Reopen Closed Tab (TabsLogic.pushClosed).
     property var closedTabs: []
-    // A dragged tab is over one of the windows (a drop outside all of them makes it a window: TabBar).
-    property bool tabDragInside: false
+    // The drop areas of Files windows that a dragged tab is over (a drop outside all of them makes it a window: TabBar).
+    // A count, not a flag: Qt may enter the next area before it leaves the previous one.
+    property int tabDragAreas: 0
     property int lastTabId: 0
 
     property list<QtObject> resources: [

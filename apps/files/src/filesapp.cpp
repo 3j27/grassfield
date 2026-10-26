@@ -439,10 +439,8 @@ QUrl FilesApp::newWindowUrl() const
 
 QVariantMap FilesApp::folderView(const QUrl &url) const
 {
-    if (!m_folderViewsLoaded) {
-        m_folderViews.load();
-        m_folderViewsLoaded = true;
-    }
+    // Another Files process may have written the file since (one stat when nothing changed).
+    m_folderViews.refresh();
     const FolderViews::Entry e = m_folderViews.entry(FolderViews::keyFor(url));
     QVariantMap out;
     if (!e.mode.isEmpty())
@@ -456,10 +454,6 @@ QVariantMap FilesApp::folderView(const QUrl &url) const
 
 void FilesApp::setFolderView(const QUrl &url, const QVariantMap &fields)
 {
-    if (!m_folderViewsLoaded) {
-        m_folderViews.load();
-        m_folderViewsLoaded = true;
-    }
     FolderViews::Entry e;
     if (fields.contains(QStringLiteral("mode")))
         e.mode = fields.value(QStringLiteral("mode")).toString();

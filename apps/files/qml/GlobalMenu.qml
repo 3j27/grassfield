@@ -60,7 +60,7 @@ Platform.MenuBar {
         return f.selectedRows().every(r => f.isDirAt(r)) && bar.app.folderStyleUnavailable(f.selectedUrls()) === "";
     }
 
-        // View > Sort By (its check marks follow the shown folder's arrangement; tst_filesglobalmenu reads it).
+    // View > Sort By (its check marks follow the shown folder's arrangement; tst_filesglobalmenu reads it).
     readonly property var sortMenu: sortByMenu
 
     // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a

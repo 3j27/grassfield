@@ -6,11 +6,14 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLockFile>
 #include <QSaveFile>
 
 namespace
 {
 const QStringList kModes = {QStringLiteral("icons"), QStringLiteral("list"), QStringLiteral("columns"), QStringLiteral("gallery")};
+// How long a write waits for another Files process holding the lock.
+constexpr int kLockWaitMs = 500;
 }
 
 FolderViews::FolderViews(const QString &file)
@@ -71,11 +74,18 @@ QDateTime FolderViews::stampOnDisk() const
     return info.exists() ? info.lastModified() : QDateTime();
 }
 
+void FolderViews::refresh()
+{
+    if (!m_loaded || stampOnDisk() != m_stamp)
+        load();
+}
+
 void FolderViews::load()
 {
     m_entries.clear();
     m_order.clear();
     m_readOnly = false;
+    m_loaded = true;
     m_stamp = stampOnDisk();
     QFile f(m_file);
     if (!f.exists())
@@ -88,26 +98,23 @@ void FolderViews::load()
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
     const QJsonObject root = doc.object();
     const QJsonValue version = root.value(QStringLiteral("version"));
-    // ADR-0020: a missing version reads as 1; a newer one makes the file read-only.
-    if (err.error != QJsonParseError::NoError || !doc.isObject() || (!version.isUndefined() && (!version.isDouble() || version.toInt() < 1))) {
+    const QJsonValue folders = root.value(QStringLiteral("folders"));
+    // ADR-0020: a missing version reads as 1; a newer one makes the file read-only. Anything this version cannot read
+    // back the same way is never overwritten.
+    if (err.error != QJsonParseError::NoError || !doc.isObject() || (!version.isUndefined() && (!version.isDouble() || version.toInt() < 1))
+        || (!folders.isUndefined() && !folders.isArray()) || version.toInt(1) > kVersion) {
         m_readOnly = true;
         return;
     }
-    if (version.toInt(1) > kVersion) {
-        m_readOnly = true;
-        return;
-    }
-    const QJsonArray folders = root.value(QStringLiteral("folders")).toArray();
-    for (const QJsonValue &value : folders) {
+    for (const QJsonValue &value : folders.toArray()) {
         const QJsonObject o = value.toObject();
         const QString key = o.value(QStringLiteral("url")).toString();
-        const Entry e = parse(o);
-        if (key.isEmpty() || e.isEmpty())
+        if (key.isEmpty() || parse(o).isEmpty())
             continue;
         // A key listed twice keeps its last (most recent) place.
         m_order.removeAll(key);
         m_order.append(key);
-        m_entries.insert(key, e);
+        m_entries.insert(key, o);
     }
     while (m_order.size() > kMaxEntries)
         m_entries.remove(m_order.takeFirst());
@@ -117,17 +124,28 @@ bool FolderViews::set(const QString &key, const Entry &fields, QString *error)
 {
     if (key.isEmpty())
         return false;
-    if (stampOnDisk() != m_stamp)
-        load();
+    QDir().mkpath(QFileInfo(m_file).absolutePath());
+    QLockFile lock(m_file + QStringLiteral(".lock"));
+    if (!lock.tryLock(kLockWaitMs)) {
+        if (error)
+            *error = QCoreApplication::translate("FolderViews", "another Files window is saving its view settings");
+        return false;
+    }
+    // Under the lock, the file on disk is the truth: another process's latest entries are merged, never dropped.
+    load();
     if (m_readOnly) {
         if (error)
             *error = QCoreApplication::translate("FolderViews", "the view settings file can't be read, so it is left as it is");
         return false;
     }
-    const Entry next = merged(m_entries.value(key), fields);
+    QJsonObject stored = m_entries.value(key);
+    const Entry next = merged(parse(stored), fields);
     if (next.isEmpty())
         return true;
-    m_entries.insert(key, next);
+    const QJsonObject known = serialize(key, next);
+    for (auto it = known.begin(); it != known.end(); ++it)
+        stored.insert(it.key(), it.value());
+    m_entries.insert(key, stored);
     m_order.removeAll(key);
     m_order.append(key);
     while (m_order.size() > kMaxEntries)
@@ -135,21 +153,32 @@ bool FolderViews::set(const QString &key, const Entry &fields, QString *error)
     return save(error);
 }
 
-bool FolderViews::save(QString *error)
+QByteArray FolderViews::serialized() const
 {
     QJsonArray folders;
     for (const QString &key : std::as_const(m_order))
-        folders.append(serialize(key, m_entries.value(key)));
+        folders.append(m_entries.value(key));
     QJsonObject root;
     root.insert(QStringLiteral("version"), kVersion);
     root.insert(QStringLiteral("folders"), folders);
-    const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+bool FolderViews::save(QString *error)
+{
+    QByteArray bytes = serialized();
+    // Over the size limit (long paths), the oldest folders go until the file fits; the folder just set always stays.
+    while (bytes.size() > kMaxFileSize && m_order.size() > 1) {
+        const int drop = qMax(1, int(m_order.size()) / 10);
+        for (int i = 0; i < drop && m_order.size() > 1; i++)
+            m_entries.remove(m_order.takeFirst());
+        bytes = serialized();
+    }
     if (bytes.size() > kMaxFileSize) {
         if (error)
             *error = QCoreApplication::translate("FolderViews", "the view settings file would be too large");
         return false;
     }
-    QDir().mkpath(QFileInfo(m_file).absolutePath());
     QSaveFile f(m_file);
     if (!f.open(QIODevice::WriteOnly)) {
         if (error)

@@ -135,7 +135,8 @@ TEST(FolderViews, AFileItCannotReadIsNeverOverwritten)
     if (!dir)
         GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
     const QString file = dir->filePath(QStringLiteral("files-views.json"));
-    for (const QByteArray &bytes : {QByteArray("{not json"), QByteArray(R"({"version":2,"folders":[]})"), QByteArray(R"({"version":"one"})")}) {
+    for (const QByteArray &bytes : {QByteArray("{not json"), QByteArray(R"({"version":2,"folders":[]})"), QByteArray(R"({"version":"one"})"),
+                                    QByteArray(R"({"version":1,"folders":{"a":1}})")}) {
         writeFile(file, bytes);
         FolderViews views(file);
         views.load();
@@ -181,4 +182,70 @@ TEST(FolderViews, AnotherProcessesEntriesAreKept)
     check.load();
     EXPECT_EQ(check.count(), 3);
     EXPECT_EQ(check.entry(QStringLiteral("file:///b")).mode, QStringLiteral("gallery"));
+}
+
+TEST(FolderViews, FieldsOfANewerVersionSurviveAWrite)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString file = dir->filePath(QStringLiteral("files-views.json"));
+    writeFile(file, R"({"version":1,"folders":[{"url":"file:///a","mode":"list","groupBy":"kind"}]})");
+    FolderViews views(file);
+    views.load();
+    ASSERT_TRUE(views.set(QStringLiteral("file:///a"), entry(QString(), 2)));
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+    const QJsonObject a = QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("folders")).toArray().at(0).toObject();
+    EXPECT_EQ(a.value(QStringLiteral("groupBy")).toString(), QStringLiteral("kind"));
+    EXPECT_EQ(a.value(QStringLiteral("mode")).toString(), QStringLiteral("list"));
+    EXPECT_EQ(a.value(QStringLiteral("sortKey")).toInt(), 2);
+}
+
+TEST(FolderViews, OldFoldersMakeRoomUnderTheSizeLimit)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString file = dir->filePath(QStringLiteral("files-views.json"));
+    // 1900 folders of about 1 KB each (long percent-encoded paths): just under 2 MiB, and under kMaxEntries.
+    const QString longName = QString(110, QChar(0x6587)); // a CJK character, 9 bytes once percent-encoded
+    QJsonArray folders;
+    for (int i = 0; i < 1900; i++)
+        folders.append(FolderViews::serialize(FolderViews::keyFor(QUrl::fromLocalFile(QStringLiteral("/f%1/").arg(i) + longName)), entry(QStringLiteral("list"))));
+    QJsonObject root;
+    root.insert(QStringLiteral("version"), 1);
+    root.insert(QStringLiteral("folders"), folders);
+    const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    ASSERT_LT(bytes.size(), FolderViews::kMaxFileSize);
+    ASSERT_GT(bytes.size(), FolderViews::kMaxFileSize - 200 * 1024);
+    writeFile(file, bytes);
+    FolderViews views(file);
+    views.load();
+    ASSERT_EQ(views.count(), 1900);
+    // 50 more folders of about 4 KB: past the size limit long before the entry limit.
+    const QString fresh = FolderViews::keyFor(QUrl::fromLocalFile(QStringLiteral("/new/") + longName + longName + longName + longName));
+    for (int i = 0; i < 50; i++)
+        ASSERT_TRUE(views.set(fresh + QString::number(i), entry(QStringLiteral("gallery")))) << i;
+    EXPECT_LE(QFileInfo(file).size(), FolderViews::kMaxFileSize);
+    EXPECT_LT(views.count(), 1950) << "folders went for size, not for count";
+    EXPECT_EQ(views.entry(fresh + QStringLiteral("49")).mode, QStringLiteral("gallery"));
+    EXPECT_TRUE(views.entry(FolderViews::keyFor(QUrl::fromLocalFile(QStringLiteral("/f0/") + longName))).isEmpty()) << "the oldest went";
+    EXPECT_EQ(views.entry(FolderViews::keyFor(QUrl::fromLocalFile(QStringLiteral("/f1899/") + longName))).mode, QStringLiteral("list"));
+}
+
+TEST(FolderViews, ReadsFollowAnotherProcess)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString file = dir->filePath(QStringLiteral("files-views.json"));
+    FolderViews reader(file);
+    reader.refresh();
+    EXPECT_TRUE(reader.entry(QStringLiteral("file:///a")).isEmpty());
+    QThread::msleep(20);
+    FolderViews writer(file);
+    ASSERT_TRUE(writer.set(QStringLiteral("file:///a"), entry(QStringLiteral("columns"))));
+    reader.refresh();
+    EXPECT_EQ(reader.entry(QStringLiteral("file:///a")).mode, QStringLiteral("columns"));
 }

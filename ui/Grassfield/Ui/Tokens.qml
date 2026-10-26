@@ -1259,6 +1259,8 @@ QtObject {
     readonly property int filesTabCloseSize: 16
     // own value: a tab hovered this long during a drag opens (macOS spring-loading, medium delay; no measurement) [ref: docs/specs/files.md § Tabs and windows]
     readonly property int filesSpringDelay: 500
+    // own value: a window size is kept this long after the last resize step (one write per resize, not per frame) [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesWindowSizeDelay: 250
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPathBarHeight: 26
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]

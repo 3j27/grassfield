@@ -11,7 +11,8 @@
 // folder, kept in a per-user state file keyed by the folder's URL (`files-views.json` in the Grassfield state directory,
 // 0600, written atomically). Files never writes into the folder itself (macOS keeps these in `.DS_Store`): read-only,
 // remote, Trash and search locations work alike and other applications never see a stray file. At most kMaxEntries
-// folders; the least recently set one is dropped first.
+// folders and kMaxFileSize bytes; the least recently set folders are dropped first. Several Files processes share the
+// file: reads follow its changes, and each write takes a lock, reads the file again and merges into it.
 class FolderViews
 {
 public:
@@ -27,21 +28,24 @@ public:
 
     static constexpr int kVersion = 1;
     static constexpr int kMaxEntries = 2000;
-    // A larger file is refused as broken (never parsed, never overwritten).
+    // A larger file is refused as broken (never parsed, never overwritten); a write drops old folders to stay under it.
     static constexpr qint64 kMaxFileSize = 2 * 1024 * 1024;
 
     explicit FolderViews(const QString &file);
 
     QString file() const { return m_file; }
-    // Reads the file again. Missing: no entries. Unparsable, too large or written by a newer version: no entries and
-    // read-only for this session (a file this version cannot read back is never overwritten).
+    // Reads the file again. Missing: no entries. Unparsable, too large, a `folders` value that is not a list, or written by
+    // a newer version: no entries and read-only for this session (a file this version cannot read back is never
+    // overwritten).
     void load();
+    // Reads the file again when it changed on disk since it was last read (another Files process wrote it).
+    void refresh();
     bool readOnly() const { return m_readOnly; }
     int count() const { return int(m_order.size()); }
-    Entry entry(const QString &key) const { return m_entries.value(key); }
-    // Merges the set fields of `fields` into the folder's entry, makes it the most recently set, drops the oldest past
-    // kMaxEntries and writes the file. A file changed on disk since it was read (another Files process) is read first,
-    // so its entries are kept. Returns false (with the reason) when nothing could be written.
+    Entry entry(const QString &key) const { return parse(m_entries.value(key)); }
+    // Merges the set fields of `fields` into the folder's entry (other keys of the entry are kept, a newer version's
+    // fields too), makes it the most recently set and writes the file, dropping the oldest folders past kMaxEntries or
+    // kMaxFileSize. Returns false (with the reason) when nothing could be written.
     bool set(const QString &key, const Entry &fields, QString *error = nullptr);
 
     // The key of a location: its URL with a trailing slash removed and "." / ".." segments resolved, fully encoded (the
@@ -54,13 +58,16 @@ public:
     static Entry merged(const Entry &base, const Entry &fields);
 
 private:
+    QByteArray serialized() const;
     bool save(QString *error);
     QDateTime stampOnDisk() const;
 
     QString m_file;
-    QHash<QString, Entry> m_entries;
+    // The stored objects (with keys this version does not know), by folder key.
+    QHash<QString, QJsonObject> m_entries;
     // Keys from the least to the most recently set.
     QStringList m_order;
     bool m_readOnly = false;
+    bool m_loaded = false;
     QDateTime m_stamp;
 };

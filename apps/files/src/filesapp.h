@@ -297,7 +297,6 @@ private:
     int m_tagRevision = 0;
     FolderStyleStore m_folderStyles;
     int m_folderStyleRevision = 0;
-    // Read on first use (the state directory may not exist before a view is chosen).
+    // Read on first use and again when it changes (the state directory may not exist before a view is chosen).
     mutable FolderViews m_folderViews;
-    mutable bool m_folderViewsLoaded = false;
 };

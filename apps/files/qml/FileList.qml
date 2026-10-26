@@ -74,7 +74,7 @@ FocusScope {
             delegate: Item {
                 id: column
                 required property var modelData
-                readonly property bool active: root.tab.app.sortKey === column.modelData.key
+                readonly property bool active: root.tab.sortKey === column.modelData.key
 
                 width: column.modelData.key === 0 ? root.nameWidth : column.modelData.key === 2 ? Tokens.filesListDateWidth : column.modelData.key === 3 ? Tokens.filesListSizeWidth : Tokens.filesListKindWidth
                 height: header.height
@@ -119,7 +119,7 @@ FocusScope {
                     name: "chevron-down"
                     size: Tokens.filesChevronSize
                     color: Appearance.colors.textSecondary
-                    rotation: root.tab.app.sortDescending ? 0 : 180
+                    rotation: root.tab.sortDescending ? 0 : 180
                 }
 
                 MouseArea {

@@ -73,12 +73,12 @@ Item {
         Drag.proposedAction: Qt.MoveAction
         Drag.onDragFinished: dropAction => {
             const tab = dragProxy.tab;
-            const outside = !root.win.manager.tabDragInside;
+            const outside = root.win.manager.tabDragAreas <= 0;
             dragProxy.Drag.active = false;
             dragProxy.tab = null;
             root.dragFrom = -1;
             root.hoverSlot = -1;
-            root.win.manager.tabDragInside = false;
+            root.win.manager.tabDragAreas = 0;
             // Dropped outside every Files window (nothing took it): the tab becomes a window (Finder). A cancelled drag
             // that ended outside the windows does the same (the platform reports no difference).
             if (dropAction === Qt.IgnoreAction && outside && tab)
@@ -103,7 +103,8 @@ Item {
                 required property var modelData
                 required property int index
                 readonly property bool current: tabItem.index === root.win.currentIndex
-                readonly property bool hovered: tabMouse.containsMouse || fileDrop.containsDrag
+                // A HoverHandler sees the pointer over the close button too (a MouseArea's containsMouse would not).
+                readonly property bool hovered: tabHover.hovered || fileDrop.containsDrag
                 // Files can be dropped into a writable folder (not a search, not this tab's own items).
                 readonly property bool acceptsFiles: tabItem.modelData.folder !== null && tabItem.modelData.folder.writable === true
                                                      && tabItem.modelData.folder.isSearch !== true
@@ -149,16 +150,23 @@ Item {
                     font.weight: Tokens.typographyMenuWeight
                 }
 
+                HoverHandler {
+                    id: tabHover
+                }
+
                 MouseArea {
                     id: tabMouse
                     anchors.fill: parent
-                    hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     drag.target: root.count > 0 ? dragProxy : null
                     drag.threshold: Tokens.filesDragThreshold
+                    // The drag image is grabbed at the press (asynchronous); a drag that starts before it is ready goes
+                    // without one rather than with an older tab's.
                     onPressed: mouse => {
-                        if (mouse.button === Qt.LeftButton)
-                            tabItem.grabToImage(result => tabItem.dragImage = result.url);
+                        if (mouse.button !== Qt.LeftButton)
+                            return;
+                        tabItem.dragImage = "";
+                        tabItem.grabToImage(result => tabItem.dragImage = result.url);
                     }
                     onClicked: mouse => {
                         if (mouse.button === Qt.MiddleButton) {
@@ -175,8 +183,7 @@ Item {
                             return;
                         dragProxy.tab = tabItem.modelData;
                         dragProxy.Drag.mimeData = ({[TabsLogic.tabMimeType]: root.app.processId + ":" + tabItem.modelData.tabId});
-                        if (String(tabItem.dragImage) !== "")
-                            dragProxy.Drag.imageSource = tabItem.dragImage;
+                        dragProxy.Drag.imageSource = tabItem.dragImage;
                         root.dragFrom = tabItem.index;
                         root.hoverSlot = tabItem.index;
                         dragProxy.Drag.active = true;
@@ -212,7 +219,7 @@ Item {
                 }
 
                 ToolButton {
-                    visible: tabMouse.containsMouse && root.dragFrom < 0
+                    visible: tabHover.hovered && root.dragFrom < 0
                     anchors.left: parent.left
                     anchors.leftMargin: Tokens.filesTabPillInset + Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
@@ -261,11 +268,14 @@ Item {
         anchors.fill: parent
         keys: [TabsLogic.tabMimeType]
         onEntered: drag => {
-            root.win.manager.tabDragInside = true;
+            root.win.manager.tabDragAreas++;
             root.updateHover(drag.x);
         }
         onPositionChanged: drag => root.updateHover(drag.x)
-        onExited: root.hoverSlot = -1
+        onExited: {
+            root.win.manager.tabDragAreas = Math.max(0, root.win.manager.tabDragAreas - 1);
+            root.hoverSlot = -1;
+        }
         onDropped: drop => {
             const id = TabsLogic.tabIdFrom(drop.getDataAsString(TabsLogic.tabMimeType), root.app.processId);
             const slot = root.hoverSlot;
