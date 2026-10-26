@@ -13,6 +13,7 @@
 #include <atomic>
 
 #include "previewlogic.h"
+#include "shortcutstyle.h"
 
 // Backend of Grassfield Preview: the validated file list, per-file inspection (kind, caps, text)
 // and appearance. Files are only ever read, never written.
@@ -37,6 +38,8 @@ class PreviewApp : public QObject
     Q_PROPERTY(bool canMinimize READ canMinimize NOTIFY appearanceChanged)
     // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
     Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
+    // keyboard.shortcutStyle resolved for this device: "mac" (macOS symbols in menus) or "pc" (text), shortcutstyle.h.
+    Q_PROPERTY(QString shortcutStyle READ shortcutStyle NOTIFY appearanceChanged)
 
 public:
     PreviewApp(const QStringList &paths, const QStringList &errors, bool glance, int startIndex = 0, bool browsing = false, QObject *parent = nullptr);
@@ -59,6 +62,7 @@ public:
     QString titlebarDoubleClick() const { return m_titlebarDoubleClick; }
     bool canMinimize() const { return m_canMinimize; }
     QString accentColor() const { return m_accentColor; }
+    QString shortcutStyle() const { return m_shortcutStyle; }
 
     // Path of file `index` for the image provider (render thread): empty when out of range.
     QString pathAt(int index) const;
@@ -103,6 +107,8 @@ private:
     QString m_titlebarDoubleClick = QStringLiteral("zoom");
     bool m_canMinimize = true;
     QString m_accentColor = QStringLiteral("multicolor");
+    const bool m_macDevice = grassfield::apps::macDeviceHere();
+    QString m_shortcutStyle = QStringLiteral("pc");
     QFileSystemWatcher m_watcher;
 };
 

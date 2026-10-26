@@ -94,7 +94,8 @@ Item {
             textFormat: Text.PlainText
             visible: root.shortcut !== ""
             anchors.verticalCenter: parent.verticalCenter
-            text: root.shortcut
+            // In the device's style: the text on a PC, the macOS symbols on a Mac (MenuShortcut.label).
+            text: MenuShortcut.label(root.shortcut, Appearance.shortcutStyle)
             color: root.highlighted && root.enabled ? root.foreground : Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize

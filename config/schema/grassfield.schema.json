@@ -551,6 +551,23 @@
         }
       }
     },
+    "keyboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Keyboard (Settings > Keyboard).",
+      "properties": {
+        "shortcutStyle": {
+          "type": "string",
+          "enum": [
+            "automatic",
+            "mac",
+            "pc"
+          ],
+          "description": "How menus show keyboard shortcuts: \"mac\" with the macOS symbols (\u2303 \u2325 \u21e7 \u2318, \u2318 for Super), \"pc\" as text (Ctrl+Shift+Q). \"automatic\" (default) picks mac on Apple hardware (firmware vendor \"Apple Inc.\") or with an Apple keyboard attached, pc otherwise (owner decision 2026-10-26, ADR-0024).",
+          "default": "automatic"
+        }
+      }
+    },
     "icons": {
       "type": "object",
       "additionalProperties": false,

@@ -115,6 +115,10 @@ TestCase {
         for (const m of ["auto", "12", "24"])
             compare(Store.validate("menubar.clockHours", m), "");
         verify(Store.validate("menubar.clockHours", "36") !== "");
+        compare(Store.DEFAULTS["keyboard.shortcutStyle"], "automatic");
+        for (const m of ["automatic", "mac", "pc"])
+            compare(Store.validate("keyboard.shortcutStyle", m), "");
+        verify(Store.validate("keyboard.shortcutStyle", "windows") !== "");
         for (const m of ["always", "desktop", "fullscreen", "never"])
             compare(Store.validate("menubar.autoHide", m), "");
         verify(Store.validate("menubar.autoHide", "sometimes") !== "");

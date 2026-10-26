@@ -53,7 +53,7 @@ Item {
         textFormat: Text.PlainText
         color: root.active ? Appearance.colors.selectionText : Appearance.colors.text
         font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyMenuSize
+        font.pixelSize: Tokens.launcherChipTextSize
         font.weight: Tokens.typographyMenuWeight
     }
 

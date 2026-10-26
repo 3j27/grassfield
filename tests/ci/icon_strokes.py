@@ -4,8 +4,9 @@
   python3 -I tests/ci/icon_strokes.py            check branding/icons/symbolic/*.svg, exit 1 on any other width
   python3 -I tests/ci/icon_strokes.py --selftest the scanner on fixed samples
 
-ADR-0003 (amended 2026-10-23): 1.75 on the 24 grid, round caps and joins. A glyph that is filled (no stroke) is exempt:
-the logo is a filled shape. Only the root element's attributes and explicit per-element stroke-width are read.
+ADR-0003 (amended 2026-10-26, owner decision: heavier everywhere): 2 on the 24 grid, round caps and joins. A glyph that is
+filled (no stroke) is exempt: the logo is a filled shape; filled parts of a stroked glyph (the Wi-Fi bands, the speaker body)
+carry no stroke-width of their own. Only the root element's attributes and explicit per-element stroke-width are read.
 
 ADR-0003 (amended 2026-10-25, menu bar status glyphs only): ui/Grassfield/Ui/icons-bar/ holds the heavier set of the menu bar's
 status items, stroke 2.4. Each is the same drawing as its branding/icons/symbolic twin with only the stroke width changed, and
@@ -15,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-WIDTH = 1.75
+WIDTH = 2.0
 BAR_WIDTH = 2.4
 ROOT = Path(__file__).resolve().parents[2] / "branding" / "icons" / "symbolic"
 BAR = Path(__file__).resolve().parents[2] / "ui" / "Grassfield" / "Ui" / "icons-bar"
@@ -41,22 +42,24 @@ def bar_problems(name, twin, text):
     if text is None:
         return [f"{name}: no twin in branding/icons/symbolic"]
     out = problems(name, text, BAR_WIDTH)
-    if text != twin.replace(f'stroke-width="{WIDTH}"', f'stroke-width="{BAR_WIDTH}"'):
+    if text != twin.replace(f'stroke-width="{WIDTH:g}"', f'stroke-width="{BAR_WIDTH:g}"'):
         out.append(f"{name}: not its symbolic twin with the stroke width changed")
     return out
 
 
 def selftest():
-    ok = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.75" stroke-linecap="round"><path d="M0 0"/></svg>'
+    ok = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M0 0"/></svg>'
     assert problems("ok", ok) == []
-    assert problems("heavy", ok.replace("1.75", "2.25"))
+    assert problems("heavy", ok.replace('stroke-width="2"', 'stroke-width="2.5"'))
+    assert problems("light", ok.replace('stroke-width="2"', 'stroke-width="1.75"'))
     assert problems("filled", '<svg viewBox="0 0 24 24"><path fill="#000" d="M0 0"/></svg>') == []
     assert problems("nowidth", '<svg viewBox="0 0 24 24" stroke="#000" stroke-linecap="round"/>')
     assert problems("square", ok.replace("round", "butt"))
-    assert problems("bar-ok", ok.replace("1.75", "2.4"), BAR_WIDTH) == []
+    bar = ok.replace('stroke-width="2"', 'stroke-width="2.4"')
+    assert problems("bar-ok", bar, BAR_WIDTH) == []
     assert problems("bar-wrong", ok, BAR_WIDTH)
-    assert bar_problems("x.svg", ok, ok.replace("1.75", "2.4")) == []
-    assert bar_problems("x.svg", ok, ok.replace("1.75", "2.4").replace("M0 0", "M1 1"))
+    assert bar_problems("x.svg", ok, bar) == []
+    assert bar_problems("x.svg", ok, bar.replace("M0 0", "M1 1"))
     assert bar_problems("x.svg", ok, None)
     print("PASS: icon_strokes selftest")
     return 0

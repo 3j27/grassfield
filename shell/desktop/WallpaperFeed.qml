@@ -466,7 +466,9 @@ Scope {
                 currentFile = o.file;
                 strip = o.strip || null;
                 imageUrl = "file://" + o.file;
-                display = {kind: "picture", color: "", url: imageUrl, strip: strip, video: ""};
+                // `image`: the whole picture's luminance {mean, p5, p95} (the helper's sidecar; absent from older caches): the
+                // backdrop of the adaptive glass on a bare desktop (Backdrop.qml).
+                display = {kind: "picture", color: "", url: imageUrl, strip: strip, image: o.image || null, video: ""};
                 videoFile = "";
                 progress = -1;
                 status = "ready";

@@ -27,6 +27,9 @@ QtObject {
     property string folderColorSetting: "theme"
     // Accent colour (`accent.color`): "multicolor" (the Grassfield green) | blue | purple | pink | red | orange | yellow | green | graphite.
     property string accentSetting: "multicolor"
+    // How menus label keyboard shortcuts: "pc" (the text, "Ctrl+Shift+N") or "mac" (the macOS symbols). Set by the host from
+    // `keyboard.shortcutStyle` and the device (MenuShortcut.style).
+    property string shortcutStyle: "pc"
 
     // A sample app icon (an SVG shipped with this module) for the icon appearance previews: it goes through the same
     // TintedIcon pipeline as every icon.
@@ -48,9 +51,9 @@ QtObject {
     // The palette of the appearance with the chosen accent applied (accent and accentText), live.
     readonly property var baseColors: dark ? accentedDark : accentedLight
     // Both carry `selection` and `selectionText`: the fill and the text of a selected row, a default button or a checked box,
-    // the light accent with its text in both appearances (Accent.withSelection).
-    readonly property var accentedDark: Accent.withSelection(Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast), accentedLightBase)
-    readonly property var accentedLight: Accent.withSelection(Accent.contrastBoost(accentedLightBase, increaseContrast), accentedLightBase)
+    // white on the accent in both appearances (Accent.selectionPair).
+    readonly property var accentedDark: Accent.withSelection(Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast), Accent.selectionPair(accentSetting, true, accentedLightBase, Tokens))
+    readonly property var accentedLight: Accent.withSelection(Accent.contrastBoost(accentedLightBase, increaseContrast), Accent.selectionPair(accentSetting, false, accentedLightBase, Tokens))
     readonly property var accentedLightBase: Accent.apply(Tokens.colorLight, accentSetting, false, Tokens)
     // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
     readonly property color focusRingColor: Accent.focusRing(baseColors.accent, windowSurface ? baseColors.windowBackground : baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
@@ -110,12 +113,24 @@ QtObject {
 
     // First installed family of the token list (Qt has no per-font fallback list in QML).
     readonly property string fontFamily: Qt.fontFamilies().indexOf(Tokens.typographyFamily) !== -1 ? Tokens.typographyFamily : Tokens.typographyFallbackFamily
+    // Inter Display from typography.displayFrom (20) px (ADR-0003 O1, T-1: where the reference's typeface switches to its
+    // display cut); the text family below, and when the display cut is not installed.
+    readonly property string displayFamily: Qt.fontFamilies().indexOf(Tokens.typographyDisplayFamily) !== -1 ? Tokens.typographyDisplayFamily : fontFamily
+
+    function fontFamilyFor(pixelSize: real): string {
+        return pixelSize >= Tokens.typographyDisplayFrom ? displayFamily : fontFamily;
+    }
     readonly property var curve: Tokens.motionCurveStandard
 
     // Size-dependent tracking of Inter's "dynamic metrics" (the reference's optical tracking): em = a + b * e^(c * px),
     // returned in pixels for Text.font.letterSpacing. Larger text is set tighter, small text slightly looser.
     function tracking(pixelSize: real): real {
         return (Tokens.typographyTrackingA + Tokens.typographyTrackingB * Math.exp(Tokens.typographyTrackingC * pixelSize)) * pixelSize;
+    }
+
+    // Tracking for the family fontFamilyFor picks: Inter Display carries its own display spacing (none added).
+    function trackingFor(pixelSize: real): real {
+        return pixelSize >= Tokens.typographyDisplayFrom && displayFamily === Tokens.typographyDisplayFamily ? 0 : tracking(pixelSize);
     }
 
     function clamp01(v: real): real {
@@ -132,6 +147,26 @@ QtObject {
         if (x <= until)
             return Math.max(linear, Tokens.materialTintAlphaClamp);
         return Tokens.materialTintAlphaClamp + (Tokens.materialTintAlphaMin - Tokens.materialTintAlphaClamp) * (x - until) / (1 - until);
+    }
+
+    // Adaptive glass (ADR-0024 section 2, G-1 to G-3): {output name: {lumMin, lumMax, grid}} for an output that shows the bare
+    // desktop (no window on its active workspace) over a wallpaper of known luminance, fed by the shell; `grid` (optional,
+    // GlassTint.gridRange) narrows the range to what lies under one surface. On any other output the backdrop is unknown and a
+    // class takes the worst case.
+    property var backdrops: ({})
+    readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps})
+
+    // Tint alpha of a glass class at transparency t on an output (GlassTint.alpha): the class target at the default slider,
+    // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop, or over the part of it
+    // under `rect` (output px; optional) when the output's luminance grid is known.
+    function glassAlpha(glassClass: string, t: real, screenName: string, rect: var): real {
+        const target = glassTargets[glassClass];
+        if (target === undefined)
+            return tintAlpha(t);
+        const known = backdrops[screenName] ?? null;
+        const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
+        const backdrop = under ?? known;
+        return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
     }
 
     // Compositor blur follows the transparency (GF-125, docs/specs/ui.md "Material blur"): Hyprland carries one blur size and

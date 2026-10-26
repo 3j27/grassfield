@@ -92,12 +92,13 @@ function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
 }
 
-// Panel size for an output. o: {width, widthMax, edgeMargin, heightFraction, minHeight, topFraction,
-// bottomClearance}. The height is a share of the output, at least minHeight, and never reaches
-// into the bottom clearance (Dock); a very short output wins over minHeight.
+// Panel size for an output. o: {width, widthMax, edgeMargin, heightFraction, minHeight, topFraction, topOffset,
+// bottomClearance}. The panel starts topOffset (the search capsule above it and the gap, macOS 27) below the
+// topFraction of the output. The height is a share of the output, at least minHeight, and never reaches into the
+// bottom clearance (Dock); a very short output wins over minHeight.
 function panelRect(screenW, screenH, o) {
     const w = Math.min(o.width, Math.max(0, screenW - 2 * o.edgeMargin));
-    const top = Math.round(screenH * o.topFraction);
+    const top = Math.round(screenH * o.topFraction) + (o.topOffset || 0);
     const room = Math.max(0, screenH - top - o.bottomClearance);
     const h = Math.min(room, Math.max(o.minHeight, Math.round(screenH * o.heightFraction)));
     return {x: Math.round((screenW - w) / 2), y: top, w: w, h: h};

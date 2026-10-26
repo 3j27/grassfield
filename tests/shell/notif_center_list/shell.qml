@@ -3,6 +3,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Services.Notifications
+import Grassfield.Ui
 import qs.notifications
 
 // The REAL list of the Notifications column (shell/notifications/NotificationList.qml, the component NotificationCenter
@@ -273,6 +274,9 @@ ShellRoot {
     }
 
     function run(): void {
+        // The scenes below drive collapsed groups of three cards (the product shows one, a stack: scene 37); the focus invariant
+        // does not depend on the count.
+        Notifications.groupCollapsed = 3;
         // 0. Three mail cards displayed (m5 m4 m3, m2 m1 hidden), then the calendar card.
         let k = {};
         step(() => {
@@ -887,6 +891,31 @@ ShellRoot {
             root.check("36: the update left the focus on the stray actions Loader (the state this scene is about)", s.stray);
             root.check("36: Return did not open the card nor close the column", s.open && s.count === 1 && Notifications.count === 1);
             root.check("36: focus is back on the button", root.onUsable() && root.ident().role === "action:b");
+        });
+
+        // 37. The product's stacks (macOS 27, groupCollapsed 1): a collapsed group of three is its newest card with two cards
+        // behind it, no header; its tail is Show All. Opening it shows the three cards, the header and Show Less; the focus follows.
+        root.scene(s => {
+            Notifications.groupCollapsed = Tokens.notificationCenterGroupCollapsed;
+            s.m = mailBy(3);
+        }, s => {
+            const front = root.card(s.m[2]);
+            s.shown = root.shownKeys().length;
+            s.layers = front ? front.stackLayers : -1;
+            s.stacked = front !== null && front.stacked;
+            s.header = front !== null && front.clearGroupCtl !== null && front.clearGroupCtl.visible;
+            root.check("37: focus the stack's tail (Show All)", root.focusCtl(s.m[2], "showAll"));
+            keys.keyClick(Qt.Key_Space);
+        }, s => {
+            root.check("37: a stack shows its front card only", s.shown === 1 && s.stacked && s.layers === 2);
+            root.check("37: a stack has no header", !s.header);
+            root.check("37: Space on the tail opened the group", Notifications.expandedApps.mail === true && root.shownKeys().length === 3);
+            const head = root.card(s.m[2]);
+            root.check("37: the open group has its header and Show Less", head !== null && !head.stacked && head.showLessCtl !== null && head.showLessCtl.visible && head.clearGroupCtl.visible);
+            root.check("37: the focus moved to Show Less", head !== null && win.activeFocusItem === head.showLessCtl);
+        }, s => {
+            root.check("37: layout settled", root.layoutOk());
+            Notifications.groupCollapsed = 3;
         });
 
         // 27. Property: seeded random turns (arrivals, closes, expiries, toggles, clears; 1 to 3 per turn) with the focus anywhere.

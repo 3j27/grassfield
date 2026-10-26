@@ -3675,6 +3675,26 @@
         <translation>Clavier</translation>
     </message>
     <message>
+        <source>Shortcuts in menus</source>
+        <translation>Raccourcis dans les menus</translation>
+    </message>
+    <message>
+        <source>Automatic shows the Mac symbols (⌘ for Super) on a Mac or with an Apple keyboard, and the key names on other computers.</source>
+        <translation>Automatique affiche les symboles Mac (⌘ pour Super) sur un Mac ou avec un clavier Apple, et le nom des touches sur les autres ordinateurs.</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Mac Symbols</source>
+        <translation>Symboles Mac</translation>
+    </message>
+    <message>
+        <source>Key Names</source>
+        <translation>Noms des touches</translation>
+    </message>
+    <message>
         <source>The shortcuts file could not be read: %1</source>
         <translation>Le fichier des raccourcis n’a pas pu être lu&#xa0;: %1</translation>
     </message>
@@ -4324,6 +4344,14 @@
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
+    </message>
+    <message>
+        <source>Notification Center</source>
+        <translation>Centre de notifications</translation>
+    </message>
+    <message>
+        <source>Clear All</source>
+        <translation>Tout effacer</translation>
     </message>
     <message>
         <source>Close</source>

@@ -204,7 +204,10 @@ int cmdPrepare(const QStringList &args)
                      {QStringLiteral("source"), a.positional},
                      {QStringLiteral("real"), real},
                      {QStringLiteral("mean"), meanColor(composed)},
-                     {QStringLiteral("strip"), stripStats(composed, rows)}};
+                     {QStringLiteral("strip"), stripStats(composed, rows)},
+                     // The whole picture's luminance ({mean, p5, p95}): the backdrop range of the shell's adaptive glass
+                     // (ADR-0024 section 2, G-3) on a bare desktop.
+                     {QStringLiteral("image"), stripStats(composed, composed.height()).value(QStringLiteral("all"))}};
     if (!writeAtomic(sidecar, QJsonDocument(meta).toJson(QJsonDocument::Compact)))
         return fail(WriteFailed, QStringLiteral("cannot write the sidecar"));
     QFile::setPermissions(sidecar, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
