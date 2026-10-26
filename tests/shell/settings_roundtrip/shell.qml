@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.store
 
-// Persistence of grassfield.json through the real Quickshell FileView/JsonAdapter.
+// Persistence of grassfield.json through the real SettingsStore (bounded reads, atomic writes, the file's own text as the document).
 // Run by scripts/dev/test.sh: `qs -p tests/shell/settings_roundtrip` (offscreen). Prints
 // "settings-roundtrip: PASS" and exits 0, or prints the failures and exits 1.
 // Phases: (1) defaults, clamping, write and read back; (2) a write keeps every schema key;
@@ -61,27 +61,27 @@ ShellRoot {
         id: reader
         saveDelay: 10
         onLoadedFile: {
-            root.check("appearance", reader.data.appearance === "light");
-            root.check("transparency", Math.abs(reader.data.material.transparency - 0.6) < 1e-9);
-            root.check("reduceTransparency", reader.data.accessibility.reduceTransparency === true);
-            root.check("reduceMotion", reader.data.accessibility.reduceMotion === true);
-            root.check("autohide", reader.data.dock.autohide === true);
-            root.check("magnification", Math.abs(reader.data.dock.magnification - 2.0) < 1e-9);
-            root.check("magnificationEnabled", reader.data.dock.magnificationEnabled === false);
-            root.check("dock size", reader.data.dock.size === 72 && reader.dockSize === 72);
-            root.check("dock position", reader.data.dock.position === "right" && reader.dockPosition === "right");
-            root.check("pinned", reader.data.dock.pinned.join(",") === "foot,kitty");
-            root.check("dnd", reader.data.notifications.dnd === true);
-            root.check("previews", reader.data.notifications.previews === "never");
+            root.check("appearance", reader.document().appearance === "light");
+            root.check("transparency", Math.abs(reader.document().material.transparency - 0.6) < 1e-9);
+            root.check("reduceTransparency", reader.document().accessibility.reduceTransparency === true);
+            root.check("reduceMotion", reader.document().accessibility.reduceMotion === true);
+            root.check("autohide", reader.document().dock.autohide === true);
+            root.check("magnification", Math.abs(reader.document().dock.magnification - 2.0) < 1e-9);
+            root.check("magnificationEnabled", reader.document().dock.magnificationEnabled === false);
+            root.check("dock size", reader.document().dock.size === 72 && reader.dockSize === 72);
+            root.check("dock position", reader.document().dock.position === "right" && reader.dockPosition === "right");
+            root.check("pinned", reader.document().dock.pinned.join(",") === "foot,kitty");
+            root.check("dnd", reader.document().notifications.dnd === true);
+            root.check("previews", reader.document().notifications.previews === "never");
             root.check("app previews", reader.notificationsAppPreviews.length === 1 && reader.notificationsAppPreviews[0].app === "Signal" && reader.notificationsAppPreviews[0].previews === "always");
-            root.check("version", reader.data.version === 1);
-            root.check("icons mode", reader.data.icons.mode === "tinted" && reader.iconMode === "tinted");
-            root.check("icons tint", reader.data.icons.tint === "#e5484d" && reader.iconTint === "#e5484d");
-            root.check("icons folder colour", reader.data.icons.folderColor === "#e5484d" && reader.folderColor === "#e5484d");
-            root.check("pointer size", reader.data.pointer.size === 48 && reader.pointerSize === 48);
-            root.check("defaults kept: profile", reader.data.material.profile === "balanced");
-            root.check("defaults kept: titlebar", reader.data.windows.titlebarDoubleClick === "zoom");
-            root.check("defaults kept: idle", reader.data.lock.idleMinutes === 5);
+            root.check("version", reader.document().version === 1);
+            root.check("icons mode", reader.document().icons.mode === "tinted" && reader.iconMode === "tinted");
+            root.check("icons tint", reader.document().icons.tint === "#e5484d" && reader.iconTint === "#e5484d");
+            root.check("icons folder colour", reader.document().icons.folderColor === "#e5484d" && reader.folderColor === "#e5484d");
+            root.check("pointer size", reader.document().pointer.size === 48 && reader.pointerSize === 48);
+            root.check("defaults kept: profile", reader.document().material.profile === "balanced");
+            root.check("defaults kept: titlebar", reader.document().windows.titlebarDoubleClick === "zoom");
+            root.check("defaults kept: idle", reader.document().lock.idleMinutes === 5);
             setup.running = true;
         }
     }
@@ -105,7 +105,7 @@ ShellRoot {
             if (done)
                 return;
             done = true;
-            root.check("keep loaded profile", keep.data.material.profile === "full");
+            root.check("keep loaded profile", keep.document().material.profile === "full");
             // The adapter's QVariantList is not an Array: the outputs must survive it (review finding).
             root.check("keep wallpaper outputs through the adapter", keep.wallpaper.outputs.length === 1 && keep.wallpaper.outputs[0].fit === "tile" && keep.wallpaper.source === "folder");
             keep.setNotificationsDnd(true);
@@ -276,7 +276,7 @@ ShellRoot {
             done = true;
             root.check("unsafe blocked", unsafe.writeBlocked);
             unsafe.setAppearance("light");
-            root.check("unsafe keeps memory", unsafe.data.appearance === "light");
+            root.check("unsafe keeps memory", unsafe.document().appearance === "light");
             unsafe.flush();
             unsafeWait.start();
         }
@@ -319,34 +319,34 @@ ShellRoot {
 
     Component.onCompleted: {
         // Defaults when no file exists.
-        check("default appearance", writer.data.appearance === "dark");
-        check("default transparency", Math.abs(writer.data.material.transparency - 0.25) < 1e-9);
-        check("default pinned", writer.data.dock.pinned.length === 3);
-        check("default magnification", Math.abs(writer.data.dock.magnification - 1.6) < 1e-9);
-        check("default dock size", writer.data.dock.size === 48 && writer.dockSize === 48);
-        check("default dock position", writer.data.dock.position === "bottom" && writer.dockPosition === "bottom");
+        check("default appearance", writer.document().appearance === "dark");
+        check("default transparency", Math.abs(writer.document().material.transparency - 0.25) < 1e-9);
+        check("default pinned", writer.document().dock.pinned.length === 3);
+        check("default magnification", Math.abs(writer.document().dock.magnification - 1.6) < 1e-9);
+        check("default dock size", writer.document().dock.size === 48 && writer.dockSize === 48);
+        check("default dock position", writer.document().dock.position === "bottom" && writer.dockPosition === "bottom");
 
         // Clamping and normalization.
         writer.setTransparency(7);
-        check("clamp high", writer.data.material.transparency === 1);
+        check("clamp high", writer.document().material.transparency === 1);
         writer.setTransparency(-2);
-        check("clamp low", writer.data.material.transparency === 0);
+        check("clamp low", writer.document().material.transparency === 0);
         writer.setAppearance("sepia");
-        check("appearance normalized", writer.data.appearance === "dark");
+        check("appearance normalized", writer.document().appearance === "dark");
         writer.setDockMagnification(9, true);
-        check("magnification max", writer.data.dock.magnification === 2.5);
+        check("magnification max", writer.document().dock.magnification === 2.5);
         writer.setDockMagnification(0.2, true);
-        check("magnification min", writer.data.dock.magnification === 1);
+        check("magnification min", writer.document().dock.magnification === 1);
         writer.setDockSize(500);
-        check("dock size max", writer.data.dock.size === 96);
+        check("dock size max", writer.document().dock.size === 96);
         writer.setDockSize(3);
-        check("dock size min", writer.data.dock.size === 32);
+        check("dock size min", writer.document().dock.size === 32);
         writer.setDockPosition("top");
-        check("dock position normalized", writer.data.dock.position === "bottom");
+        check("dock position normalized", writer.document().dock.position === "bottom");
 
-        check("default dnd", writer.data.notifications.dnd === false);
+        check("default dnd", writer.document().notifications.dnd === false);
         writer.setNotificationsPreviews("bogus");
-        check("previews normalized", writer.data.notifications.previews === "unlocked");
+        check("previews normalized", writer.document().notifications.previews === "unlocked");
 
         // Values written to disk.
         writer.setAppearance("light");
@@ -369,29 +369,29 @@ ShellRoot {
         writer.setNotificationsAppPreview("Mail", "default");
         check("app preview back to default", writer.notificationsAppPreviews.length === 1);
         // Icon appearance (ADR-0014): defaults, normalization, values written to disk.
-        check("default icon mode", writer.iconMode === "default" && writer.data.icons.mode === "default");
+        check("default icon mode", writer.iconMode === "default" && writer.document().icons.mode === "default");
         check("default icon tint", writer.iconTint === "accent");
-        check("default folder colour", writer.folderColor === "theme" && writer.data.icons.folderColor === "theme");
+        check("default folder colour", writer.folderColor === "theme" && writer.document().icons.folderColor === "theme");
         writer.setFolderColor("pink");
-        check("folder colour normalized", writer.data.icons.folderColor === "theme");
+        check("folder colour normalized", writer.document().icons.folderColor === "theme");
         writer.setIconMode("sepia");
-        check("icon mode normalized", writer.data.icons.mode === "default");
+        check("icon mode normalized", writer.document().icons.mode === "default");
         writer.setIconTint("red");
-        check("icon tint normalized", writer.data.icons.tint === "accent");
+        check("icon tint normalized", writer.document().icons.tint === "accent");
         writer.setIconMode("tinted");
         writer.setIconTint("#e5484d");
         writer.setFolderColor("#e5484d");
         // Pointer size: default, snapped to the 4 px step, kept in range, written to disk.
-        check("default pointer size", writer.pointerSize === 24 && writer.data.pointer.size === 24);
+        check("default pointer size", writer.pointerSize === 24 && writer.document().pointer.size === 24);
         writer.setPointerSize(1000);
-        check("pointer size clamped", writer.data.pointer.size === 96);
+        check("pointer size clamped", writer.document().pointer.size === 96);
         writer.setPointerSize(51);
-        check("pointer size snapped", writer.data.pointer.size === 52);
+        check("pointer size snapped", writer.document().pointer.size === 52);
         writer.setPointerSize(48);
         // Pointer colours: the packaged theme's own by default; the Settings app writes them (the shell only reads).
-        check("default pointer colours", writer.pointerOutlineColor === "#ffffff" && writer.pointerFillColor === "#000000" && writer.data.pointer.outlineColor === "#ffffff" && writer.data.pointer.fillColor === "#000000");
+        check("default pointer colours", writer.pointerOutlineColor === "#ffffff" && writer.pointerFillColor === "#000000" && writer.document().pointer.outlineColor === "#ffffff" && writer.document().pointer.fillColor === "#000000");
         // Wallpaper (ADR-0016): the defaults, complete, with the whole group in a fresh file; the shell never writes it.
-        check("default wallpaper", writer.wallpaper.source === "builtin" && writer.wallpaper.path === "" && writer.wallpaper.color === "#000000" && writer.wallpaper.fit === "fill" && writer.wallpaper.interval === "1h" && writer.wallpaper.shuffle === true && writer.wallpaper.videoOnBattery === false && writer.wallpaper.outputs.length === 0 && writer.data.wallpaper.interval === "1h");
+        check("default wallpaper", writer.wallpaper.source === "builtin" && writer.wallpaper.path === "" && writer.wallpaper.color === "#000000" && writer.wallpaper.fit === "fill" && writer.wallpaper.interval === "1h" && writer.wallpaper.shuffle === true && writer.wallpaper.videoOnBattery === false && writer.wallpaper.outputs.length === 0 && writer.document().wallpaper.interval === "1h");
         writer.flush();
     }
 }
