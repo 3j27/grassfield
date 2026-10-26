@@ -5,6 +5,7 @@
 
 #include "translationloader.h"
 #include "backend.h"
+#include "busjobs.h"
 #include "globalmenu.h"
 #include "windowchrome.h"
 
@@ -65,5 +66,7 @@ int main(int argc, char *argv[])
         return 1;
     // The registrar may appear later (an app started before the bridge) or restart: the menus follow it.
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
-    return app.exec();
+    const int code = app.exec();
+    grassfield::settings::BusJobs::setExitCode(code); // a D-Bus job stuck at exit abandons the process with the app's own code
+    return code;
 }

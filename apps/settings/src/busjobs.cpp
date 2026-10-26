@@ -14,6 +14,15 @@
 
 namespace grassfield::settings {
 
+namespace {
+std::atomic<int> g_exitCode{0};
+}
+
+void BusJobs::setExitCode(int code)
+{
+    g_exitCode = code;
+}
+
 struct BusJobs::State {
     std::mutex mutex; // guards alive, mailbox, inFlight; held while posting to the mailbox and while deleting it
     std::condition_variable idle;
@@ -29,7 +38,7 @@ BusJobs::BusJobs(CallerFactory factory, int shutdownWaitMs, std::function<void()
     , m_shutdownWaitMs(shutdownWaitMs)
     , m_onAbandon(onAbandon ? std::move(onAbandon) : [] {
         std::fflush(nullptr);
-        std::_Exit(0);
+        std::_Exit(g_exitCode.load());
     })
 {
     m_state->factory = std::move(factory);
@@ -40,7 +49,7 @@ BusJobs::~BusJobs()
 {
     std::unique_lock<std::mutex> lock(m_state->mutex);
     m_state->alive = false;
-    delete m_state->mailbox; // pending events and timers of the mailbox go with it: no `done` runs after this
+    delete m_state->mailbox; // its pending events go with it and its timers are disabled: no `done` runs after this
     m_state->mailbox = nullptr;
     const bool finished = m_state->idle.wait_for(lock, std::chrono::milliseconds(m_shutdownWaitMs), [this] { return m_state->inFlight == 0; });
     lock.unlock();

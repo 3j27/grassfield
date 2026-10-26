@@ -278,6 +278,13 @@ declare -A variants=(
   [assign]='void a(QString &error) { error = QStringLiteral("failed"); }'
   [latin1]='QString a() { QString reason; reason = QLatin1String("it broke"); return reason; }'
   [logline]='QString a() { qWarning() << "fine"; return QStringLiteral("it broke"); }'
+  [callarg]='void a(const QString &tag) { emit failed(tag, QStringLiteral("failed")); }'
+  [callarg2]='void a(Label *l) { l->setText(QStringLiteral("Failed")); }'
+  [member]='void A::a() { m_reason = QStringLiteral("failed"); }'
+  [localvar]='void a() { const QString shown = QStringLiteral("failed"); use(shown); }'
+  [fromlatin1]='QString a() { return QString::fromLatin1("failed"); }'
+  [fromutf8var]='void a() { QString shown = QString::fromUtf8("failed"); use(shown); }'
+  [nestedsink]='void a() { reportError(QString(QStringLiteral("failed"))); }'
 )
 for name in "${!variants[@]}"; do
   cppcase "$name" "${variants[$name]}"
@@ -298,6 +305,8 @@ QString d() { return QStringLiteral("two words"); }
 QString e() { return QStringLiteral("org.example.Name"); }
 bool f(const QString &m) { return m == QLatin1String("Get") || m == QStringLiteral("GetAll"); }
 void g() { qWarning().noquote() << "dev guard: refused a command" << argv.first(); qInfo() << "dev guard:"; }
+void k(const QString &t) { emit failed(t, QCoreApplication::translate("X", "failed")); QString mode = tr("failed"); }
+void l(Bus &bus) { bus.call(a, QStringLiteral("Connect"), QStringLiteral("on")); const bool x = flag == QLatin1String("on"); }
 void h(Bus &bus) { bus.call(a, QStringLiteral("GetDevices"), QStringLiteral("on"), QStringLiteral("ready to go")); } // i18n-ignore: x
 /* a comment: that network is gone */ // and another one: no word is read here
 QString i() { return QStringLiteral("%1.%2").arg(a, b); }

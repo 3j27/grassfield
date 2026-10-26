@@ -190,6 +190,18 @@ TestCase {
         compare(st.known["486F6D653A203547"], uuidA);
     }
 
+    function test_wifiEnhancedOpenNeedsNoPassword() {
+        // OWE (Enhanced Open) joins without a password, like an open network: no lock, click kind "open"; OWE with SAE or PSK is secured.
+        const list = System.parseWifiState(wifiJson([ap("4F7765", 50, 1, 0, 0x888), ap("4F7765", 20, 1, 0, 0xC88), ap("4D6978", 40, 1, 0, 0xD88)])).networks;
+        const owe = list.find(n => n.ssid === "Owe" && n.security === "OWE");
+        verify(owe !== undefined);
+        compare(owe.secured, false);
+        compare(owe.enterprise, false);
+        compare(System.wifiClickKind({hex: owe.hex, active: false, secured: owe.secured}, {}), "open");
+        compare(list.find(n => n.ssid === "Owe" && n.security !== "OWE").secured, true);
+        compare(list.find(n => n.ssid === "Mix").secured, true);
+    }
+
     function test_wifiDuplicateKeepsStrongest() {
         const list = System.parseWifiState(wifiJson([ap("4E6574", 30, 1, 0, 0x188), ap("4E6574", 80, 1, 0, 0x188)])).networks;
         compare(list.length, 1);
