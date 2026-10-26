@@ -906,6 +906,7 @@ Window {
         WallpaperPage {
             store: cfg
             backend: root.backend
+            onScreenSaverRequested: screenSaverSheet.open()
         }
     }
 
@@ -1170,6 +1171,17 @@ Window {
         confirmText: qsTr("Delete")
         destructive: true
         onAccepted: cfg.set("search.historyResetAt", Date.now())
+    }
+
+    // Wallpaper > Screen Saver… (ADR-0032); Lock Screen Settings… in its note opens the Lock Screen pane.
+    ScreenSaverSheet {
+        id: screenSaverSheet
+        store: cfg
+        hasBattery: root.hasBattery
+        onLockScreenRequested: {
+            screenSaverSheet.close();
+            root.select("lock");
+        }
     }
 
     // Lock Screen > Show message when locked > Set…

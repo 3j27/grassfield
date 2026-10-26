@@ -199,19 +199,19 @@
     </message>
     <message>
         <source>The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées : le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
     </message>
     <message>
         <source>The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées : il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
     </message>
     <message>
         <source>The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées : %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
     </message>
     <message>
         <source>Details: %1</source>
-        <translation>Détails : %1</translation>
+        <translation>Détails&#xa0;: %1</translation>
     </message>
     <message>
         <source>Increase contrast draws borders and separators stronger and secondary text in the primary colour.</source>
@@ -247,19 +247,19 @@
     </message>
     <message>
         <source>100%</source>
-        <translation>100 %</translation>
+        <translation>100&#xa0;%</translation>
     </message>
     <message>
         <source>110%</source>
-        <translation>110 %</translation>
+        <translation>110&#xa0;%</translation>
     </message>
     <message>
         <source>120%</source>
-        <translation>120 %</translation>
+        <translation>120&#xa0;%</translation>
     </message>
     <message>
         <source>130%</source>
-        <translation>130 %</translation>
+        <translation>130&#xa0;%</translation>
     </message>
     <message>
         <source>Pointer</source>
@@ -6117,6 +6117,13 @@
     </message>
 </context>
 <context>
+    <name>SaverView</name>
+    <message>
+        <source>dddd d MMMM</source>
+        <translation>dddd d MMMM</translation>
+    </message>
+</context>
+<context>
     <name>ScreenCornersSheet</name>
     <message>
         <source>Screen Corners</source>
@@ -6161,6 +6168,93 @@
     <message>
         <source>Bottom right corner</source>
         <translation>Coin inférieur droit</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenSaverSheet</name>
+    <message>
+        <source>Screen Saver</source>
+        <translation>Économiseur d’écran</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
+        <source>For 1 hour</source>
+        <translation>Pendant 1 heure</translation>
+    </message>
+    <message>
+        <source>For %1 hours</source>
+        <translation>Pendant %1 heures</translation>
+    </message>
+    <message>
+        <source>For 1 minute</source>
+        <translation>Pendant 1 minute</translation>
+    </message>
+    <message>
+        <source>For %1 minutes</source>
+        <translation>Pendant %1 minutes</translation>
+    </message>
+    <message>
+        <source>The session locks before the screen saver starts. You can change the timing in Lock Screen settings.</source>
+        <translation>La session se verrouille avant que l’économiseur d’écran ne démarre. Vous pouvez modifier les délais dans les réglages Écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>The display turns off before the screen saver starts. You can change the timing in Lock Screen settings.</source>
+        <translation>L’écran s’éteint avant que l’économiseur d’écran ne démarre. Vous pouvez modifier les délais dans les réglages Écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>Screen saver</source>
+        <translation>Économiseur d’écran</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>Slideshow</source>
+        <translation>Diaporama</translation>
+    </message>
+    <message>
+        <source>Clock</source>
+        <translation>Horloge</translation>
+    </message>
+    <message>
+        <source>Start screen saver when inactive</source>
+        <translation>Démarrer l’économiseur d’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Pictures folder</source>
+        <translation>Dossier Images</translation>
+    </message>
+    <message>
+        <source>Choose…</source>
+        <translation>Choisir…</translation>
+    </message>
+    <message>
+        <source>Choose the slideshow&apos;s folder</source>
+        <translation>Choisir le dossier du diaporama</translation>
+    </message>
+    <message>
+        <source>Lock Screen Settings…</source>
+        <translation>Réglages Écran verrouillé…</translation>
+    </message>
+    <message>
+        <source>Choose a folder of pictures</source>
+        <translation>Choisir un dossier d’images</translation>
     </message>
 </context>
 <context>
@@ -7817,6 +7911,10 @@
     <message>
         <source>Current wallpaper: %1</source>
         <translation>Fond d’écran actuel&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Screen Saver…</source>
+        <translation>Économiseur d’écran…</translation>
     </message>
     <message>
         <source>Use the Grassfield Wallpaper</source>

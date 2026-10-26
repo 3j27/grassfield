@@ -19,6 +19,9 @@ SettingsPage {
     required property var store
     required property var backend
 
+    // Screen Saver… asks Main for its sheet (ScreenSaverSheet.qml, ADR-0032).
+    signal screenSaverRequested
+
     title: qsTr("Wallpaper")
 
     // ---- which display the options are for (ADR-0016 section 8: "Display", shown with more than one output) ----
@@ -773,7 +776,7 @@ SettingsPage {
                 }
             }
 
-            // Push buttons under the group, right-aligned (macOS 27: Screen Saver…); a long pair wraps.
+            // Push buttons under the group, right-aligned (macOS 27: Screen Saver…, last on the right); a long pair wraps.
             Flow {
                 id: buttons
                 x: options.x
@@ -781,6 +784,12 @@ SettingsPage {
                 width: options.width
                 layoutDirection: Qt.RightToLeft
                 spacing: Tokens.settingsWallpaperButtonSpacing
+
+                Button {
+                    push: true
+                    text: qsTr("Screen Saver…")
+                    onClicked: root.screenSaverRequested()
+                }
 
                 Button {
                     visible: root.status.state === "error" && root.source !== "builtin"
