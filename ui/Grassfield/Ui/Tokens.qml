@@ -1359,6 +1359,8 @@ QtObject {
     readonly property real settingsNavCompactTileInset: 8.5
     // macOS 27 Accessibility: the hub row's name, its ink from 40-41 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
     readonly property int settingsNavCompactLabelInset: 40
+    // macOS 27 Privacy & Security: Location Services' value ends 10.5 before the chevron's ink; the chevron glyph's own margin (about 5.5 at 14) taken off [ref: docs/audits/settings-parity-2026-10-26.md § Privacy & Security]
+    readonly property int settingsNavValueGap: 5
     // the row chevron #B7B7B7 on #F7F7F7: the text colour (#262626) at 0.3 [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property real settingsNavChevronOpacity: 0.3
     // a pop-up button in a row: a 20-pt disc after its value [ref: docs/audits/settings-parity-2026-10-26.md § Controls]

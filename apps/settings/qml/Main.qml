@@ -27,8 +27,10 @@ Window {
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", search: "graphite", notifications: "red", focus: "purple", lock: "graphite",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
-            datetime: "blue", language: "blue", login: "graphite",
-            "accessibility-zoom": "graphite", "accessibility-display": "blue", "accessibility-motion": "green", "accessibility-keyboard": "graphite"
+            datetime: "blue", language: "blue", login: "graphite", privacy: "blue",
+            "accessibility-zoom": "graphite", "accessibility-display": "blue", "accessibility-motion": "green", "accessibility-keyboard": "graphite",
+            "privacy-location": "blue", "privacy-background": "graphite", "privacy-camera": "graphite", "privacy-remote-desktop": "blue",
+            "privacy-screen-sharing": "purple"
         })
     // The title of the shown section (the toolbar's title; the page itself repeats nothing). A hub shows its own header card
     // instead, so the toolbar has no title there (macOS 27 General).
@@ -65,6 +67,7 @@ Window {
         {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
         {id: "focus", group: 3, title: qsTr("Focus"), icon: "moon", keywords: qsTr("do not disturb silence quiet banners")},
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
+        {id: "privacy", group: 4, title: qsTr("Privacy & Security"), icon: "hand", keywords: qsTr("privacy permissions location camera background screen sharing remote desktop apps flatpak portal")},
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "mouse", group: 5, title: qsTr("Mouse"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural wheel bluetooth")},
         {id: "trackpad", group: 5, title: qsTr("Trackpad"), icon: "trackpad", keywords: qsTr("touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch")},
@@ -78,7 +81,12 @@ Window {
         {id: "accessibility-zoom", parent: "accessibility", title: qsTr("Zoom"), icon: "zoom-in", keywords: qsTr("accessibility magnify magnifier zoom level larger screen")},
         {id: "accessibility-display", parent: "accessibility", title: qsTr("Display"), icon: "display", keywords: qsTr("accessibility contrast transparency text size larger pointer cursor size mouse large color colour outline fill")},
         {id: "accessibility-motion", parent: "accessibility", title: qsTr("Motion"), icon: "motion", keywords: qsTr("accessibility reduce motion animations")},
-        {id: "accessibility-keyboard", parent: "accessibility", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("accessibility sticky keys slow keys")}
+        {id: "accessibility-keyboard", parent: "accessibility", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("accessibility sticky keys slow keys")},
+        {id: "privacy-location", parent: "privacy", title: qsTr("Location Services"), icon: "location", keywords: qsTr("privacy location where apps allow")},
+        {id: "privacy-background", parent: "privacy", title: qsTr("Background Apps"), icon: "background", keywords: qsTr("privacy background apps running allow")},
+        {id: "privacy-camera", parent: "privacy", title: qsTr("Camera"), icon: "camera", keywords: qsTr("privacy camera webcam video apps allow")},
+        {id: "privacy-remote-desktop", parent: "privacy", title: qsTr("Remote Desktop"), icon: "remote-desktop", keywords: qsTr("privacy remote desktop control saved choices")},
+        {id: "privacy-screen-sharing", parent: "privacy", title: qsTr("Screen Sharing"), icon: "screen-share", keywords: qsTr("privacy screen sharing recording window saved choices")}
     ]
     // An app's sub-pane of Notifications: "notifications/<app name>" (the name as the shell saw it).
     readonly property string notificationAppPrefix: "notifications/"
@@ -750,6 +758,14 @@ Window {
                     return dndPage;
                 case "lock":
                     return lockPage;
+                case "privacy":
+                    return privacyPage;
+                case "privacy-location":
+                case "privacy-background":
+                case "privacy-camera":
+                case "privacy-remote-desktop":
+                case "privacy-screen-sharing":
+                    return privacyCategoryPage;
                 case "mouse":
                     return mousePage;
                 case "trackpad":
@@ -1007,6 +1023,26 @@ Window {
             store: cfg
             hasBattery: root.hasBattery
             onMessageRequested: lockMessageSheet.open()
+        }
+    }
+
+    Component {
+        id: privacyPage
+        PrivacyPage {
+            backend: root.backend
+            system: sys
+            onOpen: id => root.select(id)
+        }
+    }
+
+    // A category of Privacy & Security: the section id names its key in the permission state (Privacy.js).
+    Component {
+        id: privacyCategoryPage
+        PrivacyCategoryPage {
+            backend: root.backend
+            system: sys
+            key: ({"privacy-location": "location", "privacy-background": "background", "privacy-camera": "camera",
+                    "privacy-remote-desktop": "remoteDesktop", "privacy-screen-sharing": "screencast"})[root.selectedId] ?? "location"
         }
     }
 

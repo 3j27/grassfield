@@ -4828,6 +4828,14 @@
         <translation>ne pas déranger silence calme bannières concentration</translation>
     </message>
     <message>
+        <source>Privacy &amp; Security</source>
+        <translation>Confidentialité et sécurité</translation>
+    </message>
+    <message>
+        <source>privacy permissions location camera background screen sharing remote desktop apps flatpak portal</source>
+        <translation>confidentialité autorisations localisation caméra appareil photo arrière-plan partage d’écran bureau à distance apps flatpak portail</translation>
+    </message>
+    <message>
         <source>shortcuts keys bindings</source>
         <translation>raccourcis touches clavier</translation>
     </message>
@@ -4926,6 +4934,46 @@
     <message>
         <source>accessibility sticky keys slow keys</source>
         <translation>accessibilité touches rémanentes touches lentes</translation>
+    </message>
+    <message>
+        <source>Location Services</source>
+        <translation>Service de localisation</translation>
+    </message>
+    <message>
+        <source>privacy location where apps allow</source>
+        <translation>confidentialité localisation position apps autoriser</translation>
+    </message>
+    <message>
+        <source>Background Apps</source>
+        <translation>Apps en arrière-plan</translation>
+    </message>
+    <message>
+        <source>privacy background apps running allow</source>
+        <translation>confidentialité arrière-plan apps exécution autoriser</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>Appareil photo</translation>
+    </message>
+    <message>
+        <source>privacy camera webcam video apps allow</source>
+        <translation>confidentialité caméra appareil photo webcam vidéo apps autoriser</translation>
+    </message>
+    <message>
+        <source>Remote Desktop</source>
+        <translation>Bureau à distance</translation>
+    </message>
+    <message>
+        <source>privacy remote desktop control saved choices</source>
+        <translation>confidentialité bureau à distance contrôle choix enregistrés</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
+        <source>privacy screen sharing recording window saved choices</source>
+        <translation>confidentialité partage d’écran enregistrement fenêtre choix enregistrés</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>
@@ -5972,6 +6020,116 @@
     </message>
 </context>
 <context>
+    <name>PrivacyCategoryPage</name>
+    <message>
+        <source>Apps you allow can find out where this computer is. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
+        <translation>Les apps que vous autorisez peuvent savoir où se trouve cet ordinateur. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée ; une app absente de la liste demande la première fois.</translation>
+    </message>
+    <message>
+        <source>Apps you allow can keep running in the background. An app you do not allow is not allowed to; an app not listed is allowed the first time it asks.</source>
+        <translation>Les apps que vous autorisez peuvent continuer à s’exécuter en arrière-plan. Une app que vous n’autorisez pas ne le peut pas ; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
+    </message>
+    <message>
+        <source>Apps you allow can use the camera. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
+        <translation>Les apps que vous autorisez peuvent utiliser l’appareil photo. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée ; une app absente de la liste demande la première fois.</translation>
+    </message>
+    <message>
+        <source>These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time.</source>
+        <translation>Ces apps peuvent ouvrir de nouveau une session à distance avec les écrans et les appareils que vous avez choisis pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois.</translation>
+    </message>
+    <message>
+        <source>These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time.</source>
+        <translation>Ces apps peuvent partager de nouveau l’écran ou la fenêtre que vous avez choisi pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois.</translation>
+    </message>
+    <message>
+        <source>The permissions cannot be read: %1.</source>
+        <translation>Les autorisations ne peuvent pas être lues : %1.</translation>
+    </message>
+    <message>
+        <source>The change could not be made: %1.</source>
+        <translation>La modification n’a pas pu être effectuée : %1.</translation>
+    </message>
+    <message>
+        <source>No apps have asked</source>
+        <translation>Aucune app n’a demandé</translation>
+    </message>
+    <message>
+        <source>1 saved choice</source>
+        <translation>1 choix enregistré</translation>
+    </message>
+    <message>
+        <source>%1 saved choices</source>
+        <translation>%1 choix enregistrés</translation>
+    </message>
+    <message>
+        <source>No saved choices</source>
+        <translation>Aucun choix enregistré</translation>
+    </message>
+    <message>
+        <source>Add an app</source>
+        <translation>Ajouter une app</translation>
+    </message>
+    <message>
+        <source>Remove the selected app</source>
+        <translation>Supprimer l’app sélectionnée</translation>
+    </message>
+</context>
+<context>
+    <name>PrivacyPage</name>
+    <message>
+        <source>Privacy &amp; Security</source>
+        <translation>Confidentialité et sécurité</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>1 app</source>
+        <translation>1 app</translation>
+    </message>
+    <message>
+        <source>%1 apps</source>
+        <translation>%1 apps</translation>
+    </message>
+    <message>
+        <source>Privacy</source>
+        <translation>Confidentialité</translation>
+    </message>
+    <message>
+        <source>Control which apps can use your location and your camera, keep running in the background, and share a screen you chose before.</source>
+        <translation>Choisissez quelles apps peuvent utiliser votre position et votre appareil photo, continuer à s’exécuter en arrière-plan et partager un écran que vous avez déjà choisi.</translation>
+    </message>
+    <message>
+        <source>Location Services</source>
+        <translation>Service de localisation</translation>
+    </message>
+    <message>
+        <source>The permissions cannot be read: %1.</source>
+        <translation>Les autorisations ne peuvent pas être lues : %1.</translation>
+    </message>
+    <message>
+        <source>Only sandboxed apps (Flatpak) ask for these permissions; other apps are not limited by them.</source>
+        <translation>Seules les apps isolées (Flatpak) demandent ces autorisations ; les autres apps n’en sont pas limitées.</translation>
+    </message>
+    <message>
+        <source>Background Apps</source>
+        <translation>Apps en arrière-plan</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>Appareil photo</translation>
+    </message>
+    <message>
+        <source>Remote Desktop</source>
+        <translation>Bureau à distance</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Files</source>
@@ -6597,6 +6755,26 @@
     <message>
         <source>password</source>
         <translation>mot de passe</translation>
+    </message>
+    <message>
+        <source>Privacy &amp; Security</source>
+        <translation>Confidentialité et sécurité</translation>
+    </message>
+    <message>
+        <source>permissions</source>
+        <translation>autorisations</translation>
+    </message>
+    <message>
+        <source>location</source>
+        <translation>localisation</translation>
+    </message>
+    <message>
+        <source>camera</source>
+        <translation>appareil photo</translation>
+    </message>
+    <message>
+        <source>screen sharing</source>
+        <translation>partage d’écran</translation>
     </message>
     <message>
         <source>tracking speed</source>

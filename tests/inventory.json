@@ -160,6 +160,7 @@
  {"path": "tests/unit/tst_settingssearch.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsaccessibility.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsscreensaver.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_settingsprivacy.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingssystem.qml", "layer": "headless"},
  {"path": "tests/unit/tst_stagesfront.qml", "layer": "headless"},
  {"path": "tests/unit/tst_stages.qml", "layer": "headless"},

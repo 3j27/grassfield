@@ -3,9 +3,10 @@ import QtQuick.Templates as T
 import Grassfield.Ui
 
 // A row with a 28-pt picture (macOS 27 Notifications' apps, Focus's focuses; docs/audits/settings-parity-2026-10-26.md
-// § Notifications, § Focus): 52 tall, the picture at `pictureX` (a coloured tile with `glyph`, or the app's `appIcon`), the
-// name at `titleX` with an optional second line, and on the right a chevron (`chevron`: the row opens a sub-pane; a click,
-// Space or Return emit clicked) or the controls declared inside. Inside a SettingsGroup, with the group's separators.
+// § Notifications, § Focus): 52 tall, the picture (`pictureSize`; Privacy & Security's categories have 23) at `pictureX` (a
+// coloured tile with `glyph`, or the app's `appIcon`), the name at `titleX` with an optional second line, and on the right a
+// chevron (`chevron`: the row opens a sub-pane; a click, Space or Return emit clicked) or the controls declared inside. Inside a
+// SettingsGroup, with the group's separators.
 T.AbstractButton {
     id: root
 
@@ -16,6 +17,7 @@ T.AbstractButton {
     property bool useAppIcon: false
     property string subtitle: ""
     property real pictureX: Tokens.settingsFocusRowTileX
+    property int pictureSize: Tokens.settingsLargeRowPictureSize
     property real titleX: Tokens.settingsFocusRowTitleX
     property bool chevron: true
     default property alias accessory: slot.data
@@ -82,7 +84,7 @@ T.AbstractButton {
             visible: !root.useAppIcon
             x: root.pictureX
             y: parent.middle - height / 2
-            width: Tokens.settingsLargeRowPictureSize
+            width: root.pictureSize
             height: width
             radius: Math.round(width * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
             color: Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite
@@ -90,7 +92,7 @@ T.AbstractButton {
             Icon {
                 anchors.centerIn: parent
                 name: root.glyph
-                size: Math.round(Tokens.settingsLargeRowPictureSize * Tokens.settingsNavGlyphSize / Tokens.settingsNavTileSize)
+                size: Math.round(root.pictureSize * Tokens.settingsNavGlyphSize / Tokens.settingsNavTileSize)
                 color: Tokens.settingsSidebarTileGlyph
             }
         }
@@ -99,7 +101,7 @@ T.AbstractButton {
             visible: root.useAppIcon
             x: root.pictureX
             y: parent.middle - height / 2
-            width: Tokens.settingsLargeRowPictureSize
+            width: root.pictureSize
             height: width
             icon: root.appIcon
         }

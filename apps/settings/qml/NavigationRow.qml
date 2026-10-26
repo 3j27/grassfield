@@ -111,11 +111,11 @@ T.AbstractButton {
             textFormat: Text.PlainText
             anchors {
                 right: chevron.left
-                rightMargin: root.value !== "" ? Tokens.spacingSm : 0
+                rightMargin: root.value !== "" ? Tokens.settingsNavValueGap : 0
                 verticalCenter: parent.verticalCenter
                 verticalCenterOffset: root.separator / 2
             }
-            width: root.value !== "" ? implicitWidth : 0
+            // Its own width (none without a value).
             text: root.value
             color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
