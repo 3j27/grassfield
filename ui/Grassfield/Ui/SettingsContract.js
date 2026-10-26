@@ -40,6 +40,11 @@ const DEFAULTS = {
     "notifications.appStyles": [],
     "notifications.appPreviews": [],
     "lock.idleMinutes": 5,
+    "lock.displayOffBattery": 2,
+    "lock.displayOffPower": 10,
+    "lock.showUser": true,
+    "lock.showMessage": false,
+    "lock.message": "",
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
     "hotCorners.bottomLeft": "none",
@@ -122,6 +127,11 @@ const ALL_DEFAULTS = {
     "notifications.appStyles": [],
     "notifications.appPreviews": [],
     "lock.idleMinutes": 5,
+    "lock.displayOffBattery": 2,
+    "lock.displayOffPower": 10,
+    "lock.showUser": true,
+    "lock.showMessage": false,
+    "lock.message": "",
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
     "hotCorners.bottomLeft": "none",
@@ -200,6 +210,11 @@ const RULES = {
     "notifications.appStyles": {"type": "notificationStyles"},
     "notifications.appPreviews": {"type": "notificationApps"},
     "lock.idleMinutes": {"type": "integer", "zeroIsExact": true, "min": 0, "max": 240},
+    "lock.displayOffBattery": {"type": "integer", "min": 0, "max": 240},
+    "lock.displayOffPower": {"type": "integer", "min": 0, "max": 240},
+    "lock.showUser": {"type": "boolean"},
+    "lock.showMessage": {"type": "boolean"},
+    "lock.message": {"type": "plainText", "pattern": "^[^\\u0000-\\u001f\\u007f]{0,200}$"},
     "hotCorners.topLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.topRight": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.bottomLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
@@ -264,6 +279,8 @@ function validate(path, value) {
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected a #rrggbb colour";
     case "localeName":
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected auto or a locale name such as fr_CH";
+    case "plainText":
+        return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected one line of text without control characters";
     case "wallpaperPath":
         // "" (no path) is valid: the source then reads as the built-in artwork.
         return value === "" || WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";

@@ -361,6 +361,40 @@
           "x-grassfield": {
             "zeroIsExact": true
           }
+        },
+        "displayOffBattery": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 2,
+          "description": "Minutes without input on battery before the displays turn off while the session is unlocked (macOS 27 Lock Screen: Turn display off on battery when inactive); 0 = never. Any input turns them on again; the lock follows lock.idleMinutes."
+        },
+        "displayOffPower": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 10,
+          "description": "Minutes without input on the power adapter before the displays turn off while the session is unlocked (Turn display off on power adapter when inactive); 0 = never."
+        },
+        "showUser": {
+          "type": "boolean",
+          "default": true,
+          "description": "The lock screen shows the account's name and picture (Show user name and photo)."
+        },
+        "showMessage": {
+          "type": "boolean",
+          "default": false,
+          "description": "The lock screen shows lock.message (Show message when locked)."
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]{0,200}$",
+          "default": "",
+          "description": "The message the lock screen shows (one line of plain text, at most 200 characters, no control characters).",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
         }
       }
     },

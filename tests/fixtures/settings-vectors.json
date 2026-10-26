@@ -128,6 +128,17 @@
     {"name": "recent items of the wrong type is the default", "path": "menubar.recentItems", "stored": "ten", "default": true, "valid": false},
     {"name": "clock date never", "path": "menubar.clockDate", "stored": "never", "read": "never", "valid": true},
     {"name": "clock date of an unknown value is the default", "path": "menubar.clockDate", "stored": "sometimes", "default": true, "valid": false},
-    {"name": "clock date of the wrong type is the default", "path": "menubar.clockDate", "stored": 3, "default": true, "valid": false}
+    {"name": "clock date of the wrong type is the default", "path": "menubar.clockDate", "stored": 3, "default": true, "valid": false},
+    {"name": "display off on battery 5 minutes", "path": "lock.displayOffBattery", "stored": 5, "read": 5, "valid": true},
+    {"name": "display off on battery never", "path": "lock.displayOffBattery", "stored": 0, "read": 0, "valid": true},
+    {"name": "display off on battery above range is clamped", "path": "lock.displayOffBattery", "stored": 999, "read": 240, "valid": false},
+    {"name": "display off on power adapter of the wrong type is the default", "path": "lock.displayOffPower", "stored": "10", "default": true, "valid": false},
+    {"name": "display off on power adapter 20 minutes", "path": "lock.displayOffPower", "stored": 20, "read": 20, "valid": true},
+    {"name": "lock screen user hidden", "path": "lock.showUser", "stored": false, "read": false, "valid": true},
+    {"name": "lock screen message shown", "path": "lock.showMessage", "stored": true, "read": true, "valid": true},
+    {"name": "lock screen message", "path": "lock.message", "stored": "Back at 3 · retour à 15 h", "read": "Back at 3 · retour à 15 h", "valid": true},
+    {"name": "lock screen message on two lines is the default", "path": "lock.message", "stored": "Back\nat 3", "default": true, "valid": false},
+    {"name": "lock screen message too long is the default", "path": "lock.message", "stored": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "default": true, "valid": false},
+    {"name": "lock screen message of the wrong type is the default", "path": "lock.message", "stored": 7, "default": true, "valid": false}
   ]
 }

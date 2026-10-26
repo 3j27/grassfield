@@ -9,7 +9,7 @@ Written files:
 
 A leaf is settable unless its `x-grassfield` annotation says `settable: false` (keys owned by the Dock, `version`).
 Its rule comes from the schema (enum, boolean, number and integer bounds) or from the annotation's `rule`: tint,
-folderColor, pointerColor and localeName are the schema `pattern`; wallpaperPath, wallpaperOutputs, notificationApps,
+folderColor, pointerColor, localeName and plainText are the schema `pattern`; wallpaperPath, wallpaperOutputs, notificationApps,
 notificationStyles and pathList have hand-written checks in the engine below. Any other leaf without a rule fails.
 
 Usage: gen-settings.py            write the generated files
@@ -25,7 +25,7 @@ SCHEMA = ROOT / "config/schema/grassfield.schema.json"
 DEFAULTS = ROOT / "config/defaults/grassfield.json"
 CONTRACT = ROOT / "ui/Grassfield/Ui/SettingsContract.js"
 
-PATTERN_RULES = ("tint", "folderColor", "pointerColor", "localeName")
+PATTERN_RULES = ("tint", "folderColor", "pointerColor", "localeName", "plainText")
 CUSTOM_RULES = ("wallpaperPath", "wallpaperOutputs", "notificationApps", "notificationStyles", "pathList")
 
 
@@ -114,6 +114,8 @@ function validate(path, value) {
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected a #rrggbb colour";
     case "localeName":
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected auto or a locale name such as fr_CH";
+    case "plainText":
+        return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected one line of text without control characters";
     case "wallpaperPath":
         // "" (no path) is valid: the source then reads as the built-in artwork.
         return value === "" || WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";
