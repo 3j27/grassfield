@@ -2,12 +2,14 @@ import QtQuick
 import QtTest
 import "../../apps/settings/qml/Displays.js" as Displays
 import "../../apps/settings/qml/System.js" as System
+import "../../apps/settings/qml" as SettingsQml
 
 // Settings > Displays (ADR-0027): the state the shell publishes, the resolution choices (Larger Text … More Space) and refresh
 // rates of a monitor, the lines of displays.conf and of a trial (the same rule as config/hypr/grassfield/displays.lua), the
 // merge of a change into the kept lines, and the arrangement's snap. Then the page on a fake backend: a choice writes a trial
-// with the kept lines of the other displays and asks for the keep sheet; Keep marks the trial kept once the shell applied it
-// and writes displays.conf only once the shell kept it (a Keep after the shell's deadline writes nothing); Revert marks it; the shell taking it back, or not answering, ends it; Arrange tries the moved displays; a display
+// with the kept lines of the other displays and asks for the keep sheet; Keep is taken only while the shell says the trial is
+// applied (an earlier Keep is refused, not held; the sheet stays open), and displays.conf is written only once the shell kept
+// it (a Keep after the shell's deadline writes nothing); Revert marks it; the shell taking it back, or not answering, ends it; Arrange tries the moved displays; a display
 // without a usable name is never written; brightness is the shell's command and nothing in a dev session.
 TestCase {
     id: testCase
@@ -118,13 +120,16 @@ TestCase {
         verify(!t.page.settable);
         t.page.tryChange({scale: 1.6});
         compare(t.backend.calls.length, 1);
-        // Keep before the shell applied the trial waits; a second Keep (Return twice) changes nothing.
-        t.page.keep();
-        t.page.keep();
+        // Keep before the shell applied the trial (Return twice) is refused and not held: the applied state that follows sends
+        // nothing on its own.
+        verify(!t.page.trialApplied);
+        verify(!t.page.keep());
+        publish(t, {id: trial.id, state: "applied"});
         compare(t.backend.calls.length, 1);
-        // The shell applied it: the trial is marked kept, once; displays.conf is not written yet.
-        publish(t, {id: trial.id, state: "applied"});
-        publish(t, {id: trial.id, state: "applied"});
+        // The mode is on screen: Keep marks the trial kept, once; displays.conf is not written yet.
+        verify(t.page.trialApplied);
+        verify(t.page.keep());
+        verify(!t.page.keep());
         compare(t.backend.calls.slice(1), [{call: "mark", state: "kept", id: trial.id}]);
         compare(endSpy.count, 0);
         // The shell kept it: now displays.conf, for the next login.
@@ -155,6 +160,11 @@ TestCase {
         const before = t.backend.calls.length;
         t.page.keep();
         compare(t.backend.calls.length, before);
+        // A shell that never applies the trial: Keep is never taken (the applied timer takes the trial back).
+        t.page.tryChange({scale: 1.6});
+        verify(!t.page.keep());
+        tryCompare(t.page, "trialId", "", 6000);
+        compare(t.backend.calls.filter(c => c.call === "mark" && c.state === "kept").length, 1);
         // A shell that applied the trial but never answers the Keep: nothing written, said so.
         t.page.tryChange({scale: 2.5});
         const id3 = t.backend.calls[t.backend.calls.length - 1].id;
@@ -193,6 +203,35 @@ TestCase {
         t.page.tryChange({scale: 1.6});
         compare(t.page.trialId, "");
         verify(t.page.notice.indexOf("no folder") >= 0);
+    }
+
+    Component {
+        id: keepSheet
+        Item {
+            width: 700
+            height: 600
+            property alias sheet: sheet
+            property int kept: 0
+            SettingsQml.DisplayKeepSheet {
+                id: sheet
+                onKeep: parent.kept++
+            }
+        }
+    }
+
+    function test_keepSheetWaitsForTheModeOnScreen() {
+        const host = createTemporaryObject(keepSheet, testCase);
+        host.sheet.openFor(Math.floor(Date.now() / 1000) + 15);
+        // Not applied yet: Keep (Return) leaves the sheet open and says why; no keep is sent.
+        host.sheet.confirm();
+        verify(host.sheet.visible);
+        compare(host.kept, 0);
+        verify(host.sheet.errorText !== "");
+        // Applied: Keep is sent once and the sheet closes.
+        host.sheet.canKeep = true;
+        host.sheet.confirm();
+        verify(!host.sheet.visible);
+        compare(host.kept, 1);
     }
 
     function test_page_arrangeAndUnnamedDisplays() {

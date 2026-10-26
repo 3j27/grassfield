@@ -34,10 +34,12 @@ SettingsPage {
     property var trialChange: null
     // Why the last change did not happen.
     property string notice: ""
-    // Keep was chosen: the trial is marked kept once the shell says it applied it, and displays.conf is written once the shell
-    // says it kept it, never before (a Keep that comes too late, after the shell's deadline, writes nothing).
+    // Keep was taken (only while the shell says the trial is applied: the mode is on screen); displays.conf is written once the
+    // shell says it kept it, never before (a Keep that comes too late, after the shell's deadline, writes nothing).
     property bool keeping: false
-    property bool keepMarked: false
+    // The shell has applied the trial being shown: Keep can be taken (DisplayKeepSheet.canKeep).
+    readonly property bool trialApplied: root.trialId !== "" && root.displayState !== null && root.displayState.trial !== null
+        && root.displayState.trial.id === root.trialId && root.displayState.trial.state === "applied"
 
     readonly property var monitors: root.displayState ? root.displayState.monitors : []
     readonly property var monitor: root.monitors.find(m => m.name === root.selected) ?? root.monitors[0] ?? null
@@ -64,7 +66,6 @@ SettingsPage {
         root.trialId = "";
         root.trialChange = null;
         root.keeping = false;
-        root.keepMarked = false;
         applied.stop();
         keepAnswer.stop();
         root.trialEnded();
@@ -95,26 +96,25 @@ SettingsPage {
             root.tryLines([Displays.lineFor(root.monitor, change)], change);
     }
 
-    // DisplayKeepSheet's answers. Keep goes by the shell's state of the trial (settleKeep); a second Keep changes nothing.
-    function keep(): void {
-        if (root.trialId === "" || root.keeping)
-            return;
+    // DisplayKeepSheet's answers. Keep is taken only while the shell says the trial is applied: a Keep pressed before the
+    // mode is on screen (Return twice) is not held for later, it is refused (the sheet stays open and says so). A second Keep
+    // changes nothing. Returns whether it was taken.
+    function keep(): bool {
+        if (!root.trialApplied || root.keeping)
+            return false;
         root.keeping = true;
-        root.settleKeep();
+        root.backend.markDisplayTrial("kept", root.trialId);
+        keepAnswer.restart();
+        return true;
     }
 
-    // Keep's next step: the shell applied the trial → mark it kept; the shell kept it → write displays.conf (the next login
-    // reads it); the shell took it back first (its deadline) → nothing is written. Before the shell applied it, Keep waits
-    // (the applied timer still runs).
+    // After Keep: the shell kept the trial → write displays.conf (the next login reads it); the shell took it back first (its
+    // deadline) → nothing is written.
     function settleKeep(): void {
         const t = root.displayState ? root.displayState.trial : null;
         if (!root.keeping || t === null || t.id !== root.trialId)
             return;
-        if (t.state === "applied" && !root.keepMarked) {
-            root.keepMarked = true;
-            root.backend.markDisplayTrial("kept", root.trialId);
-            keepAnswer.restart();
-        } else if (t.state === "kept") {
+        if (t.state === "kept") {
             const error = root.backend.writeDisplaysConf(root.trialLines);
             if (error !== "")
                 root.notice = qsTr("The display settings could not be saved for the next login: %1").arg(error);

@@ -61,26 +61,55 @@ function M.keyboard_path()
   return config_file("keyboard.lua")
 end
 
--- The values of a file Settings generates, read as text and never run (review of 2026-10-26: a chunk run in an empty
--- environment cannot reach os.*, but `while true do end` would still stall the compositor while it reads its configuration):
--- `key = value` pairs whose value is a number, true, false or a double-quoted string without escapes; comments are dropped,
--- anything else is ignored, at most 64 KiB is read. nil when the file cannot be opened.
+-- The values of a file Settings generates, read as text and never run (review of 2026-10-26: a chunk run even in an empty
+-- environment could stall the compositor while it reads its configuration, with `while true do end`): `key = value` pairs
+-- whose value is a number, true, false or a double-quoted string without escapes. At most 64 KiB is read; block and line
+-- comments are dropped (found as plain text); each line is read alone (a line longer than 200 characters is skipped) with
+-- anchored patterns, so a file of any content is read in linear time. nil when the file cannot be opened.
+local MAX_LINE = 200
+
 local function read_table(path)
   local f = path and io.open(path, "r")
   if not f then return nil end
   local text = f:read(65536) or ""
   f:close()
-  text = text:gsub("%-%-[^\n]*", "")
-  local out = {}
-  for key, value in text:gmatch('([%a_][%w_]*)%s*=%s*"([^"\\\n]*)"') do
-    out[key] = value
+  local kept, pos = {}, 1
+  while true do
+    local open = text:find("--[[", pos, true)
+    if not open then
+      kept[#kept + 1] = text:sub(pos)
+      break
+    end
+    kept[#kept + 1] = text:sub(pos, open - 1)
+    local close = text:find("]]", open + 4, true)
+    if not close then break end
+    pos = close + 2
   end
-  -- The other values with the strings blanked, so that text inside a string is never taken for a pair.
-  for key, value in text:gsub('"[^"\n]*"', '""'):gmatch("([%a_][%w_]*)%s*=%s*([%w%.%-]+)") do
-    if value == "true" or value == "false" then
-      out[key] = value == "true"
-    elseif value:match("^%-?%d+%.?%d*$") then
-      out[key] = tonumber(value)
+  local out = {}
+  for line in table.concat(kept, "\n"):gmatch("[^\n]+") do
+    local comment = line:find("--", 1, true)
+    if comment then line = line:sub(1, comment - 1) end
+    if #line <= MAX_LINE then
+      -- The strings are set aside first (text inside one is never taken for a pair, a comma in one splits nothing), then
+      -- each item between commas and braces is matched whole: every pattern here is anchored or starts with a literal.
+      local strings = {}
+      line = line:gsub('"([^"\\]*)"', function(v)
+        strings[#strings + 1] = v
+        return "\1" .. #strings .. "\1"
+      end)
+      for item in line:gmatch("[^,{};]+") do
+        local key, value = item:match("^%s*([%a_][%w_]*)%s*=%s*(%S+)%s*$")
+        if key then
+          local n = value:match("^\1(%d+)\1$")
+          if n then
+            out[key] = strings[tonumber(n)]
+          elseif value == "true" or value == "false" then
+            out[key] = value == "true"
+          elseif value:match("^%-?%d+%.?%d*$") then
+            out[key] = tonumber(value)
+          end
+        end
+      end
     end
   end
   return out

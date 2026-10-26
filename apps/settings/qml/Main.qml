@@ -847,6 +847,7 @@ Window {
     // Displays (ADR-0027): keep or revert a change while the shell counts down; Arrange… for several displays.
     DisplayKeepSheet {
         id: displayKeep
+        canKeep: (page.item as DisplaysPage)?.trialApplied ?? false
         onKeep: (page.item as DisplaysPage)?.keep()
         onRevert: (page.item as DisplaysPage)?.revert()
     }

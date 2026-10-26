@@ -2969,6 +2969,10 @@
         <source>Revert</source>
         <translation>Rétablir</translation>
     </message>
+    <message>
+        <source>The new settings are not on the screen yet.</source>
+        <translation>Les nouveaux réglages ne sont pas encore à l’écran.</translation>
+    </message>
 </context>
 <context>
     <name>DisplaysPage</name>
@@ -2982,7 +2986,7 @@
     </message>
     <message>
         <source>The display settings could not be saved for the next login: %1</source>
-        <translation>Les réglages d’affichage n’ont pas pu être enregistrés pour la prochaine ouverture de session : %1</translation>
+        <translation>Les réglages d’affichage n’ont pas pu être enregistrés pour la prochaine ouverture de session&#xa0;: %1</translation>
     </message>
     <message>
         <source>The display settings were taken back before they were kept.</source>
@@ -2990,7 +2994,7 @@
     </message>
     <message>
         <source>The display settings were not kept: the Grassfield shell did not answer.</source>
-        <translation>Les réglages d’affichage n’ont pas été conservés : le shell Grassfield n’a pas répondu.</translation>
+        <translation>Les réglages d’affichage n’ont pas été conservés&#xa0;: le shell Grassfield n’a pas répondu.</translation>
     </message>
     <message>
         <source>The change was not applied: the Grassfield shell did not answer.</source>

@@ -96,6 +96,13 @@ elseif case == "pointer-file" then
   -- Text inside a string is not a pair; a comment is not read.
   s = put('return {\n  secondary_click = "corner tap_to_click = false",\n  -- natural_scroll = false,\n}\n')
   say("strings-comments", tostring(s.tap_to_click), tostring(s.natural_scroll), s.secondary_click)
+  s = put('--[[\n  tap_to_click = false,\n]]\nreturn { natural_scroll = false }\n')
+  say("block-comment", tostring(s.tap_to_click), tostring(s.natural_scroll))
+  -- 64 KiB that would make a pattern over the whole text quadratic (one run of letters, then short lines of them): read fast.
+  local t0 = os.clock()
+  put(string.rep("a", 65536))
+  put(string.rep(string.rep("b", 199) .. "\n", 327))
+  say("bounded-time", tostring(os.clock() - t0 < 1.0))
   s = put("this is not lua")
   say("broken", tostring(s.sensitivity), tostring(s.natural_scroll))
   s = gi.settings(d .. "/missing.lua")
@@ -211,6 +218,9 @@ check grep -q "^no-code-runs true 0$" <<<"$out"
 check grep -q "^never-runs false$" <<<"$out"
 desc="GF-066: text inside a string is not a pair, a commented line is not read"
 check grep -q "^strings-comments true true two_finger$" <<<"$out"
+desc="GF-066: a block comment is not read; any 64 KiB file is read in a bounded time (no pattern over the whole text)"
+check grep -q "^block-comment true false$" <<<"$out"
+check grep -q "^bounded-time true$" <<<"$out"
 check grep -q "^broken 0 true$" <<<"$out"
 check grep -q "^missing 0 true two_finger$" <<<"$out"
 

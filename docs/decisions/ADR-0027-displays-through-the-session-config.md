@@ -64,8 +64,9 @@ What Grassfield already has:
      `keyword`, and nothing Hyprland would not also do when a configuration file is saved.
    - The shell owns the countdown. It survives a Settings that crashed or was closed.
    - Settings shows a sheet: "Keep these display settings?", "The previous settings come back in N seconds.", Revert and Keep.
-   - Keep: Settings marks the trial `kept <id>` once the shell has published it `applied` (a Keep chosen earlier waits for
-     that). The shell stops its countdown, removes the trial file without a second reload (what is on screen stays) and
+   - Keep is taken only while the shell has published the trial `applied` (the mode is on screen); pressed earlier (Return
+     twice), it is refused and the sheet stays open, saying the new settings are not on screen yet: nothing is held to be sent
+     later (counter-review of 2026-10-26). Settings then marks the trial `kept <id>`. The shell stops its countdown, removes the trial file without a second reload (what is on screen stays) and
      publishes `kept`; only then does Settings write the new `displays.conf` (atomically), which the next login reads. A Keep
      the shell does not take (its deadline came first: it publishes `reverted`; or it does not answer within the applied
      time) writes nothing, so a mode nobody confirmed can never reach `displays.conf` (review of 2026-10-26). If that last
