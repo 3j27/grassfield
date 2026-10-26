@@ -338,15 +338,17 @@ def scan_helpers(directory=None):
 # (f) C++ of the Settings app: every string literal is read (any spelling: "..", QStringLiteral, QString(".."), u".."_s, views,
 # a bare return "..", a literal on the next line), with the calls it sits in. It must be translated text (tr(), translate()) or
 # a token. English text outside translate() fails when it is a phrase (two words), or a word or phrase in a return statement, a
-# ?: branch or an assignment to a text-like name (error, reason, text, message, title, label, status): that is how a reason
-# reaches QML. Not text: literals inside log calls (qWarning...), asserts, regular expressions and character literals.
+# ?: branch, an assignment or initialization (member, local), or an argument of a call that shows or reports (fail, error, reason,
+# text, message, title, label, status, note...): that is how a reason reaches QML. Not text: literals inside log calls (qWarning...), asserts, regular expressions and character literals.
 CPP_TRANSLATING = {"tr", "translate", "QT_TR_NOOP", "QT_TRANSLATE_NOOP", "QT_TR_N_NOOP", "qsTr", "trUtf8"}
 CPP_NOT_TEXT = {"qDebug", "qInfo", "qWarning", "qCritical", "qFatal", "qCDebug", "qCInfo", "qCWarning", "qCCritical", "Q_ASSERT", "Q_ASSERT_X",
                 "static_assert", "QRegularExpression", "QRegExp", "Q_UNUSED", "QT_MESSAGE_PATTERN", "setObjectName", "setProperty", "property",
                 "qputenv", "qgetenv", "qEnvironmentVariable", "qEnvironmentVariableIsSet", "qEnvironmentVariableIsEmpty", "Q_LOGGING_CATEGORY"}
-CPP_TEXT_NAMES = re.compile(r"\b(?:error|reason|text|message|title|label|status|failure|hint|summary|description)\w*\s*=$", re.I)
+CPP_WRAPPER_OPEN = re.compile(r"(?:\b(?:Q\w+::)?(?:QStringLiteral|QLatin1String|QLatin1StringView|QStringView|QUtf8StringView|QAnyStringView|QString|QByteArray|fromUtf8|fromLatin1|fromLocal8Bit|fromStdString)\s*)\($")
+CPP_WRAPPERS = {"QStringLiteral", "QLatin1String", "QLatin1StringView", "QStringView", "QUtf8StringView", "QAnyStringView", "QString", "QByteArray",
+                "fromUtf8", "fromLatin1", "fromLocal8Bit", "fromStdString", "QString::fromUtf8", "QString::fromLatin1", "QString::fromLocal8Bit"}
+CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|hint|notif|show|caption|tooltip", re.I)
 CPP_LOG_STREAM = re.compile(r"\bq(?:C)?(?:Debug|Info|Warning|Critical|Fatal)\b")
-CPP_WRAPPER_OPEN = re.compile(r"(?:\b(?:QStringLiteral|QLatin1String|QLatin1StringView|QStringView|QUtf8StringView|QString|QByteArray|fromUtf8|fromLatin1|fromLocal8Bit)\s*)\($")
 CPP_VALUE_POSITION = re.compile(r"(?:\breturn|\?|(?<!:):(?!:))$")
 CPP_ASSIGN = re.compile(r"(?<![=!<>+\-*/|&^%])=$")
 CPP_WORDLIKE = re.compile(r"^[A-Za-z][A-Za-z' ,:;!?()\-]*[.!?]?$")
@@ -448,8 +450,12 @@ def scan_cpp_text(rel, text):
         phrase = bool(re.search(r"[^\W\d_]{2,}\s+[^\W\d_]{2,}", literal))
         # Where the literal stands: a return value, a branch of ?:, or the right side of an assignment to a text-like name
         # (not an operand of ==, not an argument of another call).
-        tail = CPP_WRAPPER_OPEN.sub("", before.rstrip()).rstrip()
-        visible = bool(CPP_VALUE_POSITION.search(tail)) or (bool(CPP_ASSIGN.search(tail)) and bool(CPP_TEXT_NAMES.search(tail[-80:])))
+        tail = before.rstrip()
+        while CPP_WRAPPER_OPEN.search(tail):
+            tail = CPP_WRAPPER_OPEN.sub("", tail).rstrip()
+        argument_of = next((c for c in reversed(calls) if c not in CPP_WRAPPERS), "")
+        visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
+                   or bool(argument_of and CPP_SINK.search(argument_of.split("::")[-1])))
         wordlike = bool(CPP_WORDLIKE.match(literal))
         if phrase or (visible and wordlike):
             violations.append(f"{rel}:{line}: English text {literal[:40]!r} is not wrapped in tr()/QCoreApplication::translate")
