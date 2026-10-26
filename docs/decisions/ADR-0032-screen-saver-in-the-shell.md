@@ -50,8 +50,8 @@ black; and the waking key or click consumed, as on macOS.
 - **Settings**: Wallpaper > Screen Saver… opens a sheet: "Start screen saver when inactive" (Never, 1 to 30 minutes, 1
   hour), the four savers as tiles, the slideshow's folder with Choose…, and macOS's note when the display turns off or the
   session locks before the saver would start, with Lock Screen Settings….
-- **Dev session**: off unless a test sets a delay (`saver devStart` / `devDelay` IPC, dev only), as the idle module's dev
-  hooks; no effect on the owner's session.
+- **Dev session**: off unless a test sets a delay (`saver devDelay <s>`) or shows it (`saver devShow`; `saver status`), dev
+  only, as the idle module's dev hooks; no effect on the owner's session.
 
 ## Consequences
 - A new shell module and three keys; Settings gains a sheet. No new service, dependency or language.

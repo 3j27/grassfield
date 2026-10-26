@@ -967,6 +967,33 @@ QtObject {
     // estimate: idle dim fade-in in ms [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property int idleDimFade: 1000
 
+    // ADR-0032: the screen saver fades in over 1 s (macOS fades it in); it leaves at once on input
+    readonly property int saverFadeIn: 1000
+    // ADR-0032: the screen saver's clock, the lock screen's size (lock.clockSize)
+    readonly property int saverClockSize: 104
+    // ADR-0032: the screen saver's clock weight, the lock screen's (lock.clockWeight)
+    readonly property int saverClockWeight: 600
+    // ADR-0032: the screen saver's date, the lock screen's size (lock.dateSize)
+    readonly property int saverDateSize: 22
+    // ADR-0032: the screen saver's date weight, the lock screen's (lock.dateWeight)
+    readonly property int saverDateWeight: 600
+    // ADR-0032: the clock alone on black is drawn at 75 % white, so no pixel stays at full brightness for long
+    readonly property real saverClockOnlyOpacity: 0.75
+    // ADR-0032: the wallpaper under the clock is dimmed by the lock screen's shadow-colour scrim (lock.dimOpacity, A2: white text 5.3:1 or more over any wallpaper; tests/visual/test_contrast_tokens.py), the picture kept sharp
+    readonly property real saverWallpaperDimOpacity: 0.6
+    // ADR-0032: the clock alone stays this far from the screen's edges wherever it moves
+    readonly property int saverClockMargin: 48
+    // ADR-0032: the clock alone moves to a new place every minute (no pixel stays lit)
+    readonly property int saverClockMoveMs: 60000
+    // ADR-0032: the slideshow shows each picture for 8 s
+    readonly property int saverSlideIntervalMs: 8000
+    // ADR-0032: the slideshow's crossfade between two pictures
+    readonly property int saverSlideFadeMs: 1500
+    // ADR-0032: one slow pan of the artwork and of the slideshow's pictures, out and back
+    readonly property int saverDriftMs: 40000
+    // ADR-0032: the artwork and the slideshow's pictures are scaled up this much while they pan, so no edge shows
+    readonly property real saverDriftScale: 1.08
+
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int polkitIconSize: 40
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)

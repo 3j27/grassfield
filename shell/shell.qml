@@ -13,6 +13,7 @@ import qs.osd
 import qs.overview
 import qs.overlay
 import qs.platform
+import qs.saver
 import qs.search
 import qs.security.idle
 import qs.security.lock
@@ -371,6 +372,10 @@ ShellRoot {
     AuthAgent {}
     Idle {
         // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
+        busInhibited: MenuBridge.screenSaverInhibited
+    }
+    // The screen saver (ADR-0032): the same inhibitors keep it off.
+    Saver {
         busInhibited: MenuBridge.screenSaverInhibited
     }
     Overview {

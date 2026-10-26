@@ -103,6 +103,9 @@ Singleton {
     readonly property bool searchShowSettings: store.searchShowSettings
     readonly property bool searchShowCommands: store.searchShowCommands
     readonly property real searchHistoryResetAt: store.searchHistoryResetAt
+    readonly property int screenSaverIdleMinutes: store.screenSaverIdleMinutes
+    readonly property string screenSaverKind: store.screenSaverKind
+    readonly property string screenSaverFolder: store.screenSaverFolder
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
     readonly property bool menubarShowBackground: store.menubarShowBackground
