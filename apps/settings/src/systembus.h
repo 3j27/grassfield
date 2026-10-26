@@ -62,7 +62,9 @@ QString reasonOf(const QString &error);
 //   wifiState: {"radio": bool, "device": {"name", "connected"} | null,
 //               "aps": [{"hex" (SSID bytes, upper-case hex), "strength" 0-100, "flags", "wpa", "rsn", "active"}],
 //               "profiles": [{"uuid", "hex"}]}      (saved Wi-Fi profiles with their SSID)
-//   bluetoothState: {"present": bool, "powered": bool, "devices": [{"mac", "name", "connected"}]}   (paired devices only)
+//   bluetoothState: {"present": bool, "powered": bool, "discovering": bool, "discoverable": bool, "alias" (the adapter's name),
+//                    "devices": [{"mac", "name", "connected", "icon" (BlueZ's Icon), "battery" (percent, -1 unknown)}] (paired),
+//                    "nearby": [{"mac", "name", "icon", "rssi"}] (not paired, in range: an RSSI, and a name to show)}
 // `ok` false: the service did not answer (error holds the reason); the JSON is then empty.
 struct StateResult {
     bool ok = false;
@@ -105,6 +107,9 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //   wifi.connectSecure {hex, psk}  a WPA/WPA3 personal network with its passphrase (8 to 63 printable ASCII characters or 64
 //                                  hex digits): a new profile, kept only once the connection is up (awaitJoin);
 //   bt.power {on}, bt.connect {mac, connect},
+//   bt.discover {on}            Adapter1 StartDiscovery / StopDiscovery (already running or stopped is fine)
+//   bt.pair {mac}               Device1 Pair (no agent: Just Works; it may wait for the device, kPrivilegedMs), Trusted, Connect
+//   bt.forget {mac}             Adapter1 RemoveDevice
 //   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0026)
 //   vpn.connect {uuid, on}      a VPN or WireGuard profile: ActivateConnection on no device, or its DeactivateConnection
 // and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait

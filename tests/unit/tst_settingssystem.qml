@@ -406,7 +406,7 @@ TestCase {
 
     function rowsOf(item, out) {
         for (const c of item.children) {
-            if (c.leading !== undefined && c.activated !== undefined)
+            if ((c.leading !== undefined || c.glyph !== undefined) && c.activated !== undefined)
                 out.push(c);
             rowsOf(c, out);
         }
@@ -777,18 +777,65 @@ TestCase {
         t.backend.finished("bt.state", true, state(true));
         verify(rowByTitle(page, "Zed") === zed, "row rebuilt");
         verify(zed.activeFocus, "focus lost on refresh");
-        compare(zed.subtitle, "Connected");
+        compare(zed.status, "Connected");
         compare(rowsOf(page, []).length, 2);
         compare(t.backend.queries.length, 0, "no command is run to read Bluetooth");
         verify(t.backend.busQueries.some(q => q.what === "bt.state"));
+    }
+
+    function test_bluetoothNearbyDevicesArePairedAndPairedOnesForgotten() {
+        const t = makeService(false);
+        const page = openPage("BluetoothPage.qml", t);
+        t.backend.finished("bt.state", true, JSON.stringify({present: true, powered: true, discovering: true, alias: "gf-ref",
+            devices: [{mac: "77:88:99:AA:BB:CC", name: "Zed", connected: false, icon: "input-mouse", battery: 40}],
+            nearby: [{mac: "33:33:33:33:33:33", name: "Keyboard K3", icon: "input-keyboard", rssi: -48}, {mac: "44:44:44:44:44:44", name: "Far", icon: "", rssi: -90}]}));
+        verify(page.searching);
+        compare(page.nearby.map(n => n.name), ["Keyboard K3", "Far"]);
+        page.pair("33:33:33:33:33:33");
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "bt.pair", mac: "33:33:33:33:33:33"});
+        compare(page.pending, "33:33:33:33:33:33");
+        t.backend.finished("bt.act", true, "");
+        compare(page.pending, "");
+        // (i) and Forget This Device…: Main.qml asks first, the answer removes the device.
+        const info = [];
+        page.infoRequested.connect(d => info.push(d.mac));
+        rowByTitle(page, "Zed").infoRequested();
+        compare(info, ["77:88:99:AA:BB:CC"]);
+        page.forget(page.devices[0]);
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "bt.forget", mac: "77:88:99:AA:BB:CC"});
+        // The radio off stops the search; so does leaving the pane.
+        t.backend.finished("bt.state", true, JSON.stringify({present: true, powered: false, devices: []}));
+        verify(!page.searching);
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "bt.discover", on: false});
+        t.backend.finished("bt.state", true, JSON.stringify({present: true, powered: true, devices: []}));
+        verify(page.searching);
+        page.destroy();
+        wait(0);
+        compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "bt.discover", on: false});
+        // The device glyphs.
+        compare(System.btGlyph("audio-headset"), "headphones");
+        compare(System.btGlyph("input-keyboard"), "keyboard");
+        compare(System.btGlyph("phone"), "phone");
+        compare(System.btGlyph("weird"), "bluetooth");
+        compare(System.btPair("nope"), null);
+        compare(System.btForget("11:22:33:44:55"), null);
+    }
+
+    function test_bluetoothDevSessionNeverSearches() {
+        const t = makeService(true);
+        const page = openPage("BluetoothPage.qml", t);
+        t.backend.finished("bt.state", true, JSON.stringify({present: true, powered: true, devices: []}));
+        verify(!page.searching);
+        compare(t.backend.busActions.length, 0);
     }
 
     function test_bluetoothActsThroughDBusAndFailuresAreShown() {
         const t = makeService(false);
         const page = openPage("BluetoothPage.qml", t);
         t.backend.finished("bt.state", true, JSON.stringify({present: true, powered: true, devices: [{mac: "77:88:99:AA:BB:CC", name: "Zed", connected: true}]}));
-        page.toggleDevice(page.devices[0]);
-        compare(t.backend.busActions.map(a => a.op), [{op: "bt.connect", mac: "77:88:99:AA:BB:CC", connect: false}]);
+        page.connectDevice(page.devices[0]);
+        // With the radio on, the pane looks for nearby devices first (never in a dev session).
+        compare(t.backend.busActions.map(a => a.op), [{op: "bt.discover", on: true}, {op: "bt.connect", mac: "77:88:99:AA:BB:CC", connect: false}]);
         compare(page.pending, "77:88:99:AA:BB:CC");
         t.backend.failed("bt.act", "Software caused connection abort");
         t.backend.finished("bt.act", false, "");

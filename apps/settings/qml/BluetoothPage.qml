@@ -3,40 +3,82 @@ import QtQuick
 import Grassfield.Ui
 import "System.js" as System
 
-// Bluetooth through BlueZ over D-Bus (one read-only JSON state; power and connect only through SystemService, so never
-// in a dev session; a failed action shows its reason under the list). Paired devices only: no discovery or pairing here (same scope as Quick Settings).
+// Bluetooth as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Bluetooth): a header group (the switch, then
+// the computer's Bluetooth name), My Devices (the paired devices: a click connects or disconnects, (i) opens the device's sheet
+// with Forget This Device…) and Nearby Devices (found while the pane is open: Connect pairs, trusts and connects; Settings
+// registers no pairing agent, so a device that needs a PIN says so). BlueZ over D-Bus: one read-only state (`bt.state`), every
+// action through SystemService, so never in a dev session (and no discovery there).
 SettingsPage {
     id: root
 
     required property var backend
     required property var system
 
+    // Main.qml opens the sheets and hands the answers back (connectDevice, forget).
+    signal infoRequested(var device)
+    signal forgetRequested(var device)
+
     title: qsTr("Bluetooth")
 
     property bool answered: false
-    property var controller: ({present: false, powered: false})
+    property var controller: ({present: false, powered: false, discovering: false, alias: ""})
     property var devices: []
-    // MAC address being connected or disconnected, until the command ends.
+    property var nearby: []
+    // MAC address being connected, disconnected or paired, until the action ends.
     property string pending: ""
+    // This pane started a discovery (it stops it when it closes).
+    property bool searching: false
 
-    // The rows of the list, keyed by MAC address: a refresh updates, inserts and removes rows in place.
+    readonly property bool on: root.controller.present && root.controller.powered
+
+    // The rows of the lists, keyed by MAC address: a refresh updates, inserts and removes rows in place.
     ListModel {
         id: deviceModel
     }
+    ListModel {
+        id: nearbyModel
+    }
 
     onDevicesChanged: System.syncModel(deviceModel, root.devices, "mac")
+    onNearbyChanged: System.syncModel(nearbyModel, root.nearby, "mac")
+    onOnChanged: root.discover(root.on)
 
     function refresh(): void {
         root.system.queryBus("bt.state", "bt.state");
     }
 
-    function toggleDevice(dev: var): void {
+    function discover(on: bool): void {
+        // The service can go first when the window closes: BlueZ then ends the discovery with the connection.
+        if (!root.system || typeof root.system.act !== "function" || root.system.dev || on === root.searching)
+            return;
+        if (root.system.act(on ? "bluetooth search" : "bluetooth stop searching", System.btDiscover(on), "bt.discover"))
+            root.searching = on;
+    }
+
+    function deviceOf(mac: string): var {
+        return root.devices.find(d => d.mac === mac) ?? null;
+    }
+
+    // A paired device: connect it, or disconnect it.
+    function connectDevice(dev: var): void {
         root.pending = dev.mac;
         if (!root.system.act("bluetooth " + (dev.connected ? "disconnect" : "connect"), System.btConnect(dev.mac, !dev.connected), "bt.act"))
             root.pending = "";
     }
 
-    function subtitleOf(dev: var): string {
+    // A nearby device: pair, trust and connect it.
+    function pair(mac: string): void {
+        root.pending = mac;
+        if (!root.system.act("bluetooth pair", System.btPair(mac), "bt.act"))
+            root.pending = "";
+    }
+
+    // ForgetDeviceSheet's answer.
+    function forget(dev: var): void {
+        root.system.act("bluetooth forget", System.btForget(dev.mac), "bt.act");
+    }
+
+    function statusOf(dev: var): string {
         if (root.pending === dev.mac)
             return dev.connected ? qsTr("Disconnecting…") : qsTr("Connecting…");
         return dev.connected ? qsTr("Connected") : qsTr("Not Connected");
@@ -47,13 +89,16 @@ SettingsPage {
 
         function onFinished(tag: string, ok: bool, output: string): void {
             switch (tag) {
-            case "bt.state": {
-                const state = ok ? System.parseBtState(output) : null;
-                root.controller = state ? {present: state.present, powered: state.powered} : {present: false, powered: false};
-                root.devices = state ? state.devices : [];
-                root.answered = true;
+            case "bt.state":
+                {
+                    const state = ok ? System.parseBtState(output) : null;
+                    root.controller = state ? {present: state.present, powered: state.powered, discovering: state.discovering, alias: state.alias}
+                                            : {present: false, powered: false, discovering: false, alias: ""};
+                    root.devices = state ? state.devices : [];
+                    root.nearby = state ? state.nearby : [];
+                    root.answered = true;
+                }
                 break;
-            }
             case "bt.act":
                 root.pending = "";
                 root.refresh();
@@ -70,43 +115,128 @@ SettingsPage {
     }
 
     Component.onCompleted: root.refresh()
+    Component.onDestruction: root.discover(false)
 
     SettingsGroup {
         footnote: root.answered && !root.controller.present ? qsTr("Bluetooth is not available: no adapter was found or the Bluetooth service is not running.") : ""
 
-        SettingsRow {
+        HeaderRow {
+            glyph: "bluetooth"
             title: qsTr("Bluetooth")
-            Toggle {
-                accessibleName: qsTr("Bluetooth")
-                enabled: root.controller.present
-                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
-                checked: root.controller.powered
-                onToggled: c => root.system.act("bluetooth " + (c ? "on" : "off"), System.btPower(c), "bt.act")
+            text: qsTr("Connect accessories such as headphones, keyboards, mice and game controllers to this computer.")
+            textSize: Tokens.settingsBtHeaderTextSize
+            textLineHeight: Tokens.settingsBtHeaderTextLineHeight
+            textBaseline: Tokens.settingsBtHeaderTextBaseline
+            textBottom: Tokens.settingsBtHeaderBottom
+            checked: root.controller.powered
+            switchEnabled: root.controller.present
+            onToggled: c => root.system.act("bluetooth " + (c ? "on" : "off"), System.btPower(c), "bt.act")
+        }
+
+        // The computer's Bluetooth name (macOS: "This Mac is discoverable as …").
+        Item {
+            id: note
+            visible: root.on && root.controller.alias !== ""
+            readonly property real contentTop: 1
+            width: parent.width
+            height: Math.round(noteText.y + noteText.baselineOffset + (noteText.lineCount - 1) * Tokens.settingsNoteLineHeight + Tokens.settingsNoteBottom)
+            Accessible.role: Accessible.StaticText
+            Accessible.name: noteText.text
+
+            Rectangle {
+                x: Tokens.settingsRowInset
+                width: parent.width - 2 * Tokens.settingsRowInset
+                height: 1
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            }
+
+            Text {
+                id: noteText
+                textFormat: Text.PlainText
+                x: Tokens.settingsRowInset
+                y: note.contentTop + Tokens.settingsNoteBaseline - baselineOffset
+                width: parent.width - 2 * Tokens.settingsRowInset
+                wrapMode: Text.Wrap
+                lineHeightMode: Text.FixedHeight
+                lineHeight: Tokens.settingsNoteLineHeight
+                text: qsTr("Other devices see this computer as “%1”.").arg(root.controller.alias)
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
             }
         }
     }
 
     SettingsGroup {
-        visible: root.controller.present && root.controller.powered
+        visible: root.on
         caption: qsTr("My Devices")
-        footnote: root.devices.length === 0 ? qsTr("No paired devices. Pair a device with your system's Bluetooth tools.") : qsTr("Devices are paired outside Settings for now.")
 
         Repeater {
             model: deviceModel
 
-            delegate: DeviceRow {
+            delegate: BluetoothDeviceRow {
                 id: row
 
                 required property string mac
                 required property string name
                 required property bool connected
+                required property string icon
+                required battery
+
+                readonly property var dev: ({mac: row.mac, name: row.name, connected: row.connected, icon: row.icon, battery: row.battery})
 
                 title: row.name
-                subtitle: root.subtitleOf({mac: row.mac, connected: row.connected})
-                leading: "bluetooth"
-                checked: row.connected
-                actionText: row.connected ? qsTr("Disconnect") : qsTr("Connect")
-                onActivated: root.toggleDevice({mac: row.mac, connected: row.connected})
+                status: root.statusOf(row.dev)
+                glyph: System.btGlyph(row.icon)
+                onActivated: root.connectDevice(row.dev)
+                onInfoRequested: root.infoRequested(row.dev)
+            }
+        }
+
+        SettingsRow {
+            visible: deviceModel.count === 0
+            title: qsTr("No paired devices")
+        }
+    }
+
+    SettingsGroup {
+        visible: root.on
+        caption: qsTr("Nearby Devices")
+        busy: root.controller.discovering
+
+        Repeater {
+            model: nearbyModel
+
+            delegate: BluetoothDeviceRow {
+                id: near
+
+                required property string mac
+                required property string name
+                required property string icon
+
+                nearby: true
+                title: near.name
+                glyph: System.btGlyph(near.icon)
+                busy: root.pending === near.mac
+                onConnectRequested: root.pair(near.mac)
+            }
+        }
+
+        Item {
+            visible: nearbyModel.count === 0
+            width: parent.width
+            height: Tokens.settingsEmptyListHeight
+            Accessible.role: Accessible.StaticText
+            Accessible.name: searchingText.text
+
+            Text {
+                id: searchingText
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: root.controller.discovering ? qsTr("Searching…") : qsTr("No devices found")
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
             }
         }
     }

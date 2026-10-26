@@ -326,8 +326,9 @@ function networkServices(state, radio) {
 
 // ---- Bluetooth (BlueZ over D-Bus) ----------------------------------------------------------------------------------
 
-// The `bt.state` JSON of the Backend (src/systembus.h bluetoothState): {present, powered, devices: [{mac, name, connected}]}
-// with the paired devices connected first, then by name; null when the text is not that.
+// The `bt.state` JSON of the Backend (src/systembus.h bluetoothState): {present, powered, discovering, alias, devices: [{mac,
+// name, connected, icon, battery}] with the paired devices connected first, then by name, nearby: [{mac, name, icon, rssi}]
+// strongest first}; null when the text is not that.
 function parseBtState(text) {
     let j;
     try {
@@ -337,13 +338,40 @@ function parseBtState(text) {
     }
     if (j === null || typeof j !== "object" || typeof j.present !== "boolean" || typeof j.powered !== "boolean" || !Array.isArray(j.devices))
         return null;
+    const mac = d => d !== null && typeof d === "object" && typeof d.mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(d.mac);
+    const nameOf = d => (typeof d.name === "string" && d.name.trim() !== "" ? printable(d.name.trim()) : d.mac.toUpperCase());
+    const icon = d => (typeof d.icon === "string" ? d.icon : "");
     const list = [];
     for (const d of j.devices) {
-        if (d !== null && typeof d === "object" && typeof d.mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(d.mac))
-            list.push({mac: d.mac.toUpperCase(), name: typeof d.name === "string" && d.name.trim() !== "" ? printable(d.name.trim()) : d.mac.toUpperCase(), connected: d.connected === true});
+        if (mac(d))
+            list.push({mac: d.mac.toUpperCase(), name: nameOf(d), connected: d.connected === true, icon: icon(d),
+                       battery: Number.isInteger(d.battery) && d.battery >= 0 && d.battery <= 100 ? d.battery : -1});
     }
     list.sort((a, b) => (a.connected === b.connected ? (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1) : a.connected ? -1 : 1));
-    return {present: j.present, powered: j.present && j.powered, devices: list};
+    const nearby = [];
+    for (const d of Array.isArray(j.nearby) ? j.nearby : []) {
+        if (mac(d) && typeof d.name === "string" && d.name.trim() !== "")
+            nearby.push({mac: d.mac.toUpperCase(), name: nameOf(d), icon: icon(d), rssi: Number.isInteger(d.rssi) ? d.rssi : -127});
+    }
+    nearby.sort((a, b) => b.rssi - a.rssi || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1));
+    return {present: j.present, powered: j.present && j.powered, discovering: j.discovering === true, alias: typeof j.alias === "string" ? printable(j.alias) : "",
+            devices: list, nearby: nearby};
+}
+
+// The glyph of a Bluetooth device from BlueZ's Icon (a freedesktop icon name).
+function btGlyph(icon) {
+    const i = String(icon);
+    if (/^audio-(headphones|headset)/.test(i) || i === "audio-card")
+        return "headphones";
+    if (i === "input-keyboard")
+        return "keyboard";
+    if (i === "input-mouse" || i === "input-tablet")
+        return "mouse";
+    if (i === "phone")
+        return "phone";
+    if (i === "computer")
+        return "laptop";
+    return "bluetooth";
 }
 
 // ---- wpctl -------------------------------------------------------------------------------------------------------
@@ -445,6 +473,18 @@ function wifiScan() {
 
 function btPower(on) {
     return {op: "bt.power", on: on === true};
+}
+
+function btDiscover(on) {
+    return {op: "bt.discover", on: on === true};
+}
+
+function btPair(mac) {
+    return typeof mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(mac) ? {op: "bt.pair", mac: mac.toUpperCase()} : null;
+}
+
+function btForget(mac) {
+    return typeof mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(mac) ? {op: "bt.forget", mac: mac.toUpperCase()} : null;
 }
 
 function btConnect(mac, connect) {

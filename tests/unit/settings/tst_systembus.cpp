@@ -470,9 +470,18 @@ ManagedObjects bluez(bool powered = true, bool withAdapter = true)
 {
     ManagedObjects o;
     if (withAdapter)
-        o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0"))][QStringLiteral("org.bluez.Adapter1")] = {{"Address", QStringLiteral("00:11:22:33:44:55")}, {"Powered", powered}};
+        o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0"))][QStringLiteral("org.bluez.Adapter1")] = {{"Address", QStringLiteral("00:11:22:33:44:55")}, {"Powered", powered},
+                                                                                              {"Alias", QStringLiteral("gf-ref")}, {"Discovering", true}, {"Discoverable", false}};
     o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"))][QStringLiteral("org.bluez.Device1")] =
-        {{"Address", QStringLiteral("aa:bb:cc:dd:ee:ff")}, {"Alias", QStringLiteral("Headphones")}, {"Name", QStringLiteral("WH-1000")}, {"Paired", true}, {"Connected", true}};
+        {{"Address", QStringLiteral("aa:bb:cc:dd:ee:ff")}, {"Alias", QStringLiteral("Headphones")}, {"Name", QStringLiteral("WH-1000")}, {"Paired", true}, {"Connected", true},
+         {"Icon", QStringLiteral("audio-headphones")}};
+    o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"))][QStringLiteral("org.bluez.Battery1")] = {{"Percentage", QVariant::fromValue<uchar>(80)}};
+    // In range and not paired: nearby, by its name; one with only an address-like alias and no name is not shown.
+    o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0/dev_33_33_33_33_33_33"))][QStringLiteral("org.bluez.Device1")] =
+        {{"Address", QStringLiteral("33:33:33:33:33:33")}, {"Alias", QStringLiteral("Keyboard K3")}, {"Name", QStringLiteral("Keyboard K3")}, {"Paired", false},
+         {"Connected", false}, {"RSSI", QVariant::fromValue<short>(-48)}, {"Icon", QStringLiteral("input-keyboard")}};
+    o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0/dev_44_44_44_44_44_44"))][QStringLiteral("org.bluez.Device1")] =
+        {{"Address", QStringLiteral("44:44:44:44:44:44")}, {"Alias", QStringLiteral("44-44-44-44-44-44")}, {"Paired", false}, {"RSSI", QVariant::fromValue<short>(-70)}};
     o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0/dev_11_22_33_44_55_66"))][QStringLiteral("org.bluez.Device1")] =
         {{"Address", QStringLiteral("11:22:33:44:55:66")}, {"Name", QStringLiteral("Mouse")}, {"Paired", true}, {"Connected", false}};
     o[QDBusObjectPath(QStringLiteral("/org/bluez/hci0/dev_66_66_66_66_66_66"))][QStringLiteral("org.bluez.Device1")] =
@@ -491,7 +500,8 @@ struct BtFixture {
         bus.handler = [this](const Call &c) {
             if (c.member == QLatin1String("GetManagedObjects"))
                 return ok({QVariant::fromValue(objects)});
-            if (c.member == QLatin1String("Set") || c.member == QLatin1String("Connect") || c.member == QLatin1String("Disconnect"))
+            if (c.member == QLatin1String("Set") || c.member == QLatin1String("Connect") || c.member == QLatin1String("Disconnect") || c.member == QLatin1String("Pair")
+                || c.member == QLatin1String("RemoveDevice") || c.member == QLatin1String("StartDiscovery") || c.member == QLatin1String("StopDiscovery"))
                 return ok();
             return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: ") + c.member);
         };
@@ -518,8 +528,97 @@ TEST(SystemBusBluetooth, StateListsThePairedDevicesOnly)
     EXPECT_EQ(names["77:77:77:77:77:77"], QStringLiteral("77:77:77:77:77:77")); // else the address
     EXPECT_TRUE(connected["AA:BB:CC:DD:EE:FF"]);
     EXPECT_FALSE(connected["11:22:33:44:55:66"]);
+    // The adapter's name and discovery; a device's icon and battery (-1 when BlueZ has none).
+    EXPECT_EQ(r.json["alias"].toString(), QStringLiteral("gf-ref"));
+    EXPECT_TRUE(r.json["discovering"].toBool());
+    EXPECT_FALSE(r.json["discoverable"].toBool());
+    for (const QJsonValue v : r.json["devices"].toArray()) {
+        if (v["mac"].toString() == QLatin1String("AA:BB:CC:DD:EE:FF")) {
+            EXPECT_EQ(v["icon"].toString(), QStringLiteral("audio-headphones"));
+            EXPECT_EQ(v["battery"].toInt(), 80);
+        } else {
+            EXPECT_EQ(v["battery"].toInt(), -1);
+        }
+    }
+    // Nearby: the unpaired device in range with a name; not the one seen earlier (no RSSI), not the nameless one.
+    const QJsonArray nearby = r.json["nearby"].toArray();
+    ASSERT_EQ(nearby.size(), 1);
+    EXPECT_EQ(nearby[0]["mac"].toString(), QStringLiteral("33:33:33:33:33:33"));
+    EXPECT_EQ(nearby[0]["name"].toString(), QStringLiteral("Keyboard K3"));
+    EXPECT_EQ(nearby[0]["icon"].toString(), QStringLiteral("input-keyboard"));
+    EXPECT_EQ(nearby[0]["rssi"].toInt(), -48);
     for (const Call &c : f.bus.calls)
         EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args));
+}
+
+TEST(SystemBusBluetooth, PairingTrustsAndConnectsTheNearbyDevice)
+{
+    BtFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.pair"}, {"mac", "33:33:33:33:33:33"}}), QString());
+    QStringList members;
+    for (const Call &c : f.bus.calls) {
+        if (c.member != QLatin1String("GetManagedObjects"))
+            members << c.member + QLatin1Char(' ') + c.path.section(QLatin1Char('/'), -1);
+    }
+    EXPECT_EQ(members, (QStringList{QStringLiteral("Pair dev_33_33_33_33_33_33"), QStringLiteral("Set dev_33_33_33_33_33_33"), QStringLiteral("Connect dev_33_33_33_33_33_33")}));
+    const auto pair = std::find_if(f.bus.calls.cbegin(), f.bus.calls.cend(), [](const Call &c) { return c.member == QLatin1String("Pair"); });
+    EXPECT_EQ(pair->timeoutMs, 120000); // the device may ask its user first
+    const auto trust = std::find_if(f.bus.calls.cbegin(), f.bus.calls.cend(), [](const Call &c) { return c.member == QLatin1String("Set"); });
+    EXPECT_EQ(trust->args[1].toString(), QStringLiteral("Trusted"));
+    EXPECT_TRUE(qvariant_cast<QDBusVariant>(trust->args[2]).variant().toBool());
+    EXPECT_TRUE(privilegedAction({{"op", "bt.pair"}}));
+    // Already paired: trusted and connected, no second Pair.
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.pair"}, {"mac", "11:22:33:44:55:66"}}), QString());
+    for (const Call &c : f.bus.calls)
+        EXPECT_NE(c.member, QStringLiteral("Pair"));
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.pair"}, {"mac", "01:02:03:04:05:06"}}), QStringLiteral("that device is no longer nearby"));
+    // A refusal (a device that wants a PIN) gives BlueZ's reason and connects nothing.
+    BtFixture g;
+    g.bus.handler = [&g](const Call &c) {
+        if (c.member == QLatin1String("GetManagedObjects"))
+            return ok({QVariant::fromValue(g.objects)});
+        return err(QStringLiteral("org.bluez.Error.AuthenticationFailed: Authentication Failed"));
+    };
+    EXPECT_EQ(runAction(g.bus, {{"op", "bt.pair"}, {"mac", "33:33:33:33:33:33"}}), QStringLiteral("Authentication Failed"));
+    for (const Call &c : g.bus.calls)
+        EXPECT_NE(c.member, QStringLiteral("Connect"));
+}
+
+TEST(SystemBusBluetooth, DiscoveryAndForgetMakeExactlyTheirCalls)
+{
+    BtFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.discover"}, {"on", true}}), QString());
+    EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("StartDiscovery"));
+    EXPECT_EQ(f.bus.calls.last().path, QStringLiteral("/org/bluez/hci0"));
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.discover"}, {"on", false}}), QString());
+    EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("StopDiscovery"));
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.forget"}, {"mac", "11:22:33:44:55:66"}}), QString());
+    EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("RemoveDevice"));
+    EXPECT_EQ(f.bus.calls.last().path, QStringLiteral("/org/bluez/hci0"));
+    EXPECT_EQ(qvariant_cast<QDBusObjectPath>(f.bus.calls.last().args[0]).path(), QStringLiteral("/org/bluez/hci0/dev_11_22_33_44_55_66"));
+    // A discovery that already runs (or already stopped) is not a failure.
+    BtFixture g;
+    g.bus.handler = [&g](const Call &c) {
+        if (c.member == QLatin1String("GetManagedObjects"))
+            return ok({QVariant::fromValue(g.objects)});
+        return err(QStringLiteral("org.bluez.Error.InProgress: Operation already in progress"));
+    };
+    EXPECT_EQ(runAction(g.bus, {{"op", "bt.discover"}, {"on", true}}), QString());
+    // Bad values never reach the bus; a dev session sends none of these.
+    for (const QVariantMap &op : {QVariantMap{{"op", "bt.pair"}, {"mac", "nope"}}, QVariantMap{{"op", "bt.forget"}, {"mac", "11:22:33:44:55"}},
+                                  QVariantMap{{"op", "bt.discover"}, {"on", "yes"}}}) {
+        f.bus.calls.clear();
+        EXPECT_EQ(runAction(f.bus, op), QStringLiteral("invalid request"));
+        EXPECT_TRUE(f.bus.calls.isEmpty());
+    }
+    GuardedCaller dev(f.bus, true);
+    f.bus.calls.clear();
+    for (const QVariantMap &op : {QVariantMap{{"op", "bt.pair"}, {"mac", "33:33:33:33:33:33"}}, QVariantMap{{"op", "bt.forget"}, {"mac", "11:22:33:44:55:66"}},
+                                  QVariantMap{{"op", "bt.discover"}, {"on", true}}})
+        EXPECT_TRUE(runAction(dev, op).startsWith(QStringLiteral("dev guard"))) << qPrintable(op.value("op").toString());
+    for (const Call &c : f.bus.calls)
+        EXPECT_EQ(c.member, QStringLiteral("GetManagedObjects"));
 }
 
 TEST(SystemBusBluetooth, NoAdapterAndAStoppedServiceAreTold)

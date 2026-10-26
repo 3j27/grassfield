@@ -1382,6 +1382,38 @@ QtObject {
     readonly property real settingsServiceStatusInset: 61.5
     // an empty list's group (VPN: No VPN configurations): 36 tall, the text centred in the secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
     readonly property int settingsEmptyListHeight: 36
+    // Bluetooth's header text: 12 pt (cap 9), larger than Wi-Fi's 11 [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextSize: 12
+    // Bluetooth's header text: lines 15 apart [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextLineHeight: 15
+    // Bluetooth's header text: first baseline 40 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextBaseline: 40
+    // Bluetooth's header row: 13 under the text's last baseline (68 tall with two lines) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderBottom: 13
+    // a note row under a header row (Bluetooth's name): 13 pt, secondary colour, first baseline 23 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsNoteBaseline: 23
+    // the note's lines 15 apart [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsNoteLineHeight: 15
+    // the note row: 12.5 under its last baseline (50 tall with two lines) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsNoteBottom: 12.5
+    // a device row (My Devices): 57 tall [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsDeviceRowHeight: 57
+    // the device's name (13 pt): baseline 26.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsDeviceNameBaseline: 26.5
+    // the device's status (13 pt, secondary colour): baseline 44.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsDeviceStatusBaseline: 44.5
+    // the device's name and status at 48.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsDeviceTextInset: 48.5
+    // the device's picture: Apple's is a product image (ink 19 x 30 centred at 24); Grassfield draws a 28-pt glyph centred there [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsDeviceGlyphSize: 28
+    // the device glyph's box at 10 from the group edge (centred at 24) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsDeviceGlyphInset: 10
+    // the (i) button: a 16.5-pt ring, the glyph's ring is 20/24 of its box [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsInfoSize: 20
+    // the (i) box's right edge 10 from the group edge (its ring 12) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsInfoInset: 10
+    // the (i) box's top 12 below the row top (its ring 14, beside the name) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsInfoTop: 12
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

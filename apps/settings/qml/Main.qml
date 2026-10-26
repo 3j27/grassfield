@@ -694,7 +694,21 @@ Window {
         BluetoothPage {
             backend: root.backend
             system: sys
+            onInfoRequested: device => bluetoothDevice.openFor(device)
+            onForgetRequested: device => forgetDevice.openFor(device)
         }
+    }
+
+    // Bluetooth: a device's sheet and Forget This Device…; the page acts on the answers.
+    BluetoothDeviceSheet {
+        id: bluetoothDevice
+        onConnectRequested: device => (page.item as BluetoothPage)?.connectDevice(device)
+        onForgetRequested: device => forgetDevice.openFor(device)
+    }
+
+    ForgetDeviceSheet {
+        id: forgetDevice
+        onForget: device => (page.item as BluetoothPage)?.forget(device)
     }
 
     Component {

@@ -1403,6 +1403,72 @@
     </message>
 </context>
 <context>
+    <name>BluetoothDeviceRow</name>
+    <message>
+        <source>%1 %</source>
+        <translation>%1 %</translation>
+    </message>
+    <message>
+        <source>Details of %1</source>
+        <translation>Détails de %1</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
+    <message>
+        <source>Connect %1</source>
+        <translation>Connecter %1</translation>
+    </message>
+</context>
+<context>
+    <name>BluetoothDeviceSheet</name>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Address</source>
+        <translation>Adresse</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>%1 %</source>
+        <translation>%1 %</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Not Connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
+    <message>
+        <source>Forget This Device…</source>
+        <translation>Oublier cet appareil…</translation>
+    </message>
+</context>
+<context>
     <name>BluetoothList</name>
     <message>
         <source>No Bluetooth adapter</source>
@@ -1456,24 +1522,32 @@
         <translation>Bluetooth n’est pas disponible&#xa0;: aucun adaptateur trouvé ou le service Bluetooth n’est pas lancé.</translation>
     </message>
     <message>
+        <source>Connect accessories such as headphones, keyboards, mice and game controllers to this computer.</source>
+        <translation>Connectez à cet ordinateur des accessoires comme des écouteurs, des claviers, des souris et des manettes de jeu.</translation>
+    </message>
+    <message>
+        <source>Other devices see this computer as “%1”.</source>
+        <translation>Les autres appareils voient cet ordinateur sous le nom « %1 ».</translation>
+    </message>
+    <message>
         <source>My Devices</source>
         <translation>Mes appareils</translation>
     </message>
     <message>
-        <source>No paired devices. Pair a device with your system&apos;s Bluetooth tools.</source>
-        <translation>Aucun appareil associé. Associez un appareil avec les outils Bluetooth du système.</translation>
+        <source>No paired devices</source>
+        <translation>Aucun appareil jumelé</translation>
     </message>
     <message>
-        <source>Devices are paired outside Settings for now.</source>
-        <translation>Les appareils sont associés en dehors des Réglages pour l’instant.</translation>
+        <source>Nearby Devices</source>
+        <translation>Appareils à proximité</translation>
     </message>
     <message>
-        <source>Disconnect</source>
-        <translation>Déconnecter</translation>
+        <source>Searching…</source>
+        <translation>Recherche…</translation>
     </message>
     <message>
-        <source>Connect</source>
-        <translation>Connecter</translation>
+        <source>No devices found</source>
+        <translation>Aucun appareil trouvé</translation>
     </message>
 </context>
 <context>
@@ -3233,6 +3307,21 @@
     </message>
 </context>
 <context>
+    <name>ForgetDeviceSheet</name>
+    <message>
+        <source>Forget “%1”?</source>
+        <translation>Oublier « %1 » ?</translation>
+    </message>
+    <message>
+        <source>The device is removed from this computer. To use it again, pair it again.</source>
+        <translation>L’appareil est supprimé de cet ordinateur. Pour l’utiliser de nouveau, jumelez-le de nouveau.</translation>
+    </message>
+    <message>
+        <source>Forget Device</source>
+        <translation>Oublier l’appareil</translation>
+    </message>
+</context>
+<context>
     <name>ForgetNetworkSheet</name>
     <message>
         <source>Forget Wi-Fi network “%1”?</source>
@@ -4733,7 +4822,7 @@
     </message>
     <message>
         <source>%1 Mbit/s</source>
-        <translation>%1 Mbit/s</translation>
+        <translation>%1&#xa0;Mbit/s</translation>
     </message>
     <message>
         <source>Speed</source>
@@ -4773,7 +4862,7 @@
     </message>
     <message>
         <source>No address: not connected</source>
-        <translation>Aucune adresse : non connecté</translation>
+        <translation>Aucune adresse&#xa0;: non connecté</translation>
     </message>
     <message>
         <source>Forget This Network…</source>
@@ -4863,7 +4952,7 @@
     </message>
     <message>
         <source>The network is not available: NetworkManager did not answer.</source>
-        <translation>Le réseau n’est pas disponible : NetworkManager n’a pas répondu.</translation>
+        <translation>Le réseau n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
     </message>
 </context>
 <context>
@@ -6263,6 +6352,10 @@
         <translation>Cet appareil n’est pas encore associé</translation>
     </message>
     <message>
+        <source>that device is no longer nearby</source>
+        <translation>Cet appareil n’est plus à proximité</translation>
+    </message>
+    <message>
         <source>that device is no longer paired</source>
         <translation>Cet appareil n’est plus associé</translation>
     </message>
@@ -6600,7 +6693,7 @@
     </message>
     <message>
         <source>VPN is not available: NetworkManager did not answer.</source>
-        <translation>Le VPN n’est pas disponible : NetworkManager n’a pas répondu.</translation>
+        <translation>Le VPN n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
     </message>
     <message>
         <source>No VPN configurations</source>

@@ -41,6 +41,7 @@ const QString kBluez = QStringLiteral("org.bluez");
 const QString kObjectManager = QStringLiteral("org.freedesktop.DBus.ObjectManager");
 const QString kAdapter = QStringLiteral("org.bluez.Adapter1");
 const QString kDevice1 = QStringLiteral("org.bluez.Device1");
+const QString kBattery1 = QStringLiteral("org.bluez.Battery1");
 // The General pane's services (ADR-0026).
 const QString kHostService = QStringLiteral("org.freedesktop.hostname1");
 const QString kHostPath = QStringLiteral("/org/freedesktop/hostname1");
@@ -663,24 +664,41 @@ StateResult bluetoothState(BusCaller &bus)
     const QString adapter = firstAdapterPath(objects);
     QJsonObject out{{QStringLiteral("present"), !adapter.isEmpty()}, {QStringLiteral("powered"), false}};
     QJsonArray devices;
+    QJsonArray nearby;
     if (!adapter.isEmpty()) {
-        out.insert(QStringLiteral("powered"), objects.value(QDBusObjectPath(adapter)).value(kAdapter).value(QStringLiteral("Powered")).toBool());
+        const QVariantMap a = objects.value(QDBusObjectPath(adapter)).value(kAdapter);
+        out.insert(QStringLiteral("powered"), a.value(QStringLiteral("Powered")).toBool());
+        out.insert(QStringLiteral("discovering"), a.value(QStringLiteral("Discovering")).toBool());
+        out.insert(QStringLiteral("discoverable"), a.value(QStringLiteral("Discoverable")).toBool());
+        out.insert(QStringLiteral("alias"), clean(a.value(QStringLiteral("Alias"))));
         for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
             const QVariantMap d = it.value().value(kDevice1);
-            if (d.isEmpty() || !d.value(QStringLiteral("Paired")).toBool())
+            if (d.isEmpty())
                 continue;
             const QString mac = d.value(QStringLiteral("Address")).toString().toUpper();
             if (!isMac(mac))
                 continue;
-            QString name = d.value(QStringLiteral("Alias")).toString().trimmed();
-            if (name.isEmpty())
-                name = d.value(QStringLiteral("Name")).toString().trimmed();
-            devices.append(QJsonObject{{QStringLiteral("mac"), mac},
-                                       {QStringLiteral("name"), name.isEmpty() ? mac : name},
-                                       {QStringLiteral("connected"), d.value(QStringLiteral("Connected")).toBool()}});
+            // BlueZ's Alias is the Name when the device gave one, else the address with '-' for ':' (no name to show).
+            QString name = clean(d.value(QStringLiteral("Alias"))).trimmed();
+            if (name.isEmpty() || name.compare(QString(mac).replace(QLatin1Char(':'), QLatin1Char('-')), Qt::CaseInsensitive) == 0)
+                name = clean(d.value(QStringLiteral("Name"))).trimmed();
+            const QString icon = clean(d.value(QStringLiteral("Icon")));
+            if (d.value(QStringLiteral("Paired")).toBool()) {
+                const QVariantMap battery = it.value().value(kBattery1);
+                devices.append(QJsonObject{{QStringLiteral("mac"), mac},
+                                           {QStringLiteral("name"), name.isEmpty() ? mac : name},
+                                           {QStringLiteral("connected"), d.value(QStringLiteral("Connected")).toBool()},
+                                           {QStringLiteral("icon"), icon},
+                                           {QStringLiteral("battery"), battery.contains(QStringLiteral("Percentage")) ? static_cast<int>(battery.value(QStringLiteral("Percentage")).toUInt()) : -1}});
+            } else if (!name.isEmpty() && d.contains(QStringLiteral("RSSI"))) {
+                // Nearby: seen by this discovery (BlueZ keeps RSSI only for devices in range) and with a name to show.
+                nearby.append(QJsonObject{{QStringLiteral("mac"), mac}, {QStringLiteral("name"), name}, {QStringLiteral("icon"), icon},
+                                          {QStringLiteral("rssi"), d.value(QStringLiteral("RSSI")).toInt()}});
+            }
         }
     }
     out.insert(QStringLiteral("devices"), devices);
+    out.insert(QStringLiteral("nearby"), nearby);
     r.ok = true;
     r.json = out;
     return r;
@@ -816,7 +834,7 @@ bool privilegedAction(const QVariantMap &op)
 {
     const QString name = op.value(QStringLiteral("op")).toString();
     return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget")
-        || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure");
+        || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure") || name == QLatin1String("bt.pair");
 }
 
 bool validAction(const QVariantMap &op)
@@ -848,6 +866,10 @@ bool validAction(const QVariantMap &op)
         return isUuid(op.value(QStringLiteral("uuid")).toString()) && isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("bt.connect"))
         return isMac(op.value(QStringLiteral("mac")).toString()) && isBool(op.value(QStringLiteral("connect")));
+    if (name == QLatin1String("bt.discover"))
+        return isBool(op.value(QStringLiteral("on")));
+    if (name == QLatin1String("bt.pair") || name == QLatin1String("bt.forget"))
+        return isMac(op.value(QStringLiteral("mac")).toString());
     return false;
 }
 
@@ -1058,21 +1080,58 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
     const ManagedObjects objects = bluezObjects(bus, &error);
     if (!error.isEmpty())
         return fail(error);
+    const QString adapter = firstAdapterPath(objects);
     if (name == QLatin1String("bt.power")) {
-        const QString adapter = firstAdapterPath(objects);
         return adapter.isEmpty() ? QCoreApplication::translate("SystemBus", "no Bluetooth adapter") : setProperty(bus, kBluez, adapter, kAdapter, QStringLiteral("Powered"), op.value(QStringLiteral("on")).toBool());
+    }
+    // Looking for nearby devices while the pane is open. BlueZ ends a discovery when its client leaves the bus, so a window that
+    // closes without StopDiscovery stops it too. Already running or already stopped is not a failure.
+    if (name == QLatin1String("bt.discover")) {
+        if (adapter.isEmpty())
+            return QCoreApplication::translate("SystemBus", "no Bluetooth adapter");
+        const bool on = op.value(QStringLiteral("on")).toBool();
+        const BusReply r = bus.call(kBluez, adapter, kAdapter, on ? QStringLiteral("StartDiscovery") : QStringLiteral("StopDiscovery"), {}, kActMs); // i18n-ignore: D-Bus method names
+        if (r.ok || r.error.startsWith(QLatin1String("org.bluez.Error.InProgress")) || r.error.startsWith(QLatin1String("org.bluez.Error.NotReady"))
+            || (!on && r.error.startsWith(QLatin1String("org.bluez.Error.Failed"))))
+            return QString();
+        return fail(r.error);
     }
     const QString mac = op.value(QStringLiteral("mac")).toString().toUpper();
     for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
         const QVariantMap d = it.value().value(kDevice1);
         if (d.isEmpty() || d.value(QStringLiteral("Address")).toString().toUpper() != mac)
             continue;
-        // macOS pairs first: a device that is not paired is refused here (pairing needs an agent, which Settings does not run).
+        const QString path = it.key().path();
+        // Pair a nearby device, trust it (it may connect again on its own) and connect it. Settings registers no pairing agent:
+        // BlueZ pairs as a device without input or output (Just Works), which most mice, keyboards and headphones accept; one
+        // that needs a PIN is refused by the device and its reason shown. The pairing can wait for the device (kPrivilegedMs).
+        if (name == QLatin1String("bt.pair")) {
+            if (!d.value(QStringLiteral("Paired")).toBool()) {
+                const BusReply r = bus.call(kBluez, path, kDevice1, QStringLiteral("Pair"), {}, kPrivilegedMs);
+                if (!r.ok && !r.error.startsWith(QLatin1String("org.bluez.Error.AlreadyExists")))
+                    return fail(r.error);
+            }
+            const QString trust = setProperty(bus, kBluez, path, kDevice1, QStringLiteral("Trusted"), true);
+            if (!trust.isEmpty())
+                return trust;
+            const BusReply c = bus.call(kBluez, path, kDevice1, QStringLiteral("Connect"), {}, kActMs);
+            return c.ok ? QString() : fail(c.error);
+        }
+        // Forget This Device: BlueZ removes the device and its keys.
+        if (name == QLatin1String("bt.forget")) {
+            if (adapter.isEmpty())
+                return QCoreApplication::translate("SystemBus", "no Bluetooth adapter");
+            const BusReply r = bus.call(kBluez, adapter, kAdapter, QStringLiteral("RemoveDevice"), {QVariant::fromValue(QDBusObjectPath(path))}, kActMs);
+            return r.ok ? QString() : fail(r.error);
+        }
+        // Connect or disconnect a paired device (macOS pairs first).
         if (op.value(QStringLiteral("connect")).toBool() && !d.value(QStringLiteral("Paired")).toBool())
             return QCoreApplication::translate("SystemBus", "that device is not paired yet");
-        const BusReply r = bus.call(kBluez, it.key().path(), kDevice1, op.value(QStringLiteral("connect")).toBool() ? QStringLiteral("Connect") : QStringLiteral("Disconnect"), {}, kActMs); // i18n-ignore: D-Bus method names
+        const BusReply r = bus.call(kBluez, path, kDevice1, op.value(QStringLiteral("connect")).toBool() ? QStringLiteral("Connect") : QStringLiteral("Disconnect"), {}, kActMs); // i18n-ignore: D-Bus method names
         return r.ok ? QString() : fail(r.error);
     }
+    if (name == QLatin1String("bt.pair"))
+        return QCoreApplication::translate("SystemBus", "that device is no longer nearby");
     return QCoreApplication::translate("SystemBus", "that device is no longer paired");
 }
 

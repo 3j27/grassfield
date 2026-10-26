@@ -16,7 +16,9 @@ The NetworkManager world: radio on; an Ethernet device and a Wi-Fi device wlan0 
 "Home" (secured, strong, active), "Home" (secured, weak), "Cafe" (open), a saved Wi-Fi profile for "Home" and an Ethernet one.
 For the network panes: wlan0's addresses (IP4Config, IP6Config), its active connection, a VPN profile (connected) and a WireGuard
 one; Delete on a profile removes it; a join with the password "wrong horse" goes down (its active connection's State 4).
-The BlueZ world: adapter hci0 powered; paired Headphones (connected), paired Mouse, an unpaired device.
+The BlueZ world: adapter hci0 powered (named gf-test, not discovering); paired Headphones (connected, battery 80), paired Mouse,
+an unpaired device seen earlier, and an unpaired Keyboard K3 in range (an RSSI); discovery, Pair, Trusted and RemoveDevice keep
+what they did.
 The General world (one process, five names): hostname1 (the reference machine, a laptop), timedate1 (Europe/Paris, NTP on, a fixed
 time; ListTimezones), timesync1 (a server and the fallback list), locale1 (LANG=en_US.UTF-8), systemd1 (the user manager: one of
 the user's own services under GF_TEST_BUS_DIR/units, one a package ships; Enable/DisableUnitFiles, Reload). The Set* methods of
@@ -246,34 +248,66 @@ def bluez_world(svc):
         adapter + "/dev_AA_BB_CC_DD_EE_FF": ("AA:BB:CC:DD:EE:FF", "Headphones", "WH-1000", True, True),
         adapter + "/dev_11_22_33_44_55_66": ("11:22:33:44:55:66", None, "Mouse", True, False),
         adapter + "/dev_66_66_66_66_66_66": ("66:66:66:66:66:66", None, "Seen only", False, False),
+        adapter + "/dev_33_33_33_33_33_33": ("33:33:33:33:33:33", "Keyboard K3", "Keyboard K3", False, False),
     }
+    extra = {  # Icon, RSSI (in range), Battery1 Percentage
+        adapter + "/dev_AA_BB_CC_DD_EE_FF": ("audio-headphones", None, 80),
+        adapter + "/dev_33_33_33_33_33_33": ("input-keyboard", -48, None),
+    }
+    batteries = {path: e[2] for path, e in extra.items() if e[2] is not None}
 
-    def device_props(address, alias, name, paired, connected):
-        p = {"Address": V("s", address), "Name": V("s", name), "Paired": V("b", paired), "Connected": V("b", connected), "Adapter": V("o", adapter)}
+    def device_props(path, address, alias, name, paired, connected):
+        p = {"Address": V("s", address), "Name": V("s", name), "Paired": V("b", paired), "Connected": V("b", connected), "Adapter": V("o", adapter),
+             "Trusted": V("b", False)}
         if alias:
             p["Alias"] = V("s", alias)
+        icon, rssi, _ = extra.get(path, (None, None, None))
+        if icon:
+            p["Icon"] = V("s", icon)
+        if rssi is not None:
+            p["RSSI"] = V("n", rssi)
         return p
 
-    adapter_xml = '<interface name="org.bluez.Adapter1"><property name="Address" type="s" access="read"/><property name="Powered" type="b" access="readwrite"/></interface>'
-    svc.register(adapter, adapter_xml, props={"Address": V("s", "00:11:22:33:44:55"), "Powered": V("b", True)}, writable=("Powered",))
+    def set_adapter(name, value):
+        svc.props[(adapter, "org.bluez.Adapter1")][name] = value
+
+    def remove_device(p):
+        path = p.unpack()[0]
+        if path not in devices:
+            raise GLib.Error("Does Not Exist")
+        del devices[path]
+
+    adapter_xml = ('<interface name="org.bluez.Adapter1"><property name="Address" type="s" access="read"/><property name="Powered" type="b" access="readwrite"/>'
+                   '<property name="Alias" type="s" access="read"/><property name="Discovering" type="b" access="read"/>'
+                   '<property name="Discoverable" type="b" access="read"/><method name="StartDiscovery"/><method name="StopDiscovery"/>'
+                   '<method name="RemoveDevice"><arg direction="in" type="o"/></method></interface>')
+    svc.register(adapter, adapter_xml,
+                 methods={"StartDiscovery": lambda p: set_adapter("Discovering", V("b", True)), "StopDiscovery": lambda p: set_adapter("Discovering", V("b", False)),
+                          "RemoveDevice": remove_device},
+                 props={"Address": V("s", "00:11:22:33:44:55"), "Powered": V("b", True), "Alias": V("s", "gf-test"), "Discovering": V("b", False),
+                        "Discoverable": V("b", False)}, writable=("Powered",))
     dev_xml = ('<interface name="org.bluez.Device1"><property name="Address" type="s" access="read"/><property name="Alias" type="s" access="read"/>'
                '<property name="Name" type="s" access="read"/><property name="Paired" type="b" access="read"/><property name="Connected" type="b" access="read"/>'
-               '<property name="Adapter" type="o" access="read"/><method name="Connect"/><method name="Disconnect"/></interface>')
-    for path, spec in devices.items():
-        props = device_props(*spec)
+               '<property name="Adapter" type="o" access="read"/><property name="Trusted" type="b" access="readwrite"/>'
+               '<property name="Icon" type="s" access="read"/><property name="RSSI" type="n" access="read"/>'
+               '<method name="Connect"/><method name="Disconnect"/><method name="Pair"/></interface>')
+    for path, spec in list(devices.items()):
+        props = device_props(path, *spec)
 
         def make(path=path):
-            def setc(value):
-                svc.props[(path, "org.bluez.Device1")]["Connected"] = V("b", value)
+            def setp(name, value):
+                svc.props[(path, "org.bluez.Device1")][name] = V("b", value)
 
-            return {"Connect": lambda p: setc(True), "Disconnect": lambda p: setc(False)}
+            return {"Connect": lambda p: setp("Connected", True), "Disconnect": lambda p: setp("Connected", False), "Pair": lambda p: setp("Paired", True)}
 
-        svc.register(path, dev_xml, methods=make(), props=props)
+        svc.register(path, dev_xml, methods=make(), props=props, writable=("Trusted",))
 
     def managed(_):
         objects = {adapter: {"org.bluez.Adapter1": dict(svc.props[(adapter, "org.bluez.Adapter1")])}}
         for path in devices:
             objects[path] = {"org.bluez.Device1": dict(svc.props[(path, "org.bluez.Device1")])}
+            if path in batteries:
+                objects[path]["org.bluez.Battery1"] = {"Percentage": V("y", batteries[path])}
         return V("(a{oa{sa{sv}}})", (objects,))
 
     svc.register("/", '<interface name="org.freedesktop.DBus.ObjectManager"><method name="GetManagedObjects"><arg direction="out" type="a{oa{sa{sv}}}"/></method></interface>',

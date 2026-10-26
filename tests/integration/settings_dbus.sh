@@ -21,6 +21,8 @@
 #      and WireGuard profiles with their state); a join with a password (key-mgmt wpa-psk, the password, the access point) kept
 #      when it comes up, its new profile deleted when it goes down; Forget This Network deletes that profile and nothing else;
 #      a VPN switched off and on; the dev guard sends none of these
+#  12  Bluetooth discovery and pairing: the adapter's name, the nearby device (an RSSI) and a paired one's battery; discovery on and
+#      off; Pair, Trusted and Connect on the nearby device, which is then paired; Forget removes a device; the dev guard
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -414,6 +416,36 @@ check "in a dev session a join, a Forget and a VPN switch are refused by the gua
 check "... a dev session still reads net-state" py "$(probe --dev net-state)" 'len(j["devices"]) == 2'
 check "... and none of them reached NetworkManager" bash -c 'tail -n +$(($2 + 1)) "$1" | grep -qE "\"member\": \"(AddAndActivateConnection|Delete|ActivateConnection|DeactivateConnection)\"" && exit 1 || exit 0' _ "$work/nm.log" "$before"
 stop_service nm
+
+say ""
+say "[12] Bluetooth discovery and pairing"
+start_service bluez
+bt=$(probe bt-state)
+check "the adapter's name and the nearby keyboard (in range, not paired), not the device only seen earlier" py "$bt" 'j["alias"] == "gf-test" and [(n["mac"], n["name"], n["icon"], n["rssi"]) for n in j["nearby"]] == [("33:33:33:33:33:33", "Keyboard K3", "input-keyboard", -48)]'
+check "... the Headphones' battery and icon" py "$bt" '[(d["battery"], d["icon"]) for d in j["devices"] if d["mac"] == "AA:BB:CC:DD:EE:FF"] == [(80, "audio-headphones")]'
+out=$(probe act '{"op":"bt.discover","on":true}')
+check "discovery on: ok ($out), StartDiscovery on the adapter, and the state says so" bash -c '[[ $1 == ok ]]' _ "$out"
+check "... StartDiscovery reached /org/bluez/hci0" logged bluez StartDiscovery /org/bluez/hci0 ""
+check "... discovering" py "$(probe bt-state)" 'j["discovering"] is True'
+out=$(probe act '{"op":"bt.pair","mac":"33:33:33:33:33:33"}')
+check "pair the keyboard: ok ($out)" test "$out" = ok
+check "... Pair, then Set Trusted true, then Connect on its object" bash -c 'grep dev_33_33_33_33_33_33 "$1" | python3 -I -c "import json,sys; m=[json.loads(l)[\"member\"] for l in sys.stdin]; sys.exit(0 if m==[\"Pair\",\"Set\",\"Connect\"] else 1)" && grep dev_33 "$1" | grep -q "Trusted true"' _ "$work/bluez.log"
+check "... the keyboard is paired and connected now" py "$(probe bt-state)" '[(d["connected"]) for d in j["devices"] if d["mac"] == "33:33:33:33:33:33"] == [True] and j["nearby"] == []'
+out=$(probe act '{"op":"bt.forget","mac":"11:22:33:44:55:66"}')
+check "forget the Mouse: ok ($out)" test "$out" = ok
+check "... RemoveDevice(its object) on the adapter" logged bluez RemoveDevice /org/bluez/hci0 "dev_11_22_33_44_55_66"
+check "... and it is gone" py "$(probe bt-state)" 'all(d["mac"] != "11:22:33:44:55:66" for d in j["devices"])'
+out=$(probe act '{"op":"bt.discover","on":false}')
+check "discovery off: ok ($out)" test "$out" = ok
+before=$(calls bluez)
+fine=1
+for op in '{"op":"bt.discover","on":true}' '{"op":"bt.pair","mac":"33:33:33:33:33:33"}' '{"op":"bt.forget","mac":"AA:BB:CC:DD:EE:FF"}'; do
+  out=$(probe --dev act "$op")
+  case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "in a dev session discovery, pairing and Forget are refused by the guard" test "$fine" -eq 1
+check "... and none of them reached BlueZ" bash -c 'tail -n +$(($2 + 1)) "$1" | grep -qE "\"member\": \"(StartDiscovery|Pair|RemoveDevice|Set|Connect)\"" && exit 1 || exit 0' _ "$work/bluez.log" "$before"
+stop_service bluez
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi

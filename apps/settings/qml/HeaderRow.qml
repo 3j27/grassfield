@@ -13,12 +13,17 @@ Item {
     property string text: ""
     property bool checked: false
     property bool switchEnabled: true
+    // The text's size, line pitch, first baseline and bottom margin: Wi-Fi's (11 pt) by default; Bluetooth's is 12 pt.
+    property int textSize: Tokens.typographyCaptionSize
+    property real textLineHeight: Tokens.settingsHeaderRowTextLineHeight
+    property real textBaseline: Tokens.settingsHeaderRowTextBaseline
+    property real textBottom: Tokens.settingsHeaderRowBottom
 
     signal toggled(bool checked)
 
     width: parent ? parent.width : implicitWidth
     implicitWidth: Tokens.settingsContentMaxWidth
-    implicitHeight: Math.round(body.y + body.baselineOffset + (body.lineCount - 1) * Tokens.settingsHeaderRowTextLineHeight + Tokens.settingsHeaderRowBottom)
+    implicitHeight: Math.round(body.y + body.baselineOffset + (body.lineCount - 1) * root.textLineHeight + root.textBottom)
     Accessible.role: Accessible.Grouping
     Accessible.name: root.title
     Accessible.description: root.text
@@ -57,16 +62,16 @@ Item {
         id: body
         textFormat: Text.PlainText
         x: Tokens.settingsHeaderRowTextInset
-        y: Tokens.settingsHeaderRowTextBaseline - baselineOffset
+        y: root.textBaseline - baselineOffset
         width: toggle.x - Tokens.settingsHeaderRowTextGap - x
         wrapMode: Text.Wrap
         lineHeightMode: Text.FixedHeight
-        lineHeight: Tokens.settingsHeaderRowTextLineHeight
+        lineHeight: root.textLineHeight
         // A line never breaks inside a hyphenated word ("Wi-Fi"): its hyphens are non-breaking ones (U+2011).
         text: root.text.replace(/-/g, "\u2011")
         color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyCaptionSize
+        font.pixelSize: root.textSize
     }
 
     Toggle {
