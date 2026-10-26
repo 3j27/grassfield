@@ -171,7 +171,12 @@ running as the user.
   - a failed URL no view shows any more is forgotten, and the retry map is bounded.
 - **Part 5:** the tray: the real `TrayButton` with fake items (IconThemePath FIFO, absolute and traversal `IconName`,
   pixmap and plain name). There is also a private-bus StatusNotifierItem run (`env -i`, a private
-  `DBUS_SESSION_BUS_ADDRESS` and a guard refusing the session bus). It is skipped where Unix sockets are blocked.
+  `DBUS_SESSION_BUS_ADDRESS` and a guard refusing the session bus). Its dbus-daemon uses the session bus's default
+  policy (a policy without a receive rule dropped every reply, the Hello reply too, so the run could never pass), and
+  `theme_icon_files.d/bus_check.py` checks first that the bus carries a method reply and a signal, naming the error when
+  it does not. The address must be exactly the socket dbus-daemon made in the test's directory. Both tray probes record
+  an icon only once its Image has stopped loading (an asynchronous load read too early showed status 2). It is skipped
+  where Unix sockets are blocked.
 
 `tests/shell/notif_image_files` and `notif_image_budget`, `notif_image_fairness` and `notif_clear` cover notification
 images. They include an SVG in a `.img` file that names a FIFO.
