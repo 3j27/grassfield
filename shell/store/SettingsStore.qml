@@ -7,15 +7,22 @@ import Grassfield.Ui
 // grassfield.json (contract version 1): schema, defaults, persistence. Not a singleton so that
 // tests can create independent instances; the shell uses it through the Settings singleton.
 // A missing or unreadable file leaves the defaults in place. The file is created on the first
-// change made through a setter (Control Center, Dock menu), never otherwise. Every key of
-// config/schema/grassfield.schema.json is declared so that a fresh file holds every key. Writes
-// are merges: each setter records its dotted key in `dirty`; before writing, the file is re-read
-// and only the dirty keys are replaced, so external edits (Settings app, by hand) and keys this
-// shell does not know (not allowed by the schema, but never dropped) survive. The result is
-// written atomically. A file that exists but is not valid JSON, or that JSON.parse cannot
-// round-trip (integers beyond 2^53, duplicate keys; JsonSafety.js, same rule as the Settings app),
-// is never overwritten (`writeBlocked`, logged once); the in-memory changes stay and the user
-// fixes the file.
+// change made through a setter (Control Center, Dock menu), never otherwise. A new file holds
+// every key of config/schema/grassfield.schema.json. Writes are merges: each setter records its
+// dotted key in `dirty`; before writing, the file is re-read and only the dirty keys are replaced,
+// so external edits (Settings app, by hand) and keys this shell does not know (not allowed by the
+// schema, but never dropped) survive. The result is written atomically (a temporary file renamed
+// over the target, following a symlinked grassfield.json to its target). A file that exists but
+// is not valid JSON, that JSON.parse cannot round-trip (integers beyond 2^53, duplicate keys;
+// JsonSafety.js, same rule as the Settings app), that is not a regular file (a FIFO, a device, a
+// directory) or is larger than maxFileBytes, is never read in full and never overwritten
+// (`writeBlocked`, logged once); the in-memory changes stay and the user fixes the file. A write
+// that fails (a read-only directory, a full disk) keeps its change pending and is retried.
+//
+// Both reads of the file (the load and the fresh read before a write) are one bounded shell
+// script (readScript): the file is never opened unless it is a regular file, at most maxFileBytes
+// are read, and a read that hangs ends after a few seconds. The JSON adapter of Quickshell's
+// FileView is not used: it reads without a limit and keeps old values.
 Scope {
     id: root
 
@@ -23,8 +30,18 @@ Scope {
     // Debounce for writes; tests use flush().
     property int saveDelay: 150
 
-    readonly property alias data: config
-    readonly property alias loaded: file.loaded
+    // The most a grassfield.json may hold (a real one is a few KiB). A larger file, or one that is not a regular file, is
+    // read as malformed without reading it: lock.* fails closed to its default and nothing is written back.
+    readonly property int maxFileBytes: 1048576
+    // The file is looked at again this often (ms) whatever the watch says: replacing a symlinked grassfield.json with a regular
+    // file leaves a file watch on the old target. A stat of the path, nothing more unless it changed.
+    property int pollInterval: 10000
+    // A directory searched before PATH for the tools the bounded read runs (head, stat, ...): tests put a stalled or a failing
+    // `head` there. Empty in the shell (never taken from the environment); a relative path is ignored.
+    property string toolDir: ""
+    readonly property var toolEnvironment: root.toolDir.charAt(0) !== "/" ? ({}) : ({"PATH": root.toolDir + ":" + Quickshell.env("PATH")})
+    // grassfield.json has been read at least once (also when it was malformed, too large or not a regular file).
+    property bool loaded: false
     // True while the file on disk could not be parsed: nothing is written until it loads again.
     property bool writeBlocked: false
     // True once a file was read and is valid (an empty file counts); false before any read and while the file on disk is
@@ -36,9 +53,10 @@ Scope {
     property bool unsafeFile: false
 
     // The last document read from the file (JSON.parse of its text, the same path a fresh start takes) with the shell's own
-    // pending changes on top. Every view reads from it, never from the adapter's properties: the adapter does not replace a
-    // property whose new value loosely equals the old one (0 and false, 10 and "10", 1 and true), so on a running shell an
-    // edit of lock.idleMinutes from 0 to false left the auto-lock off while Settings and a restarted shell read 5.
+    // pending changes on top. Every view reads from it. (Quickshell's JsonAdapter is not used: it does not replace a property
+    // whose new value loosely equals the old one (0 and false, 10 and "10", 1 and true), so on a running shell an edit of
+    // lock.idleMinutes from 0 to false left the auto-lock off while Settings and a restarted shell read 5; and it reads without
+    // a bound.)
     property var parsedFile: ({})
     property int parsedFileRevision: 0
 
@@ -105,15 +123,37 @@ Scope {
     }
 
     // The file is gone: exactly a fresh start without a file. The document is empty (every key its default, lock.idleMinutes 5),
-    // the adapter is put back to the defaults, writes are allowed again (the next change creates the file from the defaults),
-    // and the shell's own pending changes stay on top.
+    // writes are allowed again (the next change creates the file from the defaults), and the shell's own pending changes stay
+    // on top.
     function takeMissingFile(): void {
         root.parsedFile = ({});
         root.unsafeFile = false;
         root.writeBlocked = false;
         root.validRead = false;
         root.parsedFileRevision++;
-        root.resetMissingKeys("");
+        root.reapplyDirty();
+        // A change made while the file could not be used waits no longer: the next write creates the file.
+        if (Object.keys(root.dirty).length > 0)
+            root.save();
+    }
+
+    // The file cannot be used as it is (not a regular file, larger than maxFileBytes, or not readable): read as malformed. The
+    // cosmetic keys keep their last good values, lock.* fails closed (the default, as a restart reads it), nothing is written.
+    function takeBadFile(reason: string): void {
+        if (!root.writeBlocked)
+            console.warn("settings: " + root.filePath + " is " + reason + "; keeping the file untouched, changes will not be saved until it is fixed");
+        root.writeBlocked = true;
+        root.validRead = false;
+        root.unsafeFile = false;
+        // The sentinel no signature equals: whichever read found the file unusable (the load, or the read before a write), the poll
+        // reads it again, so the store recovers when the file or the reader does, whatever the file's signature says.
+        root.lastSignature = "!";
+        saveTimer.stop();
+        retryTimer.stop();
+        if ("lock" in root.parsedFile) {
+            delete root.parsedFile.lock;
+            root.parsedFileRevision++;
+        }
         root.reapplyDirty();
     }
 
@@ -377,9 +417,8 @@ Scope {
     // the file, so edits made elsewhere (Settings app, by hand) survive.
     property var dirty: ({})
 
-    // Setter helper: update the in-memory adapter and remember the key for the next merge.
+    // Setter helper: update the in-memory document and remember the key for the next merge.
     function change(path: string, value: var): void {
-        applyPath(path, value);
         setParsed(path, value);
         const d = dirty;
         d[path] = value;
@@ -387,33 +426,42 @@ Scope {
         save();
     }
 
-    function applyPath(path: string, value: var): void {
-        const parts = path.split(".");
-        let target = config;
-        for (let i = 0; i < parts.length - 1; i++) {
-            target = target[parts[i]];
-            // A group that is not an object (a var that held null or a number in a hand-edited file) has nothing to set.
-            if (target === null || target === undefined || typeof target !== "object")
-                return;
-        }
-        target[parts[parts.length - 1]] = value;
-    }
-
-    // A reload from disk replaces the adapter values; put pending local changes back on top.
+    // A reload from disk replaces the document; put pending local changes back on top.
     function reapplyDirty(): void {
-        for (const path in dirty) {
-            applyPath(path, dirty[path]);
+        for (const path in dirty)
             setParsed(path, dirty[path]);
-        }
     }
 
-    // Merge the dirty keys into the file as it is on disk right now (fresh read) and write the
+    // Merge the dirty keys into the file as it is on disk right now (fresh read, bounded) and write the
     // result atomically. Keys the shell does not know are kept as they are. A file that is
-    // missing or empty is created from the full adapter state. A malformed file is never written.
+    // missing or empty is created from the schema defaults. A malformed, oversized or non-regular file is never written.
     function writeMerged(): void {
         if (writeBlocked)
             return;
+        // A read or a write of the previous change is still running: this one follows when it ends (saveTimer).
+        if (diskRead.running || writer.running) {
+            saveTimer.restart();
+            return;
+        }
+        diskRead.command = ["sh", "-c", root.readScript, "sh", root.filePath, String(root.maxFileBytes)];
         diskRead.running = true;
+    }
+
+    // The whole document as the shell has it: the defaults with the file's own values over them (tests and diagnostics; the
+    // views read single keys through read()).
+    function document(): var {
+        const merged = defaultDocument();
+        const overlay = (base, over) => {
+            for (const key in over) {
+                if (base[key] !== null && typeof base[key] === "object" && !Array.isArray(base[key]) && over[key] !== null && typeof over[key] === "object" && !Array.isArray(over[key]))
+                    overlay(base[key], over[key]);
+                else
+                    base[key] = over[key];
+            }
+        };
+        root.parsedFileRevision;
+        overlay(merged, root.parsedFile);
+        return merged;
     }
 
     // The document of a fresh file: every key of the schema (nested) at its default, the contract version first.
@@ -432,14 +480,20 @@ Scope {
         return doc;
     }
 
-    // Second half of writeMerged(), once the fresh file text is in.
-    function mergeInto(text: string): void {
+    // Second half of writeMerged(), once the fresh read is in (its output: a status line, a signature line, the text).
+    function mergeInto(output: string): void {
         if (writeBlocked)
             return;
+        const read = root.splitRead(output);
+        if (read.status !== "ok" && read.status !== "missing") {
+            // Not a regular file, too large or unreadable: nothing is written, the change stays pending.
+            root.takeBadFile(root.badReason(read.status));
+            return;
+        }
+        const text = read.status === "missing" ? "" : read.text;
         let obj = null;
         if (text.trim() === "") {
-            // A missing or empty file: a fresh one holding every key at its default. Built from the schema defaults, never from
-            // the JSON adapter (file.writeAdapter()), which keeps the values of the file that was there before.
+            // A missing or empty file: a fresh one holding every key at its default, built from the schema defaults.
             obj = defaultDocument();
         } else {
             try {
@@ -449,6 +503,7 @@ Scope {
             }
             if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
                 checkText(text);
+                takeDocument(text);
                 return;
             }
             if (JsonSafety.unsafeReason(text) !== "") {
@@ -466,13 +521,132 @@ Scope {
             }
             target[parts[parts.length - 1]] = dirty[path];
         }
+        // The changes being written leave `dirty`; a failed write puts them back (see writer).
+        root.inFlight = dirty;
         dirty = ({});
-        // FileView skips a write equal to the text it last wrote, even when another writer (the Settings app) changed
-        // the file since: a Quick Settings change back to an earlier value was applied but never saved. Re-read first
-        // so its cache is the file on disk (the same guard as the lock marker, Lock.qml writeMarker).
-        disk.reload();
-        disk.waitForJob();
-        disk.setText(JSON.stringify(obj, null, 2) + "\n");
+        writer.text = JSON.stringify(obj, null, 2) + "\n";
+        writer.command = ["sh", "-c", root.writeScript, "sh", root.filePath];
+        writer.stdinEnabled = true; // closed after the previous text: open it again
+        writer.running = true;
+    }
+
+    // The two bounded reads. Output: the status (ok, missing, bad, unreadable, incomplete), the signature of the file (device, inode,
+    // size, mtime of what the path leads to), then the text. A file that is not a regular file is not opened (a FIFO would
+    // block, a device such as /dev/zero would never end); `stat -L` and `-f` follow a symlink to its target. At most $2 bytes
+    // are read, a read that does not end in 5 s is cut, and the status is "ok" ONLY when the read ended without error and
+    // returned exactly the size the file had: a read that was cut, failed, or met a file that changed under it is
+    // "incomplete" (it would otherwise look like an empty file, whose defaults a write would put over the user's settings).
+    // A read that returned another size than the stat said is tried once more (an atomic replacement between the two); a cut or failed read is not.
+    // The text is held in a shell variable (at most maxFileBytes): no temporary file, so a full or unwritable $TMPDIR cannot make every read fail.
+    readonly property string readScript: 'f=$1; max=$2\n'
+        + 'if [ ! -e "$f" ]; then echo missing; exit 0; fi\n'
+        + 'if [ ! -f "$f" ]; then echo bad; exit 0; fi\n'
+        + 'for attempt in 1 2; do\n'
+        + '  size=$(stat -L -c %s -- "$f" 2>/dev/null) || { echo bad; exit 0; }\n'
+        + '  if [ "$size" -gt "$max" ]; then echo bad; exit 0; fi\n'
+        + '  if [ ! -r "$f" ]; then echo unreadable; exit 0; fi\n'
+        + '  sig=$(stat -L -c "%d:%i:%s:%y" -- "$f" 2>/dev/null) || sig=-\n'
+        + '  out=$(timeout 5 head -c "$max" -- "$f" 2>/dev/null; printf "X%s" "$?")\n'
+        + '  rc=${out##*X}; data=${out%X*}\n'
+        + '  if [ "$rc" -ne 0 ]; then echo incomplete; exit 0; fi\n'
+        + '  n=$(printf "%s" "$data" | wc -c)\n'
+        + '  if [ "$n" -eq "$size" ]; then\n'
+        + '    echo ok; echo "$sig"; printf "%s" "$data"; exit 0\n'
+        + '  fi\n'
+        + 'done\n'
+        + 'echo incomplete\n'
+        + 'exit 0\n'
+    readonly property string signatureScript: 'stat -L -c "%d:%i:%s:%y" -- "$1" 2>/dev/null || echo -\n'
+
+    // The atomic write: stdin to a temporary file next to the target, synced, renamed over it. A symlinked grassfield.json is
+    // followed to its target (the link is kept, the file it names is replaced). The mode of the file that is replaced is kept (a
+    // new file gets 0666 minus the umask). `mv -T` refuses a target that became a directory. Exit 1 when anything fails; nothing
+    // is half written, and a crash after the rename leaves the synced file, never an empty one.
+    readonly property string writeScript: 'f=$(realpath -m -- "$1") || exit 1\n'
+        + 'd=$(dirname -- "$f")\n'
+        + 't=$(mktemp -- "$d/.grassfield.json.XXXXXX") || exit 1\n'
+        + 'm=$(stat -c %a -- "$f" 2>/dev/null) || m=$(printf "%03o" $((0666 & ~0$(umask))))\n'
+        + 'if chmod "$m" "$t" && cat > "$t" && sync -- "$t" && mv -fT -- "$t" "$f"; then exit 0; fi\n'
+        + 'rm -f -- "$t"\n'
+        + 'exit 1\n'
+
+    // The status, the signature and the text of a bounded read's output.
+    function splitRead(output: string): var {
+        const first = output.indexOf("\n");
+        const status = first < 0 ? output.trim() : output.slice(0, first);
+        if (status !== "ok")
+            return {status: status, signature: "", text: ""};
+        const rest = output.slice(first + 1);
+        const second = rest.indexOf("\n");
+        return {status: status, signature: second < 0 ? rest : rest.slice(0, second), text: second < 0 ? "" : rest.slice(second + 1)};
+    }
+
+    readonly property string filePath: root.configDir === "" ? "" : root.configDir + "/grassfield.json"
+
+    // The change being written (restored to `dirty` when the write fails) and how many writes failed in a row.
+    property var inFlight: ({})
+    property int writeFailures: 0
+
+    // Reads the file again now (a test, or a watch that is known to have missed something).
+    function reload(): void {
+        root.readFile();
+    }
+
+    // Reads the file now (bounded) and takes it as the document. One read at a time; a request while one runs follows it.
+    property bool rereadPending: false
+    function readFile(): void {
+        if (root.filePath === "")
+            return;
+        if (loader.running) {
+            root.rereadPending = true;
+            return;
+        }
+        loader.command = ["sh", "-c", root.readScript, "sh", root.filePath, String(root.maxFileBytes)];
+        loader.running = true;
+    }
+
+    property string lastSignature: ""
+
+    function badReason(status: string): string {
+        switch (status) {
+        case "unreadable":
+            return "not readable";
+        case "incomplete":
+            return "not read completely (cut after 5 s, a read error, or changed while it was read)";
+        }
+        return "not a regular file or larger than " + root.maxFileBytes + " bytes";
+    }
+
+    function applyRead(output: string): void {
+        const read = root.splitRead(output);
+        if (read.status === "missing") {
+            root.lastSignature = "-";
+            root.takeMissingFile();
+        } else if (read.status === "ok") {
+            root.lastSignature = read.signature;
+            root.loaded = true;
+            root.checkText(read.text);
+            root.takeDocument(read.text);
+            root.reapplyDirty();
+            // A change that waited because the file could not be read (it is readable now) is written now.
+            if (Object.keys(root.dirty).length > 0)
+                root.save();
+            root.loadedFile();
+        } else {
+            // A sentinel no signature equals: the poll reads such a file again every pollInterval, whether or not the watch
+            // reported its removal or repair (it does not for a symlink to a device, a directory, a file it could not read).
+            root.loaded = true;
+            root.takeBadFile(root.badReason(read.status));
+        }
+        root.armWatch();
+    }
+
+    // The file watch is set again on the path after every read: a watch follows the file it was set on, not the path.
+    property string watchPath: ""
+    function armWatch(): void {
+        const want = watchedDir.ready ? root.filePath : "";
+        root.watchPath = "";
+        root.watchPath = want;
     }
 
     function save(): void {
@@ -509,50 +683,11 @@ Scope {
         }
         unsafeFile = unsafeNow;
         if (!ok && !writeBlocked)
-            console.warn("settings: " + file.path + " " + why + "; keeping the file untouched, changes will not be saved until it is fixed");
+            console.warn("settings: " + root.filePath + " " + why + "; keeping the file untouched, changes will not be saved until it is fixed");
         writeBlocked = !ok;
         validRead = ok;
         if (!ok)
             saveTimer.stop();
-    }
-
-    function reload(): void {
-        file.reload();
-    }
-
-    // The views read parsedFile, not the adapter, and a write is built from the file on disk (or the schema defaults), not from the adapter either.
-    // The adapter keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so an emptied
-    // file would show stale values in store.data. A missing key is the default there too: put it back after each load, for every
-    // key of the contract (SettingsContract.ALL_DEFAULTS; unsaved local changes go on top again in reapplyDirty). A file that
-    // cannot be parsed is left alone.
-    function resetMissingKeys(text: string): void {
-        let parsed = null;
-        try {
-            parsed = text.trim() === "" ? {} : JSON.parse(text);
-        } catch (e) {
-            return;
-        }
-        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-            return;
-        for (const path in SettingsContract.ALL_DEFAULTS) {
-            let node = parsed;
-            let present = true;
-            for (const part of path.split(".")) {
-                if (node === null || typeof node !== "object" || Array.isArray(node) || !(part in node)) {
-                    present = false;
-                    break;
-                }
-                node = node[part];
-            }
-            if (!present) {
-                // wallpaper.online is one var holding an object (it may hold anything in a hand-edited file, null included):
-                // it is put back whole.
-                if (path === "wallpaper.online.provider")
-                    config.wallpaper.online = {provider: SettingsContract.ALL_DEFAULTS[path]};
-                else
-                    applyPath(path, JSON.parse(JSON.stringify(SettingsContract.ALL_DEFAULTS[path])));
-            }
-        }
     }
 
     Timer {
@@ -574,27 +709,97 @@ Scope {
         }
     }
 
-    // Every key of the schema, a var each, with its default (generated: scripts/dev/gen-settings.py).
-    SettingsData {
-        id: config
-    }
-
-    // Fresh read of the file for the merge (the watched FileView may lag behind an external write).
+    // The bounded read for the merge before a write.
     Process {
         id: diskRead
-        command: ["sh", "-c", 'cat "$1" 2>/dev/null; true', "sh", file.path]
+        environment: root.toolEnvironment
         stdout: StdioCollector {
             onStreamFinished: root.mergeInto(text)
         }
     }
 
-    // Atomic write of the merged text; never watched.
-    FileView {
-        id: disk
-        path: file.path
-        printErrors: false
-        atomicWrites: true
-        onSaved: root.saved()
+    // The atomic write; its text comes in on stdin (no size limit of an argument). A failed write puts its changes back.
+    Process {
+        id: writer
+        property string text: ""
+        stdinEnabled: true
+        onStarted: {
+            writer.write(writer.text);
+            writer.stdinEnabled = false;
+        }
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => {
+            if (exitCode === 0) {
+                root.writeFailures = 0;
+                root.inFlight = ({});
+                root.saved();
+                // The watch also reports it; the file is read again so the document is what is on disk.
+                root.readFile();
+                return;
+            }
+            // Keep every change that was in flight (unless a newer value of the same key was set meanwhile) and try again.
+            const d = root.dirty;
+            for (const path in root.inFlight) {
+                if (!(path in d))
+                    d[path] = root.inFlight[path];
+            }
+            root.dirty = d;
+            root.inFlight = ({});
+            root.writeFailures++;
+            if (root.writeFailures === 1)
+                console.warn("settings: " + root.filePath + " could not be written; the change stays pending and is retried");
+            retryTimer.interval = Math.min(60000, 2000 * Math.pow(2, Math.min(root.writeFailures - 1, 5)));
+            retryTimer.restart();
+        }
+    }
+
+    // A failed write is retried with a growing pause (2 s, 4 s, ... 60 s) while changes are pending.
+    Timer {
+        id: retryTimer
+        onTriggered: {
+            if (!root.writeBlocked && Object.keys(root.dirty).length > 0)
+                mkdir.running = true;
+        }
+    }
+
+    // The bounded load of the file.
+    Process {
+        id: loader
+        environment: root.toolEnvironment
+        stdout: StdioCollector {
+            onStreamFinished: root.applyRead(text)
+        }
+        onRunningChanged: {
+            if (!running && root.rereadPending) {
+                root.rereadPending = false;
+                root.readFile();
+            }
+        }
+    }
+
+    // The signature of the path now; a change since the last read is read again (see pollInterval).
+    Process {
+        id: probe
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const now = text.trim();
+                // "-" is a path that leads to nothing (read as missing); "!" is the sentinel of a file that could not be used.
+                if (now !== root.lastSignature)
+                    root.readFile();
+            }
+        }
+    }
+
+    Timer {
+        interval: root.pollInterval
+        repeat: true
+        running: watchedDir.ready && root.filePath !== ""
+        onTriggered: {
+            if (!probe.running && !loader.running && !diskRead.running && !writer.running) {
+                probe.command = ["sh", "-c", root.signatureScript, "sh", root.filePath];
+                probe.running = true;
+            }
+        }
     }
 
     // The directory is created first and the FileView gets its path only afterwards: a FileView cannot watch inside a
@@ -602,30 +807,22 @@ Scope {
     WatchedDir {
         id: watchedDir
         path: root.configDir
+        onReadyChanged: {
+            if (ready) {
+                root.armWatch();
+                root.readFile();
+            }
+        }
     }
 
+    // Only the watch: it reports a change, the bounded read above takes it. Nothing is loaded by it (preload off) and nothing
+    // is written through it.
     FileView {
         id: file
-        path: watchedDir.ready ? root.configDir + "/grassfield.json" : ""
+        path: root.watchPath
+        preload: false
         watchChanges: true
         printErrors: false
-        atomicWrites: true
-        // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
-        // qmllint disable missing-type
-        adapter: config
-        // qmllint enable missing-type
-        onFileChanged: reload()
-        onLoadFailed: error => {
-            if (error === FileViewError.FileNotFound)
-                root.takeMissingFile();
-        }
-        onSaved: root.saved()
-        onLoaded: {
-            root.checkText(file.text());
-            root.takeDocument(file.text());
-            root.resetMissingKeys(file.text());
-            root.reapplyDirty();
-            root.loadedFile();
-        }
+        onFileChanged: root.readFile()
     }
 }
