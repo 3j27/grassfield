@@ -35,11 +35,13 @@ ShellRoot {
                 // region.formats: the default locale changes, the words do not.
                 Translator.formats = "de_DE";
             } else if (root.phase === 3) {
-                root.check("formats de_DE: Qt.locale() formats", Qt.locale().name === "de_DE" && Qt.locale().toString(1234.5, "f", 1) === "1.234,5");
-                root.check("formats de_DE: the words stay", Translator.language === "en" && root.rename === "Rename");
+                // English in Germany: the German formats, the English words (macOS: the region never changes the words).
+                root.check("formats de_DE: Qt.locale() formats", Qt.locale().name === "en_DE" && Qt.locale().toString(1234.5, "f", 1) === "1.234,5");
+                root.check("formats de_DE: the words stay", Translator.language === "en" && root.rename === "Rename" && Qt.locale().dayName(1) === "Monday");
                 Translator.language = "fr";
             } else if (root.phase === 4) {
-                root.check("a language change keeps the formats", Qt.locale().name === "de_DE" && root.rename === "Renommer");
+                // Qt has no French in Germany: the region's own locale (its formats, its words).
+                root.check("a language change keeps the formats", Qt.locale().name === "de_DE" && Qt.locale().toString(1234.5, "f", 1) === "1.234,5" && root.rename === "Renommer");
                 Translator.formats = "de_DE; rm";
             } else if (root.phase === 5) {
                 root.check("an invalid name is the language's formats", Qt.locale().name === "fr_FR");

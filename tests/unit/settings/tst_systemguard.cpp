@@ -288,3 +288,44 @@ TEST(DevSession, FollowsTheRunModeRule)
     qunsetenv("GRASSFIELD_SESSION");
     qunsetenv("GRASSFIELD_DEV");
 }
+
+// Login Items (Backend::writeAutostart, removeAutostart): only a plain <name>.desktop of the autostart folder, never through a
+// symlink, and in a dev session only in a folder whose real location lies under <root>/.dev (review of ADR-0026: a symlink in
+// .dev led a QSaveFile write out of it).
+TEST(AutostartGuard, OnlyPlainEntriesOfTheFolder)
+{
+    QTemporaryDir tmp;
+    const QString dir = QFileInfo(tmp.path()).canonicalFilePath() + QStringLiteral("/autostart");
+    QDir().mkpath(dir);
+    QFile target(tmp.path() + QStringLiteral("/dotfiles-notes.desktop"));
+    ASSERT_TRUE(target.open(QIODevice::WriteOnly));
+    target.close();
+    ASSERT_EQ(::symlink(QFile::encodeName(target.fileName()).constData(), QFile::encodeName(dir + QStringLiteral("/linked.desktop")).constData()), 0);
+    ASSERT_EQ(::symlink(QFile::encodeName(tmp.path() + QStringLiteral("/nowhere")).constData(), QFile::encodeName(dir + QStringLiteral("/dangling.desktop")).constData()), 0);
+
+    EXPECT_TRUE(isAutostartWrite(dir + QStringLiteral("/notes.desktop"), dir, QString(), false));
+    EXPECT_TRUE(isAutostartWrite(dir + QStringLiteral("/org.app_x+y-1.desktop"), dir, QString(), false));
+    EXPECT_FALSE(isAutostartWrite(dir + QStringLiteral("/linked.desktop"), dir, QString(), false)) << "a symlink to a dotfile";
+    EXPECT_FALSE(isAutostartWrite(dir + QStringLiteral("/dangling.desktop"), dir, QString(), false)) << "a symlink that leads nowhere yet";
+    for (const QString &bad : {QStringLiteral("/notes"), QStringLiteral("/notes.desktop\n"), QStringLiteral("/../notes.desktop"), QStringLiteral("/sub/notes.desktop"),
+                               QStringLiteral("/.desktop"), QStringLiteral("/a b.desktop")})
+        EXPECT_FALSE(isAutostartWrite(dir + bad, dir, QString(), false)) << qPrintable(bad);
+    EXPECT_FALSE(isAutostartWrite(tmp.path() + QStringLiteral("/notes.desktop"), dir, QString(), false)) << "another folder";
+    EXPECT_FALSE(isAutostartWrite(dir + QStringLiteral("/notes.desktop"), QString(), QString(), false));
+}
+
+TEST(AutostartGuard, ADevSessionWritesOnlyUnderDev)
+{
+    const QString root = tree().root;
+    const QString inside = root + QStringLiteral("/.dev/config/autostart");
+    QDir().mkpath(inside);
+    EXPECT_TRUE(isAutostartWrite(inside + QStringLiteral("/notes.desktop"), inside, root, true));
+    // A folder that does not exist yet under .dev (isolated.sh creates it on the first write).
+    EXPECT_TRUE(isAutostartWrite(root + QStringLiteral("/.dev/fresh/autostart/notes.desktop"), root + QStringLiteral("/.dev/fresh/autostart"), root, true));
+    // The owner's folder, a folder outside .dev, a folder reached through the .dev/link symlink to <root>/outside.
+    EXPECT_FALSE(isAutostartWrite(QDir::homePath() + QStringLiteral("/.config/autostart/notes.desktop"), QDir::homePath() + QStringLiteral("/.config/autostart"), root, true));
+    EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/outside/notes.desktop"), root + QStringLiteral("/outside"), root, true));
+    EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/notes.desktop"), root + QStringLiteral("/.dev/link"), root, true));
+    EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/sub/notes.desktop"), root + QStringLiteral("/.dev/link/sub"), root, true));
+    EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("/notes.desktop"), inside, QString(), true)) << "no worktree";
+}

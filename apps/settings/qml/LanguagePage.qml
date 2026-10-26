@@ -27,8 +27,9 @@ SettingsPage {
 
     readonly property var regions: root.backend ? root.backend.regionLocales() : []
     readonly property string formats: root.store.value("region.formats")
-    // The formats the shell uses: the chosen region, else the language's own (Settings runs in the language's).
-    readonly property var formatsLocale: root.formats !== "auto" ? Qt.locale(root.formats) : Qt.locale()
+    // The formats the shell uses (General.formatsLocale, the Translator's rule): the language in the chosen region, else the
+    // language's own (Settings itself runs in the language's).
+    readonly property var formatsLocale: General.formatsLocale(Qt.locale().name, root.formats)
     // A fixed sample, as the macOS previews: 19 August of this year, 1 234 567.89.
     readonly property date sample: new Date(new Date(root.now).getFullYear(), 7, 19)
 

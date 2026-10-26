@@ -143,6 +143,22 @@ bool numberIn(const QString &s, int min, int max)
 
 } // namespace
 
+bool isAutostartWrite(const QString &path, const QString &autostartDir, const QString &devRoot, bool dev)
+{
+    static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9._+-]{1,200}\\.desktop")));
+    const QFileInfo file(path);
+    if (autostartDir.isEmpty() || QDir::cleanPath(file.path()) != QDir::cleanPath(autostartDir) || !name.match(file.fileName()).hasMatch())
+        return false;
+    if (file.isSymLink())
+        return false;
+    if (!dev)
+        return true;
+    // By the folder's real location, not its text: a symlink inside .dev must not lead a write out of it.
+    const QString devDir = devRoot.isEmpty() ? QString() : QFileInfo(devRoot + QStringLiteral("/.dev")).canonicalFilePath();
+    const QString real = resolvedPath(QDir::cleanPath(autostartDir));
+    return !devDir.isEmpty() && !real.isEmpty() && (real == devDir || real.startsWith(devDir + QLatin1Char('/')));
+}
+
 bool namesWallpaperTool(const QString &program)
 {
     return program == QLatin1String("grassfield-wallpaper") || program.endsWith(QLatin1String("/grassfield-wallpaper"));

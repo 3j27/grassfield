@@ -155,8 +155,10 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      − removes a selected item the user added (a system item is switched off instead). "Allow in the Background" lists the
      user's own systemd services (`user.units`, the session bus, units under the user's own unit folders only) with their
      Description and a switch (`user.enable`: EnableUnitFiles / DisableUnitFiles, no privilege). Every write goes through
-     `Backend.writeAutostart` / `removeAutostart` (a plain `<name>.desktop` in the user's autostart folder; in a dev session
-     only under the worktree's .dev); a failure shows one line under the group. Not built: Extensions; Hyprland `exec` lines
+     `Backend.writeAutostart` / `removeAutostart` (a plain `<name>.desktop` in the user's autostart folder, never a symbolic
+     link, so a dotfile manager's file is never written through; in a dev session only a folder whose real location lies
+     under the worktree's .dev: `isAutostartWrite`, tests/unit/settings/tst_systemguard.cpp AutostartGuard); a failure
+     shows one line under the group. Not built: Extensions; Hyprland `exec` lines
      in the user's own files are never read or edited.
    - Language & Region (General > Language & Region since PR #4; the macOS 15 structure, the macOS 27 look; `LanguagePage.qml`):
      "Preferred Languages": one "Primary language" row with an inline pop-up of Omarchy's languages (`omarchy-language list`,

@@ -55,6 +55,12 @@ bool isAllowedAction(const QStringList &argv);
 // pkexec prompt (a locale to generate) as long as a polkit call of ADR-0026 waits for the user.
 int actionTimeoutMs(const QStringList &argv, int requested);
 
+// The one file Login Items may write or remove (Backend::writeAutostart, removeAutostart): <autostartDir>/<plain name>.desktop
+// that is not a symbolic link (a write would go through the link to the file it names: a dotfile manager's file, or one outside
+// .dev; removing it would break that setup), and in a dev session only when the folder's real location lies under
+// <devRoot>/.dev (the isolated XDG_CONFIG_HOME), never the owner's ~/.config/autostart.
+bool isAutostartWrite(const QString &path, const QString &autostartDir, const QString &devRoot, bool dev);
+
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);
 

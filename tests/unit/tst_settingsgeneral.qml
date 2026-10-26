@@ -139,6 +139,15 @@ TestCase {
         verify(!General.uses24Hour("auto", "h:mm a"));
     }
 
+    function test_formatsLocale() {
+        // The language's words with the region's formats when Qt has the pair; else the region's own locale.
+        compare(General.formatsLocale("en_US", "fr_CH").name, "en_CH");
+        compare(General.formatsLocale("en_US", "de_DE").name, "en_DE");
+        compare(General.formatsLocale("fr_FR", "en_US").name, "en_US");
+        compare(General.formatsLocale("fr_FR", "auto").name, "fr_FR");
+        compare(General.formatsLocale("fr_FR", "fr_CH; rm").name, "fr_FR");
+    }
+
     function test_language() {
         const list = General.parseLanguages("English\ten\tEnglish\nFrançais\tfr\tFrench\nbad line\nX\tFR\tbad\n中文 (简体)\tzh-CN\tChinese (Simplified)\n");
         compare(list.length, 3);

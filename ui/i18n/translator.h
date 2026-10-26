@@ -15,8 +15,9 @@ class Translator : public QObject
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
-    // `region.formats`: "auto" (the language's formats) or a locale name ("fr_CH"). It becomes the process's default locale,
-    // so Qt.locale() everywhere formats with it; the words stay the language's.
+    // `region.formats`: "auto" (the language's formats) or a locale name ("fr_CH"). The language in that region becomes the
+    // process's default locale (formatsLocale() in translationloader.h), so Qt.locale() everywhere formats with it; the words
+    // stay the language's where Qt has that pair.
     Q_PROPERTY(QString formats READ formats WRITE setFormats NOTIFY formatsChanged FINAL)
 
 public:

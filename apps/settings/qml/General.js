@@ -296,6 +296,17 @@ function languageArgv(code) {
     return validLanguage(code) ? ["omarchy-language", code] : null;
 }
 
+// The locale the shell formats with (ui/i18n/translationloader.h formatsLocale, the same rule): "auto" is the language's
+// (`uiName`, "fr_FR"); a region ("fr_CH") gives the language in that territory when Qt has the pair, else the region's own.
+function formatsLocale(uiName, formats) {
+    if (!/^[a-z]{2,3}(_[A-Z][a-z]{3})?_([A-Z]{2}|[0-9]{3})$/.test(String(formats)))
+        return Qt.locale(uiName);
+    const language = String(uiName).split("_")[0];
+    const territory = String(formats).split("_").pop();
+    const pair = Qt.locale(language + "_" + territory);
+    return pair.name === language + "_" + territory ? pair : Qt.locale(formats);
+}
+
 // --- Login Items ---------------------------------------------------------------------------------------------------------
 
 // One desktop entry's [Desktop Entry] group: {name, exec, icon, hidden, noDisplay, onlyShowIn[], notShowIn[], autostartEnabled,

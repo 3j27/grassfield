@@ -37,7 +37,8 @@ service ask the session's agent itself.
   - in QML (`General.js` builds the map or returns null);
   - again in C++ (`validAction`):
     - a computer name: 1 to 64 characters, no control character;
-    - a zone: `Area/Location`, at most 64 characters, from `[A-Za-z0-9_+-]`;
+    - a zone: one to four segments of `[A-Za-z0-9_+-]` separated by `/` ("Europe/Paris", "America/Argentina/Buenos_Aires",
+      "UTC"), at most 64 characters;
     - a time: microseconds between 2000 and 2200, as a decimal string;
     - NTP: a boolean.
   - The static host name is derived in C++ from the validated name (`hostNameFor`: lower case ASCII letters, digits and `-`,
@@ -47,10 +48,25 @@ service ask the session's agent itself.
   `Properties.Get/GetAll`, timedate1 `ListTimezones`, systemd `ListUnitFilesByPatterns`. A nested session can therefore never
   change the owner's clock or name, whatever the QML asks.
 - The language goes through Omarchy's own per-user command (`omarchy-language <code>`, owner decision 2026-10-26). Grassfield
-  runs that command as an action: one validated code, one argument vector, no shell, no action in a dev session. The privilege
-  it may need (generating a locale) is Omarchy's own (its sudoers grant, else `pkexec`), not Grassfield's.
+  runs that command as an action: one validated code, one argument vector, no shell, no action in a dev session. What the
+  command does is Omarchy's, not Grassfield's (read in Omarchy's upstream sources at commit 58858ae; the installed 4.0.4
+  may differ, owner check below):
+  - it generates the locale when it is missing: `sudo -n` through Omarchy's passwordless sudoers rule for its own helper
+    `omarchy-locale-generate`, else `pkexec omarchy-locale-generate <code>`, whose password dialog is Grassfield's polkit
+    agent (the same sheet as the services above);
+  - only once the locale exists, it writes the language file and `~/.config/uwsm/env.d/50-omarchy-language` (LANG for the
+    next login), seeds an input method for Chinese, Japanese and Korean, runs `hyprctl eval 'hl.env("LANG", …)'` on the live
+    compositor (apps started by Hyprland from then on get the new LANG) and `omarchy-restart-shell`, which is the no-op
+    shim in a Grassfield session (packaging/shims), and sends a notification;
+  - Settings waits up to 130 s (`actionTimeoutMs`), as long as a polkit call above. When that time is up Settings stops the
+    command and says "timed out"; a pkexec dialog that is still open stays open (pkexec is a separate process) and can be
+    cancelled; answering it then only generates the locale, the language does not change (the command that would have
+    written it is gone). The page asks to log out and back in: grassfield-shell keeps its language until then.
 - Unprivileged changes stay what they were: the user's own systemd services (`EnableUnitFiles`/`DisableUnitFiles` on the
   session bus, only units under the user's own unit folders) and the user's autostart folder. They are not polkit actions.
+  An autostart write or removal touches only a plain `<name>.desktop` of that folder that is not a symbolic link (a write
+  would go through the link, to a dotfile manager's file or out of `.dev`), and in a dev session only a folder whose real
+  location lies under the worktree's `.dev` (`isAutostartWrite`, systemguard.h; review finding of 2026-10-26).
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
@@ -72,5 +88,7 @@ System Settings > General > About > Name and Date & Time change machine-wide set
     refusal and the dev guard.
   - `tests/unit/tst_settingsgeneral.qml`: the QML-side builders.
 - The real polkit dialog cannot be shown in a nested session (the agent cannot register there, `docs/specs/security.md` L5). The
-  owner checks it in the real session (L2): change the name and the time zone, cancel once, and enter a wrong password once.
+  owner checks it in the real session (L2): change the name and the time zone, cancel once, enter a wrong password once, and
+  leave the dialog open for 60 s before answering (the service's own polkit query must still apply the change); switch the
+  language to one whose locale is not generated yet (Omarchy's prompt or grant, then log out and in) and back.
 - A review by the security reviewer (opus) is required before merge.

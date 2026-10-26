@@ -444,20 +444,9 @@ QStringList Backend::desktopEntries(const QString &dir) const
 
 bool Backend::autostartWriteAllowed(const QString &path) const
 {
-    // Only <autostartDir>/<name>.desktop, a plain name; in a dev session the folder must lie under <worktree>/.dev (the
-    // isolated XDG_CONFIG_HOME of isolated.sh), never the owner's ~/.config/autostart.
-    static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9._+-]{1,200}\\.desktop")));
-    const QString dir = autostartDir();
-    if (QFileInfo(path).path() != dir || !name.match(QFileInfo(path).fileName()).hasMatch())
-        return false;
-    if (!m_dev)
-        return true;
-    const QString dev = QFileInfo(m_devRoot + QStringLiteral("/.dev")).canonicalFilePath();
-    QString probe = dir;
-    while (!QFileInfo::exists(probe) && probe.contains(QLatin1Char('/')))
-        probe = probe.left(probe.lastIndexOf(QLatin1Char('/')));
-    const QString real = QFileInfo(probe).canonicalFilePath();
-    return !m_devRoot.isEmpty() && !dev.isEmpty() && !real.isEmpty() && (real == dev || real.startsWith(dev + QLatin1Char('/')));
+    // systemguard.h: a plain <name>.desktop of the user's autostart folder, never a symlink, under <worktree>/.dev in a dev
+    // session (the isolated XDG_CONFIG_HOME of isolated.sh).
+    return grassfield::settings::isAutostartWrite(path, autostartDir(), m_devRoot, m_dev);
 }
 
 QString Backend::writeAutostart(const QString &path, const QString &text) const
