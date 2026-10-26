@@ -116,8 +116,9 @@ TestCase {
         compare(t.backend.busQueries.length, 1);
         t.service.query(System.QUERY.audio, "audio.status");
         compare(t.backend.queries.length, 1);
-        // No command is left that reads the network or Bluetooth.
-        compare(Object.keys(System.QUERY), ["audio"]);
+        // No command is left that reads the network or Bluetooth: Sound's two are all.
+        compare(Object.keys(System.QUERY), ["audio", "audioNames"]);
+        compare(System.QUERY.audioNames, ["wpctl", "status", "-n"]);
     }
 
     // ---- actions ----
@@ -324,6 +325,26 @@ TestCase {
         compare(System.percent(0.405), 41);
         compare(System.volumeGlyph(0.5, true), "volume-mute");
         compare(System.volumeGlyph(0.5, false), "volume-2");
+    }
+
+    function test_audioKinds() {
+        compare(System.audioKind("alsa_output.pci-0000_00_1f.3.analog-stereo"), "builtin");
+        compare(System.audioKind("alsa_input.pci-0000_00_1f.3.analog-stereo"), "builtin");
+        compare(System.audioKind("alsa_output.platform-sound.HiFi__Speaker__sink"), "builtin");
+        compare(System.audioKind("alsa_output.pci-0000_01_00.1.hdmi-stereo-extra1"), "hdmi");
+        compare(System.audioKind("alsa_output.pci-0000_00_1f.3.iec958-stereo"), "digital");
+        compare(System.audioKind("alsa_output.usb-Focusrite_Scarlett_2i2-00.analog-stereo"), "usb");
+        compare(System.audioKind("bluez_output.3C_52_82_10_00_02.1"), "bluetooth");
+        compare(System.audioKind("bluez_input.3C:52:82:10:00:02"), "bluetooth");
+        compare(System.audioKind("raop_sink.kitchen.local.192.168.1.20.7000"), "network");
+        compare(System.audioKind("tunnel.host.alsa_output.pci"), "network");
+        compare(System.audioKind("effect_output.noise_suppression"), "virtual");
+        compare(System.audioKind("auto_null"), "virtual");
+        compare(System.audioKind(""), "virtual");
+        // `wpctl status -n` lists node names where `wpctl status` lists descriptions.
+        compare(System.audioKinds(wpctlStatus.replace("Built-in Audio Analog Stereo        [vol: 0.40]", "alsa_output.pci-0000_00_1f.3.analog-stereo [vol: 0.40]")
+            .replace("HDMI [Main]                         [vol: 1.00 MUTED]", "alsa_output.pci-0000_00_1f.3.hdmi-stereo [vol: 1.00 MUTED]")),
+            {"52": "builtin", "55": "hdmi", "53": "virtual"});
     }
 
     function test_audioGarbage() {
@@ -848,21 +869,112 @@ TestCase {
         compare(page.devices.length, 0);
     }
 
-    function test_soundRefreshKeepsRowsAndUsesMicrophone() {
+    // The device rows of the Sound table (SoundDeviceTable delegates).
+    function soundRows(item, out) {
+        for (const c of item.children) {
+            if (c.nodeId !== undefined && c.kind !== undefined)
+                out.push(c);
+            soundRows(c, out);
+        }
+        return out;
+    }
+
+    function soundRow(page, name) {
+        return soundRows(page, []).find(r => r.name === name) ?? null;
+    }
+
+    function soundTable(page) {
+        return findChild(page, "", t => t.chosen !== undefined && t.kindLabel !== undefined);
+    }
+
+    function findChild(item, unused, pred) {
+        for (const c of item.children) {
+            if (pred(c))
+                return c;
+            const found = findChild(c, unused, pred);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    readonly property string wpctlNames: wpctlStatus.replace("Built-in Audio Analog Stereo        [vol: 0.40]", "alsa_output.pci-0000_00_1f.3.analog-stereo [vol: 0.40]")
+        .replace("HDMI [Main]                         [vol: 1.00 MUTED]", "alsa_output.pci-0000_00_1f.3.hdmi-stereo [vol: 1.00 MUTED]")
+        .replace("Built-in Audio Analog Stereo        [vol: 1.00]", "alsa_input.pci-0000_00_1f.3.analog-stereo [vol: 1.00]")
+
+    function test_soundTableKindsAndRefreshKeepsRows() {
         const t = makeService(false);
         const page = openPage("SoundPage.qml", t);
         t.backend.finished("audio.status", true, wpctlStatus);
-        const hdmi = rowByTitle(page, "HDMI [Main]");
-        verify(hdmi);
-        hdmi.forceActiveFocus();
-        verify(hdmi.activeFocus);
-        // Volume moved, HDMI became the default, a new source appeared.
+        // New devices: their node names are asked for once, and give the Type column.
+        compare(t.backend.queries.filter(q => q.length === 3 && q[2] === "-n").length, 1);
+        const hdmi = soundRow(page, "HDMI [Main]");
+        const builtin = soundRow(page, "Built-in Audio Analog Stereo");
+        verify(hdmi && builtin);
+        compare(hdmi.kind, "");
+        t.backend.finished("audio.names", true, wpctlNames);
+        compare(hdmi.kind, "hdmi");
+        compare(builtin.kind, "builtin");
+        compare(soundTable(page).kindLabel(hdmi.kind), "HDMI or DisplayPort");
+        verify(builtin.selected);
+        verify(!hdmi.selected);
+        // Volume moved, HDMI became the default: the same rows, no new name query (the devices are known).
         t.backend.finished("audio.status", true, wpctlStatus.replace("[vol: 0.40]", "[vol: 0.30]").replace(" │      55. HDMI [Main]                         [vol: 1.00 MUTED]", " │  *   55. HDMI [Main]                         [vol: 1.00 MUTED]").replace(" │  *   52.", " │      52."));
-        verify(rowByTitle(page, "HDMI [Main]") === hdmi, "row rebuilt");
-        verify(hdmi.activeFocus, "focus lost on refresh");
-        compare(hdmi.checked, true);
-        const mics = rowsOf(page, []).filter(r => r.leading === "microphone");
-        compare(mics.length, 1);
-        compare(rowsOf(page, []).filter(r => r.leading === "volume-1" && r.actionText === "").length, 0);
+        verify(soundRow(page, "HDMI [Main]") === hdmi, "row rebuilt");
+        verify(hdmi.selected);
+        verify(!builtin.selected);
+        compare(t.backend.queries.filter(q => q.length === 3).length, 1);
+        // A device whose kind the names did not give is not asked about again.
+        t.backend.finished("audio.status", true, wpctlStatus.replace(" │      55. HDMI", " │      57. Dock Speakers                       [vol: 0.50]\n │      55. HDMI"));
+        compare(t.backend.queries.filter(q => q.length === 3).length, 2);
+        t.backend.finished("audio.names", true, wpctlNames);
+        t.backend.finished("audio.status", true, wpctlStatus.replace(" │      55. HDMI", " │      57. Dock Speakers                       [vol: 0.50]\n │      55. HDMI"));
+        compare(t.backend.queries.filter(q => q.length === 3).length, 2);
+        compare(soundRow(page, "Dock Speakers").kind, "");
+    }
+
+    function test_soundTableChoosesByClickAndKeys() {
+        const t = makeService(false);
+        const page = openPage("SoundPage.qml", t);
+        t.backend.finished("audio.status", true, wpctlStatus);
+        const table = soundTable(page);
+        const hdmi = soundRow(page, "HDMI [Main]");
+        // The groups are laid out (the page's column positions them before the next frame).
+        tryVerify(() => page.contentItem.children[0].height > 0);
+        mouseClick(hdmi);
+        verify(table.activeFocus, "a click focuses the table");
+        compare(t.backend.actions.length, 1);
+        compare(t.backend.actions[0].argv, ["wpctl", "set-default", "55"]);
+        // Chosen: selected at once, and in the accent while the table has the focus.
+        verify(hdmi.selected);
+        verify(hdmi.emphasized);
+        t.backend.finished("audio.act", true, "");
+        verify(!hdmi.selected, "back to what PipeWire says until it answers");
+        // Up from the default (the first row) goes nowhere; Down chooses the next row; End the last.
+        keyClick(Qt.Key_Up);
+        compare(t.backend.actions.length, 1);
+        keyClick(Qt.Key_Down);
+        compare(t.backend.actions.length, 2);
+        compare(t.backend.actions[1].argv, ["wpctl", "set-default", "55"]);
+        // Choosing the selected row does nothing.
+        keyClick(Qt.Key_End);
+        compare(t.backend.actions.length, 2);
+        // Input: the sources, their volume and mute.
+        page.side = "input";
+        compare(soundRows(page, []).map(r => r.name), ["Built-in Audio Analog Stereo"]);
+        verify(soundRows(page, [])[0].selected);
+        compare(page.current.id, 53);
+        compare(table.accessibleName, "Input devices");
+    }
+
+    function test_soundDevSessionChoosesNothing() {
+        const t = makeService(true);
+        const page = openPage("SoundPage.qml", t);
+        t.backend.finished("audio.status", true, wpctlStatus);
+        tryVerify(() => page.contentItem.children[0].height > 0);
+        mouseClick(soundRow(page, "HDMI [Main]"));
+        compare(t.backend.actions.length, 0);
+        compare(page.pending, -1);
+        verify(soundRow(page, "Built-in Audio Analog Stereo").selected);
     }
 }

@@ -725,9 +725,20 @@ class WindowSurfacePairs(unittest.TestCase):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
 
+    def test_sound_table_rows(self):
+        # Settings > Sound's device table: the text on a striped row, on the column header and on the grey selection (the table
+        # without the focus), all over a Settings group; the empty-table note in the window grey on the group.
+        for ap in APPEARANCES:
+            group = self.tok.color("colors", ap, "groupFill")
+            fill = self.tok.color("colors", ap, "fill")
+            text = self.tok.color("colors", ap, "text")
+            for name in ("settings.soundTableStripeOpacity", "settings.soundTableSelectionOpacity"):
+                bg = over(fill, self.tok.path(name), group)
+                self.assertGreaterEqual(wcag(text, bg), 7.0, "text on %s, %s: %.2f:1" % (name, ap, wcag(text, bg)))
+
     def test_row_secondary_on_the_hover_fill(self):
-        # Settings device rows (Wi-Fi, Bluetooth, Sound): while hovered, the hover fill sits on the window or on a Settings group.
-        # The window grey is under 4.5:1 there (3.62:1 in light), so DeviceRow switches to textSecondary on hover.
+        # A Settings row with secondary text and a hover fill: while hovered, the fill sits on the window or on a Settings group.
+        # The window grey is under 4.5:1 there (3.62:1 in light), so such a row switches to textSecondary on hover.
         for ap in APPEARANCES:
             win = self.window(ap)
             on_group = self.tok.color("colors", ap, "groupFill")

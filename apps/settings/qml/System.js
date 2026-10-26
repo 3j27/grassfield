@@ -10,9 +10,11 @@
 
 // ---- Read-only queries ---------------------------------------------------------------------------------------------
 
-// The only command-line query of the system sections (the Sound page); Wi-Fi and Bluetooth are read over D-Bus (SystemService.queryBus).
+// The command-line queries of the system sections (the Sound page: the devices, then their PipeWire node names for the Type
+// column); Wi-Fi and Bluetooth are read over D-Bus (SystemService.queryBus).
 var QUERY = {
-    audio: ["wpctl", "status"]
+    audio: ["wpctl", "status"],
+    audioNames: ["wpctl", "status", "-n"]
 };
 
 function validUuid(s) {
@@ -401,6 +403,34 @@ function parseAudio(text) {
         (section === "Sinks" ? out.sinks : out.sources).push(dev);
     }
     return out;
+}
+
+// The kind of an audio device from its PipeWire node name (`wpctl status -n`; ALSA and BlueZ name their nodes
+// alsa_output.<bus>-<path>.<profile> and bluez_output.<address>.<n>): builtin, usb, bluetooth, hdmi, digital, network or virtual.
+function audioKind(nodeName) {
+    const n = String(nodeName);
+    if (/^bluez_(output|input)\./.test(n))
+        return "bluetooth";
+    if (/^(raop_sink|roc_sink|roc_source|tunnel)[._]/.test(n))
+        return "network";
+    if (!/^alsa_(output|input)\./.test(n))
+        return "virtual";
+    if (/^alsa_(output|input)\.usb-/.test(n))
+        return "usb";
+    if (/\.(hdmi|dp)-/.test(n))
+        return "hdmi";
+    if (/\.iec958-/.test(n))
+        return "digital";
+    return "builtin";
+}
+
+// id -> kind for every sink and source of `wpctl status -n`.
+function audioKinds(text) {
+    const a = parseAudio(text);
+    const kinds = {};
+    for (const d of a.sinks.concat(a.sources))
+        kinds[d.id] = audioKind(d.name);
+    return kinds;
 }
 
 function defaultOf(list) {

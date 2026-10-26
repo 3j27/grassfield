@@ -996,7 +996,7 @@
     <name>BatteryChart</name>
     <message>
         <source>%1 %</source>
-        <translation>%1 %</translation>
+        <translation>%1&#xa0;%</translation>
     </message>
 </context>
 <context>
@@ -1031,7 +1031,7 @@
     </message>
     <message>
         <source>%1 %</source>
-        <translation>%1 %</translation>
+        <translation>%1&#xa0;%</translation>
     </message>
     <message>
         <source>Unknown</source>
@@ -1043,7 +1043,7 @@
     </message>
     <message>
         <source>Limit charging to %1 %</source>
-        <translation>Limiter la charge à %1 %</translation>
+        <translation>Limiter la charge à %1&#xa0;%</translation>
     </message>
     <message>
         <source>Limit charging</source>
@@ -1101,19 +1101,19 @@
     </message>
     <message>
         <source>%1 % · %2 until full</source>
-        <translation>%1 % · %2 avant charge complète</translation>
+        <translation>%1&#xa0;% · %2 avant charge complète</translation>
     </message>
     <message>
         <source>%1 % · Charging</source>
-        <translation>%1 % · En charge</translation>
+        <translation>%1&#xa0;% · En charge</translation>
     </message>
     <message>
         <source>%1 % · %2 remaining</source>
-        <translation>%1 % · %2 restantes</translation>
+        <translation>%1&#xa0;% · %2 restantes</translation>
     </message>
     <message>
         <source>%1 %</source>
-        <translation>%1 %</translation>
+        <translation>%1&#xa0;%</translation>
     </message>
     <message>
         <source>12 A</source>
@@ -1130,7 +1130,7 @@
     </message>
     <message>
         <source>Power profiles are not available: power-profiles-daemon is not running.</source>
-        <translation>Les profils d’énergie ne sont pas disponibles : power-profiles-daemon n’est pas lancé.</translation>
+        <translation>Les profils d’énergie ne sont pas disponibles&#xa0;: power-profiles-daemon n’est pas lancé.</translation>
     </message>
     <message>
         <source>Low Power Mode</source>
@@ -1194,7 +1194,7 @@
     </message>
     <message>
         <source>The battery cannot be read: UPower did not answer.</source>
-        <translation>La batterie ne peut pas être lue : UPower n’a pas répondu.</translation>
+        <translation>La batterie ne peut pas être lue&#xa0;: UPower n’a pas répondu.</translation>
     </message>
     <message>
         <source>This computer has no battery.</source>
@@ -6214,6 +6214,17 @@
     </message>
 </context>
 <context>
+    <name>SoundDeviceTable</name>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>Type</translation>
+    </message>
+</context>
+<context>
     <name>SoundList</name>
     <message>
         <source>Output</source>
@@ -6247,12 +6258,64 @@
         <translation>Son</translation>
     </message>
     <message>
+        <source>Built-in</source>
+        <translation>Intégré</translation>
+    </message>
+    <message>
+        <source>USB</source>
+        <translation>USB</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>HDMI or DisplayPort</source>
+        <translation>HDMI ou DisplayPort</translation>
+    </message>
+    <message>
+        <source>Digital</source>
+        <translation>Numérique</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Virtual</source>
+        <translation>Virtuel</translation>
+    </message>
+    <message>
         <source>Sound is not available: PipeWire did not answer or no audio device was found.</source>
         <translation>Le son n’est pas disponible&#xa0;: PipeWire n’a pas répondu ou aucun périphérique audio n’a été trouvé.</translation>
     </message>
     <message>
+        <source>Output &amp; Input</source>
+        <translation>Sortie et entrée</translation>
+    </message>
+    <message>
+        <source>Devices</source>
+        <translation>Périphériques</translation>
+    </message>
+    <message>
         <source>Output</source>
         <translation>Sortie</translation>
+    </message>
+    <message>
+        <source>Output devices</source>
+        <translation>Périphériques de sortie</translation>
+    </message>
+    <message>
+        <source>Input devices</source>
+        <translation>Périphériques d’entrée</translation>
+    </message>
+    <message>
+        <source>No output devices found</source>
+        <translation>Aucun périphérique de sortie trouvé</translation>
+    </message>
+    <message>
+        <source>No input devices found</source>
+        <translation>Aucun périphérique d’entrée trouvé</translation>
     </message>
     <message>
         <source>Output volume</source>
@@ -6815,13 +6878,6 @@
     <message>
         <source>Output</source>
         <translation>Sortie</translation>
-    </message>
-</context>
-<context>
-    <name>VolumeRow</name>
-    <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
     </message>
 </context>
 <context>

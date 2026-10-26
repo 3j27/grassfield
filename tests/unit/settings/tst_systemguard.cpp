@@ -186,6 +186,12 @@ TEST(WallpaperGuard, NamesTheHelperByItsFileName)
 TEST(QueryGuard, NoNetworkOrBluetoothCommandIsAQuery)
 {
     EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("status")}));
+    // The node names (the Type column), and nothing else of wpctl's: not another option, not a device's details.
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("status"), QStringLiteral("-n")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("status"), QStringLiteral("-k")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("status"), QStringLiteral("-n"), QStringLiteral("-n")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("-n"), QStringLiteral("status")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("inspect"), QStringLiteral("52")}));
     EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("lspci")}));
     EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Q"), QStringLiteral("hyprland")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.5")}));

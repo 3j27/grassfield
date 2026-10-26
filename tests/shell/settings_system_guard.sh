@@ -109,7 +109,7 @@ QtObject {
         ["bluetoothctl", "show"], ["bluetoothctl", "power", "off"]]
 
     Component.onCompleted: {
-        // The command-line query of the Sound page, and the 4 commands of the About pane.
+        // The command-line queries of the Sound page, and the 4 commands of the About pane.
         const queries = Object.keys(System.QUERY).map(k => System.QUERY[k]);
         const about = [["pacman", "-Q", "hyprland"], ["pacman", "-Q", "quickshell"], ["pacman", "-Q", "quickshell-git"], ["lspci"]];
         // run() takes the same allow-list in both sessions.
@@ -166,10 +166,10 @@ res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
 queries=$(wc -l <"$tmp/marker")
 has() { grep -q -- "$1" <<<"$2" && echo 0 || echo 1; }
-# One command-line query of the Sound page (wpctl status), 3 wpctl actions sent as queries (refused); About's 4 commands go
-# through run(). Wi-Fi and Bluetooth are D-Bus: in a dev session their actions start nothing.
-check "dev: the Sound query runs, the 3 wpctl actions sent as queries are refused" "$(has 'dev=true ok=1 refused=3' "$res")"
-check "dev: only the Sound query and the 4 About commands reached a tool ($queries)" "$([[ $queries -eq 5 ]] && echo 0 || echo 1)"
+# The two command-line queries of the Sound page (wpctl status, wpctl status -n), 3 wpctl actions sent as queries (refused);
+# About's 4 commands go through run(). Wi-Fi and Bluetooth are D-Bus: in a dev session their actions start nothing.
+check "dev: the 2 Sound queries run, the 3 wpctl actions sent as queries are refused" "$(has 'dev=true ok=2 refused=3' "$res")"
+check "dev: only the 2 Sound queries and the 4 About commands reached a tool ($queries)" "$([[ $queries -eq 6 ]] && echo 0 || echo 1)"
 check "dev: run() answered the 4 About commands and refused the 9 stray ones" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
 check "dev: no stray command reached a tool" "$(grep -qE 'get-volume|touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid|radio wifi off|bluetoothctl' "$tmp/marker" && echo 1 || echo 0)"
 check "tools always see the C locale, whatever the user locale" "$([[ $(sort -u "$tmp/locale") == 'LC_ALL=C LANG=C LANGUAGE=unset' ]] && echo 0 || echo 1)"

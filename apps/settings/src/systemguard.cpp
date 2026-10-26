@@ -31,8 +31,9 @@ bool isReadOnlyQuery(const QStringList &argv)
     const QStringList args = argv.mid(1);
     // Wi-Fi and Bluetooth are not commands any more: they go over D-Bus (systembus.h, whose own guard allows only reads in a dev
     // session). nmcli and bluetoothctl are therefore neither queries nor actions here.
+    // Sound pane: the devices, and their PipeWire node names (the Type column).
     if (program == QLatin1String("wpctl"))
-        return args == QStringList{"status"};
+        return args == QStringList{"status"} || args == QStringList{QStringLiteral("status"), QStringLiteral("-n")};
     // About pane (Backend::run): package versions and graphics adapters. Storage pane: the installed packages' sizes (pacman -Qi).
     if (program == QLatin1String("pacman"))
         return args == QStringList{QStringLiteral("-Qi")}

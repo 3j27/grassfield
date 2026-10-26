@@ -569,8 +569,8 @@ QtObject {
     readonly property int controlToggleKnobWidth: 21
     // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobHeight: 12
-    // F1 gap 18: pill knob about 21x16 +-2 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
-    readonly property int controlSliderKnobWidth: 21
+    // pill knob 20 wide (macOS 27 Settings > Sound, Alert volume; F1 gap 18 read about 21x16 +-2) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int controlSliderKnobWidth: 20
     // F1 gap 18: Quick Settings slider track stays 4 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderTrackCompact: 4
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -1456,6 +1456,44 @@ QtObject {
     readonly property int settingsToolbarSubtitleBaseline: 40
     // the status's glyph (the battery), 7.5 before its text [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
     readonly property real settingsToolbarSubtitleGlyphGap: 7.5
+    // the device table's column header band, 27 between its two lines [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableHeaderHeight: 27
+    // the column titles (11 pt): baseline 19 below the top of the header's upper line [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableHeaderBaseline: 19
+    // the column titles 2 left of the rows' text (their ink: Name at 9, Type at 306.5) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableHeaderInset: 8
+    // the device table's rows, 24 tall [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableRowHeight: 24
+    // a device row's text (13 pt): baseline 17 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableRowBaseline: 17
+    // the Type column: the rows' type at 308 from the group's left edge (its ink at 308.5-309) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableTypeColumn: 308
+    // the header band and every second row: the fill colour at 0.03 (239 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableStripeOpacity: 0.03
+    // the line above the column header: the separator colour at 0.05 (235 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableTopLineOpacity: 0.05
+    // the line under the column header: the separator colour at 0.075 (229 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableHeaderLineOpacity: 0.075
+    // the selected device while the table does not have the focus: the fill colour at 0.1 (223 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableSelectionOpacity: 0.1
+    // a row with a slider (Alert volume): 39.5 apart [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowHeight: 40
+    // a row's slider from 228 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowSliderX: 228
+    // a row's slider from 228 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowSliderWidth: 205
+    // the speakers at both ends of a volume slider: ink 11 and 12 tall [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowGlyphSize: 18
+    // estimate: Input volume's low-end microphone, smaller than the high-end one as a slider's two speakers are (no macOS 27 capture of the row) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowSmallGlyphSize: 13
+    // the low-end speaker's box at 211, its ink (from 2.25 of 18) at 213.5 [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowLowGlyphX: 211
+    // the high-end speaker's box (its ink reaches the box's right edge) 12.5 from the group's right edge [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSliderRowHighGlyphInset: 12.5
+    // the slider and its glyphs centred 19.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSliderRowCenter: 19.5
+    // a slider row's title 1.5 above the row's middle (its cap top 13.5, the slider centred 19.5) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSliderRowTitleOffset: -1.5
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

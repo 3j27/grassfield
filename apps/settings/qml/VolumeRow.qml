@@ -2,8 +2,9 @@ import QtQuick
 import Grassfield.Ui
 import "System.js" as System
 
-// Volume slider row of the Sound pane. Writes are coalesced (one wpctl call per throttle interval while dragging) and
-// go through SystemService, so a dev session suppresses them and the slider snaps back.
+// Volume slider row of the Sound pane, laid out as macOS 27's Alert volume (docs/audits/settings-parity-2026-10-26.md § Sound):
+// the title, then a small glyph, the slider and a large glyph. Writes are coalesced (one wpctl call per throttle interval while
+// dragging) and go through SystemService, so a dev session suppresses them and the slider snaps back.
 SettingsRow {
     id: root
 
@@ -12,10 +13,21 @@ SettingsRow {
     property real volume: 0
     property bool muted: false
     property string accessibleName: root.title
+    // The glyphs at the low and high ends.
+    property string lowGlyph: "speaker"
+    property string highGlyph: "volume-3"
+    // The low-end glyph's size, centred where an 18-pt one sits (a microphone is drawn smaller there).
+    property real lowGlyphSize: Tokens.settingsSliderRowGlyphSize
 
     // A drag is being applied: the page keeps its older reading out of the slider meanwhile.
     readonly property bool busy: !isNaN(root.pending) || throttle.running
     property real pending: NaN
+    // Below the separator.
+    readonly property real contentTop: root.Positioner.index > 0 ? 1 : 0
+    readonly property real center: root.contentTop + Tokens.settingsSliderRowCenter
+
+    implicitHeight: root.contentTop + Tokens.settingsSliderRowHeight - 1
+    labelsOffset: Tokens.settingsSliderRowTitleOffset
 
     function flush(): void {
         const v = root.pending;
@@ -26,15 +38,21 @@ SettingsRow {
     }
 
     Icon {
-        name: System.volumeGlyph(root.volume, root.muted)
-        size: Tokens.settingsListIconSize
+        parent: root
+        name: root.lowGlyph
+        size: root.lowGlyphSize
         color: Appearance.windowSecondary
-        anchors.verticalCenter: parent.verticalCenter
+        x: Tokens.settingsSliderRowLowGlyphX + (Tokens.settingsSliderRowGlyphSize - width) / 2
+        y: root.center - height / 2
+        opacity: slider.enabled ? 1 : Tokens.materialDisabledOpacity
     }
 
     Slider {
         id: slider
-        width: Tokens.controlSliderDefaultWidth
+        parent: root
+        x: Tokens.settingsSliderRowSliderX
+        y: root.center - height / 2
+        width: Tokens.settingsSliderRowSliderWidth
         accessibleName: root.accessibleName
         enabled: root.deviceId >= 0
         opacity: enabled ? 1 : Tokens.materialDisabledOpacity
@@ -49,15 +67,14 @@ SettingsRow {
         }
     }
 
-    Text {
-        textFormat: Text.PlainText
-        anchors.verticalCenter: parent.verticalCenter
-        width: Tokens.settingsVolumeValueWidth
-        horizontalAlignment: Text.AlignRight
-        text: qsTr("%1%").arg(System.percent(root.volume))
+    Icon {
+        parent: root
+        name: root.highGlyph
+        size: Tokens.settingsSliderRowGlyphSize
         color: Appearance.windowSecondary
-        font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyBodySize
+        x: root.width - Tokens.settingsSliderRowHighGlyphInset - width
+        y: root.center - height / 2
+        opacity: slider.enabled ? 1 : Tokens.materialDisabledOpacity
     }
 
     Timer {
