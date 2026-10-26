@@ -39,8 +39,9 @@ Scope {
     // A file found unusable is re-read at once when its signature changes (or the watch reports it); while the signature stays the
     // same the full re-read backs off: pollInterval, then twice, four times, ... up to this (ms). What can still change without the
     // signature is the reader (a `head` that stalled or failed), which is worth a try now and then, not every tick: a 1 MiB+ file or
-    // a FIFO cost a bounded read and parse each time. 5 minutes: a reader that recovers is noticed within 5 minutes, and a
-    // permanently unusable file costs one read per 5 minutes (against one per 10 s).
+    // a FIFO cost a bounded read and parse each time. 5 minutes: a permanently unusable file costs one read per 5 minutes (against
+    // one per 10 s). Trade-off: a repair that changes no signature and raises no watch event (a recovered reader) is noticed
+    // within 5 minutes, not 10 s; lock.* stays at its closed default until then.
     property int badRetryCap: 300000
     // The full reads started (tests count them).
     property int fullReads: 0

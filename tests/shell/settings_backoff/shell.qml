@@ -48,12 +48,12 @@ ShellRoot {
         root.finish(false, "step \"" + root.stepName + "\": " + message + " (fullReads=" + (root.store ? root.store.fullReads : -1) + ")");
     }
 
-    function start(name: string): void {
+    function start(name: string, cap: int): void {
         if (root.store !== null) {
             root.store.destroy();
             root.store = null;
         }
-        root.store = comp.createObject(root, {configDir: root.dir(name)});
+        root.store = comp.createObject(root, {configDir: root.dir(name), badRetryCap: cap});
     }
 
     function windowCheck(): string {
@@ -67,7 +67,7 @@ ShellRoot {
     // check: a function returning an error text or ""; shAfter: sh is a file check run once `until` held.
     readonly property var steps: [
         // --- a file over the limit ---
-        {name: "over limit: setup", sh: 'mkdir -p "$B/big" && head -c 2097152 /dev/zero > "$B/big/grassfield.json"', run: () => root.start("big")},
+        {name: "over limit: setup", sh: 'mkdir -p "$B/big" && head -c 2097152 /dev/zero > "$B/big/grassfield.json"', run: () => root.start("big", 800)},
         {name: "over limit: unusable", closed: true, until: () => root.store.loaded && root.store.writeBlocked && root.store.lockIdleMinutes === 5},
         {name: "over limit: reads over the window", wait: root.kWindowMs, check: root.windowCheck},
         // The signature changes: read at once, and the backoff starts over (the next poll reads again).
@@ -81,13 +81,26 @@ ShellRoot {
         {name: "over limit: the waiting change is saved", shAfter: true, until: () => root.store.dockAutohide && !root.store.writeBlocked, within: 3000,
             sh: 'sleep 1; grep -q \'"autohide": true\' "$B/big/grassfield.json" && grep -q \'"size": 70\' "$B/big/grassfield.json"'},
         // --- a FIFO ---
-        {name: "fifo: setup", sh: 'mkdir -p "$B/fifo" && mkfifo "$B/fifo/grassfield.json"', run: () => root.start("fifo")},
+        {name: "fifo: setup", sh: 'mkdir -p "$B/fifo" && mkfifo "$B/fifo/grassfield.json"', run: () => root.start("fifo", 800)},
         {name: "fifo: unusable", closed: true, until: () => root.store.loaded && root.store.writeBlocked && root.store.lockIdleMinutes === 5},
         {name: "fifo: reads over the window", wait: root.kWindowMs, check: root.windowCheck},
         {name: "fifo: replaced by a file", open: true, sh: 'rm -f "$B/fifo/grassfield.json" && printf \'{"version":1,"lock":{"idleMinutes":0}}\' > "$B/fifo/grassfield.json"'},
         {name: "fifo: repair picked up", until: () => root.store.validRead && root.store.lockIdleMinutes === 0, within: 1500},
+        // --- a signature change the watch cannot see: only the poll's stat can explain a quick re-read ---
+        // grassfield.json -> ext/link -> ext/big1; the link is retargeted, which no watch on the config directory or on the old
+        // file reports. The cap (5 s) is far above `within`, and the backoff has grown to its longest by then.
+        {name: "watch-blind: setup", sh: 'mkdir -p "$B/wb" "$B/ext" && for n in 1 2 3; do head -c $((2097151 + n)) /dev/zero > "$B/ext/big$n"; done && ln -s big1 "$B/ext/link" && ln -s ../ext/link "$B/wb/grassfield.json"', run: () => root.start("wb", 5000)},
+        {name: "watch-blind: unusable", closed: true, until: () => root.store.loaded && root.store.writeBlocked && root.store.lockIdleMinutes === 5},
+        {name: "watch-blind: backoff grown", wait: 4500},
+        {name: "watch-blind: count", run: () => { root.mark = root.store.fullReads; }},
+        {name: "watch-blind: retargeted", sh: 'ln -s big2 "$B/ext/link.new" && mv -fT "$B/ext/link.new" "$B/ext/link"'},
+        {name: "watch-blind: read at once (the signature, not the backoff, not the watch)", until: () => root.store.fullReads >= root.mark + 1, within: 600},
+        {name: "watch-blind: backoff starts over (the next read is one poll away, not 2^n)", until: () => root.store.fullReads >= root.mark + 2, within: 600},
+        // The one after that is two polls on (level 1, not the level the backoff had reached): a kept level would leave it 50 polls away.
+        {name: "watch-blind: and the one after is two polls on", until: () => root.store.fullReads >= root.mark + 3, within: 600},
+        {name: "watch-blind: lock still closed", wait: 300, check: () => root.store.writeBlocked && !root.store.validRead && root.store.lockIdleMinutes === 5 ? "" : "the lock opened"},
         // --- a usable file: read again on a signature change only ---
-        {name: "usable: setup", sh: 'mkdir -p "$B/ok" && printf \'{"version":1,"lock":{"idleMinutes":10}}\' > "$B/ok/grassfield.json"', run: () => root.start("ok")},
+        {name: "usable: setup", open: true, sh: 'mkdir -p "$B/ok" && printf \'{"version":1,"lock":{"idleMinutes":10}}\' > "$B/ok/grassfield.json"', run: () => root.start("ok", 800)},
         {name: "usable: read", until: () => root.store.validRead && root.store.lockIdleMinutes === 10},
         {name: "usable: not read again while unchanged", wait: 2000, check: () => root.store.fullReads === 1 ? "" : "fullReads " + root.store.fullReads + ", wanted 1"},
         {name: "usable: changed", sh: 'printf \'{"version":1,"lock":{"idleMinutes":15}}\' > "$B/ok/grassfield.json.new" && mv -f "$B/ok/grassfield.json.new" "$B/ok/grassfield.json"'},
