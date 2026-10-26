@@ -52,7 +52,7 @@ Singleton {
     // Hyprland reads its configuration again (the trial applied or taken back): SessionConfig's one request.
     function reload(): int {
         root.reloads++;
-        return SessionConfig.reload("display trial");
+        return SessionConfig.reload("display trial", Tokens.settingsDisplayTrialAnswerMs);
     }
 
     function empty(): void {

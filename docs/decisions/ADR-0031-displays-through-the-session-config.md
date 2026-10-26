@@ -67,8 +67,9 @@ What Grassfield already has:
      that same request: Hyprland answers once it has read its configuration (counter-review of 2026-10-26: the request alone
      does not mean the mode is set). Each request has its own connection and ticket, so the answer to another reload (the
      previous trial taken back, the input files) cannot stand for it; the `configreloaded` event could (it names no
-     request). If the answer is not `ok` or never comes, the trial stays `applying`, Keep stays refused and the deadline
-     takes it back. A display can still take a moment to show the new mode after that (the monitor resyncs): no event says
+     request). If the answer is not `ok` or does not come within `settings.displayTrialAnswerMs` (3 s: reading the Lua
+     configuration may take longer than the 1 s a blur push waits), the trial stays `applying`, Keep stays refused and the
+     deadline takes it back. A display can still take a moment to show the new mode after that (the monitor resyncs): no event says
      when it is done.
    - The shell owns the countdown. It survives a Settings that crashed or was closed.
    - Settings shows a sheet: "Keep these display settings?", "The previous settings come back in N seconds.", Revert and Keep.

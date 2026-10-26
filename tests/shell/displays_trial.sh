@@ -2,7 +2,8 @@
 # ADR-0031: the shell's side of a display trial (shell/platform/Displays.qml) and of the input files (SessionConfig.qml),
 # offscreen, against a fake Hyprland: a request
 # socket that records every request and answers it ("[]" for the JSON queries; "ok" to a reload a moment later, as Hyprland
-# answers once it has read its configuration, except the fifth reload, which it refuses), and a silent event socket. Runs
+# answers once it has read its configuration: the second, t1's, after 1.4 s, longer than a blur push waits but within a
+# display trial's settings.displayTrialAnswerMs; the fifth it refuses), and a silent event socket. Runs
 # tests/shell/displays_trial.d/trial.qml as a dev session (the trial and state files under GRASSFIELD_STATE_HOME), then checks
 # that the fake saw exactly the reloads the QML counted. Nothing here can reach a real Hyprland: HYPRLAND_INSTANCE_SIGNATURE
 # and XDG_RUNTIME_DIR point at the test's own directory.
@@ -40,7 +41,7 @@ def answer(c):
             reloads += 1
             n = reloads
     if data == "reload":
-        time.sleep(0.3)
+        time.sleep(1.4 if n == 2 else 0.3)
         c.sendall(b"error: refused" if n == 5 else b"ok")
     else:
         c.sendall(b"[]" if data.startswith("j/") or "j/" in data[:8] else b"ok")

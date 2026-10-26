@@ -110,14 +110,22 @@ ShellRoot {
                 root.write("trial t1 until " + (root.stamp() + 30) + "\n" + root.line);
                 break;
             case 2:
-                root.check("a new trial is applied with one reload", Displays.reloads === 2 && Displays.running === "t1");
+                root.check("a new trial is asked for with one reload", Displays.reloads === 2 && Displays.running === "t1");
+                const asked = root.published();
+                root.check("applying while Hyprland has not answered", asked !== null && JSON.stringify(asked.trial) === '{"id":"t1","state":"applying"}');
+                break;
+            case 3:
+            case 4:
+                break;
+            case 5:
+                // Hyprland answered t1's reload after 1.4 s: later than a blur push waits, within settings.displayTrialAnswerMs.
                 const s = root.published();
-                root.check("the state says it", s !== null && JSON.stringify(s.trial) === '{"id":"t1","state":"applied"}');
+                root.check("applied once Hyprland answered, even 1.4 s later", s !== null && JSON.stringify(s.trial) === '{"id":"t1","state":"applied"}');
                 root.check("applying until Hyprland answered the reload", JSON.stringify(root.seen.filter(x => x.startsWith("t1 ")))
                     === '["t1 applying","t1 applied"]');
                 root.write("kept t1\n");
                 break;
-            case 3:
+            case 6:
                 root.check("Keep: no reload, nothing runs", Displays.reloads === 2 && Displays.running === ""
                     && JSON.stringify(Displays.trialState) === '{"id":"t1","state":"kept"}');
                 trialFile.reload();
@@ -125,42 +133,42 @@ ShellRoot {
                 root.check("Keep empties the file", trialFile.text() === "");
                 root.write("trial t2 until " + (root.stamp() + 2) + "\n" + root.line);
                 break;
-            case 4:
+            case 7:
                 root.check("t2 asked for", Displays.reloads === 3 && Displays.running === "t2");
                 break;
-            case 5:
-            case 6:
+            case 8:
+            case 9:
                 break;
-            case 7:
+            case 10:
                 // About 2.4 s later: past t2's deadline.
                 root.check("the deadline takes it back with one reload", Displays.reloads === 4 && Displays.running === ""
                     && JSON.stringify(Displays.trialState) === '{"id":"t2","state":"reverted"}');
                 root.write("trial t3 until " + (root.stamp() + 30) + "\n" + root.line);
                 break;
-            case 8:
+            case 11:
                 root.check("t3 asked for", Displays.reloads === 5 && Displays.running === "t3");
                 root.check("Hyprland refused t3's reload: it stays applying", JSON.stringify(Displays.trialState) === '{"id":"t3","state":"applying"}');
                 root.write("revert t3\n");
                 break;
-            case 9:
+            case 12:
                 root.check("Revert takes it back with one reload", Displays.reloads === 6 && Displays.running === ""
                     && JSON.stringify(Displays.trialState) === '{"id":"t3","state":"reverted"}');
                 root.write("revert zz\n");
                 break;
-            case 10:
+            case 13:
                 root.check("Revert of a trial nobody runs: nothing", Displays.reloads === 6);
                 root.write("kept zz\n");
                 break;
-            case 11:
+            case 14:
                 root.check("Keep of a trial nobody runs: nothing", Displays.reloads === 6);
                 root.write("trial t4 until " + (root.stamp() - 5) + "\n" + root.line);
                 break;
-            case 12:
+            case 15:
                 root.check("a trial past its deadline is taken back at once", Displays.reloads === 7 && Displays.running === ""
                     && JSON.stringify(Displays.trialState) === '{"id":"t4","state":"reverted"}');
                 root.write("not a trial\n");
                 break;
-            case 13:
+            case 16:
                 root.check("a line that is not a trial: nothing", Displays.reloads === 7 && Displays.running === "");
                 const last = root.published();
                 root.check("the state is published", last !== null && last.v === 1 && Array.isArray(last.monitors));
@@ -169,15 +177,15 @@ ShellRoot {
                 keyboardFile.setText("return { repeat_rate = 15 }\n");
                 keyboardFile.setText("return { repeat_rate = 25 }\n");
                 break;
-            case 14:
+            case 17:
                 break;
-            case 15:
+            case 18:
                 root.check("three writes of a new keyboard.lua: one reload", SessionConfig.reloads === 8 && Displays.reloads === 7);
                 mouseFile.setText("return { tap_to_click = false }\n");
                 break;
-            case 16:
+            case 19:
                 break;
-            case 17:
+            case 20:
                 root.check("a change of mouse-trackpad.lua: one more", SessionConfig.reloads === 9);
                 console.log(root.failures.length === 0 ? "displays-trial: PASS (" + SessionConfig.reloads + " reloads)" : "displays-trial: FAIL " + root.failures.join("; "));
                 Qt.quit();

@@ -26,8 +26,9 @@ Singleton {
     readonly property string mouseTrackpadPath: Mode.configDir + "/mouse-trackpad.lua"
     readonly property string keyboardPath: Mode.configDir + "/keyboard.lua"
 
-    // The request's ticket (answered() names it), or 0 when there is no Hyprland to ask.
-    function reload(why: string): int {
+    // The request's ticket (answered() names it), or 0 when there is no Hyprland to ask. `answerMs`: how long its answer may
+    // take (a display trial's reload gets longer than the input files': Tokens.settingsDisplayTrialAnswerMs).
+    function reload(why: string, answerMs: int): int {
         const path = Hyprland.requestSocketPath || "";
         if (path === "") {
             console.info("grassfield-shell: session config: no Hyprland request socket, not read again (" + why + ")");
@@ -35,7 +36,7 @@ Singleton {
         }
         root.reloads++;
         console.info("grassfield-shell: session config read again (" + why + ")");
-        reloadSocket.createObject(root, {"path": path, "ticket": root.reloads});
+        reloadSocket.createObject(root, {"path": path, "ticket": root.reloads, "answerMs": answerMs > 0 ? answerMs : Tokens.materialBlurAnswerMs});
         return root.reloads;
     }
 
@@ -43,7 +44,7 @@ Singleton {
     Timer {
         id: inputSettle
         interval: Tokens.settingsInputReloadMs
-        onTriggered: root.reload("input settings")
+        onTriggered: root.reload("input settings", Tokens.materialBlurAnswerMs)
     }
 
     FileView {
@@ -68,6 +69,7 @@ Singleton {
         Socket {
             id: sock
             property int ticket: 0
+            property int answerMs: Tokens.materialBlurAnswerMs
             property string reply: ""
             property bool judged: false
 
@@ -99,7 +101,7 @@ Singleton {
             }
 
             readonly property Timer answerTimeout: Timer {
-                interval: Tokens.materialBlurAnswerMs
+                interval: sock.answerMs
                 onTriggered: sock.finish()
             }
 

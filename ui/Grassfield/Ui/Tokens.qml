@@ -1564,6 +1564,8 @@ QtObject {
     readonly property int settingsDisplayTrialSeconds: 15
     // estimate: how long the shell may take to say that it applied a trial before the page calls it not applied (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayAppliedMs: 4000
+    // estimate: ms the shell waits for Hyprland's answer to the reload that applies a display trial (reading the Lua configuration may take longer than a blur push's second; past it the trial stays applying and its deadline takes it back; ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayTrialAnswerMs: 3000
     // estimate: the keep sheet's countdown is read again this often, so the seconds it shows are never late by more than a quarter (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTickMs: 250
     // Arrange…: Shift and an arrow key move a display along its edge by this part of its size (keyboard arrangement) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
