@@ -30,7 +30,7 @@ constexpr qint64 kMaxRead = 4 * 1024 * 1024;
 constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
-constexpr int kActionJobMs = 60000; // a D-Bus action: up to two calls of systembus.cpp kActMs (30 s) in a row (look up, then act)
+constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)

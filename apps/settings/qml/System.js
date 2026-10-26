@@ -142,9 +142,10 @@ function wifiSecurity(flags, wpa, rsn) {
         out.push("802.1X");
     if (rsn & 0x800)
         out.push("OWE");
-    if (out.length === 0 && (rsn !== 0 || wpa !== 0))
+    // 0x1000: OWE transition, an open network that also has an Enhanced Open twin: no credentials, still open (as systembus.cpp).
+    if (out.length === 0 && (wpa !== 0 || (rsn & ~0x1000) !== 0))
         out.push("WPA");
-    if (out.length === 0 && (flags & 1))
+    if (out.length === 0 && (flags & 1) && rsn === 0 && wpa === 0)
         out.push("WEP");
     return out.join(" ");
 }
