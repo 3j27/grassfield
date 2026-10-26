@@ -131,7 +131,7 @@ ShellRoot {
     function describe(): string {
         const s = root.steps[root.step];
         const label = s.op !== undefined ? s.op : "file " + s.text;
-        let out = "step " + root.step + " (" + label + "): " + s.want.map(w => w[0] + "=" + JSON.stringify(store[w[0]]) + " wanted " + JSON.stringify(root.expected(w[1]))).join(", ");
+        let out = "[blocked=" + store.writeBlocked + " valid=" + store.validRead + " dirty=" + JSON.stringify(store.dirty) + " inflight=" + JSON.stringify(store.inFlight) + " fails=" + store.writeFailures + "] step " + root.step + " (" + label + "): " + s.want.map(w => w[0] + "=" + JSON.stringify(store[w[0]]) + " wanted " + JSON.stringify(root.expected(w[1]))).join(", ");
         if (s.file !== undefined)
             out += "; file read back " + JSON.stringify(root.fileDoc) + " wanted " + JSON.stringify(s.file);
         if (s.fresh !== undefined && root.fresh !== null)

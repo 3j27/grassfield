@@ -834,7 +834,23 @@ deleted file's `"idleMinutes": 0` back). The one exception to "a running shell r
 file: the cosmetic keys keep their last good values until the file is fixed (a restart would show the defaults), but the lock
 timing fails closed: `lock.*` reads the default 5 at once, as a restart does, and nothing is written while the file is
 malformed. Known limit (pre-existing): there is no lock between the fresh read of the file and its atomic replacement, so an
-external edit made in that instant can be lost. `IdleModel.timings` is a stricter backstop: anything that is not a number,
+external edit made in that instant can be lost. The file is never read without a bound: both reads (the load and the fresh
+read before a write) are one script that reports a file as read only when the read ended without error and returned exactly
+the size the file had (a read cut after 5 s, a failing `head`, a file swapped under the read is "incomplete": malformed, never
+an empty file, whose defaults a write would put over the user's settings), and that opens only a regular file of at most 1 MiB (a symlink to /dev/zero, a FIFO, a
+directory, a 300 MB file are read as malformed without being opened or read: `tests/shell/settings_bounds` measures the
+shell's peak memory, +3 MB for each of them where the unbounded read cost 3.7 GB), cuts a read after 5 s, and reads a file
+that is not readable (chmod 000) as malformed too: `lock.*` reads 5, the cosmetic keys keep their last good values, nothing
+is written. A symlinked `grassfield.json` is followed (its target is read and replaced, the link stays) and a replacement
+of the link by a regular file is noticed within 10 s. A failed write keeps its change pending and is retried; a file that could not be used is read again every 10 s (its
+signature never equals the one of a usable file), so a repaired or removed file is noticed without a watch event, and a change
+that waited is written then. The write keeps the mode of the file it replaces (0666 minus the umask for a new one), syncs the
+temporary file before the rename, and refuses a target that became a directory. Both unusable-file paths (the load and the read before a write) mark the file as unread, so
+the poll reads it again whichever read found it unusable, and a change made while the file was unusable is written once the file
+is removed. The read holds the text (at most 1 MiB) in a shell variable and creates no temporary file, so a full or unwritable
+`$TMPDIR` cannot make every read incomplete. Behaviour change: a `grassfield.json` the user cannot write (mode 0444) is never
+written, because the mode is kept and the temporary file cannot be filled: the change stays pending, is retried at the 60 s
+backoff, and one warning is logged. `IdleModel.timings` is a stricter backstop: anything that is not a number,
 above 240 or not whole reads 5, and only a number that is exactly 0 is never.
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
