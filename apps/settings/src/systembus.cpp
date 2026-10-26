@@ -155,12 +155,16 @@ bool isOwe(const AccessPoint &ap)
     return ap.wpa == 0 && (ap.rsn & kKeyMgmtOwe) != 0 && (ap.rsn & kKeyMgmtNeedsCredentials) == 0;
 }
 
-// Whether joining needs a password or an account: WPA/WPA2/WPA3/802.1X, or WEP (privacy flag with nothing else); OWE does not.
+constexpr uint kKeyMgmtOweTransition = 0x1000;
+
+// Whether joining needs a password or an account: WPA/WPA2/WPA3/802.1X (or any other key management), or WEP (privacy flag with
+// no WPA/RSN information at all). Enhanced Open does not, and neither does the open side of OWE transition mode (RsnFlags 0x1000
+// only). This is the rule of System.wifiSecurity: the label ("" or "OWE" = no lock, joins with a click) and the join agree.
 bool needsCredentials(const AccessPoint &ap)
 {
     if (isOwe(ap))
         return false;
-    return ap.wpa != 0 || (ap.rsn & kKeyMgmtNeedsCredentials) != 0 || (ap.flags & 1) != 0;
+    return ap.wpa != 0 || (ap.rsn & ~kKeyMgmtOweTransition) != 0 || ((ap.flags & 1) != 0 && ap.rsn == 0);
 }
 
 struct Profile {

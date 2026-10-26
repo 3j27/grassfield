@@ -170,6 +170,10 @@ TestCase {
         compare(System.wifiSecurity(1, 0, 0x300), "WPA2 802.1X");
         compare(System.wifiSecurity(0, 0, 0x800), "OWE");
         compare(System.wifiSecurity(1, 0, 0x1), "WPA");            // encrypted, key management unknown: still secured
+        compare(System.wifiSecurity(0, 0, 0x1000), "");            // OWE transition: the open side, no credentials
+        compare(System.wifiSecurity(1, 0, 0x1000), "");            // ... also with the privacy flag set
+        compare(System.wifiSecurity(1, 0, 0x1008), "WPA");         // a cipher next to it: secured, as the join rule says
+        compare(System.wifiSecurity(1, 0, 0), "WEP");              // privacy flag and nothing else
     }
 
     function test_wifiState() {
@@ -200,6 +204,15 @@ TestCase {
         compare(System.wifiClickKind({hex: owe.hex, active: false, secured: owe.secured}, {}), "open");
         compare(list.find(n => n.ssid === "Owe" && n.security !== "OWE").secured, true);
         compare(list.find(n => n.ssid === "Mix").secured, true);
+    }
+
+    function test_wifiOweTransitionIsOpen() {
+        const list = System.parseWifiState(wifiJson([ap("4F7765", 50, 0, 0, 0x1000), ap("4F776D", 40, 1, 0, 0x1000)])).networks;
+        compare(list.length, 2);
+        for (const n of list) {
+            compare(n.secured, false);
+            compare(System.wifiClickKind({hex: n.hex, active: false, secured: n.secured}, {}), "open");
+        }
     }
 
     function test_wifiDuplicateKeepsStrongest() {

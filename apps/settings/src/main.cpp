@@ -62,8 +62,10 @@ int main(int argc, char *argv[])
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
         Qt::QueuedConnection);
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("Main.qml"))));
-    if (engine.rootObjects().isEmpty())
+    if (engine.rootObjects().isEmpty()) {
+        grassfield::settings::BusJobs::setExitCode(1); // the same code if a D-Bus job were abandoned on the way out
         return 1;
+    }
     // The registrar may appear later (an app started before the bridge) or restart: the menus follow it.
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
     const int code = app.exec();

@@ -9,6 +9,8 @@
 #include <QProcessEnvironment>
 #include <QThread>
 
+#include <unistd.h>
+
 #include <atomic>
 #include <memory>
 
@@ -211,15 +213,19 @@ TEST_F(BusJobsTest, StuckJobsAreCappedNotPiledUp)
 // The default abandon path (every test above passes its own): the process leaves at once, with the application's own exit code
 // (BusJobs::setExitCode, the result of exec()), not a 0 that hides a failure. gtest death tests are not used (they capture the
 // child's stderr in /tmp, which a sandbox may not allow): this binary starts itself as the child, in the mode named by
-// GF_BUSJOBS_CHILD, and the scenario runs from a static initializer, before gtest's main. 99 is what the child would leave with
+// GF_BUSJOBS_CHILD ("<mode>@<parent pid>": a leaked value is ignored), and the scenario runs from a static initializer, before gtest's main. 99 is what the child would leave with
 // if the abandon path did not take it out: it is never reached.
 namespace {
 struct ChildMode {
     ChildMode()
     {
-        const QByteArray mode = qgetenv("GF_BUSJOBS_CHILD");
-        if (mode.isEmpty())
+        // "<mode>@<pid of the parent test>": a value that leaked into the environment of a shell does not name the parent of this
+        // process, and must not make the test binary leave without running its tests.
+        const QByteArray value = qgetenv("GF_BUSJOBS_CHILD");
+        const int at = value.indexOf('@');
+        if (at < 0 || value.mid(at + 1).toLongLong() != static_cast<qint64>(getppid()))
             return;
+        const QByteArray mode = value.left(at);
         app();
         if (mode == "code7")
             BusJobs::setExitCode(7);
@@ -238,7 +244,7 @@ QPair<int, qint64> runChild(const char *mode)
 {
     QProcess child;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert(QStringLiteral("GF_BUSJOBS_CHILD"), QString::fromLatin1(mode));
+    env.insert(QStringLiteral("GF_BUSJOBS_CHILD"), QString::fromLatin1(mode) + QLatin1Char('@') + QString::number(getpid()));
     child.setProcessEnvironment(env);
     QElapsedTimer t;
     t.start();
