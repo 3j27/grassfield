@@ -112,6 +112,7 @@ event minimize-request: address
 event minimized: address
 event restored: address
 event appmenu: address service path pid
+event keyboard-focus: address
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
@@ -127,6 +128,7 @@ enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
+feature keyboard-focus
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile
 ```
 

@@ -120,9 +120,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
   registered; `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
-  registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered; `stages`
-  only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times"]`
+  registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered;
+  `keyboard-focus` (FR20) with `appmenu`; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times","keyboard-focus"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the capabilities JSON plus one field, `"version"` (the product version of the plugin, from the VERSION file; GF-013), as its last member. The `capabilities` event is unchanged (no `version`): its wire format is fixed by the unit tests.
 - **FR54** Presented-frame times (ADR-0006 gate P3): every output's presented frames (Hyprland's
@@ -216,7 +216,12 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   the registering client's pid; for a mapped Wayland window without a registration it is that window's client pid
   (`wl_client_get_credentials`), so that the shell can ask the menu bridge for the menu that process registered with
   `com.canonical.AppMenu.Registrar` (Electron, ADR-0008 amendment 2026-10-25); 0 for an X11/XWayland window (its
-  Wayland client is Xwayland) and for a clear.
+  Wayland client is Xwayland) and for a clear. With the appmenu server (feature `keyboard-focus`) the plugin also posts
+  `grassfield>>{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` each time the seat's keyboard focus enters a
+  mapped window (Hyprland's `input.keyboard.focus`; once per entry: the window that has it is announced again only after
+  the keyboard went elsewhere, a layer surface or nothing). The menu bar sends a chosen item's action when the item's
+  window has the keyboard back after the menu closed (docs/specs/menu-bridge.md MB12: an Electron click handler runs for
+  its focused window only).
 - **FR21** When an announced registration goes away — the window is unmapped (`window.close`) or destroyed,
   the appmenu object is released or destroyed (client exit), or the surface is destroyed — the plugin posts
   the same event with `"service":"","path":""`. A window mapped again on the same surface is announced again.
@@ -726,6 +731,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
 | shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "funnel"\|"shrink"\|"fade")` (only with feature `minimize-effect`) | FR45 |
 | plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>","pid":N}`; `"service":"","path":""` = no `set_address` menu, with the window's Wayland client pid (0: X11/XWayland or a clear) (FR20–FR22) |
+| plugin → shell | socket2 event `grassfield` (the seat's keyboard focus entered a mapped window; feature `keyboard-focus`) | `{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` (FR20) |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
 | shell → plugin | `hl.plugin.grassfield.overview("<json>")` | `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address":"0x<hex>","x","y","w","h"}…]}` (FR25-FR27) |

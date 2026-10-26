@@ -2,6 +2,7 @@
 
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Surfaces.hpp"
 #include "core/Appmenu.hpp"
 #include "core/Protocol.hpp"
 
@@ -63,6 +64,7 @@ namespace {
         SObjects                         live;
         am::CRegistry                    registry;
         std::vector<CHyprSignalListener> listeners;
+        uint64_t                         keyboardWindow = 0; // the mapped window the keyboard entered last (0: none)
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -306,6 +308,20 @@ namespace {
         }
     }
 
+    // The seat's keyboard focus entered a surface: a keyboard-focus event when it is a mapped window's (feature
+    // keyboard-focus, advertised with appmenu). Once per entry: the window that had it already is not announced again
+    // until the keyboard went elsewhere (a layer surface, nothing), as when a shell popup that held it closes.
+    void onKeyboardFocus(const SP<CWLSurfaceResource>& surface) {
+        const auto owner  = gf::surfaces::ownerOf(surface);
+        const auto window = owner.window && owner.window->m_isMapped && !owner.popup ? idOf(owner.window.get()) : 0;
+        auto&      s      = st();
+        if (window == s.keyboardWindow)
+            return;
+        s.keyboardWindow = window;
+        if (window != 0 && s.ready)
+            gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::KeyboardFocus, .id = 0}, gf::gfc::keyboardFocusJson(hexAddress(window)));
+    }
+
     void onWindowFocused(const PHLWINDOW& w) {
         if (w && w->m_isMapped)
             post(st().registry.query(idOf(w.get())));
@@ -343,6 +359,7 @@ namespace gf::appmenuServer {
         l.push_back(ev.window.close.listen([](const PHLWINDOW& w) { gf::guarded("appmenu window.close", [&] { onWindowUnmapped(w); }); }));
         l.push_back(ev.window.destroy.listen([](const PHLWINDOWREF& /*w*/) { gf::guarded("appmenu window.destroy", [] { sweepWindows(); }); }));
         l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason /*reason*/) { gf::guarded("appmenu window.active", [&] { onWindowFocused(w); }); }));
+        l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& surface) { gf::guarded("appmenu keyboard.focus", [&] { onKeyboardFocus(surface); }); }));
 
         s.global = wl_global_create(g_pCompositor->m_wlDisplay, &org_kde_kwin_appmenu_manager_interface, kGlobalVersion, nullptr, bindManager);
         if (!s.global) {
@@ -358,6 +375,7 @@ namespace gf::appmenuServer {
     void stop() {
         auto& s = st();
         s.listeners.clear();
+        s.keyboardWindow = 0;
 
         const bool   shuttingDown = !g_pCompositor || g_pCompositor->m_isShuttingDown;
         const size_t clientObjs   = s.live.managers.size() + s.live.objects.size();

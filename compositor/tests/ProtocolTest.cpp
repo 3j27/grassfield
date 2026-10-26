@@ -90,6 +90,17 @@ TEST(Protocol, AppmenuJsonEscapesEveryField) {
     EXPECT_EQ(appmenuJson("1", std::string_view(":1.\0", 4), "/\x01", 0), R"({"v":"gfc/1","type":"appmenu","address":"1","service":":1.\u0000","path":"/\u0001","pid":0})");
 }
 
+// The menu bar sends a chosen item's action once the item's window has the keyboard back (docs/specs/menu-bridge.md
+// MB12): the plugin says when the seat's keyboard focus enters a mapped window.
+TEST(Protocol, KeyboardFocusEventAndFeature) {
+    EXPECT_EQ(keyboardFocusJson("55d3c2a0b1f0"), R"({"v":"gfc/1","type":"keyboard-focus","address":"55d3c2a0b1f0"})");
+    EXPECT_EQ(keyboardFocusJson(R"(a"b)"), R"({"v":"gfc/1","type":"keyboard-focus","address":"a\"b"})");
+    EXPECT_EQ(kFeatureKeyboardFocus, "keyboard-focus");
+    EXPECT_EQ(capabilitiesJson(features(false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","appmenu","keyboard-focus"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, false, true)).find("keyboard-focus"), std::string::npos) << "only when advertised";
+}
+
 TEST(Protocol, MinimizeRequestJson) {
     EXPECT_EQ(minimizeRequestJson("55d3c2a0b1f0"), R"({"v":"gfc/1","type":"minimize-request","address":"55d3c2a0b1f0"})");
 }
