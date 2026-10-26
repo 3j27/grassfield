@@ -12,7 +12,7 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   accent         the solid accent colour
-  selection      the solid selection colour: the light appearance's accent in both appearances (Appearance.accentedDark/Light,
+  selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
   rename-field   colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper (the inline rename field)
   bar-light-tone / bar-dark-tone  the adaptive menu bar (shell/services/BarTone.qml): the opaque wallpaper itself, only for the
@@ -91,6 +91,69 @@ def wcag(a, b):
     return contrast.ratio(lum(a), lum(b))
 
 
+def grey_of(l):
+    """The sRGB grey (0-255) of a relative luminance (mirror of GlassTint.greyOf)."""
+    l = max(0.0, min(1.0, l))
+    v = l * 12.92 if l <= 0.03928 / 12.92 else 1.055 * l ** (1 / 2.4) - 0.055
+    return (v * 255, v * 255, v * 255)
+
+
+GLASS_WEIGHTS = (0.2126, 0.7152, 0.0722)
+
+
+def glass_backdrops(l):
+    """Mirror of GlassTint.backdropsOf: the grey of luminance l and the linear-light vertices of the colours of that luminance."""
+    l = max(0.0, min(1.0, l))
+    out = [grey_of(l)]
+    for c in range(3):
+        others = [k for k in range(3) if k != c]
+        for bits in range(4):
+            x = [0.0, 0.0, 0.0]
+            x[others[0]] = float(bits & 1)
+            x[others[1]] = float((bits >> 1) & 1)
+            free = (l - GLASS_WEIGHTS[others[0]] * x[others[0]] - GLASS_WEIGHTS[others[1]] * x[others[1]]) / GLASS_WEIGHTS[c]
+            if free < -1e-9 or free > 1 + 1e-9:
+                continue
+            x[c] = max(0.0, min(1.0, free))
+            out.append(tuple(grey_of(v)[0] for v in x))
+    return out
+
+
+def glass_floor(tok, appearance, lum_min, lum_max, need):
+    """Mirror of GlassTint.floorAlpha for the appearance's tint, text and secondary text, with and without the fill overlay."""
+    tint = tok.color("colors", appearance, "materialTint")
+    fill = tok.color("colors", appearance, "fill")
+    inks = [tok.color("colors", appearance, "text"), tok.color("colors", appearance, "textSecondary")]
+    for i in range(101):
+        a = i / 100
+        ok = True
+        for back in glass_backdrops(lum_min) + glass_backdrops(lum_max):
+            base = over(tint, a, back)
+            filled = over(fill, tok.path("material.fillOpacity"), base)
+            if any(wcag(ink, base) < need or wcag(ink, filled) < need for ink in inks):
+                ok = False
+                break
+        if ok:
+            return a
+    return 1.0
+
+
+def glass_target(target, t, default):
+    x = max(0.0, min(1.0, t))
+    return 1 - (1 - target) * x / default if x <= default else target * (1 - (x - default) / (1 - default))
+
+
+def glass_alpha(tok, appearance, target, t, backdrop):
+    """Mirror of GlassTint.alpha: backdrop (lum_min, lum_max) or None for the worst case."""
+    if t <= 0:
+        return 1.0
+    if backdrop is None:
+        floor = glass_floor(tok, appearance, 0.0, 1.0, 4.5)
+    else:
+        floor = glass_floor(tok, appearance, backdrop[0], backdrop[1], 4.5 + tok.path("glass.contrastMargin"))
+    return max(floor, glass_target(target, t, tok.path("material.defaultTransparency")))
+
+
 class Tokens:
     def __init__(self, data):
         self.data = data
@@ -103,12 +166,17 @@ class Tokens:
 
     def color(self, palette, appearance, name):
         # palette "colors" follows the appearance; "darkColors" / "lightColors" are always the dark / light palette.
-        # selection / selectionText are derived, not tokens: the light palette's accent and accentText in both appearances
-        # (mirror of Accent.withSelection).
-        if name in ("selection", "selectionText"):
-            return self.color("lightColors", "light", "accent" if name == "selection" else "accentText")
+        # selection / selectionText (mirror of Accent.selectionPair): the light palette's accent and accentText in the light
+        # appearance, the color.selectionDark pair of the accent in the dark one.
         fixed = {"darkColors": "dark", "lightColors": "light"}
+        if name in ("selection", "selectionText"):
+            if fixed.get(palette, appearance) == "light":
+                return self.color("lightColors", "light", "accent" if name == "selection" else "accentText")
+            return hex_rgb(self.path("color.selectionDark.%s%s" % (self.accent_name(), "Text" if name == "selectionText" else "")))
         return hex_rgb(self.path("color.%s.%s" % (fixed.get(palette, appearance), name)))
+
+    def accent_name(self):
+        return "multicolor"
 
     def number(self, ref):
         return float(ref) if isinstance(ref, (int, float)) else float(self.path(ref))
@@ -299,6 +367,9 @@ class AccentTokens(Tokens):
     def __init__(self, data, accent):
         super().__init__(data)
         self.accent = accent
+
+    def accent_name(self):
+        return self.accent
 
     def color(self, palette, appearance, name):
         if self.accent != "multicolor" and name in ("accent", "accentText"):
@@ -536,13 +607,67 @@ class ContrastTokens(unittest.TestCase):
                 self.assertIn(name + "Text", roles)
             self.assertEqual(len(roles), 2 * (len(self.ACCENTS) - 1))
 
-    def test_selection_is_the_light_accent_with_its_text_in_both_appearances(self):
-        # macOS keeps white text on its accent fill in both appearances (ADR-0024): the selection pair is the light accent's.
+    def test_selection_pair_per_appearance(self):
+        # macOS keeps white text on its accent fill in both appearances (ADR-0024): the light accent's pair in the light
+        # appearance; in the dark one the color.selectionDark shade (owner decision 2026-10-26: #2E8049 for the Grassfield
+        # green), never darker than the light accent, white at 4.85:1 or more wherever the light pair has white text.
+        roles = self.tok.data["color"]["selectionDark"]
+        self.assertEqual(sorted(roles), sorted([n for n in self.ACCENTS] + [n + "Text" for n in self.ACCENTS]))
+        self.assertEqual(self.tok.path("color.selectionDark.multicolor"), "#2E8049")
         for accent in self.ACCENTS:
             tok = AccentTokens(self.tok.data, accent)
-            for ap in APPEARANCES:
-                self.assertEqual(tok.color("colors", ap, "selection"), tok.color("lightColors", "light", "accent"), accent)
-                self.assertEqual(tok.color("colors", ap, "selectionText"), tok.color("lightColors", "light", "accentText"), accent)
+            light = tok.color("lightColors", "light", "accent")
+            light_text = tok.color("lightColors", "light", "accentText")
+            self.assertEqual(tok.color("colors", "light", "selection"), light, accent)
+            self.assertEqual(tok.color("colors", "light", "selectionText"), light_text, accent)
+            fill = tok.color("colors", "dark", "selection")
+            text = tok.color("colors", "dark", "selectionText")
+            self.assertGreaterEqual(lum(fill), lum(light), accent)
+            self.assertGreaterEqual(wcag(text, fill), 4.85 if light_text == (255, 255, 255) else 4.5, accent)
+            self.assertEqual(text == (255, 255, 255), light_text == (255, 255, 255), accent)
+
+    GLASS_CLASSES = ("menu", "notification", "controls", "apps")
+
+    def test_glass_classes_hold_a2_over_any_backdrop(self):
+        # ADR-0024 G-1 to G-3: a glass class whose backdrop the shell does not know takes the worst case; its text and secondary
+        # text keep 4.5:1 over every wallpaper colour, with and without the fill overlay, at every slider value tested.
+        for ap in APPEARANCES:
+            tint = self.tok.color("colors", ap, "materialTint")
+            fill = self.tok.color("colors", ap, "fill")
+            inks = [self.tok.color("colors", ap, "text"), self.tok.color("colors", ap, "textSecondary")]
+            for cls in self.GLASS_CLASSES:
+                target = self.tok.path("glass." + cls)
+                for t in TRANSPARENCIES + (self.tok.path("material.defaultTransparency"), 1.0):
+                    a = glass_alpha(self.tok, ap, target, t, None)
+                    for wp in WALLPAPER_COLORS:
+                        base = over(tint, a, wp)
+                        filled = over(fill, self.tok.path("material.fillOpacity"), base)
+                        for ink in inks:
+                            self.assertGreaterEqual(min(wcag(ink, base), wcag(ink, filled)), 4.5, "%s %s t=%s wp=%s a=%.2f" % (ap, cls, t, wp, a))
+
+    def test_glass_classes_hold_a2_over_a_known_backdrop(self):
+        # Over a bare desktop the class tint may drop to its target; each wallpaper colour as its own (exact) range, coloured
+        # backdrops approximated by the grey of their luminance plus glass.contrastMargin.
+        for ap in APPEARANCES:
+            tint = self.tok.color("colors", ap, "materialTint")
+            fill = self.tok.color("colors", ap, "fill")
+            inks = [self.tok.color("colors", ap, "text"), self.tok.color("colors", ap, "textSecondary")]
+            for cls in self.GLASS_CLASSES:
+                target = self.tok.path("glass." + cls)
+                for t in TRANSPARENCIES + (1.0,):
+                    for wp in WALLPAPER_COLORS:
+                        l = lum(wp)
+                        a = glass_alpha(self.tok, ap, target, t, (l, l))
+                        base = over(tint, a, wp)
+                        filled = over(fill, self.tok.path("material.fillOpacity"), base)
+                        for ink in inks:
+                            self.assertGreaterEqual(min(wcag(ink, base), wcag(ink, filled)), 4.5, "%s %s t=%s wp=%s a=%.2f" % (ap, cls, t, wp, a))
+
+    def test_glass_worst_case_matches_the_qml_test(self):
+        # tests/unit/tst_glasstint.qml asserts the same two numbers for GlassTint.js.
+        d = self.tok.path("material.defaultTransparency")
+        self.assertEqual(glass_alpha(self.tok, "light", self.tok.path("glass.menu"), d, None), 0.78)
+        self.assertEqual(glass_alpha(self.tok, "dark", self.tok.path("glass.menu"), d, None), 0.82)
 
     def test_search_selection_is_inside_the_material_fill_overlay(self):
         # The selected Search row is a neutral fill (colors.fill at search.selectionFillOpacity) under ordinary text (ADR-0024):

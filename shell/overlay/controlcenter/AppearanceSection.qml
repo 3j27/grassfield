@@ -126,6 +126,7 @@ Column {
         }
 
         Slider {
+            knobless: true
             trackHeight: Tokens.controlSliderTrackCompact
             width: parent.width - transparencyLabel.width - percent.width - 2 * parent.spacing
             anchors.verticalCenter: parent.verticalCenter

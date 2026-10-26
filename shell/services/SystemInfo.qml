@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Grassfield.Ui
 
 // Read-only facts for "About This Computer": /etc/os-release, /proc and `lspci`.
 // Loading is lazy: call refresh() when the panel opens.
@@ -23,6 +24,23 @@ Singleton {
     }
 
     Component.onCompleted: versionFile.waitForJob()
+
+    // The device is a Mac (Apple hardware or an Apple keyboard, MenuShortcut.macDevice): menu shortcuts then show the macOS
+    // symbols while `keyboard.shortcutStyle` is automatic. Read at start (not lazily like the About facts); a keyboard attached
+    // later counts from the next start. Never in a visual fixture session, whose captures must not depend on the machine.
+    readonly property bool macDevice: !VisualFixtures.active && MenuShortcut.macDevice(vendorFile.loaded ? vendorFile.text() : "", inputFile.loaded ? inputFile.text() : "")
+
+    FileView {
+        id: vendorFile
+        path: "/sys/class/dmi/id/sys_vendor"
+        printErrors: false
+    }
+
+    FileView {
+        id: inputFile
+        path: "/proc/bus/input/devices"
+        printErrors: false
+    }
 
     property string osName: ""
     property string osVersion: ""

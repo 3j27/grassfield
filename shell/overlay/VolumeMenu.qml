@@ -24,6 +24,7 @@ FocusScope {
     Keys.onDownPressed: slider.nudge(-1)
 
     Material {
+        glassClass: "menu"
         anchors.fill: parent
         radius: Tokens.radiusMenu
     }
@@ -88,8 +89,9 @@ FocusScope {
             }
 
             Slider {
-                trackHeight: Tokens.controlSliderTrackCompact
                 id: slider
+                knobless: true
+                trackHeight: Tokens.controlSliderTrackCompact
                 width: parent.width - muteButton.width - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter
                 accessibleName: qsTr("Output volume")

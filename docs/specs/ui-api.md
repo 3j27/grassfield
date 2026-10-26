@@ -67,4 +67,6 @@ add WindowActions
 add WindowControls
 add UnifiedToolbar
 add SettingsContract
+add MenuShortcut
+add GlassTint
 ```

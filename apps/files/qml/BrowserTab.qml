@@ -29,6 +29,8 @@ FocusScope {
     property real typeTime: 0
 
     readonly property var view: viewLoader.item
+    // The view's content is scrolled (icons and list; columns and gallery never report it).
+    readonly property bool scrolled: root.view !== null && root.view !== undefined && root.view.scrolled === true
     // The listing the selection actions apply to: the focused column in the column view.
     readonly property var activeFolder: root.viewMode === "columns" && root.view && root.view.activeModel ? root.view.activeModel : root.folder
     readonly property bool canBack: root.historyIndex > 0

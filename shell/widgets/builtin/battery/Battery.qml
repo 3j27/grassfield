@@ -92,7 +92,7 @@ WidgetBase {
             width: parent.width - 2 * ring.stroke - Tokens.spacingSm
             horizontalAlignment: Text.AlignHCenter
             text: root.present ? qsTr("%1%").arg(root.percent) : "-"
-            font.pixelSize: Tokens.widgetGlyphSize / 1.5
+            size: Tokens.widgetGlyphSize / 1.5
             font.weight: Tokens.typographyMenuBoldWeight
             fontSizeMode: Text.Fit
             minimumPixelSize: Tokens.typographyCaptionSize

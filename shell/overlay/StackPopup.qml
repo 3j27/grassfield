@@ -294,6 +294,7 @@ FocusScope {
 
         Material {
             id: panel
+            glassClass: "menu"
             anchors.fill: parent
             radius: Tokens.radiusMenu
         }

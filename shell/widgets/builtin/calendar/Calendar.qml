@@ -42,7 +42,7 @@ WidgetBase {
         WidgetLabel {
             width: parent.width
             text: String(root.now.getDate())
-            font.pixelSize: Tokens.widgetBigSize
+            size: Tokens.widgetBigSize
             font.weight: Tokens.typographyMenuBoldWeight
         }
 

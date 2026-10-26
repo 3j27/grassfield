@@ -197,6 +197,7 @@ does not check its gate.
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
 | overview | holdNextRelease, status | dev | `status` lists window titles and app ids |
+| backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
 | windows | minimize, tile, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R, SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything) |

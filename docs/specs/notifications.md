@@ -4,7 +4,7 @@ UI naming (renamed 2026-10-18, owner decision): the internal "Notification Cente
 Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belongs to the lock module.
 
 ## macOS reference behavior (described in words)
-- Banners slide in at the top-right under the menu bar, ~344 pt wide, rounded ~18 pt, material background,
+- Banners slide in at the top-right under the menu bar, their top where the Notifications column's top is (16 pt below the bar), ~344 pt wide, rounded ~18 pt, material background,
   app icon left, bold title, body up to 4 lines, relative time ("now", "2m ago") top-right. They stay ~5 s
   (alerts stay until acted on), hovering pauses dismissal, a swipe/drag to the right dismisses, a close (×)
   button appears on hover at the top-left corner.
@@ -12,9 +12,18 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
   Notifications column.
 - The Notifications column opens from the clock in the menu bar (click). macOS model (F1 gap 7): no full-height panel; a
   344 pt column of floating glass cards, the width of a banner, 16 pt from the right edge and below the bar. No title capsule (the
-  reference has none); cards are grouped by app, newest first; the first card of a group carries the
-  app name and the count; widgets placed in the Center follow as glass tiles; the footer (Edit Widgets pill, 24 pt close circle) is
-  centred under the column, 16 pt below the last card (at the bottom when the list fills the column). The banners hide while the column or Quick Settings is open.
+  reference has none); cards are grouped by app, newest first, 6 pt apart (within a group and between groups); the first card of a
+  group of two or more carries the app name and the count, a single notification has no app-name row (icon, bold title, body,
+  time: 56 pt for two lines; ADR-0024 lot 4b, C-14); widgets placed in the Center follow as glass tiles; the footer (Edit Widgets pill, 24 pt close circle) is
+  centred under the column, 16 pt below the last card (at the bottom when the list fills the column); the pill label is 12 pt regular in the secondary colour.
+  Title row (macOS 27, owner decision 2026-10-26; docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications): while the
+  column has notifications, "Notification Center" (fr « Centre de notifications », `notification.titleSize` 19 bold) sits
+  above the cards, 2 from the column edge, in a 30-pt row (`titleRowHeight`), with a 20-pt round x at the right
+  (`titleCloseSize`, accessible name "Clear All") that clears every notification (`Notifications.clearAll`). The title is drawn
+  straight on the wallpaper in the ink that keeps 4.5:1 over what lies under it (`GlassTint.inkOn` over the output's luminance
+  grid: the light appearance's text colour or the dark one's); when the backdrop is unknown (a window on the workspace) or
+  neither ink holds, it gets a glass plate (`titlePlatePadding`) and the appearance's text colour (A2). The x is reached by the
+  pointer and assistive technology, not by Tab (each card and group keeps its own clear). The banners hide while the column or Quick Settings is open.
   macOS 26 clear model (owner decision 2026-10-19, batch 4): there is NO permanent "Clear All" pill. Hovering (or focusing) a card
   shows a small round x at its top-left corner (accessible name "Close", fr « Fermer »); hovering a group shows, on its header card,
   "Show Less" (when the group was expanded with "Show All") and a round x that grows into a "Clear All" pill (fr « Tout effacer ») under
@@ -140,10 +149,10 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   and stays actionable while the sender keeps the notification alive. x / drag-dismiss calls `dismiss()` (sender told "dismissed"),
   the entry stays in the Center as non-actionable. A sender `CloseNotification` removes the entry. Invoking an action or the default
   click clears the entry unless `resident`. Max 5 banners visible; older ones wait in the queue.
-- Actions: first 3 non-default actions are buttons, the rest appear after "More" (inline expansion, not a menu).
+- Actions: first 3 non-default actions are buttons, the rest appear after "More" (inline expansion, not a menu). macOS shape (docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10): equal-width capsules 22 pt tall (`notification.actionHeight`), 8 pt apart (`spacing.sm`), under the text; the close badge is 20 pt.
 - Click on a banner/row runs `default` and focuses a window of `desktop-entry` when one is open.
 - Notifications column: separate full-screen transparent window (Esc and click outside the cards close, the menu bar strip stays clickable so the
-  clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". Every card, each widget
+  clock toggles it). Groups by app name, newest first. A collapsed group of two or more is a stack (macOS 27, owner decision 2026-10-26; `notification.centerGroupCollapsed` 1, `Notifications.groupCollapsed`): its newest card in front with no header, the cards behind it drawn as a tail under it (`stackStep` 4 per card, two at most, each `stackInset` 10 narrower on each side, clipped under the front card so the translucent glass never shows them through it). The tail is the group's Show All (accessible name "Show All (n)", Tab stop, Space or Return): it opens the group, which then shows every card with the header (app name, count, Show Less, Clear All) on the first. A click on the front card still runs its default action (macOS opens the stack instead; the focus tests rely on the card's own action). The focus tests (`tests/shell/notif_center_list`, `notif_clear`) drive their scenes with groups of three collapsed cards (`Notifications.groupCollapsed = 3`; the focus invariant does not depend on the count) and scene 37 covers the stacks. Every card, each widget
   tile and the footer controls are separate glass surfaces: each registers itself with the content (`addSurface`) and gets its own blur
   region (`Variants` of `Region`, rectangle in window coordinates, cut to the list viewport for rows, refreshed when the list scrolls or
   changes height). A click outside every registered surface closes; the empty area below the last card is outside the list.
@@ -154,7 +163,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   grouped by app, newest group first, newest row first inside a group); `syncShown()` reconciles the model with the displayed
   subset and touches it only where that set changed (insert / remove / move by key, a few rows per Notify). Per-row group info
   travels as roles of the rows that need it: `headCount` (> 0 on the first row of a group: draws the header with name, count and
-  Clear), `headFirst` (top group, no leading gap), `toggleCount` (> 0 on the row that carries Show All / Show Less); a role is
+  Clear; drawn for a group of two or more), `headFirst` (top group), `toggleCount` (> 0 on the row that carries Show All / Show Less); a role is
   written only when its value changed. History insert is O(dropped) (`History.pushNewest`) and
   evicted live notifications are dismissed after the Notify reply (`Qt.callLater`). The Center window is full-screen and keeps its
   size while open (the column slides in once), so a Notify never reconfigures the layer surface; it adds one card and one blur

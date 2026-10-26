@@ -203,8 +203,8 @@ FocusScope {
 
     // Bold title of a slider module.
     component ModuleTitle: Label {
-        x: root.pad
-        y: Tokens.spacingSm
+        x: Tokens.quicksettingsSliderTitleX
+        y: Tokens.quicksettingsSliderTitleTop
         width: parent.width - 2 * root.pad
         font.pixelSize: Tokens.quicksettingsTitleSize
         font.weight: Tokens.typographyMenuBoldWeight
@@ -352,7 +352,7 @@ FocusScope {
 
                 Row {
                     x: root.pad
-                    y: parent.height - height - Tokens.spacingXs
+                    y: Tokens.quicksettingsSliderTrackCentre - height / 2
                     width: parent.width - 2 * root.pad
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight
@@ -405,7 +405,7 @@ FocusScope {
 
                 Row {
                     x: root.pad
-                    y: parent.height - height - Tokens.spacingXs
+                    y: Tokens.quicksettingsSliderTrackCentre - height / 2
                     width: parent.width - 2 * root.pad
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight
@@ -457,7 +457,7 @@ FocusScope {
 
                 Row {
                     x: root.pad
-                    y: parent.height - height - Tokens.spacingXs
+                    y: Tokens.quicksettingsSliderTrackCentre - height / 2
                     width: parent.width - 2 * root.pad
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight

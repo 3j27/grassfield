@@ -49,6 +49,25 @@ function dateKind(showDate, showDay) {
     return showDate ? "date" : "none";
 }
 
+// Whether the region writes the month before the day: the first unquoted d or M of its short date format ("M/d/yy" in
+// the US, "dd/MM/yyyy" in the UK and France).
+function monthFirst(localeShortDate) {
+    const bare = String(localeShortDate || "").replace(/'[^']*'/g, "");
+    const m = bare.indexOf("M");
+    const d = bare.indexOf("d");
+    return m >= 0 && (d < 0 || m < d);
+}
+
+// A day-month pattern ("ddd MMM d", "MMM d", or their day-first forms) in the region's order: the day number goes after
+// the month name when the region writes the month first ("ddd MMM d"), before it otherwise ("ddd d MMM"); the day of the
+// week stays first. A translated pattern of another shape is left alone.
+function orderDate(pattern, monthFirstOrder) {
+    const p = String(pattern);
+    if (monthFirstOrder)
+        return p.replace(/(^|[^d])(d{1,2}) (M{3,4})/, "$1$3 $2");
+    return p.replace(/(M{3,4}) (d{1,2})(?!d)/, "$2 $1");
+}
+
 // Date part and time part joined by `gap` (Tokens.menubarClockGap: an en space and a space, macOS 9.5 pt between them against 6 for a
 // word gap); an empty date part leaves the time alone.
 function join(dateText, timeText, gap) {

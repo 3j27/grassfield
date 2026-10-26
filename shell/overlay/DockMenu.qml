@@ -111,15 +111,18 @@ PopupMenu {
             text: qsTr("Options"),
             submenu: root.optionItems()
         });
+        // The window rows exist only while the app runs (macOS omits them; it never shows them greyed out).
+        if (info.running !== true)
+            return items;
         items.push({separator: true});
-        items.push({id: "showall", text: qsTr("Show All Windows"), enabled: info.running === true});
+        items.push({id: "showall", text: qsTr("Show All Windows")});
         // Option (Alt) variants, live while the menu is open (macOS): Hide becomes Hide Others, Quit becomes Force Quit.
         if (altHeld) {
-            items.push({id: "hideOthers", text: qsTr("Hide Others"), enabled: info.running === true && Compositor.othersCount(appId(), Compositor.topologyRevision) > 0});
-            items.push({id: "forcequit", text: qsTr("Force Quit"), enabled: info.running === true});
+            items.push({id: "hideOthers", text: qsTr("Hide Others"), enabled: Compositor.othersCount(appId(), Compositor.topologyRevision) > 0});
+            items.push({id: "forcequit", text: qsTr("Force Quit")});
         } else {
-            items.push({id: "hide", text: qsTr("Hide"), enabled: info.running === true});
-            items.push({id: "quit", text: qsTr("Quit"), enabled: info.running === true});
+            items.push({id: "hide", text: qsTr("Hide")});
+            items.push({id: "quit", text: qsTr("Quit")});
         }
         return items;
     }

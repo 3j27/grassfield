@@ -23,6 +23,7 @@ Item {
     height: rows > 0 ? spanHeight : contentHeight
 
     Material {
+        glassClass: "controls"
         anchors.fill: parent
         radius: root.radius
         shadowEnabled: false

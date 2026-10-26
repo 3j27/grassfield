@@ -164,6 +164,7 @@ void PreviewApp::readAppearance()
     bool reduce = false;
     QString accent = QStringLiteral("multicolor");
     QString doubleClick = QStringLiteral("zoom");
+    QString shortcutSetting;
     QFile f(configFile());
     if (f.open(QIODevice::ReadOnly) && f.size() < 1024 * 1024) {
         const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
@@ -180,9 +181,13 @@ void PreviewApp::readAppearance()
         if (QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                         QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(a))
             accent = a;
+        shortcutSetting = root.value(QStringLiteral("keyboard")).toObject().value(QStringLiteral("shortcutStyle")).toString();
     }
+    const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
-    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize) {
+    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize
+        || shortcuts != m_shortcutStyle) {
+        m_shortcutStyle = shortcuts;
         m_canMinimize = canMinimize;
         m_titlebarDoubleClick = doubleClick;
         m_accentColor = accent;

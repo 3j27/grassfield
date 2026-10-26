@@ -680,6 +680,7 @@ Window {
             anchors.top: tabBar.bottom
             width: parent.width
             height: Tokens.appsBorderWidth
+            opacity: win.tabs.length > 1 || (win.tab !== null && win.tab.scrolled) ? 1 : 0
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 

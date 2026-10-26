@@ -74,6 +74,6 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowTitleSize = 15;
     // estimate: gap between toolbar items and groups
     inline constexpr int kWindowItemsGap = 8;
-    // estimate: space between the toolbar's trailing edge and its last item
-    inline constexpr int kWindowItemsInset = 14;
+    // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    inline constexpr int kWindowItemsInset = 8;
 } // namespace gf::theme::tokens
