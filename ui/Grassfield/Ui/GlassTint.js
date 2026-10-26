@@ -148,6 +148,21 @@ function gridOf(data, w, h, cols, rows, outW, outH) {
     return {width: outW, height: outH, cols: cols, rows: rows, min: min, max: max};
 }
 
+// Text straight on the wallpaper (no glass): the first of `inks` ("#rrggbb") that keeps `need` against every backdrop of the
+// luminance range (its bounding colours, backdropsOf), or "" when none does or the range is unknown (the caller puts glass
+// behind the text then).
+function inkOn(range, inks, need) {
+    if (!range || typeof range.lumMin !== "number" || typeof range.lumMax !== "number")
+        return "";
+    const backs = backdropsOf(range.lumMin).concat(backdropsOf(range.lumMax));
+    for (let i = 0; i < inks.length; i++) {
+        const ink = channels(inks[i]);
+        if (backs.every(b => ratio(ink, b) >= need))
+            return inks[i];
+    }
+    return "";
+}
+
 // The tint of a class: `backdrop` is {lumMin, lumMax} when the shell knows what lies behind the surface, null otherwise.
 // `margin` is added to 4.5 over a measured backdrop (a picture's percentiles, the blur's own lift); none for the worst case,
 // which is exact (black and white bound every backdrop).

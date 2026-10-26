@@ -721,6 +721,16 @@ QtObject {
     readonly property int notificationTimeInset: 2
     // footer pill label about 12, regular, secondary [ref: docs/audits/visual-tahoe-2026-10-25.md § Notifications column — partly close, 5/10]
     readonly property int notificationPillTextSize: Math.round(12 * Appearance.textScale)
+    // the Notification Center title above the cards, about 19 pt bold (cap 13.5) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationTitleSize: Math.round(19 * Appearance.textScale)
+    // title row: about 12 from the title's baseline to the first card [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationTitleRowHeight: 30
+    // the title 2.5 from the column edge [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationTitleInset: 2
+    // the round x at the right of the title row, 20 [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationTitleCloseSize: 20
+    // estimate: side padding of the glass plate the title gets over a backdrop it cannot be read on directly (A2) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationTitlePlatePadding: 10
     // estimate: close glyph is this much smaller than its button [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCloseGlyphInset: 8
     // estimate: bell glyph is this much larger than a menu icon [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]

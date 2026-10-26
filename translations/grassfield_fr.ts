@@ -4330,6 +4330,14 @@
         <translation>Notifications</translation>
     </message>
     <message>
+        <source>Notification Center</source>
+        <translation>Centre de notifications</translation>
+    </message>
+    <message>
+        <source>Clear All</source>
+        <translation>Tout effacer</translation>
+    </message>
+    <message>
         <source>Close</source>
         <translation>Fermer</translation>
     </message>

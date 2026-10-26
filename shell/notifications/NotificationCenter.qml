@@ -429,10 +429,87 @@ Variants {
                     }
                 }
 
+                // "Notification Center" title row above the cards while there are any (macOS 27, owner decision 2026-10-26), with a
+                // round x that clears them all. The title sits straight on the wallpaper in the ink that keeps 4.5:1 over what is
+                // under it (GlassTint.inkOn over the output's luminance grid); on a glass plate when that is unknown or mixed (A2).
+                Item {
+                    id: titleRow
+
+                    readonly property bool shown: list.count > 0
+                    readonly property rect area: Qt.rect(panel.restRect.x, panel.restRect.y, panel.width, Tokens.notificationTitleRowHeight)
+                    readonly property var known: Appearance.backdrops[Screen.name] ?? null
+                    readonly property var range: known ? (known.grid ? (GlassTint.gridRange(known.grid, area, Tokens.glassBackdropPad) ?? known) : known) : null
+                    readonly property string ink: GlassTint.inkOn(range, [String(Appearance.darkColors.text), String(Appearance.lightColors.text)], Tokens.menubarToneNeededContrast)
+                    readonly property bool plated: ink === ""
+
+                    visible: shown
+                    width: parent.width
+                    height: shown ? Tokens.notificationTitleRowHeight : 0
+
+                    Material {
+                        id: titlePlate
+                        glassClass: "notification"
+                        x: 0
+                        y: titleText.y - Tokens.spacingXs
+                        width: titleRow.plated && titleRow.shown ? titleText.implicitWidth + 2 * Tokens.notificationTitlePlatePadding : 0
+                        height: titleText.height + 2 * Tokens.spacingXs
+                        radius: height / 2
+                        shadowEnabled: false
+                        visible: width > 0
+                        Component.onCompleted: host.addSurface(titlePlate, false, Math.floor(height / 2), null)
+                    }
+
+                    Text {
+                        id: titleText
+                        x: titleRow.plated ? Tokens.notificationTitlePlatePadding : Tokens.notificationTitleInset
+                        y: 0
+                        text: qsTr("Notification Center")
+                        textFormat: Text.PlainText
+                        color: titleRow.plated ? Appearance.colors.text : titleRow.ink
+                        font.family: Appearance.fontFamilyFor(Tokens.notificationTitleSize)
+                        font.pixelSize: Tokens.notificationTitleSize
+                        font.weight: Tokens.typographyMenuBoldWeight
+                        Accessible.role: Accessible.Heading
+                        Accessible.name: text
+                    }
+
+                    Item {
+                        id: clearAllButton
+                        x: parent.width - width
+                        y: titleText.y + (titleText.height - height) / 2
+                        width: Tokens.notificationTitleCloseSize
+                        height: width
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Clear All")
+                        Accessible.onPressAction: if (titleRow.shown)
+                            Notifications.clearAll()
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+                            border.width: 1
+                            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                        }
+
+                        Icon {
+                            anchors.centerIn: parent
+                            size: parent.width - Tokens.notificationCloseGlyphInset
+                            name: "close-glyph"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.ArrowCursor
+                            onClicked: Notifications.clearAll()
+                        }
+                    }
+                }
+
                 NotificationList {
                     id: list
                     x: -panel.gutter
-                    y: -panel.gutter
+                    y: titleRow.height - panel.gutter
                     width: parent.width + panel.gutter
                     host: host
                     panel: panel

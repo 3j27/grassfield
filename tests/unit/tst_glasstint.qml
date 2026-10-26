@@ -120,6 +120,16 @@ TestCase {
         compare(material.tintAlpha, Appearance.glassAlpha("menu", Tokens.materialDefaultTransparency, material.screenName, Qt.rect(0, 0, 0, 0)));
     }
 
+    // Text straight on the wallpaper (the Notification Center title): the ink that holds 4.5:1 over the whole range, else
+    // none (the caller puts glass behind it).
+    function test_inkOn() {
+        const inks = [Tokens.colorDark.text, Tokens.colorLight.text];
+        compare(GlassTint.inkOn({lumMin: 0.01, lumMax: 0.1}, inks, 4.5), Tokens.colorDark.text);
+        compare(GlassTint.inkOn({lumMin: 0.6, lumMax: 0.95}, inks, 4.5), Tokens.colorLight.text);
+        compare(GlassTint.inkOn({lumMin: 0.02, lumMax: 0.88}, inks, 4.5), "");
+        compare(GlassTint.inkOn(null, inks, 4.5), "");
+    }
+
     // Increase Contrast frosts the glass whatever the backdrop and the class (G-8).
     function test_increaseContrastFrosts() {
         Appearance.dark = true;

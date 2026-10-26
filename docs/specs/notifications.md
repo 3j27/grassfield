@@ -15,7 +15,15 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
   reference has none); cards are grouped by app, newest first, 6 pt apart (within a group and between groups); the first card of a
   group of two or more carries the app name and the count, a single notification has no app-name row (icon, bold title, body,
   time: 56 pt for two lines; ADR-0024 lot 4b, C-14); widgets placed in the Center follow as glass tiles; the footer (Edit Widgets pill, 24 pt close circle) is
-  centred under the column, 16 pt below the last card (at the bottom when the list fills the column); the pill label is 12 pt regular in the secondary colour. The banners hide while the column or Quick Settings is open.
+  centred under the column, 16 pt below the last card (at the bottom when the list fills the column); the pill label is 12 pt regular in the secondary colour.
+  Title row (macOS 27, owner decision 2026-10-26; docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications): while the
+  column has notifications, "Notification Center" (fr « Centre de notifications », `notification.titleSize` 19 bold) sits
+  above the cards, 2 from the column edge, in a 30-pt row (`titleRowHeight`), with a 20-pt round x at the right
+  (`titleCloseSize`, accessible name "Clear All") that clears every notification (`Notifications.clearAll`). The title is drawn
+  straight on the wallpaper in the ink that keeps 4.5:1 over what lies under it (`GlassTint.inkOn` over the output's luminance
+  grid: the light appearance's text colour or the dark one's); when the backdrop is unknown (a window on the workspace) or
+  neither ink holds, it gets a glass plate (`titlePlatePadding`) and the appearance's text colour (A2). The x is reached by the
+  pointer and assistive technology, not by Tab (each card and group keeps its own clear). The banners hide while the column or Quick Settings is open.
   macOS 26 clear model (owner decision 2026-10-19, batch 4): there is NO permanent "Clear All" pill. Hovering (or focusing) a card
   shows a small round x at its top-left corner (accessible name "Close", fr « Fermer »); hovering a group shows, on its header card,
   "Show Less" (when the group was expanded with "Show All") and a round x that grows into a "Clear All" pill (fr « Tout effacer ») under
