@@ -41,7 +41,7 @@ Window {
     readonly property bool compactViews: {
         if (searchCapsule.expanded)
             return true;
-        const trailing = 4 * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
+        const trailing = win.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
         const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
         return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
     }
@@ -650,7 +650,7 @@ Window {
                 // darker than the capsule, a rule between two views that are not selected.
                 Rectangle {
                     visible: !win.compactViews
-                    width: 4 * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
+                    width: win.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
                     height: Tokens.filesToolbarCapsule
                     radius: height / 2
                     color: Appearance.buttonFill

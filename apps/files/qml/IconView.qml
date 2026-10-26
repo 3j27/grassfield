@@ -96,7 +96,7 @@ FocusScope {
         if (groupsModel.count > groups.length)
             groupsModel.remove(groups.length, groupsModel.count - groups.length);
         for (let i = 0; i < sections.count; i++)
-            sections.itemAt(i).syncRange();
+            sections.itemAt(i).refresh();
         // A shorter page: the scroll stays within it (once the layout has followed).
         Qt.callLater(() => groupedView.contentY = Math.max(0, Math.min(groupedView.contentY, groupedView.contentHeight - groupedView.height)));
     }
@@ -132,9 +132,13 @@ FocusScope {
             if (rename)
                 root.tab.startRename(root.model, row);
         }
+        // Another folder opens at its top, every line at its start.
         function onUrlChanged(): void {
             root.expanded = {};
             root.rowScroll = {};
+            groupedView.contentY = 0;
+            for (let i = 0; i < sections.count; i++)
+                sections.itemAt(i).setScroll(0);
         }
     }
 
@@ -305,7 +309,14 @@ FocusScope {
                 function setScroll(x: real): void {
                     section.scroll = Math.max(0, Math.min(x, section.itemCount * root.cellWidth - groupedView.width));
                     root.rowScroll[section.title] = section.scroll;
+                    section.place();
+                }
+
+                // The inner views at the place this section says: a view given its model again, or whose model was reset (a
+                // new sort), starts at its beginning.
+                function place(): void {
                     sectionRow.contentX = sectionRow.originX + section.scroll;
+                    sectionGrid.contentY = sectionGrid.originY + sectionGrid.shownTop - Tokens.filesIconGroupHeight;
                 }
 
                 function revealX(x: real): void {
@@ -327,14 +338,22 @@ FocusScope {
                         range.items.addGroups(section.first, section.itemCount, ["range"]);
                 }
 
-                // A group that moved to this place brings its own scroll.
-                onTitleChanged: section.setScroll(root.rowScroll[section.title] ?? 0)
-                onItemCountChanged: section.setScroll(section.scroll)
-                onWidthChanged: section.setScroll(section.scroll)
-                Component.onCompleted: {
+                // The title shown when the scroll was last placed: a group that moved to this place brings its own scroll.
+                property string placedTitle: ""
+
+                // After the groups changed (all of this section's roles set): its rows, then its scroll.
+                function refresh(): void {
                     section.syncRange();
-                    section.setScroll(root.rowScroll[section.title] ?? 0);
+                    if (section.placedTitle !== section.title) {
+                        section.placedTitle = section.title;
+                        section.setScroll(root.rowScroll[section.title] ?? 0);
+                    } else {
+                        section.setScroll(section.scroll);
+                    }
                 }
+
+                onWidthChanged: section.setScroll(section.scroll)
+                Component.onCompleted: section.refresh()
 
                 Text {
                     textFormat: Text.PlainText
@@ -388,6 +407,13 @@ FocusScope {
                             id: rangeGroup
                             name: "range"
                             includeByDefault: false
+                            // A reset of the listing (every new sort) empties it: filled again at once (the groups keep their
+                            // rows across a sort), and the views put back where they were.
+                            onCountChanged: {
+                                if (rangeGroup.count === 0 && section.itemCount > 0)
+                                    Qt.callLater(() => section?.syncRange());
+                                Qt.callLater(() => section?.place());
+                            }
                         }
                     ]
                     filterOnGroup: "range"
@@ -408,8 +434,7 @@ FocusScope {
                     interactive: false
                     acceptedButtons: Qt.NoButton
                     boundsBehavior: Flickable.StopAtBounds
-                    // A view given its model again starts at its beginning: back to the group's scroll.
-                    onModelChanged: Qt.callLater(() => sectionRow.contentX = sectionRow.originX + section.scroll)
+                    onModelChanged: Qt.callLater(() => section?.place())
 
                     // A sideways wheel or trackpad swipe scrolls the line; a vertical one is left to the page.
                     WheelHandler {
@@ -436,7 +461,6 @@ FocusScope {
                     y: sectionGrid.shownTop
                     width: parent.width
                     height: sectionGrid.shownBottom - sectionGrid.shownTop
-                    contentY: sectionGrid.originY + sectionGrid.shownTop - Tokens.filesIconGroupHeight
                     visible: section.full
                     cellWidth: root.cellWidth
                     cellHeight: Tokens.filesIconCellHeight
@@ -444,6 +468,9 @@ FocusScope {
                     interactive: false
                     acceptedButtons: Qt.NoButton
                     cacheBuffer: 0
+                    // Placed by section.place (a binding would be left behind when the view moves itself on a new model).
+                    onShownTopChanged: section.place()
+                    onModelChanged: Qt.callLater(() => section?.place())
                 }
             }
         }
@@ -602,7 +629,11 @@ FocusScope {
 
         DropArea {
             id: drop
-            anchors.fill: parent
+            // Over the icon and the name, like the clicks: the rest of the cell drops into the shown folder.
+            x: mouse.x
+            y: mouse.y
+            width: mouse.width
+            height: mouse.height
             enabled: cell.isDir && !cell.selected
             keys: ["text/uri-list"]
             onEntered: root.tab.springHover(cell.url)

@@ -88,9 +88,25 @@ bool readWhole(int fd, qint64 size, QByteArray *out)
     return true;
 }
 
-// Writes `bytes` over `path` atomically: a new file in the same folder, given the old one's permissions, extended
-// attributes (user.* such as Files' tags, and the access lists system.posix_acl_*) read from `fd`, written to disk
-// (fsync) and renamed over it. Any attribute that cannot be read or kept stops the change, so nothing is lost silently.
+// Whether the file behind `fd` still has the size and modification time it had when it was read (`st`), and, with
+// `samePath`, whether `path` still names it: an editor's save or a rename meanwhile leaves the file as it is.
+bool unchanged(int fd, const struct stat &st, const QString &path, bool samePath)
+{
+    struct stat now {};
+    if (::fstat(fd, &now) != 0 || now.st_size != st.st_size || now.st_mtim.tv_sec != st.st_mtim.tv_sec
+        || now.st_mtim.tv_nsec != st.st_mtim.tv_nsec)
+        return false;
+    if (!samePath)
+        return true;
+    struct stat named {};
+    return ::lstat(QFile::encodeName(path).constData(), &named) == 0 && named.st_dev == st.st_dev && named.st_ino == st.st_ino;
+}
+
+// Writes `bytes` over `path` atomically: a new file in the same folder, given the old one's group, extended attributes
+// (user.* such as Files' tags, and the access lists system.posix_acl_*) read from `fd` and permissions, written to disk
+// (fsync) and renamed over it if the file did not change meanwhile. security.* labels belong to the system (a new file
+// gets its folder's); any other attribute, or one that cannot be read or kept, stops the change, so nothing is lost
+// silently.
 QString replaceKeepingAttributes(int fd, const struct stat &st, const QString &path, const QByteArray &bytes)
 {
     QTemporaryFile tmp(QFileInfo(path).absolutePath() + QStringLiteral("/.grassfield-rotate-XXXXXX"));
@@ -99,8 +115,12 @@ QString replaceKeepingAttributes(int fd, const struct stat &st, const QString &p
         return tmp.errorString();
     if (tmp.write(bytes) != bytes.size() || !tmp.flush())
         return tmp.errorString();
-    if (::fchmod(tmp.handle(), st.st_mode & 07777) != 0)
-        return errnoText();
+    // A shared picture keeps its group (the new file has the user's, or the folder's set-group one).
+    if (::fchown(tmp.handle(), uid_t(-1), st.st_gid) != 0)
+        return tr("its group could not be kept, so it was left as it is");
+    // The folder's default access list is not the picture's: the picture's own, if any, is copied below.
+    if (::fremovexattr(tmp.handle(), "system.posix_acl_access") != 0 && errno != ENODATA && errno != ENOTSUP && errno != EOPNOTSUPP)
+        return tr("its tags could not be kept, so it was left as it is");
     const ssize_t listSize = ::flistxattr(fd, nullptr, 0);
     if (listSize < 0 && errno != ENOTSUP)
         return tr("its tags could not be read, so it was left as it is");
@@ -110,9 +130,10 @@ QString replaceKeepingAttributes(int fd, const struct stat &st, const QString &p
         if (got < 0)
             return tr("its tags could not be read, so it was left as it is");
         for (const QByteArray &name : names.left(int(got)).split('\0')) {
-            // security.* labels belong to the system (a new file gets its folder's); every other kind is kept.
-            if (name.isEmpty() || !(name.startsWith("user.") || name.startsWith("system.posix_acl_")))
+            if (name.isEmpty() || name.startsWith("security."))
                 continue;
+            if (!(name.startsWith("user.") || name.startsWith("system.posix_acl_")))
+                return tr("some of its attributes could not be kept, so it was left as it is");
             const ssize_t valueSize = ::fgetxattr(fd, name.constData(), nullptr, 0);
             if (valueSize < 0)
                 return tr("its tags could not be read, so it was left as it is");
@@ -123,8 +144,13 @@ QString replaceKeepingAttributes(int fd, const struct stat &st, const QString &p
                 return tr("its tags could not be kept, so it was left as it is");
         }
     }
+    // After the access list (whose mask is the group bits of the mode).
+    if (::fchmod(tmp.handle(), st.st_mode & 07777) != 0)
+        return errnoText();
     if (::fsync(tmp.handle()) != 0)
         return errnoText();
+    if (!unchanged(fd, st, path, true))
+        return tr("it changed while it was being turned, so it was left as it is");
     const QByteArray tmpName = QFile::encodeName(tmp.fileName());
     if (::rename(tmpName.constData(), QFile::encodeName(path).constData()) != 0)
         return errnoText();
@@ -271,6 +297,8 @@ QString rotate(const QString &path, const QByteArray &mimeType, bool clockwise)
         const int next = turned(where.value, clockwise);
         if (where.offset >= 0) {
             // Two bytes changed in place: the file keeps its owner, links and every attribute.
+            if (!unchanged(file.fd, st, path, false))
+                return tr("it changed while it was being turned, so it was left as it is");
             const char value[2] = {where.bigEndian ? char(0) : char(next), where.bigEndian ? char(next) : char(0)};
             if (::pwrite(file.fd, value, 2, where.offset) != 2 || ::fsync(file.fd) != 0)
                 return errnoText();

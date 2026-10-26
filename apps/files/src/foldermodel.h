@@ -249,6 +249,12 @@ private:
     FileLogic::Group groupFor(const KFileItem &item) const;
     // The rows or their groups changed: groupsChanged follows (once per event loop turn).
     void groupsDirty();
+    // Every cached group goes (the folder, the grouping or the day changed).
+    void clearGroupCache();
+    // A new day: the items are grouped and sorted again, outside any sort (its comparisons must see one grouping).
+    void regroupForNewDay();
+    // Arms m_dayTimer for the next midnight while the rows are grouped.
+    void armDayTimer();
     void dropTags(const QUrl &url);
     // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
@@ -283,6 +289,10 @@ private:
     // "Now" of the date groups, read again once a minute (a sort compares many times).
     mutable QDateTime m_groupNow;
     mutable QElapsedTimer m_groupClock;
+    // The day the cached groups were made for; a new one (seen by groupFor, or the timer armed for midnight) regroups.
+    mutable QDate m_groupDay;
+    mutable bool m_newDayQueued = false;
+    QTimer m_dayTimer;
     bool m_descending = false;
     bool m_foldersFirst = true;
     QString m_filterText;

@@ -1479,17 +1479,15 @@ bool FilesApp::eventFilter(QObject *watched, QEvent *event)
         m_drags.insert(watched, {e->position(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers(), e->source() != nullptr});
         break;
     }
-    case QEvent::DragLeave: {
+    case QEvent::DragLeave:
+    case QEvent::Drop: {
         const auto it = m_drags.constFind(watched);
         const bool outside = it != m_drags.cend() && !it->local;
         m_drags.remove(watched);
         if (outside)
-            emit outsideDragLeft(watched);
+            emit outsideDragEnded(watched, event->type() == QEvent::Drop);
         break;
     }
-    case QEvent::Drop:
-        m_drags.remove(watched);
-        break;
     default:
         break;
     }

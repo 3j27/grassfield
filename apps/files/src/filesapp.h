@@ -292,8 +292,9 @@ signals:
     void folderStylesChanged(const QList<QUrl> &urls);
     void allFolderStylesChanged();
     void folderStyleRevisionChanged();
-    // A drag from another application left `window` (or was canceled over it): what it spring-loaded goes back.
-    void outsideDragLeft(QObject *window);
+    // A drag from another application ended over `window`: it left or was canceled (`dropped` false: what it
+    // spring-loaded goes back) or was dropped there (it stays, whichever view took the drop).
+    void outsideDragEnded(QObject *window, bool dropped);
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).

@@ -3780,6 +3780,18 @@
         <translation>ce type d’image ne peut pas pivoter sans perte de qualité</translation>
     </message>
     <message>
+        <source>its group could not be kept, so it was left as it is</source>
+        <translation>son groupe n’aurait pas pu être conservé, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>some of its attributes could not be kept, so it was left as it is</source>
+        <translation>certains de ses attributs n’auraient pas pu être conservés, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it changed while it was being turned, so it was left as it is</source>
+        <translation>elle a changé pendant la rotation, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
         <source>it could not be read whole, so it was left as it is</source>
         <translation>elle n’a pas pu être lue en entier, elle a été laissée telle quelle</translation>
     </message>

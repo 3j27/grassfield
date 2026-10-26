@@ -91,34 +91,35 @@ QString xbelPath()
 
 namespace
 {
-QHash<QString, QString> &renames()
+QHash<QString, Rename> &renames()
 {
-    static QHash<QString, QString> map;
+    static QHash<QString, Rename> map;
     return map;
 }
 } // namespace
 
-void noteRenamed(const QString &from, const QString &to)
+void noteRenamed(const QString &from, const QString &to, const QDateTime &at)
 {
-    QHash<QString, QString> &map = renames();
+    QHash<QString, Rename> &map = renames();
     for (auto it = map.begin(); it != map.end();) {
-        if (it.value() == from)
-            it.value() = to;
+        // A chain keeps the time of its first rename (what was used before it went on to the last name).
+        if (it.value().to == from)
+            it.value().to = to;
         // Renamed back: nothing to follow.
-        it = it.key() == it.value() ? map.erase(it) : std::next(it);
+        it = it.key() == it.value().to ? map.erase(it) : std::next(it);
     }
     if (from != to)
-        map.insert(from, to);
+        map.insert(from, {to, at});
 }
 
-QHash<QString, QString> renamed()
+QHash<QString, Rename> renamed()
 {
     return renames();
 }
 
 } // namespace Recents
 
-RecentsLoader::RecentsLoader(quint64 generation, const QString &file, const QHash<QString, QString> &renames)
+RecentsLoader::RecentsLoader(quint64 generation, const QString &file, const QHash<QString, Recents::Rename> &renames)
     : m_generation(generation)
     , m_file(file)
     , m_renames(renames)
@@ -138,7 +139,8 @@ void RecentsLoader::run()
         for (const Recents::Entry &e : entries) {
             if (paths.size() >= Recents::kMaxItems)
                 break;
-            const QString path = m_renames.value(e.path, e.path);
+            const auto rename = m_renames.constFind(e.path);
+            const QString path = rename != m_renames.cend() && e.used <= rename->at ? rename->to : e.path;
             if (!seen.contains(path) && QFileInfo(path).isFile()) {
                 seen.insert(path);
                 paths.append(path);

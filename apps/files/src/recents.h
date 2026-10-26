@@ -36,22 +36,28 @@ bool isRecentsUrl(const QUrl &url);
 QString xbelPath();
 
 // A recent file renamed or moved while Files runs stays a recent file under its new path (recently-used.xbel keeps the
-// old one): the loaders read it there. Process-wide, GUI thread only.
-void noteRenamed(const QString &from, const QString &to);
-// Old path -> new path of the renames noted so far (chains followed).
-QHash<QString, QString> renamed();
+// old one): the loaders read it there. Only an entry last used before the rename follows it (a new file at the old path,
+// used since, is that file). Process-wide, GUI thread only.
+struct Rename {
+    QString to;
+    QDateTime at;
+};
+void noteRenamed(const QString &from, const QString &to, const QDateTime &at = QDateTime::currentDateTimeUtc());
+// Old path -> where it went and when, for the renames noted so far (chains followed, each from its own time).
+QHash<QString, Rename> renamed();
 
 } // namespace Recents
 
 // Reads the list on its own thread: an entry on a network mount that does not answer must not stop the window. parse(),
-// each path through `renames` (Recents::renamed()), then the entries that are regular files (links followed), each once,
+// each path through `renames` (Recents::renamed(): entries used before the rename), then the entries that are regular
+// files (links followed), each once,
 // at most Recents::kMaxItems. One run per object; the caller deletes it (deleteLater on finished).
 class RecentsLoader : public QThread
 {
     Q_OBJECT
 
 public:
-    RecentsLoader(quint64 generation, const QString &file, const QHash<QString, QString> &renames = {});
+    RecentsLoader(quint64 generation, const QString &file, const QHash<QString, Recents::Rename> &renames = {});
 
 signals:
     // `used` holds the QDateTime of each path.
@@ -63,5 +69,5 @@ protected:
 private:
     const quint64 m_generation;
     const QString m_file;
-    const QHash<QString, QString> m_renames;
+    const QHash<QString, Recents::Rename> m_renames;
 };

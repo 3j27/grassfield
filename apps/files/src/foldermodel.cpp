@@ -234,6 +234,21 @@ FolderModel::FolderModel(QObject *parent)
         for (int row = topLeft.row(); row <= bottomRight.row(); row++)
             m_groupCache.remove(m_results->item(row).url());
     });
+    // Items that go, and the old names of renamed ones, leave the cache too: a new item at the same URL is grouped afresh.
+    connect(m_dirModel, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this](const QModelIndex &parent, int first, int last) {
+        for (int row = first; row <= last; row++)
+            m_groupCache.remove(m_dirModel->itemForIndex(m_dirModel->index(row, 0, parent)).url());
+    });
+    connect(m_results, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this](const QModelIndex &, int first, int last) {
+        for (int row = first; row <= last; row++)
+            m_groupCache.remove(m_results->item(row).url());
+    });
+    connect(m_lister, &KCoreDirLister::refreshItems, this, [this](const QList<QPair<KFileItem, KFileItem>> &items) {
+        for (const auto &change : items)
+            m_groupCache.remove(change.first.url());
+    });
+    m_dayTimer.setSingleShot(true);
+    connect(&m_dayTimer, &QTimer::timeout, this, &FolderModel::regroupForNewDay);
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -382,7 +397,7 @@ void FolderModel::setUrl(const QUrl &url)
     clearAllPreviews();
     m_tags.clear();
     m_styles.clear();
-    m_groupCache.clear();
+    clearGroupCache();
     setError(QString());
     m_freeSpace = -1;
     emit freeSpaceChanged();
@@ -466,7 +481,7 @@ void FolderModel::startRecents()
                 fresh.append(path);
         }
         addResults(fresh);
-        m_groupCache.clear();
+        clearGroupCache();
         invalidate();
         qCDebug(lcFiles) << "recents" << rowCount() << "files in" << m_listTimer.elapsed() << "ms";
         m_loading = false;
@@ -863,6 +878,13 @@ FileLogic::Group FolderModel::groupFor(const KFileItem &item) const
     if (!m_groupClock.isValid() || m_groupClock.elapsed() > 60000) {
         m_groupNow = QDateTime::currentDateTime();
         m_groupClock.restart();
+        if (!m_groupDay.isValid()) {
+            m_groupDay = m_groupNow.date();
+        } else if (m_groupNow.date() != m_groupDay && !m_newDayQueued) {
+            // Not now: this may be in the middle of a sort.
+            m_newDayQueued = true;
+            QTimer::singleShot(0, const_cast<FolderModel *>(this), &FolderModel::regroupForNewDay);
+        }
     }
     const FileLogic::Group g = FileLogic::groupOf(sortEntry(item, FileLogic::SortKey::Name), FileLogic::GroupBy(m_groupBy), m_groupNow);
     m_groupCache.insert(url, g);
@@ -877,15 +899,37 @@ void FolderModel::groupsDirty()
     m_groupsNotifyQueued = true;
     QTimer::singleShot(0, this, [this] {
         m_groupsNotifyQueued = false;
-        // A new day moves items between the date groups: they are grouped and sorted again (outside any sort, whose
-        // comparisons must see one grouping).
-        if (m_groupClock.isValid() && m_groupNow.date() != QDate::currentDate()) {
-            m_groupCache.clear();
-            m_groupClock.invalidate();
-            invalidate();
-        }
         emit groupsChanged();
     });
+}
+
+void FolderModel::clearGroupCache()
+{
+    m_groupCache.clear();
+    m_groupDay = QDate();
+}
+
+void FolderModel::regroupForNewDay()
+{
+    m_newDayQueued = false;
+    if (m_groupBy == 0)
+        return;
+    clearGroupCache();
+    m_groupClock.invalidate();
+    armDayTimer();
+    // Sorted again: the layout change marks the groups dirty.
+    invalidate();
+}
+
+void FolderModel::armDayTimer()
+{
+    if (m_groupBy == 0) {
+        m_dayTimer.stop();
+        return;
+    }
+    const QDateTime now = QDateTime::currentDateTime();
+    // A second past midnight (a timer may fire a little early); a suspended machine is caught by groupFor on wake.
+    m_dayTimer.start(int(qMax<qint64>(1000, now.msecsTo(QDateTime(now.date().addDays(1), QTime(0, 0))) + 1000)));
 }
 
 QVariantList FolderModel::groups() const
@@ -918,7 +962,8 @@ void FolderModel::setGroupBy(int by)
     if (by == m_groupBy)
         return;
     m_groupBy = by;
-    m_groupCache.clear();
+    clearGroupCache();
+    armDayTimer();
     m_groupsValid = false;
     invalidate();
     emit sortChanged();
@@ -1442,6 +1487,7 @@ void FolderModel::renameResult(const QUrl &from, const QUrl &to)
         }
     }
     const bool selected = m_selected.remove(from);
+    m_groupCache.remove(from);
     forgetThumbnail(m_small, from, false);
     forgetThumbnail(m_large, from, false);
     m_tags.remove(from);

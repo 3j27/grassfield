@@ -127,13 +127,15 @@ TEST(Recents, TheLoaderKeepsExistingFilesOnly)
 TEST(Recents, RenamesAreFollowed)
 {
     const QString a = QStringLiteral("/test/a.txt"), b = QStringLiteral("/test/b.txt"), c = QStringLiteral("/test/c.txt");
-    Recents::noteRenamed(a, b);
-    Recents::noteRenamed(b, c);
-    EXPECT_EQ(Recents::renamed().value(a), c) << "a chain ends at the last name";
-    EXPECT_EQ(Recents::renamed().value(b), c);
-    Recents::noteRenamed(c, a);
+    const QDateTime t1 = QDateTime::fromString(QStringLiteral("2026-10-26T10:00:00Z"), Qt::ISODate);
+    Recents::noteRenamed(a, b, t1);
+    Recents::noteRenamed(b, c, t1.addSecs(60));
+    EXPECT_EQ(Recents::renamed().value(a).to, c) << "a chain ends at the last name";
+    EXPECT_EQ(Recents::renamed().value(a).at, t1) << "from the time of its first rename";
+    EXPECT_EQ(Recents::renamed().value(b).to, c);
+    Recents::noteRenamed(c, a, t1.addSecs(120));
     EXPECT_FALSE(Recents::renamed().contains(a)) << "renamed back: nothing left to follow";
-    EXPECT_EQ(Recents::renamed().value(b), a);
+    EXPECT_EQ(Recents::renamed().value(b).to, a);
 }
 
 TEST(Recents, TheLoaderReadsRenamedFilesUnderTheirNewPath)
@@ -154,10 +156,14 @@ TEST(Recents, TheLoaderReadsRenamedFilesUnderTheirNewPath)
     f.write(bookmark(dir->filePath(QStringLiteral("old name.txt")), "2026-10-26T10:00:00Z"));
     // An application opened it again under its new name: listed once, at its latest use.
     f.write(bookmark(renamed, "2026-10-26T09:00:00Z"));
+    // A new file at a renamed path, used after the rename, is that file (here gone: left out), not the renamed one.
+    f.write(bookmark(dir->filePath(QStringLiteral("reused.txt")), "2026-10-26T12:00:00Z"));
     f.write("</xbel>\n");
     f.close();
 
-    RecentsLoader loader(1, xbel, {{dir->filePath(QStringLiteral("old name.txt")), renamed}});
+    const QDateTime renamedAt = QDateTime::fromString(QStringLiteral("2026-10-26T11:00:00Z"), Qt::ISODate);
+    RecentsLoader loader(1, xbel, {{dir->filePath(QStringLiteral("old name.txt")), {renamed, renamedAt}},
+                                   {dir->filePath(QStringLiteral("reused.txt")), {renamed, renamedAt}}});
     QStringList paths;
     QVariantList used;
     QObject::connect(&loader, &RecentsLoader::loaded, &loader, [&](quint64, const QStringList &p, const QVariantList &u) {
