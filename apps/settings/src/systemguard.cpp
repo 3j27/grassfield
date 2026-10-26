@@ -33,8 +33,9 @@ bool isReadOnlyQuery(const QStringList &argv)
         return args == QStringList{"status"};
     // About pane (Backend::run): package versions and graphics adapters. Storage pane: the installed packages' sizes (pacman -Qi).
     if (program == QLatin1String("pacman"))
-        return args == QStringList{QStringLiteral("-Qi")} || args.size() == 2 && args.at(0) == QLatin1String("-Q")
-            && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git"));
+        return args == QStringList{QStringLiteral("-Qi")}
+            || (args.size() == 2 && args.at(0) == QLatin1String("-Q")
+                && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git")));
     if (program == QLatin1String("lspci"))
         return args.isEmpty();
     // Storage pane: the size of the user's folders.

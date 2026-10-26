@@ -1214,6 +1214,8 @@ QtObject {
     readonly property int settingsCaptionGap: 43
     // a section title's baseline 13 above its group [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
     readonly property int settingsCaptionToGroup: 13
+    // behaviour: Date & Time > Closest city lists at most 8 matching cities under the field [ref: docs/audits/settings-parity-2026-10-26.md § Date & Time]
+    readonly property int settingsCityMatches: 8
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

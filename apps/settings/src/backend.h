@@ -95,6 +95,8 @@ public:
     // Login Items (XDG autostart): the .desktop file names of a folder; the user's folder ($XDG_CONFIG_HOME/autostart) and the
     // system's ($XDG_CONFIG_DIRS/autostart). Writes go only to the user's folder, one plain <name>.desktop at a time, and in a dev
     // session only when that folder lies under the worktree's .dev (writeAutostart, removeAutostart: "" or a reason).
+    // Date & Time: a zone's names in the UI language {longName, shortName, offset, territory}; {} for a zone Qt does not know.
+    Q_INVOKABLE QVariantMap zoneInfo(const QString &zone) const;
     Q_INVOKABLE QStringList desktopEntries(const QString &dir) const;
     Q_INVOKABLE QString writeAutostart(const QString &path, const QString &text) const;
     Q_INVOKABLE QString removeAutostart(const QString &path) const;

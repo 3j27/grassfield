@@ -134,6 +134,19 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      tile and "Version 1.0.0-rc1", Omarchy's VERSION_ID, Hyprland and Quickshell from `pacman -Q`, Qt); Displays (one row per
      output: "14-inch (1920 × 1080)" from the size the output reports); Storage (the start-up volume, "742.81 GB available of
      1.00 TB", decimal units as macOS). Not shown: the serial number (root-only), coverage, System Report.
+   - Date & Time (General > Date & Time since PR #4; the macOS 15 structure, the macOS 27 look; `DateTimePage.qml`): "Set time
+     and date automatically" (timedate1 `NTP`, `time.ntp`; off when timedate1 says NTP cannot be used) and Source (timesync1's
+     current server, else the first configured one, read-only, dimmed while the automatic time is off); "Date and time" (the
+     time zone's wall clock, ticking each second from timedate1's `TimeUSec`, "Oct 24, 2026 at 11:01:00": the date pattern is
+     the translators', the time follows the 24-hour switch) with a "Set…" capsule while the automatic time is off, which opens
+     a sheet of six steppers (day, month, year, hour, minute, second; `time.set`); "24-hour time" (`menubar.clockHours` "24"
+     or "12"; at "auto" it shows what the region uses); "Time zone" (the zone's long name in the UI language, Qt's zone data)
+     and "Closest city" ("Paris - France": the zone's city and its country; typing turns it into a field with at most
+     `settings.cityMatches` cities under it, those that start with the text first; Down moves into the list, Return or a click
+     picks, Escape gives the city back; `time.zone`). Every change goes to timedate1 through polkit (ADR-0025), "Waiting for
+     permission…" under the row meanwhile, one line under the group when it failed ("The change could not be made: <reason>."),
+     and the page reads the state again. Not built: the zone from the location, the Lock Screen's own 24-hour switch, editing
+     the source, the calendar and clock faces of the macOS sheet (steppers instead); country names come from Qt in English.
 3. S3 Writes: the file is re-read before every change and the one key is set, so every other key (also unknown ones, `dock.pinned`) is preserved. Values are validated against rules that mirror the schema (`qml/Store.js`; a unit test checks parity with `config/schema/grassfield.schema.json`). A missing or empty file is created as `{"version": 1, ...}`. Atomic replace through `QSaveFile`.
 4. S4 A file that is not valid JSON, not an object, has `version` other than 1, or cannot be read is never overwritten: a banner in the destructive colour (tokens `destructive` / `destructiveText`) shows the reason, a translated sentence fragment, the detail pane is inert, nothing is written. Fixing the file re-enables the pane (file watcher).
 5. S5 Live effect: the shell watches `grassfield.json`; changes apply immediately (transparency, appearance, screen corners, Dock). The app also follows external edits of the file.

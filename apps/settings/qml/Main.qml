@@ -57,7 +57,8 @@ Window {
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "mouse", group: 5, title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
-        {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")}
+        {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
+        {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")}
     ]
     property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
     property string query: ""
@@ -619,6 +620,8 @@ Window {
                     return generalPage;
                 case "about":
                     return aboutPage;
+                case "datetime":
+                    return dateTimePage;
                 }
                 return appearancePage;
             }
@@ -736,6 +739,22 @@ Window {
             backend: root.backend
             system: sys
         }
+    }
+
+    Component {
+        id: dateTimePage
+        DateTimePage {
+            backend: root.backend
+            system: sys
+            store: cfg
+            onSetRequested: wall => timeSheet.openAt(wall)
+        }
+    }
+
+    // Date & Time > Set…: a sheet over the whole window; the page sends the answer to timedate1.
+    SetDateTimeSheet {
+        id: timeSheet
+        onChosen: wall => (page.item as DateTimePage)?.setWallClock(wall)
     }
 
     // Menu Bar > Clock Options…: a sheet over the whole window.

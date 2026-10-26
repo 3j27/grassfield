@@ -227,6 +227,25 @@ function timeZone(zone) {
     return validZone(zone) ? {op: "time.zone", zone: zone} : null;
 }
 
+// A Date whose local fields read as the wall clock of a zone `offsetSec` east of UTC at `ms` (the page shows the time zone
+// timedate1 reports, which this process may not have picked up yet).
+function wallClock(ms, offsetSec) {
+    const d = new Date(ms);
+    return new Date(ms + offsetSec * 1000 + d.getTimezoneOffset() * 60000);
+}
+
+// The inverse, for a time the user set as that zone's wall clock.
+function fromWallClock(wall, offsetSec) {
+    return wall.getTime() - offsetSec * 1000 - wall.getTimezoneOffset() * 60000;
+}
+
+// Whether the clock reads 24-hour: menubar.clockHours "24", or "auto" in a region whose short time has no AM/PM.
+function uses24Hour(setting, shortTimeFormat) {
+    if (setting === "24" || setting === "12")
+        return setting === "24";
+    return !/[aA]/.test(String(shortTimeFormat).replace(/'[^']*'/g, ""));
+}
+
 // SetTime: a date between 2000 and 2200 (systembus.cpp isUsec), as microseconds in a string.
 function timeSet(ms) {
     const n = Math.floor(Number(ms));

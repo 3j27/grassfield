@@ -17,6 +17,9 @@
 #include <QScreen>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QTimeZone>
+#include <QDateTime>
+#include <QLocale>
 #include <QTimer>
 
 #include "busjobs.h"
@@ -343,6 +346,23 @@ QVariantList Backend::volumes() const
         out.append(entry(v));
     }
     return out;
+}
+
+QVariantMap Backend::zoneInfo(const QString &zone) const
+{
+    // Names of a time zone in the UI language (Date & Time: "Central European Summer Time", "France", "UTC+02:00"); pure, no
+    // privilege: Qt's own time zone data.
+    const QTimeZone tz(zone.toUtf8());
+    if (zone.isEmpty() || !tz.isValid())
+        return {};
+    const QDateTime now = QDateTime::currentDateTime();
+    const QLocale locale;
+    const QLocale::Territory territory = tz.territory();
+    return {{"longName", tz.displayName(now, QTimeZone::LongName, locale)},
+            {"shortName", tz.displayName(now, QTimeZone::ShortName, locale)},
+            {"offset", tz.displayName(now, QTimeZone::OffsetName, locale)},
+            {"offsetSeconds", tz.offsetFromUtc(now)},
+            {"territory", territory == QLocale::AnyTerritory ? QString() : QLocale::territoryToString(territory)}};
 }
 
 QString Backend::autostartDir() const

@@ -23,5 +23,11 @@ SettingsPage {
             glyph: "laptop"
             onClicked: root.open("about")
         }
+        NavigationRow {
+            text: qsTr("Date & Time")
+            glyph: "clock"
+            tileColor: "blue"
+            onClicked: root.open("datetime")
+        }
     }
 }

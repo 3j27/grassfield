@@ -99,6 +99,28 @@ TestCase {
         compare(General.timeSet(NaN), null);
     }
 
+    function test_wallClock() {
+        // 2026-10-24 09:01:00 UTC: 11:01 in Paris (UTC+2), 05:01 in New York (UTC-4), whatever this process's own zone is.
+        const ms = 1792832460000;
+        const paris = General.wallClock(ms, 7200);
+        compare(paris.getHours(), 11);
+        compare(paris.getMinutes(), 1);
+        compare(paris.getDate(), 24);
+        compare(General.wallClock(ms, -14400).getHours(), 5);
+        compare(General.fromWallClock(paris, 7200), ms);
+        compare(General.fromWallClock(General.wallClock(ms, 0), 0), ms);
+    }
+
+    function test_uses24Hour() {
+        verify(General.uses24Hour("24", "h:mm AP"));
+        verify(!General.uses24Hour("12", "HH:mm"));
+        verify(General.uses24Hour("auto", "HH:mm"));
+        verify(!General.uses24Hour("auto", "h:mm AP"));
+        // A quoted literal is not an AM/PM field.
+        verify(General.uses24Hour("auto", "HH'h'mm 'Uhr'"));
+        verify(!General.uses24Hour("auto", "h:mm a"));
+    }
+
     function test_language() {
         const list = General.parseLanguages("English\ten\tEnglish\nFrançais\tfr\tFrench\nbad line\nX\tFR\tbad\n中文 (简体)\tzh-CN\tChinese (Simplified)\n");
         compare(list.length, 3);

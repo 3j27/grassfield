@@ -1833,6 +1833,21 @@
     </message>
 </context>
 <context>
+    <name>CityField</name>
+    <message>
+        <source>%1 - %2</source>
+        <translation>%1 - %2</translation>
+    </message>
+    <message>
+        <source>Closest city</source>
+        <translation>Ville la plus proche</translation>
+    </message>
+    <message>
+        <source>Cities</source>
+        <translation>Villes</translation>
+    </message>
+</context>
+<context>
     <name>Clock</name>
     <message>
         <source>dddd, MMMM d</source>
@@ -2188,6 +2203,73 @@
     <message>
         <source>Done</source>
         <translation>Terminé</translation>
+    </message>
+</context>
+<context>
+    <name>DateTimePage</name>
+    <message>
+        <source>Date &amp; Time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>The change could not be made: %1.</source>
+        <translation>La modification n’a pas pu être faite : %1.</translation>
+    </message>
+    <message>
+        <source>MMM d, yyyy</source>
+        <translation>d MMM yyyy</translation>
+    </message>
+    <message>
+        <source>h:mm:ss AP</source>
+        <translation>h:mm:ss AP</translation>
+    </message>
+    <message>
+        <source>%1 at %2</source>
+        <translation>%1 à %2</translation>
+    </message>
+    <message>
+        <source>Set time and date automatically</source>
+        <translation>Régler la date et l’heure automatiquement</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Date and time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>Set…</source>
+        <translation>Régler…</translation>
+    </message>
+    <message>
+        <source>Set the date and time</source>
+        <translation>Régler la date et l’heure</translation>
+    </message>
+    <message>
+        <source>24-hour time</source>
+        <translation>Heure au format 24 heures</translation>
+    </message>
+    <message>
+        <source>Time zone</source>
+        <translation>Fuseau horaire</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnu</translation>
+    </message>
+    <message>
+        <source>Closest city</source>
+        <translation>Ville la plus proche</translation>
     </message>
 </context>
 <context>
@@ -3149,6 +3231,10 @@
         <source>About</source>
         <translation>Informations</translation>
     </message>
+    <message>
+        <source>Date &amp; Time</source>
+        <translation>Date et heure</translation>
+    </message>
 </context>
 <context>
     <name>Glance</name>
@@ -3975,6 +4061,14 @@
     <message>
         <source>About</source>
         <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Date &amp; Time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>clock time zone city automatic network time ntp 24-hour</source>
+        <translation>horloge heure fuseau horaire ville automatique heure réseau ntp 24 heures</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>
@@ -5355,6 +5449,49 @@
     <message>
         <source>No Results for “%1”</source>
         <translation>Aucun résultat pour « %1 »</translation>
+    </message>
+</context>
+<context>
+    <name>SetDateTimeSheet</name>
+    <message>
+        <source>Set the date and time</source>
+        <translation>Régler la date et l’heure</translation>
+    </message>
+    <message>
+        <source>Set</source>
+        <translation>Régler</translation>
+    </message>
+    <message>
+        <source>Date</source>
+        <translation>Date</translation>
+    </message>
+    <message>
+        <source>Day</source>
+        <translation>Jour</translation>
+    </message>
+    <message>
+        <source>Month</source>
+        <translation>Mois</translation>
+    </message>
+    <message>
+        <source>Year</source>
+        <translation>Année</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Heure</translation>
+    </message>
+    <message>
+        <source>Hour</source>
+        <translation>Heures</translation>
+    </message>
+    <message>
+        <source>Minute</source>
+        <translation>Minutes</translation>
+    </message>
+    <message>
+        <source>Second</source>
+        <translation>Secondes</translation>
     </message>
 </context>
 <context>

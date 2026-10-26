@@ -97,6 +97,8 @@ Item {
         Text {
             id: valueLabel
             textFormat: Text.PlainText
+            // Centred on the row's control (Date & Time: the date beside its Set… button).
+            anchors.verticalCenter: parent.verticalCenter
             visible: root.valueText !== ""
             // The natural width comes from TextMetrics, not from this Text's implicitWidth, which changes as the text
             // wraps and looped (real session 2026-10-22, "SettingsRow.qml:72: Binding loop detected for property width").
