@@ -482,7 +482,8 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
   Search and Recent Items), newest first, existing local files only, at most 500; Files adds the files it opens there
   through KIO (KRecentDocument).
 - **F-6 Move**: Finder has no Cut for files. Edit shows Copy and, while ⌥ is held, Paste becomes Move Item Here ⌥⌘V.
-  ⌘X stays as an unlisted shortcut and a cut made in another file manager still pastes as a move (interop, nothing shown).
+  ⌘X does nothing to files (as in the Finder; no hidden shortcut, opus review of ADR-0028). A cut made in another file
+  manager still pastes as a move (interop: the clipboard says so; Files shows the move in the paste's progress).
 - **F-7 Terminal**: the session's terminal is `xdg-terminal-exec` (Omarchy; the shell uses it for `Terminal=true` entries,
   ADR-0011). Files starts terminal applications and "New Terminal at Folder" through it, never through KIO's konsole
   lookup; the working directory is the folder. Launches keep `launchguard.cpp`'s rules (Files never runs a program from a
