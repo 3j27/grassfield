@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """A fake NetworkManager or BlueZ for the Settings D-Bus tests (tests/integration/settings_dbus.sh, GF-049).
 
-    fake-system-service.py nm|bluez --log FILE --ready FILE [--fail 'Member=org.x.Error|message']
+    fake-system-service.py nm|bluez --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
 It owns org.freedesktop.NetworkManager (or org.bluez) on the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
 PRIVATE dbus-daemon. It REFUSES to start on anything else: GF_TEST_BUS=1 must be set and the address must not be a real system
 bus (/run, /var/run). It serves a small, fixed world (see below), keeps the state its methods change (the radio, the
 connection state, Powered, Connected) and appends one JSON line per call that reaches it to --log, so the test can say exactly
-what the Settings app sent. With --fail, the named method answers with that D-Bus error instead.
+what the Settings app sent. With --fail, the named method answers with that D-Bus error instead; with --slow it answers after that many seconds.
 
 The NetworkManager world: radio on; an Ethernet device and a Wi-Fi device wlan0 (connected, active AP 1); access points
 "Home" (secured, strong, active), "Home" (secured, weak), "Cafe" (open), a saved Wi-Fi profile for "Home" and an Ethernet one.
@@ -17,6 +17,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import urllib.parse
 
 import gi
 
@@ -27,10 +29,40 @@ V = GLib.Variant
 NM = "/org/freedesktop/NetworkManager"
 
 
+def is_private_test_bus(addr, directory):
+    """Every ';' entry is unix:path=<socket under directory> (percent-escapes decoded, dots resolved) or tcp on loopback."""
+    if not addr or not directory:
+        return False
+    root = os.path.normpath(directory)
+    entries = [e for e in addr.split(";") if e]
+    if not entries:
+        return False
+    for entry in entries:
+        transport, sep, rest = entry.partition(":")
+        if not sep:
+            return False
+        kv = {}
+        for pair in [p for p in rest.split(",") if p]:
+            key, eq, value = pair.partition("=")
+            if not eq or not key:
+                return False
+            kv[key] = urllib.parse.unquote(value)
+        if transport == "unix":
+            path = kv.get("path", "")
+            if set(kv) - {"path", "guid"} or not path.startswith("/") or not os.path.normpath(path).startswith(root + "/"):
+                return False
+        elif transport == "tcp":
+            if set(kv) - {"host", "port", "family", "guid"} or kv.get("host") not in ("127.0.0.1", "localhost", "::1"):
+                return False
+        else:
+            return False
+    return True
+
+
 def refuse_unless_private_bus():
     addr = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS", "")
-    if os.environ.get("GF_TEST_BUS") != "1" or not addr or "/run/" in addr or "/var/run/" in addr or addr.startswith("systemd:"):
-        sys.exit("fake-system-service: refusing to run on %r: only a private test bus (GF_TEST_BUS=1, DBUS_SYSTEM_BUS_ADDRESS)" % addr)
+    if os.environ.get("GF_TEST_BUS") != "1" or not is_private_test_bus(addr, os.environ.get("GF_TEST_BUS_DIR", "")):
+        sys.exit("fake-system-service: refusing to run on %r: only a private test bus (GF_TEST_BUS=1, GF_TEST_BUS_DIR, DBUS_SYSTEM_BUS_ADDRESS)" % addr)
     return addr
 
 
@@ -39,8 +71,9 @@ def xml(text):
 
 
 class Service:
-    def __init__(self, conn, log_path, fail):
+    def __init__(self, conn, log_path, fail, slow):
         self.conn = conn
+        self.slow = slow  # {member: seconds}
         self.log_path = log_path
         self.fail = fail  # {member: (error name, message)}
         self.props = {}  # (path, iface) -> {name: GLib.Variant}
@@ -58,6 +91,8 @@ class Service:
 
         def call(conn, sender, obj_path, interface, member, params, invocation):
             self.log(path=obj_path, iface=interface, member=member, args=params.print_(True))
+            if member in self.slow:
+                time.sleep(self.slow[member])
             if member in self.fail:
                 invocation.return_dbus_error(*self.fail[member])
                 return
@@ -188,6 +223,7 @@ def main():
     ap.add_argument("--log", required=True)
     ap.add_argument("--ready", required=True)
     ap.add_argument("--fail", action="append", default=[])
+    ap.add_argument("--slow", action="append", default=[])
     args = ap.parse_args()
     addr = refuse_unless_private_bus()
     conn = Gio.DBusConnection.new_for_address_sync(
@@ -197,7 +233,8 @@ def main():
         member, _, rest = spec.partition("=")
         name, _, message = rest.partition("|")
         fail[member] = (name, message)
-    svc = Service(conn, args.log, fail)
+    slow = {spec.partition("=")[0]: float(spec.partition("=")[2]) for spec in args.slow}
+    svc = Service(conn, args.log, fail, slow)
     name = nm_world(svc) if args.service == "nm" else bluez_world(svc)
 
     def acquired(c, n):

@@ -277,6 +277,23 @@ TEST(SystemBusWifi, ASecuredOrMissingNetworkIsNotJoinedAndSaysWhy)
         EXPECT_TRUE(c.member != QLatin1String("AddAndActivateConnection") && c.member != QLatin1String("ActivateConnection"));
 }
 
+TEST(SystemBusWifi, AnOpenAndASecuredNetworkOfTheSameNameAreToldApartBySecurity)
+{
+    // "Home" is secured on /ap/1 and /ap/2 (listed first); an open "Home" (/ap/gone, the page's open row) is joined by ITS access
+    // point, not refused for the secured neighbours; the strongest of several open ones is chosen.
+    NmFixture f;
+    f.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Home")}, {"Strength", u8(20)}, {"Flags", u32(0)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0)}};
+    f.apProps[QStringLiteral("/ap/2")] = {{"Ssid", QByteArray("Home")}, {"Strength", u8(60)}, {"Flags", u32(0)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0)}};
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectOpen"}, {"hex", "486F6D65"}}), QString());
+    const Call c = f.bus.calls.last();
+    EXPECT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+    EXPECT_EQ(qvariant_cast<QDBusObjectPath>(c.args[2]).path(), QStringLiteral("/ap/2"));
+    EXPECT_FALSE(qvariant_cast<ConnectionSettings>(c.args[0]).contains(QStringLiteral("802-11-wireless-security")));
+    // Only the secured ones left: refused with the password reason, never joined.
+    NmFixture g;
+    EXPECT_EQ(runAction(g.bus, {{"op", "wifi.connectOpen"}, {"hex", "486F6D65"}}), QStringLiteral("that network needs a password"));
+}
+
 TEST(SystemBusWifi, AFailedCallGivesTheServicesOwnShortReason)
 {
     NmFixture f;
@@ -412,6 +429,15 @@ TEST(SystemBusBluetooth, ActionsMakeExactlyTheirCalls)
     EXPECT_EQ(runAction(f.bus, {{"op", "bt.connect"}, {"mac", "01:02:03:04:05:06"}, {"connect", true}}), QStringLiteral("that device is no longer paired"));
     f.objects = bluez(true, false);
     EXPECT_EQ(runAction(f.bus, {{"op", "bt.power"}, {"on", true}}), QStringLiteral("no Bluetooth adapter"));
+}
+
+TEST(SystemBusBluetooth, ADeviceThatIsNotPairedIsNeverConnected)
+{
+    // macOS pairs first; Settings has no pairing agent: a seen-but-unpaired device is refused with a reason, and no Connect is sent.
+    BtFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "bt.connect"}, {"mac", "66:66:66:66:66:66"}, {"connect", true}}), QStringLiteral("that device is not paired yet"));
+    for (const Call &c : f.bus.calls)
+        EXPECT_NE(c.member, QStringLiteral("Connect"));
 }
 
 TEST(SystemBusBluetooth, AFailedConnectGivesTheServicesReason)

@@ -16,13 +16,10 @@
 #include <QStandardPaths>
 #include <QTimer>
 
+#include "busjobs.h"
 #include "qtbuscaller.h"
 #include "systemguard.h"
 
-#include <QRunnable>
-#include <QThreadPool>
-#include <QDBusConnection>
-#include <atomic>
 
 #ifndef GRASSFIELD_DEV_BINDINGS
 #define GRASSFIELD_DEV_BINDINGS ""
@@ -32,6 +29,8 @@ namespace {
 constexpr qint64 kMaxRead = 4 * 1024 * 1024;
 constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
+constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
+constexpr int kActionJobMs = 30000; // a D-Bus action (up to three calls of 15 s)
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -87,6 +86,7 @@ Backend::Backend(QObject *parent)
     , m_dev(grassfield::settings::devSession())
 {
     grassfield::settings::registerBusTypes();
+    m_bus = std::make_unique<Bus>();
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &Backend::onPath);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &Backend::onPath);
     if (m_dev) {
@@ -116,8 +116,14 @@ QString Backend::wallpaperRecentFile() const
     return QFileInfo(m_configFile).absolutePath() + QStringLiteral("/wallpaper-recent.json");
 }
 
+struct Backend::Bus {
+    grassfield::settings::SystemBusConnection connection;
+    grassfield::settings::BusJobs jobs{[this] { return connection.caller(); }};
+};
+
 Backend::~Backend()
 {
+    m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
     // Never destroy a running QProcess.
     const auto procs = findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly);
     for (QProcess *p : procs) {
@@ -192,35 +198,26 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
     return true;
 }
 
-// One D-Bus job on a worker thread, on a connection of its own to the system bus (a blocked service never blocks the window).
-// `job` returns "" on success, else the reason; its second argument receives the output (JSON) of a query.
-void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job)
+// One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
+// nothing a job holds outlives the Backend: busjobs.h). `job` returns "" on success, else the reason; its second argument
+// receives the output (JSON) of a query.
+void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs)
 {
-    static std::atomic<int> counter{0};
     const bool dev = m_dev;
-    QThreadPool::globalInstance()->start(QRunnable::create([this, tag, job = std::move(job), dev] {
-        QString output;
-        QString reason;
-        const QString name = QStringLiteral("gf-settings-bus-%1").arg(counter.fetch_add(1));
-        {
-            QDBusConnection connection = QDBusConnection::connectToBus(QDBusConnection::SystemBus, name);
-            grassfield::settings::QtBusCaller real(connection);
+    m_bus->jobs.start(
+        [dev, job = std::move(job)](grassfield::settings::BusCaller &real, QString *output) {
             grassfield::settings::GuardedCaller guarded(real, dev);
-            reason = job(guarded, &output);
-        }
-        QDBusConnection::disconnectFromBus(name);
-        QMetaObject::invokeMethod(
-            this,
-            [this, tag, output, reason] {
-                if (!reason.isEmpty()) {
-                    emit failed(tag, reason);
-                    emit finished(tag, false, QString());
-                } else {
-                    emit finished(tag, true, output);
-                }
-            },
-            Qt::QueuedConnection);
-    }));
+            return job(guarded, output);
+        },
+        [this, tag](const QString &reason, const QString &output) {
+            if (!reason.isEmpty()) {
+                emit failed(tag, reason);
+                emit finished(tag, false, QString());
+            } else {
+                emit finished(tag, true, output);
+            }
+        },
+        timeoutMs);
 }
 
 void Backend::busQuery(const QString &what, const QString &tag)
@@ -238,7 +235,7 @@ void Backend::busQuery(const QString &what, const QString &tag)
             return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
         *output = QString::fromUtf8(QJsonDocument(r.json).toJson(QJsonDocument::Compact));
         return QString();
-    });
+    }, kQueryJobMs);
 }
 
 bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &tag)
@@ -253,7 +250,7 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
         qWarning().noquote() << "refused a bus action that is not well formed:" << what;
         return false;
     }
-    runBus(tag, [op](BusCaller &bus, QString *) { return runAction(bus, op); });
+    runBus(tag, [op](BusCaller &bus, QString *) { return runAction(bus, op); }, kActionJobMs);
     return true;
 }
 

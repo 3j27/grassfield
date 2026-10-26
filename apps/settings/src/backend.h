@@ -3,6 +3,7 @@
 #include <QFileSystemWatcher>
 
 #include <functional>
+#include <memory>
 
 #include "systembus.h"
 
@@ -92,7 +93,7 @@ private:
     bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
     void start(const QStringList &argv, const QString &tag, int timeoutMs);
-    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job);
+    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs);
 
     QString m_configFile;
     QString m_bindingsFile;
@@ -103,4 +104,6 @@ private:
     QString m_devRoot;
     QFileSystemWatcher m_watcher;
     QStringList m_watched;
+    struct Bus; // the system bus connection and the D-Bus jobs (busjobs.h), in backend.cpp
+    std::unique_ptr<Bus> m_bus;
 };

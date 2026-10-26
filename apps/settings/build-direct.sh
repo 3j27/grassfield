@@ -20,7 +20,7 @@ if [[ ${1:-} == "--tests" ]]; then
   fi
   # shellcheck disable=SC2046
   g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${extra[@]}" -I"$here/src" -I"$here/.." $(pkg-config --cflags Qt6Core Qt6DBus) \
-    "$root/tests/unit/settings/tst_systemguard.cpp" "$root/tests/unit/settings/tst_systembus.cpp" "$here/src/systemguard.cpp" "$here/src/systembus.cpp" \
+    "$root/tests/unit/settings/tst_systemguard.cpp" "$root/tests/unit/settings/tst_systembus.cpp" "$here/src/systemguard.cpp" "$here/src/systembus.cpp" "$here/src/busjobs.cpp" "$root/tests/unit/settings/tst_busjobs.cpp" \
     $(pkg-config --libs Qt6Core Qt6DBus) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests$suffix"
   echo "built $out/settings-unit-tests$suffix"
   exit 0
@@ -40,7 +40,7 @@ moc=/usr/lib/qt6/moc
 g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${defs[@]}" \
   -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
   $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus) $(pkg-config --cflags wayland-client) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui)/QtGui -I/usr/include/qt6/QtCore/$(pkg-config --modversion Qt6Gui) \
-  "$here/src/main.cpp" "$here/src/backend.cpp" "$here/src/systemguard.cpp" "$here/src/systembus.cpp" "$out/moc_backend.cpp" \
+  "$here/src/main.cpp" "$here/src/backend.cpp" "$here/src/systemguard.cpp" "$here/src/systembus.cpp" "$here/src/busjobs.cpp" "$out/moc_backend.cpp" \
   $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus) -lwayland-client \
   -o "$out/grassfield-settings"
 echo "built $out/grassfield-settings"

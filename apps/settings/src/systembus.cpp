@@ -396,12 +396,25 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
             return QCoreApplication::translate("SystemBus", "that network is no longer saved");
         }
         // wifi.connectOpen: only an access point that needs no password; anything else is joined from Quick Settings.
+        // The page asks for the row it shows, an open one: an access point with the same SSID that is secured is another row.
+        // So the choice is made on the security of the access point: the strongest open one; only secured ones: refused.
         const QByteArray ssid = QByteArray::fromHex(op.value(QStringLiteral("hex")).toString().toLatin1());
-        for (const AccessPoint &ap : accessPoints(bus, dev.path)) {
-            if (ap.ssid != ssid)
+        bool seen = false;
+        AccessPoint ap;
+        bool haveOpen = false;
+        for (const AccessPoint &candidate : accessPoints(bus, dev.path)) {
+            if (candidate.ssid != ssid)
                 continue;
-            if (ap.wpa != 0 || ap.rsn != 0 || (ap.flags & 1) != 0)
-                return QCoreApplication::translate("SystemBus", "that network needs a password");
+            seen = true;
+            const bool secured = candidate.wpa != 0 || candidate.rsn != 0 || (candidate.flags & 1) != 0;
+            if (!secured && (!haveOpen || candidate.strength > ap.strength)) {
+                ap = candidate;
+                haveOpen = true;
+            }
+        }
+        if (seen && !haveOpen)
+            return QCoreApplication::translate("SystemBus", "that network needs a password");
+        if (haveOpen) {
             ConnectionSettings settings;
             settings.insert(QStringLiteral("connection"), QVariantMap{{QStringLiteral("id"), QString::fromUtf8(ssid)}, {QStringLiteral("type"), QStringLiteral("802-11-wireless")}});
             settings.insert(QStringLiteral("802-11-wireless"), QVariantMap{{QStringLiteral("ssid"), ssid}, {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
@@ -426,7 +439,10 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
         const QVariantMap d = it.value().value(kDevice1);
         if (d.isEmpty() || d.value(QStringLiteral("Address")).toString().toUpper() != mac)
             continue;
-        const BusReply r = bus.call(kBluez, it.key().path(), kDevice1, op.value(QStringLiteral("connect")).toBool() ? QStringLiteral("Connect") : QStringLiteral("Disconnect"), {}, kActMs);
+        // macOS pairs first: a device that is not paired is refused here (pairing needs an agent, which Settings does not run).
+        if (op.value(QStringLiteral("connect")).toBool() && !d.value(QStringLiteral("Paired")).toBool())
+            return QCoreApplication::translate("SystemBus", "that device is not paired yet");
+        const BusReply r = bus.call(kBluez, it.key().path(), kDevice1, op.value(QStringLiteral("connect")).toBool() ? QStringLiteral("Connect") : QStringLiteral("Disconnect"), {}, kActMs); // i18n-ignore: D-Bus method names
         return r.ok ? QString() : fail(r.error);
     }
     return QCoreApplication::translate("SystemBus", "that device is no longer paired");

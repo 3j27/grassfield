@@ -174,11 +174,12 @@ if want headless; then
     record headless scripts/dev/i18n-cmake-check.sh skip
   fi
 fi
-# Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure. tests/security/*.sh run here only when
-# registered with the test.sh runner (the nested security scenarios are bare commands; helpers are not registered).
-for script in tests/shell/*.sh tests/security/*.sh; do
+# Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure. tests/security/*.sh and tests/integration/*.sh
+# run here only when registered with the test.sh runner (the nested ones are bare commands; helpers are not registered).
+# tests/integration/settings_dbus.sh is one: a private bus and fake services, SKIP where Unix sockets are not available.
+for script in tests/shell/*.sh tests/security/*.sh tests/integration/*.sh; do
   [[ -f $script ]] || continue
-  [[ $script == tests/security/* && ${inv_runner[$script]:-} != test.sh ]] && continue
+  [[ $script == tests/security/* || $script == tests/integration/* ]] && [[ ${inv_runner[$script]:-} != test.sh ]] && continue
   layer=$(layer_of "$script") || { status=1; continue; }
   want "$layer" || continue
   script_out=$(bash "$script" 2>&1) && script_rc=0 || script_rc=$?

@@ -5549,6 +5549,10 @@
         <translation>Aucun adaptateur Bluetooth</translation>
     </message>
     <message>
+        <source>that device is not paired yet</source>
+        <translation>Cet appareil n’est pas encore associé</translation>
+    </message>
+    <message>
         <source>that device is no longer paired</source>
         <translation>Cet appareil n’est plus associé</translation>
     </message>

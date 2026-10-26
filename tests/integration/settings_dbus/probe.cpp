@@ -3,24 +3,74 @@
 // sets to a PRIVATE dbus-daemon with fake services, and REFUSES to run on anything else (exit 2), before it connects:
 //   probe [--dev] wifi-state | bt-state | act '<json of an action map>'
 // Prints the state JSON, or for an action "ok" / "failed: <reason>". Exit 0 ok, 1 failed, 2 refused to run.
+#include "busjobs.h"
 #include "qtbuscaller.h"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QDBusConnection>
+#include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 
 using namespace grassfield::settings;
+
+// An address is a private test bus only when EVERY entry (';'-separated) is either unix:path=<a socket under `dir`> (percent-escapes
+// decoded, dots resolved: "%2Frun%2F..." and "dir/../x" do not pass) or tcp on loopback; nothing else (abstract, runtime=, systemd:,
+// launchd:, a real socket) is accepted. `dir` is the scratch directory of the test (GF_TEST_BUS_DIR).
+bool isPrivateTestBus(const QString &address, const QString &dir)
+{
+    if (address.isEmpty() || dir.isEmpty())
+        return false;
+    const QString root = QDir::cleanPath(dir);
+    const QStringList entries = address.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    if (entries.isEmpty())
+        return false;
+    for (const QString &entry : entries) {
+        const int colon = entry.indexOf(QLatin1Char(':'));
+        if (colon <= 0)
+            return false;
+        const QString transport = entry.left(colon);
+        QMap<QString, QString> kv;
+        for (const QString &pair : entry.mid(colon + 1).split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            const int eq = pair.indexOf(QLatin1Char('='));
+            if (eq <= 0)
+                return false;
+            kv.insert(pair.left(eq), QString::fromUtf8(QByteArray::fromPercentEncoding(pair.mid(eq + 1).toUtf8())));
+        }
+        if (transport == QLatin1String("unix")) {
+            for (auto it = kv.cbegin(); it != kv.cend(); ++it)
+                if (it.key() != QLatin1String("path") && it.key() != QLatin1String("guid"))
+                    return false;
+            const QString path = kv.value(QStringLiteral("path"));
+            if (path.isEmpty() || !path.startsWith(QLatin1Char('/')) || !QDir::cleanPath(path).startsWith(root + QLatin1Char('/')))
+                return false;
+        } else if (transport == QLatin1String("tcp")) {
+            for (auto it = kv.cbegin(); it != kv.cend(); ++it)
+                if (it.key() != QLatin1String("host") && it.key() != QLatin1String("port") && it.key() != QLatin1String("family") && it.key() != QLatin1String("guid"))
+                    return false;
+            const QString host = kv.value(QStringLiteral("host"));
+            if (host != QLatin1String("127.0.0.1") && host != QLatin1String("localhost") && host != QLatin1String("::1"))
+                return false;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
 
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QString address = qEnvironmentVariable("DBUS_SYSTEM_BUS_ADDRESS");
-    if (qEnvironmentVariable("GF_TEST_BUS") != QLatin1String("1") || address.isEmpty() || address.contains(QLatin1String("/run/"))
-        || address.contains(QLatin1String("/var/run/")) || address.startsWith(QLatin1String("systemd:"))) {
-        std::fprintf(stderr, "probe: refusing to run on '%s': only a private test bus (GF_TEST_BUS=1, DBUS_SYSTEM_BUS_ADDRESS)\n", qPrintable(address));
+    if (qEnvironmentVariable("GF_TEST_BUS") != QLatin1String("1") || !isPrivateTestBus(address, qEnvironmentVariable("GF_TEST_BUS_DIR"))) {
+        std::fprintf(stderr, "probe: refusing to run on '%s': only a private test bus (GF_TEST_BUS=1, GF_TEST_BUS_DIR, DBUS_SYSTEM_BUS_ADDRESS)\n", qPrintable(address));
         return 2;
     }
     QStringList args = app.arguments().mid(1);
@@ -32,6 +82,35 @@ int main(int argc, char **argv)
     if (args.isEmpty())
         return 2;
     registerBusTypes();
+    if (args.first() == QLatin1String("close-midjob")) {
+        // The window closes while a slow service has not answered: the Backend's own machinery (busjobs.h, qtbuscaller.h) on the
+        // real connection. No callback may run afterwards, the destructor must not wait for the service, and the stuck job is
+        // abandoned (the app's default for that is _Exit(0); here a flag, then the same exit).
+        SystemBusConnection connection;
+        std::atomic<int> callbacks{0};
+        std::atomic<bool> abandoned{false};
+        QElapsedTimer closing;
+        {
+            BusJobs jobs([&connection] { return connection.caller(); }, 200, [&abandoned] { abandoned = true; });
+            jobs.start(
+                [](BusCaller &bus, QString *) { return runAction(bus, {{"op", "bt.connect"}, {"mac", "11:22:33:44:55:66"}, {"connect", true}}); },
+                [&callbacks](const QString &, const QString &) { ++callbacks; }, 30000);
+            QElapsedTimer wait;
+            wait.start();
+            while (wait.elapsed() < 500)
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 20); // the call is on the wire, the service is asleep
+            closing.start();
+        }
+        const qint64 ms = closing.elapsed();
+        QElapsedTimer after;
+        after.start();
+        while (after.elapsed() < 300)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const bool ok = callbacks.load() == 0 && abandoned.load() && ms < 1500;
+        std::printf("close-midjob: destructor %lld ms, abandoned=%d, callbacks after=%d: %s\n", static_cast<long long>(ms), abandoned.load() ? 1 : 0, callbacks.load(), ok ? "ok" : "FAILED");
+        std::fflush(nullptr);
+        std::_Exit(ok ? 0 : 1);
+    }
     // QDBusConnection::systemBus() takes DBUS_SYSTEM_BUS_ADDRESS, as the app does.
     const QDBusConnection system = QDBusConnection::systemBus();
     if (!system.isConnected())

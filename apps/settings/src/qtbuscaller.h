@@ -6,10 +6,12 @@
 #include <QDBusError>
 #include <QDBusMessage>
 
+#include <memory>
+#include <mutex>
+
 namespace grassfield::settings {
 
-// The real caller: one blocking call at a time on a D-Bus connection of its own (the worker threads of Backend each make
-// one; the bus is the system bus, which Qt takes from DBUS_SYSTEM_BUS_ADDRESS when it is set: the integration tests point it at
+// The real caller: blocking calls on a D-Bus connection (the one of SystemBusConnection; the bus is the system bus, which Qt takes from DBUS_SYSTEM_BUS_ADDRESS when it is set: the integration tests point it at
 // a private bus).
 class QtBusCaller : public BusCaller
 {
@@ -40,6 +42,37 @@ public:
 
 private:
     QDBusConnection m_connection;
+};
+
+// The ONE connection to the system bus of the Settings app (made lazily, on a worker thread, never on the GUI thread: a bus that
+// stalls during the connect blocks that worker only), shared by every job and made again when the bus went away.
+class SystemBusConnection
+{
+public:
+    ~SystemBusConnection()
+    {
+        if (m_made)
+            QDBusConnection::disconnectFromBus(m_name);
+    }
+    std::shared_ptr<BusCaller> caller()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_made) {
+            const QDBusConnection existing(m_name);
+            if (existing.isConnected())
+                return std::make_shared<QtBusCaller>(existing);
+            QDBusConnection::disconnectFromBus(m_name);
+            m_made = false;
+        }
+        const QDBusConnection fresh = QDBusConnection::connectToBus(QDBusConnection::SystemBus, m_name);
+        m_made = true;
+        return std::make_shared<QtBusCaller>(fresh);
+    }
+
+private:
+    std::mutex m_mutex;
+    const QString m_name = QStringLiteral("gf-settings-system-bus");
+    bool m_made = false;
 };
 
 } // namespace grassfield::settings

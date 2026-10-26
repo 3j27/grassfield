@@ -59,7 +59,7 @@ trap stop_all EXIT
 
 src=$root/apps/settings/src
 g++ -std=c++17 -O1 -fPIC -Wno-sfinae-incomplete -I"$src" -I"$root/apps" -I/usr/include/qt6 -I/usr/include/qt6/QtCore -I/usr/include/qt6/QtDBus \
-  "$root/tests/integration/settings_dbus/probe.cpp" "$src/systembus.cpp" "$src/systemguard.cpp" -lQt6Core -lQt6DBus -o "$work/probe" 2>"$work/build.log" ||
+  "$root/tests/integration/settings_dbus/probe.cpp" "$src/systembus.cpp" "$src/systemguard.cpp" "$src/busjobs.cpp" -pthread -lQt6Core -lQt6DBus -o "$work/probe" 2>"$work/build.log" ||
   { cat "$work/build.log"; die "the probe did not build"; }
 
 # The private bus: a unix socket in the test's own directory; else loopback TCP with anonymous authentication (a sandbox that
@@ -100,7 +100,7 @@ case $bus in
 esac
 say "private bus ${bus%%,guid*} (dbus-daemon pid $bus_pid)"
 
-penv=(env -i PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" GF_TEST_BUS=1)
+penv=(env -i PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work")
 # GF_TEST_PRELOAD (optional): a library preloaded into the probe only. In a sandbox that has no interface but lo, libdbus cannot
 # resolve its loopback TCP address (it asks getaddrinfo for AI_ADDRCONFIG), so such a run preloads a getaddrinfo that drops the flag.
 probe() { timeout 30 "${penv[@]}" ${GF_TEST_PRELOAD:+LD_PRELOAD=$GF_TEST_PRELOAD} "$work/probe" "$@" 2>&1; }
@@ -147,16 +147,35 @@ start_service bluez
 
 say ""
 say "[1] the guard"
-out=$(env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket timeout 10 "$work/probe" wifi-state 2>&1)
+# The refusal parses the address: only unix:path=<socket under the scratch directory> or loopback tcp pass (every entry).
+refused() { # ADDRESS...: the probe and the fake service both exit non-zero on it, whatever spelling it has
+  local addr=$1 rc
+  env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$addr" timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
+  rc=$?
+  [[ $rc -eq 2 ]] || return 1
+  rm -f "$work/x.ready"
+  env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$addr" timeout 10 python3 -I "$root/tests/fixtures/fake-system-service.py" nm --log "$work/x.log" --ready "$work/x.ready" >/dev/null 2>&1
+  [[ $? -ne 0 && ! -e "$work/x.ready" ]]
+}
+out=$(env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket timeout 10 "$work/probe" wifi-state 2>&1)
 rc=$?
 check "the probe refuses the real system bus (exit 2: $out)" test "$rc" -eq 2
-env -i PATH="$PATH" HOME="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
+check "both refuse unix:path=/var/run/dbus/system_bus_socket" refused unix:path=/var/run/dbus/system_bus_socket
+check "both refuse the same socket percent-escaped (unix:path=%2Frun%2Fdbus%2Fsystem_bus_socket)" refused 'unix:path=%2Frun%2Fdbus%2Fsystem_bus_socket'
+check "both refuse a path that only starts like the scratch directory ($work/../x)" refused "unix:path=$work/../x.sock"
+check "both refuse a socket next to the scratch directory (${work}x/bus)" refused "unix:path=${work}x/bus.sock"
+check "both refuse an abstract socket, runtime=, systemd: and an unknown transport" bash -c '
+  for a in "unix:abstract=/tmp/x" "unix:runtime=yes" "systemd:" "launchd:env=X" "nonce-tcp:host=127.0.0.1,port=1" "tcp:host=192.0.2.1,port=1" "tcp:port=1"; do
+    env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$1" DBUS_SYSTEM_BUS_ADDRESS="$a" timeout 10 "$1/probe" wifi-state >/dev/null 2>&1
+    [[ $? -eq 2 ]] || { echo "not refused: $a"; exit 1; }
+  done' _ "$work"
+check "both refuse a list that hides the real bus after a private entry" refused "unix:path=$work/bus.sock;unix:path=/run/dbus/system_bus_socket"
+env -i PATH="$PATH" HOME="$work" GF_TEST_BUS_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
 check "the probe refuses a run without GF_TEST_BUS=1" test "$?" -eq 2
-env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
+env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 DBUS_SYSTEM_BUS_ADDRESS="$bus" timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
+check "the probe refuses a run without GF_TEST_BUS_DIR" test "$?" -eq 2
+env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work" timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
 check "the probe refuses a run with no bus address" test "$?" -eq 2
-env -i PATH="$PATH" HOME="$work" GF_TEST_BUS=1 DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket timeout 10 python3 -I "$root/tests/fixtures/fake-system-service.py" nm --log "$work/x.log" --ready "$work/x.ready" >/dev/null 2>&1
-rc=$?
-check "the fake service refuses the real system bus too (exit non-zero, never ready)" test "$rc" -ne 0 -a ! -e "$work/x.ready"
 
 say ""
 say "[2] Wi-Fi state"
@@ -221,6 +240,9 @@ check "disconnect the Headphones (lower-case address): ok, Disconnect on their o
 check "... Disconnect reached dev_AA_BB_CC_DD_EE_FF" logged bluez Disconnect /org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF ""
 out=$(probe act '{"op":"bt.connect","mac":"01:02:03:04:05:06","connect":true}')
 check "a device that is not paired: the reason says so" test "$out" = "failed: that device is no longer paired"
+out=$(probe act '{"op":"bt.connect","mac":"66:66:66:66:66:66","connect":true}')
+check "a device that is seen but not paired is not connected: the reason says so" test "$out" = "failed: that device is not paired yet"
+check "... and no Connect reached it" bash -c '! grep -q "dev_66_66_66_66_66_66.*\"member\": \"Connect\"" "$1"' _ "$work/bluez.log"
 
 say ""
 say "[6] failure feedback"
@@ -267,6 +289,16 @@ out=$(probe bt-state)
 check "no BlueZ: likewise ($out)" test "$out" = "failed: the service is not running"
 out=$(probe act '{"op":"wifi.radio","on":false}')
 check "an action on a service that is not there fails with that reason ($out)" test "$out" = "failed: the service is not running"
+
+say ""
+say "[9] the window closes while a service is slow"
+start_service bluez --slow Connect=5
+start=$SECONDS
+out=$(probe close-midjob)
+rc=$?
+check "no callback after the close, the destructor does not wait for the service, the stuck job is abandoned ($out)" test "$rc" -eq 0
+check "... and the process is gone long before the service answers (took $((SECONDS - start)) s of its 5 s)" test "$((SECONDS - start))" -lt 4
+stop_service bluez
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi
