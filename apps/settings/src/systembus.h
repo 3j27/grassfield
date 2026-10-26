@@ -72,6 +72,15 @@ struct StateResult {
 StateResult wifiState(BusCaller &bus);
 StateResult bluetoothState(BusCaller &bus);
 
+// The Hardware group's network panes (Wi-Fi details, Network, VPN), NetworkManager read in one go:
+//   networkState: {"devices": [{"name", "type" ("ethernet" | "wifi"), "state" ("connected" | "connecting" | "disconnected" |
+//                  "unavailable"), "mac", "connection" (the active profile's name), "uuid", "ip4": ["a.b.c.d/n"], "router",
+//                  "dns": [...], "ip6": [...], "router6", "bitrate" (kbit/s, Wi-Fi), "frequency" (MHz, Wi-Fi), "ssid" (hex)}],
+//                  "vpns": [{"uuid", "name", "kind" ("vpn" | "wireguard"), "state" ("connected" | "connecting" |
+//                  "disconnected")}]}
+// Ethernet and Wi-Fi devices only (loopback, bridges, tun and the like are not services the person chose).
+StateResult networkState(BusCaller &bus);
+
 // The General pane's system services (PR #4, ADR-0026), on the system bus:
 //   hostState: hostname1  {"pretty", "static", "hostname", "chassis", "vendor", "model"}       (About)
 //   timeState: timedate1 and timesync1  {"zone", "ntp", "canNtp", "synced", "usec" (microseconds since the epoch, as a string),
@@ -90,7 +99,9 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
 //   wifi.radio {on}, wifi.connectKnown {uuid}, wifi.connectOpen {hex}, wifi.disconnect {}, wifi.scan {},
-//   bt.power {on}, bt.connect {mac, connect}
+//   bt.power {on}, bt.connect {mac, connect},
+//   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0026)
+//   vpn.connect {uuid, on}      a VPN or WireGuard profile: ActivateConnection on no device, or its DeactivateConnection
 // and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait
 // for the user's answer (kPrivilegedMs):
 //   host.setName {name}         hostname1 SetPrettyHostname, then SetStaticHostname with the name made a valid host name

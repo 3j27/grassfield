@@ -237,7 +237,7 @@ void Backend::busQuery(const QString &what, const QString &tag)
 {
     using namespace grassfield::settings;
     static const QStringList known{QStringLiteral("wifi.state"), QStringLiteral("bt.state"), QStringLiteral("host.state"), QStringLiteral("time.state"),
-                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units")};
+                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units"), QStringLiteral("net.state")};
     if (!known.contains(what)) {
         qWarning().noquote() << "refused a bus query that is not known:" << what;
         emit finished(tag, false, QString());
@@ -251,6 +251,7 @@ void Backend::busQuery(const QString &what, const QString &tag)
             : what == QLatin1String("time.state")                ? timeState(bus)
             : what == QLatin1String("time.zones")                ? timeZones(bus)
             : what == QLatin1String("locale.state")              ? localeState(bus)
+            : what == QLatin1String("net.state")                 ? networkState(bus)
                                                                  : userUnits(bus, own);
         if (!r.ok)
             return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;

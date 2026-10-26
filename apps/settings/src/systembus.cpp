@@ -33,6 +33,9 @@ const QString kNmAp = QStringLiteral("org.freedesktop.NetworkManager.AccessPoint
 const QString kNmSettingsPath = QStringLiteral("/org/freedesktop/NetworkManager/Settings");
 const QString kNmSettings = QStringLiteral("org.freedesktop.NetworkManager.Settings");
 const QString kNmConnection = QStringLiteral("org.freedesktop.NetworkManager.Settings.Connection");
+const QString kNmIp4 = QStringLiteral("org.freedesktop.NetworkManager.IP4Config");
+const QString kNmIp6 = QStringLiteral("org.freedesktop.NetworkManager.IP6Config");
+const QString kNmActive = QStringLiteral("org.freedesktop.NetworkManager.Connection.Active");
 const QString kBluez = QStringLiteral("org.bluez");
 const QString kObjectManager = QStringLiteral("org.freedesktop.DBus.ObjectManager");
 const QString kAdapter = QStringLiteral("org.bluez.Adapter1");
@@ -450,6 +453,169 @@ StateResult wifiState(BusCaller &bus)
     return r;
 }
 
+namespace {
+constexpr uint kDeviceTypeEthernet = 1;
+
+// An aa{sv} property (IP4Config AddressData, NameserverData) from the bus (a QDBusArgument) or canned (a list of maps).
+QList<QVariantMap> mapList(const QVariant &v)
+{
+    const QVariant u = unwrap(v);
+    QList<QVariantMap> out;
+    if (u.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        const QDBusArgument arg = qvariant_cast<QDBusArgument>(u);
+        arg.beginArray();
+        while (!arg.atEnd()) {
+            QVariantMap m;
+            arg >> m;
+            out.append(m);
+        }
+        arg.endArray();
+        return out;
+    }
+    for (const QVariant &e : u.toList())
+        out.append(e.toMap());
+    return out;
+}
+
+// "connected", "connecting", "disconnected" or "unavailable" from NM_DEVICE_STATE (10 unmanaged, 20 unavailable, 30
+// disconnected, 40-90 on the way, 100 activated, 110 deactivating, 120 failed).
+QString deviceState(uint state)
+{
+    if (state == kDeviceStateActivated)
+        return QStringLiteral("connected");
+    if (state >= 40 && state < 100)
+        return QStringLiteral("connecting");
+    if (state <= 20)
+        return QStringLiteral("unavailable");
+    return QStringLiteral("disconnected");
+}
+
+// An IP4Config or IP6Config object: its addresses ("a/n"), its gateway and (IPv4) its name servers.
+void addIpConfig(BusCaller &bus, const QString &path, bool v6, QJsonObject *out)
+{
+    if (path.isEmpty() || path == QLatin1String("/"))
+        return;
+    const Props p = allProperties(bus, kNmService, path, v6 ? kNmIp6 : kNmIp4);
+    if (!p.ok)
+        return;
+    QStringList addresses;
+    for (const QVariantMap &a : mapList(p.map.value(QStringLiteral("AddressData")))) {
+        const QString address = clean(a.value(QStringLiteral("address")));
+        if (!address.isEmpty())
+            addresses << address + QLatin1Char('/') + QString::number(unwrap(a.value(QStringLiteral("prefix"))).toUInt());
+    }
+    out->insert(v6 ? QStringLiteral("ip6") : QStringLiteral("ip4"), jsonStrings(addresses));
+    out->insert(v6 ? QStringLiteral("router6") : QStringLiteral("router"), clean(p.map.value(QStringLiteral("Gateway"))));
+    if (!v6) {
+        QStringList dns;
+        for (const QVariantMap &n : mapList(p.map.value(QStringLiteral("NameserverData")))) {
+            const QString address = clean(n.value(QStringLiteral("address")));
+            if (!address.isEmpty())
+                dns << address;
+        }
+        out->insert(QStringLiteral("dns"), jsonStrings(dns));
+    }
+}
+
+QString connectionState(uint state)
+{
+    // NM_ACTIVE_CONNECTION_STATE: 1 activating, 2 activated, 3 deactivating, 4 deactivated.
+    return state == 2 ? QStringLiteral("connected") : state == 1 ? QStringLiteral("connecting") : QStringLiteral("disconnected");
+}
+
+// A saved profile of any type: its object path, uuid, name and type.
+struct AnyProfile {
+    QString path, uuid, id, type;
+};
+
+QList<AnyProfile> allProfiles(BusCaller &bus)
+{
+    QList<AnyProfile> out;
+    for (const QDBusObjectPath &p : paths(bus.call(kNmService, kNmSettingsPath, kNmSettings, QStringLiteral("ListConnections"), {}, kReadMs))) {
+        const BusReply r = bus.call(kNmService, p.path(), kNmConnection, QStringLiteral("GetSettings"), {}, kReadMs);
+        if (!r.ok || r.args.isEmpty())
+            continue;
+        const QVariantMap c = cast<ConnectionSettings>(r.args.first()).value(QStringLiteral("connection"));
+        out.append({p.path(), c.value(QStringLiteral("uuid")).toString(), clean(c.value(QStringLiteral("id"))), c.value(QStringLiteral("type")).toString()});
+    }
+    return out;
+}
+
+// The active connections: uuid -> {object path, NM_ACTIVE_CONNECTION_STATE}.
+QMap<QString, QPair<QString, uint>> activeConnections(BusCaller &bus)
+{
+    QMap<QString, QPair<QString, uint>> out;
+    const Result active = property(bus, kNmService, kNmPath, kNmIface, QStringLiteral("ActiveConnections"));
+    if (!active.ok)
+        return out;
+    for (const QDBusObjectPath &p : cast<QList<QDBusObjectPath>>(active.value)) {
+        const Props a = allProperties(bus, kNmService, p.path(), kNmActive);
+        if (a.ok)
+            out.insert(a.map.value(QStringLiteral("Uuid")).toString().toLower(), {p.path(), a.map.value(QStringLiteral("State")).toUInt()});
+    }
+    return out;
+}
+} // namespace
+
+StateResult networkState(BusCaller &bus)
+{
+    StateResult r;
+    const BusReply list = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("GetDevices"), {}, kReadMs);
+    if (!list.ok) {
+        r.error = reasonOf(list.error);
+        return r;
+    }
+    QJsonArray devices;
+    for (const QDBusObjectPath &p : paths(list)) {
+        const Props d = allProperties(bus, kNmService, p.path(), kNmDevice);
+        const uint type = d.map.value(QStringLiteral("DeviceType")).toUInt();
+        if (!d.ok || (type != kDeviceTypeEthernet && type != kDeviceTypeWifi))
+            continue;
+        const uint state = d.map.value(QStringLiteral("State")).toUInt();
+        QJsonObject dev{{QStringLiteral("name"), clean(d.map.value(QStringLiteral("Interface")))},
+                        {QStringLiteral("type"), type == kDeviceTypeWifi ? QStringLiteral("wifi") : QStringLiteral("ethernet")},
+                        {QStringLiteral("state"), deviceState(state)},
+                        {QStringLiteral("mac"), clean(d.map.value(QStringLiteral("HwAddress")))}};
+        const QString activePath = cast<QDBusObjectPath>(d.map.value(QStringLiteral("ActiveConnection"))).path();
+        if (!activePath.isEmpty() && activePath != QLatin1String("/")) {
+            const Props a = allProperties(bus, kNmService, activePath, kNmActive);
+            if (a.ok) {
+                dev.insert(QStringLiteral("connection"), clean(a.map.value(QStringLiteral("Id"))));
+                dev.insert(QStringLiteral("uuid"), clean(a.map.value(QStringLiteral("Uuid"))));
+            }
+        }
+        if (state == kDeviceStateActivated) {
+            addIpConfig(bus, cast<QDBusObjectPath>(d.map.value(QStringLiteral("Ip4Config"))).path(), false, &dev);
+            addIpConfig(bus, cast<QDBusObjectPath>(d.map.value(QStringLiteral("Ip6Config"))).path(), true, &dev);
+            if (type == kDeviceTypeWifi) {
+                const Props w = allProperties(bus, kNmService, p.path(), kNmWireless);
+                if (w.ok) {
+                    dev.insert(QStringLiteral("bitrate"), static_cast<qint64>(w.map.value(QStringLiteral("Bitrate")).toUInt()));
+                    const QString ap = cast<QDBusObjectPath>(w.map.value(QStringLiteral("ActiveAccessPoint"))).path();
+                    const Props a = ap.isEmpty() || ap == QLatin1String("/") ? Props() : allProperties(bus, kNmService, ap, kNmAp);
+                    if (a.ok) {
+                        dev.insert(QStringLiteral("frequency"), static_cast<qint64>(a.map.value(QStringLiteral("Frequency")).toUInt()));
+                        dev.insert(QStringLiteral("ssid"), upperHex(cast<QByteArray>(a.map.value(QStringLiteral("Ssid")))));
+                    }
+                }
+            }
+        }
+        devices.append(dev);
+    }
+    QJsonArray vpns;
+    const QMap<QString, QPair<QString, uint>> active = activeConnections(bus);
+    for (const AnyProfile &p : allProfiles(bus)) {
+        if (p.type != QLatin1String("vpn") && p.type != QLatin1String("wireguard"))
+            continue;
+        const auto a = active.constFind(p.uuid.toLower());
+        vpns.append(QJsonObject{{QStringLiteral("uuid"), p.uuid}, {QStringLiteral("name"), p.id},
+                                {QStringLiteral("kind"), p.type}, {QStringLiteral("state"), a == active.cend() ? QStringLiteral("disconnected") : connectionState(a->second)}});
+    }
+    r.json = QJsonObject{{QStringLiteral("devices"), devices}, {QStringLiteral("vpns"), vpns}};
+    r.ok = true;
+    return r;
+}
+
 StateResult bluetoothState(BusCaller &bus)
 {
     StateResult r;
@@ -614,7 +780,7 @@ bool sessionAction(const QVariantMap &op)
 bool privilegedAction(const QVariantMap &op)
 {
     const QString name = op.value(QStringLiteral("op")).toString();
-    return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time."));
+    return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget");
 }
 
 bool validAction(const QVariantMap &op)
@@ -638,6 +804,10 @@ bool validAction(const QVariantMap &op)
         return isSsidHex(op.value(QStringLiteral("hex")).toString());
     if (name == QLatin1String("wifi.disconnect") || name == QLatin1String("wifi.scan"))
         return true;
+    if (name == QLatin1String("wifi.forget"))
+        return isUuid(op.value(QStringLiteral("uuid")).toString());
+    if (name == QLatin1String("vpn.connect"))
+        return isUuid(op.value(QStringLiteral("uuid")).toString()) && isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("bt.connect"))
         return isMac(op.value(QStringLiteral("mac")).toString()) && isBool(op.value(QStringLiteral("connect")));
     return false;
@@ -688,6 +858,41 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
     }
     if (name == QLatin1String("wifi.radio"))
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());
+
+    // Forget This Network: the saved Wi-Fi profile with that uuid goes. NetworkManager asks polkit itself for a profile of the
+    // whole system (settings.modify.system, ADR-0026), so the call waits for the user's answer.
+    if (name == QLatin1String("wifi.forget")) {
+        const QString uuid = op.value(QStringLiteral("uuid")).toString();
+        for (const AnyProfile &p : allProfiles(bus)) {
+            if (p.type != QLatin1String("802-11-wireless") || p.uuid.compare(uuid, Qt::CaseInsensitive) != 0)
+                continue;
+            const BusReply r = bus.call(kNmService, p.path, kNmConnection, QStringLiteral("Delete"), {}, kPrivilegedMs);
+            return r.ok ? QString() : fail(r.error);
+        }
+        return QCoreApplication::translate("SystemBus", "that network is no longer saved");
+    }
+    // A VPN or WireGuard profile switched on (activated on no particular device) or off (its active connection deactivated).
+    if (name == QLatin1String("vpn.connect")) {
+        const QString uuid = op.value(QStringLiteral("uuid")).toString();
+        for (const AnyProfile &p : allProfiles(bus)) {
+            if ((p.type != QLatin1String("vpn") && p.type != QLatin1String("wireguard")) || p.uuid.compare(uuid, Qt::CaseInsensitive) != 0)
+                continue;
+            if (op.value(QStringLiteral("on")).toBool()) {
+                const BusReply r = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("ActivateConnection"),
+                                            {QVariant::fromValue(QDBusObjectPath(p.path)), QVariant::fromValue(QDBusObjectPath(QStringLiteral("/"))),
+                                             QVariant::fromValue(QDBusObjectPath(QStringLiteral("/")))},
+                                            kActMs);
+                return r.ok ? QString() : fail(r.error);
+            }
+            const QString activePath = activeConnections(bus).value(p.uuid.toLower()).first;
+            if (activePath.isEmpty())
+                return QString(); // already off
+            const BusReply r = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("DeactivateConnection"),
+                                        {QVariant::fromValue(QDBusObjectPath(activePath))}, kActMs);
+            return r.ok ? QString() : fail(r.error);
+        }
+        return QCoreApplication::translate("SystemBus", "that VPN is no longer saved");
+    }
 
     if (name.startsWith(QLatin1String("wifi."))) {
         QString error;

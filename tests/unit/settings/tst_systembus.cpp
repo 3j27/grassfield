@@ -23,6 +23,7 @@ using ManagedObjects = QMap<QDBusObjectPath, ConnectionSettings>;
 struct Call {
     QString service, path, iface, member;
     QVariantList args;
+    int timeoutMs = 0;
 };
 
 // A bus that answers from a table and remembers every call.
@@ -32,9 +33,9 @@ public:
     std::function<BusReply(const Call &)> handler;
     QList<Call> calls;
 
-    BusReply call(const QString &service, const QString &path, const QString &iface, const QString &member, const QVariantList &args, int) override
+    BusReply call(const QString &service, const QString &path, const QString &iface, const QString &member, const QVariantList &args, int timeoutMs) override
     {
-        const Call c{service, path, iface, member, args};
+        const Call c{service, path, iface, member, args, timeoutMs};
         calls.append(c);
         return handler ? handler(c) : BusReply{false, {}, QStringLiteral("org.freedesktop.DBus.Error.ServiceUnknown: nobody")};
     }
@@ -762,4 +763,143 @@ TEST(SystemBusGeneral, ADevSessionReadsButNeverChangesTheSystem)
     EXPECT_FALSE(isReadOnlyCall(kSystemdName, QStringLiteral("org.freedesktop.systemd1.Manager"), QStringLiteral("EnableUnitFiles"), {}));
     EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.locale1"), QStringLiteral("org.freedesktop.locale1"), QStringLiteral("SetLocale"), {}));
     EXPECT_TRUE(isReadOnlyCall(kTime, kTime, QStringLiteral("ListTimezones"), {}));
+}
+
+// ---- Network (the Hardware group): devices with their addresses, VPN profiles, Forget, VPN on and off ----
+namespace
+{
+// A NetworkManager with a connected Wi-Fi device (addresses, router, DNS, bitrate, the access point's frequency), a disconnected
+// Ethernet device, a loopback that is not listed, a saved Wi-Fi profile, a WireGuard profile that is up and an OpenVPN one that
+// is down.
+struct NetFixture {
+    FakeBus bus;
+    NetFixture()
+    {
+        bus.handler = [](const Call &c) -> BusReply {
+            const QString m = c.member, target = c.args.value(0).toString();
+            if (m == QLatin1String("GetDevices"))
+                return ok({paths({QStringLiteral("/dev/wlan0"), QStringLiteral("/dev/eth0"), QStringLiteral("/dev/lo")})});
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.Device")) {
+                if (c.path == QLatin1String("/dev/wlan0"))
+                    return ok({QVariant::fromValue(QVariantMap{{"DeviceType", u32(2)}, {"Interface", QStringLiteral("wlan0")}, {"State", u32(100)},
+                                                               {"HwAddress", QStringLiteral("AA:BB:CC:00:11:22")}, {"ActiveConnection", path(QStringLiteral("/active/1"))},
+                                                               {"Ip4Config", path(QStringLiteral("/ip4/1"))}, {"Ip6Config", path(QStringLiteral("/ip6/1"))}})});
+                if (c.path == QLatin1String("/dev/eth0"))
+                    return ok({QVariant::fromValue(QVariantMap{{"DeviceType", u32(1)}, {"Interface", QStringLiteral("eth0")}, {"State", u32(30)},
+                                                               {"HwAddress", QStringLiteral("AA:BB:CC:00:11:33")}, {"ActiveConnection", path(QStringLiteral("/"))}})});
+                return ok({QVariantMap{{"DeviceType", u32(32)}, {"Interface", QStringLiteral("lo")}, {"State", u32(100)}}});
+            }
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.IP4Config"))
+                return ok({QVariant::fromValue(QVariantMap{{"AddressData", QVariantList{QVariantMap{{"address", QStringLiteral("192.168.1.42")}, {"prefix", u32(24)}}}},
+                                                           {"Gateway", QStringLiteral("192.168.1.1")},
+                                                           {"NameserverData", QVariantList{QVariantMap{{"address", QStringLiteral("192.168.1.1")}}, QVariantMap{{"address", QStringLiteral("9.9.9.9")}}}}})});
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.IP6Config"))
+                return ok({QVariant::fromValue(QVariantMap{{"AddressData", QVariantList{QVariantMap{{"address", QStringLiteral("fe80::1")}, {"prefix", u32(64)}}}},
+                                                           {"Gateway", QString()}})});
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.Device.Wireless"))
+                return ok({QVariant::fromValue(QVariantMap{{"Bitrate", u32(866700)}, {"ActiveAccessPoint", path(QStringLiteral("/ap/1"))}})});
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.AccessPoint"))
+                return ok({QVariant::fromValue(QVariantMap{{"Frequency", u32(5180)}, {"Ssid", QByteArray("Home")}})});
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.Connection.Active")) {
+                if (c.path == QLatin1String("/active/1"))
+                    return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Home")}, {"Uuid", QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")}, {"State", u32(2)}})});
+                return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Office")}, {"Uuid", QStringLiteral("AAAAAAAA-0000-0000-0000-000000000001")}, {"State", u32(2)}})});
+            }
+            if (m == QLatin1String("Get") && c.args.value(1).toString() == QLatin1String("ActiveConnections"))
+                return ok({variant(QVariant::fromValue(QList<QDBusObjectPath>{QDBusObjectPath(QStringLiteral("/active/1")), QDBusObjectPath(QStringLiteral("/active/2"))}))});
+            if (m == QLatin1String("ListConnections"))
+                return ok({paths({QStringLiteral("/conn/1"), QStringLiteral("/conn/2"), QStringLiteral("/conn/3")})});
+            if (m == QLatin1String("GetSettings")) {
+                ConnectionSettings s;
+                if (c.path == QLatin1String("/conn/1"))
+                    s[QStringLiteral("connection")] = {{"type", QStringLiteral("802-11-wireless")}, {"uuid", QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")}, {"id", QStringLiteral("Home")}};
+                else if (c.path == QLatin1String("/conn/2"))
+                    s[QStringLiteral("connection")] = {{"type", QStringLiteral("wireguard")}, {"uuid", QStringLiteral("aaaaaaaa-0000-0000-0000-000000000001")}, {"id", QStringLiteral("Office")}};
+                else
+                    s[QStringLiteral("connection")] = {{"type", QStringLiteral("vpn")}, {"uuid", QStringLiteral("bbbbbbbb-0000-0000-0000-000000000002")}, {"id", QStringLiteral("Travel")}};
+                return ok({QVariant::fromValue(s)});
+            }
+            if (m == QLatin1String("Delete") || m == QLatin1String("ActivateConnection") || m == QLatin1String("DeactivateConnection"))
+                return ok();
+            return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: ") + m);
+        };
+    }
+};
+} // namespace
+
+TEST(SystemBusNetwork, StateListsEthernetAndWifiWithTheirAddressesAndTheVpns)
+{
+    NetFixture f;
+    const StateResult r = networkState(f.bus);
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const QJsonArray devices = r.json["devices"].toArray();
+    ASSERT_EQ(devices.size(), 2); // not the loopback
+    const QJsonObject wifi = devices[0].toObject();
+    EXPECT_EQ(wifi["type"].toString(), QStringLiteral("wifi"));
+    EXPECT_EQ(wifi["state"].toString(), QStringLiteral("connected"));
+    EXPECT_EQ(wifi["mac"].toString(), QStringLiteral("AA:BB:CC:00:11:22"));
+    EXPECT_EQ(wifi["connection"].toString(), QStringLiteral("Home"));
+    EXPECT_EQ(wifi["ip4"].toArray(), QJsonArray({QStringLiteral("192.168.1.42/24")}));
+    EXPECT_EQ(wifi["router"].toString(), QStringLiteral("192.168.1.1"));
+    EXPECT_EQ(wifi["dns"].toArray(), QJsonArray({QStringLiteral("192.168.1.1"), QStringLiteral("9.9.9.9")}));
+    EXPECT_EQ(wifi["ip6"].toArray(), QJsonArray({QStringLiteral("fe80::1/64")}));
+    EXPECT_EQ(wifi["bitrate"].toInt(), 866700);
+    EXPECT_EQ(wifi["frequency"].toInt(), 5180);
+    EXPECT_EQ(wifi["ssid"].toString(), QStringLiteral("486F6D65"));
+    const QJsonObject eth = devices[1].toObject();
+    EXPECT_EQ(eth["state"].toString(), QStringLiteral("disconnected"));
+    EXPECT_FALSE(eth.contains(QStringLiteral("ip4"))); // no addresses read for a device that is not connected
+    const QJsonArray vpns = r.json["vpns"].toArray();
+    ASSERT_EQ(vpns.size(), 2);
+    EXPECT_EQ(vpns[0]["name"].toString(), QStringLiteral("Office"));
+    EXPECT_EQ(vpns[0]["kind"].toString(), QStringLiteral("wireguard"));
+    EXPECT_EQ(vpns[0]["state"].toString(), QStringLiteral("connected")); // the active uuid matched case-insensitively
+    EXPECT_EQ(vpns[1]["state"].toString(), QStringLiteral("disconnected"));
+}
+
+TEST(SystemBusNetwork, ForgetAndVpnActionsMakeExactlyTheirCalls)
+{
+    NetFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.forget"}, {"uuid", "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0"}}), QString());
+    EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("Delete"));
+    EXPECT_EQ(f.bus.calls.last().path, QStringLiteral("/conn/1"));
+    // NetworkManager may ask polkit first: the call waits for the dialog, and so does the job.
+    EXPECT_EQ(f.bus.calls.last().timeoutMs, 120000);
+    EXPECT_TRUE(privilegedAction({{"op", "wifi.forget"}}));
+    EXPECT_FALSE(privilegedAction({{"op", "vpn.connect"}}));
+    // A VPN uuid is not a Wi-Fi network to forget, and the reverse.
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.forget"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}}), QStringLiteral("that network is no longer saved"));
+    EXPECT_FALSE(f.bus.members().contains(QStringLiteral("Connection.Delete")));
+    EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}, {"on", true}}), QStringLiteral("that VPN is no longer saved"));
+    EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", true}}), QString());
+    EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("ActivateConnection"));
+    EXPECT_EQ(f.bus.calls.last().args.value(0).value<QDBusObjectPath>().path(), QStringLiteral("/conn/3"));
+    EXPECT_EQ(f.bus.calls.last().args.value(1).value<QDBusObjectPath>().path(), QStringLiteral("/"));
+    EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "aaaaaaaa-0000-0000-0000-000000000001"}, {"on", false}}), QString());
+    EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("DeactivateConnection"));
+    EXPECT_EQ(f.bus.calls.last().args.value(0).value<QDBusObjectPath>().path(), QStringLiteral("/active/2"));
+    // A VPN that is already off: nothing is deactivated.
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", false}}), QString());
+    EXPECT_FALSE(f.bus.members().contains(QStringLiteral("NetworkManager.DeactivateConnection")));
+}
+
+TEST(SystemBusNetwork, BadValuesNeverReachTheBusAndADevSessionOnlyReads)
+{
+    NetFixture f;
+    for (const QVariantMap &op : {QVariantMap{{"op", "wifi.forget"}, {"uuid", "not-a-uuid"}}, QVariantMap{{"op", "wifi.forget"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0\n"}},
+                                  QVariantMap{{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", "yes"}},
+                                  QVariantMap{{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}}}) {
+        f.bus.calls.clear();
+        EXPECT_EQ(runAction(f.bus, op), QStringLiteral("invalid request"));
+        EXPECT_TRUE(f.bus.calls.isEmpty());
+    }
+    GuardedCaller dev(f.bus, true);
+    f.bus.calls.clear();
+    EXPECT_TRUE(networkState(dev).ok);
+    EXPECT_TRUE(runAction(dev, {{"op", "wifi.forget"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}}).startsWith(QStringLiteral("dev guard")));
+    EXPECT_TRUE(runAction(dev, {{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", true}}).startsWith(QStringLiteral("dev guard")));
+    for (const QString &m : f.bus.members())
+        EXPECT_FALSE(m.endsWith(QLatin1String(".Delete")) || m.endsWith(QLatin1String("ActivateConnection"))) << qPrintable(m);
 }

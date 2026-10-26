@@ -68,6 +68,18 @@ service ask the session's agent itself.
   would go through the link, to a dotfile manager's file or out of `.dev`), and in a dev session only a folder whose real
   location lies under the worktree's `.dev` (`isAutostartWrite`, systemguard.h; review finding of 2026-10-26).
 
+- Hardware group (PR after #6), NetworkManager. NetworkManager checks its own polkit actions for every client call and lets
+  polkit ask the session's agent; the method has no `interactive` argument. Grassfield sends these calls only:
+  - Wi-Fi > Forget This Network: `Settings.Connection.Delete` on the saved Wi-Fi profile with that uuid (`wifi.forget`).
+    A profile of the whole system needs `org.freedesktop.NetworkManager.settings.modify.system`, `auth_admin_keep` or `yes`
+    depending on how the distribution built NetworkManager, so the call may wait for the dialog: 120 s, as above. A profile
+    of any other type is refused (a VPN uuid is not a network to forget).
+  - VPN switches: `ActivateConnection` of a `vpn` or `wireguard` profile on no device, `DeactivateConnection` of its active
+    connection (`vpn.connect`; `network-control`, `yes` for the active session by default). A VPN that needs a secret it does
+    not store needs NetworkManager's secret agent, which Grassfield does not provide: the activation fails with
+    NetworkManager's own reason, shown under the list.
+  Both are validated twice (a uuid, a boolean) and are refused by `GuardedCaller` in a dev session.
+
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
 (the lock, or a sheet) and remember it for a while. Nothing else in the window changes while the system asks.
