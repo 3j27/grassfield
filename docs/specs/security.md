@@ -500,6 +500,15 @@ VERIFIED until run).
   `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
   dies meanwhile cannot leave the screen dark. Off in the nested dev session unless `idle devDisplayOff <s>` sets it
   (`lock_privacy.sh display-off`). NOT VERIFIED on hardware (L2†).
+- Display power-off while unlocked (2026-10-26, Settings > Lock Screen; ADR-0010 amendment of that date): a second
+  `IdleMonitor` (`respectInhibitors: true`, armed only while unlocked and no ScreenSaver cookie is held,
+  `IdleModel.inactiveOffArmed`) switches the displays off after `lock.displayOffBattery` / `lock.displayOffPower` minutes
+  without input (the power source from UPower; 0 = never) and does not lock. The idle lock is untouched. A lock that follows
+  keeps the displays off until input (the monitor stays armed while it is idle, `offForInactivity`); any input switches them
+  on. Off in the nested dev session unless `idle devInactiveOff <s>` sets it. NOT VERIFIED on hardware or in nested here
+  (no compositor in the cloud container; L2†).
+- The lock surface (2026-10-26): `lock.showUser` false hides the picture and the name, `lock.showMessage` shows
+  `lock.message` (plain text, one line stored, at most two lines drawn) above them. Display only.
 - `org.freedesktop.ScreenSaver` inhibitors (GF-016 residual, done 2026-10-24; ADR-0008 and ADR-0010 amendments):
   Quickshell 0.3.1 cannot own a D-Bus name or serve methods (verified in its qmltypes: no D-Bus server type, only the
   DBusMenu client, the StatusNotifier, MPRIS and Notifications services and the Wayland `IdleInhibitor`), so the menu

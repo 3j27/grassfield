@@ -266,6 +266,13 @@ Scope {
     // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:
     // false or "0" in a hand-edited file must not switch the auto-lock off).
     readonly property int lockIdleMinutes: read("lock.idleMinutes")
+    // Minutes without input before the displays turn off while unlocked, on battery and on the power adapter; 0 = never.
+    readonly property int lockDisplayOffBattery: read("lock.displayOffBattery")
+    readonly property int lockDisplayOffPower: read("lock.displayOffPower")
+    // The lock screen shows the account's name and picture, and the user's message (plain text, one line).
+    readonly property bool lockShowUser: read("lock.showUser")
+    readonly property bool lockShowMessage: read("lock.showMessage")
+    readonly property string lockMessage: read("lock.message")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")

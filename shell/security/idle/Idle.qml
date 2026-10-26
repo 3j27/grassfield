@@ -19,7 +19,9 @@ import "../../lib/RunMode.js" as RunMode
 // protocol. Display power-off on the lock screen (D-4, macOS): IdleModel.DISPLAY_OFF_SECONDS without input while
 // locked switch the displays off (Hyprland DPMS); input or the unlock switch them on (the compositor also wakes them on
 // a key press or pointer motion: misc.key_press_enables_dpms / mouse_move_enables_dpms, looknfeel.lua, so a shell that
-// died meanwhile cannot leave the screen dark). Also hosts the lock-before-sleep inhibitor.
+// died meanwhile cannot leave the screen dark). While unlocked, lock.displayOffBattery / lock.displayOffPower minutes without
+// input (the power source in use; 0 = never) also switch them off, without locking (macOS 27 Lock Screen: Turn display off when
+// inactive); a lock that follows keeps them off until input. Also hosts the lock-before-sleep inhibitor.
 Scope {
     id: root
 
@@ -33,18 +35,26 @@ Scope {
     property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
     // This module switched the displays off (and must switch them on again).
     property bool displayOff: false
+    // Seconds without input before the displays go off while unlocked, for the power source in use; 0 = never. Off in the
+    // nested dev session unless a test sets it (`idle devInactiveOff <seconds>`), as the lock screen's.
+    property int devInactiveOffSeconds: 0
+    readonly property int inactiveOffSeconds: devHooks ? devInactiveOffSeconds : IdleModel.inactiveDisplayOffSeconds(Settings.lockDisplayOffBattery, Settings.lockDisplayOffPower, Battery.onBattery)
+    // The unlocked monitor turned the displays off and no input came since.
+    property bool offForInactivity: false
+    property bool rearmingInactive: false
 
+    // The compositor also switches the displays on at a key press or pointer motion, so the request is sent whenever the
+    // state is recomputed, never skipped as already done (a stale "off" would keep the next "off" from being sent).
     function setDisplays(on: bool): void {
-        if (on === !displayOff)
-            return;
+        if (on !== !displayOff)
+            console.info("grassfield-idle: displays " + (on ? "on" : (Lock.locked ? "off (locked, no input)" : "off (inactive)")));
         displayOff = !on;
-        console.info("grassfield-idle: displays " + (on ? "on" : "off (locked, no input)"));
         const action = on ? "enable" : "disable";
         Hyprland.dispatch(Hyprland.usingLua ? "hl.dsp.dpms({ action = \"" + action + "\" })" : "dpms " + (on ? "on" : "off"));
     }
 
     function updateDisplays(): void {
-        setDisplays(!(lockedMonitor.enabled && lockedMonitor.isIdle));
+        setDisplays(!IdleModel.displaysOff(lockedMonitor.enabled && lockedMonitor.isIdle, inactiveMonitor.enabled && inactiveMonitor.isIdle));
     }
 
     function update(): void {
@@ -94,6 +104,28 @@ Scope {
             root.dimmed = false;
             if (result !== "ok")
                 console.warn("grassfield-idle: idle lock not engaged:", result);
+        }
+    }
+
+    // No input while unlocked for inactiveOffSeconds: the displays go off; the session stays unlocked until the idle lock.
+    IdleMonitor {
+        id: inactiveMonitor
+        enabled: IdleModel.inactiveOffArmed(root.inactiveOffSeconds, Lock.locked, root.offForInactivity, root.rearmingInactive, root.busInhibited)
+        timeout: Math.max(1, root.inactiveOffSeconds)
+        respectInhibitors: true
+        onIsIdleChanged: {
+            root.offForInactivity = isIdle && enabled;
+            root.updateDisplays();
+        }
+        onEnabledChanged: {
+            if (!enabled)
+                root.offForInactivity = false;
+            root.updateDisplays();
+        }
+        // The power source changed (or the setting): re-enable so that the new timeout applies (see `rearming`).
+        onTimeoutChanged: {
+            root.rearmingInactive = true;
+            Qt.callLater(() => root.rearmingInactive = false);
         }
     }
 
@@ -176,6 +208,9 @@ Scope {
                 sleepBudgetMs: sleepInhibitor.budgetMs,
                 displayOffSeconds: root.displayOffSeconds,
                 displayOff: root.displayOff,
+                inactiveOffSeconds: root.inactiveOffSeconds,
+                inactiveOffArmed: inactiveMonitor.enabled,
+                offForInactivity: root.offForInactivity,
                 busInhibited: root.busInhibited
             });
         }
@@ -200,6 +235,14 @@ Scope {
             if (!root.devHooks || seconds < 0 || seconds > 600)
                 return RunMode.REFUSED;
             root.displayOffSeconds = seconds;
+            return "ok";
+        }
+
+        // Dev hook (dev only, else "refused"): display power-off delay while unlocked, 0..600 s (0 = never).
+        function devInactiveOff(seconds: int): string {
+            if (!root.devHooks || seconds < 0 || seconds > 600)
+                return RunMode.REFUSED;
+            root.devInactiveOffSeconds = seconds;
             return "ok";
         }
     }

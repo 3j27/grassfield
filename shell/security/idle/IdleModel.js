@@ -41,6 +41,29 @@ function idleArmed(enabled, locked, rearming, busInhibited) {
 // while locked before the displays go off (Hyprland DPMS); any input switches them on again.
 var DISPLAY_OFF_SECONDS = 30;
 
+// Display power-off while the session is unlocked (macOS 27 Lock Screen: Turn display off on battery / on power adapter when
+// inactive): the minutes of the power source in use, as seconds; 0 = never. The values arrive read through the contract
+// (integers 0..240); anything else is never: turning the displays off is not what keeps the session safe (the lock is, and it
+// does not depend on this).
+function inactiveDisplayOffSeconds(batteryMinutes, powerMinutes, onBattery) {
+    var m = onBattery === true ? batteryMinutes : powerMinutes;
+    if (typeof m !== "number" || !isFinite(m) || m <= 0 || m > MAX_MINUTES || Math.floor(m) !== m)
+        return 0;
+    return m * 60;
+}
+
+// The unlocked display-off monitor is armed: a delay is set, it is not being re-armed, and no application holds an idle
+// inhibitor (a video plays). While locked it stays armed only when it had already turned the displays off (`offForInactivity`):
+// the lock that follows keeps them dark until input, instead of lighting them for its own display-off delay.
+function inactiveOffArmed(seconds, locked, offForInactivity, rearming, busInhibited) {
+    return seconds > 0 && (locked !== true || offForInactivity === true) && rearming !== true && busInhibited !== true;
+}
+
+// The displays are off: the lock screen's monitor is idle, or the unlocked one is.
+function displaysOff(lockedIdle, inactiveIdle) {
+    return lockedIdle === true || inactiveIdle === true;
+}
+
 // Sleep inhibitor and PrepareForSleep watcher restarts (GF-030: never given up silently). A child that exits within
 // FAST_EXIT_MS of its start is a failure; MAX_FAST_FAILURES in a row make the module "degraded" (a notice tells the user)
 // and the child is then retried every SLOW_RETRY_MS instead of every FAST_RETRY_MS, for as long as the shell runs.

@@ -90,6 +90,11 @@ Singleton {
     // Opt-in: the shell builds the compositor extension when none is made for the installed Hyprland (shell.qml).
     readonly property bool windowsRebuildExtension: store.windowsRebuildExtension
     readonly property int lockIdleMinutes: store.lockIdleMinutes
+    readonly property int lockDisplayOffBattery: store.lockDisplayOffBattery
+    readonly property int lockDisplayOffPower: store.lockDisplayOffPower
+    readonly property bool lockShowUser: store.lockShowUser
+    readonly property bool lockShowMessage: store.lockShowMessage
+    readonly property string lockMessage: store.lockMessage
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
     readonly property bool menubarShowBackground: store.menubarShowBackground

@@ -937,6 +937,8 @@ QtObject {
     readonly property int lockFieldWidth: 220
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockFieldHeight: 32
+    // estimate (no capture of a macOS lock screen with a message): the user's message wraps at twice the password field's width [ref: docs/audits/settings-parity-2026-10-26.md § Lock Screen]
+    readonly property int lockMessageMaxWidth: 440
     // A2: was a white fill at 0.22 (placeholder 1.4:1 over a white wallpaper); the password field is a dark frosted inset (shadow colour) over the scrim: placeholder 8.6:1, typed dots and caret 10.7:1, return arrow 3.1:1 when hovered, over any wallpaper, tested [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real lockFieldFillOpacity: 0.45
     // A2: alpha of the white focus ring of the password field; 3.5:1 or more against the scrim over any wallpaper, tested [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
