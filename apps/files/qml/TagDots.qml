@@ -13,7 +13,7 @@ Row {
     property var colors: []
     property int size: Tokens.filesTagDotSize
     // The colour behind the dots (window or selection), drawn as their ring.
-    property color ringColor: Appearance.colors.materialTint
+    property color ringColor: Appearance.windowFill
 
     readonly property var shown: root.firstColors(root.colors)
 

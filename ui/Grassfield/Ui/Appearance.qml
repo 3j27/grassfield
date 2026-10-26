@@ -46,14 +46,14 @@ QtObject {
     readonly property real fillOpacity: dark ? Tokens.materialFillOpacity : Tokens.materialFillOpacityLight
     readonly property var colors: devGlyphMode !== "" ? glyphColors(baseColors) : baseColors
     // The palette of the appearance with the chosen accent applied (accent and accentText), live.
-    readonly property var baseColors: windowSurface ? windowPalette(dark ? accentedDark : accentedLight) : (dark ? accentedDark : accentedLight)
+    readonly property var baseColors: dark ? accentedDark : accentedLight
     // Both carry `selection` and `selectionText`: the fill and the text of a selected row, a default button or a checked box,
     // the light accent with its text in both appearances (Accent.withSelection).
     readonly property var accentedDark: Accent.withSelection(Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast), accentedLightBase)
     readonly property var accentedLight: Accent.withSelection(Accent.contrastBoost(accentedLightBase, increaseContrast), accentedLightBase)
     readonly property var accentedLightBase: Accent.apply(Tokens.colorLight, accentSetting, false, Tokens)
     // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
-    readonly property color focusRingColor: Accent.focusRing(baseColors.accent, baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
+    readonly property color focusRingColor: Accent.focusRing(baseColors.accent, windowFill, baseColors.text, Tokens.controlFocusRingMinContrast)
     // Control fills (audit 2026-10-25, priority 6). Dark appearance: the translucent fill of the material, as before. Light
     // appearance (macOS): chips white, secondary push buttons about 6 % grey, wells (the Apps field, Force Quit list, Overview add
     // button) white and translucent, none with a dark stroke.
@@ -61,11 +61,9 @@ QtObject {
     readonly property color buttonFill: withAlpha(colors.fill, fillOpacity)
     readonly property color lightWellFill: withAlpha(colors.chipFill, Tokens.materialWellFillOpacityLight)
 
-    function windowPalette(base: var): var {
-        const c = Object.assign({}, base);
-        c.materialTint = base.windowBackground;
-        return c;
-    }
+    // The fill that app windows draw as their own background (Settings, Files: `windowSurface`); the shell's materials, and the
+    // menus, sheets, tooltips and combo popups that Grassfield.Ui draws in an app, keep `colors.materialTint` (ADR-0024 lot 1).
+    readonly property color windowFill: windowSurface ? colors.windowBackground : colors.materialTint
 
     // Secondary text drawn directly on the opaque window surface or on its group fill (Settings): the lighter app-only grey, as
     // macOS. Text on a field, tab or chip fill keeps `colors.textSecondary`, which holds 4.5:1 on those fills (A2); outside an

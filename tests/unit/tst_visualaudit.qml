@@ -196,20 +196,24 @@ TestCase {
         Appearance.textScale = saved;
     }
 
+    // The window surface switch changes the window's own roles only: the popup material (menus, sheets, tooltips, combo popups) in
+    // Settings and Files is the one on main, `materialTint`, in both appearances (ADR-0024 lot 1).
     function test_windowSurfaceSwitch() {
         const saved = Appearance.windowSurface;
         const dark = Appearance.dark;
-        Appearance.dark = false;
-        Appearance.windowSurface = false;
-        compare(String(Appearance.colors.materialTint).toLowerCase(), Tokens.colorLight.materialTint.toLowerCase());
-        Appearance.windowSurface = true;
-        compare(String(Appearance.colors.materialTint).toLowerCase(), "#ffffff");
-        // The lighter grey is its own role: textSecondary (fields, tabs, chips) is untouched.
-        compare(String(Appearance.windowSecondary).toLowerCase(), Tokens.colorLight.windowTextSecondary.toLowerCase());
-        compare(String(Appearance.colors.textSecondary).toLowerCase(), Tokens.colorLight.textSecondary.toLowerCase());
-        Appearance.windowSurface = false;
-        compare(String(Appearance.windowSecondary).toLowerCase(), Tokens.colorLight.textSecondary.toLowerCase());
-        Appearance.windowSurface = true;
+        for (const isDark of [false, true]) {
+            Appearance.dark = isDark;
+            const pal = isDark ? Tokens.colorDark : Tokens.colorLight;
+            Appearance.windowSurface = false;
+            compare(String(Appearance.colors.materialTint).toLowerCase(), pal.materialTint.toLowerCase());
+            compare(String(Appearance.windowFill).toLowerCase(), pal.materialTint.toLowerCase());
+            compare(String(Appearance.windowSecondary).toLowerCase(), pal.textSecondary.toLowerCase());
+            Appearance.windowSurface = true;
+            compare(String(Appearance.colors.materialTint).toLowerCase(), pal.materialTint.toLowerCase(), "popup material unchanged in an app window");
+            compare(String(Appearance.windowFill).toLowerCase(), pal.windowBackground.toLowerCase());
+            compare(String(Appearance.windowSecondary).toLowerCase(), pal.windowTextSecondary.toLowerCase());
+            compare(String(Appearance.colors.textSecondary).toLowerCase(), pal.textSecondary.toLowerCase());
+        }
         Appearance.windowSurface = saved;
         Appearance.dark = dark;
     }

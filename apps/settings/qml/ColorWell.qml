@@ -188,7 +188,7 @@ Item {
             width: card.contentWidth + 2 * Tokens.spacingMd
             height: column.height + 2 * Tokens.spacingMd
             radius: Tokens.radiusMenu
-            color: Appearance.colors.materialTint
+            color: Appearance.windowFill
             border.width: 1
             border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             onHeightChanged: if (layer.visible) root.place()
