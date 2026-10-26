@@ -13,6 +13,10 @@
 #   7  dev guard: with the dev flag the state is read and every action is refused before it reaches the bus (the fake's log has
 #      no new call)
 #   8  a service that is not there: the reason says so
+#   9  the window closes while a service is slow
+#  10  General (ADR-0026): hostname1, timedate1, timesync1, locale1 read; the name, NTP, the zone and the time set with
+#      interactive = true (the service asks polkit); a polkit refusal's reason; a bad zone refused before the bus; the user's own
+#      services (the session bus) listed and switched, a shipped one refused; the dev guard sends none of these changes
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -46,10 +50,10 @@ python3 -I -c 'import gi; gi.require_version("Gio", "2.0")' 2>/dev/null || { say
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/gf-settings-dbus.XXXXXX") || die "no temp dir"
 chmod 700 "$work"
-bus_pid="" nm_pid="" bz_pid=""
+bus_pid="" nm_pid="" bz_pid="" gen_pid=""
 stop_all() {
   local p
-  for p in "$nm_pid" "$bz_pid" "$bus_pid"; do
+  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$bus_pid"; do
     [[ -n $p ]] && kill "$p" 2>/dev/null
   done
   wait 2>/dev/null
@@ -100,23 +104,25 @@ case $bus in
 esac
 say "private bus ${bus%%,guid*} (dbus-daemon pid $bus_pid)"
 
-penv=(env -i PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work")
+# The session bus (the user's own services) is the same private bus. LC_ALL=C.UTF-8: under a plain C locale Qt prints a warning
+# on stderr, which the probe's output would carry into the comparisons.
+penv=(env -i LC_ALL=C.UTF-8 PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" DBUS_SESSION_BUS_ADDRESS="$bus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$work")
 # GF_TEST_PRELOAD (optional): a library preloaded into the probe only. In a sandbox that has no interface but lo, libdbus cannot
 # resolve its loopback TCP address (it asks getaddrinfo for AI_ADDRCONFIG), so such a run preloads a getaddrinfo that drops the flag.
 probe() { timeout 30 "${penv[@]}" ${GF_TEST_PRELOAD:+LD_PRELOAD=$GF_TEST_PRELOAD} "$work/probe" "$@" 2>&1; }
 
-start_service() { # nm|bluez [--fail ...]: sets nm_pid / bz_pid
+start_service() { # nm|bluez|general [--fail ...]: sets nm_pid / bz_pid / gen_pid
   local which=$1
   shift
   rm -f "$work/$which.ready"
   : >"$work/$which.log"
   setsid "${penv[@]}" python3 -I "$root/tests/fixtures/fake-system-service.py" "$which" --log "$work/$which.log" --ready "$work/$which.ready" "$@" >"$work/$which.err" 2>&1 </dev/null &
-  if [[ $which == nm ]]; then nm_pid=$!; else bz_pid=$!; fi
+  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; *) gen_pid=$! ;; esac
   wait_until 10 test -e "$work/$which.ready" || { cat "$work/$which.err"; die "the fake $which did not start"; }
 }
-stop_service() { # nm|bluez
+stop_service() { # nm|bluez|general
   local pid
-  if [[ $1 == nm ]]; then pid=$nm_pid nm_pid=""; else pid=$bz_pid bz_pid=""; fi
+  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
   [[ -n $pid ]] && { kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; }
   sleep 0.3
 }
@@ -302,6 +308,60 @@ rc=$?
 check "no callback after the close, the destructor does not wait for the service, the stuck job is abandoned ($out)" test "$rc" -eq 0
 check "... and the process is gone long before the service answers (took $((SECONDS - start)) s of its 5 s)" test "$((SECONDS - start))" -lt 4
 stop_service bluez
+
+say ""
+say "[10] General (ADR-0026)"
+start_service general
+check "the probe refuses a session bus that is not the private one" bash -c '
+  env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$1" DBUS_SYSTEM_BUS_ADDRESS="$2" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus timeout 10 "$1/probe" units-state >/dev/null 2>&1
+  [[ $? -eq 2 ]]' _ "$work" "$bus"
+check "hostname1: the reference laptop, its pretty and static names" py "$(probe host-state)" 'j == {"pretty": "Grassfield Reference", "static": "grassfield-reference", "hostname": "grassfield-reference", "chassis": "laptop", "vendor": "Grassfield", "model": "Reference Laptop 14"}'
+st=$(probe time-state)
+check "timedate1 + timesync1: the zone, NTP, the time and the servers" py "$st" 'j["zone"] == "Europe/Paris" and j["ntp"] and j["canNtp"] and j["usec"] == "1792832460000000" and j["server"] == "2.arch.pool.ntp.org" and len(j["servers"]) == 3'
+check "ListTimezones: the zones, a malformed one dropped" py "$(probe time-zones)" 'j["zones"] == ["Europe/Paris", "Europe/Zurich", "America/New_York", "UTC"]'
+check "locale1: the system locale" py "$(probe locale-state)" 'j["locale"] == ["LANG=en_US.UTF-8"]'
+out=$(probe act '{"op":"host.setName","name":"Studio Desk"}')
+check "rename: ok" test "$out" = ok
+check "... SetPrettyHostname('Studio Desk', interactive true)" logged general SetPrettyHostname /org/freedesktop/hostname1 "'Studio Desk', true"
+check "... then SetStaticHostname of the derived name, interactive true" logged general SetStaticHostname /org/freedesktop/hostname1 "'studio-desk', true"
+check "... and hostname1 now says so" py "$(probe host-state)" 'j["pretty"] == "Studio Desk" and j["static"] == "studio-desk"'
+out=$(probe act '{"op":"time.ntp","on":false}')
+check "automatic time off: ok, SetNTP(false, interactive true)" bash -c '[[ $1 == ok ]]' _ "$out"
+check "... SetNTP(false, true)" logged general SetNTP /org/freedesktop/timedate1 "false, true"
+out=$(probe act '{"op":"time.zone","zone":"Europe/Zurich"}')
+check "time zone: ok, SetTimezone('Europe/Zurich', interactive true)" logged general SetTimezone /org/freedesktop/timedate1 "'Europe/Zurich', true"
+out=$(probe act '{"op":"time.set","usec":"1800000000000000"}')
+check "set the time: ok, SetTime(usec, absolute, interactive true)" logged general SetTime /org/freedesktop/timedate1 "1800000000000000, false, true"
+check "... and timedate1 now reads the new zone, NTP off and the new time" py "$(probe time-state)" 'j["zone"] == "Europe/Zurich" and not j["ntp"] and j["usec"] == "1800000000000000"'
+before=$(calls general)
+out=$(probe act '{"op":"time.zone","zone":"../../etc/passwd"}')
+check "a bad zone is refused before the bus (invalid request, no call)" bash -c '[[ $1 == "failed: invalid request" && $(wc -l <"$2") -eq $3 ]]' _ "$out" "$work/general.log" "$before"
+out=$(probe act '{"op":"time.set","usec":"1"}')
+check "a time before 2000 is refused before the bus" test "$out" = "failed: invalid request"
+check "units: the user's own services only (not the one a package ships)" py "$(probe units-state)" 'sorted((u["unit"], u["state"]) for u in j["units"]) == [("backup.service", "disabled"), ("sync.service", "enabled")]'
+out=$(probe act '{"op":"user.enable","unit":"backup.service","on":true}')
+check "switch the user's backup service on: ok" test "$out" = ok
+check "... EnableUnitFiles(['backup.service'], runtime false, force false), then Reload" bash -c 'grep EnableUnitFiles "$1" | grep -q "\[.backup.service.\], false, false" && grep -q "\"member\": \"Reload\"" "$1"' _ "$work/general.log"
+check "... and it reads enabled" py "$(probe units-state)" '[u["state"] for u in j["units"] if u["unit"] == "backup.service"] == ["enabled"]'
+out=$(probe act '{"op":"user.enable","unit":"shipped.service","on":false}')
+check "a service a package ships is refused ($out)" test "$out" = "failed: that item is not one of your own"
+check "... and DisableUnitFiles never reached the manager" bash -c '! grep -q DisableUnitFiles "$1"' _ "$work/general.log"
+stop_service general
+start_service general --fail 'SetTimezone=org.freedesktop.PolicyKit1.Error.NotAuthorized|Interactive authentication required.'
+out=$(probe act '{"op":"time.zone","zone":"Europe/Zurich"}')
+check "a polkit refusal (a cancelled dialog) becomes the page's reason ($out)" test "$out" = "failed: not allowed: the system refused the request"
+stop_service general
+start_service general
+fine=1
+for op in '{"op":"host.setName","name":"Dev"}' '{"op":"time.ntp","on":false}' '{"op":"time.zone","zone":"UTC"}' '{"op":"time.set","usec":"1800000000000000"}' \
+  '{"op":"user.enable","unit":"sync.service","on":false}'; do
+  out=$(probe --dev act "$op")
+  case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
+done
+check "in a dev session every General change is refused by the guard" test "$fine" -eq 1
+check "... a dev session still reads hostname1 and timedate1" py "$(probe --dev time-state)" 'j["zone"] == "Europe/Paris"'
+check "... and no Set*, Enable or Disable call reached the services" bash -c '! grep -qE "\"member\": \"(Set[A-Za-z]*|EnableUnitFiles|DisableUnitFiles|Reload)\"" "$1"' _ "$work/general.log"
+stop_service general
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi
