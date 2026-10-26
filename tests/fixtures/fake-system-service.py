@@ -4,8 +4,9 @@
     fake-system-service.py nm|bluez --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
 It owns org.freedesktop.NetworkManager (or org.bluez) on the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
-PRIVATE dbus-daemon. It REFUSES to start on anything else: GF_TEST_BUS=1 must be set and the address must not be a real system
-bus (/run, /var/run). It serves a small, fixed world (see below), keeps the state its methods change (the radio, the
+PRIVATE dbus-daemon. It REFUSES to start on anything else: GF_TEST_BUS=1 must be set, GF_TEST_BUS_DIR must name the test's
+scratch directory, and every entry of the address must be a unix socket under that directory or loopback tcp (parsed, not
+matched: percent-escapes, dots and lists do not get past it; never a real system bus). It serves a small, fixed world (see below), keeps the state its methods change (the radio, the
 connection state, Powered, Connected) and appends one JSON line per call that reaches it to --log, so the test can say exactly
 what the Settings app sent. With --fail, the named method answers with that D-Bus error instead; with --slow it answers after that many seconds.
 

@@ -16,8 +16,10 @@
 //  - The jobs hold no pointer to their owner: they only post to a mailbox that ~BusJobs deletes under a lock, so a result that
 //    arrives after destruction is dropped (the `done` callbacks never run after ~BusJobs).
 //  - ~BusJobs waits at most shutdownWaitMs for jobs in flight; a job still stuck after that is abandoned: `onAbandon` runs
-//    (default: flush and _Exit(0), because a thread blocked inside Qt D-Bus must not meet the teardown of the application, and
-//    the process must not stay alive until the call times out). Nothing the window holds is unsaved.
+//    (default: flush and _Exit(exit code), because a thread blocked inside Qt D-Bus must not meet the teardown of the application,
+//    and the process must not stay alive until the call times out). The exit code is the application's own, given to
+//    setExitCode() once exec() returned (0 until then). The owner of the jobs does its other cleanup (child processes) BEFORE
+//    destroying them: the abandon path skips every destructor. Nothing the window holds is unsaved.
 //  - The caller comes from `factory`, called on the worker (it may connect: a slow bus never blocks the GUI thread); a null
 //    caller fails the job.
 // Qt Core only; the factory brings the bus.
@@ -40,6 +42,9 @@ public:
     BusJobs &operator=(const BusJobs &) = delete;
 
     void start(Job job, Done done, int timeoutMs);
+
+    // The exit code the default abandon path leaves with (the result of the application's exec()).
+    static void setExitCode(int code);
 
 private:
     struct State;
