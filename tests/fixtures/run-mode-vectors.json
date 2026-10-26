@@ -1,5 +1,5 @@
 {
-"comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
+"comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. The processes outside Qt or with their own read (slice M7): the compositor plugin (compositor/src/core/RunMode.hpp via compositor/tests/RunModeTest.cpp) and the menu bridge (bridges/menu-bridge/src/Safety.h via tests/unit/menu-bridge/tst_menubridge.cpp) read the modes (dev, session). A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
 "refused": "refused",
 "members": {
  "comment": "Every member of shell/lib/Mode.qml, exactly: its type and the canonical form of its expression, as Qt's syntax tree reads it (checked by tests/shell/run_mode_env.sh, which also runs the real singleton in every environment below). A member that is not here, a second root child, a timer or any other expression fails. The C++ side lists the same names in apps/runmode.h from M6.",

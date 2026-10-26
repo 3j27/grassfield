@@ -12,6 +12,14 @@
 
 namespace gf::menubridge {
 
+    bool devRun(const QByteArray& devValue, const QByteArray& sessionValue) {
+        return devValue == "1" && !sessionRun(sessionValue);
+    }
+
+    bool sessionRun(const QByteArray& sessionValue) {
+        return sessionValue == "1";
+    }
+
     bool isDefaultSessionBus(const QString& address, uint uid) {
         if (address.trimmed().isEmpty())
             return true;
