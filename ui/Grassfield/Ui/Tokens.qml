@@ -755,8 +755,14 @@ QtObject {
     readonly property int notificationCenterPillHeight: 23
     // F1 gap 7: 24-pt close circle of the footer [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterCloseDisk: 24
-    // estimate: entries per group before Show all [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
-    readonly property int notificationCenterGroupCollapsed: 3
+    // a collapsed group is a stack: its newest card in front, the others as a tail under it (owner decision 2026-10-26) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationCenterGroupCollapsed: 1
+    // each card behind the front one shows 4 below the card above it, two at most (a 7.5-pt tail for a stack of three or more) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationStackStep: 4
+    // estimate: each card behind is this much narrower on each side than the one in front [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationStackInset: 10
+    // cards drawn behind the front one at most [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Notifications]
+    readonly property int notificationStackLayers: 2
     // estimate: pixels of rows kept alive beyond the viewport (keyboard reach) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterCache: 2000
 

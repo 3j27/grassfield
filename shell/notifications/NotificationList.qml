@@ -636,6 +636,9 @@ ListView {
         required property int toggleCount
 
         readonly property bool expanded: Notifications.expandedApps[appName] === true
+        // A collapsed group of two or more is a stack (macOS 27): this front card, the others as a tail under it.
+        readonly property bool stacked: toggleCount > 0 && !expanded
+        readonly property int stackLayers: stacked ? Math.min(toggleCount - 1, Tokens.notificationStackLayers) : 0
         // The focusable card.
         readonly property Item rowItem: row
         // The pointer is over a card of this app.
@@ -905,20 +908,57 @@ ListView {
                 border.color: Appearance.focusRingColor
             }
 
-            // One floating card: the group header on the first card of a group of two or more (a single
-            // notification shows no app-name row, as on macOS), the notification, Show All / Show Less on the
-            // last visible card of a group.
+            // One floating card: the group header on the first card of an expanded group (a single notification
+            // and a stack show no app-name row, as on macOS), the notification, Show Less on the head of an expanded
+            // group; a collapsed group is a stack whose tail under the front card is its Show All.
             Component {
                 id: rowBody
 
                 Item {
-                    implicitHeight: cardColumn.implicitHeight + 2 * Tokens.spacingMd
+                    id: body
+
+                    readonly property real cardHeight: cardColumn.implicitHeight + 2 * Tokens.spacingMd
+
+                    implicitHeight: cardHeight + item.stackLayers * Tokens.notificationStackStep
+
+                    // The cards behind the front one of a stack, each a little narrower and lower: only their bottom edge shows
+                    // under the front card (clipped there, so the translucent front card never shows them through it).
+                    Repeater {
+                        model: item.stackLayers
+
+                        delegate: Item {
+                            id: stackLayer
+
+                            required property int index
+
+                            z: -1 - index
+                            y: body.cardHeight
+                            width: body.width
+                            height: (index + 1) * Tokens.notificationStackStep
+                            clip: true
+
+                            Material {
+                                id: stackSurface
+                                glassClass: "notification"
+                                backdropRect: list.panel.restRect ?? Qt.rect(0, 0, 0, 0)
+                                x: (stackLayer.index + 1) * Tokens.notificationStackInset
+                                y: stackLayer.height - height
+                                width: body.width - 2 * x
+                                height: body.cardHeight
+                                radius: Tokens.radiusBanner
+                                shadowEnabled: false
+                            }
+
+                            Component.onCompleted: list.host.addSurface(stackLayer, true, Tokens.radiusBanner, item)
+                        }
+                    }
 
                     Material {
                         id: cardSurface
                         glassClass: "notification"
                         backdropRect: list.panel.restRect ?? Qt.rect(0, 0, 0, 0)
-                        anchors.fill: parent
+                        width: parent.width
+                        height: body.cardHeight
                         radius: Tokens.radiusBanner
                         shadowEnabled: false
                         Component.onCompleted: list.host.addSurface(cardSurface, true, Tokens.radiusBanner, item)
@@ -932,7 +972,7 @@ ListView {
                         spacing: Tokens.spacingSm
 
                         Item {
-                            visible: item.headCount > 1
+                            visible: item.headCount > 1 && !item.stacked
                             width: parent.width
                             height: visible ? Math.max(clearGroup.height, showLess.implicitHeight) : 0
 
@@ -970,7 +1010,7 @@ ListView {
                                 Button {
                                     id: showLess
                                     anchors.verticalCenter: parent.verticalCenter
-                                    visible: item.expanded && item.headCount > Tokens.notificationCenterGroupCollapsed
+                                    visible: item.expanded && item.headCount > Notifications.groupCollapsed
                                     opacity: item.groupHot || activeFocus ? 1 : 0
                                     capsule: true
                                     text: qsTr("Show Less")
@@ -1030,28 +1070,57 @@ ListView {
                             }
                         }
 
-                        Item {
-                            visible: item.toggleCount > 0 && !item.expanded
-                            width: parent.width
-                            height: visible ? toggle.implicitHeight : 0
+                    }
 
-                            Button {
-                                id: toggle
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                capsule: true
-                                text: qsTr("Show All (%1)").arg(item.toggleCount)
-                                Component.onCompleted: item.toggleCtl = toggle
-                                onVisibleChanged: list.queueResolve()
-                                onClicked: {
-                                    if (!item.actable(toggle)) {
-                                        list.queueResolve();
-                                        return;
-                                    }
-                                    const kbd = toggle.activeFocus;
-                                    Notifications.setExpanded(item.appName, true);
-                                    if (kbd)
-                                        list.handoff(item.appName, "showLess");
+                    // Show All of a stack: its tail under the front card; a click on it, or
+                    // Space / Return while it holds the focus, opens the group.
+                    Item {
+                        visible: item.stacked
+                        anchors.fill: parent
+
+                        Item {
+                            id: toggle
+
+                            signal clicked
+
+                            x: Tokens.notificationStackInset
+                            y: body.cardHeight
+                            width: body.width - 2 * Tokens.notificationStackInset
+                            height: Math.max(Tokens.spacingMd, item.stackLayers * Tokens.notificationStackStep)
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: qsTr("Show All (%1)").arg(item.toggleCount)
+                            Accessible.focusable: true
+                            Accessible.onPressAction: if (toggle.visible)
+                                toggle.clicked()
+                            Component.onCompleted: item.toggleCtl = toggle
+                            onVisibleChanged: list.queueResolve()
+                            Keys.onPressed: event => {
+                                if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    event.accepted = true;
+                                    toggle.clicked();
                                 }
+                            }
+                            onClicked: {
+                                if (!item.actable(toggle)) {
+                                    list.queueResolve();
+                                    return;
+                                }
+                                const kbd = toggle.activeFocus;
+                                Notifications.setExpanded(item.appName, true);
+                                if (kbd)
+                                    list.handoff(item.appName, "showLess");
+                            }
+
+                            FocusRing {
+                                shapeRadius: Tokens.radiusBanner
+                                visible: toggle.activeFocus
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.ArrowCursor
+                                onClicked: toggle.clicked()
                             }
                         }
                     }
