@@ -112,68 +112,61 @@ function folderIconName(path, home) {
     return names[rel] ? names[rel] : "folder";
 }
 
-// ---- Listing ----
+// ---- The helper's window (apps/stack-helper, shell/dock/StackHelper.qml) ----
 
-// Output of dock/list-folder.sh: records ended by RS (0x1e), fields by US (0x1f): birth, modified and changed time (seconds,
-// birth is empty or 0 where the file system has none), type letter (d folder, f file, ...), name. Hidden names never come
-// (the script drops them). [{name, path, isDir, created, modified, added}], times in seconds.
-function parseListing(text, dir) {
-    const out = [];
+// A name as the helper writes it: backslash, line break, return and US are escaped as \\, \n, \r and \u.
+function unescapeName(text) {
+    if (text.indexOf("\\") < 0)
+        return text;
+    // Linear, and without a call per escape (300 names of 255 backslashes were 160 to 266 ms with one callback per match): the
+    // doubled backslashes become NUL (which no file name holds) by a native regex replace, then the three one-letter escapes
+    // are plain replacements, then NUL becomes one backslash (each step one native call on the whole name). Scanning left to right, a doubled backslash is always a pair.
+    return text.replace(/\\\\/g, "\0").replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\u/g, "\x1f").replace(/\0/g, "\\");
+}
+
+// One "W" line of the helper: the window, the first entries of the folder in the stack's order, fields separated by US:
+// W, sequence, total, n, then n times name, isDir (0 or 1), modified, added, created (seconds).
+// A parser that works in slices: `valid` says whether the line is one; step(budgetMs) reads entries until the budget is used and says
+// whether it is done (a name made of hundreds of escapes costs a third of a millisecond, 300 of them 100 ms: never one long call on
+// the GUI thread); `result` is {sequence, total, entries: [{name, path, isDir, modified, added, created}]}.
+function windowParser(line, dir) {
+    const f = String(line).split("\x1f");
+    const n = f[0] === "W" && f.length >= 4 ? parseInt(f[3]) : -1;
     const base = String(dir).replace(/\/+$/, "");
-    for (const record of String(text || "").split("\x1e")) {
-        if (record === "")
-            continue;
-        const f = record.split("\x1f");
-        if (f.length < 5)
-            continue;
-        const name = f.slice(4).join("\x1f").replace(/^\n+/, "");
-        if (name === "" || name.indexOf("/") >= 0 || name.startsWith("."))
-            continue;
-        const modified = parseFloat(f[1]) || 0;
-        const changed = parseFloat(f[2]) || 0;
-        const born = parseFloat(f[0]) || 0;
-        out.push({
-            name: name,
-            path: base + "/" + name,
-            isDir: f[3] === "d",
-            created: born > 0 ? born : modified,
-            modified: modified,
-            // Linux has no "date added": the last change of the inode (a download finishing, a file moved in) is the closest.
-            added: Math.max(changed, born)
-        });
-    }
-    return out;
-}
-
-function compareNames(a, b) {
-    const x = a.name.toLowerCase();
-    const y = b.name.toLowerCase();
-    return x < y ? -1 : x > y ? 1 : (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-}
-
-// File kind used for the "Kind" order: folders first, then by extension, then by name.
-function kindOf(entry) {
-    if (entry.isDir)
-        return "";
-    const i = entry.name.lastIndexOf(".");
-    return i > 0 ? entry.name.substring(i + 1).toLowerCase() : "~";
-}
-
-// A copy of `entries` in the order of `sort`: Name (A to Z), the three dates newest first (macOS), Kind. Ties by name.
-function sortEntries(entries, sort) {
-    const by = {
-        name: compareNames,
-        dateAdded: (a, b) => b.added - a.added,
-        dateModified: (a, b) => b.modified - a.modified,
-        dateCreated: (a, b) => b.created - a.created,
-        kind: (a, b) => {
-            const x = kindOf(a);
-            const y = kindOf(b);
-            return x < y ? -1 : x > y ? 1 : 0;
+    const p = {
+        valid: n >= 0 && f.length >= 4 + 5 * n,
+        index: 0,
+        result: {sequence: parseInt(f[1]) || 0, total: parseInt(f[2]) || 0, entries: []},
+        step: function (budgetMs) {
+            const end = Date.now() + budgetMs;
+            while (p.index < n) {
+                const at = 4 + 5 * p.index;
+                const name = unescapeName(f[at]);
+                p.result.entries.push({
+                    name: name,
+                    path: base + "/" + name,
+                    isDir: f[at + 1] === "1",
+                    modified: parseFloat(f[at + 2]) || 0,
+                    added: parseFloat(f[at + 3]) || 0,
+                    created: parseFloat(f[at + 4]) || 0
+                });
+                p.index++;
+                if (p.index < n && Date.now() >= end)
+                    return false;
+            }
+            return true;
         }
     };
-    const cmp = by[normalizeSort(sort)];
-    return Array.from(entries || []).sort((a, b) => cmp(a, b) || compareNames(a, b));
+    return p;
+}
+
+// The whole window at once (tests and small windows); null when the line is not one.
+function parseWindow(line, dir) {
+    const p = windowParser(line, dir);
+    if (!p.valid)
+        return null;
+    p.step(1e9);
+    return p.result;
 }
 
 // ---- Views ----
@@ -306,4 +299,17 @@ function folderSlot(main, centers, separator, count) {
             k++;
     }
     return k;
+}
+
+// ---- The pile on a stack tile (macOS "Display as: Stack": the newest items piled up, the newest on top) ----
+
+// The sheets of the pile, back to front, from the folder's newest items (newest first, as the listing gives them): at most
+// `max` of them, each {path, isDir, rank} with rank 0 the newest (the top sheet). A different newest item makes a different
+// top sheet: the result is a pure function of `newest`, so a view bound to it follows the folder.
+function pileSheets(newest, max) {
+    const list = Array.from(newest || []).filter(e => e && typeof e.path === "string" && e.path !== "").slice(0, Math.max(0, max));
+    const out = [];
+    for (let i = list.length - 1; i >= 0; i--)
+        out.push({path: list[i].path, isDir: list[i].isDir === true, rank: i});
+    return out;
 }

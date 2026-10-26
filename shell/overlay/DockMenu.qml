@@ -34,7 +34,7 @@ PopupMenu {
     readonly property bool isTrash: info.kind === "trash"
     readonly property bool isFolder: info.kind === "folder"
     // The documents this app used (macOS lists them in the app's Dock menu), newest first.
-    readonly property var recentDocs: entry && !isTrash && !isFolder ? RecentItems.documentsFor(entry, Tokens.dockRecentDocsMax) : []
+    readonly property var recentDocs: entry && !isTrash && !isFolder && DockModel.opensDocuments(entry) ? RecentItems.documentsFor(entry, Tokens.dockRecentDocsMax) : []
 
     // Radio rows of the stack menu's submenus: the chosen value is checked.
     function choice(key: string, current: string, rows: var): var {
@@ -285,9 +285,10 @@ PopupMenu {
             Apps.openDetached(["gio", "open", data.path]);
             break;
         case "recentDocument":
-            // Opened by the app that used it (its Exec line with the file field code), refused when that is not possible.
-            if (data.entry && !Apps.openDocument(data.entry, item.path))
-                Apps.openDetached(["gio", "open", item.path]);
+            // macOS: a recent document opens in the app that used it (its Exec line with the file field code). When that app
+            // cannot take the file the failure is shown; another app never opens it instead.
+            if (!data.entry || !Apps.openDocument(data.entry, item.path))
+                Popups.notice(qsTr("The document can’t be opened"), qsTr("%1 can’t open “%2”.").arg(data.entry && data.entry.name ? data.entry.name : qsTr("This app")).arg(DisplayName.text(Stacks.baseName(item.path))));
             break;
         case "trashOpen":
             Trash.open();

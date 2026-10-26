@@ -92,14 +92,21 @@ inline QString stateDir()
 }
 
 // The arguments after `qs` of a call into the running shell: ipc -p <shell dir> call (then target, function, arguments).
-// Empty when there is no shell to call: a dev session without GRASSFIELD_SHELL_DIR. The caller must refuse then (an error
-// the user can read), never fall back to another shell.
+// Empty when there is no shell to call: a dev session without GRASSFIELD_SHELL_DIR. The caller must refuse then, with
+// shellIpcRefusal() as the reason, and never fall back to another shell. (No code calls the shell yet: the Settings app's
+// one-writer slice, C7, is the first caller; it takes both functions, and tst_runmode holds the pair to this contract.)
 inline QStringList shellIpcArgs()
 {
     const QString dir = shellDir(qEnvironmentVariable("GRASSFIELD_DEV"), qEnvironmentVariable("GRASSFIELD_SESSION"), qEnvironmentVariable("GRASSFIELD_SHELL_DIR"));
     if (dir.isEmpty())
         return {};
     return {QStringLiteral("ipc"), QStringLiteral("-p"), dir, QStringLiteral("call")};
+}
+
+// Why there is no shell to call, for the message of the refusal ("" when shellIpcArgs() is not empty).
+inline QString shellIpcRefusal()
+{
+    return shellIpcArgs().isEmpty() ? QStringLiteral("This is a development session and GRASSFIELD_SHELL_DIR names no shell: the installed shell is never driven from it.") : QString();
 }
 
 // GRASSFIELD_STATE_HOME as set ("" when unset): the dev sessions' own state directory, honoured in every session like

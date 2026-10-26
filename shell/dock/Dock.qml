@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQml
 import QtQuick.Effects
 import Quickshell
 import qs.lib
@@ -347,6 +348,30 @@ Scope {
         const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
         for (const top of plan)
             Compositor.activate(top);
+    }
+
+    // The newest items of every folder shown as a stack (StackWatch: one watcher per folder for the whole Dock, not one per
+    // output), by folder path, for the pile on its tile.
+    property var pileItems: ({})
+
+    function setPile(path: string, newest: var): void {
+        const next = Object.assign({}, pileItems);
+        next[path] = newest;
+        pileItems = next;
+    }
+
+    Instantiator {
+        model: root.items.filter(it => it.kind === "folder" && Stacks.optionsFor(Settings.dockStackOptions, it.path).display === "stack").map(it => it.path)
+
+        delegate: StackWatch {
+            id: watch
+
+            required property string modelData
+
+            folder: modelData
+            sort: Stacks.optionsFor(Settings.dockStackOptions, modelData).sort
+            onNewestChanged: root.setPile(modelData, newest)
+        }
     }
 
     // Opens the stack of a folder tile on the Dock's output (macOS: a click on Downloads).
@@ -808,7 +833,14 @@ Scope {
 
             // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
             // it (Geometry.metrics). The setting itself is never changed.
-            readonly property int iconSize: Geometry.fitSize(root.sizeNow, root.items.filter(it => it.kind !== "separator").length, root.items.filter(it => it.kind === "separator").length, separatorWidth, Tokens.dockSpacing, Tokens.dockPadding, mainTotal - 2 * Tokens.dockFitMargin, Tokens.dockFitMin)
+            readonly property int iconSize: Geometry.fitSizeMagnified(root.sizeNow, root.items.map(it => it.kind === "separator"), mainTotal - 2 * Tokens.dockFitMargin, Tokens.dockFitMin, {
+                    separatorWidth: separatorWidth,
+                    spacing: Tokens.dockSpacing,
+                    padding: Tokens.dockPadding,
+                    maxScale: maxScale,
+                    radius: Tokens.dockMagnificationRadius,
+                    slack: Tokens.dockFitSlack
+                })
             // The window is as deep as the largest Dock needs, whatever the size now: resizing never reconfigures the layer surface
             // (the pointer's coordinates in it stay put while the separator is dragged). It is transparent and takes input only where the mask says.
             readonly property var largest: Geometry.metrics(Tokens.dockSizeMax, {
@@ -1912,7 +1944,7 @@ Scope {
                                 StackPile {
                                     id: pile
                                     visible: tile.isFolder && tile.folderOptions.display === "stack" && !empty
-                                    folder: tile.isFolder && tile.folderOptions.display === "stack" ? tile.modelData.path : ""
+                                    items: tile.isFolder && tile.folderOptions.display === "stack" ? (root.pileItems[tile.modelData.path] ?? []) : []
                                     size: win.iconSize
                                     width: tile.iconPx
                                     height: tile.iconPx

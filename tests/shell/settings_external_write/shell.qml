@@ -49,7 +49,7 @@ ShellRoot {
         saveDelay: 10
         onLoadedFile: {
             // A load of the shell's own Dark write may come first: wait for the external Auto.
-            if (root.phase === 2 && store.data.appearance === "auto") {
+            if (root.phase === 2 && store.appearance === "auto") {
                 // 3. the external Auto is loaded; the shell goes back to Dark (the text it wrote in step 1)
                 root.phase = 3;
                 store.setAppearance("dark");

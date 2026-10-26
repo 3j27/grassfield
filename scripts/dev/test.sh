@@ -121,7 +121,7 @@ if want headless && compgen -G "tests/security/tst_*.qml" >/dev/null; then
   ((rc == 0)) || status=1
   record_run headless "tests/security (qmltestrunner)" "$rc" "PASS"
 fi
-# Quickshell-level tests (real FileView/JsonAdapter, reloads): each tests/shell/<name>/shell.qml and
+# Quickshell-level tests (real stores and files, reloads, hostile files): each tests/shell/<name>/shell.qml and
 # tests/security/<name>/shell.qml prints PASS/FAIL. Run offscreen and detached from any compositor session.
 # The i18n tests import the Grassfield.I18n plugin and read the compiled catalogs.
 if want headless; then
@@ -221,6 +221,10 @@ gtest_suite tests/unit/preview "apps/preview/build-direct.sh --tests" ".dev/buil
 # here, then again with ASan and UBSan.
 gtest_suite tests/unit/wallpaper-tool "apps/wallpaper-tool/build-direct.sh --tests >/dev/null && apps/wallpaper-tool/build-direct.sh --tests --asan" \
   "QT_QPA_PLATFORM=offscreen .dev/build/wallpaper-unit-tests --gtest_brief=1" "QT_QPA_PLATFORM=offscreen .dev/build/wallpaper-unit-tests-asan --gtest_brief=1"
+# grassfield-stack-helper (ADR-0025) logic: the orders, the window, the scan, the race of a vanishing file, the escaping: built
+# here, then again with ASan and UBSan. The process itself is tests/shell/stack_helper.sh.
+gtest_suite tests/unit/stack-helper "apps/stack-helper/build-direct.sh --tests >/dev/null && apps/stack-helper/build-direct.sh --tests --asan" \
+  ".dev/build/stack-helper-unit-tests --gtest_brief=1" ".dev/build/stack-helper-unit-tests-asan --gtest_brief=1"
 # grassfield-settings dev guard and the wallpaper helper door (exact tool path, exact argument vectors).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
   ".dev/build/settings-unit-tests --gtest_brief=1" ".dev/build/settings-unit-tests-asan --gtest_brief=1"

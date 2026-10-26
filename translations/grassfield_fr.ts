@@ -2675,6 +2675,18 @@
         <translation>Les modifications non enregistrées de cette application seront perdues.</translation>
     </message>
     <message>
+        <source>The document can’t be opened</source>
+        <translation>Le document ne peut pas être ouvert</translation>
+    </message>
+    <message>
+        <source>%1 can’t open “%2”.</source>
+        <translation>%1 ne peut pas ouvrir « %2 ».</translation>
+    </message>
+    <message>
+        <source>This app</source>
+        <translation>Cette app</translation>
+    </message>
+    <message>
         <source>Keep in Dock</source>
         <translation>Garder dans le Dock</translation>
     </message>

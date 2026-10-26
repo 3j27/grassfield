@@ -31,11 +31,11 @@ rm -f "$out"/*
 
 fail=0
 check() { if [[ $2 -eq 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
-cfg=$VS_DEV/config/grassfield/grassfield.json
+cfg=$VS_DEV/config/grassfield.json
 setting() { # <jq filter assigning the value>
   local tmp
   mkdir -p "$(dirname "$cfg")"
-  [[ -s $cfg ]] || echo '{}' >"$cfg"
+  [[ -s $cfg ]] || echo '{"version":1}' >"$cfg"
   tmp=$(mktemp "$cfg.XXXXXX") && jq "$1" "$cfg" >"$tmp" && mv "$tmp" "$cfg"
   sleep 1.2
 }
@@ -192,8 +192,9 @@ if want fit; then
   [[ -n $fit && $fit -lt $now ]]; check "24 apps: the tiles shrink below the setting ($fit < $now)" $?
   w=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -r '[.[] | select(.name == "'"$VS_OUTPUT"'") | .width][0]')
   n=$(vs_ipc dock tiles | jq 'length')
-  # shelf <= tiles * fit + gaps + padding (every tile counted as an icon, the separators are narrower: a stricter bound)
-  shelf=$(( n * fit + (n - 1) * 4 + 20 ))
+  seps=$(vs_ipc dock tiles | jq '[.[] | select(. == "separator")] | length')
+  # the shelf as the Dock lays it out: icons, separators (spacing x 2 + 1 px), the gaps between all tiles, padding at both ends
+  shelf=$(( (n - seps) * fit + seps * 9 + (n - 1) * 4 + 20 ))
   [[ $shelf -le $w ]]; check "the shelf fits the output ($shelf <= $w px, $n tiles)" $?
   VS_SETTLE=1 vs_capture dock-fit >/dev/null
   cp "$VS_SHOTS/dock-fit.en.png" "$out/fit.png" 2>/dev/null

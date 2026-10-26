@@ -49,10 +49,30 @@ adding `version` is safe for a downgrade.
    annotations (`tint`, `folderColor`, `pointerColor`, `wallpaperPath`, `wallpaperOutputs`, `notificationApps`, `notificationStyles`, `pathList`,
    `settable: false`, `qmlType`). `scripts/dev/gen-settings.py` (stdlib only, the `ui/tools/gen-tokens.py` pattern)
    writes `config/defaults/grassfield.json`, `ui/Grassfield/Ui/SettingsContract.js` (`VERSION`, `DEFAULTS`, `RULES`,
-   `validate`, `normalize`, `versionStatus`), `shell/store/SettingsData.qml` (the JsonAdapter) and
-   `apps/settingscontract.h`. `just check-schema` runs `--check` and `--selftest`, so stale output fails `check-quick`.
+   `validate`, `normalize`, `versionStatus`, `ALL_DEFAULTS`) and `apps/settingscontract.h`. (No generated JsonAdapter
+   exists: Quickshell's adapter reads a file without a bound and keeps old values, so the shell's store parses the file
+   itself, see 2.) `just check-schema` runs `--check` and `--selftest`, so stale output fails `check-quick`.
 2. **Normalisation, identical everywhere.** Numbers are clamped; integers are rounded then clamped; any other invalid
-   value takes its default.
+   value takes its default. A key where 0 switches a protection off (`lock.idleMinutes`, 0 = never lock) fails closed
+   (`x-grassfield.zeroIsExact` in the schema): only an exact 0 reads 0; a value below 0, or a fraction that would round to
+   0, is invalid and reads the default. A value above the maximum is still clamped (240 minutes: a bounded choice, and the
+   lock still fires). The shell reads the last parse of the file text for every key, not the JSON adapter's properties
+   (the adapter keeps an old value that loosely equals the new one), so a running shell and a fresh start agree: a deleted
+   file is a fresh start without a file, and a write is built from the file on disk or the schema defaults, never from the
+   adapter. The one exception is a malformed file: the cosmetic keys keep their last good values (a restart shows the
+   defaults), the idle lock fails closed (`lock.*` reads the default at once, as a restart does) and nothing is written.
+   Known limit: no lock between the fresh read and the atomic replace, so a concurrent external edit can be lost.
+   **The file is never read without a bound.** Both reads of the shell (the load, and the fresh read before a write) are one
+   shell script: a file that is not a regular file (a FIFO, a device such as /dev/zero through a symlink, a directory) is
+   not opened, a file over 1 MiB (a real one is a few KiB) is not read, a read that hangs is cut after 5 s, and a read counts
+   only when it ended without error with exactly the file's size (otherwise it is "incomplete", never an empty file). Such a file, and
+   one that is not readable (chmod 000), is read as malformed: the cosmetic keys keep their last good values, `lock.*`
+   reads the default 5 (what a restart reads), nothing is written, the file is left as it is. A symlinked
+   `grassfield.json` is followed for reading and for writing (the target is replaced, the link stays); the path is looked at
+   again every 10 s and after each read, so replacing the link with a regular file is noticed. A write that fails (a
+   read-only directory, a full disk) keeps its change pending and is retried (2 s, 4 s, ... 60 s) instead of being lost.
+   The write keeps the replaced file's mode, syncs before the rename and refuses a directory in the way; a file that could
+   not be used is read again at every poll.
 3. **Version policy.** Missing `version` is read as 1 and written on the next write. `1` reads normally. An integer above
    1 makes the file read-only: valid keys apply best-effort, nothing is written, in-memory changes last for the session;
    Settings shows one banner and disables its controls. A non-integer is malformed and refused, as today.

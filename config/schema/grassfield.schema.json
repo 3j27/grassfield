@@ -356,7 +356,11 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 240,
-          "default": 5
+          "default": 5,
+          "description": "Minutes without input before the session locks; 0 = never. Fail closed: only an exact 0 means never. A value below 0, or a fraction that rounds to 0 (0.4), is invalid and reads as the default 5, so no invalid number can switch the auto-lock off.",
+          "x-grassfield": {
+            "zeroIsExact": true
+          }
         }
       }
     },

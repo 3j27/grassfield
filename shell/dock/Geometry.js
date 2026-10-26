@@ -46,6 +46,85 @@ function fitSize(requested, tiles, separators, separatorWidth, spacing, padding,
     return Math.max(Math.min(requested, floor), Math.min(requested, fit));
 }
 
+// The widest the shelf gets while magnified (px, padding included): tiles of `size` px (`isSeparator[i]`: a separator, which is
+// never magnified) laid out unmagnified, the pointer anywhere along them (every half tile, and past both ends), each tile taking
+// its slot scale (Magnify.slotScales, as the Dock does). `o` = {separatorWidth, spacing, padding, maxScale, radius}. Without
+// magnification (maxScale <= 1) the shelf at rest.
+function magnifiedShelf(size, isSeparator, o) {
+    const widths = isSeparator.map(s => s ? o.separatorWidth : size);
+    const total = Magnify.totalWidth(widths, o.spacing);
+    const rest = total + 2 * o.padding;
+    if (!(o.maxScale > 1) || widths.length === 0)
+        return rest;
+    // A pointer left of the first tile counts as no pointer in Magnify (negative): the line is shifted so that p stays >= 0.
+    const pitch = size + o.spacing;
+    const reach = o.radius * pitch;
+    const centers = Magnify.centersFor(widths, o.spacing, reach);
+    // How much wider than at rest the shelf is with the pointer at p. Only the tiles whose slot touches the reach of the pointer are
+    // magnified (Magnify.meanScale, the one Magnify.slotScales takes); the sum is smooth in p.
+    const growth = p => {
+        let grown = 0;
+        for (let i = 0; i < widths.length; i++) {
+            const half = (widths[i] + o.spacing) / 2;
+            if (isSeparator[i] || Math.abs(centers[i] - p) >= reach + half)
+                continue;
+            grown += widths[i] * (Magnify.meanScale(centers[i] - half - p, centers[i] + half - p, pitch, o.maxScale, o.radius) - 1);
+        }
+        return grown;
+    };
+    // The worst case is the maximum of that smooth curve: a sample every quarter tile finds the hill, a search inside the two
+    // steps around the best sample finds its top (no safety margin needed beyond rounding).
+    const step = Math.max(0.5, size / 4);
+    let best = 0;
+    let bestAt = 0;
+    for (let p = 0; p <= total + 2 * reach; p += step) {
+        const g = growth(p);
+        if (g > best) {
+            best = g;
+            bestAt = p;
+        }
+    }
+    let lo = Math.max(0, bestAt - step);
+    let hi = bestAt + step;
+    for (let i = 0; i < 24; i++) {
+        const m1 = lo + (hi - lo) / 3;
+        const m2 = hi - (hi - lo) / 3;
+        if (growth(m1) < growth(m2))
+            lo = m1;
+        else
+            hi = m2;
+    }
+    best = Math.max(best, growth((lo + hi) / 2));
+    return rest + best;
+}
+
+// Shrink to fit with magnification (macOS: the Dock never leaves the screen, magnified or not): the largest whole tile size
+// not above `requested` whose shelf, at its widest while magnified (magnifiedShelf), fits in `available` px, never below
+// `floor` (a requested size under the floor is kept). With no magnification this is fitSize.
+function fitSizeMagnified(requested, isSeparator, available, floor, o) {
+    if (!(available > 0) || isSeparator.length === 0)
+        return requested;
+    // `o.slack` px stay free beyond the computed worst case (the rounding of the search for the top of the curve), and only while
+    // magnification is on: a Dock that does not grow has an exact width, and a shelf that fits exactly is kept as it is.
+    const slack = o.maxScale > 1 && o.slack > 0 ? o.slack : 0;
+    const fits = size => magnifiedShelf(size, isSeparator, o) + slack <= available;
+    if (fits(requested))
+        return requested;
+    const low = Math.min(requested, floor);
+    if (!fits(low))
+        return low;
+    let lo = low;
+    let hi = requested;
+    while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (fits(mid))
+            lo = mid;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
 // ---- Position on screen (Settings > Position on screen: Left / Bottom / Right) ----
 //
 // The Dock lives in a transparent layer window anchored to its screen edge. Everything is written along two axes:

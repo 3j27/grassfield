@@ -7,12 +7,7 @@ import "../../shell/dock/DockModel.js" as DockModel
 TestCase {
     name: "DockStacks"
 
-    readonly property string rs: "\x1e"
     readonly property string us: "\x1f"
-
-    function record(born, modified, changed, type, name) {
-        return [born, modified, changed, type, name].join(us) + rs;
-    }
 
     function test_folderListIsCleanAbsoluteAndDistinct() {
         const list = Stacks.folderList(["~/Downloads", "/home/u/Downloads/", "relative", "/a/../etc", 5, "", "/", "/srv//x/./y", "~"], "/home/u", 12);
@@ -45,54 +40,81 @@ TestCase {
         compare(Object.keys(all).length, 0);
     }
 
-    function test_parseListing() {
-        const text = record("100.5", "200.5", "300.5", "d", "Sub")
-            + record("0", "50", "60", "f", "a b.txt")
-            + record("", "10", "10", "f", ".hidden")
-            + record("1", "2", "3", "f", "x" + us + "y")
-            + "garbage" + rs;
-        const e = Stacks.parseListing(text, "/home/u/Downloads/");
-        compare(e.length, 3);
-        compare(e[0].path, "/home/u/Downloads/Sub");
-        verify(e[0].isDir);
-        compare(e[0].created, 100.5);
-        compare(e[0].added, 300.5);
-        // no birth time: created falls back to the modified time
-        compare(e[1].created, 50);
-        compare(e[1].added, 60);
-        verify(!e[1].isDir);
-        compare(e[2].name, "x" + us + "y");
-        compare(Stacks.parseListing("", "/a").length, 0);
-        compare(Stacks.parseListing(null, "/a").length, 0);
+    // ---- the helper's window line (apps/stack-helper) ----
+
+    function test_unescapeNameUndoesTheHelpersEscapes() {
+        compare(Stacks.unescapeName("plain"), "plain");
+        compare(Stacks.unescapeName("a\\\\b"), "a\\b");
+        compare(Stacks.unescapeName("x\\ny"), "x\ny");
+        compare(Stacks.unescapeName("x\\ry\\uz"), "x\ry\x1fz");
     }
 
-    readonly property var sample: [
-        {name: "b.png", isDir: false, created: 10, modified: 30, added: 20},
-        {name: "A.txt", isDir: false, created: 30, modified: 10, added: 10},
-        {name: "Dir", isDir: true, created: 20, modified: 20, added: 30},
-        {name: "c", isDir: false, created: 5, modified: 5, added: 5}
-    ]
-
-    function names(sort) {
-        return Stacks.sortEntries(sample, sort).map(e => e.name).join(",");
+    function test_parseWindow() {
+        const line = ["W", "7", "120", "2", "one.txt", "0", "10.5", "20.5", "5", "Sub", "1", "1", "2", "3"].join(us);
+        const w = Stacks.parseWindow(line, "/home/u/Docs/");
+        verify(w !== null);
+        compare(w.sequence, 7);
+        compare(w.total, 120);
+        compare(w.entries.length, 2);
+        compare(w.entries[0].path, "/home/u/Docs/one.txt");
+        compare(w.entries[0].isDir, false);
+        compare(w.entries[0].modified, 10.5);
+        compare(w.entries[0].added, 20.5);
+        compare(w.entries[0].created, 5);
+        compare(w.entries[1].name, "Sub");
+        compare(w.entries[1].isDir, true);
     }
 
-    function test_sortOrders() {
-        compare(names("name"), "A.txt,b.png,c,Dir");
-        compare(names("dateAdded"), "Dir,b.png,A.txt,c");
-        compare(names("dateModified"), "b.png,Dir,A.txt,c");
-        compare(names("dateCreated"), "A.txt,Dir,b.png,c");
-        // kind: folders first, then by extension, files without one last
-        compare(names("kind"), "Dir,b.png,A.txt,c");
-        compare(names("bogus"), names("dateAdded"));
-        compare(Stacks.sortEntries(null, "name").length, 0);
+    function test_parseWindowRefusesWhatIsNotAWindow() {
+        verify(Stacks.parseWindow("A", "/d") === null);
+        verify(Stacks.parseWindow("G", "/d") === null);
+        verify(Stacks.parseWindow("", "/d") === null);
+        verify(Stacks.parseWindow(["W", "1", "5", "2", "only", "0", "1", "1", "1"].join(us), "/d") === null, "fewer fields than announced");
+        verify(Stacks.parseWindow(["W", "1", "5", "-1"].join(us), "/d") === null);
+        compare(Stacks.parseWindow(["W", "1", "0", "0"].join(us), "/d").entries.length, 0);
     }
 
-    function test_sortDoesNotModifyItsInput() {
-        const copy = JSON.stringify(sample);
-        Stacks.sortEntries(sample, "name");
-        compare(JSON.stringify(sample), copy);
+    function test_escapesAreReadLeftToRight() {
+        // \\n is a backslash and an n, \\\n a backslash and a line break, \n a line break
+        compare(Stacks.unescapeName("a\\\\nb"), "a\\nb");
+        compare(Stacks.unescapeName("a\\\\\\nb"), "a\\\nb");
+        compare(Stacks.unescapeName("\\n\\\\\\r"), "\n\\\r");
+        compare(Stacks.unescapeName("\\\\\\\\"), "\\\\");
+        compare(Stacks.unescapeName("\\\\u"), "\\u");
+        compare(Stacks.unescapeName("\\u"), "\x1f");
     }
+
+    // 300 names of 255 backslashes (510 characters each once escaped) cost about 100 ms to read: the parser works in slices, and
+    // no single call of it holds the thread for long
+    function test_aHostileWindowIsReadInSlices() {
+        const name = "\\\\".repeat(255);
+        const fields = ["W", "1", "300", "300"];
+        for (let i = 0; i < 300; i++)
+            fields.push(name + i, "0", "1", "1", "1");
+        const parser = Stacks.windowParser(fields.join(us), "/d");
+        verify(parser.valid);
+        let longest = 0;
+        let calls = 0;
+        for (;;) {
+            const t0 = Date.now();
+            const done = parser.step(6);
+            longest = Math.max(longest, Date.now() - t0);
+            calls++;
+            if (done)
+                break;
+        }
+        compare(parser.result.entries.length, 300);
+        compare(parser.result.entries[7].name, "\\".repeat(255) + "7");
+        compare(parser.result.total, 300);
+        verify(longest < 50, "the longest slice took " + longest + " ms in " + calls + " calls (limit 50; LOAD-SENSITIVE: wall clock)");
+    }
+
+    function test_aNameWithEscapesKeepsItsBytes() {
+        const w = Stacks.parseWindow(["W", "1", "1", "1", "a\\nW\\u1", "0", "0", "0", "0"].join(us), "/d");
+        compare(w.entries[0].name, "a\nW\x1f1");
+        compare(w.entries[0].path, "/d/a\nW\x1f1");
+    }
+
 
     function test_automaticViewIsFanThenGrid() {
         compare(Stacks.resolveView("automatic", 3, 9), "fan");
@@ -221,5 +243,34 @@ TestCase {
         compare(Stacks.folderSlot(900, centers, 3, 2), 2, "over the Trash: last folder slot");
         compare(Stacks.folderSlot(250, centers, 3, 0), 0, "no folder yet");
         compare(Stacks.folderSlot(250, centers, -1, 2), -1, "no divider");
+    }
+
+    // ---- the pile on the tile ----
+
+    function test_pileHasTheNewestOnTop() {
+        const newest = [{path: "/d/c", isDir: false}, {path: "/d/b", isDir: true}, {path: "/d/a", isDir: false}, {path: "/d/old", isDir: false}];
+        const sheets = Stacks.pileSheets(newest, 3);
+        compare(sheets.length, 3);
+        // back to front: the third, the second, the newest last (on top)
+        compare(sheets.map(x => x.path).join(), "/d/a,/d/b,/d/c");
+        compare(sheets.map(x => x.rank).join(), "2,1,0");
+        compare(sheets[2].rank, 0);
+        verify(sheets[1].isDir);
+    }
+
+    function test_aNewerItemMakesANewTopSheet() {
+        const before = Stacks.pileSheets([{path: "/d/f4"}, {path: "/d/f3"}, {path: "/d/f2"}], 3);
+        const after = Stacks.pileSheets([{path: "/d/newest.txt"}, {path: "/d/f4"}, {path: "/d/f3"}], 3);
+        compare(before[before.length - 1].path, "/d/f4");
+        compare(after[after.length - 1].path, "/d/newest.txt");
+        compare(after.map(x => x.path).join(), "/d/f3,/d/f4,/d/newest.txt");
+    }
+
+    function test_pileEdgeCases() {
+        compare(Stacks.pileSheets([], 3).length, 0);
+        compare(Stacks.pileSheets(null, 3).length, 0);
+        compare(Stacks.pileSheets([{path: "/a"}, {path: ""}, null, {path: 5}], 3).map(x => x.path).join(), "/a");
+        compare(Stacks.pileSheets([{path: "/a"}, {path: "/b"}], 0).length, 0);
+        compare(Stacks.pileSheets([{path: "/a"}], 3)[0].rank, 0);
     }
 }

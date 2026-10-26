@@ -410,6 +410,8 @@ QtObject {
     readonly property int dockStackListWidth: 260
     // estimate: items a Grid or List holds (the rest are in Files) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackItemMax: 300
+    // estimate: the longest the GUI thread reads a stack folder's window at once (names are read in slices of this many milliseconds), far under a frame at 60 Hz
+    readonly property int dockStackParseSliceMs: 6
     // macOS stack icon: sheets behind the top one are turned by this angle, degrees [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackPileTilt: 5
     // estimate: size of a pile sheet relative to the tile [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -474,6 +476,14 @@ QtObject {
     readonly property int dockMenuTailHeight: 13
     // reference gs-014-019: tail tip 16 above the shelf top [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuTailGap: 16
+    // estimate: shrink to fit: px kept free beyond the computed worst case of the magnified shelf (rounding of the search for the maximum of the magnification curve)
+    readonly property real dockFitSlack: 0.25
+    // estimate: macOS stack icon: the newest three items are piled up
+    readonly property int dockStackPileSheets: 3
+    // estimate: the top sheet of a pile sits this fraction of the tile lower than the sheets behind it
+    readonly property real dockStackPileLift: 0.04
+    // estimate: the icon or preview on a pile sheet, relative to the sheet
+    readonly property real dockStackPileIconScale: 0.8
     // running dot in the bottom padding, its centre 6 above the shelf's edge (padding 10 - 6 - half the dot); macOS 26 read about 5 [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
     readonly property int dockIndicatorGap: 2
     // Room the tile reserves for the running dot: none, the dot sits in the padding (shelf 76 -> 68); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -998,6 +1008,8 @@ QtObject {
     readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddSize: 32
+    // estimate: the strip shows at most this many minimized windows (the newest; the rest stay in the Dock): ten tiles fit a 1920 px output at full size and bound the live captures
+    readonly property int overviewMinimizedMax: 10
     // the add button is a bare plus about 20 x 20 (the 24-grid glyph's ink is 16 of 24), no circle at rest [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
     readonly property int overviewAddGlyphSize: 30
     // estimate: the add button's circle shows only under the pointer, white at this opacity in light [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]

@@ -258,7 +258,7 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. 30 variants of visible English text in the table below plus one literal on the line after its call: each
+# Part (f): the Settings C++. 39 variants of visible English text in the table below plus one literal on the line after its call: each
 # must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
@@ -299,6 +299,15 @@ declare -A variants=(
   [declparen]='void a() { const QString shown(QStringLiteral("failed")); use(shown); }'
   [declbrace]='void a() { QString shown{QStringLiteral("failed")}; use(shown); }'
   [insertmessage]='void a(QJsonObject &o) { o.insert(QStringLiteral("message"), QStringLiteral("failed")); }'
+  [memberappend]='void A::a() { m_errors.append(QStringLiteral("failed")); }'
+  [pushback]='void a() { reasons.push_back(QStringLiteral("failed")); }'
+  [constkey]='void a(QJsonObject &o) { o.insert(kReasonKey, QStringLiteral("failed")); }'
+  [msgkey]='void a(QJsonObject &o) { o.insert(QStringLiteral("msg"), QStringLiteral("failed")); }'
+  [detailkey]='void a(QJsonObject &o) { o.insert(QStringLiteral("detail"), QStringLiteral("failed")); }'
+  [jsonpair]='QJsonObject a() { return QJsonObject{{"reason", "failed"}}; }'
+  [shiftlist]='void a() { reasons << QStringLiteral("failed"); }'
+  [jsonvalue]='void a(QJsonObject &o) { o.insert(QStringLiteral("reason"), QJsonValue("failed")); }'
+  [ondone]='void a() { onDone(QStringLiteral("failed"), {}); }'
 )
 for name in "${!variants[@]}"; do
   cppcase "$name" "${variants[$name]}"
@@ -325,6 +334,11 @@ QJsonObject n() { return QJsonObject{{QStringLiteral("name"), v}, {QStringLitera
 Result o() { return {false, {}, tr("failed")}; }
 void p(QStringList &args, QJsonObject &o) { args.append(QStringLiteral("status")); o.insert(k, QStringLiteral("owe")); abandoned(QStringLiteral("failed")); }
 void q(Result &r) { r.insert(QStringLiteral("name"), QStringLiteral("owe")); QString mode = tr("failed"); const auto x = f(QStringLiteral("a")); }
+void r(QStringList &args, QStringList &cmd, QStringList &argv, QJsonObject &o) {
+    args.append(QStringLiteral("status")); cmd.push_back(QStringLiteral("status")); argv << QStringLiteral("status");
+    o.insert(kPath, QStringLiteral("owe")); o.insert(QStringLiteral("radio"), QStringLiteral("owe")); abandoned(QStringLiteral("failed"));
+}
+QJsonObject s() { return QJsonObject{{"name", "owe"}, {"mode", "infrastructure"}}; }
 void l(Bus &bus) { bus.call(a, QStringLiteral("Connect"), QStringLiteral("on")); const bool x = flag == QLatin1String("on"); }
 void h(Bus &bus) { bus.call(a, QStringLiteral("GetDevices"), QStringLiteral("on"), QStringLiteral("ready to go")); } // i18n-ignore: x
 /* a comment: that network is gone */ // and another one: no word is read here
