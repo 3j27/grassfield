@@ -49,6 +49,21 @@ function isPid(pid) {
     return Number.isInteger(pid) && pid > 0 && pid <= 2147483647;
 }
 
+// gfc/1 keyboard-focus event data (feature keyboard-focus: the seat's keyboard entered a mapped window) -> the window's
+// normalized address, or null when it is not a valid keyboard-focus event. A chosen item's action waits for it (MB12).
+function parseKeyboardFocusEvent(data) {
+    let msg = null;
+    try {
+        msg = JSON.parse(data);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || typeof msg !== "object" || msg.v !== "gfc/1" || msg.type !== "keyboard-focus" || typeof msg.address !== "string")
+        return null;
+    const address = normalizeAddress(msg.address);
+    return address === "" ? null : address;
+}
+
 // gfc/1 appmenu event data -> {address, service, path, pid}, or null when it is not a valid appmenu event.
 // An empty service and path means the window has no (more) set_address menu; its pid is then the window's Wayland
 // client (0 for an X11/XWayland window or a clear): the bridge may serve it a menu that process registered with

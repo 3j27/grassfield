@@ -86,10 +86,15 @@ top-level menus (Left/Right).
   new revision that changes the open submenu reopens it. Items: plain-text labels, the app's shortcut text
   (`Control` → `Ctrl`, first shortcut), check mark for checkmark/radio items that are on, disabled items dimmed,
   hidden items left out, separators collapsed, a submenu the app has not filled shown disabled. Choosing an item closes
-  the menu and sends `activate` once the popup host gave the keyboard back (`Tokens.focusReturnReleaseHoldMs`, 120 ms,
-  after the close; macOS runs a menu's action after the menu closed): an Electron click handler runs only for its focused
-  window, and no window is focused while the popup holds the keyboard (measured with Obsidian: sent with the popup open,
-  File > New Window did nothing; sent after the close, it opened a window). Without a T1/T2 menu (GTK4, no plugin, no
+  the menu, then sends `activate` once the item's window has the keyboard back (macOS runs a menu's action after the menu
+  closed): an Electron click handler runs only for its focused window, and no window is focused while the popup holds the
+  keyboard (measured with Obsidian: sent with the popup open, File > New Window did nothing; a fixed 120 ms wait after
+  the choice failed 1 run in 3 in a loaded nested session, review of 9ba1d40). When the popup held the keyboard (a press,
+  drag and release on the bar leaves it with the window: the action goes at once), the shell waits for the plugin's
+  `keyboard-focus` event naming that window (compositor FR20), sends `Tokens.focusReturnMenuActionSettleMs` (30 ms, for
+  the application to read its keyboard enter first) after it, and sends anyway `Tokens.focusReturnMenuActionWaitMs`
+  (300 ms) after the close when no such event comes (a plugin without the feature, the keyboard went to another window).
+  Without a T1/T2 menu (GTK4, no plugin, no
   bridge, refused or failed menu) the T0 menus stay: nothing is hidden.
 - **MB14 Hostile applications, crash attribution and graceful degradation.** Perfect attribution is impossible at the
   D-Bus layer: libdbus buffers every incoming message (a 100 MB message peaks at ~225 MB RSS; a 30 MB reply at 115 MB)
@@ -227,8 +232,8 @@ top-level menus (Left/Right).
     - the plugin's `appmenu` event for a Wayland window without a `set_address` registration carries the window's client
       pid (compositor FR20; 0 for X11/XWayland windows and for a window that is gone);
     - the shell sends `{"type":"open-registered","window":"<hex>","pid":N}` when such a window is shown;
-    - the bridge refuses a pid outside its own pid namespace (the `NSpid` depth of `/proc/<pid>/status` differs from its
-      own, or cannot be read: Flatpak, nested sandboxes) with `foreign-namespace`, answers `backoff` while degraded
+    - the bridge refuses a pid outside its own pid namespace (`/proc/<pid>/ns/pid` names another inode than
+      `/proc/self/ns/pid`, or cannot be read: Flatpak, any sandbox with its own pid namespace) with `foreign-namespace`, answers `backoff` while degraded
       (MB14), else opens the newest settled registration (MB2) of a sender whose process is that pid, through `open`
       (MB5's check again: a pid reused after the registering process exited gets nothing). Without one the window waits:
       a registration that settles later opens it, and an open window follows a newer settled registration of its
@@ -248,7 +253,7 @@ top-level menus (Left/Right).
 | MB15 (D-Bus) | `tests/integration/launcher_entry.sh` (bare; private bus, bridge, socket tap as the shell, `tests/fixtures/launcher-entry.py` as applications): count and clamp, count-visible, progress and clamp, progress-visible, urgent, flood (21 lines for 300 updates, last state arrives), sender disconnect, replay to a new shell, invalid uri and wrong signature (penalty logged, sender refused then served again). Fails on the bridge before ADR-0018 | L1 | 2026-10-22: PASS (and every behaviour check FAILs against the previous bridge) |
 | MB16 (logic) | `tests/unit/menu-bridge/tst_screensaver.cpp` (cookies distinct and non-zero, owner-only release, sender gone, limits, clean names, only two methods served, `SetActive` refused, wrong signatures, the line and its clamp, introspection); shell: `tests/unit/tst_menubridge.qml` `test_screensaverLines`, `tests/security/tst_idlemodel.qml` `test_idleArmed` | L0 | 2026-10-24: see the security report |
 | MB16 (D-Bus) | `tests/integration/screensaver_inhibit.sh` (bare; private bus, bridge, socket tap, `tests/fixtures/screensaver-client.py`): name owned, first state, Inhibit on both paths, other/unknown cookies, owner release, sender leaving, NotSupported members, 16-cookie limit, replay to a new shell, bridge exit | L1 | NOT VERIFIED (needs Unix sockets: bare, outside the sandbox) |
-| MB2, MB17 (logic) | `tests/unit/menu-bridge/tst_menubridge.cpp` `Registrar.*` (7: register and unregister, malformed calls and other members, the caps without eviction, the newest registration of the window's process, settling, a reused pid, the NSpid depth) and `ShellMessages.OpenRegisteredParses` | L0 | 2026-10-26: 88/88 PASS outside the sandbox (84 + 4 skipped inside it) |
+| MB2, MB17 (logic) | `tests/unit/menu-bridge/tst_menubridge.cpp` `Registrar.*` (7: register and unregister, malformed calls and other members, the caps without eviction, the newest registration of the window's process, settling, a reused pid, the pid namespace identity) and `ShellMessages.OpenRegisteredParses` | L0 | 2026-10-26: 88/88 PASS outside the sandbox (84 + 4 skipped inside it) |
 | MB11, MB12, MB17 (shell) | `tests/unit/tst_menubridge.qml` (pid-only appmenu events, the open-registered line, `foreign-namespace` as a lost menu) | L0 | 2026-10-26: 16/16 PASS |
 | MB12, MB17 (nested) | `tests/integration/electron_menus.sh` (bare; Obsidian offline on the private bus: RegisterWindow kept, its menus in the bar, File > New Window, Close Window and Quit clicked with the pointer, no layout failure) | L1 | 2026-10-26 PASS, 17/17 checks (Hyprland 0.56.2 efb50993, Obsidian 1.13.7 / Electron 43.6.0, run `.dev/electron-menus/run-20261026-012602`: menus File, Edit, View, Window, Help; New Window opened a second window through the popup, which showed its own menu (File: Open Vault..., Close, Quit) with no layout failure; Close Window and Quit worked; no process left). Earlier manual nested probe 2026-10-25 (before the settle delay): RegisterWindow kept, the bar showed File, Edit, View, Window, Help (vault window: File, Edit, Insert, Format, View, Window, Help); File > Quit closed the app; with the popup open a DBusMenu Event for File > New Window did nothing and after Escape the same Event opened a window; with the action sent after the close, File > New Window (2 -> 3 windows) and File > Close (3 -> 2) worked through the popup; a new window's GetLayout right after RegisterWindow answered UnknownMethod (what the settle delay addresses) |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
@@ -326,8 +331,8 @@ application localized them; Grassfield strings use `qsTr()`.
   mapped to a Wayland window), so with two Obsidian windows the second one's menu shows over the first as well, until
   one of them registers again. A new window shows T0 for the 300 ms a registration takes to settle; a menu object slower
   than that fails its first read (`layout-failed`: T0, the app refused 2 s, its menus back at the window's next focus).
-- An item's action reaches the application 120 ms after its menu closed (MB12; macOS blinks the chosen item, then runs
-  the action); the item does not blink.
+- An item's action reaches the application once its window has the keyboard back after the menu closed, about 30 ms
+  later, 300 ms at most (MB12; macOS blinks the chosen item, then runs the action); the item does not blink.
 - Sandboxed apps behind a D-Bus proxy (Flatpak) fail the pid check (`pid-mismatch`) and keep T0: a later rule is
   needed.
 - Only first-level submenus get `AboutToShow` from the shell (deeper ones are shown as the layout has them).

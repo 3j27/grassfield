@@ -8,14 +8,17 @@
 #       menu bar shows its own menus (File, Edit, View ... Help): the plugin reports the window's client pid, the shell
 #       sends open-registered, the bridge serves the registration of that process (bridge log: the window's pid);
 #     - File > New Window clicked with the (virtual) pointer opens a second window: an Obsidian click handler that runs
-#       only for its focused window, so the action must arrive after the popup gave the keyboard back (MB12); the second
-#       window shows Obsidian's menus too, read once its registration settled (no layout failure in the bridge log);
+#       only for its focused window, so the action must arrive once the window has the keyboard back (MB12, the plugin's
+#       keyboard-focus event); the second window shows Obsidian's menus too, read once its registration settled (no layout
+#       failure in the bridge log);
 #     - File > Close Window (a role item) closes the second window; the first one shows its menus again;
 #     - File > Quit closes the app (process gone).
-#   SKIP when obsidian is not installed. Screenshots: .dev/shots/electron-menus-*.png (scripts/dev/shot.sh).
+#   The scenario runs ROUNDS times in the same session (a fresh Obsidian each round): the action's timing is a race
+#   against the keyboard's return, which one round cannot show (review of 9ba1d40: a fixed wait failed 1 run in 3).
+#   SKIP when obsidian is not installed. Screenshots (round 1): .dev/shots/electron-menus-*.png (scripts/dev/shot.sh).
 #
-# Usage: tests/integration/electron_menus.sh   (restarts the nested session of this checkout; run it outside the Claude
-#                                               Code sandbox: it starts the nested compositor)
+# Usage: tests/integration/electron_menus.sh [ROUNDS]   (default 1; restarts the nested session of this checkout; run it
+#                                                       outside the Claude Code sandbox: it starts the nested compositor)
 # Exit: 0 PASS (or SKIP), 1 FAIL, 2 environment error. Summary: .dev/electron-menus/run-<stamp>/summary.txt
 #
 # SAFETY: the registrar, the bridge and Obsidian share the nested shell's PRIVATE bus (.dev/bus.address, checked to be a
@@ -37,6 +40,8 @@ summary=$run/summary.txt
 output=GF-REF
 class=md.obsidian.Obsidian
 fail=0
+rounds=${1:-1}
+[[ $rounds =~ ^[1-9][0-9]?$ ]] || { echo "usage: electron_menus.sh [ROUNDS 1-99]" >&2; exit 2; }
 
 say() { printf '%s\n' "$*" | tee -a "$summary"; }
 check() { # <description> <command...>
@@ -151,63 +156,78 @@ point abs 960 600 sleep 200
 
 # ---- Obsidian ----------------------------------------------------------------------------------------------------
 say ""
-say "[Electron] Obsidian (Electron $(cat /usr/lib/electron43/version 2>/dev/null || echo "?"))"
-name=el-obsidian
-rm -rf "${dev:?}/isolated/$name"
-cfg=$dev/isolated/$name/config/obsidian
-vault=$run/vault
-mkdir -p "$cfg" "$vault"
-printf '# A note\n' >"$vault/note.md"
-jq -n --arg p "$vault" '{updateDisabled: true, vaults: {"656c6d656e757331": {path: $p, ts: 1, open: true}}}' >"$cfg/obsidian.json"
+say "[Electron] Obsidian (Electron $(cat /usr/lib/electron43/version 2>/dev/null || echo "?")), $rounds round(s)"
 sock=$(nested_sock) || die "no nested Wayland socket"
 proxy=http://127.0.0.1:9
-http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy no_proxy="" WAYLAND_DISPLAY=$sock DBUS_SESSION_BUS_ADDRESS=$bus \
-  ELECTRON_OZONE_PLATFORM_HINT=wayland \
-  setsid "$root/scripts/dev/isolated.sh" --name "$name" -- obsidian --proxy-server=127.0.0.1:9 >"$run/obsidian.out" 2>&1 </dev/null &
-ob_pid=$!
+failed_rounds=0
 
-check "Obsidian window mapped" wait_for 40 has_windows 1
-check "Obsidian runs on Wayland (not XWayland)" on_wayland
-first=$(focused_address)
-cpid=$(client_pid)
-say "  window $first \"$(clients | jq -r --arg c "$class" '[.[] | select(.class == $c)][0].title // ""')\", client pid $cpid (started $ob_pid)"
-check "Obsidian registered its window with the registrar (bridge log)" wait_for 20 bridge_log_has "registrar: RegisterWindow from :[0-9.]+ kept"
-check "menu bar shows Obsidian's own menus (File, Edit ... Help)" wait_for 20 menus_are "$first" "$obsidian_menus"
-say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
-check "the bridge served the registration to the window's client pid $cpid" bridge_log_has "window $first: menu :[0-9.]+ /com/canonical/menu/[0-9A-F]+ \(pid $cpid,"
-say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-bar "$output")"
+scenario() { # <round>: one Obsidian from start to Quit; returns 1 when a check of the round failed
+  local r=$1 fail_before=$fail name=el-obsidian cfg vault first cpid second
+  log_round=$(($(wc -l <"$dev/menu-bridge.log" 2>/dev/null || echo 0) + 1))
+  rm -rf "${dev:?}/isolated/$name"
+  cfg=$dev/isolated/$name/config/obsidian
+  vault=$run/vault-$r
+  mkdir -p "$cfg" "$vault"
+  printf '# A note\n' >"$vault/note.md"
+  jq -n --arg p "$vault" '{updateDisabled: true, vaults: {"656c6d656e757331": {path: $p, ts: 1, open: true}}}' >"$cfg/obsidian.json"
+  http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy no_proxy="" WAYLAND_DISPLAY=$sock DBUS_SESSION_BUS_ADDRESS=$bus \
+    ELECTRON_OZONE_PLATFORM_HINT=wayland \
+    setsid "$root/scripts/dev/isolated.sh" --name "$name" -- obsidian --proxy-server=127.0.0.1:9 >"$run/obsidian-$r.out" 2>&1 </dev/null &
+  ob_pid=$!
 
-click_title File
-check "File menu open with New Window" wait_for 5 row_present '^New Window$'
-say "  File rows: $(state | jq -c '[.popup[]?.text]')"
-say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-file "$output")"
-click_row '^New Window$'
-check "pointer click on File > New Window opened a second window (focused-window click handler)" wait_for 15 has_windows 2
-second=$(focused_address)
-say "  second window $second"
-check "the second window shows Obsidian's menus" wait_for 20 menus_are "$second" '(.menus | index("File")) != null'
-say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
-check "no layout failure in the bridge log (registrations served once settled)" test -z "$(bridge_log | grep -a 'GetLayout on .*failed\|refused: this application')"
+  check "[$r] Obsidian window mapped" wait_for 40 has_windows 1
+  check "[$r] Obsidian runs on Wayland (not XWayland)" on_wayland
+  first=$(focused_address)
+  cpid=$(client_pid)
+  say "  [$r] window $first \"$(clients | jq -r --arg c "$class" '[.[] | select(.class == $c)][0].title // ""')\", client pid $cpid (started $ob_pid)"
+  check "[$r] Obsidian registered its window with the registrar (bridge log)" wait_for 20 round_log_has "registrar: RegisterWindow from :[0-9.]+ kept"
+  check "[$r] menu bar shows Obsidian's own menus (File, Edit ... Help)" wait_for 20 menus_are "$first" "$obsidian_menus"
+  say "  [$r] bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
+  check "[$r] the bridge served the registration to the window's client pid $cpid" round_log_has "window $first: menu :[0-9.]+ /com/canonical/menu/[0-9A-F]+ \(pid $cpid,"
+  ((r == 1)) && say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-bar "$output")"
 
-click_title File
-check "second window's File menu open with Close Window" wait_for 5 row_present '^Close( Window)?$'
-say "  File rows: $(state | jq -c '[.popup[]?.text]')"
-click_row '^Close( Window)?$'
-check "pointer click on File > Close Window closed the second window" wait_for 15 windows_at_most 1
-check "the remaining window shows Obsidian's menus again" wait_for 20 menus_are "$first" "$obsidian_menus"
+  click_title File
+  check "[$r] File menu open with New Window" wait_for 5 row_present '^New Window$'
+  ((r == 1)) && say "  File rows: $(state | jq -c '[.popup[]?.text]')"
+  ((r == 1)) && say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-file "$output")"
+  click_row '^New Window$'
+  check "[$r] pointer click on File > New Window opened a second window (focused-window click handler)" wait_for 15 has_windows 2
+  second=$(focused_address)
+  check "[$r] the second window shows Obsidian's menus" wait_for 20 menus_are "$second" '(.menus | index("File")) != null'
+  check "[$r] no layout failure in the bridge log (registrations served once settled)" test -z "$(round_log | grep -a 'GetLayout on .*failed\|refused: this application')"
 
-click_title File
-check "File menu open with Quit" wait_for 5 row_present '^Quit$'
-click_row '^Quit$'
-check "pointer click on File > Quit closed every window" wait_for 15 windows_at_most 0
-check "Obsidian exited" wait_for 15 exited "$ob_pid"
+  click_title File
+  check "[$r] second window's File menu open with Close Window" wait_for 5 row_present '^Close( Window)?$'
+  click_row '^Close( Window)?$'
+  check "[$r] pointer click on File > Close Window closed the second window" wait_for 15 windows_at_most 1
+  check "[$r] the remaining window shows Obsidian's menus again" wait_for 20 menus_are "$first" "$obsidian_menus"
+
+  click_title File
+  check "[$r] File menu open with Quit" wait_for 5 row_present '^Quit$'
+  click_row '^Quit$'
+  check "[$r] pointer click on File > Quit closed every window" wait_for 15 windows_at_most 0
+  check "[$r] Obsidian exited" wait_for 15 exited "$ob_pid"
+  round_log | grep -a "registrar\|window .*menu\|activate\|registered" | tail -n 12 >>"$summary"
+  stop_obsidian
+  check "[$r] no process of Obsidian's group left" test -z "$(pgrep -g "$ob_pid" 2>/dev/null)"
+  ob_pid=""
+  ((fail == fail_before))
+}
+
+# The bridge log of the current round only.
+log_round=1
+round_log() { tail -n "+$log_round" "$dev/menu-bridge.log" 2>/dev/null; }
+round_log_has() { round_log | grep -a -q -E -- "$1"; }
+
+for r in $(seq 1 "$rounds"); do
+  if scenario "$r"; then say "  round $r: PASS"; else say "  round $r: FAIL"; failed_rounds=$((failed_rounds + 1)); fi
+  point abs 960 600 sleep 200
+done
+say "rounds: $rounds, failed: $failed_rounds"
 bridge_log >"$run/menu-bridge.log"
 cp "$dev/shell.log" "$run/shell.log"
-grep -a "registrar\|window .*menu\|activate\|registered" "$run/menu-bridge.log" | tail -n 20 >>"$summary"
 
 # ---- cleanup -----------------------------------------------------------------------------------------------------
-stop_obsidian
-check "no process of Obsidian's group left" test -z "$(pgrep -g "$ob_pid" 2>/dev/null)"
 "$root/scripts/dev/nested-down.sh" >"$run/nested-down.log" 2>&1
 trap - EXIT
 say ""

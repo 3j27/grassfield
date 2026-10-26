@@ -12,6 +12,21 @@ TestCase {
         return JSON.stringify(Object.assign({v: "gfc/1", type: "appmenu"}, fields));
     }
 
+    // The plugin's keyboard-focus event (feature keyboard-focus): a chosen item's action waits for its window (MB12).
+    function test_keyboardFocusEvents() {
+        const focus = fields => JSON.stringify(Object.assign({v: "gfc/1", type: "keyboard-focus"}, fields));
+        compare(Bridge.parseKeyboardFocusEvent(focus({address: "55D3C2A0B1F0"})), "55d3c2a0b1f0");
+        compare(Bridge.parseKeyboardFocusEvent(focus({address: "0x1a"})), "1a");
+        compare(Bridge.parseKeyboardFocusEvent(focus({address: ""})), null);
+        compare(Bridge.parseKeyboardFocusEvent(focus({address: "zz"})), null);
+        compare(Bridge.parseKeyboardFocusEvent(focus({address: 42})), null);
+        compare(Bridge.parseKeyboardFocusEvent(focus({})), null);
+        compare(Bridge.parseKeyboardFocusEvent(JSON.stringify({v: "gfc/2", type: "keyboard-focus", address: "1a"})), null);
+        compare(Bridge.parseKeyboardFocusEvent(event({address: "1a", service: "", path: "", pid: 0})), null); // an appmenu event
+        compare(Bridge.parseKeyboardFocusEvent("{"), null);
+        compare(Bridge.parseAppmenuEvent(focus({address: "1a"})), null);
+    }
+
     function test_appmenuEvents() {
         compare(Bridge.parseAppmenuEvent(event({address: "55D3C2A0B1F0", service: ":1.42", path: "/MenuBar/1", pid: 4242})),
                 {address: "55d3c2a0b1f0", service: ":1.42", path: "/MenuBar/1", pid: 4242});

@@ -105,34 +105,58 @@ Singleton {
         send(Logic.itemLine("about-to-show", root.openedWindow, dbusId));
     }
 
-    // Choosing an item: its action reaches the application once the popup host gave the keyboard back (macOS sends a
-    // menu's action after the menu closed). An Electron click handler runs for the focused window only (Electron passes
-    // BaseWindow.getFocusedWindow() to it) and no window is focused while the popup holds the keyboard: the host drops it
-    // at close and unmaps Tokens.focusReturnReleaseHoldMs later (KeyboardRelease), so the line is sent after that.
-    // Measured in the nested session (Obsidian, Electron 43): sent while the popup was open, File > New Window did nothing;
-    // sent after it closed, it opened a window.
-    function activate(dbusId: int): void {
+    // Choosing an item (the caller closed the menu first): its action reaches the application once the item's window has
+    // the keyboard back (macOS sends a menu's action after the menu closed). An Electron click handler runs for its focused
+    // window only (Electron passes BaseWindow.getFocusedWindow() to it), and no window is focused while the popup holds the
+    // keyboard (measured with Obsidian, Electron 43: sent with the popup open, File > New Window did nothing; a fixed
+    // 120 ms wait failed 1 run in 3 in a loaded session). So, when the popup held the keyboard (`keyboardHeld`; a press,
+    // drag and release leaves it with the window), the line waits for the plugin's keyboard-focus event naming that window
+    // (Tokens.focusReturnMenuActionSettleMs more after it, for the application to read its keyboard enter first), and goes
+    // anyway Tokens.focusReturnMenuActionWaitMs after this call when no such event comes (a plugin without the
+    // keyboard-focus feature, or the keyboard went to another window).
+    function activate(dbusId: int, keyboardHeld: bool): void {
         const line = Logic.itemLine("activate", root.openedWindow, dbusId);
         if (line === "")
             return;
-        if (activation.running)
-            activation.triggered(); // the previous choice goes first (one click closes the popup: not expected)
-        activation.line = line;
-        activation.restart();
+        flushActivation(); // a choice still waiting goes first (one choice closes the menu: not expected)
+        if (!keyboardHeld) {
+            send(line);
+            return;
+        }
+        root.pendingActivation = line;
+        root.pendingActivationWindow = root.openedWindow;
+        activationFallback.restart();
+    }
+
+    // An item's action waiting for its window to get the keyboard back ("" when none), and that window.
+    property string pendingActivation: ""
+    property string pendingActivationWindow: ""
+
+    function flushActivation(): void {
+        activationSettle.stop();
+        activationFallback.stop();
+        const line = root.pendingActivation;
+        root.pendingActivation = "";
+        root.pendingActivationWindow = "";
+        send(line);
+    }
+
+    // The plugin says the keyboard entered `address`: the waiting action of that window goes after the settle time.
+    function keyboardEntered(address: string): void {
+        if (root.pendingActivation !== "" && address === root.pendingActivationWindow && !activationSettle.running)
+            activationSettle.start();
     }
 
     Timer {
-        id: activation
+        id: activationSettle
+        interval: Tokens.focusReturnMenuActionSettleMs
+        onTriggered: root.flushActivation()
+    }
 
-        property string line: ""
-
-        interval: Tokens.focusReturnReleaseHoldMs
-        onTriggered: {
-            const pending = activation.line;
-            activation.line = "";
-            activation.stop();
-            root.send(pending);
-        }
+    Timer {
+        id: activationFallback
+        interval: Tokens.focusReturnMenuActionWaitMs
+        onTriggered: root.flushActivation()
     }
 
     function send(line: string): void {
@@ -207,6 +231,11 @@ Singleton {
     }
 
     function handlePluginEvent(data: string): void {
+        const entered = Logic.parseKeyboardFocusEvent(data);
+        if (entered !== null) {
+            keyboardEntered(entered);
+            return;
+        }
         const ev = Logic.parseAppmenuEvent(data);
         if (!ev)
             return;

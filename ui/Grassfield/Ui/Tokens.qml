@@ -1620,6 +1620,10 @@ QtObject {
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it [ref: docs/decisions/ADR-0012-desktop-focus-model.md; docs/specs/desktop.md]
     readonly property int focusReturnReleaseHoldMs: 120
+    // estimate (bound): a chosen application menu item waits at most this long after its menu closed for its window to get the keyboard back (the plugin's keyboard-focus event), then its action is sent anyway (an older plugin, or the keyboard went elsewhere) [ref: docs/specs/menu-bridge.md MB12]
+    readonly property int focusReturnMenuActionWaitMs: 300
+    // estimate: after the window got the keyboard back, the action waits this long more so that the application has read its keyboard enter before the action arrives over D-Bus [ref: docs/specs/menu-bridge.md MB12]
+    readonly property int focusReturnMenuActionSettleMs: 30
 
     // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarBackgroundDark: "#28282C"
