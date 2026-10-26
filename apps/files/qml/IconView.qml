@@ -21,6 +21,12 @@ FocusScope {
     readonly property var groups: root.grouped ? root.model.groups : []
     // Groups shown in full (Show All), by title; forgotten with the folder.
     property var expanded: ({})
+    // How far each one-line group is scrolled sideways, by title (written in place: nothing binds to it).
+    property var rowScroll: ({})
+    // The groups as Nav.groupedIconMove sees them: a collapsed group is one line of all its items.
+    readonly property var navGroups: root.groups.map(g => ({first: g.first, count: g.count, columns: root.expanded[g.title] === true ? root.columns : g.count}))
+    // The top of each group in the grouped layout, then its whole height.
+    readonly property var groupTops: Nav.groupedIconTops(root.navGroups, Tokens.filesIconGroupHeight, Tokens.filesIconCellHeight)
     // The flickable that holds the items now.
     readonly property Flickable flick: root.grouped ? groupedView : grid
     // The content has moved up under the toolbar (the window draws the toolbar's hairline then, macOS).
@@ -36,48 +42,78 @@ FocusScope {
         root.flick.forceActiveFocus();
     }
 
-    // The group holding `row` (an index into root.groups), -1 without groups.
-    function groupOfRow(row: int): int {
-        for (let g = 0; g < root.groups.length; g++) {
-            if (row < root.groups[g].first + root.groups[g].count)
-                return g;
-        }
-        return -1;
-    }
-
     function setExpanded(title: string, on: bool): void {
         const next = Object.assign({}, root.expanded);
         next[title] = on;
         root.expanded = next;
     }
 
-    // The groups as Nav.groupedIconMove sees them: a collapsed group is one row of all its items.
-    function navGroups(): var {
-        return root.groups.map(g => ({first: g.first, count: g.count, columns: root.expanded[g.title] === true ? root.columns : g.count}));
+    // Where `row` sits in the grouped layout (Nav.groupedIconCell), null for none.
+    function groupedCell(row: int): var {
+        return Nav.groupedIconCell(row, root.cellWidth, Tokens.filesIconCellHeight, Tokens.filesIconGroupHeight, root.navGroups);
     }
 
-    // Scrolls `row` into view (its group, then within the group's row).
+    // Scrolls `row` into view, as little as it takes (in the grouped layout: down the page, then along its group's line;
+    // a cell of a group's first line comes with the group's header).
     function reveal(row: int): void {
         if (!root.grouped) {
             grid.positionViewAtIndex(row, GridView.Contain);
             return;
         }
-        const g = root.groupOfRow(row);
-        if (g < 0)
+        const cell = root.groupedCell(row);
+        if (cell === null)
             return;
-        groupedView.positionViewAtIndex(g, ListView.Contain);
-        const item = groupedView.itemAtIndex(g);
-        if (item)
-            item.reveal(row - root.groups[g].first);
+        const top = cell.line === 0 ? cell.y - Tokens.filesIconGroupHeight : cell.y;
+        const bottom = cell.y + Tokens.filesIconCellHeight;
+        const y = Math.min(top, Math.max(groupedView.contentY, bottom - groupedView.height));
+        groupedView.contentY = Math.max(0, Math.min(y, groupedView.contentHeight - groupedView.height));
+        const section = sections.itemAt(cell.group);
+        if (section && !section.full)
+            section.revealX(cell.x);
     }
+
+    // The sideways scroll of the one-line groups, for Nav.groupedIconCells.
+    function bandGroups(): var {
+        return root.navGroups.map((g, i) => {
+            const section = sections.itemAt(i);
+            return {first: g.first, count: g.count, columns: g.columns, scrollX: section && !section.full ? section.scroll : 0};
+        });
+    }
+
+    // FolderModel.groups into groupsModel, changed in place: a section keeps its cells and its scroll while it stays.
+    function syncGroups(): void {
+        const groups = root.groups;
+        for (let i = 0; i < groups.length; i++) {
+            const g = {title: groups[i].title, first: groups[i].first, itemCount: groups[i].count};
+            if (i >= groupsModel.count) {
+                groupsModel.append(g);
+                continue;
+            }
+            const old = groupsModel.get(i);
+            if (old.title !== g.title || old.first !== g.first || old.itemCount !== g.itemCount)
+                groupsModel.set(i, g);
+        }
+        if (groupsModel.count > groups.length)
+            groupsModel.remove(groups.length, groupsModel.count - groups.length);
+        for (let i = 0; i < sections.count; i++)
+            sections.itemAt(i).syncRange();
+        // A shorter page: the scroll stays within it (once the layout has followed).
+        Qt.callLater(() => groupedView.contentY = Math.max(0, Math.min(groupedView.contentY, groupedView.contentHeight - groupedView.height)));
+    }
+
+    onGroupsChanged: root.syncGroups()
 
     // Window coordinates of a row (keyboard context menu).
     function rowPosition(model: var, row: int): point {
         if (row < 0)
             return root.mapToItem(null, Tokens.spacingLg, Tokens.spacingLg);
         if (root.grouped) {
-            const item = groupedView.itemAtIndex(root.groupOfRow(row));
-            return item ? item.rowPosition(row) : root.mapToItem(null, Tokens.spacingLg, Tokens.spacingLg);
+            const cell = root.groupedCell(row);
+            if (cell === null)
+                return root.mapToItem(null, Tokens.spacingLg, Tokens.spacingLg);
+            const section = sections.itemAt(cell.group);
+            const scroll = section && !section.full ? section.scroll : 0;
+            return groupedView.contentItem.mapToItem(null, cell.x - scroll + root.cellWidth / 2, cell.y + Tokens.filesIconSize);
         }
         const col = row % root.columns;
         const r = Math.floor(row / root.columns);
@@ -96,13 +132,9 @@ FocusScope {
             if (rename)
                 root.tab.startRename(root.model, row);
         }
-        // The group rows are made again when the groups change (a new list): the scroll position is kept.
-        function onGroupsChanged(): void {
-            const y = groupedView.contentY;
-            Qt.callLater(() => groupedView.contentY = Math.max(groupedView.originY, Math.min(y, groupedView.contentHeight - groupedView.height + groupedView.originY)));
-        }
         function onUrlChanged(): void {
             root.expanded = {};
+            root.rowScroll = {};
         }
     }
 
@@ -129,17 +161,6 @@ FocusScope {
         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
         dragProxy.Drag.imageSource = thumbnail !== "" ? thumbnail : "image://icon/" + iconName;
         dragProxy.Drag.active = true;
-    }
-
-    // The rows a band covers in the grouped layout: the group rows on screen, each by its own geometry.
-    function groupedRowsInBand(left: real, top: real, right: real, bottom: real): var {
-        const out = [];
-        for (let g = 0; g < root.groups.length; g++) {
-            const item = groupedView.itemAtIndex(g);
-            if (item)
-                out.push(...item.rowsInBand(left, top - item.y, right, bottom - item.y));
-        }
-        return out;
     }
 
     // Background: empty-space clicks, rubber band selection, context menu and drops into this folder.
@@ -189,7 +210,7 @@ FocusScope {
             band.width = Math.abs(x - origin.x);
             band.contentTop = Math.min(y, origin.y);
             band.height = Math.abs(y - origin.y);
-            const rows = root.grouped ? root.groupedRowsInBand(Math.min(x, origin.x), Math.min(y, origin.y), Math.max(x, origin.x), Math.max(y, origin.y))
+            const rows = root.grouped ? Nav.groupedIconCells(origin.x, origin.y, x, y, root.cellWidth, Tokens.filesIconCellHeight, Tokens.filesIconGroupHeight, root.bandGroups())
                                       : Nav.cellsInRect(origin.x, origin.y, x, y, grid.cellWidth, grid.cellHeight, root.columns, grid.count);
             const urls = baseSelection.slice();
             for (let i = 0; i < rows.length; i++)
@@ -202,6 +223,7 @@ FocusScope {
                 f.contentY = Math.max(f.originY, f.contentY - Tokens.spacingSm);
         }
         onReleased: banding = false
+        onCanceled: banding = false
     }
 
     GridView {
@@ -230,166 +252,199 @@ FocusScope {
         delegate: IconCell {}
     }
 
-    // Grouped layout: one section per group (FolderModel.groups), its items in one row or, after Show All, in full.
-    ListView {
+    // FolderModel.groups as the sections show them (root.syncGroups).
+    ListModel {
+        id: groupsModel
+    }
+
+    // Grouped layout: one section per group, its items in one line or, after Show All, in full. The sections are all made
+    // (a folder has few groups) and placed from root.groupTops; only the cells near the view are.
+    Flickable {
         id: groupedView
         anchors.fill: grid
         visible: root.grouped
-        model: root.groups
+        contentWidth: width
+        contentHeight: root.groupTops[root.groupTops.length - 1]
         clip: true
         focus: root.grouped
         activeFocusOnTab: root.grouped
-        keyNavigationEnabled: false
         acceptedButtons: Qt.NoButton
         boundsBehavior: Flickable.StopAtBounds
-        cacheBuffer: Tokens.filesIconCellHeight * 2
         Accessible.role: Accessible.List
         Accessible.name: qsTr("Files")
 
-        Keys.onPressed: event => root.tab.handleViewKey(event, root.model, key => Nav.groupedIconMove(root.model.currentRow, key, root.navGroups()))
+        Keys.onPressed: event => root.tab.handleViewKey(event, root.model, key => Nav.groupedIconMove(root.model.currentRow, key, root.navGroups))
 
-        delegate: Item {
-            id: section
+        Repeater {
+            id: sections
+            model: groupsModel
 
-            required property var modelData
-            required property int index
+            delegate: Item {
+                id: section
 
-            readonly property bool full: root.expanded[section.modelData.title] === true
-            readonly property int first: section.modelData.first
-            readonly property int count: section.modelData.count
-            readonly property bool overflows: section.count * root.cellWidth > groupedView.width
-            readonly property Flickable items: section.full ? sectionGrid : sectionRow
+                required property int index
+                required property string title
+                required property int first
+                required property int itemCount
 
-            width: groupedView.width
-            height: Tokens.filesIconGroupHeight + (section.full ? Math.ceil(section.count / root.columns) : 1) * Tokens.filesIconCellHeight
-            Accessible.role: Accessible.Grouping
-            Accessible.name: section.modelData.title
+                readonly property bool full: root.expanded[section.title] === true
+                readonly property bool overflows: section.itemCount * root.cellWidth > groupedView.width
+                // The page in view, in this section's coordinates, widened by the margin the flat grid makes cells ahead in.
+                readonly property real viewTop: groupedView.contentY - section.y - grid.cacheBuffer
+                readonly property real viewBottom: groupedView.contentY - section.y + groupedView.height + grid.cacheBuffer
+                readonly property bool near: section.viewBottom > 0 && section.viewTop < section.height
+                // How far the one line is scrolled sideways.
+                property real scroll: 0
 
-            function reveal(index: int): void {
-                section.items.positionViewAtIndex(index, section.full ? GridView.Contain : ListView.Contain);
-            }
+                y: root.groupTops[section.index] ?? 0
+                width: groupedView.width
+                height: Tokens.filesIconGroupHeight + (section.full ? Math.ceil(section.itemCount / root.columns) : 1) * Tokens.filesIconCellHeight
+                Accessible.role: Accessible.Grouping
+                Accessible.name: section.title
 
-            function rowPosition(row: int): point {
-                const i = row - section.first;
-                const col = section.full ? i % root.columns : i;
-                const r = section.full ? Math.floor(i / root.columns) : 0;
-                return section.items.mapToItem(null, (col + 0.5) * root.cellWidth - section.items.contentX, r * Tokens.filesIconCellHeight + Tokens.filesIconSize);
-            }
-
-            // Rows under the band, in this section's coordinates.
-            function rowsInBand(left: real, top: real, right: real, bottom: real): var {
-                const y0 = Tokens.filesIconGroupHeight;
-                if (section.full)
-                    return Nav.cellsInRect(left, top - y0, right, bottom - y0, root.cellWidth, Tokens.filesIconCellHeight, root.columns, section.count).map(i => section.first + i);
-                if (bottom < y0 || top > y0 + Tokens.filesIconCellHeight)
-                    return [];
-                return Nav.cellsInRect(left + sectionRow.contentX, 0, right + sectionRow.contentX, 0, root.cellWidth, Tokens.filesIconCellHeight, section.count, section.count).map(i => section.first + i);
-            }
-
-            Text {
-                textFormat: Text.PlainText
-                x: Tokens.spacingSm
-                anchors.verticalCenter: header.verticalCenter
-                width: showAll.x - x - Tokens.spacingSm
-                text: section.modelData.title
-                elide: Text.ElideRight
-                color: Appearance.colors.text
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-                font.weight: Tokens.typographyMenuBoldWeight
-                Accessible.role: Accessible.Heading
-                Accessible.name: text
-            }
-
-            Item {
-                id: header
-                width: parent.width
-                height: Tokens.filesIconGroupHeight
-            }
-
-            Text {
-                id: showAll
-                textFormat: Text.PlainText
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.spacingSm
-                anchors.verticalCenter: header.verticalCenter
-                visible: section.overflows || section.full
-                text: section.full ? qsTr("Show Less") : qsTr("Show All")
-                color: Appearance.colors.accent
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                Accessible.onPressAction: root.setExpanded(section.modelData.title, !section.full)
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -Tokens.spacingXs
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.setExpanded(section.modelData.title, !section.full)
+                function setScroll(x: real): void {
+                    section.scroll = Math.max(0, Math.min(x, section.itemCount * root.cellWidth - groupedView.width));
+                    root.rowScroll[section.title] = section.scroll;
+                    sectionRow.contentX = sectionRow.originX + section.scroll;
                 }
-            }
 
-            // This group's rows of the listing.
-            DelegateModel {
-                id: range
-                model: root.model
-                groups: [
-                    DelegateModelGroup {
-                        name: "range"
-                        includeByDefault: false
+                function revealX(x: real): void {
+                    if (x < section.scroll)
+                        section.setScroll(x);
+                    else if (x + root.cellWidth > section.scroll + groupedView.width)
+                        section.setScroll(x + root.cellWidth - groupedView.width);
+                }
+
+                // The range group holds this group's rows of the listing; it is set again only when it no longer holds exactly
+                // those rows (a group that kept its place keeps its cells).
+                function syncRange(): void {
+                    const n = rangeGroup.count;
+                    if (n === section.itemCount && (n === 0 || (rangeGroup.get(0).itemsIndex === section.first && rangeGroup.get(n - 1).itemsIndex === section.first + n - 1)))
+                        return;
+                    if (n > 0)
+                        rangeGroup.remove(0, n);
+                    if (section.first + section.itemCount <= range.items.count)
+                        range.items.addGroups(section.first, section.itemCount, ["range"]);
+                }
+
+                // A group that moved to this place brings its own scroll.
+                onTitleChanged: section.setScroll(root.rowScroll[section.title] ?? 0)
+                onItemCountChanged: section.setScroll(section.scroll)
+                onWidthChanged: section.setScroll(section.scroll)
+                Component.onCompleted: {
+                    section.syncRange();
+                    section.setScroll(root.rowScroll[section.title] ?? 0);
+                }
+
+                Text {
+                    textFormat: Text.PlainText
+                    x: Tokens.spacingSm
+                    anchors.verticalCenter: header.verticalCenter
+                    width: showAll.x - x - Tokens.spacingSm
+                    text: section.title
+                    elide: Text.ElideRight
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                    Accessible.role: Accessible.Heading
+                    Accessible.name: text
+                }
+
+                Item {
+                    id: header
+                    width: parent.width
+                    height: Tokens.filesIconGroupHeight
+                }
+
+                Text {
+                    id: showAll
+                    textFormat: Text.PlainText
+                    anchors.right: parent.right
+                    anchors.rightMargin: Tokens.spacingSm
+                    anchors.verticalCenter: header.verticalCenter
+                    visible: section.overflows || section.full
+                    text: section.full ? qsTr("Show Less") : qsTr("Show All")
+                    color: Appearance.colors.accent
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                    Accessible.role: Accessible.Button
+                    Accessible.name: text
+                    Accessible.onPressAction: root.setExpanded(section.title, !section.full)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -Tokens.spacingXs
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.setExpanded(section.title, !section.full)
                     }
-                ]
-                filterOnGroup: "range"
-                delegate: IconCell {
-                    row: DelegateModel.itemsIndex
                 }
-                Component.onCompleted: range.items.addGroups(section.first, section.count, ["range"])
-            }
 
-            ListView {
-                id: sectionRow
-                y: Tokens.filesIconGroupHeight
-                width: parent.width
-                height: Tokens.filesIconCellHeight
-                visible: !section.full
-                orientation: ListView.Horizontal
-                model: section.full ? null : range
-                clip: true
-                interactive: false
-                acceptedButtons: Qt.NoButton
-                boundsBehavior: Flickable.StopAtBounds
-                cacheBuffer: root.cellWidth * 4
-
-                // A sideways wheel or trackpad swipe scrolls the row; a vertical one is left to the page (a horizontal-only
-                // flickable would take it).
-                WheelHandler {
-                    orientation: Qt.Horizontal
-                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                    onWheel: event => {
-                        // A wheel notch is 120 eighths of a degree (Qt): one item per notch.
-                        const dx = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.angleDelta.x / 120 * root.cellWidth;
-                        if (dx === 0) {
-                            event.accepted = false;
-                            return;
+                DelegateModel {
+                    id: range
+                    model: root.model
+                    groups: [
+                        DelegateModelGroup {
+                            id: rangeGroup
+                            name: "range"
+                            includeByDefault: false
                         }
-                        const max = Math.max(0, sectionRow.contentWidth - sectionRow.width);
-                        sectionRow.contentX = Math.max(0, Math.min(max, sectionRow.contentX - dx));
+                    ]
+                    filterOnGroup: "range"
+                    delegate: IconCell {
+                        row: DelegateModel.itemsIndex
                     }
                 }
-            }
 
-            GridView {
-                id: sectionGrid
-                y: Tokens.filesIconGroupHeight
-                width: parent.width
-                height: parent.height - y
-                visible: section.full
-                cellWidth: root.cellWidth
-                cellHeight: Tokens.filesIconCellHeight
-                model: section.full ? range : null
-                interactive: false
-                acceptedButtons: Qt.NoButton
+                ListView {
+                    id: sectionRow
+                    y: Tokens.filesIconGroupHeight
+                    width: parent.width
+                    height: Tokens.filesIconCellHeight
+                    visible: !section.full
+                    orientation: ListView.Horizontal
+                    model: !section.full && section.near ? range : null
+                    clip: true
+                    interactive: false
+                    acceptedButtons: Qt.NoButton
+                    boundsBehavior: Flickable.StopAtBounds
+                    // A view given its model again starts at its beginning: back to the group's scroll.
+                    onModelChanged: Qt.callLater(() => sectionRow.contentX = sectionRow.originX + section.scroll)
+
+                    // A sideways wheel or trackpad swipe scrolls the line; a vertical one is left to the page.
+                    WheelHandler {
+                        orientation: Qt.Horizontal
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                        onWheel: event => {
+                            // A wheel notch is 120 eighths of a degree (Qt): one item per notch.
+                            const dx = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.angleDelta.x / 120 * root.cellWidth;
+                            if (dx === 0) {
+                                event.accepted = false;
+                                return;
+                            }
+                            section.setScroll(section.scroll - dx);
+                        }
+                    }
+                }
+
+                // Shown in full: only the lines near the view are a part of the grid (a group of thousands makes the cells of
+                // one page).
+                GridView {
+                    id: sectionGrid
+                    readonly property real shownTop: Math.max(Tokens.filesIconGroupHeight, Math.min(section.height, section.viewTop))
+                    readonly property real shownBottom: Math.max(sectionGrid.shownTop, Math.min(section.height, section.viewBottom))
+                    y: sectionGrid.shownTop
+                    width: parent.width
+                    height: sectionGrid.shownBottom - sectionGrid.shownTop
+                    contentY: sectionGrid.originY + sectionGrid.shownTop - Tokens.filesIconGroupHeight
+                    visible: section.full
+                    cellWidth: root.cellWidth
+                    cellHeight: Tokens.filesIconCellHeight
+                    model: section.full && section.near ? range : null
+                    interactive: false
+                    acceptedButtons: Qt.NoButton
+                    cacheBuffer: 0
+                }
             }
         }
     }
@@ -492,6 +547,7 @@ FocusScope {
         }
 
         Rectangle {
+            id: nameBox
             visible: cell.selected && !cell.renaming
             anchors.horizontalCenter: label.horizontalCenter
             y: label.y - Tokens.spacingXs / 2
@@ -561,7 +617,12 @@ FocusScope {
 
         MouseArea {
             id: mouse
-            anchors.fill: parent
+            // The icon and the name (with its tag dots) take the clicks; the rest of the cell is the background, where a drag
+            // draws a selection rectangle (Finder).
+            x: Math.min(backdrop.x, nameBox.x - cell.dotsRoom)
+            y: backdrop.y
+            width: Math.max(backdrop.x + backdrop.width, nameBox.x + nameBox.width) - x
+            height: nameBox.y + nameBox.height - y
             enabled: !cell.renaming
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             drag.target: dragProxy

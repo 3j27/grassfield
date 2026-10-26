@@ -176,6 +176,28 @@ TestCase {
         compare(Nav.groupedIconMove(0, "down", []), -1);
     }
 
+    function test_groupedIconLayout() {
+        // Rows 0-4 in one line, 5-6 in one line, 7-12 in full four to a line; headers 32, cells 100 x 90.
+        const groups = [{first: 0, count: 5, columns: 5}, {first: 5, count: 2, columns: 2}, {first: 7, count: 6, columns: 4}];
+        compare(Nav.groupedIconTops(groups, 32, 90), [0, 122, 244, 456], "each header over its lines, the height last");
+        compare(Nav.groupedIconTops([], 32, 90), [0]);
+        compare(Nav.groupedIconCell(3, 100, 90, 32, groups), {group: 0, index: 3, line: 0, column: 3, x: 300, y: 32});
+        compare(Nav.groupedIconCell(12, 100, 90, 32, groups), {group: 2, index: 5, line: 1, column: 1, x: 100, y: 366}, "second line of the full group");
+        compare(Nav.groupedIconCell(13, 100, 90, 32, groups), null);
+    }
+
+    function test_groupedIconCells() {
+        const groups = [{first: 0, count: 5, columns: 5, scrollX: 0}, {first: 5, count: 2, columns: 2, scrollX: 0},
+                        {first: 7, count: 6, columns: 4, scrollX: 0}];
+        compare(Nav.groupedIconCells(0, 0, 400, 20, 100, 90, 32, groups), [], "a header alone selects nothing");
+        compare(Nav.groupedIconCells(150, 40, 250, 60, 100, 90, 32, groups), [1, 2]);
+        compare(Nav.groupedIconCells(50, 100, 150, 160, 100, 90, 32, groups), [0, 1, 5, 6], "across a header");
+        compare(Nav.groupedIconCells(150, 400, 50, 300, 100, 90, 32, groups), [7, 8, 11, 12], "upwards, both lines of the full group");
+        groups[0].scrollX = 200;
+        compare(Nav.groupedIconCells(0, 40, 50, 60, 100, 90, 32, groups), [2], "a line scrolled sideways");
+        compare(Nav.groupedIconCells(0, 500, 400, 600, 100, 90, 32, groups), [], "below the last group");
+    }
+
     function test_groupedRowsInSpan() {
         // Two groups: rows 0-2 under a 28-high header, rows 3-4 under the next; rows 20 high.
         const groups = [{first: 0, count: 3}, {first: 3, count: 2}];

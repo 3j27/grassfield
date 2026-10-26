@@ -215,6 +215,7 @@ FocusScope {
                 root.bandMove(background, mouse.x, mouse.y);
         }
         onReleased: root.banding = false
+        onCanceled: root.banding = false
     }
 
     ListView {
@@ -472,6 +473,15 @@ FocusScope {
                     if (collapseOnRelease && !drag.active)
                         root.model.select(row.index, 0);
                     collapseOnRelease = false;
+                }
+                // A band whose row went away (scrolled far past the cache) or whose press was taken ends there.
+                onCanceled: mouse.endBand()
+                Component.onDestruction: mouse.endBand()
+                function endBand(): void {
+                    if (!mouse.bandStart)
+                        return;
+                    mouse.bandStart = false;
+                    root.banding = false;
                 }
                 onDoubleClicked: event => {
                     if (event.button === Qt.LeftButton)

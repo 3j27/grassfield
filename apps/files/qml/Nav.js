@@ -215,6 +215,55 @@ function groupedIconMove(current, key, groups) {
     return current;
 }
 
+// The grouped icon view's layout: each group of `groups` ([{first, count, columns}], as groupedIconMove takes them) is a
+// header `headerHeight` high over its lines of cells `cellHeight` high. Returns the top of each group, then the whole height.
+function groupedIconTops(groups, headerHeight, cellHeight) {
+    const tops = [];
+    let y = 0;
+    for (let g = 0; g < groups.length; g++) {
+        tops.push(y);
+        y += headerHeight + Math.ceil(groups[g].count / Math.max(1, groups[g].columns)) * cellHeight;
+    }
+    tops.push(y);
+    return tops;
+}
+
+// Where `row` sits in the grouped icon view: {group, index (in the group), line, column, x (in the group's own, unscrolled
+// lines), y (the top of its cell in the content)}; null for a row in no group.
+function groupedIconCell(row, cellWidth, cellHeight, headerHeight, groups) {
+    let y = 0;
+    for (let g = 0; g < groups.length; g++) {
+        const cols = Math.max(1, groups[g].columns);
+        if (row >= groups[g].first && row < groups[g].first + groups[g].count) {
+            const i = row - groups[g].first;
+            const line = Math.floor(i / cols);
+            return {group: g, index: i, line: line, column: i % cols, x: (i % cols) * cellWidth, y: y + headerHeight + line * cellHeight};
+        }
+        y += headerHeight + Math.ceil(groups[g].count / cols) * cellHeight;
+    }
+    return null;
+}
+
+// Rows of the grouped icon view under a rubber band (content coordinates). `groups`: [{first, count, columns, scrollX}],
+// scrollX how far a one-line group is scrolled sideways.
+function groupedIconCells(x1, y1, x2, y2, cellWidth, cellHeight, headerHeight, groups) {
+    const out = [];
+    const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+    let y = 0;
+    for (let g = 0; g < groups.length && y <= bottom; g++) {
+        const cols = Math.max(1, groups[g].columns);
+        const rowsTop = y + headerHeight;
+        y = rowsTop + Math.ceil(groups[g].count / cols) * cellHeight;
+        if (bottom < rowsTop || top >= y)
+            continue;
+        const dx = groups[g].scrollX || 0;
+        const cells = cellsInRect(x1 + dx, top - rowsTop, x2 + dx, bottom - rowsTop, cellWidth, cellHeight, cols, groups[g].count);
+        for (let i = 0; i < cells.length; i++)
+            out.push(groups[g].first + cells[i]);
+    }
+    return out;
+}
+
 // Rows of a grouped list (FolderModel.groups: [{first, count}] in row order, each group under a header `headerHeight` high)
 // that the vertical span [y1, y2] of the list's content covers.
 function groupedRowsInSpan(y1, y2, rowHeight, headerHeight, groups) {
