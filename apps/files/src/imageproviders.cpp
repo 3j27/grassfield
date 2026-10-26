@@ -11,6 +11,8 @@
 #include <QPointer>
 #include <QThreadPool>
 
+#include <memory>
+
 QMutex ThumbnailStore::s_mutex;
 QHash<QString, QImage> ThumbnailStore::s_images;
 quint64 ThumbnailStore::s_serial = 0;
@@ -56,15 +58,34 @@ QImage ThumbnailProvider::requestImage(const QString &id, QSize *size, const QSi
     return image;
 }
 
+IconProvider::IconProvider()
+    : QQuickImageProvider(QQuickImageProvider::Pixmap)
+{
+}
+
+QPixmap IconProvider::requestPixmap(const QString &id, QSize *size, const QSize &requestedSize)
+{
+    const QSize want = requestedSize.isValid() && !requestedSize.isEmpty() ? requestedSize : QSize(64, 64);
+    QIcon icon = QIcon::fromTheme(id);
+    if (icon.isNull())
+        icon = QIcon::fromTheme(id.endsWith(QLatin1String("-symbolic")) ? QStringLiteral("folder-symbolic") : QStringLiteral("text-x-generic"));
+    const QPixmap pixmap = icon.pixmap(want);
+    if (size)
+        *size = pixmap.size();
+    return pixmap;
+}
+
 namespace
 {
-// Finished by hand: the image is known when the response is made (a theme icon) or is handed over from a worker thread.
+// Finished from the GUI thread. Qt requires finished() after cancel() too, so a cancelled response is still finished (empty).
 class IconResponse : public QQuickImageResponse
 {
 public:
     QQuickTextureFactory *textureFactory() const override { return QQuickTextureFactory::textureFactoryForImage(m_image); }
-    void cancel() override { m_cancelled.storeRelaxed(1); }
-    bool cancelled() const { return m_cancelled.loadRelaxed() != 0; }
+    void cancel() override { m_cancelled->storeRelaxed(1); }
+    // Shared with the worker, which must not touch the response itself (the engine may delete it at any time).
+    std::shared_ptr<QAtomicInt> cancelFlag() const { return m_cancelled; }
+    bool cancelled() const { return m_cancelled->loadRelaxed() != 0; }
     void done(const QImage &image)
     {
         m_image = image;
@@ -73,48 +94,48 @@ public:
 
 private:
     QImage m_image;
-    QAtomicInt m_cancelled;
+    std::shared_ptr<QAtomicInt> m_cancelled = std::make_shared<QAtomicInt>(0);
 };
 
-// An icon file that is refused (or a path that is no icon) shows the generic application icon.
-QImage fallbackImage(const QSize &want)
+// The decodes run on a pool of their own that is never destroyed: the global pool (or a pool object) is waited for at exit,
+// and a decode in progress would keep the process alive after Qt.quit. A worker is a plain thread: it ends with the process.
+QThreadPool *decodePool()
 {
-    return IconProvider::themeImage(QStringLiteral("application-x-executable"), want);
+    static QThreadPool *pool = [] {
+        auto *p = new QThreadPool;
+        p->setMaxThreadCount(2);
+        return p;
+    }();
+    return pool;
 }
 } // namespace
 
-QImage IconProvider::themeImage(const QString &id, const QSize &requestedSize)
-{
-    const QSize want = requestedSize.isValid() && !requestedSize.isEmpty() ? requestedSize : QSize(64, 64);
-    QIcon icon = QIcon::fromTheme(id);
-    if (icon.isNull())
-        icon = QIcon::fromTheme(id.endsWith(QLatin1String("-symbolic")) ? QStringLiteral("folder-symbolic") : QStringLiteral("text-x-generic"));
-    return icon.pixmap(want).toImage();
-}
-
-QQuickImageResponse *IconProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
+QQuickImageResponse *AppIconProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
 {
     auto *response = new IconResponse;
     const QSize want = requestedSize.isValid() && !requestedSize.isEmpty() ? requestedSize : QSize(64, 64);
-    if (!id.startsWith(QLatin1Char('/'))) {
-        // The theme is read on the GUI thread, as before; finished() is emitted once the caller has the response.
-        const QImage image = themeImage(id, want);
-        QMetaObject::invokeMethod(response, [response, image] { response->done(image); }, Qt::QueuedConnection);
-        return response;
-    }
-    // A file path: validated and decoded off the GUI thread. The roots are computed here (QStandardPaths, GUI thread).
+    // The roots are computed here (QStandardPaths), on the thread Qt calls the provider from, once.
     static const QStringList roots = ApplicationsLogic::iconRoots();
     QPointer<IconResponse> guard(response);
-    QThreadPool::globalInstance()->start([guard, id, want] {
-        if (guard && guard->cancelled())
-            return;
-        QImage image = AppIcons::load(id, roots, want);
-        // Done on the GUI thread; the fallback needs the icon theme.
+    const std::shared_ptr<QAtomicInt> cancelled = response->cancelFlag();
+    decodePool()->start([guard, cancelled, id, want] {
+        QImage image;
+        if (cancelled->loadRelaxed() == 0)
+            image = AppIcons::load(id, roots, want);
+        // Done on the GUI thread, always (also after cancel): the fallback needs the icon theme, and QIcon is only used there.
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
             [guard, image, want] {
-                if (guard)
-                    guard->done(image.isNull() ? fallbackImage(want) : image);
+                if (!guard)
+                    return;
+                if (guard->cancelled() || !image.isNull()) {
+                    guard->done(image);
+                    return;
+                }
+                QIcon icon = QIcon::fromTheme(QStringLiteral("application-x-executable"));
+                if (icon.isNull())
+                    icon = QIcon::fromTheme(QStringLiteral("text-x-generic"));
+                guard->done(icon.pixmap(want).toImage());
             },
             Qt::QueuedConnection);
     });

@@ -3,6 +3,8 @@
 #include "applicationslogic.h"
 
 #include <QBuffer>
+#include <QHash>
+#include <QList>
 #include <QImageReader>
 #include <QXmlStreamReader>
 
@@ -55,7 +57,15 @@ bool svgIsSelfContained(const QByteArray &data)
     int depth = 0;
     int elements = 0;
     int uses = 0;
-    bool inStyle = false;
+    int styleDepth = 0;
+    // <use> copies what it references: a use inside something that is itself used multiplies (63 chained uses are 9^7 copies,
+    // minutes of CPU). Only a use of an element with no use inside it is accepted, so the expansion is at most kMaxSvgUses
+    // copies of one element. Each open element is an index; `ids` maps an id to its index.
+    QList<int> open;
+    QList<bool> containsUse;
+    QList<bool> isStyle;
+    QHash<QString, int> ids;
+    QStringList useTargets;
     while (!xml.atEnd()) {
         switch (xml.readNext()) {
         case QXmlStreamReader::StartDocument: {
@@ -72,19 +82,37 @@ bool svgIsSelfContained(const QByteArray &data)
             if (++depth > kMaxSvgDepth || ++elements > kMaxSvgElements)
                 return false;
             const QString name = xml.name().toString().toLower();
-            if (name == QLatin1String("script") || name == QLatin1String("foreignobject") || name == QLatin1String("iframe")
-                || name == QLatin1String("embed") || name == QLatin1String("object") || name == QLatin1String("audio")
-                || name == QLatin1String("video") || name == QLatin1String("handler") || name == QLatin1String("listener"))
+            // <image> and <feImage> are refused whatever they name: QtSvg opens even "#name" as a file relative to the
+            // working directory (a FIFO there blocks the worker for good), and a data: image is not bounded in pixels.
+            if (name == QLatin1String("image") || name == QLatin1String("feimage") || name == QLatin1String("script")
+                || name == QLatin1String("foreignobject") || name == QLatin1String("iframe") || name == QLatin1String("embed")
+                || name == QLatin1String("object") || name == QLatin1String("audio") || name == QLatin1String("video")
+                || name == QLatin1String("handler") || name == QLatin1String("listener"))
                 return false;
-            if (name == QLatin1String("use") && ++uses > kMaxSvgUses)
-                return false;
-            inStyle = name == QLatin1String("style");
+            const int index = int(containsUse.size());
+            containsUse.append(false);
+            isStyle.append(name == QLatin1String("style"));
+            open.append(index);
+            if (name == QLatin1String("style"))
+                ++styleDepth;
+            if (name == QLatin1String("use")) {
+                if (++uses > kMaxSvgUses)
+                    return false;
+                for (const int i : std::as_const(open))
+                    containsUse[i] = true;
+            }
             const auto attributes = xml.attributes();
             for (const QXmlStreamAttribute &a : attributes) {
                 const QString key = a.name().toString().toLower();
                 const QString value = a.value().toString();
-                if (key == QLatin1String("href") && !value.startsWith(QLatin1Char('#')))
-                    return false;
+                if (key == QLatin1String("href")) {
+                    if (!value.startsWith(QLatin1Char('#')))
+                        return false;
+                    if (name == QLatin1String("use"))
+                        useTargets << value.mid(1);
+                }
+                if (key == QLatin1String("id"))
+                    ids.insert(value, index);
                 if (key == QLatin1String("base") || key == QLatin1String("src"))
                     return false;
                 // <set attributeName="href" to="file"> and <animate ...> write an href later.
@@ -99,12 +127,16 @@ bool svgIsSelfContained(const QByteArray &data)
         }
         case QXmlStreamReader::EndElement:
             --depth;
-            inStyle = false;
+            if (!open.isEmpty()) {
+                if (isStyle.at(open.last()))
+                    --styleDepth;
+                open.removeLast();
+            }
             break;
         case QXmlStreamReader::Characters:
         case QXmlStreamReader::Comment: {
             const QString content = xml.text().toString();
-            if (!urlsStayInside(content) || (inStyle && !cssIsPlain(content)))
+            if (!urlsStayInside(content) || (styleDepth > 0 && !cssIsPlain(content)))
                 return false;
             break;
         }
@@ -112,7 +144,14 @@ bool svgIsSelfContained(const QByteArray &data)
             break;
         }
     }
-    return !xml.hasError() && depth == 0 && elements > 0;
+    if (xml.hasError() || depth != 0 || elements == 0)
+        return false;
+    for (const QString &target : std::as_const(useTargets)) {
+        const auto it = ids.constFind(target);
+        if (it != ids.cend() && containsUse.at(*it))
+            return false;
+    }
+    return true;
 }
 
 QImage decode(const QByteArray &data, const QSize &wanted)

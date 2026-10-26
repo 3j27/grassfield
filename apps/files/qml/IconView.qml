@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 import "Nav.js" as Nav
 
 // Icon view: a grid of thumbnails or type icons with names below. Click selects (Shift extends,
@@ -64,7 +65,7 @@ FocusScope {
 
     function startDrag(iconName: string, thumbnail: string): void {
         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
-        dragProxy.Drag.imageSource = thumbnail !== "" ? thumbnail : "image://icon/" + iconName;
+        dragProxy.Drag.imageSource = thumbnail !== "" ? thumbnail : IconSource.url(iconName);
         dragProxy.Drag.active = true;
     }
 

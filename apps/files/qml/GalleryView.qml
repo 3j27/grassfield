@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 import "Nav.js" as Nav
 
 // Gallery view: a large preview of the current item (its KIO thumbnail at the gallery size, the icon-size thumbnail
@@ -389,7 +390,7 @@ FocusScope {
                     if (mouse.drag.active) {
                         mouse.collapseOnRelease = false;
                         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
-                        dragProxy.Drag.imageSource = cell.thumbnail !== "" ? cell.thumbnail : "image://icon/" + cell.iconName;
+                        dragProxy.Drag.imageSource = cell.thumbnail !== "" ? cell.thumbnail : IconSource.url(cell.iconName);
                         dragProxy.Drag.active = true;
                     }
                 }

@@ -8,7 +8,7 @@
 
 // Decoding of an application's absolute Icon= path (the desktop entry is not trusted: any user can plant one). The shell never
 // decodes such a file itself (shell/services/image-copy.py re-encodes it out of process); Files has no helper, so it is
-// stricter in what it decodes in its own process, and never on the GUI thread (IconProvider answers asynchronously):
+// stricter in what it decodes in its own process, and never on the GUI thread (AppIconProvider answers asynchronously, image://appicon):
 //   - the file must pass ApplicationsLogic::readIconFile (a regular file under the allowed roots, read from the checked
 //     descriptor: a FIFO or device never blocks);
 //   - the content is chosen by its magic bytes, never by the name or by Qt's format guessing: PNG, or SVG. JPEG, GIF, WebP,
@@ -29,8 +29,9 @@ constexpr int kMaxSvgElements = 20000;
 constexpr int kMaxSvgUses = 64;                     // <use> can multiply: a chain of them is a CPU bomb
 
 // True when the SVG document `data` refers to nothing outside itself and has no construct that does: no DTD or entity, no
-// processing instruction, no script, foreignObject, animation of an href, no href other than "#id" (a data: image included:
-// its pixels are not bounded), no xml:base, no CSS url() other than "#id", no CSS @-rule or backslash escape, a UTF-8
+// processing instruction, no script, foreignObject, animation of an href, no <image> or <feImage> at all (QtSvg opens even
+// "#name" as a file relative to the working directory; a data: image is not bounded in pixels), no href other than "#id",
+// no <use> of an element that contains a <use> (the copies would multiply), no xml:base, no CSS url() other than "#id", no CSS @-rule or backslash escape, a UTF-8
 // document of bounded depth and size.
 bool svgIsSelfContained(const QByteArray &data);
 

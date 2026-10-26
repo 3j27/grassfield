@@ -151,6 +151,7 @@
  {"path": "tests/unit/files/tst_appscope.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_applications.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_appicons.cpp", "layer": "logic"},
+ {"path": "tests/unit/files/tst_imageproviders.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_runmode.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_autoappearance.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_filelogic.cpp", "layer": "logic"},

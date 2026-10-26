@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 import "Nav.js" as Nav
 
 // List view: Name, Date Modified, Size and Kind columns; clicking a header sorts by it (again: reverses).
@@ -366,7 +367,7 @@ FocusScope {
                     if (drag.active) {
                         collapseOnRelease = false;
                         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
-                        dragProxy.Drag.imageSource = "image://icon/" + row.iconName;
+                        dragProxy.Drag.imageSource = IconSource.url(row.iconName);
                         dragProxy.Drag.active = true;
                     }
                 }

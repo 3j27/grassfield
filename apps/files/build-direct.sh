@@ -19,12 +19,12 @@ if [[ ${1:-} == "--tests" ]]; then
   moc=/usr/lib/qt6/moc
   [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
   "$moc" "$here/src/tagsearch.h" -o "$out/moc_tests_tagsearch.cpp"
-  g++ "${cxxflags[@]}" -I"$here/src" -I"$root/apps" $(pkg-config --cflags Qt6Gui Qt6Core) \
+  g++ "${cxxflags[@]}" -I"$here/src" -I"$root/apps" $(pkg-config --cflags Qt6Quick Qt6Gui Qt6Core) \
     "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$root/tests/unit/files/tst_tags.cpp" \
     "$root/tests/unit/files/tst_tagsearch.cpp" "$root/tests/unit/files/tst_folderstyle.cpp" "$root/tests/unit/files/tst_folderprune.cpp" \
-    "$root/tests/unit/files/tst_appscope.cpp" "$root/tests/unit/files/tst_runmode.cpp" "$root/tests/unit/files/tst_applications.cpp" "$root/tests/unit/files/tst_autoappearance.cpp" "$root/tests/unit/files/tst_launchguard.cpp" "$root/tests/unit/files/tst_appicons.cpp" \
-    "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$out/moc_tests_tagsearch.cpp" \
-    $(pkg-config --libs Qt6Gui Qt6Core) -lgtest -lgtest_main -pthread \
+    "$root/tests/unit/files/tst_appscope.cpp" "$root/tests/unit/files/tst_runmode.cpp" "$root/tests/unit/files/tst_applications.cpp" "$root/tests/unit/files/tst_autoappearance.cpp" "$root/tests/unit/files/tst_launchguard.cpp" "$root/tests/unit/files/tst_appicons.cpp" "$root/tests/unit/files/tst_imageproviders.cpp" \
+    "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/imageproviders.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$out/moc_tests_tagsearch.cpp" \
+    $(pkg-config --libs Qt6Quick Qt6Gui Qt6Core) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"
   echo "built $out/files-unit-tests"
   exit 0

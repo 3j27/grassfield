@@ -110,6 +110,7 @@ TEST(AppIcons, AnSvgThatNamesAFifoIsRefusedAtOnce)
         svg("<g xml:base=\"" + href + "\"><image xlink:href=\"icon\"/></g>"),
         "<!DOCTYPE svg [<!ENTITY x SYSTEM \"" + href + "\">]>" + svg("<text>&x;</text>"),
         "<?xml-stylesheet href=\"" + href + "\" type=\"text/css\"?>" + svg("<rect width=\"48\" height=\"48\"/>"),
+        svg("<image width=\"48\" height=\"48\" xlink:href=\"#icon.fifo\"/>"), // QtSvg opens "#name" relative to the cwd
         svg("<script>alert(1)</script>"),
         svg("<foreignObject width=\"48\" height=\"48\"><div/></foreignObject>"),
     };
@@ -147,7 +148,22 @@ TEST(AppIcons, SvgThatCannotBeCheckedIsRefused)
     for (int i = 0; i <= AppIcons::kMaxSvgUses; ++i)
         uses += "<use href=\"#r\"/>";
     EXPECT_FALSE(AppIcons::svgIsSelfContained(svg(uses)));
+    // A use of something that holds a use multiplies (9^7 copies from 63 uses took over 30 s): refused, also a cycle.
+    QByteArray chain = "<defs><rect id=\"u0\" width=\"1\" height=\"1\"/>";
+    for (int i = 1; i <= 7; ++i) {
+        chain += "<g id=\"u" + QByteArray::number(i) + "\">";
+        for (int k = 0; k < 9; ++k)
+            chain += "<use href=\"#u" + QByteArray::number(i - 1) + "\"/>";
+        chain += "</g>";
+    }
+    chain += "</defs><use href=\"#u7\"/>";
+    EXPECT_FALSE(AppIcons::svgIsSelfContained(svg(chain)));
+    EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<g id=\"a\"><use href=\"#a\"/></g>")));
+    EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<use id=\"a\" href=\"#r\"/><use href=\"#a\"/><rect id=\"r\" width=\"1\" height=\"1\"/>")));
+    // @import after another child of <style> is refused too.
+    EXPECT_FALSE(AppIcons::svgIsSelfContained(svg("<style>rect{fill:red}<![CDATA[ @import url(x); ]]></style>")));
     EXPECT_TRUE(AppIcons::svgIsSelfContained(svg("<rect width=\"1\" height=\"1\"/>")));
+    EXPECT_TRUE(AppIcons::svgIsSelfContained(svg("<defs><rect id=\"r\" width=\"1\" height=\"1\"/></defs><use href=\"#r\"/><use href=\"#r\"/>")));
 }
 
 TEST(AppIcons, OnlyPngAndSvgAreDecidedByTheirBytesNotTheirName)

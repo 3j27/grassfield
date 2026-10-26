@@ -337,9 +337,9 @@ gets (Return, double-click, File > Open, the context menu), before the scripted-
   open with another app: Kdenlive was offered for `*.kdenlive`). An absolute `Icon=` of an entry is read only if it is a
   regular file within 8 MiB under the shell's allowed roots, read from the descriptor that was checked (`ApplicationsLogic::
   readIconFile`; a FIFO hung the GUI thread), and then decoded by `AppIcons` (`apps/files/src/appicons.h`) on a worker
-  thread of the image provider, never on the GUI thread: only PNG (magic bytes; the header size must be within 1024 x 1024
+  thread of the image://appicon provider (the theme provider image://icon stays synchronous: Qt calls an asynchronous one off the GUI thread and QIcon is not thread-safe), never on the GUI thread: only PNG (magic bytes; the header size must be within 1024 x 1024
   before the pixels are decoded; a 64 MiB allocation limit) and SVG (UTF-8, at most 512 KiB, 64 levels, 64 `<use>`, and
-  nothing that names another file: no DTD, entity, processing instruction, script, foreignObject, `href` other than `#id`
+  nothing that names another file: no DTD, entity, processing instruction, script, foreignObject, `<image>`/`<feImage>` at all (QtSvg opens even `#name` as a file relative to the cwd), a `<use>` of an element that holds a `<use>`, `href` other than `#id`
   (a data: image included), `xml:base`, CSS `url()` other than `#id`, at-rule or escape). Every other Qt image plugin (PDF,
   TIFF, ICNS, JPEG, ...) is refused; the shell's out-of-process `image-copy.py` is not available to Files. Qt 6.11's SVG
   reader follows `<image href>` to any file and has no option against it (probed with `QtSvg::Options`: a href to a FIFO

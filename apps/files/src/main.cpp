@@ -67,6 +67,7 @@ int main(int argc, char *argv[])
     for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
         engine.addImportPath(*it);
     engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
+    engine.addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_FILES_QML");
