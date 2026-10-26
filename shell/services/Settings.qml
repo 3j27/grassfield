@@ -23,9 +23,9 @@ Singleton {
     readonly property bool dark: AutoAppearance.isDark(store.appearance, now, Tokens.autoAppearanceDarkFromHour, Tokens.autoAppearanceDarkToHour)
     readonly property real transparency: store.transparency
     readonly property string materialProfile: store.materialProfile
-    readonly property bool reduceTransparency: store.data.accessibility.reduceTransparency
-    readonly property bool reduceMotion: store.data.accessibility.reduceMotion
-    readonly property bool increaseContrast: store.data.accessibility.increaseContrast === true
+    readonly property bool reduceTransparency: store.reduceTransparency
+    readonly property bool reduceMotion: store.reduceMotion
+    readonly property bool increaseContrast: store.increaseContrast
     readonly property real textSize: store.textSize
     readonly property bool zoomOn: store.zoomOn
     readonly property real zoomLevel: store.zoomLevel
@@ -45,15 +45,15 @@ Singleton {
     // What the Dock keeps clear on its edge, whether or not it hides (the desktop icons, the widgets and the Apps panel stay put).
     readonly property var dockFootprint: DockGeometry.footprint(dockPosition, dockMetrics, false)
     readonly property real dockMagnification: store.dockMagnification
-    readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
-    readonly property bool dockAutohide: store.data.dock.autohide
+    readonly property bool dockMagnificationEnabled: store.dockMagnificationEnabled
+    readonly property bool dockAutohide: store.dockAutohide
     readonly property var dockRecent: store.dockRecent
     readonly property var dockFolders: store.dockFolders
     readonly property var dockStackOptions: store.dockStackOptions
-    readonly property bool dockShowRecents: store.data.dock.showRecents
-    readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
-    readonly property bool dockAnimateOpening: store.data.dock.animateOpening
-    readonly property bool dockShowIndicators: store.data.dock.showIndicators
+    readonly property bool dockShowRecents: store.dockShowRecents
+    readonly property bool dockMinimizeIntoApp: store.dockMinimizeIntoApp
+    readonly property bool dockAnimateOpening: store.dockAnimateOpening
+    readonly property bool dockShowIndicators: store.dockShowIndicators
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor
@@ -74,38 +74,38 @@ Singleton {
     // Wallpaper settings (ADR-0016), complete and valid; see ui/Grassfield/Ui/WallpaperConfig.js.
     readonly property var wallpaper: store.wallpaper
 
-    readonly property bool notificationsDnd: store.data.notifications.dnd
+    readonly property bool notificationsDnd: store.notificationsDnd
     readonly property string notificationsPreviews: store.notificationsPreviews
     readonly property var notificationsAppPreviews: store.notificationsAppPreviews
     readonly property var notificationsAppStyles: store.notificationsAppStyles
     readonly property string notificationsHistory: store.notificationsHistory
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
-    readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
-    readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
-    readonly property bool windowsTilingMargins: store.data.windows.tilingMargins
-    readonly property bool windowsStages: store.data.windows.stages
+    readonly property bool windowsTilingEdges: store.windowsTilingEdges
+    readonly property bool windowsTilingMenuBar: store.windowsTilingMenuBar
+    readonly property bool windowsTilingMargins: store.windowsTilingMargins
+    readonly property bool windowsStages: store.windowsStages
     // Opt-in: the shell builds the compositor extension when none is made for the installed Hyprland (shell.qml).
-    readonly property bool windowsRebuildExtension: store.data.windows.rebuildExtension
+    readonly property bool windowsRebuildExtension: store.windowsRebuildExtension
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
-    readonly property bool desktopShowIcons: store.data.desktop.showIcons
-    readonly property bool menubarShowBackground: store.data.menubar.showBackground
+    readonly property bool desktopShowIcons: store.desktopShowIcons
+    readonly property bool menubarShowBackground: store.menubarShowBackground
     readonly property string menubarAutoHide: store.menubarAutoHide
-    readonly property bool menubarShowNowPlaying: store.data.menubar.showNowPlaying
-    readonly property bool menubarShowSearch: store.data.menubar.showSearch
-    readonly property bool menubarShowWifi: store.data.menubar.showWifi
-    readonly property bool menubarShowSound: store.data.menubar.showSound
-    readonly property bool menubarShowBattery: store.data.menubar.showBattery
-    readonly property bool menubarShowBatteryPercentage: store.data.menubar.showBatteryPercentage
-    readonly property bool menubarShowFocus: store.data.menubar.showFocus
+    readonly property bool menubarShowNowPlaying: store.menubarShowNowPlaying
+    readonly property bool menubarShowSearch: store.menubarShowSearch
+    readonly property bool menubarShowWifi: store.menubarShowWifi
+    readonly property bool menubarShowSound: store.menubarShowSound
+    readonly property bool menubarShowBattery: store.menubarShowBattery
+    readonly property bool menubarShowBatteryPercentage: store.menubarShowBatteryPercentage
+    readonly property bool menubarShowFocus: store.menubarShowFocus
     readonly property string menubarClockDate: store.menubarClockDate
-    readonly property bool menubarClockShowAmPm: store.data.menubar.clockShowAmPm
-    readonly property bool menubarClockFlashSeparators: store.data.menubar.clockFlashSeparators
-    readonly property bool menubarShowTrayItems: store.data.menubar.showTrayItems
+    readonly property bool menubarClockShowAmPm: store.menubarClockShowAmPm
+    readonly property bool menubarClockFlashSeparators: store.menubarClockFlashSeparators
+    readonly property bool menubarShowTrayItems: store.menubarShowTrayItems
     readonly property int menubarRecentItems: store.menubarRecentItems
-    readonly property bool menubarClockShowDayOfWeek: store.data.menubar.clockShowDayOfWeek
+    readonly property bool menubarClockShowDayOfWeek: store.menubarClockShowDayOfWeek
     readonly property string menubarClockHours: store.menubarClockHours
-    readonly property bool menubarClockShowSeconds: store.data.menubar.clockShowSeconds
+    readonly property bool menubarClockShowSeconds: store.menubarClockShowSeconds
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft

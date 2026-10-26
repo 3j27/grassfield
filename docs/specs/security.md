@@ -820,7 +820,22 @@ Decisions:
   multi-line message).
 
 `grassfield.json`: `lock.idleMinutes` (integer 0–240, default 5, 0 = never) is read through `Settings.lockIdleMinutes`
-(clamped); invalid values fall back to 5 in `IdleModel.timings`.
+(the settings contract, `SettingsContract.normalize`). Fail closed: only an exact 0 means never. A value above 240 is
+clamped to 240 (a bounded choice, like the longest "require password" delay of macOS: the lock still fires); a value below
+0, a fraction that rounds to 0 (0.4), and anything that is not a number (false, "0", null, [0]) is invalid and reads as the
+default 5. The shell and the Settings app read the same (`tests/fixtures/settings-vectors.json`, run through the real store
+by `tests/shell/settings_vectors`), and so does a RUNNING shell after the file is edited: the store reads the last parse of
+the file text, not the JSON adapter, which keeps an old value that loosely equals the new one (0 and false, 10 and "10", 1
+and true; `tests/shell/settings_reload` rewrites the file under one live store). The same holds when the file is deleted
+(a fresh start without a file: the document is empty, lock.idleMinutes reads 5, writes are allowed again) or emptied, and for
+what the shell writes: a change made after any of these builds the file from the file on disk, or from the schema defaults
+when there is none, plus the shell's own pending change, never from the JSON adapter's retained values (which once wrote the
+deleted file's `"idleMinutes": 0` back). The one exception to "a running shell reads what a restart reads" is a malformed
+file: the cosmetic keys keep their last good values until the file is fixed (a restart would show the defaults), but the lock
+timing fails closed: `lock.*` reads the default 5 at once, as a restart does, and nothing is written while the file is
+malformed. Known limit (pre-existing): there is no lock between the fresh read of the file and its atomic replacement, so an
+external edit made in that instant can be lost. `IdleModel.timings` is a stricter backstop: anything that is not a number,
+above 240 or not whole reads 5, and only a number that is exactly 0 is never.
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
 puts the program in `message`, which is shown, and the action's icon is shown (see "Polkit details"). Caps Lock is
