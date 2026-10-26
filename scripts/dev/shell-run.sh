@@ -158,6 +158,29 @@ fi
 "$root/ui/i18n/build-direct.sh" >&2
 "$root/scripts/dev/i18n-build.sh" >&2
 
+# grassfield-stack-helper (ADR-0025, the Dock's folder stacks): built when missing or older than its sources or Files'
+# filelogic it compiles in. The build runs in the background and is waited for one second at most (a build of the helper took
+# 56 s on a loaded machine and held the shell back): the shell starts at once, the Dock asks for the helper again every 5 s
+# until it is there and shows the folder icon meanwhile, and a stale helper is used until the new one is moved into place
+# (build-direct.sh moves it atomically). A failed build never stops the shell: one line here and the log.
+stack_helper=$dev/build/grassfield-stack-helper
+if [[ ! -x $stack_helper || -n $(find "$root/apps/stack-helper/src" "$root/apps/files/src/filelogic.cpp" "$root/apps/files/src/filelogic.h" "$root/apps/stack-helper/build-direct.sh" -newer "$stack_helper" -print -quit 2>/dev/null) ]]; then
+  (
+    "$root/apps/stack-helper/build-direct.sh" >"$dev/stack-helper-build.log" 2>&1 ||
+      echo "shell-run: the stack helper did not build (see $dev/stack-helper-build.log): folder stacks show the folder icon" >>"$dev/stack-helper-build.log"
+  ) </dev/null >/dev/null 2>&1 &
+  build_pid=$!
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$build_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "$build_pid" 2>/dev/null; then
+    echo "shell-run: the stack helper is still building in the background (log $dev/stack-helper-build.log)" >&2
+  elif [[ ! -x $stack_helper ]]; then
+    echo "shell-run: the stack helper did not build (see $dev/stack-helper-build.log): folder stacks show the folder icon" >&2
+  fi
+fi
+
 # The isolated trash of the dev session (shell/services/Trash.qml watches it; ADR-0011): the shell's "Move to Trash"
 # and the Dock's Trash drop put files here, never in the owner's ~/.local/share/Trash.
 mkdir -p "$dev/apps-home/data/Trash/files" "$dev/apps-home/data/Trash/info" "$dev/apps-home/home"
@@ -180,6 +203,10 @@ fi
 # then starts a terminal, never a browser or a file manager on the owner's profile/home (incidents 2026-10-17/18).
 if jq -e '.dock.pinned == null' "$cfg" >/dev/null 2>&1; then
   jq '.dock.pinned = ["foot"]' "$cfg" >"$cfg.new" && mv "$cfg.new" "$cfg"
+fi
+# No folder stack by default in dev (the shell's default is ~/Downloads: a nested Dock would pile up the owner's real downloads).
+if jq -e '.dock.folders == null' "$cfg" >/dev/null 2>&1; then
+  jq '.dock.folders = []' "$cfg" >"$cfg.new" && mv "$cfg.new" "$cfg"
 fi
 
 # The open shims (gio, xdg-open, gtk-launch -> open-policy.sh) come first on the shell's PATH: QProcess resolves a program

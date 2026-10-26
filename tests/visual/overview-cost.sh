@@ -31,9 +31,9 @@ rss_mb() { awk '/^VmRSS:/ { printf "%.0f", $2 / 1024 }' "/proc/$1/status" 2>/dev
 hypr_pid() { cat "$VS_DEV/nested.pid" 2>/dev/null; }
 shell_pid() { cat "$VS_DEV/shell.pid" 2>/dev/null; }
 set_profile() {
-  local f=$VS_DEV/config/grassfield/grassfield.json tmp
+  local f=$VS_DEV/config/grassfield.json tmp
   mkdir -p "$(dirname "$f")"
-  [[ -s $f ]] || echo '{}' >"$f"
+  [[ -s $f ]] || echo '{"version":1}' >"$f"
   tmp=$(mktemp "$f.XXXXXX") && jq --arg p "$1" '.material.profile = $p' "$f" >"$tmp" && mv "$tmp" "$f"
 }
 # measure LABEL: one markdown row, CPU % of one core of the shell and of Hyprland over $secs, and their RSS at the end.

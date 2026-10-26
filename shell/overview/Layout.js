@@ -259,6 +259,12 @@ function stripHeight(count, t) {
     return count > 0 ? t.h + t.label + 2 * t.pad : 0;
 }
 
+// The minimized windows the strip shows: the newest `max` (the shell records them oldest first); the rest stay in the Dock.
+function capStrip(list, max) {
+    const all = Array.from(list || []);
+    return max > 0 ? all.slice(-max) : [];
+}
+
 // Tiles of the strip: one row centred in `b` = {x, w, bottom} (bottom = the lowest y the strip may use), each tile t.w x
 // t.h, narrower (the same aspect) when the row would not fit. Returns {height, dividerY, rects: [{x, y, w, h}]}: the
 // divider is a hairline at dividerY, the tiles start t.pad below it and the title goes under each tile.

@@ -6,6 +6,7 @@ The schema is the one source of the settings contract (ADR-0020). Every leaf (a 
 Written files:
   config/defaults/grassfield.json        the defaults, nested, in schema order
   ui/Grassfield/Ui/SettingsContract.js   VERSION, DEFAULTS and RULES of the settable keys, validate, normalize, read
+  shell/store/SettingsData.qml           the shell store's JsonAdapter: every leaf a `var` holding the schema default
 
 A leaf is settable unless its `x-grassfield` annotation says `settable: false` (keys owned by the Dock, `version`).
 Its rule comes from the schema (enum, boolean, number and integer bounds) or from the annotation's `rule`: tint,
@@ -24,6 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = ROOT / "config/schema/grassfield.schema.json"
 DEFAULTS = ROOT / "config/defaults/grassfield.json"
 CONTRACT = ROOT / "ui/Grassfield/Ui/SettingsContract.js"
+DATA = ROOT / "shell/store/SettingsData.qml"
 
 PATTERN_RULES = ("tint", "folderColor", "pointerColor")
 CUSTOM_RULES = ("wallpaperPath", "wallpaperOutputs", "notificationApps", "notificationStyles", "pathList")
@@ -78,6 +80,8 @@ def rule_of(path, leaf, errors):
         return {"type": "boolean"}
     if leaf.get("type") in ("integer", "number"):
         rule = {"type": leaf["type"]}
+        if leaf.get("x-grassfield", {}).get("zeroIsExact"):
+            rule["zeroIsExact"] = True
         if "minimum" in leaf:
             rule["min"] = leaf["minimum"]
         if "maximum" in leaf:
@@ -151,12 +155,23 @@ function inRange(rule, value) {
 
 // The value a reader uses for a stored value (any JSON type): a number is clamped to its range, an integer is rounded
 // first, anything else invalid takes the key's default (how macOS reads a defaults value that is out of range: the Dock
-// clamps its tile size). A valid value is returned as it is.
+// clamps its tile size). A colour is lower case. Any other valid value is returned as it is. A string, a boolean or null
+// where a number is expected is never turned into one ("0" and false are not 0: lock.idleMinutes must never read 0 from them).
+// A rule with zeroIsExact (lock.idleMinutes, where 0 means "never") fails closed: a value below 0, or one that rounds to 0
+// without being exactly 0, is the default, so only an exact 0 reads 0.
 function normalize(path, value) {
     const rule = RULES[path];
     if (!rule)
         return undefined;
+    // The per-app notification lists keep their good entries and drop the bad or repeated ones (a write is still refused
+    // as a whole by validate): the shell and the Settings app read one list.
+    if (rule.type === "notificationApps")
+        return NotificationPrefs.normalize(value);
+    if (rule.type === "notificationStyles")
+        return NotificationPrefs.normalizeStyles(value);
     if ((rule.type === "number" || rule.type === "integer") && typeof value === "number" && isFinite(value)) {
+        if (rule.zeroIsExact && (value < 0 || (value !== 0 && Math.round(value) === 0)))
+            return DEFAULTS[path];
         let n = rule.type === "integer" ? Math.round(value) : value;
         if (rule.min !== undefined)
             n = Math.max(rule.min, n);
@@ -164,7 +179,9 @@ function normalize(path, value) {
             n = Math.min(rule.max, n);
         return n;
     }
-    return validate(path, value) === "" ? value : DEFAULTS[path];
+    if (validate(path, value) !== "")
+        return DEFAULTS[path];
+    return (rule.type === "tint" || rule.type === "folderColor" || rule.type === "pointerColor") ? value.toLowerCase() : value;
 }
 
 // The normalised value of a dotted path in parsed data; the default when absent or invalid.
@@ -197,14 +214,62 @@ def render_contract(schema, errors):
         "const DEFAULTS = {",
     ]
     out.append(",\n".join(f"    {json.dumps(p)}: {json.dumps(leaf['default'], ensure_ascii=False)}" for p, leaf in settable))
+    out += ["};", "",
+            "// Default of every leaf of the schema, the keys owned by the Dock included (a reader that puts a key back to its",
+            "// default when the file has none).",
+            "const ALL_DEFAULTS = {"]
+    out.append(",\n".join(f"    {json.dumps(p)}: {json.dumps(leaf['default'], ensure_ascii=False)}" for p, leaf in entries if p != "version"))
     out += ["};", "", "// Rule of every settable key.", "const RULES = {"]
     out.append(",\n".join(f"    {json.dumps(p)}: {json.dumps(rule_of(p, leaf, errors), ensure_ascii=False)}" for p, leaf in settable))
     out += ["};"]
     return "\n".join(out) + "\n" + ENGINE
 
 
+def qml_literal(value):
+    text = json.dumps(value, ensure_ascii=False)
+    return f"({text})" if isinstance(value, dict) else text
+
+
+def render_data(schema, errors):
+    """shell/store/SettingsData.qml: a JsonAdapter whose leaves are vars (a typed property would coerce "false", 1 or "0"
+    into a valid value before the contract could refuse it). A group of the top level is a JsonObject component; a group
+    below it (wallpaper.online) is one var holding its default object, as a hand-edited file may hold anything there."""
+    out = [
+        "// Generated by scripts/dev/gen-settings.py from config/schema/grassfield.schema.json (ADR-0020); do not edit.",
+        "import Quickshell.Io",
+        "",
+        "// The adapter of grassfield.json for the shell's SettingsStore: every key of the schema with its default. The leaves",
+        "// are vars so that a hand-edited value reaches SettingsContract untouched.",
+        "JsonAdapter {",
+    ]
+    comps = []
+    for key, child in schema["properties"].items():
+        if is_group(child):
+            comp = key[0].upper() + key[1:] + "Config"
+            out.append(f"    property {comp} {key}: {comp} {{}}")
+            body = [f"    component {comp}: JsonObject {{"]
+            for sub_key, sub_child in child["properties"].items():
+                if "default" in sub_child:
+                    body.append(f"        property var {sub_key}: {qml_literal(sub_child['default'])}")
+                elif is_group(sub_child):
+                    body.append(f"        property var {sub_key}: {qml_literal(defaults_of(sub_child, key + '.' + sub_key, errors))}")
+                else:
+                    errors.append(f"{key}.{sub_key}: leaf without a default")
+            body.append("    }")
+            comps.append("\n".join(body))
+        elif "default" in child:
+            kind = "int" if key == "version" else "var"
+            out.append(f"    property {kind} {key}: {qml_literal(child['default'])}")
+        else:
+            errors.append(f"{key}: leaf without a default")
+    out.append("")
+    out.append("\n\n".join(comps))
+    out.append("}")
+    return "\n".join(out) + "\n"
+
+
 def outputs(schema, errors):
-    return [(DEFAULTS, render(schema, errors)), (CONTRACT, render_contract(schema, errors))]
+    return [(DEFAULTS, render(schema, errors)), (CONTRACT, render_contract(schema, errors)), (DATA, render_data(schema, errors))]
 
 
 def stale(schema, targets=None):
@@ -238,12 +303,13 @@ def selftest():
     if not stale(unruled):
         failures.append("a leaf without a rule was accepted")
     with tempfile.TemporaryDirectory() as tmp:
-        fake = {DEFAULTS: pathlib.Path(tmp) / "grassfield.json", CONTRACT: pathlib.Path(tmp) / "SettingsContract.js"}
+        fake = {DEFAULTS: pathlib.Path(tmp) / "grassfield.json", CONTRACT: pathlib.Path(tmp) / "SettingsContract.js",
+                DATA: pathlib.Path(tmp) / "SettingsData.qml"}
         for target, text in outputs(tiny, []):
             fake[target].write_text(text)
         if stale(tiny, fake):
             failures.append("fresh output reported stale")
-        for target in (DEFAULTS, CONTRACT):
+        for target in (DEFAULTS, CONTRACT, DATA):
             original = fake[target].read_text()
             fake[target].write_text(original.replace("7", "8"))
             if not stale(tiny, fake):

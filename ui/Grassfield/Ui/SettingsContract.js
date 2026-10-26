@@ -81,6 +81,85 @@ const DEFAULTS = {
     "wallpaper.outputs": []
 };
 
+// Default of every leaf of the schema, the keys owned by the Dock included (a reader that puts a key back to its
+// default when the file has none).
+const ALL_DEFAULTS = {
+    "appearance": "dark",
+    "material.transparency": 0.25,
+    "material.profile": "balanced",
+    "accessibility.reduceTransparency": false,
+    "accessibility.reduceMotion": false,
+    "accessibility.increaseContrast": false,
+    "accessibility.textSize": 1,
+    "accessibility.zoom": false,
+    "accessibility.zoomLevel": 2,
+    "dock.pinned": ["chromium", "foot", "org.grassfield.Settings"],
+    "dock.size": 48,
+    "dock.position": "bottom",
+    "dock.magnification": 1.6,
+    "dock.autohide": false,
+    "dock.magnificationEnabled": false,
+    "dock.recent": [],
+    "dock.showRecents": true,
+    "dock.folders": ["~/Downloads"],
+    "dock.stackOptions": {},
+    "dock.minimizeIntoApp": false,
+    "dock.animateOpening": true,
+    "dock.showIndicators": true,
+    "dock.minimizeEffect": "funnel",
+    "windows.titlebarDoubleClick": "zoom",
+    "windows.tilingEdges": true,
+    "windows.tilingMenuBar": true,
+    "windows.tilingMargins": true,
+    "windows.stages": false,
+    "windows.rebuildExtension": false,
+    "notifications.dnd": false,
+    "notifications.previews": "unlocked",
+    "notifications.history": "week",
+    "notifications.appStyles": [],
+    "notifications.appPreviews": [],
+    "lock.idleMinutes": 5,
+    "hotCorners.topLeft": "none",
+    "hotCorners.topRight": "none",
+    "hotCorners.bottomLeft": "none",
+    "hotCorners.bottomRight": "none",
+    "desktop.showIcons": true,
+    "menubar.showBackground": false,
+    "menubar.autoHide": "fullscreen",
+    "menubar.showNowPlaying": true,
+    "menubar.showSearch": true,
+    "menubar.showWifi": true,
+    "menubar.showSound": true,
+    "menubar.showBattery": true,
+    "menubar.showBatteryPercentage": true,
+    "menubar.showFocus": true,
+    "menubar.clockDate": "auto",
+    "menubar.clockShowDayOfWeek": true,
+    "menubar.clockHours": "auto",
+    "menubar.clockShowAmPm": true,
+    "menubar.clockFlashSeparators": false,
+    "menubar.showTrayItems": true,
+    "menubar.recentItems": 10,
+    "menubar.clockShowSeconds": false,
+    "accent.color": "multicolor",
+    "keyboard.shortcutStyle": "automatic",
+    "icons.mode": "default",
+    "icons.tint": "accent",
+    "icons.folderColor": "theme",
+    "pointer.size": 24,
+    "pointer.outlineColor": "#ffffff",
+    "pointer.fillColor": "#000000",
+    "wallpaper.source": "builtin",
+    "wallpaper.path": "",
+    "wallpaper.color": "#000000",
+    "wallpaper.fit": "fill",
+    "wallpaper.interval": "1h",
+    "wallpaper.shuffle": true,
+    "wallpaper.videoOnBattery": false,
+    "wallpaper.online.provider": "commons",
+    "wallpaper.outputs": []
+};
+
 // Rule of every settable key.
 const RULES = {
     "appearance": {"type": "enum", "values": ["dark", "light", "auto"]},
@@ -114,7 +193,7 @@ const RULES = {
     "notifications.history": {"type": "enum", "values": ["week", "day", "never"]},
     "notifications.appStyles": {"type": "notificationStyles"},
     "notifications.appPreviews": {"type": "notificationApps"},
-    "lock.idleMinutes": {"type": "integer", "min": 0, "max": 240},
+    "lock.idleMinutes": {"type": "integer", "zeroIsExact": true, "min": 0, "max": 240},
     "hotCorners.topLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.topRight": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.bottomLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
@@ -215,12 +294,23 @@ function inRange(rule, value) {
 
 // The value a reader uses for a stored value (any JSON type): a number is clamped to its range, an integer is rounded
 // first, anything else invalid takes the key's default (how macOS reads a defaults value that is out of range: the Dock
-// clamps its tile size). A valid value is returned as it is.
+// clamps its tile size). A colour is lower case. Any other valid value is returned as it is. A string, a boolean or null
+// where a number is expected is never turned into one ("0" and false are not 0: lock.idleMinutes must never read 0 from them).
+// A rule with zeroIsExact (lock.idleMinutes, where 0 means "never") fails closed: a value below 0, or one that rounds to 0
+// without being exactly 0, is the default, so only an exact 0 reads 0.
 function normalize(path, value) {
     const rule = RULES[path];
     if (!rule)
         return undefined;
+    // The per-app notification lists keep their good entries and drop the bad or repeated ones (a write is still refused
+    // as a whole by validate): the shell and the Settings app read one list.
+    if (rule.type === "notificationApps")
+        return NotificationPrefs.normalize(value);
+    if (rule.type === "notificationStyles")
+        return NotificationPrefs.normalizeStyles(value);
     if ((rule.type === "number" || rule.type === "integer") && typeof value === "number" && isFinite(value)) {
+        if (rule.zeroIsExact && (value < 0 || (value !== 0 && Math.round(value) === 0)))
+            return DEFAULTS[path];
         let n = rule.type === "integer" ? Math.round(value) : value;
         if (rule.min !== undefined)
             n = Math.max(rule.min, n);
@@ -228,7 +318,9 @@ function normalize(path, value) {
             n = Math.min(rule.max, n);
         return n;
     }
-    return validate(path, value) === "" ? value : DEFAULTS[path];
+    if (validate(path, value) !== "")
+        return DEFAULTS[path];
+    return (rule.type === "tint" || rule.type === "folderColor" || rule.type === "pointerColor") ? value.toLowerCase() : value;
 }
 
 // The normalised value of a dotted path in parsed data; the default when absent or invalid.

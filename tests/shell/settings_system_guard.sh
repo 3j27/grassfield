@@ -158,7 +158,7 @@ run() { # GRASSFIELD_DEV value, then an optional GRASSFIELD_SESSION value (1 wit
   : >"$tmp/marker"
   : >"$tmp/locale"
   QT_FORCE_STDERR_LOGGING=1 PATH="$tmp/bin:$PATH" GRASSFIELD_SETTINGS_QML="$tmp/qml" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
-    timeout 30 scripts/dev/isolated.sh --name settings-guard env DBUS_SYSTEM_BUS_ADDRESS="$dead_bus" GRASSFIELD_DEV="$1" GRASSFIELD_SESSION="${2:-}" LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 LANGUAGE=fr "$root/.dev/build/grassfield-settings" 2>&1
+    timeout 30 scripts/dev/isolated.sh --name settings-guard env DBUS_SYSTEM_BUS_ADDRESS="$dead_bus" GRASSFIELD_LANG=en GRASSFIELD_DEV="$1" GRASSFIELD_SESSION="${2:-}" LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 LANGUAGE=fr "$root/.dev/build/grassfield-settings" 2>&1
 }
 
 out=$(run 1) || true
@@ -183,22 +183,9 @@ res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
 check "real: the 3 wpctl actions run, the failing one and the 8 D-Bus actions (no bus here) report" "$(has 'dev=false ok=3 refused=9' "$res")"
 check "real: failure reason is the tool's stderr line" "$(has 'failing=Error: simulated failure' "$res")"
-# The run is started in a French locale and, outside a dev session, the app loads the INSTALLED catalog (/usr/share/grassfield/
-# translations) if there is one: the reason may come back in English or in French depending on the machine. The test accepts the
-# source string or its French text from the repository's own catalog (translations/grassfield_fr.ts), never what is installed.
-reason_count=$(RES="$res" python3 -I - "$root/translations/grassfield_fr.ts" <<'PY'
-import os, sys
-import xml.etree.ElementTree as ET
-source = "no connection to the system bus"
-french = None
-for m in ET.parse(sys.argv[1]).getroot().iter("message"):
-    if m.findtext("source") == source:
-        french = m.findtext("translation")
-text = os.environ["RES"]
-print(sum(text.count("b.act=" + t) for t in {source, french} if t))
-PY
-)
-check "real: a D-Bus action with no bus fails with a reason (the source string or its French text), not silently" "$([[ $reason_count == 8 ]] && echo 0 || echo 1)"
+# The app runs with GRASSFIELD_LANG=en (see run()): the reasons are the English source strings whatever catalog is installed on the
+# machine (outside a dev session the app loads /usr/share/grassfield/translations). The tools still see C: forceCLocale.
+check "real: a D-Bus action with no bus fails with a reason, not silently" "$(grep -o 'b.act=no connection to the system bus' <<<"$res" | wc -l | grep -qx 8 && echo 0 || echo 1)"
 check "real: run() takes the same allow-list" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
 check "real: no stray run() command reached a tool" "$(grep -qE 'get-volume|^touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid|bluetoothctl' "$tmp/marker" && echo 1 || echo 0)"
 check "real: tools always see the C locale" "$([[ $(sort -u "$tmp/locale") == 'LC_ALL=C LANG=C LANGUAGE=unset' ]] && echo 0 || echo 1)"
