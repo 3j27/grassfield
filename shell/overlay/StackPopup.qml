@@ -74,11 +74,9 @@ FocusScope {
 
     // Lists `path` (a folder opened in place, or back to the one above).
     function reload(): void {
-        lister.running = false;
         entries = [];
         loaded = false;
         currentIndex = -1;
-        lister.running = true;
     }
 
     function enter(path: string): void {
@@ -104,6 +102,16 @@ FocusScope {
         Popups.close();
         if (target !== "")
             Apps.openDetached(["gio", "open", target]);
+    }
+
+    // The keyboard cursor stays in view (the Grid is virtualized: the cell may not exist yet).
+    onCurrentIndexChanged: {
+        if (currentIndex >= 0 && currentIndex < entries.length) {
+            if (view === "grid")
+                gridView.positionViewAtIndex(currentIndex, GridView.Contain);
+            else if (view === "list")
+                listView.positionViewAtIndex(currentIndex, ListView.Contain);
+        }
     }
 
     function move(key: string): void {
@@ -140,16 +148,19 @@ FocusScope {
     Keys.onEnterPressed: open(currentIndex)
     Keys.onSpacePressed: open(currentIndex)
 
-    // The listing: one read-only `find` of the folder (shell/dock/list-folder.sh), sorted here.
-    Process {
+    // The folder's first Tokens.dockStackItemMax entries in the stack's order, from the native helper (ADR-0025, shell/dock/StackHelper.qml):
+    // a new window whenever the folder changes while the popup is open. Another folder (in place, back) restarts the helper.
+    StackHelper {
         id: lister
-        command: ["sh", Quickshell.shellPath("dock/list-folder.sh"), root.folderPath]
-        Component.onCompleted: if (root.folderPath !== "")
-            running = true
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const all = Stacks.sortEntries(Stacks.parseListing(text, root.folderPath), root.info.sort);
-                root.entries = all.slice(0, Tokens.dockStackItemMax);
+        folder: root.folderPath
+        sort: root.info.sort ? root.info.sort : "dateAdded"
+        limit: Tokens.dockStackItemMax
+        low: Math.round(Tokens.dockStackItemMax * 2 / 3)
+        onArrived: {
+            if (!loaded)
+                return;
+            root.entries = entries;
+            if (!root.loaded) {
                 root.loaded = true;
                 reveal.restart();
             }
@@ -169,37 +180,37 @@ FocusScope {
         easing.type: Easing.OutQuad
     }
 
-    // Test hook (fixtures only): what the open stack shows, "view|name,name,..." in display order.
-    IpcHandler {
-        target: "dockstack"
+    // What the open stack shows is published for the test hooks (IPC target dockstack, which lives in Popups: a handler inside
+    // this popup would not exist while it is closed), and the hooks' commands arrive as a signal.
+    Binding {
+        target: Popups
+        property: "stackView"
+        value: root.view
+    }
 
-        function state(): string {
-            if (!VisualFixtures.active)
-                return "";
-            return root.view + "|" + root.entries.map(e => e.name).join(",");
-        }
+    Binding {
+        target: Popups
+        property: "stackNames"
+        value: root.entries.map(e => e.name)
+    }
 
-        // How many folders deep the stack is opened in place (0: the stack itself).
-        function depth(): string {
-            if (!VisualFixtures.active)
-                return "";
-            return String(root.trail.length);
-        }
+    Binding {
+        target: Popups
+        property: "stackDepth"
+        value: root.trail.length
+    }
 
-        // Opens the folder `name` of the listing in place (the click of a Grid or List item); "refused" for a file or a Fan.
-        function enter(name: string): string {
-            if (!VisualFixtures.active)
-                return "refused";
-            const at = root.entries.findIndex(e => e.name === name && e.isDir);
-            if (at < 0 || root.fan)
-                return "refused";
-            root.open(at);
-            return "ok";
-        }
+    Connections {
+        target: Popups
 
-        function back(): void {
-            if (VisualFixtures.active)
+        function onStackCommand(command: string, argument: string): void {
+            if (command === "back") {
                 root.back();
+            } else if (command === "enter" && !root.fan) {
+                const at = root.entries.findIndex(e => e.name === argument && e.isDir);
+                if (at >= 0)
+                    root.open(at);
+            }
         }
     }
 
@@ -348,80 +359,75 @@ FocusScope {
             }
         }
 
-        // Grid
-        Flickable {
+        // Grid: virtualized (a GridView creates the cells that are on screen, not up to Tokens.dockStackItemMax of them, each with
+        // a preview to decode).
+        GridView {
             id: gridView
             visible: root.view === "grid"
             x: root.panelPad
             y: root.panelPad + root.headerHeight
             width: root.columns * Tokens.dockStackCellWidth
             height: root.gridRows * Tokens.dockStackCellHeight
-            contentWidth: gridContent.width
-            contentHeight: gridContent.height
+            cellWidth: Tokens.dockStackCellWidth
+            cellHeight: Tokens.dockStackCellHeight
+            model: root.view === "grid" ? root.entries : []
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            cacheBuffer: Tokens.dockStackCellHeight
+            interactive: contentHeight > height
 
-            Grid {
-                id: gridContent
-                columns: root.columns
+            delegate: Item {
+                id: cell
 
-                Repeater {
-                    model: root.view === "grid" ? root.entries : []
+                required property var modelData
+                required property int index
+                readonly property bool current: root.currentIndex === index
 
-                    delegate: Item {
-                        id: cell
+                width: Tokens.dockStackCellWidth
+                height: Tokens.dockStackCellHeight
+                Accessible.role: Accessible.Button
+                Accessible.name: DisplayName.text(modelData.name)
+                Accessible.onPressAction: root.open(index)
 
-                        required property var modelData
-                        required property int index
-                        readonly property bool current: root.currentIndex === index
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: Tokens.spacingXs / 2
+                    radius: Tokens.radiusControl
+                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                    visible: cell.current
+                    border.width: Tokens.controlFocusOutline
+                    border.color: root.activeFocus ? Appearance.focusRingColor : "transparent"
+                }
 
-                        width: Tokens.dockStackCellWidth
-                        height: Tokens.dockStackCellHeight
-                        Accessible.role: Accessible.Button
-                        Accessible.name: DisplayName.text(modelData.name)
-                        Accessible.onPressAction: root.open(index)
+                StackIcon {
+                    x: (parent.width - width) / 2
+                    y: Tokens.spacingSm
+                    path: cell.modelData.path
+                    isDir: cell.modelData.isDir
+                    size: root.iconSize
+                }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            anchors.margins: Tokens.spacingXs / 2
-                            radius: Tokens.radiusControl
-                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
-                            visible: cell.current
-                            border.width: Tokens.controlFocusOutline
-                            border.color: root.activeFocus ? Appearance.focusRingColor : "transparent"
-                        }
+                Text {
+                    textFormat: Text.PlainText
+                    x: Tokens.spacingXs
+                    y: Tokens.spacingSm + root.iconSize + Tokens.spacingXs
+                    width: parent.width - 2 * Tokens.spacingXs
+                    text: DisplayName.text(cell.modelData.name)
+                    elide: Text.ElideMiddle
+                    maximumLineCount: 2
+                    wrapMode: Text.WrapAnywhere
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
+                    font.letterSpacing: Appearance.tracking(Tokens.typographyCaptionSize)
+                }
 
-                        StackIcon {
-                            x: (parent.width - width) / 2
-                            y: Tokens.spacingSm
-                            path: cell.modelData.path
-                            isDir: cell.modelData.isDir
-                            size: root.iconSize
-                        }
-
-                        Text {
-                            textFormat: Text.PlainText
-                            x: Tokens.spacingXs
-                            y: Tokens.spacingSm + root.iconSize + Tokens.spacingXs
-                            width: parent.width - 2 * Tokens.spacingXs
-                            text: DisplayName.text(cell.modelData.name)
-                            elide: Text.ElideMiddle
-                            maximumLineCount: 2
-                            wrapMode: Text.WrapAnywhere
-                            horizontalAlignment: Text.AlignHCenter
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                            font.letterSpacing: Appearance.tracking(Tokens.typographyCaptionSize)
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onEntered: root.currentIndex = cell.index
-                            onClicked: root.open(cell.index)
-                        }
-                    }
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: root.currentIndex = cell.index
+                    onClicked: root.open(cell.index)
                 }
             }
         }

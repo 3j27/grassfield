@@ -519,4 +519,14 @@ TestCase {
     function test_oldWithAppsStillWorks() {
         compare(DockModel.withApps([{kind: "app", key: "a"}])[0].kind, "apps");
     }
+
+    function test_opensDocumentsNeedsAFileFieldCode() {
+        verify(DockModel.opensDocuments({id: "e", execString: "gedit %U"}));
+        verify(DockModel.opensDocuments({id: "e", execString: "viewer --file %f"}));
+        verify(DockModel.opensDocuments({id: "e", command: ["app", "%F"]}));
+        verify(!DockModel.opensDocuments({id: "e", execString: "foot"}));
+        verify(!DockModel.opensDocuments({id: "e", execString: "app --name %c"}));
+        verify(!DockModel.opensDocuments({id: "e", execString: "app 100%%"}));
+        verify(!DockModel.opensDocuments(null));
+    }
 }

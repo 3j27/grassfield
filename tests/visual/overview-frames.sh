@@ -42,9 +42,9 @@ build_probe || { echo "FAIL the probe did not build (wayland-scanner, gcc, wayla
 
 # The Balanced profile (or the one asked for) through the settings file the shell watches.
 set_profile() {
-  local f=$VS_DEV/config/grassfield/grassfield.json tmp
+  local f=$VS_DEV/config/grassfield.json tmp
   mkdir -p "$(dirname "$f")"
-  [[ -s $f ]] || echo '{}' >"$f"
+  [[ -s $f ]] || echo '{"version":1}' >"$f"
   tmp=$(mktemp "$f.XXXXXX") && jq --arg p "$1" '.material.profile = $p' "$f" >"$tmp" && mv "$tmp" "$f"
 }
 

@@ -67,6 +67,7 @@ n=$(minimized | jq 'length')
 lowest_open=$(status | jq '[.screens[] | select(.name == "'"$VS_OUTPUT"'") | .windows[].rect | (.y + .h)] | max')
 top_tile=$(minimized | jq '[.[].rect.y] | min')
 [[ -n $lowest_open && -n $top_tile ]] && awk "BEGIN{exit !($top_tile > $lowest_open)}"; check "the strip is below the open windows (tiles from y=$top_tile, windows end at $lowest_open)" $?
+echo "capture sizes {source, implicit, constraint}: $(status | jq -c '[.screens[] | select(.name == "'"$VS_OUTPUT"'") | .minimized[].capture]')"
 shot=$(VS_SETTLE=1 vs_capture overview-minimized-strip)
 cp "$shot" "$out/strip.png"
 
