@@ -26,8 +26,9 @@ SettingsPage {
     // When the state was read (Date.now()): the clock runs on from timedate1's time.
     property real readAt: 0
     property real now: Date.now()
-    // The change sent to timedate1 until it answered ("ntp", "set", "zone"): the polkit dialog may be up.
-    property string pending: ""
+    // The change sent to timedate1 until it answered ("ntp", "set", "zone"): the polkit dialog may be up. Held by the Backend,
+    // so a visit while it is up shows it too and cannot send a second one.
+    readonly property string pending: General.pendingTimeOp(root.backend.pendingActions)
     // The last change, whose group shows the error if it failed.
     property string lastOp: ""
 
@@ -53,8 +54,7 @@ SettingsPage {
 
     function apply(op: string, what: string, spec: var): void {
         root.lastOp = op;
-        if (root.system.act(what, spec, "time.act"))
-            root.pending = op;
+        root.system.act(what, spec, "time.act");
     }
 
     function setWallClock(wall: var): void {
@@ -77,7 +77,6 @@ SettingsPage {
             } else if (tag === "time.zones") {
                 root.zones = ok ? General.parseZones(output) : [];
             } else if (tag === "time.act") {
-                root.pending = "";
                 root.system.queryBus("time.state", "time.state");
             }
         }

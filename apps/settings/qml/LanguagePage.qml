@@ -27,8 +27,10 @@ SettingsPage {
     readonly property string note: General.languageNote(root.installed, root.system.dev, root.listAnswered, root.languages.length)
     // The session's language (its LANG: the locale Settings itself runs in).
     readonly property string sessionLanguage: General.languageName(Qt.locale().nativeLanguageName, Qt.locale().name)
-    // The language sent to omarchy-language until it answered, then the one to log in again for.
+    // The language sent to omarchy-language until it answered, then the one to log in again for. Whether it still runs is the
+    // Backend's (a visit while it runs shows it and cannot start a second one).
     property string pending: ""
+    readonly property bool waiting: (root.backend.pendingActions ?? {})["language.act"] !== undefined
     property string changed: ""
     property real now: Date.now()
 
@@ -103,17 +105,17 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Primary language")
-            subtitle: root.pending !== "" ? qsTr("Changing the language…") : ""
+            subtitle: root.waiting ? qsTr("Changing the language…") : ""
             valueText: root.languages.length === 0 ? root.sessionLanguage : ""
 
             ComboBox {
                 visible: root.languages.length > 0
                 inline: true
-                enabled: root.pending === ""
+                enabled: !root.waiting
                 accessibleName: qsTr("Primary language")
                 // The native name, and the English one beside it (findable whatever the current language).
                 model: root.languages.map(l => ({id: l.code, text: l.name === l.english ? l.name : qsTr("%1 — %2").arg(l.name).arg(l.english)}))
-                value: root.pending !== "" ? root.pending : root.language
+                value: root.waiting && root.pending !== "" ? root.pending : root.language
                 onPicked: id => root.setLanguage(id)
             }
         }

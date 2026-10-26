@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 
+#include "busjobs.h"
 #include "systembus.h"
 
 #include "chromecaps.h"
@@ -46,6 +47,10 @@ class Backend : public QObject
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
     // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
     Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
+    // The actions that may wait for a password and still run, tag -> what (polkit actions of busAct, omarchy-language of act:
+    // one per tag, busjobs.h InFlight). A page shows its waiting state from it, also when it is opened again while the dialog
+    // is up.
+    Q_PROPERTY(QVariantMap pendingActions READ pendingActions NOTIFY pendingActionsChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -69,6 +74,7 @@ public:
     QStringList currentDesktops() const;
     QString homeDir() const { return QDir::cleanPath(QDir::homePath()); }
     bool omarchyLanguage() const;
+    QVariantMap pendingActions() const { return m_actions.map(); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
     Q_INVOKABLE QVariantMap readText(const QString &path) const;
@@ -80,10 +86,12 @@ public:
     // Every command (query, act, run) runs with LC_ALL=C and LANG=C (LANGUAGE unset): the parsers expect English output.
     // Read-only query without blocking the window: runs argv (no shell), emits finished(tag, ok, stdout). In a dev
     // session only the queries of systemguard.h::isReadOnlyQuery run; anything else is refused (logged, finished(false)).
+    // The same command still running under the same tag is not started again: its answer comes under that tag.
     Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000);
     // State-changing action (Wi-Fi, Bluetooth, volume). Only nmcli, bluetoothctl and wpctl run. In a dev session
     // nothing runs: one "dev guard: <what> suppressed" line is logged, suppressed(what) is emitted, false returned.
-    // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started.
+    // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started. An action that may wait
+    // for a password is refused (false) while one of its tag still runs (pendingActions); busAct does the same for polkit.
     Q_INVOKABLE bool act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs = 15000);
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
@@ -122,12 +130,20 @@ signals:
     // or the start error), at most 160 characters. Plain text from a tool: show it as text only.
     void failed(const QString &tag, const QString &reason);
     void suppressed(const QString &what);
+    void pendingActionsChanged();
 
 private:
     bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
-    void start(const QStringList &argv, const QString &tag, int timeoutMs);
-    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false);
+    // What a process ends when it finishes: nothing, its query (m_queries) or its action (m_actions).
+    enum class Track { None, Query, Action };
+    void start(const QStringList &argv, const QString &tag, int timeoutMs, Track track);
+    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false,
+                bool action = false);
+    bool beginAction(const QString &tag, const QString &what);
+    void endAction(const QString &tag);
+    grassfield::settings::InFlight m_actions;
+    grassfield::settings::InFlight m_queries;
     QStringList userUnitDirs() const;
     bool autostartWriteAllowed(const QString &path) const;
 

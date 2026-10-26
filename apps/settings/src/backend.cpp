@@ -148,9 +148,16 @@ Backend::~Backend()
     m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
 }
 
-void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
+void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs, Track track)
 {
     auto *p = new QProcess(this);
+    // Once, whichever way the process ends: the query or action it held is over.
+    const auto settle = [this, tag, track] {
+        if (track == Track::Query)
+            m_queries.end(tag);
+        else if (track == Track::Action)
+            endAction(tag);
+    };
     forceCLocale(*p);
     auto *timer = new QTimer(p);
     timer->setSingleShot(true);
@@ -158,14 +165,16 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
         p->setProperty("timedOut", true);
         p->kill();
     });
-    connect(p, &QProcess::errorOccurred, this, [this, p, tag](QProcess::ProcessError e) {
+    connect(p, &QProcess::errorOccurred, this, [this, p, tag, settle](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
+            settle();
             emit failed(tag, p->errorString().left(kMaxReason));
             emit finished(tag, false, QString());
             p->deleteLater();
         }
     });
-    connect(p, &QProcess::finished, this, [this, p, tag](int code, QProcess::ExitStatus status) {
+    connect(p, &QProcess::finished, this, [this, p, tag, settle](int code, QProcess::ExitStatus status) {
+        settle();
         const bool ok = status == QProcess::NormalExit && code == 0;
         const QByteArray out = p->readAllStandardOutput();
         if (!ok)
@@ -193,7 +202,27 @@ void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
         emit finished(tag, false, QString());
         return;
     }
-    start(argv, tag, timeoutMs);
+    // A page shown again asks for what still runs (Storage's counts, up to two minutes each): it gets that answer.
+    const QString key = argv.join(QChar(0x1f));
+    if (m_queries.runs(tag, key))
+        return;
+    start(argv, tag, timeoutMs, m_queries.begin(tag, key) ? Track::Query : Track::None);
+}
+
+bool Backend::beginAction(const QString &tag, const QString &what)
+{
+    if (!m_actions.begin(tag, what)) {
+        qWarning().noquote() << "refused" << what << "while the previous action of" << tag << "still runs";
+        return false;
+    }
+    emit pendingActionsChanged();
+    return true;
+}
+
+void Backend::endAction(const QString &tag)
+{
+    m_actions.end(tag);
+    emit pendingActionsChanged();
 }
 
 bool Backend::act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs)
@@ -207,14 +236,19 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         qWarning().noquote() << "refused an action with an unknown program:" << what;
         return false;
     }
-    start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs));
+    // One at a time per tag when it may wait for a password (a page shown again cannot start a second prompt).
+    const bool latch = grassfield::settings::asksForPassword(argv);
+    if (latch && !beginAction(tag, what))
+        return false;
+    start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs), latch ? Track::Action : Track::None);
     return true;
 }
 
 // One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
 // nothing a job holds outlives the Backend: busjobs.h). `job` returns "" on success, else the reason; its second argument
 // receives the output (JSON) of a query.
-void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session)
+void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session,
+                     bool action)
 {
     const bool dev = m_dev;
     (session ? m_bus->sessionJobs : m_bus->jobs).start(
@@ -222,7 +256,9 @@ void Backend::runBus(const QString &tag, std::function<QString(grassfield::setti
             grassfield::settings::GuardedCaller guarded(real, dev);
             return job(guarded, output);
         },
-        [this, tag](const QString &reason, const QString &output) {
+        [this, tag, action](const QString &reason, const QString &output) {
+            if (action)
+                endAction(tag);
             if (!reason.isEmpty()) {
                 emit failed(tag, reason);
                 emit finished(tag, false, QString());
@@ -279,8 +315,13 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
         qWarning().noquote() << "refused a bus action that is not well formed:" << what;
         return false;
     }
+    // A polkit action runs one at a time per tag: a page shown again while the dialog is up cannot send a second one, and
+    // blocked calls cannot fill the jobs' kMaxInFlight (integrator review of PR #6).
+    const bool latch = privilegedAction(op);
+    if (latch && !beginAction(tag, what))
+        return false;
     const QStringList own = userUnitDirs();
-    runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, privilegedAction(op) ? kPrivilegedJobMs : kActionJobMs, sessionAction(op));
+    runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, latch ? kPrivilegedJobMs : kActionJobMs, sessionAction(op), latch);
     return true;
 }
 

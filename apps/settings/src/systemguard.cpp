@@ -199,6 +199,11 @@ bool isActionProgram(const QString &program)
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language");
 }
 
+bool asksForPassword(const QStringList &argv)
+{
+    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language");
+}
+
 int actionTimeoutMs(const QStringList &argv, int requested)
 {
     constexpr int kPromptMs = 130000;

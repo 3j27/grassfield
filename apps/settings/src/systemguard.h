@@ -51,6 +51,10 @@ bool isActionProgram(const QString &program);
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code.
 bool isAllowedAction(const QStringList &argv);
 
+// An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt). Backend::act runs one per
+// tag at a time (busjobs.h InFlight), as busAct does for the polkit actions of ADR-0030 (privilegedAction).
+bool asksForPassword(const QStringList &argv);
+
 // How long an allowed action may run: `requested`, or 130 s for Omarchy's language switch, which may wait for its own
 // pkexec prompt (a locale to generate) as long as a polkit call of ADR-0030 waits for the user.
 int actionTimeoutMs(const QStringList &argv, int requested);

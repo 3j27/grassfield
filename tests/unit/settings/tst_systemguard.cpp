@@ -238,6 +238,11 @@ TEST(ActionGuard, OmarchyLanguageTakesOneCodeOnly)
 
 TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
 {
+    // It may ask for a password: one at a time per tag (Backend::act, InFlight); wpctl and xdg-open never do.
+    EXPECT_TRUE(asksForPassword({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
+    EXPECT_FALSE(asksForPassword({QStringLiteral("wpctl"), QStringLiteral("set-volume")}));
+    EXPECT_FALSE(asksForPassword({QStringLiteral("xdg-open"), QStringLiteral("https://example.org")}));
+    EXPECT_FALSE(asksForPassword({}));
     EXPECT_EQ(actionTimeoutMs({QStringLiteral("omarchy-language"), QStringLiteral("fr")}, 15000), 130000);
     EXPECT_EQ(actionTimeoutMs({QStringLiteral("wpctl"), QStringLiteral("set-mute")}, 15000), 15000);
     EXPECT_EQ(actionTimeoutMs({}, 15000), 15000);

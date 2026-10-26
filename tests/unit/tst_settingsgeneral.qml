@@ -171,6 +171,18 @@ TestCase {
         compare(General.languageArgv("fr\n"), null);
     }
 
+    function test_pendingActions() {
+        // The waiting state of a change that may ask for a password is the Backend's (integrator review of PR #6): a page opened
+        // again while a polkit dialog is up shows which change waits, and its controls stay off (the Backend refuses a second
+        // one of the tag anyway).
+        compare(General.pendingTimeOp({}), "");
+        compare(General.pendingTimeOp(undefined), "");
+        compare(General.pendingTimeOp({"time.act": "automatic time"}), "ntp");
+        compare(General.pendingTimeOp({"time.act": "date and time"}), "set");
+        compare(General.pendingTimeOp({"time.act": "time zone"}), "zone");
+        compare(General.pendingTimeOp({"host.act": "computer name"}), "");
+    }
+
     function test_desktopEntries() {
         const text = "[Desktop Entry]\nType=Application\nName=Syncthing\nName[fr]=Syncthing (fr)\nExec=syncthing\nIcon=syncthing\nOnlyShowIn=GNOME;Hyprland;\n[Desktop Action x]\nName=Other\n";
         const e = General.parseDesktopEntry(text, "fr_FR.UTF-8");

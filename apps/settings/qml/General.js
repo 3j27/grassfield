@@ -261,6 +261,13 @@ function uses24Hour(setting, shortTimeFormat) {
     return !/[aA]/.test(String(shortTimeFormat).replace(/'[^']*'/g, ""));
 }
 
+// The Date & Time change still waiting for its answer ("ntp", "set", "zone"; "" for none), from Backend.pendingActions (tag ->
+// what). The Backend holds it, so the page shows it again when it is opened while the polkit dialog is still up.
+function pendingTimeOp(pending) {
+    const what = (pending || {})["time.act"];
+    return what === "automatic time" ? "ntp" : what === "date and time" ? "set" : what === "time zone" ? "zone" : "";
+}
+
 // SetTime: a date between 2000 and 2200 (systembus.cpp isUsec), as microseconds in a string.
 function timeSet(ms) {
     const n = Math.floor(Number(ms));

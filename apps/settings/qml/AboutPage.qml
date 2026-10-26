@@ -20,8 +20,9 @@ SettingsPage {
     property var host: null
     property var screens: []
     property var volume: null
-    // The name sent to hostname1, until it answered (the polkit dialog may be up).
-    property string pendingName: ""
+    // The name sent to hostname1 has no answer yet (the polkit dialog may be up): held by the Backend, so a visit while it is
+    // up shows it too and cannot send a second one.
+    readonly property bool waiting: (root.backend.pendingActions ?? {})["host.act"] !== undefined
 
     function pacman(pkgs: var): string {
         for (const pkg of pkgs) {
@@ -78,11 +79,8 @@ SettingsPage {
             nameField.text = current;
             return;
         }
-        root.pendingName = wanted;
-        if (!root.system.act("computer name", General.hostSetName(wanted), "host.act")) {
-            root.pendingName = "";
+        if (!root.system.act("computer name", General.hostSetName(wanted), "host.act"))
             nameField.text = current;
-        }
     }
 
     Component.onCompleted: {
@@ -101,7 +99,6 @@ SettingsPage {
                 if (!nameField.activeFocus)
                     nameField.text = General.computerName(root.host);
             } else if (tag === "host.act") {
-                root.pendingName = "";
                 root.system.queryBus("host.state", "host.state");
             }
         }
@@ -145,7 +142,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Name")
-            subtitle: root.pendingName !== "" ? qsTr("Waiting for permission…") : ""
+            subtitle: root.waiting ? qsTr("Waiting for permission…") : ""
 
             // The name reads as text and becomes a field while it is edited (macOS); Return or leaving it applies, Escape
             // gives the name back.
@@ -159,7 +156,7 @@ SettingsPage {
                 leftPadding: activeFocus ? Tokens.spacingSm : 0
                 rightPadding: activeFocus ? Tokens.spacingSm : 0
                 maximumLength: 64
-                enabled: root.host !== null && root.pendingName === ""
+                enabled: root.host !== null && !root.waiting
                 accessibleName: qsTr("Computer name")
                 onAccepted: root.rename(text)
                 onActiveFocusChanged: if (!activeFocus)
