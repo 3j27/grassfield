@@ -107,6 +107,16 @@
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
   },
+  "search": {
+    "showApps": true,
+    "showDocuments": true,
+    "showRecents": true,
+    "showCalculator": true,
+    "showConversions": true,
+    "showSettings": true,
+    "showCommands": true,
+    "historyResetAt": 0
+  },
   "wallpaper": {
     "source": "builtin",
     "path": "",

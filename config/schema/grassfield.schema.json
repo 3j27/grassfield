@@ -724,6 +724,55 @@
         }
       }
     },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Search (Settings > Search; macOS 27 Spotlight).",
+      "properties": {
+        "showApps": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows applications (Settings > Search > Search Results: Applications)."
+        },
+        "showDocuments": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows documents found on this computer (localsearch, plocate) (Settings > Search > Search Results: Documents)."
+        },
+        "showRecents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows recently used documents (Settings > Search > Search Results: Recent Documents)."
+        },
+        "showCalculator": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows the calculator's answer (Settings > Search > Search Results: Calculator)."
+        },
+        "showConversions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows unit conversions (Settings > Search > Search Results: Conversions)."
+        },
+        "showSettings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows Settings panes (Settings > Search > Search Results: Settings)."
+        },
+        "showCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows system commands (Lock Screen, Sleep, Restart, Shut Down, Log Out) (Settings > Search > Search Results: System Commands)."
+        },
+        "historyResetAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999999999999,
+          "default": 0,
+          "description": "Milliseconds since the epoch of the last Delete Search History (Settings > Search): the shell forgets the results the user picked before it (search-usage.json). 0 = never deleted."
+        }
+      }
+    },
     "wallpaper": {
       "type": "object",
       "additionalProperties": false,

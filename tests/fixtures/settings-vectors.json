@@ -139,6 +139,12 @@
     {"name": "lock screen message", "path": "lock.message", "stored": "Back at 3 · retour à 15 h", "read": "Back at 3 · retour à 15 h", "valid": true},
     {"name": "lock screen message on two lines is the default", "path": "lock.message", "stored": "Back\nat 3", "default": true, "valid": false},
     {"name": "lock screen message too long is the default", "path": "lock.message", "stored": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "default": true, "valid": false},
-    {"name": "lock screen message of the wrong type is the default", "path": "lock.message", "stored": 7, "default": true, "valid": false}
+    {"name": "lock screen message of the wrong type is the default", "path": "lock.message", "stored": 7, "default": true, "valid": false},
+    {"name": "search hides applications", "path": "search.showApps", "stored": false, "read": false, "valid": true},
+    {"name": "search documents of the wrong type is the default", "path": "search.showDocuments", "stored": "no", "default": true, "valid": false},
+    {"name": "search hides system commands", "path": "search.showCommands", "stored": false, "read": false, "valid": true},
+    {"name": "search history reset time", "path": "search.historyResetAt", "stored": 1792832460000, "read": 1792832460000, "valid": true},
+    {"name": "search history reset time negative is clamped to 0", "path": "search.historyResetAt", "stored": -5, "read": 0, "valid": false},
+    {"name": "search history reset time of the wrong type is the default", "path": "search.historyResetAt", "stored": "now", "default": true, "valid": false}
   ]
 }
