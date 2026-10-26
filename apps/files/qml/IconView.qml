@@ -113,7 +113,9 @@ FocusScope {
         height: Tokens.filesIconSize
         visible: false
         Drag.dragType: Drag.Automatic
-        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+        // No link: Wayland drag and drop has none (a drop proposing it is refused); Files makes an alias itself
+        // for Option-Cmd (FilesApp.drop).
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
         Drag.proposedAction: Qt.MoveAction
         Drag.hotSpot.x: Tokens.filesIconSize / 2
         Drag.hotSpot.y: Tokens.filesIconSize / 2

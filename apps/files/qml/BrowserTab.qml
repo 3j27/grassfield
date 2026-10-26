@@ -523,6 +523,8 @@ FocusScope {
             root.springing = true;
             root.navigate(root.springTarget, true);
             root.springing = false;
+            // The folder's view now lies under the pointer: it becomes the drop target without the pointer moving.
+            Qt.callLater(() => root.app.refreshDrag(root.win));
         }
     }
 

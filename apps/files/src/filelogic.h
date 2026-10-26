@@ -45,6 +45,11 @@ struct SortEntry {
 // the key's value (no tag, no application, an unknown date) come last in either direction.
 int compareEntries(const SortEntry &a, const SortEntry &b, SortKey key, bool descending, bool foldersFirst, const QCollator &collator);
 
+// What a drop of files does (Finder, with Cmd as Ctrl and Option as Alt, decision F-1): Option copies, Cmd moves, both
+// make aliases (symbolic links); without a modifier a drop on the same volume moves and on another volume copies.
+enum class DropAction { Move, Copy, Link };
+DropAction dropAction(bool ctrl, bool alt, bool sameVolume);
+
 // Default direction when a column is chosen: names, kinds, tags and applications ascending, dates and sizes descending.
 bool defaultDescending(SortKey key);
 

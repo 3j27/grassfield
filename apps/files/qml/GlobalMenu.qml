@@ -181,6 +181,8 @@ Platform.MenuBar {
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Glance at %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Glance at “%1”").arg(bar.firstName) : qsTr("Glance")
+            // Finder's File > Quick Look (Cmd+Y); Space in the views too.
+            shortcut: "Ctrl+Y"
             enabled: bar.count > 0 && !bar.inTrash
             onTriggered: bar.tab.glance()
         }

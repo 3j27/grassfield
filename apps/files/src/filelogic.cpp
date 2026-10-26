@@ -46,6 +46,17 @@ bool defaultDescending(SortKey key)
     return key == SortKey::Date || key == SortKey::Size || key == SortKey::Created || key == SortKey::Opened;
 }
 
+DropAction dropAction(bool ctrl, bool alt, bool sameVolume)
+{
+    if (ctrl && alt)
+        return DropAction::Link;
+    if (alt)
+        return DropAction::Copy;
+    if (ctrl)
+        return DropAction::Move;
+    return sameVolume ? DropAction::Move : DropAction::Copy;
+}
+
 namespace
 {
 // Items without a value come after those with one, in both directions: 0 when both or neither have one.

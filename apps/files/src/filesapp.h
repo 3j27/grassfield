@@ -5,9 +5,12 @@
 
 #include <QCoreApplication>
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QJSValue>
 #include <QList>
+#include <QMimeData>
 #include <QObject>
+#include <QPointF>
 #include <QPointer>
 #include <QSettings>
 #include <QTimer>
@@ -239,6 +242,10 @@ public:
     // Recents (Go > Recents, the sidebar's first place; docs/specs/files.md "Views and selection").
     Q_INVOKABLE bool isRecents(const QUrl &url) const;
     Q_INVOKABLE QUrl recentsUrl() const;
+    // A spring-loaded folder replaced the view under a drag that has not moved since: the window gets its last drag
+    // move again, so the new view under the pointer becomes the drop target (a drop without moving lands in the opened
+    // folder, as in the Finder). Nothing happens when no drag is over `window`.
+    Q_INVOKABLE void refreshDrag(QObject *window);
     Q_INVOKABLE QString searchedTag(const QUrl &url) const;
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.
@@ -278,6 +285,10 @@ signals:
     void folderStylesChanged(const QList<QUrl> &urls);
     void allFolderStylesChanged();
     void folderStyleRevisionChanged();
+
+protected:
+    // Remembers the last drag move over each window (refreshDrag).
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void track(KJob *job, const QString &activity);
@@ -330,4 +341,13 @@ private:
     int m_folderStyleRevision = 0;
     // Read on first use and again when it changes (the state directory may not exist before a view is chosen).
     mutable FolderViews m_folderViews;
+    // The last drag move over each window (refreshDrag); dropped when the drag leaves or drops.
+    struct DragState {
+        QPointF position;
+        Qt::DropActions actions;
+        QPointer<const QMimeData> mime;
+        Qt::MouseButtons buttons;
+        Qt::KeyboardModifiers modifiers;
+    };
+    QHash<QObject *, DragState> m_drags;
 };

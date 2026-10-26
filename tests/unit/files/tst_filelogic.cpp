@@ -139,6 +139,16 @@ TEST(SortKeys, NewKeysPutItemsWithoutAValueLast)
     EXPECT_FALSE(defaultDescending(SortKey::Application));
 }
 
+TEST(Drops, FinderModifiers)
+{
+    EXPECT_EQ(dropAction(false, false, true), DropAction::Move) << "same volume: move";
+    EXPECT_EQ(dropAction(false, false, false), DropAction::Copy) << "another volume: copy";
+    EXPECT_EQ(dropAction(false, true, true), DropAction::Copy) << "Option copies";
+    EXPECT_EQ(dropAction(true, false, false), DropAction::Move) << "Cmd moves, even to another volume";
+    EXPECT_EQ(dropAction(true, true, true), DropAction::Link) << "Option-Cmd makes an alias";
+    EXPECT_EQ(dropAction(true, true, false), DropAction::Link);
+}
+
 TEST(Groups, DatesNewestFirst)
 {
     const QLocale en(QLocale::English, QLocale::UnitedStates);

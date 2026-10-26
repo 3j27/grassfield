@@ -398,7 +398,8 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
-        sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
+        // Shift+Cmd+Z only: Cmd+Y is Glance (Finder's Quick Look).
+        sequence: "Ctrl+Shift+Z"
         enabled: win.app.canRedo
         onActivated: win.app.redo()
         onActivatedAmbiguously: activated()
@@ -456,6 +457,11 @@ Window {
     Shortcut {
         sequence: "Ctrl+/"
         onActivated: win.app.statusBarShown = !win.app.statusBarShown
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Y"
+        onActivated: win.tab.glance()
         onActivatedAmbiguously: activated()
     }
     Shortcut {

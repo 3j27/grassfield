@@ -21,6 +21,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDropEvent>
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QProcess>
@@ -153,6 +154,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(undo, &KIO::FileUndoManager::redoTextChanged, this, &FilesApp::undoChanged);
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &FilesApp::clipboardChanged);
     connect(m_places, &PlacesModel::error, this, &FilesApp::operationFailed);
+    qApp->installEventFilter(this);
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
     const QString file = configFile();
@@ -1088,15 +1090,26 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
     if (sources.isEmpty() || refuseTwin(this, dest, sources))
         return;
     const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
-    bool copy = mods & (Qt::ControlModifier | Qt::AltModifier);
-    if (!copy) {
-        // Across filesystems a drop copies, like the macOS file manager.
-        const QString destDevice = dest.isLocalFile() ? QString::fromUtf8(QStorageInfo(dest.toLocalFile()).device()) : QString();
-        for (const QUrl &u : std::as_const(sources)) {
-            if (!u.isLocalFile() || destDevice.isEmpty() || QString::fromUtf8(QStorageInfo(u.toLocalFile()).device()) != destDevice)
-                copy = true;
-        }
+    // Across filesystems a drop copies, like the macOS file manager (unless a modifier says otherwise).
+    const QString destDevice = dest.isLocalFile() ? QString::fromUtf8(QStorageInfo(dest.toLocalFile()).device()) : QString();
+    bool sameVolume = !destDevice.isEmpty();
+    for (const QUrl &u : std::as_const(sources)) {
+        if (!u.isLocalFile() || QString::fromUtf8(QStorageInfo(u.toLocalFile()).device()) != destDevice)
+            sameVolume = false;
     }
+    const FileLogic::DropAction action = FileLogic::dropAction(mods & Qt::ControlModifier, mods & Qt::AltModifier, sameVolume);
+    if (action == FileLogic::DropAction::Link) {
+        // Make Alias (decision: an alias is a symbolic link); one per item, named after it.
+        KIO::CopyJob *link = KIO::link(sources, dest, KIO::HideProgressInfo);
+        attachDelegate(link);
+        KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Link, sources, dest, link);
+        connect(link, &KJob::result, this, [this, link] {
+            if (link->error() && link->error() != KIO::ERR_USER_CANCELED)
+                emit operationFailed(link->errorString());
+        });
+        return;
+    }
+    const bool copy = action == FileLogic::DropAction::Copy;
     KIO::CopyJob *job = copy ? KIO::copy(sources, dest, KIO::HideProgressInfo) : KIO::move(sources, dest, KIO::HideProgressInfo);
     attachDelegate(job);
     if (copy)
@@ -1434,6 +1447,36 @@ QUrl FilesApp::tagSearchUrl(const QString &tag, const QUrl &from) const
 bool FilesApp::isTagSearch(const QUrl &url) const
 {
     return TagLogic::isSearchUrl(url);
+}
+
+bool FilesApp::eventFilter(QObject *watched, QEvent *event)
+{
+    if (!watched->isWindowType())
+        return false;
+    switch (event->type()) {
+    case QEvent::DragEnter:
+    case QEvent::DragMove: {
+        const auto *e = static_cast<QDragMoveEvent *>(event);
+        m_drags.insert(watched, {e->position(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers()});
+        break;
+    }
+    case QEvent::DragLeave:
+    case QEvent::Drop:
+        m_drags.remove(watched);
+        break;
+    default:
+        break;
+    }
+    return false;
+}
+
+void FilesApp::refreshDrag(QObject *window)
+{
+    const auto it = m_drags.constFind(window);
+    if (!window || it == m_drags.cend() || !it->mime)
+        return;
+    QDragMoveEvent move(it->position, it->actions, it->mime, it->buttons, it->modifiers);
+    QCoreApplication::sendEvent(window, &move);
 }
 
 bool FilesApp::isRecents(const QUrl &url) const
