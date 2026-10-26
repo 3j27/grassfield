@@ -351,10 +351,18 @@ CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|h
                       r"|^(?:on)?(?:done|settle\w*|finish\w*)$", re.I)
 # insert(KEY, VALUE): the VALUE is text that can reach the screen when the KEY says so (reason, error, message, text, title...)
 CPP_STORES = {"insert", "insertMulti"}
-CPP_TEXT_KEY = re.compile(r"reason|error|message|text|title|label|status|note|hint|description|summary|failure|msg|err|detail|body|caption|tooltip|info|warning", re.I)
-# list-building calls and `<<`: the text goes in when the receiver (the word before . or ->) names text; args/argv/cmd lists stay clean
-CPP_LIST_CALLS = re.compile(r"(\w+)\s*(?:\.|->)\s*(?:append|push_back|prepend|emplace_back|push)\s*\(")
-CPP_TEXT_RECEIVER = re.compile(r"reason|error|message|text|title|label|status|note|hint|warning|msg|err|detail|line", re.I)
+# a key names text as a WHOLE word (m_reason and kReasonKey count; "set_toplevel_description" and "titles" do not)
+CPP_TEXT_KEY = re.compile(r"^(?:m_|k(?=[A-Z]))?(?:reason|error|message|text|title|label|status|note|hint|description|summary|failure|msg|err|detail|body|caption|tooltip|info|warning)(?:Key)?$", re.I)
+# list-building calls and `<<`: the text goes in when the receiver names text as a WHOLE word (optional m_ prefix, optional plural s:
+# reasons, m_errors, lines); args/argv/cmd lists stay clean. The receiver of append() & co is the word before . or ->; of `<<` the
+# FIRST name of the statement (the last segment of a chain, after this->/d->), so `args << reasonFlag << "status"` is an argument
+# list. msg and err are receivers of append() only: `msg << "x"` is a QDBusMessage, `err << ..` a QTextStream.
+CPP_LIST_METHODS = {"append", "push_back", "prepend", "emplace_back", "emplaceBack", "push"}
+CPP_LIST_CALLS = re.compile(r"(\w+)\s*(?:\.|->)\s*(?:" + "|".join(sorted(CPP_LIST_METHODS)) + r")\s*\(")
+_CPP_TEXT_WORDS = r"reason|error|message|text|title|label|status|note|hint|warning|detail|line"
+CPP_TEXT_RECEIVER = re.compile(r"^(?:m_)?(?:" + _CPP_TEXT_WORDS + r"|msg|err)s?$", re.I)
+CPP_SHIFT_RECEIVER = re.compile(r"^(?:m_)?(?:" + _CPP_TEXT_WORDS + r")s?$", re.I)
+CPP_SHIFT_FIRST = re.compile(r"\s*((?:[A-Za-z_]\w*(?:\s*(?:\.|->)\s*)?)+)")
 CPP_ARGV_RECEIVER = re.compile(r"arg|cmd|command|argv", re.I)
 CPP_INSERT_KEY = re.compile(r"insert(?:Multi)?\s*\(\s*([A-Za-z_][\w:.>-]*)\s*,$")
 CPP_DECL_TYPES = {"QString", "QByteArray", "QStringView", "QLatin1String", "QLatin1StringView", "QAnyStringView", "auto"}
@@ -526,12 +534,16 @@ def scan_cpp_text(rel, text):
         identifier_key = CPP_INSERT_KEY.search(tail)
         if identifier_key:
             key_name = identifier_key.group(1)
-        stored = pos >= 0 and argument_indexes[pos] >= 1 and bool(CPP_TEXT_KEY.search(key_name)) and (name in CPP_STORES or (argument_of == "" and pos >= 0))
+        stored = pos >= 0 and argument_indexes[pos] >= 1 and bool(CPP_TEXT_KEY.search(re.split(r"::|\.|->", key_name)[-1])) and (name in CPP_STORES or (argument_of == "" and pos >= 0))
         # list.append(TEXT), list.push_back(TEXT), list << TEXT when the list is named for text (reasons, m_errors, lines)
         list_call = CPP_LIST_CALLS.findall(before)
-        receiver = list_call[-1] if list_call and name in {"append", "push_back", "prepend", "emplace_back", "push"} else ""
+        receiver = list_call[-1] if list_call and name in CPP_LIST_METHODS else ""
         if not receiver and tail.endswith("<<"):
-            receiver = next((w for w in re.findall(r"[A-Za-z_]\w*", before) if CPP_TEXT_RECEIVER.search(w)), "")
+            first = CPP_SHIFT_FIRST.match(before)
+            chain = re.findall(r"[A-Za-z_]\w*", first.group(1)) if first else []
+            while len(chain) > 1 and chain[0] in ("this", "d"):  # this->reasons, d->m_errors
+                chain.pop(0)
+            receiver = chain[-1] if chain and CPP_SHIFT_RECEIVER.search(chain[-1]) else ""
         listed = bool(receiver) and bool(CPP_TEXT_RECEIVER.search(receiver)) and not CPP_ARGV_RECEIVER.search(receiver)
         visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
                    or bool(argument_of and CPP_SINK.search(name)) or stored or listed)

@@ -258,7 +258,7 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. 39 variants of visible English text in the table below plus one literal on the line after its call: each
+# Part (f): the Settings C++. 45 variants of visible English text in the table below plus one literal on the line after its call: each
 # must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
@@ -308,6 +308,12 @@ declare -A variants=(
   [shiftlist]='void a() { reasons << QStringLiteral("failed"); }'
   [jsonvalue]='void a(QJsonObject &o) { o.insert(QStringLiteral("reason"), QJsonValue("failed")); }'
   [ondone]='void a() { onDone(QStringLiteral("failed"), {}); }'
+  [emplaceback]='void a() { reasons.emplace_back(QStringLiteral("failed")); }'
+  [emplaceBack]='void a() { m_errors.emplaceBack(QStringLiteral("failed")); }'
+  [shiftprefix]='void A::a() { m_reasons << QStringLiteral("failed"); }'
+  [shiftdptr]='void A::a() { d->errors << QStringLiteral("failed"); }'
+  [shiftthis]='void A::a() { this->lines << QStringLiteral("failed"); }'
+  [shiftchain]='void a(Result &r) { r.errors << QStringLiteral("failed") << QStringLiteral("it broke"); }'
 )
 for name in "${!variants[@]}"; do
   cppcase "$name" "${variants[$name]}"
@@ -344,6 +350,11 @@ void h(Bus &bus) { bus.call(a, QStringLiteral("GetDevices"), QStringLiteral("on"
 /* a comment: that network is gone */ // and another one: no word is read here
 QString i() { return QStringLiteral("%1.%2").arg(a, b); }
 QString j() { return QCoreApplication::translate("X", "timed out") + QString::fromUtf8(R"(raw/path)"); }
+QDBusMessage t() { QDBusMessage msg; msg << "clicked"; return msg; }
+void u(QTextStream &err) { err << "grassfield-preview: " << "failed"; }
+void v() { QJsonObject o{{"set_toplevel_description", "os"}, {"titles", "File:"}}; }
+void w(QStringList &args, bool x) { args << reasonFlag << "status"; args << QStringLiteral("status") << "failed"; }
+void x(QTextStream &cerr, QString &outline, QString &context, QString &hinting) { cerr << "failed"; outline << "failed"; context << "failed"; hinting << "failed"; }
 CPP
 desc="part (f): translated text, tokens, comparisons, log lines, comments and i18n-ignore pass"
 check bash -c '[[ -z $1 ]]' _ "$(cppgate "$tmp/cpp-good")"
