@@ -54,6 +54,7 @@ QtObject {
     // once (busjobs.h), which is its job but not what this test is about. A job counts until its worker is done, so 3 in flight
     // plus the one being started stays under the cap whatever the machine's load.
     property var pendingOps: []
+    property var busReturns: [] // what busAct returned for the real-session ops, kept in order, listed before the other returns
 
     readonly property string uuid: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
     // Wi-Fi and Bluetooth actions are D-Bus maps (busAct), Sound's are wpctl argument vectors (act).
@@ -67,7 +68,7 @@ QtObject {
         target: root.backend
         function onFinished(tag: string, ok: bool, output: string): void {
             if (tag === "b.act" && root.pendingOps.length > 0)
-                root.actReturns.push(root.backend.busAct("test", root.pendingOps.shift(), "b.act"));
+                root.busReturns.push(root.backend.busAct("test", root.pendingOps.shift(), "b.act"));
             root.seen++;
             if (ok)
                 root.okCount++;
@@ -95,7 +96,7 @@ QtObject {
     }
 
     function finish(): void {
-        console.log("RESULT dev=" + root.backend.devSession + " ok=" + root.okCount + " refused=" + root.refusedCount + " actReturns=" + root.actReturns.join(",") + " runs=" + root.runs.join("|") + " reasons=" + root.reasons.join("|"));
+        console.log("RESULT dev=" + root.backend.devSession + " ok=" + root.okCount + " refused=" + root.refusedCount + " actReturns=" + root.busReturns.concat(root.actReturns).join(",") + " runs=" + root.runs.join("|") + " reasons=" + root.reasons.join("|"));
         Qt.quit();
     }
 
@@ -136,7 +137,7 @@ QtObject {
             root.expected = root.busOps.length + root.commands.length + 1;
             root.pendingOps = root.busOps.slice(3);
             for (const o of root.busOps.slice(0, 3))
-                root.actReturns.push(root.backend.busAct("test", o, "b.act"));
+                root.busReturns.push(root.backend.busAct("test", o, "b.act"));
             for (const a of root.commands)
                 root.actReturns.push(root.backend.act("test", a, "a"));
             // A failing tool reports its reason (stderr) before finished(false).
