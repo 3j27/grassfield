@@ -5,7 +5,7 @@
     <name>AboutPage</name>
     <message>
         <source>About</source>
-        <translation>À propos</translation>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>%1 (1 thread)</source>
@@ -3088,6 +3088,21 @@
     </message>
 </context>
 <context>
+    <name>GeneralPage</name>
+    <message>
+        <source>General</source>
+        <translation>Général</translation>
+    </message>
+    <message>
+        <source>Manage your overall setup and preferences for this computer, such as storage, language, the date and time, and more.</source>
+        <translation>Gérez la configuration générale et les préférences de cet ordinateur, comme le stockage, la langue, la date et l’heure, et plus encore.</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <translation>Informations</translation>
+    </message>
+</context>
+<context>
     <name>Glance</name>
     <message>
         <source>Glance</source>
@@ -3846,6 +3861,14 @@
         <translation>Accessibilité</translation>
     </message>
     <message>
+        <source>General</source>
+        <translation>Général</translation>
+    </message>
+    <message>
+        <source>about storage date time language region login items startup</source>
+        <translation>informations stockage date heure langue région ouverture éléments démarrage</translation>
+    </message>
+    <message>
         <source>pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display</source>
         <translation>pointeur curseur taille souris grand couleur contour remplissage contraste transparence animation texte taille agrandir affichage</translation>
     </message>
@@ -3890,6 +3913,10 @@
         <translation>pointeur vitesse de déplacement défilement naturel toucher cliquer clic secondaire droit pavé tactile</translation>
     </message>
     <message>
+        <source>version system hardware processor memory computer name graphics serial</source>
+        <translation>version système matériel processeur mémoire nom ordinateur graphisme série</translation>
+    </message>
+    <message>
         <source>Keyboard</source>
         <translation>Clavier</translation>
     </message>
@@ -3899,11 +3926,7 @@
     </message>
     <message>
         <source>About</source>
-        <translation>À propos</translation>
-    </message>
-    <message>
-        <source>version system hardware processor memory</source>
-        <translation>version système matériel processeur mémoire</translation>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>

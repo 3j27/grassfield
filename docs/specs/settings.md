@@ -3,7 +3,7 @@
 UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section "Hot Corners" is "Screen Corners" (fr « Coins de l’écran »); the corner action "Notification Center" is "Notifications"; the app menu entry "System Settings…" is "Settings…" (fr « Réglages… »). Bindings descriptions "Next Space", "Previous Space", "Notification Center" of the bindings file are shown as "Next Desktop", "Previous Desktop", "Notifications" (`Bindings.uiName`).
 
 ## macOS reference behavior (described in words)
-- Settings is one opaque window (about 740 x 640 in macOS 27): a sidebar on the left with a search field on top and
+- Settings is one opaque window (740 x 690 in macOS 27): a sidebar on the left with a search field on top and
   one row per section (a 20-pt coloured icon tile with a white glyph, the name), a detail pane on the right with the
   title in the toolbar and grouped, rounded "inset" lists. Rows hold a label (optionally a grey caption) and a control on
   the right: switch, slider, pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
@@ -14,6 +14,15 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
   radius 12, 468 wide with 20-pt margins, 10 apart, the first 12 below the toolbar; rows 38, labels and separators 10
   inside the group; section headers 13 bold in the text colour.
 - Typing in the search field filters the sidebar. Up/Down in the sidebar switch the pane.
+- Sidebar groups and hubs (PR #4, `docs/audits/settings-parity-2026-10-26.md`): the sections follow the macOS 27 order in
+  groups with a 13-pt gap between them (Wi-Fi, Bluetooth | General, Accessibility, Appearance, Desktop & Dock, Displays, Menu
+  Bar, Wallpaper | Notifications, Sound | Lock Screen | Keyboard, Mouse & Trackpad). General is a hub: a header card (a
+  48-pt tile, the name in bold, what it holds), then navigation rows (a 24-pt tile, the name, a chevron; 48 tall, 49
+  apart) that open its sub-panes; the sidebar keeps General selected while one is open, the toolbar shows the sub-pane's
+  title (none on the hub itself) and its back button returns to the hub. The search also finds the sub-panes. The search
+  field and the toolbar's back / forward capsule are glass, as in macOS 27: an almost clear fill with a dark rim outside
+  and a light rim inside, one device pixel each, and a hairline between back and forward (`RimmedCapsule.qml`). A
+  pop-up in a row is the macOS 27 one: the value as plain text, then a 20-pt disc with two chevrons (`ComboBox.inline`).
 
 ## macOS 27 parity inventory (owner brief 2026-10-26)
 Target: every pane indistinguishable from macOS 27 Golden Gate System Settings on close inspection (F1 strict, ADR-0024),
