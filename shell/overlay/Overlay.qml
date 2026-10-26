@@ -252,7 +252,11 @@ Variants {
             y: Math.max(0, Math.min(win.height - height - margin, wantedY))
             opacity: item ? 1 : 0
 
+            // Menus and the menu bar's popovers appear at once (macOS: no motion on a frequent interaction, audit F6, C-23);
+            // centred dialogs (About, Force Quit, confirmations) keep their short fade in.
             Behavior on opacity {
+                enabled: Popups.align === "center"
+
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
                 }

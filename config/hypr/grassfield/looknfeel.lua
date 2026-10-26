@@ -26,26 +26,28 @@ hl.config({
   },
 
   decoration = {
-    -- Fixed-radius window corners (macOS 27). Continuous-corner approximation.
-    -- 26: the macOS toolbar-window radius, for Grassfield's own windows (org.grassfield.*). Every other window gets the
-    -- titlebar-only radius 12 from the rule gf-third-party-rounding (windows.lua). Hyprland 0.56.2 caps the window rule
-    -- `rounding` at 20, not this global value: 26 is only reachable here.
-    rounding = 26,
+    -- One window radius for every window (macOS 27, ADR-0024 C-1): about 16.6 pt circle-equivalent at 45 degrees in the
+    -- release captures, 4.9 pt from both edges; 20 at rounding_power 2.6 puts that point 4.7 in (20 x (1 - 2^(-1/2.6))),
+    -- the closest a window rule can reach: Hyprland 0.56.2 caps a rule's `rounding` at 20, and the rules
+    -- gf-third-party-rounding and gf-client-chrome-info-rounding (windows.lua) set the same 20. Continuous-corner
+    -- approximation.
+    rounding = 20,
     rounding_power = 2.6,
     active_opacity = 1.0,
     inactive_opacity = 1.0,
     fullscreen_opacity = 1.0,
     dim_inactive = false,
 
-    -- Diffused shadow: large range, low power, offset downwards.
+    -- Diffused shadow fitted to the macOS 27 window shadow (ADR-0024 C-3, docs/audits/ui-finesse-2026-10-25.md 7.3:
+    -- alpha = 0.25 x (1 - d / 68)^4, offset 16 down); inactive windows keep today's ratio to the active shadow (0.2 / 0.35).
     shadow = {
       enabled = true,
-      range = 38,
-      render_power = 2,
+      range = 68,
+      render_power = 4,
       sharp = false,
-      color = "rgba(00000059)",
-      color_inactive = "rgba(00000033)",
-      offset = { 0, 14 },
+      color = "rgba(00000040)",
+      color_inactive = "rgba(00000024)",
+      offset = { 0, 16 },
       scale = 1.0,
     },
 

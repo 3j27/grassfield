@@ -39,15 +39,15 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- any button).
 hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, tag = "+grassfield-client-chrome" })
 
--- Get Info and Customize Folder draw the titlebar-only style (role "info"): radius 12 like every titlebar window; the
--- main windows keep the toolbar radius 26 (ADR-0015 Q5).
-hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12 })
+-- Get Info and Customize Folder draw the titlebar-only style (role "info"). macOS 27 has one radius for every window
+-- (ADR-0024 C-1, replacing ADR-0015 Q5's 26 / 12): 20, the global decoration.rounding (looknfeel.lua).
+hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 20 })
 
--- Corner radius (docs/testing/f1-reference-gaps.md, "Window chrome"): Grassfield's own windows keep the default 26
--- (looknfeel.lua, the macOS toolbar-window radius); every other window, matched by a negated class regex (also a window
--- without a class), gets 12, the titlebar-only radius (under the rule's cap of 20). Rule regexes match the whole class:
--- the pattern must cover all of it (a bare prefix never matches, so its negation would match every window).
-hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\..*$" }, rounding = 12 })
+-- Corner radius (ADR-0024 C-1, one radius for every window as in macOS 27): Grassfield's windows take 20 from
+-- decoration.rounding (looknfeel.lua); every other window, matched by a negated class regex (also a window without a
+-- class), gets the same 20 from this rule (the rule's cap). Rule regexes match the whole class: the pattern must cover
+-- all of it (a bare prefix never matches, so its negation would match every window).
+hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\..*$" }, rounding = 20 })
 
 -- Glance (quick look of Preview): a floating panel centered on the screen, without the plugin titlebar.
 hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Preview\\.Glance$" }, float = true, center = true, decorate = false })

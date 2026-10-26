@@ -505,7 +505,7 @@ class ContrastTokens(unittest.TestCase):
     def test_every_accent_passes_the_accent_roles(self):
         # appearance.accent: every accent, both appearances, every role that puts text or a graphic on the accent fill
         # (text 4.5:1, the lock band 3:1 against its field) over every wallpaper colour and transparency.
-        ids = ("accent text on accent", "search selected subtitle on accent", "apps selected chip text",
+        ids = ("accent text on accent", "apps selected chip text",
                "lock password selection (dots on the accent band)", "lock password selection band against the field",
                "selection text on selection")
         roles = [r for r in self.roles if r["id"] in ids]
@@ -536,6 +536,13 @@ class ContrastTokens(unittest.TestCase):
             for ap in APPEARANCES:
                 self.assertEqual(tok.color("colors", ap, "selection"), tok.color("lightColors", "light", "accent"), accent)
                 self.assertEqual(tok.color("colors", ap, "selectionText"), tok.color("lightColors", "light", "accentText"), accent)
+
+    def test_search_selection_is_inside_the_material_fill_overlay(self):
+        # The selected Search row is a neutral fill (colors.fill at search.selectionFillOpacity) under ordinary text (ADR-0024):
+        # the material backdrop's worst case already blends that fill at material.fillOpacity, and contrast moves
+        # monotonically with the alpha in between, so the text and secondary roles on material cover the row as long as it
+        # is no denser.
+        self.assertLessEqual(self.tok.path("search.selectionFillOpacity"), self.tok.path("material.fillOpacity"))
 
     def test_selection_highlight_text_both_appearances(self):
         accent = next(r for r in self.roles if r["id"] == "accent text on accent")

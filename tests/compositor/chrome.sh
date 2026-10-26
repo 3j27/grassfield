@@ -9,8 +9,9 @@
 #
 #   1 foot A (a third-party window), active, pointer away: the three lights at their centres (+-0.75 px), 14 px across
 #     (+-1), no glyph; the bar GF_TB_HEIGHT rows tall, flush with the window's left edge and the surface (no gap); its
-#     top corners rounded like the window, radius 12 (inset of the first fill pixels on the corner's diagonal 3-5 px; a
-#     square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius 26); the lights coloured; bar and
+#     top corners rounded like the window, radius 20 (ADR-0024: one radius for every window; inset of the first fill pixels
+#     on the corner's diagonal 5-7 px; a square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius
+#     26, so about 6 at 20); the lights coloured; bar and
 #     content join square (no pixel of the content's cut top corners differs from the content next to them)
 #   2 pointer in the gap between A's close and minimize lights (no light under the cursor image): glyphs on all three
 #     lights (the whole group, macOS); pointer away again: no glyph
@@ -23,7 +24,7 @@
 #     chrome (ADR-0015, tag grassfield-client-chrome): no plugin bar above it (0 rows of the bar colour), its own lights at
 #     their own geometry (centres 26 px from the surface's top-left, 23 px apart, 14 px across, coloured while active)
 #     and glyphs on all three while the pointer is between two of them (macOS); the window's corner radius as before;
-#     radius 26 (the global default; corner inset 7-10 px), square join, glyphs with the pointer between its minimize
+#     radius 20 (the global default; corner inset 5-7 px), square join, glyphs with the pointer between its minimize
 #     and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
 # radii are measured, at the surface's own corners (the Lua config alone sets them).
@@ -260,7 +261,7 @@ if ((plugin)); then
   check_bar "A"
   check_junction "A"
 fi
-check_corner "A (third-party)" 3 5 12
+check_corner "A (third-party)" 5 7 20
 
 if ((plugin)); then
   # 2 hover in the gap between A's close and minimize lights (the cursor image covers no light)
@@ -361,7 +362,7 @@ if [[ -x $settings ]]; then
     # The corner on the app's own top edge (its toolbar colour, measured with no plugin bar): the measurement above looks
     # for the plugin bar, absent by design here, and finds no corner (integrator run 2026-10-24: diagonal inset -1).
     measure_app settings "$sx" "$sy" "$sw"
-    check_corner "Settings (org.grassfield.*)" 7 10 26
+    check_corner "Settings (org.grassfield.*)" 5 7 20
     check_app_lights "Settings (its own lights)" "$sx" "$sy"
     check_grey "Settings (active): its own lights coloured" 1
     # Between the minimize and zoom lights. The app draws the glyphs itself, from the pointer events it gets: up to three

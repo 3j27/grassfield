@@ -55,7 +55,7 @@ NavItem {
         width: Tokens.panelCcIconButton
         height: width
         radius: width / 2
-        color: root.on ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.on ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Behavior on color {
             ColorAnimation {
@@ -67,7 +67,7 @@ NavItem {
             anchors.centerIn: parent
             size: Tokens.menuIconSize
             name: root.iconName
-            color: root.on ? Appearance.colors.accentText : Appearance.colors.text
+            color: root.on ? Appearance.colors.selectionText : Appearance.colors.text
         }
 
         MouseArea {

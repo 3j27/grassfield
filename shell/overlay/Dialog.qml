@@ -24,6 +24,8 @@ FocusScope {
 
     readonly property real cornerRadius: sheet ? Tokens.radiusSheet : Tokens.radiusAlert
     readonly property real pad: sheet ? Tokens.panelSheetPadding : Tokens.spacingLg
+    // An alert's icon and text sit 24 from its edges, its buttons 16; a sheet has one padding.
+    readonly property real textInset: sheet ? pad : Tokens.panelAlertTextInset
     readonly property Item surface: material
 
     width: panelWidth
@@ -42,9 +44,9 @@ FocusScope {
 
     Column {
         id: column
-        x: root.pad
+        x: root.textInset
         y: root.pad
-        width: root.width - 2 * root.pad
+        width: root.width - 2 * root.textInset
         spacing: Tokens.spacingMd
 
         Item {
@@ -67,7 +69,7 @@ FocusScope {
             visible: text !== ""
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
-            font.pixelSize: root.sheet ? Tokens.typographyTitleSize : Tokens.typographyBodySize
+            font.pixelSize: Tokens.typographyBodySize
             font.weight: Tokens.typographyMenuBoldWeight
             wrapMode: Text.WordWrap
         }
@@ -123,7 +125,7 @@ FocusScope {
             }
             if (count === 0)
                 return;
-            const fill = root.sheet ? 0 : (column.width - (count - 1) * buttonRow.spacing) / count;
+            const fill = root.sheet ? 0 : (root.width - 2 * root.pad - (count - 1) * buttonRow.spacing) / count;
             const wanted = Math.max(widest, fill);
             for (let i = 0; i < kids.length; i++) {
                 if ("capsule" in kids[i])
