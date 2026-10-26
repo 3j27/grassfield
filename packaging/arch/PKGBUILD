@@ -140,6 +140,7 @@ package_grassfield-desktop() {
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
     'localsearch: file results in Search'
+    'plocate: file names in Search when localsearch has no index (ADR-0027)'
     'kio-extras: network locations and image thumbnails in Files'
     'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
     'udiskie: mounts removable media when they are connected'

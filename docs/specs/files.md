@@ -418,7 +418,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 |---|---|---|---|---|---|---|
 | FP-49 | Copy, Paste, Undo/Redo, Select All | done | — | KIO, FileUndoManager | — | — |
 | FP-50 | Move: Copy then ⌥⌘V (Move Item Here); no Cut for files | partial: Files has Cut ⌘X (KDE/GNOME cut flag) | none | `KIO::paste` | decision F-6 | 5 |
-| FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | done (Empty Trash never run by tests; no ⇧⌘⌫) | Finder-Empty-Trash | KIO trash | — | 5 |
+| FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | partial: Empty Trash only while the Trash is shown (Finder: Finder > Empty Trash and ⇧⌘⌫ anywhere); never run by tests | Finder-Empty-Trash | KIO trash | — | 5 |
 | FP-52 | Delete Immediately ⌥⌘⌫ on any item (confirmed) | partial: in the Trash only | none | `KIO::del` | — | 5 |
 | FP-53 | Duplicate ⌘D | done | — | `KIO::copyAs` | — | — |
 | FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | missing | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
@@ -476,7 +476,8 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
   folders, least recently used dropped), keyed by the cleaned URL, holding the view, sort key and order, grouping and
   View Options; a folder without an entry uses the defaults (View Options "Use as Defaults"). Files never writes into the
   folder (macOS's `.DS_Store`, KDE's `.directory`): it works on read-only, remote and Trash locations alike, and other
-  applications never see stray files. A tag search or saved search keeps its own entry.
+  applications never see stray files. A tag search or saved search keeps its own entry. The file joins ADR-0020's table
+  of Grassfield's files with the code that writes it (PR 1, #5).
 - **F-4 Return renames** (macOS), ⌘O and ⌘↓ open; F2 keeps renaming (PC keyboards).
 - **F-5 Recents**: the files listed in `recently-used.xbel` (written by GTK and KDE applications and read by the shell's
   Search and Recent Items), newest first, existing local files only, at most 500; Files adds the files it opens there
@@ -497,8 +498,10 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
   the shell's T0 menus (menubar.md). Items only Files can run (Empty Trash, Merge All Windows, Move Tab to New Window,
   Services) are exported in Files' own menus (File, View) and context menus until the menu bar can host app-provided app
   and Window items (a menubar change, later).
-- **F-11 Bars**: the path and status bars are hidden by default, as in the Finder; View shows them. Job progress moves to
-  the progress window (FP-68).
+- **F-11 Bars**: the path and status bars are hidden by default, as in the Finder; View shows them. The status bar
+  carries job progress and notices (a search stopped early) until the progress window exists (FP-68, PR 5): from PR 2
+  to PR 5 it shows itself while a job runs or a notice is up, whatever the setting, so nothing is hidden; FP-68 then
+  takes the progress.
 - **F-12 Names**: no Apple trademark in the UI (master-prompt §14): "This Mac" is "This Computer" (« Cet ordinateur »), as
   in the system menu's About This Computer; Quick Look is Glance; Archive Utility has no name of its own (Files expands).
 
