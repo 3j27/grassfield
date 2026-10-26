@@ -1401,6 +1401,8 @@ QtObject {
     readonly property int filesPreviewActionGap: 9
     // macOS 27 Finder: action glyphs about 15 tall (own symbols, 15 tall in an 18 box) [ref: docs/specs/files.md § Preview pane]
     readonly property int filesPreviewActionIcon: 18
+    // macOS 27 Finder: the bar's inner width shared by three action slots (Rotate Left, Markup, More), centred whatever is offered [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionSlots: 3
     // estimate: colour tag dot next to a file name [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTagDotSize: 10
     // estimate: overlap of stacked tag dots [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]

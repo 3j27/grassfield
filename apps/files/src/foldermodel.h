@@ -245,9 +245,9 @@ private:
     QStringList tagsOf(const KFileItem &item) const;
     // What sorting by `key` and grouping by m_groupBy read of an item (only those fields are filled).
     FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key) const;
-    // An item's group (cached per url until the rows or the grouping change).
+    // An item's group (cached per url until the item, the folder, the grouping or the day changes).
     FileLogic::Group groupFor(const KFileItem &item) const;
-    // The rows, their groups or the grouping changed: the cache goes and groupsChanged follows (once per event loop turn).
+    // The rows or their groups changed: groupsChanged follows (once per event loop turn).
     void groupsDirty();
     void dropTags(const QUrl &url);
     // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).

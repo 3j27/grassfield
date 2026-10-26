@@ -4,9 +4,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QSet>
 #include <QXmlStreamReader>
 
 #include <algorithm>
+#include <iterator>
 
 namespace Recents
 {
@@ -87,11 +89,39 @@ QString xbelPath()
     return data + QStringLiteral("/recently-used.xbel");
 }
 
+namespace
+{
+QHash<QString, QString> &renames()
+{
+    static QHash<QString, QString> map;
+    return map;
+}
+} // namespace
+
+void noteRenamed(const QString &from, const QString &to)
+{
+    QHash<QString, QString> &map = renames();
+    for (auto it = map.begin(); it != map.end();) {
+        if (it.value() == from)
+            it.value() = to;
+        // Renamed back: nothing to follow.
+        it = it.key() == it.value() ? map.erase(it) : std::next(it);
+    }
+    if (from != to)
+        map.insert(from, to);
+}
+
+QHash<QString, QString> renamed()
+{
+    return renames();
+}
+
 } // namespace Recents
 
-RecentsLoader::RecentsLoader(quint64 generation, const QString &file)
+RecentsLoader::RecentsLoader(quint64 generation, const QString &file, const QHash<QString, QString> &renames)
     : m_generation(generation)
     , m_file(file)
+    , m_renames(renames)
 {
 }
 
@@ -104,11 +134,14 @@ void RecentsLoader::run()
     constexpr qint64 kMaxFileSize = 32 * 1024 * 1024;
     if (f.size() <= kMaxFileSize && f.open(QIODevice::ReadOnly)) {
         const QList<Recents::Entry> entries = Recents::parse(f.readAll());
+        QSet<QString> seen;
         for (const Recents::Entry &e : entries) {
             if (paths.size() >= Recents::kMaxItems)
                 break;
-            if (QFileInfo(e.path).isFile()) {
-                paths.append(e.path);
+            const QString path = m_renames.value(e.path, e.path);
+            if (!seen.contains(path) && QFileInfo(path).isFile()) {
+                seen.insert(path);
+                paths.append(path);
                 used.append(e.used);
             }
         }

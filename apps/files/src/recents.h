@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -34,17 +35,23 @@ bool isRecentsUrl(const QUrl &url);
 // $XDG_DATA_HOME/recently-used.xbel ($HOME/.local/share without XDG_DATA_HOME).
 QString xbelPath();
 
+// A recent file renamed or moved while Files runs stays a recent file under its new path (recently-used.xbel keeps the
+// old one): the loaders read it there. Process-wide, GUI thread only.
+void noteRenamed(const QString &from, const QString &to);
+// Old path -> new path of the renames noted so far (chains followed).
+QHash<QString, QString> renamed();
+
 } // namespace Recents
 
 // Reads the list on its own thread: an entry on a network mount that does not answer must not stop the window. parse(),
-// then the entries that are regular files (links followed), at most Recents::kMaxItems. One run per object; the caller
-// deletes it (deleteLater on finished).
+// each path through `renames` (Recents::renamed()), then the entries that are regular files (links followed), each once,
+// at most Recents::kMaxItems. One run per object; the caller deletes it (deleteLater on finished).
 class RecentsLoader : public QThread
 {
     Q_OBJECT
 
 public:
-    RecentsLoader(quint64 generation, const QString &file);
+    RecentsLoader(quint64 generation, const QString &file, const QHash<QString, QString> &renames = {});
 
 signals:
     // `used` holds the QDateTime of each path.
@@ -56,4 +63,5 @@ protected:
 private:
     const quint64 m_generation;
     const QString m_file;
+    const QHash<QString, QString> m_renames;
 };

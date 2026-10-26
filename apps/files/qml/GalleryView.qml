@@ -404,15 +404,17 @@ FocusScope {
 
     // Preview pane (View > Show Preview, the gallery's own setting): the shared pane with a small preview beside the name,
     // the view's own preview being the large one.
-    PreviewPane {
+    Loader {
         id: infoPanel
-        visible: root.showInfo
+        active: root.showInfo
         x: pager.width
         height: parent.height
-        topExtension: root.tab.win ? root.tab.win.previewExtension : 0
-        tab: root.tab
-        model: root.model
-        large: false
+        sourceComponent: PreviewPane {
+            topExtension: root.tab.win ? root.tab.win.previewExtension : 0
+            tab: root.tab
+            model: root.model
+            large: false
+        }
     }
 
     Text {

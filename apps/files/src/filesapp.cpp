@@ -147,6 +147,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
     , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
 {
+    m_rotations.setMaxThreadCount(1);
     auto *undo = KIO::FileUndoManager::self();
     connect(undo, &KIO::FileUndoManager::undoAvailable, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoAvailable, this, &FilesApp::undoChanged);
@@ -209,6 +210,12 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     m_knownTags = TagLogic::displayOrder(m_settings.value(QStringLiteral("tags/known")).toStringList()).mid(0, kMaxKnownTags);
     m_hiddenTags = m_settings.value(QStringLiteral("tags/hidden")).toStringList().mid(0, kMaxHiddenTags);
     publishKnownTags();
+}
+
+FilesApp::~FilesApp()
+{
+    // A picture being turned is finished before Files goes (its replacement is written whole or not at all).
+    m_rotations.waitForDone();
 }
 
 QString FilesApp::configFile() const
@@ -470,6 +477,8 @@ void FilesApp::setColumnPreview(bool on)
 QList<QUrl> FilesApp::rotatableImages(const QList<QUrl> &urls) const
 {
     QList<QUrl> out;
+    if (urls.size() > kMaxQuickActionItems)
+        return out;
     static const QMimeDatabase mimes;
     for (const QUrl &url : urls) {
         if (!url.isLocalFile())
@@ -485,20 +494,30 @@ QList<QUrl> FilesApp::rotatableImages(const QList<QUrl> &urls) const
 
 void FilesApp::rotateImages(const QList<QUrl> &urls, bool clockwise)
 {
-    static const QMimeDatabase mimes;
-    QList<QUrl> changed;
-    for (const QUrl &url : rotatableImages(urls)) {
-        const QString path = url.toLocalFile();
-        const QString error = ImageRotate::rotate(path, mimes.mimeTypeForFile(path).name().toLatin1(), clockwise);
-        if (!error.isEmpty()) {
-            emit operationFailed(tr("“%1” couldn’t be turned: %2.").arg(FileLogic::displayName(QFileInfo(path).fileName()), error));
-            continue;
+    const QList<QUrl> todo = rotatableImages(urls);
+    if (todo.isEmpty())
+        return;
+    // A large picture or a slow disk must not stop the windows: the files are read and written on m_rotations' thread.
+    m_rotations.start([this, todo, clockwise] {
+        const QMimeDatabase mimes;
+        QStringList failures;
+        QList<QUrl> changed;
+        for (const QUrl &url : todo) {
+            const QString path = url.toLocalFile();
+            const QString error = ImageRotate::rotate(path, mimes.mimeTypeForFile(path).name().toLatin1(), clockwise);
+            if (error.isEmpty())
+                changed.append(url);
+            else
+                failures.append(tr("“%1” couldn’t be turned: %2.").arg(FileLogic::displayName(QFileInfo(path).fileName()), error));
         }
-        changed.append(url);
-    }
-    // Listings and thumbnails follow (KDirLister refreshes the items, the thumbnails are made again).
-    if (!changed.isEmpty())
-        org::kde::KDirNotify::emitFilesChanged(changed);
+        QMetaObject::invokeMethod(this, [this, failures, changed] {
+            for (const QString &failure : failures)
+                emit operationFailed(failure);
+            // Listings and thumbnails follow (KDirLister refreshes the items, the thumbnails are made again).
+            if (!changed.isEmpty())
+                org::kde::KDirNotify::emitFilesChanged(changed);
+        }, Qt::QueuedConnection);
+    });
 }
 
 namespace
@@ -1457,10 +1476,17 @@ bool FilesApp::eventFilter(QObject *watched, QEvent *event)
     case QEvent::DragEnter:
     case QEvent::DragMove: {
         const auto *e = static_cast<QDragMoveEvent *>(event);
-        m_drags.insert(watched, {e->position(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers()});
+        m_drags.insert(watched, {e->position(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers(), e->source() != nullptr});
         break;
     }
-    case QEvent::DragLeave:
+    case QEvent::DragLeave: {
+        const auto it = m_drags.constFind(watched);
+        const bool outside = it != m_drags.cend() && !it->local;
+        m_drags.remove(watched);
+        if (outside)
+            emit outsideDragLeft(watched);
+        break;
+    }
     case QEvent::Drop:
         m_drags.remove(watched);
         break;
@@ -1487,6 +1513,11 @@ bool FilesApp::isRecents(const QUrl &url) const
 QUrl FilesApp::recentsUrl() const
 {
     return Recents::locationUrl();
+}
+
+int FilesApp::recentsSortKey() const
+{
+    return int(FileLogic::SortKey::Opened);
 }
 
 QString FilesApp::searchedTag(const QUrl &url) const

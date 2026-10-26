@@ -13,6 +13,7 @@
 #include <QPointF>
 #include <QPointer>
 #include <QSettings>
+#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -96,6 +97,7 @@ class FilesApp : public QObject
 
 public:
     explicit FilesApp(const QList<QUrl> &initialUrls, QObject *parent = nullptr);
+    ~FilesApp() override;
 
     QObject *places() const;
     QString homePath() const;
@@ -162,7 +164,9 @@ public:
     Q_INVOKABLE void setFolderView(const QUrl &url, const QVariantMap &fields);
 
     // Quick actions of the preview pane (ImageRotate): the local pictures among `urls` that Files can turn without a loss
-    // (JPEG through its orientation tag; PNG, BMP, TIFF), and the turn itself (errors in the banner).
+    // (JPEG through its orientation tag; PNG, BMP), none for a selection of more than kMaxQuickActionItems (each is looked
+    // at on disk as the selection changes); and the turn itself, on a thread of its own (errors in the banner).
+    static constexpr int kMaxQuickActionItems = 100;
     Q_INVOKABLE QList<QUrl> rotatableImages(const QList<QUrl> &urls) const;
     Q_INVOKABLE void rotateImages(const QList<QUrl> &urls, bool clockwise);
 
@@ -242,6 +246,9 @@ public:
     // Recents (Go > Recents, the sidebar's first place; docs/specs/files.md "Views and selection").
     Q_INVOKABLE bool isRecents(const QUrl &url) const;
     Q_INVOKABLE QUrl recentsUrl() const;
+    // Recents is sorted by when the files were last opened unless chosen otherwise for it (Finder).
+    Q_PROPERTY(int recentsSortKey READ recentsSortKey CONSTANT)
+    int recentsSortKey() const;
     // A spring-loaded folder replaced the view under a drag that has not moved since: the window gets its last drag
     // move again, so the new view under the pointer becomes the drop target (a drop without moving lands in the opened
     // folder, as in the Finder). Nothing happens when no drag is over `window`.
@@ -285,6 +292,8 @@ signals:
     void folderStylesChanged(const QList<QUrl> &urls);
     void allFolderStylesChanged();
     void folderStyleRevisionChanged();
+    // A drag from another application left `window` (or was canceled over it): what it spring-loaded goes back.
+    void outsideDragLeft(QObject *window);
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).
@@ -348,6 +357,10 @@ private:
         QPointer<const QMimeData> mime;
         Qt::MouseButtons buttons;
         Qt::KeyboardModifiers modifiers;
+        // The drag started in Files (its end reaches the views by Drag.onDragFinished).
+        bool local = false;
     };
     QHash<QObject *, DragState> m_drags;
+    // Pictures are turned here, one batch at a time and in order (two turns of one picture never overlap).
+    QThreadPool m_rotations;
 };

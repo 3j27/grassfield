@@ -107,8 +107,21 @@ QtObject {
     }
 
     // Tabs a drag spring-loaded into a folder (BrowserTab.springHover): when a drag Files started ends, they stay where
-    // the drop happened or, without a drop, go back (Finder).
+    // the drop happened or, without a drop, go back (Finder). A drag from another application has no end Files hears of:
+    // the tabs of a window it leaves go back then (a drop into one keeps it: BrowserTab.dropUrls).
     property var springTabs: []
+
+    property Connections outsideDrags: Connections {
+        target: root.app
+        function onOutsideDragLeft(window: var): void {
+            const tabs = root.springTabs;
+            root.springTabs = tabs.filter(tab => !tab || tab.win !== window);
+            for (let i = 0; i < tabs.length; i++) {
+                if (tabs[i] && tabs[i].win === window && tabs[i].springEnd)
+                    tabs[i].springEnd(false);
+            }
+        }
+    }
 
     function springStarted(tab: var): void {
         if (root.springTabs.indexOf(tab) < 0)

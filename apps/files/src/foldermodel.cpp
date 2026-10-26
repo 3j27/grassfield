@@ -224,9 +224,16 @@ FolderModel::FolderModel(QObject *parent)
     m_lister->setAutoErrorHandlingEnabled(false);
     m_lister->setDelayedMimeTypes(true);
     m_results = new ItemListModel(this);
-    // Before the proxy's own connections (setSourceModel): an item that changed is grouped afresh when it is sorted again.
-    for (QAbstractItemModel *source : {static_cast<QAbstractItemModel *>(m_dirModel), static_cast<QAbstractItemModel *>(m_results)})
-        connect(source, &QAbstractItemModel::dataChanged, this, [this] { m_groupCache.clear(); });
+    // Before the proxy's own connections (setSourceModel): the items that changed are grouped afresh when they are sorted
+    // again (KDirModel reports each item whose type it found, one by one).
+    connect(m_dirModel, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+        for (int row = topLeft.row(); row <= bottomRight.row(); row++)
+            m_groupCache.remove(m_dirModel->itemForIndex(topLeft.siblingAtRow(row)).url());
+    });
+    connect(m_results, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+        for (int row = topLeft.row(); row <= bottomRight.row(); row++)
+            m_groupCache.remove(m_results->item(row).url());
+    });
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -375,6 +382,7 @@ void FolderModel::setUrl(const QUrl &url)
     clearAllPreviews();
     m_tags.clear();
     m_styles.clear();
+    m_groupCache.clear();
     setError(QString());
     m_freeSpace = -1;
     emit freeSpaceChanged();
@@ -437,7 +445,7 @@ void FolderModel::startRecents()
     m_listTimer.start();
     m_loading = true;
     emit loadingChanged();
-    auto *loader = new RecentsLoader(generation, file);
+    auto *loader = new RecentsLoader(generation, file, Recents::renamed());
     connect(loader, &RecentsLoader::loaded, this, [this](quint64 gen, const QStringList &paths, const QVariantList &used) {
         if (gen != m_recentsGeneration || !isRecents())
             return;
@@ -824,7 +832,7 @@ FileLogic::SortEntry FolderModel::sortEntry(const KFileItem &item, FileLogic::So
     e.isDir = item.isDir();
     const bool typed = key == SortKey::Kind || key == SortKey::Application || by == GroupBy::Kind || by == GroupBy::Application;
     if (typed && !e.isDir) {
-        const MimeFacts &facts = mimeFacts(mimeNameOf(item));
+        const MimeFacts facts = mimeFacts(mimeNameOf(item));
         e.kind = facts.comment;
         e.mimeTypes = facts.lineage;
         e.application = facts.application;
@@ -863,13 +871,19 @@ FileLogic::Group FolderModel::groupFor(const KFileItem &item) const
 
 void FolderModel::groupsDirty()
 {
-    m_groupCache.clear();
     m_groupsValid = false;
     if (m_groupsNotifyQueued || m_groupBy == 0)
         return;
     m_groupsNotifyQueued = true;
     QTimer::singleShot(0, this, [this] {
         m_groupsNotifyQueued = false;
+        // A new day moves items between the date groups: they are grouped and sorted again (outside any sort, whose
+        // comparisons must see one grouping).
+        if (m_groupClock.isValid() && m_groupNow.date() != QDate::currentDate()) {
+            m_groupCache.clear();
+            m_groupClock.invalidate();
+            invalidate();
+        }
         emit groupsChanged();
     });
 }
@@ -1411,11 +1425,21 @@ void FolderModel::renameResult(const QUrl &from, const QUrl &to)
 {
     if (m_results->rowOf(from) < 0)
         return;
-    // Moved out of the searched folder (or to the Trash): it leaves the results.
-    const QUrl folder = TagLogic::searchFolder(m_url);
-    if (!to.isLocalFile() || !(folder == to || folder.isParentOf(to))) {
-        removeResults({from});
-        return;
+    if (isRecents()) {
+        // Still a recent file under its new name; to the Trash, it leaves Recents.
+        if (!to.isLocalFile()) {
+            removeResults({from});
+            return;
+        }
+        Recents::noteRenamed(from.toLocalFile(), to.toLocalFile());
+        m_recentTimes.insert(to, m_recentTimes.take(from));
+    } else {
+        // Moved out of the searched folder (or to the Trash): it leaves the results.
+        const QUrl folder = TagLogic::searchFolder(m_url);
+        if (!to.isLocalFile() || !(folder == to || folder.isParentOf(to))) {
+            removeResults({from});
+            return;
+        }
     }
     const bool selected = m_selected.remove(from);
     forgetThumbnail(m_small, from, false);

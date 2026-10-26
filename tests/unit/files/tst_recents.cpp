@@ -92,7 +92,7 @@ TEST(Recents, TheLoaderKeepsExistingFilesOnly)
         GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
     app();
     const QString present = dir->filePath(QStringLiteral("present.txt"));
-    QFile(present).open(QIODevice::WriteOnly);
+    ASSERT_TRUE(QFile(present).open(QIODevice::WriteOnly));
     QDir().mkpath(dir->filePath(QStringLiteral("folder")));
     const QString xbel = dir->filePath(QStringLiteral("recently-used.xbel"));
     QFile f(xbel);
@@ -122,4 +122,51 @@ TEST(Recents, TheLoaderKeepsExistingFilesOnly)
     EXPECT_EQ(paths, QStringList{present}) << "missing files and folders are left out";
     ASSERT_EQ(used.size(), 1);
     EXPECT_EQ(used.at(0).toDateTime(), QDateTime::fromString(QStringLiteral("2026-10-26T09:00:00Z"), Qt::ISODate));
+}
+
+TEST(Recents, RenamesAreFollowed)
+{
+    const QString a = QStringLiteral("/test/a.txt"), b = QStringLiteral("/test/b.txt"), c = QStringLiteral("/test/c.txt");
+    Recents::noteRenamed(a, b);
+    Recents::noteRenamed(b, c);
+    EXPECT_EQ(Recents::renamed().value(a), c) << "a chain ends at the last name";
+    EXPECT_EQ(Recents::renamed().value(b), c);
+    Recents::noteRenamed(c, a);
+    EXPECT_FALSE(Recents::renamed().contains(a)) << "renamed back: nothing left to follow";
+    EXPECT_EQ(Recents::renamed().value(b), a);
+}
+
+TEST(Recents, TheLoaderReadsRenamedFilesUnderTheirNewPath)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    app();
+    const QString renamed = dir->filePath(QStringLiteral("new name.txt"));
+    ASSERT_TRUE(QFile(renamed).open(QIODevice::WriteOnly));
+    const QString xbel = dir->filePath(QStringLiteral("recently-used.xbel"));
+    QFile f(xbel);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    auto bookmark = [](const QString &path, const char *when) {
+        return QStringLiteral("<bookmark href=\"%1\" modified=\"%2\" visited=\"%2\"/>\n").arg(QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded), QLatin1String(when)).toUtf8();
+    };
+    f.write("<?xml version=\"1.0\"?>\n<xbel version=\"1.0\">\n");
+    f.write(bookmark(dir->filePath(QStringLiteral("old name.txt")), "2026-10-26T10:00:00Z"));
+    // An application opened it again under its new name: listed once, at its latest use.
+    f.write(bookmark(renamed, "2026-10-26T09:00:00Z"));
+    f.write("</xbel>\n");
+    f.close();
+
+    RecentsLoader loader(1, xbel, {{dir->filePath(QStringLiteral("old name.txt")), renamed}});
+    QStringList paths;
+    QVariantList used;
+    QObject::connect(&loader, &RecentsLoader::loaded, &loader, [&](quint64, const QStringList &p, const QVariantList &u) {
+        paths = p;
+        used = u;
+    }, Qt::DirectConnection);
+    loader.start();
+    ASSERT_TRUE(loader.wait(5000));
+    EXPECT_EQ(paths, QStringList{renamed});
+    ASSERT_EQ(used.size(), 1);
+    EXPECT_EQ(used.at(0).toDateTime(), QDateTime::fromString(QStringLiteral("2026-10-26T10:00:00Z"), Qt::ISODate));
 }

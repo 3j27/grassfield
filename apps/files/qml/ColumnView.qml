@@ -146,13 +146,15 @@ FocusScope {
 
             // Preview column for a selected file (View > Show Preview, the column view's own setting): the preview pane on the
             // window's white.
-            PreviewPane {
-                visible: root.previewInfo !== null && root.tab.app.columnPreview
-                width: visible ? Tokens.filesPreviewPaneWidth : 0
+            Loader {
+                active: root.previewInfo !== null && root.tab.app.columnPreview
+                width: active ? Tokens.filesPreviewPaneWidth : 0
                 height: strip.height
-                tab: root.tab
-                model: root.activeModel
-                filled: false
+                sourceComponent: PreviewPane {
+                    tab: root.tab
+                    model: root.activeModel
+                    filled: false
+                }
             }
         }
     }
@@ -268,6 +270,7 @@ FocusScope {
                     root.userSelected(col.index);
                 col.banding = false;
             }
+            onCanceled: col.banding = false
         }
 
         ListView {

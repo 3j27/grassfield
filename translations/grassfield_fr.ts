@@ -5076,6 +5076,14 @@
         <translation>%1 octets</translation>
     </message>
     <message>
+        <source>Zero bytes</source>
+        <translation>Zéro octet</translation>
+    </message>
+    <message>
+        <source>1 byte</source>
+        <translation>1 octet</translation>
+    </message>
+    <message>
         <source>Where</source>
         <translation>Emplacement</translation>
     </message>

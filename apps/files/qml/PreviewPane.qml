@@ -61,6 +61,14 @@ Item {
     }
     readonly property bool taggable: root.tagUrls.length > 0 && root.tab.app.tagsUnavailable(root.tagUrls) === ""
 
+    // The exact size: zero and one spelt out (qsTr's %Ln count is an int, too small for a file's size). `text`: the
+    // number written for the locale.
+    function byteCount(size: real, text: string): string {
+        if (size === 0)
+            return qsTr("Zero bytes");
+        return size === 1 ? qsTr("1 byte") : qsTr("%1 bytes").arg(text);
+    }
+
     width: Tokens.filesPreviewPaneWidth
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Preview")
@@ -68,8 +76,14 @@ Item {
     Connections {
         target: root.model
         ignoreUnknownSignals: true
-        function onDataChanged(): void {
-            root.revision++;
+        // Only a change of the shown item or of a selected one is read again (thumbnails of the rest arrive all the time).
+        function onDataChanged(topLeft: var, bottomRight: var): void {
+            for (let r = topLeft.row; r <= bottomRight.row; r++) {
+                if (r === root.row || root.model.isSelected(r)) {
+                    root.revision++;
+                    return;
+                }
+            }
         }
         function onSelectionChanged(): void {
             root.revision++;
@@ -311,7 +325,7 @@ Item {
                     {label: qsTr("Modified"), value: root.info.modified, more: false},
                     {label: qsTr("Dimensions"), value: root.info.dimensions ? root.info.dimensions : "", more: false},
                     {label: qsTr("Last opened"), value: root.info.accessed, more: true},
-                    {label: qsTr("Size"), value: root.info.isDir ? "" : qsTr("%1 bytes").arg(root.info.bytes), more: true},
+                    {label: qsTr("Size"), value: root.info.isDir ? "" : root.byteCount(root.info.size, root.info.bytes), more: true},
                     {label: qsTr("Where"), value: root.info.where, more: true}
                 ].filter(line => line.value !== undefined && line.value !== "" && (root.showMore || !line.more))
 
@@ -510,7 +524,7 @@ Item {
 
                     required property var modelData
 
-                    width: (actions.width - 2 * Tokens.filesPreviewInset) / 3
+                    width: (actions.width - 2 * Tokens.filesPreviewInset) / Tokens.filesPreviewActionSlots
                     height: actionColumn.implicitHeight
                     Accessible.role: Accessible.Button
                     Accessible.name: action.modelData.text

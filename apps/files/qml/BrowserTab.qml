@@ -146,7 +146,7 @@ FocusScope {
         root.viewMode = Nav.viewFor(String(root.url) === "" && !root.restore ? "" : root.viewMode, stored.mode, root.app.viewMode);
         // Recents opens sorted by Date Last Opened, newest first, until arranged otherwise.
         const recents = root.app.isRecents(target);
-        const sort = Nav.sortFor(stored, recents ? 5 : root.app.sortKey, recents ? true : root.app.sortDescending, key => root.app.defaultDescending(key));
+        const sort = Nav.sortFor(stored, recents ? root.app.recentsSortKey : root.app.sortKey, recents ? root.app.defaultDescending(root.app.recentsSortKey) : root.app.sortDescending, key => root.app.defaultDescending(key));
         root.setArrangement(sort.key, sort.descending);
         root.groupBy = stored.groupBy !== undefined ? stored.groupBy : 0;
         root.applyGroups();
@@ -856,22 +856,24 @@ FocusScope {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.right: previewPane.visible ? previewPane.left : parent.right
+        anchors.right: previewPane.active ? previewPane.left : parent.right
         focus: true
         readonly property string kind: Nav.effectiveView(root.viewMode, root.folder !== null && root.folder.isSearch)
         sourceComponent: viewLoader.kind === "list" ? listComponent : viewLoader.kind === "columns" ? columnComponent : viewLoader.kind === "gallery" ? galleryComponent : iconComponent
         onLoaded: Qt.callLater(root.focusView)
     }
 
-    // The preview pane beside the icon and list views (the gallery and the column view have their own).
-    PreviewPane {
+    // The preview pane beside the icon and list views (the gallery and the column view have their own), made while shown.
+    Loader {
         id: previewPane
-        visible: (viewLoader.kind === "icons" || viewLoader.kind === "list") && root.app.previewPane
+        active: (viewLoader.kind === "icons" || viewLoader.kind === "list") && root.app.previewPane
         anchors.right: parent.right
         height: parent.height
-        topExtension: root.win ? root.win.previewExtension : 0
-        tab: root
-        model: root.activeFolder
+        sourceComponent: PreviewPane {
+            topExtension: root.win ? root.win.previewExtension : 0
+            tab: root
+            model: root.activeFolder
+        }
     }
 
     Component {
