@@ -34,6 +34,11 @@ service ask the session's agent itself.
   (`kPrivilegedJobMs`). The window never blocks. A refusal, a cancelled dialog or no agent at all comes back as the service's
   error and is shown on one line under the group: "The name could not be changed: not allowed: the system refused the request".
   The page then reads the state again. Nothing is retried on its own.
+- One polkit action per tag at a time, held by the Backend and not by the page (integrator review of PR #6): a page is created
+  anew on each visit, so a waiting state kept there let a second request go out while the first dialog was up, and four such
+  blocked calls filled the jobs' `kMaxInFlight`, after which every read of the system bus answered "timed out". `busAct` now
+  refuses a polkit action while one of its tag runs (`InFlight`, busjobs.h; `omarchy-language` of `act` likewise), and the
+  pages show "Waiting for permission…" from `Backend.pendingActions`, also when opened again while the dialog is up.
 - Every op is validated twice:
   - in QML (`General.js` builds the map or returns null);
   - again in C++ (`validAction`):
