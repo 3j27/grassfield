@@ -842,9 +842,14 @@ directory, a 300 MB file are read as malformed without being opened or read: `te
 shell's peak memory, +3 MB for each of them where the unbounded read cost 3.7 GB), cuts a read after 5 s, and reads a file
 that is not readable (chmod 000) as malformed too: `lock.*` reads 5, the cosmetic keys keep their last good values, nothing
 is written. A symlinked `grassfield.json` is followed (its target is read and replaced, the link stays) and a replacement
-of the link by a regular file is noticed within 10 s. A failed write keeps its change pending and is retried; a file that could not be used is read again every 10 s (its
-signature never equals the one of a usable file), so a repaired or removed file is noticed without a watch event, and a change
-that waited is written then. The write keeps the mode of the file it replaces (0666 minus the umask for a new one), syncs the
+of the link by a regular file is noticed within 10 s. A failed write keeps its change pending and is retried; a file that could not be used is marked unread (its
+signature never equals the one of a usable file) and the poll (a stat every 10 s) reads it again in full at once when its
+signature changed, so a repaired or removed file is noticed without a watch event, and a change that waited is written then.
+While its signature stays the same the full re-read backs off (10 s, 20 s, 40 s, ... capped at 5 min, `badRetryCap`; it starts
+over when the signature changes or a read succeeds), so a permanently unusable file (over 1 MiB, a FIFO) costs one bounded read
+per 5 min instead of one per 10 s (`tests/shell/settings_backoff`: 61 full reads over 6 s at a 100 ms poll before, 11 after).
+Trade-off: a repair that changes no signature and raises no watch event (a recovered reader, a `head` that stalled or failed) is
+noticed within 5 min, not 10 s; `lock.*` stays at its closed default until then. The write keeps the mode of the file it replaces (0666 minus the umask for a new one), syncs the
 temporary file before the rename, and refuses a target that became a directory. Both unusable-file paths (the load and the read before a write) mark the file as unread, so
 the poll reads it again whichever read found it unusable, and a change made while the file was unusable is written once the file
 is removed. The read holds the text (at most 1 MiB) in a shell variable and creates no temporary file, so a full or unwritable
