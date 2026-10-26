@@ -458,6 +458,12 @@ function entryArgs(entry) {
     return typeof entry.execString === "string" ? execArgs(entry.execString) : Array.from(entry.command || []);
 }
 
+// Whether the app of `entry` opens documents at all (macOS lists recent documents only for such apps): its Exec line has a file
+// field code (%f %F %u %U).
+function opensDocuments(entry) {
+    return !!entry && hasFileCode(entryArgs(entry));
+}
+
 function hasFileCode(command) {
     return Array.from(command || []).some(a => /%[fFuU]/.test(String(a).replace(/%%/g, "")));
 }

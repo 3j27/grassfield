@@ -528,4 +528,176 @@ TestCase {
         compare(Geometry.clampInto({x: 95, y: 5, w: 10, h: 10}, box), {x: 90, y: 5, w: 10, h: 10});
         compare(Geometry.clampInto({x: 3, y: 4, w: 10, h: 10}, box), {x: 3, y: 4, w: 10, h: 10});
     }
+
+    // The shelf the Dock lays out (icons, separators, gaps between all tiles, padding at both ends) never exceeds the room once
+    // the size was reduced below the request, for every count the Dock can have (nested finding: 32 tiles on 1920 px).
+    function test_fitSizeShelfNeverExceedsTheRoom() {
+        for (let tiles = 1; tiles <= 60; tiles++) {
+            for (const seps of [0, 1, 2]) {
+                for (const room of [800, 1280, 1920, 2560]) {
+                    const available = room - 12;
+                    const size = Geometry.fitSize(96, tiles, seps, 9, 4, 10, available, 16);
+                    const shelf = tiles * size + seps * 9 + (tiles + seps - 1) * 4 + 20;
+                    if (size > 16)
+                        verify(shelf <= available, tiles + " tiles, " + seps + " separators, " + room + " px: size " + size + " shelf " + shelf);
+                }
+            }
+        }
+        // 32 tiles of the nested run: 30 icons and 2 separators on 1920 px
+        const size = Geometry.fitSize(96, 30, 2, 9, 4, 10, 1908, 16);
+        verify(30 * size + 18 + 31 * 4 + 20 <= 1908);
+        verify(size >= 50);
+    }
+
+    // ---- the magnified Dock stays inside the output (post-merge review: 1990 px on 1920 at 1.6) ----
+
+    function kindsOf(tiles, seps) {
+        const out = [];
+        for (let i = 0; i < tiles; i++)
+            out.push(false);
+        for (let i = 0; i < seps; i++)
+            out.splice(Math.floor((i + 1) * tiles / (seps + 1)), 0, true);
+        return out;
+    }
+
+    function magOptions(maxScale) {
+        return {separatorWidth: 9, spacing: 4, padding: 10, maxScale: maxScale, radius: 3};
+    }
+
+    // The slack is for the rounding of the magnified worst case only: with magnification off a shelf that fits exactly stays at the
+    // size asked for (the review: 472 configurations lost a pixel to a slack that has no reason to be there).
+    function test_noSlackWithoutMagnification() {
+        for (const tiles of [3, 7, 12]) {
+            const kinds = kindsOf(tiles, 1);
+            const o = Object.assign(magOptions(1), {slack: 2});
+            const exact = Geometry.magnifiedShelf(96, kinds, o);
+            compare(Geometry.fitSizeMagnified(96, kinds, exact, 16, o), 96, tiles + " tiles in exactly their width");
+            compare(Geometry.fitSizeMagnified(96, kinds, exact, 16, Object.assign(magOptions(1), {slack: 0})), 96);
+            // one pixel less still shrinks, by one size step
+            verify(Geometry.fitSizeMagnified(96, kinds, exact - 1, 16, o) < 96);
+            // magnified, the slack stays: a shelf that would fit to the pixel keeps 2 px free
+            const m = Object.assign(magOptions(1.6), {slack: 2});
+            const widest = Geometry.magnifiedShelf(96, kinds, m);
+            verify(Geometry.fitSizeMagnified(96, kinds, widest + 1, 16, m) < 96, tiles + " tiles magnified");
+        }
+    }
+
+    function test_magnifiedShelfGrowsWithMagnification() {
+        const kinds = kindsOf(31, 1);
+        const rest = Geometry.magnifiedShelf(48, kinds, magOptions(1));
+        compare(rest, 31 * 48 + 9 + 31 * 4 + 20);
+        const m16 = Geometry.magnifiedShelf(48, kinds, magOptions(1.6));
+        const m20 = Geometry.magnifiedShelf(48, kinds, magOptions(2.0));
+        verify(m16 > rest + 30, "1.6 grows the shelf: " + m16 + " vs " + rest);
+        verify(m20 > m16, "2.0 grows it more: " + m20);
+        // the growth is about (m - 1) x radius x size, as the spec says for the budget
+        verify(Math.abs((m16 - rest) - 0.6 * 3 * 48) < 0.25 * 0.6 * 3 * 48, "growth " + (m16 - rest));
+    }
+
+    function test_fitSizeMagnifiedKeepsTheMagnifiedShelfInsideTheRoom() {
+        for (const m of [1, 1.6, 2.5]) {
+            for (const tiles of [10, 31, 55]) {
+                for (const requested of [48, 96]) {
+                    for (const room of [1280, 1920, 2560]) {
+                        const kinds = kindsOf(tiles, 1);
+                        const size = Geometry.fitSizeMagnified(requested, kinds, room - 12, 16, magOptions(m));
+                        verify(size <= requested && size >= Math.min(requested, 16));
+                        if (size > 16 && size < requested) {
+                            const shelf = Geometry.magnifiedShelf(size, kinds, magOptions(m));
+                            verify(shelf <= room - 12, "m " + m + ", " + tiles + " tiles, " + requested + " px, room " + room + ": size " + size + " shelf " + shelf);
+                            // and it is the largest: one more would not fit
+                            verify(Geometry.magnifiedShelf(size + 1, kinds, magOptions(m)) > room - 12, "not the largest: " + size);
+                        }
+                        if (size === requested)
+                            verify(Geometry.magnifiedShelf(size, kinds, magOptions(m)) <= room - 12 || size <= 16);
+                    }
+                }
+            }
+        }
+    }
+
+    function test_fitSizeMagnifiedWithoutMagnificationIsFitSize() {
+        for (const tiles of [10, 31, 45]) {
+            const kinds = kindsOf(tiles, 1);
+            compare(Geometry.fitSizeMagnified(96, kinds, 1908, 16, magOptions(1)), Geometry.fitSize(96, tiles, 1, 9, 4, 10, 1908, 16));
+        }
+    }
+
+    function test_nestedFullDockMagnifiedFits() {
+        // 31 icons and a separator on 1920 px, magnification 1.6 (the review's case)
+        const kinds = kindsOf(31, 1);
+        const size = Geometry.fitSizeMagnified(64, kinds, 1908, 16, magOptions(1.6));
+        verify(size < 64);
+        verify(Geometry.magnifiedShelf(64, kinds, magOptions(1.6)) > 1908, "the request alone would overflow");
+        verify(Geometry.magnifiedShelf(size, kinds, magOptions(1.6)) <= 1908);
+    }
+
+    // The widest the shelf gets, found by brute force (the pointer at every px, Magnify.slotScales as the Dock does), against the
+    // size fitSizeMagnified chose: never over the room (the review found 19 of 19,200 configurations over by up to 4.64 px).
+    function bruteWidest(size, kinds, o) {
+        const widths = kinds.map(k => k ? o.separatorWidth : size);
+        const total = Magnify.totalWidth(widths, o.spacing);
+        const pitch = size + o.spacing;
+        const reach = o.radius * pitch;
+        const centers = Magnify.centersFor(widths, o.spacing, reach);
+        let worst = total + 2 * o.padding;
+        for (let p = 0; p <= total + 2 * reach; p += 1) {
+            const sc = Magnify.slotScales(centers, widths, o.spacing, kinds, p, pitch, o.maxScale, o.radius);
+            const w = Magnify.totalWidth(widths.map((x, i) => x * sc[i]), o.spacing) + 2 * o.padding;
+            if (w > worst)
+                worst = w;
+        }
+        return worst;
+    }
+
+    function test_noConfigurationExceedsTheRoomByBruteForce() {
+        let checked = 0;
+        for (const m of [1.2, 1.6, 2.0, 2.5]) {
+            for (const tiles of [12, 29, 40]) {
+                for (const room of [1280, 1920]) {
+                    const kinds = kindsOf(tiles, 1);
+                    const available = room - 12;
+                    const size = Geometry.fitSizeMagnified(96, kinds, available, 16, magOptions(m));
+                    if (size <= 16)
+                        continue;
+                    const widest = bruteWidest(size, kinds, magOptions(m));
+                    verify(widest <= available, "m " + m + ", " + tiles + " tiles, room " + room + ": size " + size + " widest " + widest + " over " + (widest - available));
+                    checked++;
+                }
+            }
+        }
+        verify(checked >= 10);
+    }
+
+    // The exact worst case (no fixed slack): side Docks and small outputs had configurations over the room by up to 1.98 px with a
+    // half-tile sampling, and 2 px of slack made 7,212 Docks shrink for nothing. Against a brute force at 1 px: never over the room,
+    // and the size chosen is the largest within 1 px of the room (no shrink for nothing).
+    function test_theWorstCaseIsExact() {
+        let checked = 0;
+        for (const m of [1.2, 1.6, 2.0, 2.5]) {
+            for (const tiles of [2, 3, 6, 9]) {
+                for (const seps of [0, 1]) {
+                    for (const available of [564, 720, 1000]) {
+                        const kinds = kindsOf(tiles, seps);
+                        const o = Object.assign(magOptions(m), {slack: 0.25});
+                        const size = Geometry.fitSizeMagnified(96, kinds, available, 16, o);
+                        if (size <= 16)
+                            continue;
+                        const widest = bruteWidest(size, kinds, magOptions(m));
+                        verify(widest <= available, "m " + m + ", " + tiles + " tiles + " + seps + " separators, room " + available + ": size " + size + " widest " + widest);
+                        if (size < 96)
+                            verify(bruteWidest(size + 1, kinds, magOptions(m)) > available - 1, "shrunk for nothing: size " + size + " in " + available + ", the next size has " + bruteWidest(size + 1, kinds, magOptions(m)));
+                        checked++;
+                    }
+                }
+            }
+        }
+        verify(checked >= 40, "checked " + checked);
+        // the reviewers' cases: 3 tiles + 1 separator at 2.5 in 720 px, at 2 in 564 px
+        for (const c of [{m: 2.5, room: 720}, {m: 2, room: 564}]) {
+            const kinds = kindsOf(3, 1);
+            const size = Geometry.fitSizeMagnified(96, kinds, c.room, 16, Object.assign(magOptions(c.m), {slack: 0.25}));
+            verify(bruteWidest(size, kinds, magOptions(c.m)) <= c.room, "m " + c.m + " room " + c.room + " size " + size);
+        }
+    }
 }

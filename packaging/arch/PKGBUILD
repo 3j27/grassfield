@@ -93,6 +93,10 @@ build() {
   cmake -S "$(_root)/apps/wallpaper-tool" -B "$srcdir/wallpaper-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/wallpaper-build"
+  # grassfield-stack-helper (ADR-0025): lists, orders and watches one Dock stack folder.
+  cmake -S "$(_root)/apps/stack-helper" -B "$srcdir/stack-helper-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/stack-helper-build"
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
@@ -122,6 +126,9 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
+  # inotify-tools (inotifywait): the applications directories are watched by shell/launchpad/watch-applications.sh; without it the
+  # Launchpad falls back to slow polling or to the shell's own signals. The Dock's stack folders are watched by the native
+  # grassfield-stack-helper (ADR-0025), which needs nothing beyond Qt.
   # networkmanager and bluez-utils (which pulls bluez) are the D-Bus services the Settings Wi-Fi and Bluetooth pages talk to (GF-049:
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
@@ -213,6 +220,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
   # grassfield-wallpaper: /usr/lib/grassfield/grassfield-wallpaper (run by the shell and Settings, never by the user).
   DESTDIR="$pkgdir" cmake --install "$srcdir/wallpaper-build"
+  # grassfield-stack-helper: /usr/lib/grassfield/grassfield-stack-helper (run by the Dock and the stack popup).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/stack-helper-build"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).

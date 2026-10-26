@@ -3,6 +3,7 @@ import QtQuick
 import qs.platform
 import "../platform/ScreenChoice.js" as ScreenChoice
 import Quickshell
+import Quickshell.Io
 
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
 // of the matching screen renders it; menus, status items and the Dock only call open()/close().
@@ -23,6 +24,45 @@ Singleton {
     property var data: ({})
 
     readonly property bool active: kind !== ""
+
+    // The open folder stack (shell/overlay/StackPopup.qml publishes these) for the test hooks below.
+    property string stackView: ""
+    property var stackNames: []
+    property int stackDepth: 0
+    signal stackCommand(string command, string argument)
+
+    // Test hooks (fixtures only) of the folder stack popup: tests/visual/dock-stacks.sh. Here, not in the popup, so that the
+    // target exists whether or not a stack is open ("" and "refused" then).
+    IpcHandler {
+        target: "dockstack"
+
+        // "view|name,name,..." of the open stack.
+        function state(): string {
+            if (!VisualFixtures.active || root.kind !== "dockstack")
+                return "";
+            return root.stackView + "|" + root.stackNames.join(",");
+        }
+
+        // How many folders deep the stack is opened in place (0: the stack itself).
+        function depth(): string {
+            if (!VisualFixtures.active || root.kind !== "dockstack")
+                return "";
+            return String(root.stackDepth);
+        }
+
+        // Opens the folder `name` of the listing in place (a click on a Grid or List item).
+        function enter(name: string): string {
+            if (!VisualFixtures.active || root.kind !== "dockstack")
+                return "refused";
+            root.stackCommand("enter", name);
+            return "ok";
+        }
+
+        function back(): void {
+            if (VisualFixtures.active && root.kind === "dockstack")
+                root.stackCommand("back", "");
+        }
+    }
 
     // The menu bar of each output, by output name. While a popup holds the keyboard (Exclusive) Hyprland sends the pointer
     // to the overlay even over the bar strip (its input mask leaves the strip out), so the overlay hands the strip to the

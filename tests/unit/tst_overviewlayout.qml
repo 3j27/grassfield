@@ -293,4 +293,14 @@ TestCase {
         // never a zero or negative tile, whatever the room
         verify(Layout.stripRects(50, {x: 0, w: 10, bottom: 100}, tileSpec).rects[0].w >= 1);
     }
+
+    function test_capStripKeepsTheNewest() {
+        compare(Layout.capStrip([1, 2, 3, 4, 5], 3), [3, 4, 5]);
+        compare(Layout.capStrip([1, 2], 10), [1, 2]);
+        compare(Layout.capStrip([1, 2], 0), []);
+        compare(Layout.capStrip(null, 3), []);
+        // the capped row of 10 at full size fits a 1920 px output
+        const s = Layout.stripRects(10, {x: 32, w: 1856, bottom: 1000}, tileSpec);
+        compare(s.rects[0].w, 144);
+    }
 }
