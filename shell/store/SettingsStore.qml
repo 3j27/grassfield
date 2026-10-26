@@ -82,19 +82,39 @@ Scope {
         root.parsedFileRevision++;
     }
 
-    // After each load: the file's own text is the document. An empty file is an empty document (every key its default); a file
-    // that is not a JSON object leaves the last good document in place (validRead tells it is malformed).
+    // After each load: the file's own text is the document. An empty file is an empty document (every key its default). A file
+    // that is not a JSON object leaves the last good document in place for the cosmetic keys (validRead tells it is malformed),
+    // but NOT for lock.*: the idle lock fails closed there, it reads what a fresh start reads (the default 5), never the last
+    // good value, which may be 0 = never.
     function takeDocument(text: string): void {
         let parsed = null;
         try {
             parsed = text.trim() === "" ? {} : JSON.parse(text);
         } catch (e) {
+            parsed = null;
+        }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            if ("lock" in root.parsedFile) {
+                delete root.parsedFile.lock;
+                root.parsedFileRevision++;
+            }
             return;
         }
-        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-            return;
         root.parsedFile = parsed;
         root.parsedFileRevision++;
+    }
+
+    // The file is gone: exactly a fresh start without a file. The document is empty (every key its default, lock.idleMinutes 5),
+    // the adapter is put back to the defaults, writes are allowed again (the next change creates the file from the defaults),
+    // and the shell's own pending changes stay on top.
+    function takeMissingFile(): void {
+        root.parsedFile = ({});
+        root.unsafeFile = false;
+        root.writeBlocked = false;
+        root.validRead = false;
+        root.parsedFileRevision++;
+        root.resetMissingKeys("");
+        root.reapplyDirty();
     }
 
     readonly property string appearance: read("appearance")
@@ -390,28 +410,45 @@ Scope {
         diskRead.running = true;
     }
 
+    // The document of a fresh file: every key of the schema (nested) at its default, the contract version first.
+    function defaultDocument(): var {
+        const doc = {version: SettingsContract.VERSION};
+        for (const path in SettingsContract.ALL_DEFAULTS) {
+            const parts = path.split(".");
+            let node = doc;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (node[parts[i]] === undefined)
+                    node[parts[i]] = {};
+                node = node[parts[i]];
+            }
+            node[parts[parts.length - 1]] = JSON.parse(JSON.stringify(SettingsContract.ALL_DEFAULTS[path]));
+        }
+        return doc;
+    }
+
     // Second half of writeMerged(), once the fresh file text is in.
     function mergeInto(text: string): void {
         if (writeBlocked)
             return;
-        if (text.trim() === "") {
-            file.writeAdapter();
-            dirty = ({});
-            return;
-        }
         let obj = null;
-        try {
-            obj = JSON.parse(text);
-        } catch (e) {
-            obj = null;
-        }
-        if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-            checkText(text);
-            return;
-        }
-        if (JsonSafety.unsafeReason(text) !== "") {
-            checkText(text);
-            return;
+        if (text.trim() === "") {
+            // A missing or empty file: a fresh one holding every key at its default. Built from the schema defaults, never from
+            // the JSON adapter (file.writeAdapter()), which keeps the values of the file that was there before.
+            obj = defaultDocument();
+        } else {
+            try {
+                obj = JSON.parse(text);
+            } catch (e) {
+                obj = null;
+            }
+            if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+                checkText(text);
+                return;
+            }
+            if (JsonSafety.unsafeReason(text) !== "") {
+                checkText(text);
+                return;
+            }
         }
         for (const path in dirty) {
             const parts = path.split(".");
@@ -477,9 +514,9 @@ Scope {
         file.reload();
     }
 
-    // The views read parsedFile, not the adapter; the adapter only WRITES the file (file.writeAdapter() for a new or empty one).
-    // It keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so an emptied
-    // file would be rewritten with stale values. A missing key is the default there too: put it back after each load, for every
+    // The views read parsedFile, not the adapter, and a write is built from the file on disk (or the schema defaults), not from the adapter either.
+    // The adapter keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so an emptied
+    // file would show stale values in store.data. A missing key is the default there too: put it back after each load, for every
     // key of the contract (SettingsContract.ALL_DEFAULTS; unsaved local changes go on top again in reapplyDirty). A file that
     // cannot be parsed is left alone.
     function resetMissingKeys(text: string): void {
@@ -572,6 +609,10 @@ Scope {
         adapter: config
         // qmllint enable missing-type
         onFileChanged: reload()
+        onLoadFailed: error => {
+            if (error === FileViewError.FileNotFound)
+                root.takeMissingFile();
+        }
         onSaved: root.saved()
         onLoaded: {
             root.checkText(file.text());
