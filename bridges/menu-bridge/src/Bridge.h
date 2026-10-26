@@ -11,6 +11,11 @@
 //   pid. The bridge resolves the bus name's owner and accepts the pair only if
 //   org.freedesktop.DBus.GetConnectionUnixProcessID(owner) equals that pid (a client naming another app's bus name
 //   is refused). It then talks to the unique name only.
+// - open-registered (ADR-0008 amendment 2026-10-25): a window without a set_address registration whose Wayland client is
+//   pid N is served the latest menu a sender of that process registered with com.canonical.AppMenu.Registrar
+//   (Electron), through the same open path (pid re-checked, crash attribution, limits, back-off); never for a process
+//   in another pid namespace. A window whose process has not registered yet waits; a newer registration of the
+//   process replaces the open menu.
 // - The bridge executes nothing: it only sends DBusMenu GetLayout / AboutToShow / Event calls.
 // - LauncherEntry (ADR-0018): while it runs, applications' com.canonical.Unity.LauncherEntry.Update signals are
 //   validated and forwarded to the shell as "launcher" lines (LauncherWatcher.h); the current state is replayed when
@@ -62,6 +67,12 @@ namespace gf::menubridge {
         void    handle(const ShellMessage& msg);
         void    hello(bool appmenu);
         void    open(const ShellMessage& msg);
+        void    openRegistered(const ShellMessage& msg);
+        // Opens `window` with `registration` (a sender of process `pid`) as an ordinary open of (sender, path, pid).
+        void    openFromRegistration(const QString& window, qint64 pid, const registrar::Registration& registration);
+        // The registrar's book changed: waiting windows whose process registered meanwhile are opened, and windows
+        // opened through the registrar follow their process's newest registration.
+        void    onRegistrations();
         void    verified(const ShellMessage& msg, quint64 token, const QString& owner);
         void    close(const QString& window);
         // Hostile or broken applications (Penalties.h): refusals are keyed by the application's identity (app scope,
@@ -95,6 +106,8 @@ namespace gf::menubridge {
         bool                           m_registrar = false;
         bool                           m_registrarBusy = false;
         RegistrarObject                m_registrarObject;
+        QHash<QString, qint64>         m_waiting;      // window -> pid: open-registered before the process registered
+        QHash<QString, qint64>         m_viaRegistrar; // window -> pid: opened through the registrar (follows newer ones)
 
         struct SOpened {
             QString service; // as requested by the shell

@@ -49,8 +49,25 @@ function isPid(pid) {
     return Number.isInteger(pid) && pid > 0 && pid <= 2147483647;
 }
 
+// gfc/1 keyboard-focus event data (feature keyboard-focus: the seat's keyboard entered a mapped window) -> the window's
+// normalized address, or null when it is not a valid keyboard-focus event. A chosen item's action waits for it (MB12).
+function parseKeyboardFocusEvent(data) {
+    let msg = null;
+    try {
+        msg = JSON.parse(data);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || typeof msg !== "object" || msg.v !== "gfc/1" || msg.type !== "keyboard-focus" || typeof msg.address !== "string")
+        return null;
+    const address = normalizeAddress(msg.address);
+    return address === "" ? null : address;
+}
+
 // gfc/1 appmenu event data -> {address, service, path, pid}, or null when it is not a valid appmenu event.
-// An empty service and path (pid 0) means the window has no (more) menu.
+// An empty service and path means the window has no (more) set_address menu; its pid is then the window's Wayland
+// client (0 for an X11/XWayland window or a clear): the bridge may serve it a menu that process registered with
+// com.canonical.AppMenu.Registrar (Electron, ADR-0008 amendment 2026-10-25).
 function parseAppmenuEvent(data) {
     let msg = null;
     try {
@@ -64,7 +81,7 @@ function parseAppmenuEvent(data) {
     if (address === "" || typeof msg.service !== "string" || typeof msg.path !== "string")
         return null;
     if (msg.service === "" && msg.path === "")
-        return {address: address, service: "", path: "", pid: 0};
+        return {address: address, service: "", path: "", pid: isPid(msg.pid) ? msg.pid : 0};
     if (!isBusName(msg.service) || !isObjectPath(msg.path))
         return null;
     return {address: address, service: msg.service, path: msg.path, pid: isPid(msg.pid) ? msg.pid : 0};
@@ -82,6 +99,15 @@ function openLine(address, reg) {
     if (window === "" || !reg || !isBusName(reg.service) || !isObjectPath(reg.path) || !isPid(reg.pid))
         return "";
     return JSON.stringify({type: "open", window: window, service: reg.service, path: reg.path, pid: reg.pid}) + "\n";
+}
+
+// A window without a set_address menu whose Wayland client is pid `pid`: the menu that process registered with the
+// registrar (ADR-0008 amendment 2026-10-25).
+function openRegisteredLine(address, pid) {
+    const window = normalizeAddress(address);
+    if (window === "" || !isPid(pid))
+        return "";
+    return JSON.stringify({type: "open-registered", window: window, pid: pid}) + "\n";
 }
 
 function itemLine(type, address, id) {
@@ -238,9 +264,10 @@ function applyLauncher(state, msg) {
 }
 
 // Error codes after which the window's current bridge menu must not stay on screen (its items would be dead):
-// the application's menu was refused at open (pid-mismatch, no-owner, backoff), left the bus (gone), could not be
-// read again (layout-failed) or was refused as too large when re-read (oversized). The window falls back to T0.
-var menuLostCodes = ["pid-mismatch", "no-owner", "gone", "layout-failed", "oversized", "backoff"];
+// the application's menu was refused at open (pid-mismatch, no-owner, backoff, foreign-namespace), left the bus (gone),
+// could not be read again (layout-failed) or was refused as too large when re-read (oversized). The window falls back
+// to T0.
+var menuLostCodes = ["pid-mismatch", "no-owner", "gone", "layout-failed", "oversized", "backoff", "foreign-namespace"];
 
 function menuLost(code) {
     return menuLostCodes.indexOf(code) >= 0;

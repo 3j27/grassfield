@@ -294,7 +294,8 @@ module's `stop()` leaves its state as its `start()` expects it). What it means:
 | plugin → shell | socket2 event, posted at load and on `hello` | `grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus"]}` (each feature only when registered) |
 | plugin → shell | socket2 event, minimize button or double-click set to minimize | `grassfield>>{"v":"gfc/1","type":"minimize-request","address":"<hex>"}` |
 | plugin → shell | socket2 event, end of a minimize / restore | `grassfield>>{"v":"gfc/1","type":"minimized","address":"<hex>"}`, `..."restored"...` |
-| plugin → shell | socket2 event: a mapped window's appmenu registration changed, the window was mapped with one, got focus, or on `appmenu(address)`; empty strings when it has none (any more) | `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}` |
+| plugin → shell | socket2 event: a mapped window's appmenu registration changed, the window was mapped with one, got focus, or on `appmenu(address)`; empty strings when it has none (any more), then `pid` is the window's Wayland client pid (0 for X11/XWayland and clears) | `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>","pid":N}` |
+| plugin → shell | socket2 event: the seat's keyboard focus entered a mapped window (feature `keyboard-focus`, with appmenu); the menu bar sends a chosen item's action once its window has the keyboard back | `grassfield>>{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` |
 | shell → plugin | `Hyprland.dispatch("hl.plugin.grassfield.hello()")` (Quickshell) | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` | Dock tile in layout px; validated |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | allowlisted |

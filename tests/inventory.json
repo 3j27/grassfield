@@ -364,6 +364,7 @@
  {"path": "tests/compositor/window_stacking.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/zoom_restore.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/global_menus.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/integration/electron_menus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/launcher_entry.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/integration/screensaver_inhibit.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/integration/settings_dbus.sh", "layer": "headless", "runner": "test.sh"},

@@ -17,7 +17,8 @@ set(MENU_BRIDGE_LOGIC
     src/Penalties.cpp src/Penalties.h
     src/Launcher.cpp src/Launcher.h
     src/DBusObjects.cpp src/DBusObjects.h
-    src/ScreenSaver.cpp src/ScreenSaver.h)
+    src/ScreenSaver.cpp src/ScreenSaver.h
+    src/Registrations.cpp src/Registrations.h)
 
 add_executable(grassfield-menu-bridge
     src/main.cpp

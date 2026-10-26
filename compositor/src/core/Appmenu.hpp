@@ -6,9 +6,12 @@
 // with org_kde_kwin_appmenu.set_address. The plugin validates the strings (untrusted client input), keeps
 // the latest address per surface here, and announces it per window to the shell over gfc/1:
 //   grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<path>","pid":N}
-// with empty service and path (and pid 0) when the window has no (more) registration. `pid` is the process id
-// of the Wayland client that made the registration (wl_client_get_credentials): the menu bridge accepts the
-// (service, path) only if that bus name belongs to the same process (spoofing check, ADR-0008).
+// with empty service and path when the window has no (more) registration. `pid` is the process id of the
+// Wayland client that made the registration (wl_client_get_credentials): the menu bridge accepts the
+// (service, path) only if that bus name belongs to the same process (spoofing check, ADR-0008). Without a
+// registration it is the pid of the mapped window's Wayland client (0 for an X11/XWayland window and for a clear):
+// the shell then asks the bridge for a menu that process registered with com.canonical.AppMenu.Registrar
+// (Electron; ADR-0008 amendment 2026-10-25). The glue fills it; this registry keeps registrations only.
 
 #include <cstddef>
 #include <cstdint>

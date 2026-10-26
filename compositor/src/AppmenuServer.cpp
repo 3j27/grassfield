@@ -2,6 +2,7 @@
 
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Surfaces.hpp"
 #include "core/Appmenu.hpp"
 #include "core/Protocol.hpp"
 
@@ -63,6 +64,7 @@ namespace {
         SObjects                         live;
         am::CRegistry                    registry;
         std::vector<CHyprSignalListener> listeners;
+        uint64_t                         keyboardWindow = 0; // the mapped window the keyboard entered last (0: none)
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -87,13 +89,17 @@ namespace {
         return std::format("{:x}", address);
     }
 
+    int unregisteredPid(uint64_t window);
+
     // Coalesced per window (spec FR24): a client can send set_address by the thousand, the shell gets the latest
-    // registration at most every 100 ms.
+    // registration at most every 100 ms. Without a registration the event carries the window's Wayland client pid
+    // (unregisteredPid), so that the shell can ask the bridge for a menu that process registered otherwise.
     void post(const am::Announcement& a) {
         if (!st().ready)
             return;
+        const int pid = a.registration.service.empty() ? unregisteredPid(a.window) : a.registration.pid;
         gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Appmenu, .id = a.window},
-                           gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
+                           gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, pid));
     }
 
     void post(const std::optional<am::Announcement>& a) {
@@ -125,6 +131,21 @@ namespace {
     template <typename T>
     void eraseFrom(std::vector<UP<T>>& v, const T* p) {
         std::erase_if(v, [p](const UP<T>& e) { return e.get() == p; });
+    }
+
+    pid_t clientPid(wl_client* client);
+
+    // A mapped Wayland window without a set_address registration: the pid of its client (wl_client_get_credentials).
+    // Electron announces its menu through com.canonical.AppMenu.Registrar.RegisterWindow instead, and the bridge serves
+    // it to the windows of the registering process (ADR-0008 amendment 2026-10-25). 0 for an X11/XWayland window (its
+    // Wayland client is Xwayland, never served) and for a window that is not mapped (a clear).
+    int unregisteredPid(uint64_t window) {
+        const auto w = mappedWindowByAddress(window);
+        if (!w || w->m_isX11)
+            return 0;
+        const auto surface = w->resource();
+        wl_client* client  = surface ? surface->client() : nullptr;
+        return client ? static_cast<int>(clientPid(client)) : 0;
     }
 
     pid_t clientPid(wl_client* client) {
@@ -287,6 +308,20 @@ namespace {
         }
     }
 
+    // The seat's keyboard focus entered a surface: a keyboard-focus event when it is a mapped window's (feature
+    // keyboard-focus, advertised with appmenu). Once per entry: the window that had it already is not announced again
+    // until the keyboard went elsewhere (a layer surface, nothing), as when a shell popup that held it closes.
+    void onKeyboardFocus(const SP<CWLSurfaceResource>& surface) {
+        const auto owner  = gf::surfaces::ownerOf(surface);
+        const auto window = owner.window && owner.window->m_isMapped && !owner.popup ? idOf(owner.window.get()) : 0;
+        auto&      s      = st();
+        if (window == s.keyboardWindow)
+            return;
+        s.keyboardWindow = window;
+        if (window != 0 && s.ready)
+            gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::KeyboardFocus, .id = 0}, gf::gfc::keyboardFocusJson(hexAddress(window)));
+    }
+
     void onWindowFocused(const PHLWINDOW& w) {
         if (w && w->m_isMapped)
             post(st().registry.query(idOf(w.get())));
@@ -324,6 +359,7 @@ namespace gf::appmenuServer {
         l.push_back(ev.window.close.listen([](const PHLWINDOW& w) { gf::guarded("appmenu window.close", [&] { onWindowUnmapped(w); }); }));
         l.push_back(ev.window.destroy.listen([](const PHLWINDOWREF& /*w*/) { gf::guarded("appmenu window.destroy", [] { sweepWindows(); }); }));
         l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason /*reason*/) { gf::guarded("appmenu window.active", [&] { onWindowFocused(w); }); }));
+        l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& surface) { gf::guarded("appmenu keyboard.focus", [&] { onKeyboardFocus(surface); }); }));
 
         s.global = wl_global_create(g_pCompositor->m_wlDisplay, &org_kde_kwin_appmenu_manager_interface, kGlobalVersion, nullptr, bindManager);
         if (!s.global) {
@@ -339,6 +375,7 @@ namespace gf::appmenuServer {
     void stop() {
         auto& s = st();
         s.listeners.clear();
+        s.keyboardWindow = 0;
 
         const bool   shuttingDown = !g_pCompositor || g_pCompositor->m_isShuttingDown;
         const size_t clientObjs   = s.live.managers.size() + s.live.objects.size();
