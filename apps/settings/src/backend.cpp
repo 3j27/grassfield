@@ -355,14 +355,17 @@ QVariantList Backend::screens() const
 
 QVariantList Backend::volumes() const
 {
-    // Real file systems only (no tmpfs, proc, overlay or the like): the start-up volume first, then the others by mount point.
-    static const QStringList virtualTypes{QStringLiteral("tmpfs"), QStringLiteral("devtmpfs"), QStringLiteral("proc"), QStringLiteral("sysfs"),
-                                          QStringLiteral("overlay"), QStringLiteral("squashfs"), QStringLiteral("efivarfs"), QStringLiteral("ramfs"),
-                                          QStringLiteral("autofs"), QStringLiteral("fuse.portal"), QStringLiteral("cgroup2"), QStringLiteral("debugfs")};
+    // Local volumes only (systemguard.h isLocalVolume): this runs on the GUI thread, and the statfs of a network or FUSE mount
+    // whose server or daemon does not answer would block the window. The mount table is /proc/self/mounts (reading it stats
+    // nothing); the volume of the home is found in it, not by a statfs of the home. The start-up volume first, then the others
+    // by mount point; a btrfs subvolume mounted twice is one volume.
+    using namespace grassfield::settings;
+    QFile table(QStringLiteral("/proc/self/mounts"));
+    QList<Mount> mounts = table.open(QIODevice::ReadOnly) ? parseMounts(table.readAll()) : QList<Mount>{};
+    const QString homeMount = mountPointOf(mounts, QDir::homePath());
     QVariantList out;
     QStringList seen;
-    const QString home = QDir::homePath();
-    auto entry = [&home](const QStorageInfo &v) {
+    auto entry = [&homeMount](const QStorageInfo &v) {
         return QVariantMap{{"root", v.rootPath()},
                            {"name", v.name()},
                            {"device", QString::fromUtf8(v.device())},
@@ -372,21 +375,21 @@ QVariantList Backend::volumes() const
                            {"free", double(v.bytesFree())},
                            {"readOnly", v.isReadOnly()},
                            {"isRoot", v.isRoot()},
-                           {"holdsHome", QStorageInfo(home).rootPath() == v.rootPath()}};
+                           {"holdsHome", v.rootPath() == homeMount}};
     };
     const QStorageInfo root = QStorageInfo::root();
     if (root.isValid() && root.isReady()) {
         out.append(entry(root));
         seen << QString::fromUtf8(root.device());
     }
-    QList<QStorageInfo> others = QStorageInfo::mountedVolumes();
-    std::sort(others.begin(), others.end(), [](const QStorageInfo &a, const QStorageInfo &b) { return a.rootPath() < b.rootPath(); });
-    for (const QStorageInfo &v : others) {
-        const QString device = QString::fromUtf8(v.device());
-        if (!v.isValid() || !v.isReady() || v.bytesTotal() <= 0 || virtualTypes.contains(QString::fromUtf8(v.fileSystemType())) || seen.contains(device)
-            || v.rootPath().startsWith(QLatin1String("/boot")))
+    std::sort(mounts.begin(), mounts.end(), [](const Mount &a, const Mount &b) { return a.mountPoint < b.mountPoint; });
+    for (const Mount &m : mounts) {
+        if (!isLocalVolume(m.device, m.type) || seen.contains(m.device) || m.mountPoint == QLatin1String("/") || m.mountPoint.startsWith(QLatin1String("/boot")))
             continue;
-        seen << device; // a btrfs subvolume mounted twice is one volume
+        const QStorageInfo v(m.mountPoint);
+        if (!v.isValid() || !v.isReady() || v.bytesTotal() <= 0)
+            continue;
+        seen << m.device;
         out.append(entry(v));
     }
     return out;

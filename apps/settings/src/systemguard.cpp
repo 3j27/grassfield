@@ -23,6 +23,57 @@ bool isUuid(const QString &s)
     return re.match(s).hasMatch();
 }
 
+QList<Mount> parseMounts(const QByteArray &text)
+{
+    // fstab(5) escaping: \ooo (three octal digits) for a space, a tab, a newline or a backslash.
+    const auto unescape = [](const QByteArray &field) {
+        QByteArray out;
+        for (qsizetype i = 0; i < field.size(); ++i) {
+            if (field.at(i) == '\\' && i + 3 < field.size()) {
+                const QByteArray digits = field.mid(i + 1, 3);
+                bool ok = digits.size() == 3;
+                for (const char c : digits)
+                    ok = ok && c >= '0' && c <= '7';
+                if (ok) {
+                    out.append(char(digits.toInt(nullptr, 8)));
+                    i += 3;
+                    continue;
+                }
+            }
+            out.append(field.at(i));
+        }
+        return QString::fromUtf8(out);
+    };
+    QList<Mount> out;
+    for (const QByteArray &line : text.split('\n')) {
+        const QList<QByteArray> f = line.simplified().split(' ');
+        if (f.size() >= 3 && !f.at(0).isEmpty())
+            out.append({unescape(f.at(0)), unescape(f.at(1)), unescape(f.at(2))});
+    }
+    return out;
+}
+
+bool isLocalVolume(const QString &device, const QString &type)
+{
+    static const QStringList virtualTypes{QStringLiteral("tmpfs"), QStringLiteral("devtmpfs"), QStringLiteral("proc"), QStringLiteral("sysfs"),
+                                          QStringLiteral("overlay"), QStringLiteral("squashfs"), QStringLiteral("efivarfs"), QStringLiteral("ramfs"),
+                                          QStringLiteral("autofs"), QStringLiteral("cgroup2"), QStringLiteral("debugfs")};
+    if (type.startsWith(QLatin1String("fuse")) || virtualTypes.contains(type))
+        return false;
+    return device.startsWith(QLatin1String("/dev/")) || type == QLatin1String("zfs");
+}
+
+QString mountPointOf(const QList<Mount> &mounts, const QString &path)
+{
+    QString best;
+    for (const Mount &m : mounts) {
+        const bool holds = m.mountPoint == QLatin1String("/") || path == m.mountPoint || path.startsWith(m.mountPoint + QLatin1Char('/'));
+        if (holds && m.mountPoint.size() > best.size())
+            best = m.mountPoint;
+    }
+    return best;
+}
+
 QString xdgHome(const QString &value, const QString &fallback)
 {
     return value.startsWith(QLatin1Char('/')) ? QDir::cleanPath(value) : fallback;

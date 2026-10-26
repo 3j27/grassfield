@@ -355,6 +355,48 @@ TEST(AutostartGuard, ATextualDotDotThroughALinkIsRefused)
 
 // Login Items' image://icon with an absolute Icon= path: only a small regular raster file (a FIFO, a device, a link to one,
 // an SVG, a huge file or an unclean path shows the page's own tile).
+TEST(Volumes, OnlyLocalOnesAreRead)
+{
+    // Integrator review of PR #6: volumes() ran statfs on every mount on the GUI thread; a stuck network or FUSE mount froze the
+    // window. The table comes from /proc/self/mounts and only local volumes are stat'ed.
+    const QByteArray table = "/dev/nvme0n1p2 / btrfs rw,relatime 0 0\n"
+                             "proc /proc proc rw 0 0\n"
+                             "/dev/nvme0n1p2 /home btrfs rw,subvol=/@home 0 0\n"
+                             "/dev/nvme0n1p1 /boot vfat rw 0 0\n"
+                             "nas:/export/media /mnt/media nfs4 rw,hard 0 0\n"
+                             "//nas/share /mnt/share cifs rw 0 0\n"
+                             "me@host: /home/u/remote fuse.sshfs rw 0 0\n"
+                             "/dev/sdb1 /run/media/u/Win fuseblk rw 0 0\n"
+                             "/dev/sdc1 /run/media/u/My\\040Disk exfat rw 0 0\n"
+                             "tank/data /tank/data zfs rw 0 0\n"
+                             "tmpfs /tmp tmpfs rw 0 0\n"
+                             "/dev/loop0 /snap/x squashfs ro 0 0\n";
+    const QList<Mount> mounts = parseMounts(table);
+    ASSERT_EQ(mounts.size(), 12);
+    EXPECT_EQ(mounts.at(8).mountPoint, QStringLiteral("/run/media/u/My Disk"));
+    EXPECT_EQ(mounts.at(8).type, QStringLiteral("exfat"));
+    QStringList local;
+    for (const Mount &m : mounts) {
+        if (isLocalVolume(m.device, m.type))
+            local << m.mountPoint;
+    }
+    EXPECT_EQ(local, (QStringList{QStringLiteral("/"), QStringLiteral("/home"), QStringLiteral("/boot"), QStringLiteral("/run/media/u/My Disk"),
+                                  QStringLiteral("/tank/data")}));
+    // A network file system names a server, not a /dev device; FUSE is refused whatever its device (fuseblk names /dev/sdb1).
+    for (const char *net : {"nfs", "nfs4", "cifs", "smb3", "ceph", "9p", "virtiofs"})
+        EXPECT_FALSE(isLocalVolume(QStringLiteral("server:/export"), QString::fromLatin1(net))) << net;
+    for (const char *fuse : {"fuse", "fuseblk", "fuse.sshfs", "fuse.rclone"})
+        EXPECT_FALSE(isLocalVolume(QStringLiteral("/dev/sdb1"), QString::fromLatin1(fuse))) << fuse;
+    // The home's volume without a statfs of the home: the longest mount point above it.
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/home/u")), QStringLiteral("/home"));
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/home/u/remote/x")), QStringLiteral("/home/u/remote"));
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/homework")), QStringLiteral("/"));
+    EXPECT_EQ(mountPointOf({}, QStringLiteral("/home/u")), QString());
+    // A broken line is skipped; a backslash that is not an escape stays.
+    EXPECT_EQ(parseMounts("only-two fields\n\n/dev/sda1 /a\\b ext4 rw 0 0\n").size(), 1);
+    EXPECT_EQ(parseMounts("/dev/sda1 /a\\b ext4 rw 0 0\n").at(0).mountPoint, QStringLiteral("/a\\b"));
+}
+
 TEST(XdgDirs, EmptyOrRelativeMeansNotSet)
 {
     // Integrator review of PR #6: an empty XDG_CONFIG_HOME made the autostart folder "/autostart" and the user's units

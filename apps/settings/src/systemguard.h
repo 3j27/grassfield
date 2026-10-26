@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -77,6 +79,23 @@ bool isIconFile(const QString &path);
 // else those of `fallback`.
 QString xdgHome(const QString &value, const QString &fallback);
 QStringList xdgDirs(const QString &value, const QString &fallback);
+
+// Storage and About read the volumes on the GUI thread, so only local ones (integrator review of PR #6): the statfs of a
+// network or FUSE mount blocks while its server or daemon does not answer, and the window with it.
+// One line of /proc/self/mounts (reading that file stats nothing), its octal escapes (\040 for a space) decoded.
+struct Mount {
+    QString device;
+    QString mountPoint;
+    QString type;
+};
+QList<Mount> parseMounts(const QByteArray &text);
+// A volume that may be stat'ed: a local block device's file system (or ZFS, whose "device" is its dataset), never a network
+// file system (nfs, cifs, ceph, 9p: their device is not under /dev), never FUSE (fuse, fuseblk, fuse.sshfs...), never a
+// virtual one (tmpfs, overlay, squashfs...).
+bool isLocalVolume(const QString &device, const QString &type);
+// The mount point that holds `path` (the longest one that is `path` or one of its parents), "" when none does: which volume
+// holds the home, without a statfs of the home.
+QString mountPointOf(const QList<Mount> &mounts, const QString &path);
 
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);

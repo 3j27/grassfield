@@ -105,8 +105,9 @@ public:
     // height, scale, pixelWidth, pixelHeight, refreshRate, physicalWidth, physicalHeight (mm), primary}]. Read-only; never
     // talks to Hyprland.
     Q_INVOKABLE QVariantList screens() const;
-    // Mounted volumes with a real file system (Storage, About): [{root, name, device, type, total, available, free, readOnly,
-    // isRoot, holdsHome}], the start-up volume first. Read-only (QStorageInfo).
+    // Mounted local volumes (Storage, About): [{root, name, device, type, total, available, free, readOnly, isRoot, holdsHome}],
+    // the start-up volume first. Read-only; never a network or FUSE mount, whose statfs could block this thread
+    // (systemguard.h isLocalVolume).
     Q_INVOKABLE QVariantList volumes() const;
     // Date & Time: a zone's names in the UI language {longName, shortName, offset, offsetSeconds, territory}; {} for a zone Qt
     // does not know.
