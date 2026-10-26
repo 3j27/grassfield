@@ -49,9 +49,10 @@ function dateKind(showDate, showDay) {
     return showDate ? "date" : "none";
 }
 
-// Date part and time part joined by a space; an empty date part leaves the time alone.
-function join(dateText, timeText) {
-    return dateText !== "" ? dateText + " " + timeText : timeText;
+// Date part and time part joined by `gap` (Tokens.menubarClockGap: an en space and a space, macOS 9.5 pt between them against 6 for a
+// word gap); an empty date part leaves the time alone.
+function join(dateText, timeText, gap) {
+    return dateText !== "" ? dateText + (gap === undefined ? " " : gap) + timeText : timeText;
 }
 
 // "When Space Allows": the date is shown when the whole status area fits with it. `fullHidden` = the optional items

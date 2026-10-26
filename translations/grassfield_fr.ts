@@ -1665,6 +1665,10 @@
         <translation>Fichiers</translation>
     </message>
     <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
         <source>Back</source>
         <translation>Précédent</translation>
     </message>
@@ -3905,6 +3909,18 @@
         <source>Sections</source>
         <translation>Sections</translation>
     </message>
+    <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
 </context>
 <context>
     <name>MediaView</name>
@@ -4008,7 +4024,7 @@
         <translation>Date et heure&#xa0;: %1. Ouvrir les notifications</translation>
     </message>
     <message>
-        <source>ddd d MMM</source>
+        <source>ddd MMM d</source>
         <translation>ddd d MMM</translation>
     </message>
     <message>
@@ -4016,7 +4032,7 @@
         <translation>ddd</translation>
     </message>
     <message>
-        <source>d MMM</source>
+        <source>MMM d</source>
         <translation>d MMM</translation>
     </message>
 </context>

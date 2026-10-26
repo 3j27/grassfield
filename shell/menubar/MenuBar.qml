@@ -298,19 +298,21 @@ Scope {
                 const d = FixedTime.date(clock.date);
                 let dateText = "";
                 if (kind === "both")
-                    dateText = Qt.locale().toString(d, qsTr("ddd d MMM"));
+                    dateText = Qt.locale().toString(d, qsTr("ddd MMM d"));
                 else if (kind === "day")
                     dateText = Qt.locale().toString(d, qsTr("ddd"));
                 else if (kind === "date")
-                    dateText = Qt.locale().toString(d, qsTr("d MMM"));
+                    dateText = Qt.locale().toString(d, qsTr("MMM d"));
                 const t = Qt.formatTime(d, ClockFormat.timePattern(Qt.locale().timeFormat(Locale.ShortFormat), Settings.menubarClockHours, Settings.menubarClockShowSeconds, Settings.menubarClockShowAmPm));
-                return ClockFormat.join(dateText, ClockFormat.flash(t, off));
+                return ClockFormat.join(dateText, ClockFormat.flash(t, off), Tokens.menubarClockGap);
             }
             readonly property bool clockFlashOff: Settings.menubarClockFlashSeparators && clock.date.getSeconds() % 2 === 1
             // Widths of the clock with and without the date (never of what is drawn now, so the choice cannot feed back).
             readonly property real clockFullWidth: clockFullMetrics.width
             readonly property real clockShortWidth: clockShortMetrics.width
-            readonly property real clockPadding: Math.max(0, clockButton.implicitWidth - clockText.implicitWidth)
+            // The button's own padding, not its implicit width minus the text's: that read the text, which follows clockDateShown
+            // (a binding loop).
+            readonly property real clockPadding: 2 * clockButton.padding
             // "When Space Allows": the date stays while the whole status area fits with it.
             readonly property bool clockDateShown: {
                 const mode = Settings.menubarClockDate;
@@ -847,6 +849,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "grassfield-logo"
                             }
@@ -998,6 +1001,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "now-playing"
                             }
@@ -1016,6 +1020,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "moon"
                             }
@@ -1036,7 +1041,8 @@ Scope {
                             onEntered: win.hoverSwitch("network")
 
                             Icon {
-                                size: Tokens.menubarIconSize
+                                size: Connectivity.iconName.indexOf("wifi") === 0 ? Tokens.menubarIconSize * Tokens.menubarWifiIconScale : Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: Connectivity.iconName
                             }
@@ -1058,7 +1064,8 @@ Scope {
                             onScrolled: delta => Audio.adjust(delta > 0 ? 0.05 : -0.05)
 
                             Icon {
-                                size: Tokens.menubarIconSize
+                                size: Tokens.menubarIconSize * Tokens.menubarVolumeIconScale
+                                heavy: true
                                 color: win.barText
                                 name: Audio.iconName
                             }
@@ -1080,6 +1087,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: win.battery && win.battery.state === UPowerDeviceState.Charging ? "battery-charging" : "battery"
                             }
@@ -1110,6 +1118,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "search"
                             }
@@ -1130,6 +1139,7 @@ Scope {
 
                             Icon {
                                 size: Tokens.menubarIconSize
+                                heavy: true
                                 color: win.barText
                                 name: "control-center"
                             }

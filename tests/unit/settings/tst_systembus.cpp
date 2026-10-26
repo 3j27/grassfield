@@ -294,6 +294,31 @@ TEST(SystemBusWifi, AnOpenAndASecuredNetworkOfTheSameNameAreToldApartBySecurity)
     EXPECT_EQ(runAction(g.bus, {{"op", "wifi.connectOpen"}, {"hex", "486F6D65"}}), QStringLiteral("that network needs a password"));
 }
 
+TEST(SystemBusWifi, EnhancedOpenIsJoinedWithoutAPasswordAndWithKeyMgmtOwe)
+{
+    // OWE (rsn 0x888: OWE key management, CCMP; the privacy flag is set) needs no password: joined like an open network, but
+    // NetworkManager needs key-mgmt owe in the profile. One that also offers SAE or PSK needs a password.
+    NmFixture f;
+    f.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Owe")}, {"Strength", u8(50)}, {"Flags", u32(1)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0x888)}};
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectOpen"}, {"hex", "4F7765"}}), QString());
+    const Call c = f.bus.calls.last();
+    EXPECT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+    const ConnectionSettings settings = qvariant_cast<ConnectionSettings>(c.args[0]);
+    EXPECT_EQ(settings["802-11-wireless-security"]["key-mgmt"].toString(), QStringLiteral("owe"));
+    EXPECT_EQ(settings["802-11-wireless-security"].size(), 1) << "no secret in the profile";
+    EXPECT_EQ(qvariant_cast<QDBusObjectPath>(c.args[2]).path(), QStringLiteral("/ap/gone"));
+    // Not OWE alone: needs a password, never joined.
+    for (uint rsn : {0x888u | 0x400u, 0x888u | 0x100u, 0x888u | 0x200u}) {
+        NmFixture g;
+        g.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Owe")}, {"Strength", u8(50)}, {"Flags", u32(1)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(rsn)}};
+        EXPECT_EQ(runAction(g.bus, {{"op", "wifi.connectOpen"}, {"hex", "4F7765"}}), QStringLiteral("that network needs a password")) << rsn;
+    }
+    // A plain open network has no security section.
+    NmFixture h;
+    EXPECT_EQ(runAction(h.bus, {{"op", "wifi.connectOpen"}, {"hex", "43616665"}}), QString());
+    EXPECT_FALSE(qvariant_cast<ConnectionSettings>(h.bus.calls.last().args[0]).contains(QStringLiteral("802-11-wireless-security")));
+}
+
 TEST(SystemBusWifi, AFailedCallGivesTheServicesOwnShortReason)
 {
     NmFixture f;

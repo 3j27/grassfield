@@ -759,8 +759,8 @@ ListView {
 
         width: list.width
         leftPadding: list.panel.gutter
-        // Groups are set apart; cards of one group are one banner gap apart.
-        topPadding: item.headCount > 0 && !item.headFirst ? Tokens.spacingMd : 0
+        // macOS: every card is one banner gap (6) from the next, groups included.
+        topPadding: 0
         bottomPadding: Tokens.notificationBannerGap
 
         Item {
@@ -929,7 +929,9 @@ ListView {
                         spacing: Tokens.spacingSm
 
                         Item {
-                            visible: item.headCount > 0
+                            // macOS: a lone notification has no app-name row (icon, bold title, body, time); only a group
+                            // of several has its header (app name, count, Show Less, Clear).
+                            visible: item.headCount > 1
                             width: parent.width
                             height: visible ? Math.max(clearGroup.height, showLess.implicitHeight) : 0
 

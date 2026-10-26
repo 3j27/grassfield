@@ -339,42 +339,38 @@ Variants {
                         radius: Tokens.launcherPanelRadius
                     }
 
-                    // Search field.
-                    Rectangle {
+                    // Header row (macOS): a borderless 56-pt row, the glass glyph and the title "Apps" in grey that the query replaces
+                    // while it is typed, a hairline under it. The field has no ring and no fill: the caret is the focus.
+                    Item {
                         id: searchBox
 
                         x: Tokens.launcherPadding
-                        y: Tokens.launcherPadding
+                        y: 0
                         width: panel.width - 2 * Tokens.launcherPadding
-                        height: Tokens.launcherSearchHeight
-                        radius: height / 2
-                        // The translucent fill of the material; in dark a little less of it, so the light placeholder keeps 4.5:1.
-                        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.launcherSearchFillOpacityDark : Tokens.materialFillOpacity)
-                        border.width: field.activeFocus ? Tokens.controlFocusOutline : 0
-                        border.color: Appearance.focusRingColor
+                        height: Tokens.launcherHeaderHeight
                         Accessible.role: Accessible.Pane
                         Accessible.name: qsTr("Search")
 
                         Icon {
                             id: glass
-                            x: Tokens.spacingMd
+                            x: 0
                             y: (parent.height - height) / 2
-                            size: Tokens.menuIconSize
+                            size: Tokens.launcherGlassSize
                             name: "search"
                             color: Appearance.colors.textSecondary
                         }
 
                         TextInput {
                             id: field
-                            x: glass.x + glass.width + Tokens.spacingSm
-                            width: parent.width - x - Tokens.spacingMd
+                            x: glass.x + glass.width + Tokens.spacingMd
+                            width: parent.width - x
                             height: parent.height
                             verticalAlignment: TextInput.AlignVCenter
                             color: Appearance.colors.text
                             selectionColor: Appearance.highlight
                             selectedTextColor: Appearance.highlightText
                             font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyBodySize
+                            font.pixelSize: Tokens.launcherQueryFontSize
                             clip: true
                             focus: true
                             // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
@@ -395,12 +391,20 @@ Variants {
                                 anchors.fill: parent
                                 verticalAlignment: Text.AlignVCenter
                                 visible: field.text === "" && field.preeditText === ""
-                                text: qsTr("Search")
+                                text: qsTr("Apps")
                                 textFormat: Text.PlainText
                                 color: Appearance.colors.textSecondary
                                 font: field.font
                             }
                         }
+                    }
+
+                    Rectangle {
+                        x: Tokens.launcherPadding
+                        y: searchBox.y + searchBox.height
+                        width: panel.width - 2 * Tokens.launcherPadding
+                        height: Tokens.appsBorderWidth
+                        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 
                     // Category chips (scroll sideways when the panel is narrower than the row).
@@ -446,12 +450,21 @@ Variants {
                         }
                     }
 
+                    Rectangle {
+                        id: chipRule
+                        x: Tokens.launcherPadding
+                        y: chipFlick.y + chipFlick.height + Tokens.launcherChipHairlineGap
+                        width: panel.width - 2 * Tokens.launcherPadding
+                        height: Tokens.appsBorderWidth
+                        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                    }
+
                     // Scrolling grid, alphabetical (or ranked while searching).
                     AppsGrid {
                         id: grid
 
                         x: Tokens.launcherPadding
-                        y: chipFlick.y + chipFlick.height + Tokens.spacingXs
+                        y: chipRule.y + chipRule.height + Tokens.launcherChipToGrid
                         width: panel.width - 2 * Tokens.launcherPadding
                         // Down to the panel's edge (inside its border): rows scroll out under it, the last one clears it.
                         height: panel.height - y - Tokens.appsBorderWidth

@@ -82,7 +82,8 @@ PanelWindow {
     Column {
         id: column
         x: win.pad
-        y: Tokens.menubarHeight + Tokens.notificationBannerGap + win.osdOffset
+        // macOS: banners start where the Notifications column starts.
+        y: Tokens.menubarHeight + Tokens.notificationCenterInset + win.osdOffset
         width: Tokens.notificationBannerWidth
         spacing: Tokens.notificationBannerGap
 

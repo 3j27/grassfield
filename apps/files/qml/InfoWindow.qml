@@ -43,7 +43,7 @@ Window {
     height: Tokens.filesInfoWindowHeight
     minimumWidth: Tokens.filesInfoWindowWidth
     minimumHeight: Tokens.filesInfoWindowHeight / 2
-    color: Appearance.colors.materialTint
+    color: Appearance.windowFill
     visible: true
 
     onClosing: Qt.callLater(root.destroy)

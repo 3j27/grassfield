@@ -41,7 +41,7 @@ Window {
     maximumWidth: width
     minimumHeight: height
     maximumHeight: height
-    color: Appearance.colors.materialTint
+    color: Appearance.windowFill
     visible: true
 
     onClosing: Qt.callLater(root.destroy)
