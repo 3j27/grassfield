@@ -37,7 +37,7 @@ const QString kBluez = QStringLiteral("org.bluez");
 const QString kObjectManager = QStringLiteral("org.freedesktop.DBus.ObjectManager");
 const QString kAdapter = QStringLiteral("org.bluez.Adapter1");
 const QString kDevice1 = QStringLiteral("org.bluez.Device1");
-// The General pane's services (ADR-0025).
+// The General pane's services (ADR-0026).
 const QString kHostService = QStringLiteral("org.freedesktop.hostname1");
 const QString kHostPath = QStringLiteral("/org/freedesktop/hostname1");
 const QString kTimeService = QStringLiteral("org.freedesktop.timedate1");
@@ -649,7 +649,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         return QCoreApplication::translate("SystemBus", "invalid request");
     const QString name = op.value(QStringLiteral("op")).toString();
 
-    // General (ADR-0025): the service asks the polkit agent (interactive = true) and answers once the user did.
+    // General (ADR-0026): the service asks the polkit agent (interactive = true) and answers once the user did.
     if (name == QLatin1String("host.setName")) {
         const QString pretty = op.value(QStringLiteral("name")).toString().trimmed();
         const QString error = privileged(bus, kHostService, kHostPath, QStringLiteral("SetPrettyHostname"), {pretty, true});

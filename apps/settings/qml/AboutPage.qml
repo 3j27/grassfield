@@ -5,7 +5,7 @@ import "SysInfo.js" as SysInfo
 import "General.js" as General
 
 // General > About (macOS 27; the structure of the macOS 15 capture, docs/audits/settings-parity-2026-10-26.md § About): the
-// device picture and the model name, then the computer's name (editable: hostname1 through polkit, ADR-0025), processor,
+// device picture and the model name, then the computer's name (editable: hostname1 through polkit, ADR-0026), processor,
 // graphics and memory; Grassfield and the components it runs on; the displays; the start-up disk. Read once when the page
 // opens; the name again after a change.
 SettingsPage {

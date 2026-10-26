@@ -72,7 +72,7 @@ struct StateResult {
 StateResult wifiState(BusCaller &bus);
 StateResult bluetoothState(BusCaller &bus);
 
-// The General pane's system services (PR #4, ADR-0025), on the system bus:
+// The General pane's system services (PR #4, ADR-0026), on the system bus:
 //   hostState: hostname1  {"pretty", "static", "hostname", "chassis", "vendor", "model"}       (About)
 //   timeState: timedate1 and timesync1  {"zone", "ntp", "canNtp", "synced", "usec" (microseconds since the epoch, as a string),
 //              "localRtc", "server" (the server in use, "" when none), "servers": [the configured ones, link then system then fallback]}
@@ -91,7 +91,7 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
 //   wifi.radio {on}, wifi.connectKnown {uuid}, wifi.connectOpen {hex}, wifi.disconnect {}, wifi.scan {},
 //   bt.power {on}, bt.connect {mac, connect}
-// and the General pane's (ADR-0025): the system service asks the session's polkit agent itself (interactive), so these calls wait
+// and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait
 // for the user's answer (kPrivilegedMs):
 //   host.setName {name}         hostname1 SetPrettyHostname, then SetStaticHostname with the name made a valid host name
 //   time.ntp {on}               timedate1 SetNTP

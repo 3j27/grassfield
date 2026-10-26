@@ -1,4 +1,4 @@
-# ADR-0025: Settings changes the system only through the system services' own polkit actions
+# ADR-0026: Settings changes the system only through the system services' own polkit actions
 Status: Proposed (cloud session, owner brief 2026-10-26: "toute action privilégiée passe par polkit et demande un ADR, plus une
 relecture opus") · Date: 2026-10-26 · Decider: owner (brief), integrator (merge after the opus review)
 
