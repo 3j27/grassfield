@@ -15,6 +15,9 @@ class Translator : public QObject
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
+    // `region.formats`: "auto" (the language's formats) or a locale name ("fr_CH"). It becomes the process's default locale,
+    // so Qt.locale() everywhere formats with it; the words stay the language's.
+    Q_PROPERTY(QString formats READ formats WRITE setFormats NOTIFY formatsChanged FINAL)
 
 public:
     // The factory is the only way QML gets the singleton (the constructor is private on purpose: with a
@@ -27,16 +30,20 @@ public:
 
     QString language() const { return m_language; }
     void setLanguage(const QString &language);
+    QString formats() const { return m_formats; }
+    void setFormats(const QString &formats);
     // Re-evaluates all qsTr() bindings (also callable after external catalog changes).
     Q_INVOKABLE void retranslate();
 
 signals:
     void languageChanged();
+    void formatsChanged();
 
 private:
     explicit Translator(QObject *parent = nullptr);
 
     QString m_language;
+    QString m_formats = QStringLiteral("auto");
     QTranslator *m_translator = nullptr;
     QPointer<QQmlEngine> m_engine;
 };

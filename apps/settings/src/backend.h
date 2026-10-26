@@ -92,11 +92,15 @@ public:
     // Mounted volumes with a real file system (Storage, About): [{root, name, device, type, total, available, free, readOnly,
     // isRoot, holdsHome}], the start-up volume first. Read-only (QStorageInfo).
     Q_INVOKABLE QVariantList volumes() const;
+    // Date & Time: a zone's names in the UI language {longName, shortName, offset, offsetSeconds, territory}; {} for a zone Qt
+    // does not know.
+    Q_INVOKABLE QVariantMap zoneInfo(const QString &zone) const;
+    // Language & Region: the regions of the UI language, as [{name: "fr_CH", territory: "Suisse"}] sorted by the territory's
+    // name (Qt's locale data: what region.formats can hold for this language).
+    Q_INVOKABLE QVariantList regionLocales() const;
     // Login Items (XDG autostart): the .desktop file names of a folder; the user's folder ($XDG_CONFIG_HOME/autostart) and the
     // system's ($XDG_CONFIG_DIRS/autostart). Writes go only to the user's folder, one plain <name>.desktop at a time, and in a dev
     // session only when that folder lies under the worktree's .dev (writeAutostart, removeAutostart: "" or a reason).
-    // Date & Time: a zone's names in the UI language {longName, shortName, offset, territory}; {} for a zone Qt does not know.
-    Q_INVOKABLE QVariantMap zoneInfo(const QString &zone) const;
     Q_INVOKABLE QStringList desktopEntries(const QString &dir) const;
     Q_INVOKABLE QString writeAutostart(const QString &path, const QString &text) const;
     Q_INVOKABLE QString removeAutostart(const QString &path) const;

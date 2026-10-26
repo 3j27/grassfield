@@ -134,6 +134,18 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      tile and "Version 1.0.0-rc1", Omarchy's VERSION_ID, Hyprland and Quickshell from `pacman -Q`, Qt); Displays (one row per
      output: "14-inch (1920 × 1080)" from the size the output reports); Storage (the start-up volume, "742.81 GB available of
      1.00 TB", decimal units as macOS). Not shown: the serial number (root-only), coverage, System Report.
+   - Language & Region (General > Language & Region since PR #4; the macOS 15 structure, the macOS 27 look; `LanguagePage.qml`):
+     "Preferred Languages": one "Primary language" row with an inline pop-up of Omarchy's languages (`omarchy-language list`,
+     "Français — French"; the current one from `omarchy-language`). Choosing one runs `omarchy-language <code>` (an action:
+     one validated code, never in a dev session; it may wait for Omarchy's own pkexec prompt, so it has 130 s). Then the
+     group says "Log out and back in to use <language> everywhere." (Omarchy sets LANG for the next login and for what
+     Hyprland starts; grassfield-shell keeps its language until then). The formats group: a preview (the long date and time,
+     then the short date and time, an amount and a number, centred), Region (an inline pop-up of the UI language's regions,
+     `Backend.regionLocales`: `region.formats`, the language's own region stores "auto"), First day of week ("Automatic
+     (Sunday)" or a day: `region.firstDayOfWeek`), Date format and Number format (read-only: the region's). The shell
+     applies the formats at once (`Translator.formats`, docs/specs/i18n.md) and the first day in the Calendar widget. Not
+     built: more than one preferred language, other calendars, temperature and measurement units (nothing in Grassfield
+     shows one), custom date and number formats, Live Text, per-app languages.
    - Date & Time (General > Date & Time since PR #4; the macOS 15 structure, the macOS 27 look; `DateTimePage.qml`): "Set time
      and date automatically" (timedate1 `NTP`, `time.ntp`; off when timedate1 says NTP cannot be used) and Source (timesync1's
      current server, else the first configured one, read-only, dimmed while the automatic time is off); "Date and time" (the

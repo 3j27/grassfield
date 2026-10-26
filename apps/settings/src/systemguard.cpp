@@ -2,6 +2,8 @@
 
 #include "runmode.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
@@ -166,6 +168,12 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language");
+}
+
+int actionTimeoutMs(const QStringList &argv, int requested)
+{
+    constexpr int kPromptMs = 130000;
+    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language") ? std::max(requested, kPromptMs) : requested;
 }
 
 bool isAllowedAction(const QStringList &argv)

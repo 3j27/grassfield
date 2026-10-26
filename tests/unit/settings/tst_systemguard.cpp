@@ -234,6 +234,13 @@ TEST(ActionGuard, OmarchyLanguageTakesOneCodeOnly)
     EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-language"), QStringLiteral("fr")}));
 }
 
+TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
+{
+    EXPECT_EQ(actionTimeoutMs({QStringLiteral("omarchy-language"), QStringLiteral("fr")}, 15000), 130000);
+    EXPECT_EQ(actionTimeoutMs({QStringLiteral("wpctl"), QStringLiteral("set-mute")}, 15000), 15000);
+    EXPECT_EQ(actionTimeoutMs({}, 15000), 15000);
+}
+
 TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
     // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell); omarchy-language is

@@ -3247,6 +3247,10 @@
         <source>Date &amp; Time</source>
         <translation>Date et heure</translation>
     </message>
+    <message>
+        <source>Language &amp; Region</source>
+        <translation>Langue et région</translation>
+    </message>
 </context>
 <context>
     <name>Glance</name>
@@ -3869,6 +3873,65 @@
     </message>
 </context>
 <context>
+    <name>LanguagePage</name>
+    <message>
+        <source>Language &amp; Region</source>
+        <translation>Langue et région</translation>
+    </message>
+    <message>
+        <source>Preferred Languages</source>
+        <translation>Langues préférées</translation>
+    </message>
+    <message>
+        <source>The language could not be changed: %1.</source>
+        <translation>La langue n’a pas pu être modifiée : %1.</translation>
+    </message>
+    <message>
+        <source>Log out and back in to use %1 everywhere.</source>
+        <translation>Langue choisie : %1. Fermez la session puis rouvrez-la pour l’utiliser partout.</translation>
+    </message>
+    <message>
+        <source>Primary language</source>
+        <translation>Langue principale</translation>
+    </message>
+    <message>
+        <source>Changing the language…</source>
+        <translation>Changement de langue…</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnue</translation>
+    </message>
+    <message>
+        <source>%1 — %2</source>
+        <translation>%1 — %2</translation>
+    </message>
+    <message>
+        <source>%1 at %2</source>
+        <translation>%1 à %2</translation>
+    </message>
+    <message>
+        <source>Region</source>
+        <translation>Région</translation>
+    </message>
+    <message>
+        <source>First day of week</source>
+        <translation>Premier jour de la semaine</translation>
+    </message>
+    <message>
+        <source>Automatic (%1)</source>
+        <translation>Automatique (%1)</translation>
+    </message>
+    <message>
+        <source>Date format</source>
+        <translation>Format de date</translation>
+    </message>
+    <message>
+        <source>Number format</source>
+        <translation>Format des nombres</translation>
+    </message>
+</context>
+<context>
     <name>Lock</name>
     <message>
         <source>Authentication service unavailable. The session stays locked.</source>
@@ -4081,6 +4144,14 @@
     <message>
         <source>clock time zone city automatic network time ntp 24-hour</source>
         <translation>horloge heure fuseau horaire ville automatique heure réseau ntp 24 heures</translation>
+    </message>
+    <message>
+        <source>Language &amp; Region</source>
+        <translation>Langue et région</translation>
+    </message>
+    <message>
+        <source>language region formats locale date number first day of week calendar</source>
+        <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>

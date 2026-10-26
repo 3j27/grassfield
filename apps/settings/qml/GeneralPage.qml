@@ -23,11 +23,21 @@ SettingsPage {
             glyph: "laptop"
             onClicked: root.open("about")
         }
+    }
+
+    // macOS 27 keeps Date & Time, Language & Region and Login Items together (after AutoFill & Passwords, not built).
+    SettingsGroup {
         NavigationRow {
             text: qsTr("Date & Time")
             glyph: "clock"
             tileColor: "blue"
             onClicked: root.open("datetime")
+        }
+        NavigationRow {
+            text: qsTr("Language & Region")
+            glyph: "globe"
+            tileColor: "blue"
+            onClicked: root.open("language")
         }
     }
 }

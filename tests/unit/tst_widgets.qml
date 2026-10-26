@@ -239,6 +239,14 @@ TestCase {
         compare(Calendar.monthGrid(2026, 0, 0)[0][0].inMonth, false);
     }
 
+    function test_firstDay() {
+        compare(Calendar.firstDay("monday", 0), 1);
+        compare(Calendar.firstDay("sunday", 1), 0);
+        compare(Calendar.firstDay("saturday", 1), 6);
+        compare(Calendar.firstDay("auto", 1), 1);
+        compare(Calendar.firstDay("lundi", 0), 0);
+    }
+
     function test_weekdayOrder() {
         compare(Calendar.weekdayOrder(0).join(""), "0123456");
         compare(Calendar.weekdayOrder(1).join(""), "1234560");

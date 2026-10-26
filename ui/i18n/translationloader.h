@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QLocale>
+#include <QRegularExpression>
 #include <QString>
 #include <QTranslator>
 
@@ -65,6 +66,18 @@ inline QTranslator *install(const QString &language, QTranslator *previous = nul
     }
     delete translator;
     return nullptr;
+}
+
+// The locale whose formats dates, times and numbers use (`region.formats`, Settings > General > Language & Region): a
+// locale name such as "fr_CH" (the contract's localeName rule), else the language's own ("auto", or anything else).
+inline QLocale formatsLocale(const QString &language, const QString &formats)
+{
+    static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[a-z]{2,3}(_[A-Z][a-z]{3})?_([A-Z]{2}|[0-9]{3})")));
+    if (name.match(formats).hasMatch())
+        return QLocale(formats);
+    QString lang = language;
+    lang.replace(QLatin1Char('-'), QLatin1Char('_'));
+    return QLocale(lang.section(QLatin1Char('.'), 0, 0).section(QLatin1Char('@'), 0, 0));
 }
 
 // Call before creating the QML engine.

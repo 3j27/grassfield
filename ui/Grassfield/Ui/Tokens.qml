@@ -1228,6 +1228,14 @@ QtObject {
     readonly property int settingsCaptionToGroup: 13
     // behaviour: Date & Time > Closest city lists at most 8 matching cities under the field [ref: docs/audits/settings-parity-2026-10-26.md § Date & Time]
     readonly property int settingsCityMatches: 8
+    // Language & Region's preview of the formats: a 49.5-tall first row, on the 1-pt grid [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewRowHeight: 50
+    // the preview's first line: its baseline 21 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewFirstBaseline: 21
+    // the preview's second line: its baseline 16 below the first [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewLineGap: 16
+    // the preview's second line: 18 to 18.5 between the inks of the date, the amount and the number, 17 between the text boxes [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewItemGap: 17
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

@@ -48,7 +48,20 @@ void Translator::setLanguage(const QString &language)
     m_language = language;
     m_translator = g_translator = grassfield::i18n::install(language, g_translator);
     g_language = language;
+    // install() set the language's own formats: the chosen ones stay.
+    QLocale::setDefault(grassfield::i18n::formatsLocale(m_language, m_formats));
     emit languageChanged();
+    retranslate();
+}
+
+void Translator::setFormats(const QString &formats)
+{
+    if (formats == m_formats)
+        return;
+    m_formats = formats;
+    QLocale::setDefault(grassfield::i18n::formatsLocale(m_language, m_formats));
+    emit formatsChanged();
+    // The bindings that format with a qsTr() pattern follow at once; the others at their next evaluation (a clock's tick).
     retranslate();
 }
 

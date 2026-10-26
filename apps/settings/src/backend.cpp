@@ -1,9 +1,11 @@
 #include "backend.h"
 
 #include <algorithm>
+#include <numeric>
 
 #include "runmode.h"
 
+#include <QCollator>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -205,7 +207,7 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         qWarning().noquote() << "refused an action with an unknown program:" << what;
         return false;
     }
-    start(argv, tag, timeoutMs);
+    start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs));
     return true;
 }
 
@@ -363,6 +365,34 @@ QVariantMap Backend::zoneInfo(const QString &zone) const
             {"offset", tz.displayName(now, QTimeZone::OffsetName, locale)},
             {"offsetSeconds", tz.offsetFromUtc(now)},
             {"territory", territory == QLocale::AnyTerritory ? QString() : QLocale::territoryToString(territory)}};
+}
+
+QVariantList Backend::regionLocales() const
+{
+    // The default locale is the UI language (translationloader.h). A region's name carries the script only when it is not
+    // the one the language and territory imply ("sr_Latn_RS", but "fr_CH").
+    const QLocale ui;
+    QList<QLocale> found;
+    QStringList names;
+    for (const QLocale &l : QLocale::matchingLocales(ui.language(), QLocale::AnyScript, QLocale::AnyTerritory)) {
+        if (l.territory() == QLocale::AnyTerritory)
+            continue;
+        const QString base = QLocale::languageToCode(l.language()) + QLatin1Char('_') + QLocale::territoryToCode(l.territory());
+        const QString name = QLocale(base).script() == l.script() ? base
+            : QLocale::languageToCode(l.language()) + QLatin1Char('_') + QLocale::scriptToCode(l.script()) + QLatin1Char('_') + QLocale::territoryToCode(l.territory());
+        if (names.contains(name))
+            continue;
+        names << name;
+        found << l;
+    }
+    QCollator collator(ui);
+    QList<int> order(found.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](int a, int b) { return collator.compare(found[a].nativeTerritoryName(), found[b].nativeTerritoryName()) < 0; });
+    QVariantList out;
+    for (int i : order)
+        out << QVariantMap{{"name", names[i]}, {"territory", found[i].nativeTerritoryName()}};
+    return out;
 }
 
 QString Backend::autostartDir() const
