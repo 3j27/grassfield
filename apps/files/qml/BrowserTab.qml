@@ -113,6 +113,9 @@ FocusScope {
     function navigate(target: url, record: bool): void {
         if (String(target) === "")
             return;
+        // A navigation of the user's own ends a spring-loaded excursion: a later cancelled drag does not undo it.
+        if (!root.springing)
+            root.springOrigin = "";
         root.renameModel = null;
         if (root.searchText !== "")
             root.setSearch("");
@@ -440,7 +443,56 @@ FocusScope {
     }
 
     function dropUrls(urls: var, destination: url, model: var): void {
+        springTimer.stop();
+        root.springOrigin = "";
         root.app.drop(urls, destination, model);
+    }
+
+    // Spring-loaded folders (Finder): a drag that rests on a folder (a row of a view or a sidebar place) opens it in this
+    // tab after Tokens.filesSpringDelay. When a drag that Files started ends without a drop, the tab goes back to where it
+    // was before the first spring (Main.qml dragEnded); a drop, or a navigation of the user's own, keeps it.
+    property url springTarget
+    property url springOrigin
+    property bool springing: false
+
+    function springHover(target: url): void {
+        root.springTarget = target;
+        springTimer.restart();
+    }
+
+    function springLeave(target: url): void {
+        if (String(root.springTarget) === String(target))
+            springTimer.stop();
+    }
+
+    // A drag Files started (from any view) ended; `dropAction` is what the target did with it.
+    function dragFinished(dropAction: int): void {
+        if (root.win)
+            root.win.manager.dragEnded(dropAction !== Qt.IgnoreAction);
+    }
+
+    function springEnd(dropped: bool): void {
+        springTimer.stop();
+        const origin = root.springOrigin;
+        root.springOrigin = "";
+        if (!dropped && String(origin) !== "")
+            root.navigate(origin, true);
+    }
+
+    Timer {
+        id: springTimer
+        interval: Tokens.filesSpringDelay
+        onTriggered: {
+            if (String(root.springTarget) === "" || root.app.sameUrl(root.springTarget, root.url))
+                return;
+            if (String(root.springOrigin) === "") {
+                root.springOrigin = root.url;
+                root.win.manager.springStarted(root);
+            }
+            root.springing = true;
+            root.navigate(root.springTarget, true);
+            root.springing = false;
+        }
     }
 
     // Keyboard -----------------------------------------------------------------------------------

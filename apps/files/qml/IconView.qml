@@ -61,7 +61,10 @@ FocusScope {
         Drag.proposedAction: Qt.MoveAction
         Drag.hotSpot.x: Tokens.filesIconSize / 2
         Drag.hotSpot.y: Tokens.filesIconSize / 2
-        Drag.onDragFinished: dragProxy.Drag.active = false
+        Drag.onDragFinished: dropAction => {
+            dragProxy.Drag.active = false;
+            root.tab.dragFinished(dropAction);
+        }
     }
 
     function startDrag(iconName: string, thumbnail: string): void {
@@ -271,6 +274,8 @@ FocusScope {
                 anchors.fill: parent
                 enabled: cell.isDir && !cell.selected
                 keys: ["text/uri-list"]
+                onEntered: root.tab.springHover(cell.url)
+                onExited: root.tab.springLeave(cell.url)
                 onDropped: event => {
                     if (event.hasUrls) {
                         root.tab.dropUrls(event.urls, cell.url, root.model);

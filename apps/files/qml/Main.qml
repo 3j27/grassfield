@@ -106,6 +106,25 @@ QtObject {
         return w;
     }
 
+    // Tabs a drag spring-loaded into a folder (BrowserTab.springHover): when a drag Files started ends, they stay where
+    // the drop happened or, without a drop, go back (Finder).
+    property var springTabs: []
+
+    function springStarted(tab: var): void {
+        if (root.springTabs.indexOf(tab) < 0)
+            root.springTabs = root.springTabs.concat([tab]);
+    }
+
+    function dragEnded(dropped: bool): void {
+        const tabs = root.springTabs;
+        root.springTabs = [];
+        for (let i = 0; i < tabs.length; i++) {
+            // A tab closed during the drag has no functions left.
+            if (tabs[i] && tabs[i].springEnd)
+                tabs[i].springEnd(dropped);
+        }
+    }
+
     function nextTabId(): int {
         root.lastTabId += 1;
         return root.lastTabId;

@@ -79,7 +79,10 @@ FocusScope {
         Drag.proposedAction: Qt.MoveAction
         Drag.hotSpot.x: Tokens.filesGalleryStripIconSize / 2
         Drag.hotSpot.y: Tokens.filesGalleryStripIconSize / 2
-        Drag.onDragFinished: dragProxy.Drag.active = false
+        Drag.onDragFinished: dropAction => {
+            dragProxy.Drag.active = false;
+            root.tab.dragFinished(dropAction);
+        }
     }
 
     // Background: drops into this folder and the folder's context menu.

@@ -298,6 +298,15 @@ FocusScope {
             anchors.fill: parent
             enabled: entry.mounted && entry.kind !== "network"
             keys: ["text/uri-list"]
+            // A place rested on during a drag opens in the tab (spring-loaded); a tag does not.
+            onEntered: {
+                if (root.tab && !entry.isTag)
+                    root.tab.springHover(entry.url);
+            }
+            onExited: {
+                if (root.tab)
+                    root.tab.springLeave(entry.url);
+            }
             onDropped: event => {
                 if (!event.hasUrls || !root.tab)
                     return;

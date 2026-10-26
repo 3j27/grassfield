@@ -18,6 +18,39 @@ FocusScope {
     // The rows have moved up under the toolbar (the window draws the toolbar's hairline then, macOS).
     readonly property bool scrolled: list.contentY > list.originY
 
+    // Rubber band (Finder): a drag from the empty space under the rows, or from a row outside its icon and name, selects
+    // the rows it covers (with Shift or Cmd, added to the selection there was). Points in list.contentItem coordinates.
+    property bool banding: false
+    property point bandOrigin
+    property point bandEnd
+    property var bandBase: []
+
+    function bandPress(item: Item, x: real, y: real, modifiers: int): void {
+        root.bandOrigin = item.mapToItem(list.contentItem, x, y);
+        root.bandEnd = root.bandOrigin;
+        root.bandBase = (modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) ? root.model.selectedUrls() : [];
+        root.banding = false;
+    }
+
+    function bandMove(item: Item, x: real, y: real): void {
+        const p = item.mapToItem(list.contentItem, x, y);
+        if (!root.banding && Math.abs(p.x - root.bandOrigin.x) + Math.abs(p.y - root.bandOrigin.y) < Tokens.filesDragThreshold)
+            return;
+        root.banding = true;
+        root.bandEnd = p;
+        const rows = Nav.cellsInRect(0, root.bandOrigin.y, 0, p.y, 1, Tokens.filesListRowHeight, 1, list.count);
+        const urls = root.bandBase.slice();
+        for (let i = 0; i < rows.length; i++)
+            urls.push(root.model.urlAt(rows[i]));
+        root.model.selectUrls(urls);
+        // Scroll while the band reaches past the edges.
+        const inList = item.mapToItem(list, x, y);
+        if (inList.y > list.height)
+            list.contentY = Math.min(list.contentY + Tokens.spacingSm, Math.max(list.originY, list.contentHeight - list.height + list.originY));
+        else if (inList.y < 0)
+            list.contentY = Math.max(list.originY, list.contentY - Tokens.spacingSm);
+    }
+
     clip: true
     Accessible.role: Accessible.Table
     Accessible.name: qsTr("Files")
@@ -57,7 +90,10 @@ FocusScope {
         Drag.dragType: Drag.Automatic
         Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
         Drag.proposedAction: Qt.MoveAction
-        Drag.onDragFinished: dragProxy.Drag.active = false
+        Drag.onDragFinished: dropAction => {
+            dragProxy.Drag.active = false;
+            root.tab.dragFinished(dropAction);
+        }
     }
 
     // Header ------------------------------------------------------------------------------------
@@ -156,6 +192,7 @@ FocusScope {
     }
 
     MouseArea {
+        id: background
         anchors.fill: list
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: mouse => {
@@ -163,10 +200,17 @@ FocusScope {
             if (mouse.button === Qt.RightButton) {
                 const p = mapToItem(null, mouse.x, mouse.y);
                 root.tab.contextMenu(root.model, -1, p.x, p.y, false);
-            } else {
-                root.model.clearSelection();
+                return;
             }
+            root.bandPress(background, mouse.x, mouse.y, mouse.modifiers);
+            if (root.bandBase.length === 0)
+                root.model.clearSelection();
         }
+        onPositionChanged: mouse => {
+            if (pressed && mouse.buttons === Qt.LeftButton)
+                root.bandMove(background, mouse.x, mouse.y);
+        }
+        onReleased: root.banding = false
     }
 
     ListView {
@@ -332,6 +376,8 @@ FocusScope {
                 anchors.fill: parent
                 enabled: row.isDir && !row.selected
                 keys: ["text/uri-list"]
+                onEntered: root.tab.springHover(row.url)
+                onExited: root.tab.springLeave(row.url)
                 onDropped: event => {
                     if (event.hasUrls) {
                         root.tab.dropUrls(event.urls, row.url, root.model);
@@ -345,9 +391,12 @@ FocusScope {
                 anchors.fill: parent
                 enabled: !row.renaming
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                drag.target: dragProxy
+                drag.target: mouse.bandStart ? null : dragProxy
                 drag.threshold: Tokens.filesDragThreshold
                 property bool collapseOnRelease: false
+                // Pressed outside the icon and the name: a drag draws a rubber band, a click selects the row.
+                property bool bandStart: false
+                property int pressModifiers: 0
 
                 onPressed: event => {
                     list.forceActiveFocus();
@@ -357,11 +406,29 @@ FocusScope {
                         return;
                     }
                     const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier);
+                    const nameEnd = rowDots.visible ? rowDots.x + rowDots.width : nameText.x + Math.min(nameText.paintedWidth, nameText.width);
+                    mouse.bandStart = event.x > nameEnd + Tokens.spacingSm;
+                    if (mouse.bandStart) {
+                        mouse.pressModifiers = mods;
+                        root.bandPress(mouse, event.x, event.y, mods);
+                        return;
+                    }
                     collapseOnRelease = row.selected && mods === 0;
                     if (!row.selected || mods !== 0)
                         root.model.select(row.index, mods);
                 }
-                onReleased: {
+                onPositionChanged: event => {
+                    if (mouse.bandStart && pressed && event.buttons === Qt.LeftButton)
+                        root.bandMove(mouse, event.x, event.y);
+                }
+                onReleased: event => {
+                    if (mouse.bandStart) {
+                        if (!root.banding)
+                            root.model.select(row.index, mouse.pressModifiers);
+                        root.banding = false;
+                        mouse.bandStart = false;
+                        return;
+                    }
                     if (collapseOnRelease && !drag.active)
                         root.model.select(row.index, 0);
                     collapseOnRelease = false;
@@ -380,6 +447,19 @@ FocusScope {
                 }
             }
         }
+    }
+
+    Rectangle {
+        parent: list.contentItem
+        z: 1
+        visible: root.banding
+        x: Math.min(root.bandOrigin.x, root.bandEnd.x)
+        y: Math.min(root.bandOrigin.y, root.bandEnd.y)
+        width: Math.abs(root.bandEnd.x - root.bandOrigin.x)
+        height: Math.abs(root.bandEnd.y - root.bandOrigin.y)
+        color: Appearance.withAlpha(Appearance.colors.accent, Tokens.filesRubberBandOpacity)
+        border.width: Tokens.appsBorderWidth
+        border.color: Appearance.colors.accent
     }
 
     ScrollBar {

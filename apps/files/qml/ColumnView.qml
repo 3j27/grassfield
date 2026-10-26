@@ -174,6 +174,13 @@ FocusScope {
             lv.forceActiveFocus();
         }
 
+        // Rubber band from the column's empty space (Finder): the rows it covers, added to the selection with Shift or
+        // Cmd. Points in lv.contentItem coordinates.
+        property bool banding: false
+        property point bandOrigin
+        property point bandEnd
+        property var bandBase: []
+
         function rowPosition(row: int): point {
             return lv.mapToItem(null, Tokens.spacingLg, (Math.max(0, row) + 1) * Tokens.filesColumnRowHeight - lv.contentY + lv.originY);
         }
@@ -219,15 +226,47 @@ FocusScope {
         }
 
         MouseArea {
+            id: colBackground
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
+            // The band keeps the pointer: the strip of columns would take a sideways drag for its own scroll.
+            preventStealing: true
             onPressed: mouse => {
                 root.activeColumn = col.index;
                 lv.forceActiveFocus();
                 if (mouse.button === Qt.RightButton) {
                     const p = mapToItem(null, mouse.x, mouse.y);
                     root.tab.contextMenu(col.model, -1, p.x, p.y, false);
+                    return;
                 }
+                col.bandOrigin = colBackground.mapToItem(lv.contentItem, mouse.x, mouse.y);
+                col.bandEnd = col.bandOrigin;
+                col.bandBase = (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) ? col.model.selectedUrls() : [];
+                col.banding = false;
+            }
+            onPositionChanged: mouse => {
+                if (!pressed || mouse.buttons !== Qt.LeftButton)
+                    return;
+                const p = colBackground.mapToItem(lv.contentItem, mouse.x, mouse.y);
+                if (!col.banding && Math.abs(p.x - col.bandOrigin.x) + Math.abs(p.y - col.bandOrigin.y) < Tokens.filesDragThreshold)
+                    return;
+                col.banding = true;
+                col.bandEnd = p;
+                const rows = Nav.cellsInRect(0, col.bandOrigin.y, 0, p.y, 1, Tokens.filesColumnRowHeight, 1, lv.count);
+                const urls = col.bandBase.slice();
+                for (let i = 0; i < rows.length; i++)
+                    urls.push(col.model.urlAt(rows[i]));
+                col.model.selectUrls(urls);
+                if (mouse.y > lv.y + lv.height)
+                    lv.contentY = Math.min(lv.contentY + Tokens.spacingSm, Math.max(lv.originY, lv.contentHeight - lv.height + lv.originY));
+                else if (mouse.y < lv.y)
+                    lv.contentY = Math.max(lv.originY, lv.contentY - Tokens.spacingSm);
+            }
+            onReleased: {
+                // A band changed the selection: the columns after this one follow it; a plain click keeps them.
+                if (col.banding)
+                    root.userSelected(col.index);
+                col.banding = false;
             }
         }
 
@@ -372,6 +411,8 @@ FocusScope {
                     anchors.fill: parent
                     enabled: entry.isDir && !entry.selected
                     keys: ["text/uri-list"]
+                    onEntered: root.tab.springHover(entry.url)
+                    onExited: root.tab.springLeave(entry.url)
                     onDropped: event => {
                         if (event.hasUrls) {
                             root.tab.dropUrls(event.urls, entry.url, col.model);
@@ -401,6 +442,19 @@ FocusScope {
                     }
                 }
             }
+        }
+
+        Rectangle {
+            parent: lv.contentItem
+            z: 1
+            visible: col.banding
+            x: Math.min(col.bandOrigin.x, col.bandEnd.x)
+            y: Math.min(col.bandOrigin.y, col.bandEnd.y)
+            width: Math.abs(col.bandEnd.x - col.bandOrigin.x)
+            height: Math.abs(col.bandEnd.y - col.bandOrigin.y)
+            color: Appearance.withAlpha(Appearance.colors.accent, Tokens.filesRubberBandOpacity)
+            border.width: Tokens.appsBorderWidth
+            border.color: Appearance.colors.accent
         }
 
         ScrollBar {
