@@ -91,4 +91,8 @@ System Settings > General > About > Name and Date & Time change machine-wide set
   owner checks it in the real session (L2): change the name and the time zone, cancel once, enter a wrong password once, and
   leave the dialog open for 60 s before answering (the service's own polkit query must still apply the change); switch the
   language to one whose locale is not generated yet (Omarchy's prompt or grant, then log out and in) and back.
-- A review by the security reviewer (opus) is required before merge.
+- A review by the security reviewer (opus) is required before merge. 2026-10-26: FAIL (an autostart write through a symlinked
+  entry; no test of those writes; this ADR silent on what omarchy-language does; a region changing the words; the zone
+  wording) → 55d87be → counter-review FAIL (a textual `link/..` path normalised past the folder check) → e0db168 →
+  counter-review #2 PASS on the whole scope. Not verified by it: the real polkit dialog, real hostname1/timedate1/systemd,
+  the installed omarchy-language, a nested session (owner checks above).
