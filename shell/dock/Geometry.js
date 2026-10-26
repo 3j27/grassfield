@@ -153,6 +153,32 @@ function iconOrigin(edge, iconSize, iconPx, indicatorArea) {
     return {x: 0, y: iconSize - iconPx};
 }
 
+// The box of the tile that takes the pointer (press, hover, drag, drop, menu), in the tile's own coordinates: the tile's box
+// (`tileW` x `tileH`) joined with the drawn icon (`iconPx` square at iconOrigin). A magnified icon grows beyond the tile
+// across the Dock (away from the screen edge; the tile does not grow, so the Grid that lays tiles out stays put), and the
+// whole of it is clickable (macOS). Along the Dock it is the tile's own extent. {x, y, w, h}.
+function hitBox(edge, iconSize, iconPx, indicatorArea, tileW, tileH) {
+    const o = iconOrigin(edge, iconSize, iconPx, indicatorArea);
+    const x0 = Math.min(0, o.x);
+    const y0 = Math.min(0, o.y);
+    return {x: x0, y: y0, w: Math.max(tileW, o.x + iconPx) - x0, h: Math.max(tileH, o.y + iconPx) - y0};
+}
+
+// The tile that owns the point (x, y): of the hit boxes holding it, the one drawn on top (highest `z`, equal z: the later
+// tile, as Qt stacks siblings). `boxes`: one {x, y, w, h, z} per tile in a common space, null for a tile that cannot be
+// pressed. -1 when no box holds the point. Boxes are half-open (x <= px < x + w), so two that touch share no point.
+function hitOwner(boxes, x, y) {
+    let best = -1;
+    for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        if (!b || x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h)
+            continue;
+        if (best < 0 || (b.z || 0) >= (boxes[best].z || 0))
+            best = i;
+    }
+    return best;
+}
+
 // The running dot in the tile's box, in the shelf padding on the screen-edge side of the icon, `spacing` (dock.indicatorGap)
 // from it. `lift` is how far the tile has moved away from the edge (hover rise): the dot stays on the shelf.
 function dotOrigin(edge, tileW, tileH, iconSize, spacing, dotSize, lift) {
