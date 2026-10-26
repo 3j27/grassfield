@@ -562,7 +562,7 @@ SettingsPage {
             width: Math.min(parent.width, height * header.aspect)
             radius: Tokens.settingsDisplayRadius
             clip: true
-            color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+            color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
             Accessible.role: Accessible.Graphic
             Accessible.name: qsTr("Current wallpaper: %1").arg(root.headline)
 

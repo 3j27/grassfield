@@ -17,7 +17,7 @@
 #               titlebar.background*). Both windows open centred, foot under Settings: for the capture foot goes to the
 #               upper left and Settings to the lower right, apart (checked), then Settings goes back. The decoration
 #               object itself stays attached to every window (hyprctl decorations lists it): P1 hides it
-#   4  APP      the close light (25.75, 25.75 from the surface's top-left) closes the window, with and without the plugin
+#   4  APP      the close light (26, 26 from the surface's top-left) closes the window, with and without the plugin
 #   5  PLUGIN   the minimize light puts the window on special:minimized (the bridge: requestsMinimize -> minimize-request);
 #               skipped with --no-plugin (the light is greyed there, ADR-0015 Q4)
 #   6  SESSION  the zoom light gives fullscreen=1 (maximized); a second press restores the same box (same with --no-plugin)
@@ -122,10 +122,10 @@ launch_settings() {
   return 1
 }
 
-# Centre of a light, in output coordinates: surface top-left + (25.75, 25.75) + n * 23 on x.
+# Centre of a light, in output coordinates: surface top-left + (26, 26) + n * 23 on x.
 light() { # <index 0..2> -> "x y"
   read -r x y _ < <(geom org.grassfield.Settings)
-  awk -v x="$x" -v y="$y" -v n="$1" 'BEGIN { printf "%d %d\n", x + 25.75 + n * 23 + 0.5, y + 25.75 + 0.5 }'
+  awk -v x="$x" -v y="$y" -v n="$1" 'BEGIN { printf "%d %d\n", x + 26 + n * 23 + 0.5, y + 26 + 0.5 }'
 }
 
 say "client_chrome: nested pid $hypr_pid, instance $sig, output $out ${mon_w}x${mon_h}, plugin=$plugin"

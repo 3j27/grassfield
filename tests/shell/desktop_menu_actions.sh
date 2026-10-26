@@ -17,7 +17,7 @@ for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
 done
 cp tests/shell/desktop_menu_actions.d/actions.qml "$tmp/cfg/shell.qml"
-out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u GRASSFIELD_DEV -u DISPLAY \
+out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u GRASSFIELD_SESSION -u DISPLAY GRASSFIELD_DEV=1 \
   QS_NO_RELOAD_POPUP=1 HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/runtime" GRASSFIELD_STATE_HOME="$tmp/state" \
   GRASSFIELD_DESKTOP_DIR="$tmp/desktop" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" \
   GRASSFIELD_LANG=en timeout 60 qs -p "$tmp/cfg" --no-color 2>&1) || true

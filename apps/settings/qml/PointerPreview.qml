@@ -23,7 +23,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Tokens.radiusControl
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
     }
 
     Shape {

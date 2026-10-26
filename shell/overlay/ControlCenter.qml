@@ -46,17 +46,25 @@ FocusScope {
             open(id);
     }
 
+    // The reason to pass on when focus moves after an action: a key (the focused control shows its ring) or a click.
+    function focusReason(): int {
+        const item = root.Window.window ? root.Window.window.activeFocusItem : null;
+        return item && item.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+    }
+
     function open(id: string): void {
         expanded = id;
-        Qt.callLater(() => back.forceActiveFocus());
+        const reason = focusReason();
+        Qt.callLater(() => back.forceActiveFocus(reason));
     }
 
     function collapse(): void {
         const id = expanded;
         expanded = "";
+        const reason = focusReason();
         Qt.callLater(() => {
             const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceSide.visible ? appearanceSideRow : appearanceBottomRow;
-            target.forceActiveFocus();
+            target.forceActiveFocus(reason);
         });
     }
 
@@ -134,7 +142,7 @@ FocusScope {
         const i = Model.navTarget(rects, targets.indexOf(from), dx, dy);
         if (i < 0)
             return false;
-        targets[i].forceActiveFocus();
+        targets[i].forceActiveFocus(Qt.TabFocusReason);
         return true;
     }
 

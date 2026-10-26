@@ -29,8 +29,8 @@ import re
 
 TEXT_TYPES = {"Text", "TextInput", "TextEdit", "TextField", "Label"}
 PALETTE = r"(?:Appearance\.(?:dark|base)?[cC]olors|Tokens\.color(?:Dark|Light))"
-TEXT_TOKENS = ("text", "accentText", "textSecondary", "danger")
-PRIMARY_TOKENS = ("text", "accentText", "fieldText")
+TEXT_TOKENS = ("text", "accentText", "selectionText", "textSecondary", "danger")
+PRIMARY_TOKENS = ("text", "accentText", "selectionText", "fieldText")
 # Files whose every palette read is classified (primary/backdrop), not only the secondary/danger/derived ones.
 ALL_READS_DIRS = ("shell/security/",)
 DERIVE = re.compile(r"\b(?:withAlpha|Qt\.(?:alpha|darker|lighter|tint|rgba|hsla|hsva))\s*\(")

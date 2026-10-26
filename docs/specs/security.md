@@ -68,6 +68,107 @@ on `GRASSFIELD_DEV` alone fails it), `tests/security/ipc_inventory.sh` (the exac
 the definitions in `RunMode.js`, `Mode.qml` and `VisualFixtures.qml`, no security module on `qs.lib`, `Mode` or a
 non-relative `RunMode`, no `GRASSFIELD_DEV` read outside the gate call; its selftest: look-alike gates, a security
 module on `Mode` or a local `RunMode.js`, wrong definitions in `Mode.qml` and `RunMode.js` each fail).
+`ipc_inventory.sh` is a lint on the source text, comments and string contents blanked first (re-review of 2b8e13a):
+`RunMode` appears only as `RunMode.<function>(...)` or a read of `RunMode.<variable>` (never bare, so no alias, no
+`Object.defineProperty`/`assign` on it, no `(RunMode).x`, no spread, never `X.RunMode`; never an assignment, update,
+destructuring or for-of target), `RunMode.js` is imported only by QML files and only under the name `RunMode`
+(re-reviews of bf9e280 and f03d65a: `import ".../RunMode.js" as RM` then `RM.dev = ...` turned every dev hook on in a
+simulated real session), read by Qt's own parsers (`qmldom` syntax trees and `qmlimportscanner`, through
+`tests/ci/import_graph.py`), with import paths resolved as the engine resolves them and any `\` or `%` in them refused,
+and no qmldir or second file stands in for it, `Mode.qml` or `VisualFixtures.qml`, `Quickshell` is
+never written to or passed bare (`target: Quickshell` excepted), `RunMode.js` never rebinds an export or reaches its
+own scope indirectly, no module uses `eval`, `Function`, `with`, escaped identifiers, `constructor`, `__proto__`,
+`Qt.include` or `Qt.createQmlObject` or declares its own `Mode`/`RunMode`, a hook body that binds a gate name itself
+counts as ungated,
+a gate call in a security module stands only on a readonly property line or an `if (!...)` line, and Lock.qml's
+leaked-value warning line is exempt only when its exact warning follows. It lists the files of shell/ from disk, hidden
+ones included, and refuses any hidden path under shell/ or ui/ (re-review of e45bdf3: a glob skipped
+`shell/widgets/.Evil.qml`, which a `Loader { source: ".Evil.qml" }` loaded and which turned the dev hooks on);
+`tests/ci/import_graph.py` refuses them in the tracked tree and the PKGBUILD refuses them in the package. Its header
+lists what it does not see: what a guard protects; a write by a name it does not model; QML outside shell/ (a shell
+import that lands there is refused); a directory link under shell/ (none exists). Not done, measured: freezing `RunMode.js` (`Object.freeze(this)`
+or non-writable properties in the `.pragma library` file) does not stop a write through an importer's alias, which
+changes `RunMode.dev` for every importer (qs 0.3 offscreen, all three variants); the runtime is not tamper-evident, and
+code that runs as the user is out of scope (next section).
+
+## Where the shell's code comes from (GF-115, review of 360d6fa)
+**Out of scope**, as for Omarchy: processes that run as the user. They can set the session's environment and run code
+in it. Examples:
+- `LD_PRELOAD`;
+- `GTK3_MODULES`, or `GTK_PATH` with `GTK_MODULES`, once the gtk3 platform theme Omarchy's environment selects runs
+  `gtk_init`;
+- a planted compiled-QML cache (its location follows `XDG_CACHE_HOME`);
+- a user drop-in for the unit (`~/.config/systemd/user/grassfield-shell.service.d/`);
+- ptrace.
+
+**In scope**: leaked developer search paths and accidental overrides that would replace or disable the shell's QML,
+for example a `QML_IMPORT_PATH` left in the session by a development setup, or a stray Quickshell option variable.
+macOS loads the lock screen only from the system, so the packaged shell does not take its code locations from the
+environment:
+- `packaging/systemd/grassfield-shell.service` starts `/usr/bin/qs -n -p /usr/share/grassfield/shell`. Never `-c`,
+  which would also search `$XDG_CONFIG_HOME/quickshell` (GF-115).
+- `UnsetEnvironment=` clears the following. systemd applies it last, over `Environment=` and the manager's environment:
+  - the QML and Qt plugin search paths (`QML_IMPORT_PATH`, `QML2_IMPORT_PATH`, `QML_PLUGIN_PATH`,
+    `QML_DISK_CACHE_PATH`, `QT_PLUGIN_PATH`, `QT_QPA_PLATFORM_PLUGIN_PATH`). A `qs/security/lock` directory on
+    `QML_IMPORT_PATH` had replaced the whole lock screen.
+  - every variable `qs --help` maps to an option (`QS_CONFIG_PATH`, `QS_CONFIG_NAME`, `QS_MANIFEST` today). The
+    packaged command line needs none of them, and a stray `QS_MANIFEST` or `QS_CONFIG_NAME` made `qs -n -p` exit 108,
+    so the session had no lock and no polkit agent, and the sleep-lock stand-in could not start the shell either.
+  - as cheap extensions: `GTK_MODULES`, `GTK3_MODULES`, `GTK_PATH`, `GIO_EXTRA_MODULES` (GSettings loaded native code
+    from it in the reviewer's probe of bf9e280), `QT_VULKAN_LIB` and `QSG_RHI_BACKEND` (the Vulkan library override
+    matters only with `QSG_RHI_BACKEND=vulkan`; the shell runs on Qt's default backend). The shell needs none of them.
+  - The list is not a native-loader boundary: the EGL, GBM, Mesa and Vulkan driver variables (for example
+    `__EGL_VENDOR_LIBRARY_DIRS`, `LIBGL_DRIVERS_PATH`, `GBM_BACKENDS_PATH`, `VK_ICD_FILENAMES`, `VK_ADD_LAYER_PATH`)
+    and `LD_LIBRARY_PATH` still reach qs, and some GPU setups need them. Whoever can set them already runs code as the
+    user (out of scope, above); the list only keeps a leaked developer setting from replacing the shell's QML.
+- The same variables made every `qs <subcommand> -p` exit 108, `qs ipc` included (re-review of bf9e280, M1), so a lock
+  request could be defeated by the session's environment. Every installed caller of the lock clears them before it
+  asks: the lock key and every other shell request of `config/hypr/grassfield/bindings.lua` (`env -u ... qs ipc`),
+  the lid (`packaging/bin/grassfield-lid`) and the sleep-lock fallback (`packaging/shims/omarchy-shell`), both with
+  `unset`. `tests/security/lock_request_env.sh` sets every option variable `qs --help` lists and checks that each
+  caller still sends its request and that qs receives none of them; its control shows that qs's own option parsing
+  refuses the request (exit 108) when the variables reach it.
+- Nor can a test hook redirect a lock request (follow-up of the re-review of bf9e280). The callers' hooks are ADR-0019
+  dev plumbing, honoured only in a dev session (`GRASSFIELD_DEV` exactly `1` and `GRASSFIELD_SESSION` not `1`):
+  `GRASSFIELD_LID_LOCK`, `GRASSFIELD_LID_FALLBACK`, `GRASSFIELD_DRM` (a fake connected display skipped the fallback)
+  and `GRASSFIELD_LID_PROC` in `grassfield-lid`, `GRASSFIELD_LID_TOOL` in the clamshell stand-in, and
+  `GRASSFIELD_SHELL_DIR` in `bindings.lua`. `config/hypr/session.lua` takes its modules from its own directory and
+  the stand-ins from `/usr/lib/grassfield/omarchy-shims`, never from `GRASSFIELD_CONFIG_DIR` or `GRASSFIELD_SHIM_DIR`
+  (another config could drop the lock key and the lid lock; another shim directory would hand Omarchy's sleep-lock
+  Omarchy's own `omarchy-shell`). `lock_request_env.sh` sets hostile values in a real session (with a leaked
+  `GRASSFIELD_DEV=1`, and without any run-mode variable) and checks that the installed shell is asked and no hostile
+  command runs; in a dev session each hook is honoured (the controls). Not covered: a session whose own identity
+  variables (`WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE`, `XDG_RUNTIME_DIR`) are wrong, and `PATH`, which is
+  code running as the user; the idle lock's timing comes from the user's own settings (`GRASSFIELD_CONFIG_HOME` is
+  always honoured, ADR-0019), which the user may set to never lock.
+- Grassfield's QML modules and Qt plugins then come from Qt's built-in locations (`/usr/lib/qt6/qml`,
+  `/usr/lib/qt6/plugins`), and nothing is set in their place.
+- `scripts/dev/shell-run.sh --unit-env` applies the same list, read from the unit file. Its own `QML_IMPORT_PATH` is
+  then only the tree's module roots, standing in for the packaged import path.
+
+Tests:
+- **`tests/security/shell_unit_env.sh`** (data layer) checks:
+  - the list, with the option variables read from the installed `qs --help`, so a new Quickshell option cannot be
+    missed silently;
+  - that no packaged drop-in resets it, and that `ExecStart` is the system tree.
+
+  Its selftest fails on 11 mutations, a new option variable included.
+- **`tests/security/unit_env_paths.sh`** (offscreen, the real modules) shows that each of these is real in a control
+  run and gone once the unit's environment is applied:
+  - a hostile `qs/security/lock` on `QML_IMPORT_PATH`, and separately on `QML2_IMPORT_PATH`, replaces the lock;
+  - `QS_MANIFEST` stops the packaged command line (exit 108). With the unit's environment, it starts under each
+    option variable and under all of them;
+  - a native module named by `GTK3_MODULES`, or by `GTK_PATH` with `GTK_MODULES`, is loaded by the gtk3 platform
+    theme.
+
+Translations: `ui/i18n/translationloader.h` honours `GRASSFIELD_TRANSLATIONS_DIR` (ADR-0019 dev plumbing) only in a dev
+session (the predicate written out until `apps/runmode.h` reaches main). Outside dev, the lock's and the polkit sheet's
+strings come only from `/usr/share/grassfield/translations`. `tests/security/translations_dir.sh` checks this with a
+hostile catalog: it is read in dev (the control), and ignored in a real session with a leaked `GRASSFIELD_DEV=1`,
+without the variables, and for a near-miss value.
+
+Not verified here: a full start of the shell under Omarchy's `QT_QPA_PLATFORMTHEME=gtk3` with the new list needs a
+display. Offscreen, gtk3 exits 1 for lack of one, with or without the list.
 
 ## IPC surface (GF-AUDIT-001 SEC-04)
 Quickshell's `IpcHandler` functions can be called by any process of the user (`qs ipc`, socket under

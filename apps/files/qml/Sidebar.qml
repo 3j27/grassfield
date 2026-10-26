@@ -109,24 +109,18 @@ FocusScope {
         }
     }
 
+    // macOS 27: an edge-to-edge sidebar a step darker than the white content, with no dividing line.
     Rectangle {
         anchors.fill: parent
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesStripeOpacity)
-    }
-
-    Rectangle {
-        anchors.right: parent.right
-        width: Tokens.appsBorderWidth
-        height: parent.height
-        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        color: Appearance.colors.sidebarFill
     }
 
     ListView {
         id: list
         anchors.fill: parent
         anchors.topMargin: root.topInset + Tokens.spacingSm
-        anchors.leftMargin: Tokens.spacingSm
-        anchors.rightMargin: Tokens.spacingSm + Tokens.appsBorderWidth
+        anchors.leftMargin: Tokens.filesSidebarInset
+        anchors.rightMargin: Tokens.filesSidebarInset
         model: root.places
         clip: true
         focus: true
@@ -232,10 +226,11 @@ FocusScope {
         Accessible.selected: entry.current
         Accessible.onPressAction: root.openEntry(entry)
 
+        // The current place: a neutral fill under a bold label (macOS 27 Finder), not the accent.
         Rectangle {
             anchors.fill: parent
-            radius: Tokens.radiusControl
-            color: entry.current ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 1.5)
+            radius: Tokens.filesSidebarItemRadius
+            color: entry.current ? Appearance.withAlpha(Appearance.colors.fill, Tokens.filesSidebarSelectionOpacity)
                  : mouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
             border.width: entry.keyed || drop.containsDrag ? Tokens.controlFocusOutline : 0
             border.color: Appearance.focusRingColor
@@ -275,6 +270,7 @@ FocusScope {
             color: entry.mounted ? Appearance.colors.text : Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
+            font.weight: entry.current ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
         }
 
         ToolButton {

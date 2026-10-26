@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
@@ -35,7 +36,8 @@ Scope {
     }
     property string query: ""
     property string screenName: ""
-    // Groups [{id, title, items}], the flat rows for the list ({header, title} | {item, itemIndex})
+    // Groups [{id, title, items}], the flat rows for the list ({item, itemIndex, groupId}: no header rows, as macOS 27 Spotlight;
+    // the groups still order the list and Tab moves between them)
     // and the flat items (actionable entries). `selected` indexes `items`.
     property var groups: []
     property var rows: []
@@ -93,20 +95,14 @@ Scope {
     readonly property string home: Quickshell.env("HOME")
     // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
     // another database, so tests do not depend on the owner's index.
-    readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home
-    readonly property string plocateDb: Quickshell.env("GRASSFIELD_SEARCH_PLOCATE_DB")
+    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
+    readonly property string plocateDb: Mode.devValue("SEARCH_PLOCATE_DB")
     readonly property string dataHome: {
         const xdg = Quickshell.env("XDG_DATA_HOME");
         return xdg ? xdg : home + "/.local/share";
     }
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"
 
     // ---- state changes -------------------------------------------------------------------
@@ -310,11 +306,10 @@ Scope {
         let sel = -1;
         const prevKey = selected >= 0 && selected < items.length ? items[selected].key : "";
         for (const grp of g) {
-            rowList.push({header: true, title: grp.title, groupId: grp.id});
             for (const it of grp.items) {
                 if (prevKey !== "" && it.key === prevKey && fileHitsOnly)
                     sel = flat.length;
-                rowList.push({header: false, item: it, itemIndex: flat.length, groupId: grp.id});
+                rowList.push({item: it, itemIndex: flat.length, groupId: grp.id});
                 flat.push(Object.assign({groupId: grp.id}, it));
             }
         }

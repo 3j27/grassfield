@@ -54,7 +54,7 @@ Variable classes:
 
 | Class | Variables | Rule |
 |---|---|---|
-| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET`, `SHELL_DIR` | honoured only when `dev`; inert otherwise |
+| Dev plumbing | `SETTINGS_CMD`, `PREVIEW_CMD`, `FILES_CMD`, `OPEN_POLICY`, `ONLINE_BASE_URL`, `FIXED_TIME`, `WALLPAPER_FILE`, `DESKTOP_SCREEN`, `DESKTOP_DIR`, `SEARCH_ROOT`, `SEARCH_PLOCATE_DB`, `CURSORS_*`, `PICTURES_DIR`, `MENU_BRIDGE_SOCKET`, `SHELL_DIR` (also `config/hypr/grassfield/bindings.lua`), `TRANSLATIONS_DIR` (C++ loader `ui/i18n/translationloader.h`, since the re-review of 2b8e13a), `LID_LOCK`, `LID_FALLBACK`, `LID_PROC`, `DRM` (`packaging/bin/grassfield-lid`), `LID_TOOL` (the clamshell stand-in; these five and bindings.lua's `SHELL_DIR` since the follow-up of the re-review of bf9e280: a lock request must not be redirected by the session environment) | honoured only when `dev`; inert otherwise |
 | Always honoured | `CONFIG_HOME`, `STATE_HOME`, `APPS_TRACE` | as today |
 | Mode inputs | `DEV`, `SESSION`, `VISUAL_FIXTURES`, private bus selection | read only by `Mode` / `runmode.h` |
 
@@ -69,6 +69,14 @@ rule through `qs.lib` or `Mode`: they import `shell/lib/RunMode.js` by a relativ
 That call is the one exception to "only `Mode` reads `GRASSFIELD_*`" in QML; M8's `tests/ci/run_mode.py` must accept
 exactly it in the security modules. Non-security modules use `Mode`. `tests/security/ipc_inventory.sh` holds both forms
 to the definitions.
+
+Amendment (slice M4, 2026-10-25): the QML half of the enforcement exists as `tests/ci/run_mode.py` (in `check-shell`, selftest in
+`just test`). It reads every .qml file outside `shell/lib` from Qt's syntax tree and refuses any string literal that starts with
+`GRASSFIELD_` and any `env` call whose name is not one string literal; a .js file that imports Quickshell is refused. The security
+exception is by name: `shell/security/**` may spell `GRASSFIELD_DEV`, `GRASSFIELD_SESSION` and (the lock) `GRASSFIELD_DEV_ALLOW_PAM`, and
+nothing else; it goes away when the packaged shell's import path is fixed. `Mode` also offers `stateHome` (the raw
+`GRASSFIELD_STATE_HOME`, for Apps and Capabilities) and `appsTrace`. The C++ half (`qEnvironmentVariable("GRASSFIELD_` outside
+`apps/runmode.h`) stays with M6/M8.
 
 ## macOS reference
 A debug default never changes a shipped app's behaviour unless the developer build reads it; there is no "developer
@@ -91,4 +99,3 @@ mode" that disables Quick Settings toggles, power actions or global menus. The r
 - Slices (plan §2): M1 (qs.lib, Mode, vectors), M2 (gate flip, security), M3 (services), M4 (platform, menubar),
   M5a/M5b (desktop, widgets, notifications, search, overview), M6 (C++ runmode.h), M7 (bridge and testFault),
   M8 (enforcement).
-- Unverified: that `hl.env` sets Hyprland's own environ (needed for M7).

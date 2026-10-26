@@ -218,7 +218,7 @@ FocusScope {
                 width: Math.min(label.paintedWidth + 2 * Tokens.spacingXs, cell.width - Tokens.spacingXs)
                 height: label.paintedHeight + Tokens.spacingXs
                 radius: Tokens.radiusControl / 2
-                color: cell.focused ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                color: cell.focused ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
             }
 
             // Colour tags: dots before the first line of the name; dots and name are centred together.
@@ -244,7 +244,7 @@ FocusScope {
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 maximumLineCount: Tokens.filesIconLabelLines
                 elide: Text.ElideRight
-                color: cell.selected && cell.focused ? Appearance.colors.accentText : Appearance.colors.text
+                color: cell.selected && cell.focused ? Appearance.colors.selectionText : Appearance.colors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize + 1
             }

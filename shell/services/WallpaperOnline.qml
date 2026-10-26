@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 
@@ -26,7 +27,7 @@ Singleton {
     readonly property string outDir: WallpaperState.cacheDir + "/online/" + provider
     // The loopback origin of a dev session's test server, "" otherwise.
     readonly property string devBaseUrl: {
-        const u = WallpaperState.dev ? Quickshell.env("GRASSFIELD_ONLINE_BASE_URL") : "";
+        const u = Mode.devValue("ONLINE_BASE_URL");
         return /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(u) ? u : "";
     }
     readonly property string lang: Qt.locale().name.substring(0, 2) === "fr" ? "fr" : "en"

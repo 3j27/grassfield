@@ -20,9 +20,20 @@ inline QString systemLanguage()
     return name == QLatin1String("C") ? QStringLiteral("en") : name;
 }
 
+// A dev session: GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1". The one run-mode predicate of ADR-0019,
+// written out here until the C++ header apps/runmode.h (refactor wave 2, slice M6) reaches main; shell/lib/RunMode.js
+// holds the same rule and tests/fixtures/run-mode-vectors.json the shared vectors.
+inline bool devSession()
+{
+    return qgetenv("GRASSFIELD_DEV") == "1" && qgetenv("GRASSFIELD_SESSION") != "1";
+}
+
+// The catalogs. GRASSFIELD_TRANSLATIONS_DIR is dev plumbing (ADR-0019): honoured only in a dev session, so outside it
+// the lock screen's and the polkit sheet's strings (and the apps') come only from the system catalogs, never from a
+// directory the environment picks (re-review of 2b8e13a; tests/security/translations_dir.sh).
 inline QString translationsDir()
 {
-    const QString dir = qEnvironmentVariable("GRASSFIELD_TRANSLATIONS_DIR");
+    const QString dir = devSession() ? qEnvironmentVariable("GRASSFIELD_TRANSLATIONS_DIR") : QString();
     return dir.isEmpty() ? QStringLiteral("/usr/share/grassfield/translations") : dir;
 }
 

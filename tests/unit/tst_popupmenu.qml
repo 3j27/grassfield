@@ -93,6 +93,62 @@ TestCase {
         }
     }
 
+    // macOS 27 menu layout (ADR-0024): the label sits menuItemPadding inside the row; a section that holds a checkable row
+    // moves its labels after the check column; an icon moves only its own row; the highlight is concentric with the menu.
+    Component {
+        id: layoutMenuComponent
+        PopupMenu {
+            model: [
+                {id: "a", text: "Plain"},
+                {id: "b", text: "With icon", iconName: "lock"},
+                {separator: true},
+                {id: "c", text: "Checked", checked: true},
+                {id: "d", text: "Unchecked", checked: false},
+                {separator: true},
+                {id: "e", text: "After"}
+            ]
+        }
+    }
+
+    function test_labelsFollowTheirRowAndSection() {
+        const m = createTemporaryObject(layoutMenuComponent, testCase);
+        wait(0);
+        // The label Text of a row (a MenuItem carries the same `text`, so look for the QQuickText itself).
+        const label = (root, name) => {
+            for (const child of root.children) {
+                if (String(child).indexOf("QQuickText") === 0 && child.text === name)
+                    return child;
+                const found = label(child, name);
+                if (found)
+                    return found;
+            }
+            return null;
+        };
+        const left = name => {
+            const t = label(m, name);
+            verify(t !== null, name);
+            return t.mapToItem(m, 0, 0).x;
+        };
+        compare(left("Plain"), Tokens.menuPadding + Tokens.menuItemPadding);
+        compare(left("With icon"), Tokens.menuPadding + Tokens.menuItemPadding + Tokens.menuIconSize + Tokens.spacingSm);
+        compare(left("Checked"), Tokens.menuPadding + Tokens.menuCheckInset);
+        compare(left("Unchecked"), Tokens.menuPadding + Tokens.menuCheckInset, "the whole section aligns after the check column");
+        compare(left("After"), Tokens.menuPadding + Tokens.menuItemPadding, "the next section has no check column");
+        verify(Math.abs(m.width - Math.round(m.width)) < 1e-9, "whole-pixel width " + m.width);
+    }
+
+    function test_highlightIsConcentricWithTheMenu() {
+        const row = createTemporaryObject(itemComponent, testCase, {text: "Open", highlighted: true});
+        let fill = null;
+        for (const child of row.children) {
+            if (String(child).indexOf("QQuickRectangle") === 0 && child.visible)
+                fill = child;
+        }
+        verify(fill !== null);
+        compare(fill.radius, Tokens.radiusMenu - Tokens.menuPadding);
+        compare(fill.color, Qt.color(Appearance.colors.selection));
+    }
+
     function test_downSkipsDisabledAndSeparator() {
         const m = makeMenu();
         keyClick(Qt.Key_Down);
