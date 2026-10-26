@@ -66,7 +66,12 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
   glyph** (7.3 % of the box: 1.17 px at 16 px, 1.02 px at 14 px, the menu bar size). Amended 2026-10-23 (audit GF-124):
   the first text said "1.5 px at 16 px", which is 2.25 on the grid; rendered, that weight fills the Apps grid dots and
   the Trash lines together and is heavier than the menu bar glyphs of the reference, so the shipped 1.75 is kept and
-  the rule is now the measured one. `tests/ci/icon_strokes.py` fails on any glyph with another stroke width. App
+  the rule is now the measured one. Amended 2026-10-26 (owner decision on ADR-0024, "heavier everywhere"): **2 on the
+  24 grid** (1.33 px at 16 px), within the macOS 27 stroked symbols measured on the release captures (the menu bar's Time
+  Machine clock about 1.8, the Finder toolbar magnifier about 2.1); the status glyphs macOS draws solid are solid: the
+  Wi-Fi bands (filled, round-ended, 2.9 units thick), the speaker body, the charging battery with its bolt cut out, and
+  the Control Center switches (the lower one filled, its knob cut out). `tests/ci/icon_strokes.py` fails on any glyph
+  with another stroke width. App
   icons come from the user's icon theme; Grassfield ships no app icons that imitate Apple's.
 - **Traffic lights**: own glyphs and own colors (close #E5534B, minimize #D9A93B, zoom #4FA64F), shown
   without symbols until hover, then own symbols (×, −, ⤢). Recorded in `docs/legal/visual-review.md`.

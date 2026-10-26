@@ -4,14 +4,15 @@
   python3 -I tests/ci/icon_strokes.py            check branding/icons/symbolic/*.svg, exit 1 on any other width
   python3 -I tests/ci/icon_strokes.py --selftest the scanner on fixed samples
 
-ADR-0003 (amended 2026-10-23): 1.75 on the 24 grid, round caps and joins. A glyph that is filled (no stroke) is exempt:
-the logo is a filled shape. Only the root element's attributes and explicit per-element stroke-width are read.
+ADR-0003 (amended 2026-10-26, owner decision: heavier everywhere): 2 on the 24 grid, round caps and joins. A glyph that is
+filled (no stroke) is exempt: the logo is a filled shape; filled parts of a stroked glyph (the Wi-Fi bands, the speaker body)
+carry no stroke-width of their own. Only the root element's attributes and explicit per-element stroke-width are read.
 """
 import re
 import sys
 from pathlib import Path
 
-WIDTH = 1.75
+WIDTH = 2.0
 ROOT = Path(__file__).resolve().parents[2] / "branding" / "icons" / "symbolic"
 
 
@@ -31,9 +32,10 @@ def problems(name, text):
 
 
 def selftest():
-    ok = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.75" stroke-linecap="round"><path d="M0 0"/></svg>'
+    ok = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M0 0"/></svg>'
     assert problems("ok", ok) == []
-    assert problems("heavy", ok.replace("1.75", "2.25"))
+    assert problems("heavy", ok.replace('stroke-width="2"', 'stroke-width="2.5"'))
+    assert problems("light", ok.replace('stroke-width="2"', 'stroke-width="1.75"'))
     assert problems("filled", '<svg viewBox="0 0 24 24"><path fill="#000" d="M0 0"/></svg>') == []
     assert problems("nowidth", '<svg viewBox="0 0 24 24" stroke="#000" stroke-linecap="round"/>')
     assert problems("square", ok.replace("round", "butt"))
