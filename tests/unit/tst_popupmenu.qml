@@ -65,36 +65,10 @@ TestCase {
         return m;
     }
 
-    Component {
-        id: checkMenuComponent
-        PopupMenu {
-            model: [
-                {id: "a", text: "Alpha"},
-                {separator: true},
-                {id: "b", text: "Beta", checked: true},
-                {id: "c", text: "Gamma"},
-                {separator: true},
-                {id: "d", text: "Delta", iconName: "gear"}
-            ]
-        }
-    }
-
     function test_sizing() {
         const m = makeMenu();
         verify(m.width >= Tokens.menuMinWidth);
         verify(m.height > 0);
-    }
-
-    // The Text drawing `text` (the MenuItem carries the same property but no font).
-    function labelOf(root: Item, text: string): var {
-        for (const child of root.children) {
-            if (child.text === text && child.font !== undefined)
-                return child;
-            const found = labelOf(child, text);
-            if (found)
-                return found;
-        }
-        return null;
     }
 
     function textItem(root: Item, text: string): var {

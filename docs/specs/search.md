@@ -55,6 +55,3 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 ## Limitations (v1)
 - Ctrl+Return reveals with `gio open <parent folder>` (default file manager) until Grassfield Files exists (M4).
 - localsearch output parsing (`file://` URIs per line) could not be verified against real results: nothing is indexed on the dev machine.
-
-## Row look (visual audit 2026-10-25, priority 2)
-macOS model, measured: no group headers (the groups only order the rows; `Search.rows` has no header rows), row title 17 and subtitle 15 (`search.titleSize`, `search.subtitleSize`), text box inset 71 from the panel edge (a whole number) so the ink starts at about 72.5 (`search.textInset`; sizes follow Text Size), query inset 61 (`search.queryInset`) after a 26-pt magnifier box (`search.fieldIconSize`) at the 20-pt inset (`search.fieldInset`, also the hairline and chip inset), selection capsule inset 10 and radius 18 (`search.rowInset`, `search.rowRadius`). Test: `tst_visualaudit.qml`, `tests/shell/search_chips`.

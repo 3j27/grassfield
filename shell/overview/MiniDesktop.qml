@@ -46,7 +46,7 @@ Item {
                 anchors.fill: parent
                 radius: Tokens.overviewMiniWindowRadius
                 color: Appearance.colors.materialTint
-                border.width: 1
+                border.width: Tokens.controlBorderWidth
                 border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
             }
 

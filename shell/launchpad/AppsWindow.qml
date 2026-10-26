@@ -403,7 +403,7 @@ Variants {
                         x: Tokens.launcherPadding
                         y: searchBox.y + searchBox.height
                         width: panel.width - 2 * Tokens.launcherPadding
-                        height: 1
+                        height: Tokens.appsBorderWidth
                         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 
@@ -455,7 +455,7 @@ Variants {
                         x: Tokens.launcherPadding
                         y: chipFlick.y + chipFlick.height + Tokens.launcherChipHairlineGap
                         width: panel.width - 2 * Tokens.launcherPadding
-                        height: 1
+                        height: Tokens.appsBorderWidth
                         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 
