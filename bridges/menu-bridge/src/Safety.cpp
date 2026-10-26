@@ -5,8 +5,10 @@
 #include <QFileInfo>
 #include <QStringList>
 
+#include <array>
 #include <cerrno>
 #include <cstring>
+#include <limits>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -21,33 +23,32 @@ namespace gf::menubridge {
         return sessionValue == "1";
     }
 
-    int nsPidDepth(const QByteArray& statusText) {
-        for (const QByteArray& raw : statusText.split('\n')) {
-            if (!raw.startsWith("NSpid:"))
-                continue;
-            const QList<QByteArray> pids = raw.mid(6).simplified().split(' ');
-            int                     n    = 0;
-            for (const QByteArray& p : pids) {
-                bool ok = false;
-                if (p.toLongLong(&ok) <= 0 || !ok)
-                    return 0;
-                ++n;
-            }
-            return n;
+    quint64 pidNamespaceInode(const QByteArray& linkTarget) {
+        if (!linkTarget.startsWith("pid:[") || !linkTarget.endsWith(']'))
+            return 0;
+        const QByteArray digits = linkTarget.mid(5, linkTarget.size() - 6);
+        if (digits.isEmpty() || digits.size() > 20)
+            return 0;
+        for (const char c : digits) {
+            if (c < '0' || c > '9')
+                return 0;
         }
-        return 0;
+        bool          ok    = false;
+        const quint64 inode = digits.toULongLong(&ok);
+        return ok ? inode : 0;
     }
 
     bool inBridgePidNamespace(qint64 pid) {
-        if (pid <= 0)
+        if (pid <= 0 || pid > std::numeric_limits<pid_t>::max())
             return false;
-        auto read = [](const QString& path) {
-            QFile f(path);
-            return f.open(QIODevice::ReadOnly) ? f.read(16384) : QByteArray();
+        auto inode = [](const QByteArray& path) -> quint64 {
+            std::array<char, 64> buf{};
+            const ssize_t        n = ::readlink(path.constData(), buf.data(), buf.size() - 1);
+            return n > 0 ? pidNamespaceInode(QByteArray(buf.data(), static_cast<qsizetype>(n))) : 0;
         };
-        const int theirs = nsPidDepth(read(QStringLiteral("/proc/%1/status").arg(pid)));
-        const int mine   = nsPidDepth(read(QStringLiteral("/proc/self/status")));
-        return theirs > 0 && theirs == mine;
+        const quint64 theirs = inode(QByteArray("/proc/") + QByteArray::number(pid) + "/ns/pid");
+        const quint64 mine   = inode(QByteArrayLiteral("/proc/self/ns/pid"));
+        return theirs != 0 && theirs == mine;
     }
 
     bool isDefaultSessionBus(const QString& address, uint uid) {

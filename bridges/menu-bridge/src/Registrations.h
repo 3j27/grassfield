@@ -13,7 +13,10 @@
 // Electron registers a window before its DBusMenu object answers (measured in the nested session: Obsidian's second
 // window, GetLayout right after RegisterWindow -> org.freedesktop.DBus.Error.UnknownMethod, which counts as a layout
 // failure and backs the application off; the same call seconds later -> the layout). So a registration is served only once
-// settled: the registrar object settles it kSettleMs after it arrived.
+// settled: the registrar object settles it kSettleMs after it arrived. kSettleMs is an estimate and the only wait: nothing
+// is retried in a loop. A menu object still not answering after it gets the ordinary layout failure path (MB14,
+// Penalties.h): the window shows T0 menus, the application is refused for 2 s (doubling on each repeat, at most 64 s, and
+// ended by the next menu it delivers), and its menus come back at the window's next open once that back-off is over.
 //
 // Book and handle() are pure (QtCore and QtDBus types only), unit-tested in tests/unit/menu-bridge/tst_menubridge.cpp.
 

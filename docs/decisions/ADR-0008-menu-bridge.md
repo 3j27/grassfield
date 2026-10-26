@@ -230,8 +230,8 @@ Decision (integrator, 2026-10-25):
   menu is the same for every window; when one process registered several menus, the latest wins: the focused window
   cannot be mapped to Electron's windowId). At use it re-checks the sender's process (`GetConnectionUnixProcessID`
   again, the same check as `open`: a reused pid never gets another process's menu) and refuses a process in another pid
-  namespace than the bridge's (`NSpid` of `/proc/<pid>/status`; a Flatpak app talks through a proxy and fails the pid
-  check anyway). From there it is an `open` of (sender, path, pid): the same crash attribution, size limits, back-off
+  namespace than the bridge's (the inode `/proc/<pid>/ns/pid` names against `/proc/self/ns/pid`: the same namespace, not
+  one as deep; a Flatpak app talks through a proxy and fails the pid check anyway). From there it is an `open` of (sender, path, pid): the same crash attribution, size limits, back-off
   and degraded mode. A window whose process has not registered yet waits: the registration, when it comes, opens it.
 - X11/XWayland applications that call `RegisterWindow` are kept like any sender but never served: the plugin reports no
   pid for their windows. Qt under XWayland still hides its menu bar while the registrar exists (the limitation above,

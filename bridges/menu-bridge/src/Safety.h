@@ -21,13 +21,14 @@ namespace gf::menubridge {
     // A Grassfield session: GRASSFIELD_SESSION == "1".
     bool sessionRun(const QByteArray& sessionValue);
 
-    // The pid namespace depth of a process from the text of its /proc/<pid>/status: the number of pids on its "NSpid:"
-    // line (1 in the initial namespace, one more per nested namespace); 0 when the line is missing or malformed.
-    int nsPidDepth(const QByteArray& statusText);
+    // The identity of a pid namespace from the target of a /proc/<pid>/ns/pid link ("pid:[4026531836]"): its inode; 0
+    // when the text is not of that form.
+    quint64 pidNamespaceInode(const QByteArray& linkTarget);
 
-    // A process the bridge may serve a registrar menu for (ADR-0008 amendment 2026-10-25): its pid namespace is as deep
-    // as the bridge's own (a sandbox in a nested namespace, a Flatpak app, is refused). False when either status cannot
-    // be read.
+    // A process the bridge may serve a registrar menu for (ADR-0008 amendment 2026-10-25): it is in the bridge's own pid
+    // namespace, the same namespace and not merely one as deep (/proc/<pid>/ns/pid and /proc/self/ns/pid name the same
+    // inode; review of 9ba1d40). A Flatpak app or any other sandbox with its own pid namespace is refused, and so is a
+    // process whose link cannot be read (gone, or not the user's).
     bool inBridgePidNamespace(qint64 pid);
 
     // True when DBUS_SESSION_BUS_ADDRESS `address` is (or falls back to) the user's default session bus: empty

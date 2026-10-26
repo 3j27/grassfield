@@ -1234,17 +1234,20 @@ TEST(Registrar, APidReusedAfterTheSenderLeftGetsNothing) {
 }
 
 // A process in another pid namespace (a Flatpak app, a nested sandbox) is never served a registrar menu.
-TEST(Registrar, PidNamespaceDepthFromProcStatus) {
-    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tobsidian\nNSpid:\t4242\nNSsid:\t1\n")), 1);
-    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tapp\nNSpid:\t9876\t2\n")), 2) << "a process in a nested pid namespace";
-    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tapp\nNSpid:\t9876\t5\t2\n")), 3);
-    EXPECT_EQ(nsPidDepth(QByteArray("Name:\tapp\n")), 0) << "no NSpid line: unknown, refused";
-    EXPECT_EQ(nsPidDepth(QByteArray("NSpid:\t12x\n")), 0) << "malformed: refused";
-    EXPECT_EQ(nsPidDepth(QByteArray("NSpid:\n")), 0);
-    EXPECT_EQ(nsPidDepth(QByteArray()), 0);
+// Review of 9ba1d40: the same namespace, not one as deep (two sandboxes side by side have the same depth).
+TEST(Registrar, PidNamespaceIdentityFromTheNsLink) {
+    EXPECT_EQ(pidNamespaceInode("pid:[4026531836]"), 4026531836ULL);
+    EXPECT_EQ(pidNamespaceInode("pid:[1]"), 1ULL);
+    EXPECT_EQ(pidNamespaceInode("pid:[]"), 0ULL);
+    EXPECT_EQ(pidNamespaceInode("pid:[12x]"), 0ULL) << "malformed: refused";
+    EXPECT_EQ(pidNamespaceInode("net:[4026531840]"), 0ULL) << "another namespace type";
+    EXPECT_EQ(pidNamespaceInode("pid:[4026531836"), 0ULL);
+    EXPECT_EQ(pidNamespaceInode("pid:[-4]"), 0ULL);
+    EXPECT_EQ(pidNamespaceInode(""), 0ULL);
     EXPECT_TRUE(inBridgePidNamespace(::getpid())) << "this process is in its own namespace";
     EXPECT_FALSE(inBridgePidNamespace(0));
     EXPECT_FALSE(inBridgePidNamespace(-1));
+    EXPECT_FALSE(inBridgePidNamespace(2147483646)) << "no such process: refused";
 }
 
 // ---- start-up guards -------------------------------------------------------------------------------------------
