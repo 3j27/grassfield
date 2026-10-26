@@ -5,6 +5,13 @@
   Locations with volumes and the network, Tags), a unified toolbar (back/forward, folder title, view switcher for
   icons/list/columns/gallery, action menu, search field), the folder contents, and optional path and status bars
   at the bottom ("12 items, 120 GB available").
+- Toolbar (macOS 26/27, ADR-0024 lot 5, C-12; docs/audits/visual-tahoe-2026-10-25.md § Files): the items sit in floating
+  capsules 36 tall (`ToolbarGroup` of Grassfield.Ui, `window.groupHeight`): back and forward share one (74 x 36), the
+  four views another (146 x 36, the chosen view a pill inside it), the Action menu is a round one; search is a 36-pt
+  circle that widens into the field (`files.searchWidth`) while it has the focus or a query. Buttons are 36
+  (`files.toolbarButtonSize`), the last item 8 from the trailing edge (`window.itemsInset`). There is no line under the
+  toolbar until the icons or the list scroll under it (or a tab bar sits there). Light capsules are white with the
+  material hairline, dark ones a faint white; macOS also gives them a soft shadow, not drawn here.
 - Window and sidebar (macOS 27 Finder, ADR-0024 lot 2): a white content area (#292929 in the dark appearance); the sidebar
   edge to edge in `color.*.sidebarFill` with no dividing line; 32-pt rows under 34-pt section headers; the current place
   a neutral fill (`files.sidebarSelectionOpacity`, 10 from both sidebar edges, radius 8) under a bold label, not the

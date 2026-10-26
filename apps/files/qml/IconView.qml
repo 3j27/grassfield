@@ -14,6 +14,8 @@ FocusScope {
 
     readonly property int columns: Math.max(1, Math.floor(grid.width / Tokens.filesIconCellWidth))
     readonly property int pageRows: Math.max(1, Math.floor(grid.height / grid.cellHeight))
+    // The content has moved up under the toolbar (the window draws the toolbar's hairline then, macOS).
+    readonly property bool scrolled: grid.contentY > grid.originY
 
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Files")

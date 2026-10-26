@@ -49,6 +49,7 @@ IconShapePrewarm 1.0 IconShapePrewarm.qml
 WindowActions 1.0 WindowActions.js
 WindowControls 1.0 WindowControls.qml
 UnifiedToolbar 1.0 UnifiedToolbar.qml
+ToolbarGroup 1.0 ToolbarGroup.qml
 internal WindowLight WindowLight.qml
 internal WindowGlyph WindowGlyph.qml
 AutoAppearance 1.0 AutoAppearance.js

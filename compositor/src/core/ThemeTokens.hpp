@@ -74,6 +74,14 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowTitleSize = 15;
     // estimate: gap between toolbar items and groups
     inline constexpr int kWindowItemsGap = 8;
-    // estimate: space between the toolbar's trailing edge and its last item
-    inline constexpr int kWindowItemsInset = 14;
+    // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    inline constexpr int kWindowItemsInset = 8;
+    // toolbar items sit in glass capsules 36 tall: back and forward 72 x 36, the view group 146 x 36 [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    inline constexpr int kWindowGroupHeight = 36;
+    // room between a toolbar capsule and its buttons along the row: 4 x 36 + 2 = 146 [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    inline constexpr int kWindowGroupInset = 1;
+    // estimate: light toolbar capsules are white (macOS 26/27 floating capsules) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    inline constexpr double kWindowGroupFillLight = 1.0;
+    // estimate: dark toolbar capsules are white at this opacity over the window [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    inline constexpr double kWindowGroupFillDark = 0.1;
 } // namespace gf::theme::tokens

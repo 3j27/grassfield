@@ -397,13 +397,15 @@ Window {
             doubleClickAction: win.app.titlebarDoubleClick
             canMinimize: win.app.canMinimize
 
-            leading: Row {
+            // macOS 26/27: back and forward share one capsule.
+            leading: ToolbarGroup {
                 id: navButtons
-                spacing: Tokens.spacingXs / 2
 
                 ToolButton {
                     iconName: "chevron-right"
                     iconRotation: 180
+                    capsule: true
+                    buttonSize: Tokens.filesToolbarButtonSize
                     enabled: win.tab !== null && win.tab.canBack
                     accessibleName: qsTr("Back")
                     onClicked: win.tab.back()
@@ -411,6 +413,8 @@ Window {
 
                 ToolButton {
                     iconName: "chevron-right"
+                    capsule: true
+                    buttonSize: Tokens.filesToolbarButtonSize
                     enabled: win.tab !== null && win.tab.canForward
                     accessibleName: qsTr("Forward")
                     onClicked: win.tab.forward()
@@ -421,19 +425,13 @@ Window {
                 id: tools
                 spacing: Tokens.spacingSm
 
-                // View switcher (segmented)
-                Rectangle {
-                    width: viewRow.width + Tokens.spacingXs
-                    height: Tokens.filesToolbarButtonSize + Tokens.spacingXs
-                    radius: Tokens.radiusControl + Tokens.spacingXs / 2
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesStripeOpacity * 2)
+                // View switcher: one capsule, the chosen view a pill inside it.
+                ToolbarGroup {
                     anchors.verticalCenter: parent.verticalCenter
-                    Accessible.role: Accessible.Grouping
-                    Accessible.name: qsTr("View")
+                    accessibleName: qsTr("View")
 
                     Row {
                         id: viewRow
-                        anchors.centerIn: parent
 
                         Repeater {
                             model: [
@@ -445,6 +443,8 @@ Window {
                             delegate: ToolButton {
                                 id: viewButton
                                 required property var modelData
+                                capsule: true
+                                buttonSize: Tokens.filesToolbarButtonSize
                                 checkable: true
                                 radio: true
                                 checked: win.tab !== null && win.tab.viewMode === modelData.mode
@@ -460,43 +460,68 @@ Window {
                     }
                 }
 
-                ToolButton {
-                    id: actionButton
-                    accessibleName: qsTr("Action")
+                ToolbarGroup {
                     anchors.verticalCenter: parent.verticalCenter
-                    onClicked: {
-                        const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
-                        win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
-                    }
 
-                    ViewGlyph {
-                        anchors.centerIn: parent
-                        kind: "more"
+                    ToolButton {
+                        id: actionButton
+                        accessibleName: qsTr("Action")
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarButtonSize
+                        onClicked: {
+                            const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
+                            win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                        }
+
+                        ViewGlyph {
+                            anchors.centerIn: parent
+                            kind: "more"
+                        }
                     }
                 }
 
-                // Search field (filters the current folder)
+                // Search (filters the current folder): a round capsule (macOS 26/27) that widens into the field while it has the
+                // focus or a query.
                 Rectangle {
-                    width: Tokens.filesSearchWidth
-                    height: Tokens.filesToolbarButtonSize
+                    id: searchBox
+                    readonly property bool expanded: search.activeFocus || search.text !== ""
+                    width: expanded ? Tokens.filesSearchWidth : Tokens.windowGroupHeight
+                    height: Tokens.windowGroupHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                    radius: height / 2
+                    color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.windowGroupFillDark) : Appearance.withAlpha(Appearance.colors.knob, Tokens.windowGroupFillLight)
+                    border.width: search.activeFocus ? Tokens.controlFocusOutline : 1
+                    border.color: search.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+                    clip: true
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Appearance.duration(Tokens.motionFast)
+                        }
+                    }
 
                     Icon {
                         id: searchIcon
                         name: "search"
-                        size: Tokens.menuIconSize
-                        color: Appearance.colors.textSecondary
-                        x: Tokens.spacingSm
+                        size: Tokens.filesToolbarIconSize
+                        color: searchBox.expanded ? Appearance.colors.textSecondary : Appearance.colors.text
+                        x: searchBox.expanded ? Tokens.spacingSm + Tokens.spacingXs : (parent.width - width) / 2
                         anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    // The collapsed circle is a button that opens the field.
+                    MouseArea {
+                        anchors.fill: parent
+                        visible: !searchBox.expanded
+                        cursorShape: Qt.ArrowCursor
+                        onClicked: search.forceActiveFocus()
                     }
 
                     TextInput {
                         id: search
                         TextCursor {}
+                        // Hidden but focusable while the capsule is a circle (the shortcut and the circle's click focus it).
+                        opacity: searchBox.expanded ? 1 : 0
                         anchors.left: searchIcon.right
                         anchors.leftMargin: Tokens.spacingXs
                         anchors.right: parent.right
@@ -632,11 +657,13 @@ Window {
             }
         }
 
+        // macOS 26/27: no line under the toolbar until the content scrolls under it (or a tab bar sits there).
         Rectangle {
             id: toolbarRule
             anchors.top: tabBar.bottom
             width: parent.width
             height: Tokens.appsBorderWidth
+            opacity: win.tabs.length > 1 || (win.tab !== null && win.tab.scrolled) ? 1 : 0
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 

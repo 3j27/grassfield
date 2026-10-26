@@ -1171,8 +1171,8 @@ QtObject {
     readonly property real filesSidebarSelectionOpacity: 0.09
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarHeight: 52
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesToolbarButtonSize: 28
+    // toolbar buttons fill the 36-pt capsules (were 28 bare buttons) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property int filesToolbarButtonSize: 36
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarIconSize: 16
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -1707,8 +1707,16 @@ QtObject {
     readonly property int windowTitleSize: Math.round(15 * Appearance.textScale)
     // estimate: gap between toolbar items and groups
     readonly property int windowItemsGap: 8
-    // estimate: space between the toolbar's trailing edge and its last item
-    readonly property int windowItemsInset: 14
+    // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property int windowItemsInset: 8
+    // toolbar items sit in glass capsules 36 tall: back and forward 72 x 36, the view group 146 x 36 [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property int windowGroupHeight: 36
+    // room between a toolbar capsule and its buttons along the row: 4 x 36 + 2 = 146 [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property int windowGroupInset: 1
+    // estimate: light toolbar capsules are white (macOS 26/27 floating capsules) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property real windowGroupFillLight: 1.0
+    // estimate: dark toolbar capsules are white at this opacity over the window [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
+    readonly property real windowGroupFillDark: 0.1
 
     // estimate: tile box the plugin fits a stage's windows into (macOS model: small live thumbnails in a left-edge strip)
     readonly property int stagesTileWidth: 160
