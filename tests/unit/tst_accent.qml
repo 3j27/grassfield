@@ -187,6 +187,33 @@ TestCase {
         compare(Store.DEFAULTS["accessibility.textSize"], 1);
     }
 
+    function test_textHighlightColour() {
+        // accent.highlight (macOS 27 Text highlight colour): Automatic follows the accent; a name keeps its colour whatever the
+        // accent is; anything else reads as Automatic.
+        Appearance.dark = false;
+        Appearance.accentSetting = "purple";
+        Appearance.highlightSetting = "automatic";
+        const accent = Qt.color(Appearance.colors.accent).toString();
+        compare(Appearance.highlight.toString(), accent);
+        compare(Appearance.highlightText.toString(), Qt.color(Appearance.colors.accentText).toString());
+        Appearance.highlightSetting = "orange";
+        compare(Appearance.highlight.toString(), Qt.color(Tokens.colorAccentLight.orange).toString());
+        compare(Appearance.highlightText.toString(), Qt.color(Tokens.colorAccentLight.orangeText).toString());
+        compare(Qt.color(Appearance.colors.accent).toString(), accent, "the accent stays");
+        Appearance.dark = true;
+        compare(Appearance.highlight.toString(), Qt.color(Tokens.colorAccentDark.orange).toString());
+        Appearance.highlightSetting = "Orange";
+        compare(Appearance.highlight.toString(), Qt.color(Appearance.colors.accent).toString(), "an unknown name is Automatic");
+        compare(Accent.normalizeHighlight("multicolor"), "automatic");
+        for (const n of ["automatic", "blue", "graphite"])
+            compare(Store.validate("accent.highlight", n), "", n);
+        for (const n of ["", "Automatic", "multicolor", "#ff0000"])
+            verify(Store.validate("accent.highlight", n) !== "", n);
+        compare(Store.DEFAULTS["accent.highlight"], "automatic");
+        Appearance.highlightSetting = "automatic";
+        Appearance.accentSetting = "multicolor";
+    }
+
     function test_settingsValidation() {
         for (const n of Accent.NAMES)
             compare(Store.validate("accent.color", n), "", n);

@@ -75,6 +75,7 @@ ShellRoot {
             "hotCorners.bottomLeft": "hotCornerBottomLeft",
             "hotCorners.bottomRight": "hotCornerBottomRight",
             "accent.color": "accentColor",
+            "accent.highlight": "accentHighlight",
             "keyboard.shortcutStyle": "keyboardShortcutStyle",
             "region.formats": "regionFormats",
             "region.firstDayOfWeek": "regionFirstDayOfWeek",

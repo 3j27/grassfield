@@ -205,6 +205,12 @@ Window {
         value: cfg.value("accent.color")
     }
 
+    Binding {
+        target: Appearance
+        property: "highlightSetting"
+        value: cfg.value("accent.highlight")
+    }
+
     // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26); the device facts are read once.
     readonly property bool macDevice: MenuShortcut.macDevice(root.backend.readText("/sys/class/dmi/id/sys_vendor").text, root.backend.readText("/proc/bus/input/devices").text)
 

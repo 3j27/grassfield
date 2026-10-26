@@ -105,6 +105,12 @@ ShellRoot {
         value: Settings.accentColor
     }
 
+    Binding {
+        target: Appearance
+        property: "highlightSetting"
+        value: Settings.accentHighlight
+    }
+
     // Adaptive glass: what lies behind it on each output, when known (ADR-0024 G-3).
     Binding {
         target: Appearance

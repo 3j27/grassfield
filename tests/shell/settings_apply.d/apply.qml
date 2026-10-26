@@ -88,6 +88,8 @@ ShellRoot {
         ["accent.color", "orange", () => Settings.accentColor === "orange" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.orange).toLowerCase() && Appearance.colors.accentText.toString().toLowerCase() === String(Tokens.colorAccentLight.orangeText).toLowerCase()],
         ["accent.color", "neon", () => Settings.accentColor === "multicolor" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorLight.accent).toLowerCase()],
         ["accent.color", "graphite", () => Settings.accentColor === "graphite" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.graphite).toLowerCase()],
+        ["accent.highlight", "pink", () => Settings.accentHighlight === "pink" && Appearance.highlight.toString().toLowerCase() === String(Tokens.colorAccentLight.pink).toLowerCase()],
+        ["accent.highlight", "neon", () => Settings.accentHighlight === "automatic" && Appearance.highlight.toString().toLowerCase() === String(Appearance.colors.accent).toLowerCase()],
         ["icons.mode", "tinted", () => Settings.iconMode === "tinted"],
         ["icons.tint", "#8e5bea", () => Settings.iconTint === "#8e5bea"],
         ["icons.folderColor", "#8e5bea", () => Settings.folderColor === "#8e5bea"],
@@ -101,6 +103,12 @@ ShellRoot {
         target: Appearance
         property: "accentSetting"
         value: Settings.accentColor
+    }
+
+    Binding {
+        target: Appearance
+        property: "highlightSetting"
+        value: Settings.accentHighlight
     }
 
     Binding {

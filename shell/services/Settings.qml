@@ -57,6 +57,7 @@ Singleton {
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor
+    readonly property string accentHighlight: store.accentHighlight
     readonly property string keyboardShortcutStyle: store.keyboardShortcutStyle
     readonly property string regionFormats: store.regionFormats
     readonly property string regionFirstDayOfWeek: store.regionFirstDayOfWeek

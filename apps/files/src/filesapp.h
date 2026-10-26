@@ -41,6 +41,7 @@ class FilesApp : public QObject
     Q_PROPERTY(bool canMinimize READ canMinimize NOTIFY appearanceChanged)
     // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
     Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
+    Q_PROPERTY(QString accentHighlight READ accentHighlight NOTIFY appearanceChanged)
     // keyboard.shortcutStyle resolved for this device: "mac" (macOS symbols in menus) or "pc" (text), shortcutstyle.h.
     Q_PROPERTY(QString shortcutStyle READ shortcutStyle NOTIFY appearanceChanged)
     Q_PROPERTY(QString iconMode READ iconMode NOTIFY appearanceChanged)
@@ -84,6 +85,7 @@ public:
     bool canMinimize() const { return m_canMinimize; }
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and "accent" or #rrggbb.
     QString accentColor() const { return m_accentColor; }
+    QString accentHighlight() const { return m_accentHighlight; }
     QString shortcutStyle() const { return m_shortcutStyle; }
     QString iconMode() const { return m_iconMode; }
     QString iconTint() const { return m_iconTint; }
@@ -250,6 +252,7 @@ private:
     QString m_titlebarDoubleClick = QStringLiteral("zoom");
     bool m_canMinimize = true;
     QString m_accentColor = QStringLiteral("multicolor");
+    QString m_accentHighlight = QStringLiteral("automatic");
     const bool m_macDevice = grassfield::apps::macDeviceHere();
     QString m_shortcutStyle = QStringLiteral("pc");
     QString m_iconMode = QStringLiteral("default");

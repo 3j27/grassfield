@@ -237,6 +237,7 @@ Scope {
     readonly property string menubarClockHours: read("menubar.clockHours")
     readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
+    readonly property string accentHighlight: read("accent.highlight")
     // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
     // auto | a locale name ("fr_CH"), and auto | monday … sunday (Settings > General > Language & Region): the formats of dates,
