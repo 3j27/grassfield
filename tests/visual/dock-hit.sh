@@ -6,9 +6,9 @@
 # on. Each click must run the tap handler of exactly the tile whose drawn icon holds the pointer (`dock iconrect`), once, no other.
 # Nothing is started or opened by the clicks: `dock noactivate` (fixtures) makes the Dock's activation a no-op after the tap handler
 # logged "dock-launch: tapped <tile key>" (the key form `dock tiles` prints). One more click, on the Apps tile (key "grid") with
-# activation back on, must open the Apps panel from the top of its magnified icon. The shell runs with the fixture HOME
-# (.dev/apps-home/home, scripts/dev/shell-run.sh) and the test seeds a throwaway Downloads there: the owner's files are never read
-# (the test stops, exit 2, when the shell's HOME is not the fixture one).
+# activation back on, must open the Apps panel from the top of its magnified icon. The Dock's folder stack is pointed at a
+# throwaway Downloads under .dev/apps-home/home (the owner's files are never listed; the test stops, exit 2, if a tile still names
+# the real ~/Downloads).
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-hit.sh [edge ...] [-- scale ...]     default: bottom left right, scales 1.6 2.5
 # Exit status 1 when a check fails.
@@ -46,9 +46,16 @@ mkdir -p "$fix_home/Downloads"
 printf 'fixture\n' > "$fix_home/Downloads/dock-hit-fixture.txt"
 vs_session en || { echo "dock-hit: the nested session did not come up"; exit 2; }
 vs_reset dark 0.25
-shell_pid=$(dev_live_pid "$VS_DEV/shell.pid")
-shell_home=$(tr '\0' '\n' < "/proc/$shell_pid/environ" 2>/dev/null | sed -n 's/^HOME=//p')
-[[ -n $shell_pid && $shell_home == "$fix_home" ]] || { echo "dock-hit: the shell's HOME is '$shell_home', not the fixture $fix_home: refusing to run (no owner files)"; exit 2; }
+# The shell itself runs with the real HOME (only the apps it starts get the fixture one, shell-run.sh), and the Dock's default
+# stack is ~/Downloads: point the stacks at the throwaway folder in the settings of this tree (.dev/config), wait for the Dock
+# to follow, and stop (exit 2) when any tile still names a path of the real HOME.
+cfg=$VS_DEV/config/grassfield.json
+jq --arg d "$fix_home/Downloads" '.dock.folders = [$d]' "$cfg" > "$cfg.new" 2>/dev/null && mv "$cfg.new" "$cfg" || { echo "dock-hit: cannot set the fixture stack folder in $cfg"; exit 2; }
+sleep 3
+if vs_ipc dock tiles | grep -q "$HOME/Downloads\|~/Downloads"; then
+  echo "dock-hit: a Dock tile still points at the real ~/Downloads ($(vs_ipc dock tiles)): refusing to run (no owner files)"
+  exit 2
+fi
 size=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | "\(.width) \(.height)"')
 read -r W H <<<"$size"
 [[ -n $W && -n $H ]] || { echo "dock-hit: no output $VS_OUTPUT"; exit 2; }
