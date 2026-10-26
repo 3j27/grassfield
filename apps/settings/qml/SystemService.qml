@@ -1,6 +1,7 @@
 import QtQuick
 
 // Door of the system sections to the machine: read-only queries and guarded actions.
+// Wi-Fi and Bluetooth go over D-Bus (queryBus, and act with an {op: ...} map); the Sound page runs wpctl (query, act with an argv).
 // In a dev session (GRASSFIELD_DEV=1, a nested Hyprland on the owner's machine) an action never reaches the Backend:
 // one "dev guard: <what> suppressed" line is logged and `suppressedNote` turns on (the pages show "dev: not applied").
 // The Backend refuses the same things again (src/systemguard.cpp), so a mistake here still cannot act.
@@ -11,8 +12,8 @@ QtObject {
     readonly property bool dev: root.backend.devSession === true
     // An action was suppressed in this session.
     property bool suppressedNote: false
-    // Reason of the last failed action per tag ("wifi.act", "bt.act", "audio.act"): the tool's own short message, "-"
-    // when it gave none. An entry goes away when the next action of that tag starts or succeeds.
+    // Reason of the last failed action per tag ("wifi.act", "bt.act", "audio.act"): the service's or the tool's own short
+    // message, "-" when it gave none. An entry goes away when the next action of that tag starts or succeeds.
     property var errors: ({})
 
     function clearError(tag: string): void {
@@ -28,9 +29,15 @@ QtObject {
         root.backend.query(argv, tag);
     }
 
-    // State-changing action. `argv` is null for an invalid value (nothing runs). Returns true when it was started.
-    function act(what: string, argv: var, tag: string): bool {
-        if (argv === null || argv === undefined)
+    // Read-only D-Bus query ("wifi.state", "bt.state"): the answer, a JSON text, arrives as backend.finished(tag, ok, output).
+    function queryBus(what: string, tag: string): void {
+        root.backend.busQuery(what, tag);
+    }
+
+    // State-changing action. `spec` is an argv (wpctl) or an {op: ...} map (D-Bus), null for an invalid value (nothing runs).
+    // Returns true when it was started.
+    function act(what: string, spec: var, tag: string): bool {
+        if (spec === null || spec === undefined)
             return false;
         if (root.dev) {
             console.info("dev guard: " + what + " suppressed");
@@ -38,7 +45,9 @@ QtObject {
             return false;
         }
         root.clearError(tag);
-        return root.backend.act(what, argv, tag);
+        if (!Array.isArray(spec))
+            return root.backend.busAct(what, spec, tag);
+        return root.backend.act(what, spec, tag);
     }
 
     readonly property Connections results: Connections {

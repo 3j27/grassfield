@@ -3,7 +3,8 @@ import QtQuick
 import Grassfield.Ui
 import "System.js" as System
 
-// Wi-Fi through NetworkManager's `nmcli` (read with -t, acted on only through SystemService, so never in a dev session).
+// Wi-Fi through NetworkManager over D-Bus (read as one JSON state, acted on only through SystemService, so never in a dev
+// session). A failed action shows its reason under the list (ErrorNote); a NetworkManager that does not answer shows the footnote.
 SettingsPage {
     id: root
 
@@ -16,9 +17,7 @@ SettingsPage {
     property var radio: null
     property bool answered: false
     property var networks: []
-    // UUIDs of the saved Wi-Fi profiles, the SSID (hex) of each, and SSID hex -> UUID of the first profile with it.
-    property var profiles: []
-    property var profileSsids: ({})
+    // SSID hex -> UUID of the first saved profile with that SSID.
     property var known: ({})
     property var device: null
     // SSID being connected, until the command ends.
@@ -43,27 +42,12 @@ SettingsPage {
         System.syncModel(netModel, list, "key");
     }
 
-    function setProfiles(uuids: var): void {
-        const ssids = {};
-        for (const u of uuids) {
-            if (root.profileSsids[u] !== undefined)
-                ssids[u] = root.profileSsids[u];
-            else
-                root.system.query(System.wifiProfileSsidQuery(u), "wifi.ssid:" + u);
-        }
-        root.profiles = uuids;
-        root.profileSsids = ssids;
-        root.rebuildKnown();
-    }
-
-    function rebuildKnown(): void {
-        const k = {};
-        for (const u of root.profiles) {
-            const hex = root.profileSsids[u];
-            if (hex && k[hex] === undefined)
-                k[hex] = u;
-        }
-        root.known = k;
+    function setState(state: var): void {
+        root.radio = state ? state.radio : null;
+        root.device = state ? state.device : null;
+        root.known = state ? state.known : {};
+        root.setNetworks(state ? state.networks : []);
+        root.answered = true;
     }
 
     // The row's fields as the plain network object the helpers take.
@@ -72,10 +56,7 @@ SettingsPage {
     }
 
     function refresh(): void {
-        root.system.query(System.QUERY.wifiRadio, "wifi.radio");
-        root.system.query(System.QUERY.wifiList, "wifi.list");
-        root.system.query(System.QUERY.wifiProfiles, "wifi.profiles");
-        root.system.query(System.QUERY.wifiDevices, "wifi.devices");
+        root.system.queryBus("wifi.state", "wifi.state");
     }
 
     function activate(net: var): void {
@@ -108,29 +89,9 @@ SettingsPage {
         target: root.backend
 
         function onFinished(tag: string, ok: bool, output: string): void {
-            if (tag.startsWith("wifi.ssid:")) {
-                const uuid = tag.slice("wifi.ssid:".length);
-                if (root.profiles.indexOf(uuid) >= 0) {
-                    const ssids = Object.assign({}, root.profileSsids);
-                    ssids[uuid] = ok ? System.parseProfileSsid(output) : "";
-                    root.profileSsids = ssids;
-                    root.rebuildKnown();
-                }
-                return;
-            }
             switch (tag) {
-            case "wifi.radio":
-                root.radio = ok ? System.parseWifiRadio(output) : null;
-                root.answered = true;
-                break;
-            case "wifi.list":
-                root.setNetworks(ok ? System.parseWifiList(output) : []);
-                break;
-            case "wifi.profiles":
-                root.setProfiles(ok ? System.parseWifiProfiles(output) : []);
-                break;
-            case "wifi.devices":
-                root.device = ok ? System.parseWifiDevice(output) : null;
+            case "wifi.state":
+                root.setState(ok ? System.parseWifiState(output) : null);
                 break;
             case "wifi.act":
                 root.pending = "";
@@ -151,7 +112,7 @@ SettingsPage {
         root.refresh();
         // NetworkManager scans on its own; ask for a fresh scan when the pane opens (never in a dev session).
         if (!root.system.dev)
-            root.system.act("wifi scan", ["nmcli", "device", "wifi", "rescan"], "wifi.scan");
+            root.system.act("wifi scan", System.wifiScan(), "wifi.scan");
     }
 
     SettingsGroup {

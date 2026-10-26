@@ -122,8 +122,10 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
-  # networkmanager (nmcli), bluez-utils (bluetoothctl), wireplumber (wpctl) and wl-clipboard (wl-copy) are run by Settings
-  # and the shell (GF-049, ARCH-08): declared, not assumed to come with Omarchy.
+  # networkmanager and bluez-utils (which pulls bluez) are the D-Bus services the Settings Wi-Fi and Bluetooth pages talk to (GF-049:
+  # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
+  # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
+  # with Omarchy.
   depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
