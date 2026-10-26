@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 
 // Backlight of the first /sys/class/backlight device. Absent when there is none (desktops):
@@ -25,7 +26,7 @@ Singleton {
     // The real backlight, whatever the fixtures say (the IPC level hook reads these, never `available` or `level`).
     readonly property bool deviceAvailable: device !== "" && max > 0
     readonly property real deviceLevel: deviceAvailable ? Math.max(0, Math.min(1, value / max)) : 0
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
 
     signal commandFinished
 

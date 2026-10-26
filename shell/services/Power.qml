@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import qs.platform
 
 // Session power actions behind confirmation dialogs. In the nested dev session
@@ -9,7 +10,7 @@ import qs.platform
 Singleton {
     id: root
 
-    readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool dev: Mode.dev
 
     function systemctl(verb: string): void {
         if (dev) {

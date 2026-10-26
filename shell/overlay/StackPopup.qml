@@ -456,8 +456,8 @@ FocusScope {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: Tokens.radiusControl
-                    color: Appearance.colors.accent
+                    radius: Tokens.radiusMenu - Tokens.menuPadding
+                    color: Appearance.colors.selection
                     visible: row.current
                 }
 
@@ -476,7 +476,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: DisplayName.text(row.modelData.name)
                     elide: Text.ElideMiddle
-                    color: row.current ? Appearance.colors.accentText : Appearance.colors.text
+                    color: row.current ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyMenuSize
                     font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
@@ -512,8 +512,8 @@ FocusScope {
 
             Rectangle {
                 anchors.fill: parent
-                radius: Tokens.radiusControl
-                color: Appearance.colors.accent
+                radius: root.view === "list" ? Tokens.radiusMenu - Tokens.menuPadding : Tokens.radiusControl
+                color: Appearance.colors.selection
                 visible: openRow.current
             }
 
@@ -522,7 +522,7 @@ FocusScope {
                 x: Tokens.menuItemPadding
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.openText
-                color: openRow.current ? Appearance.colors.accentText : Appearance.colors.text
+                color: openRow.current ? Appearance.colors.selectionText : Appearance.colors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyMenuSize
                 font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)

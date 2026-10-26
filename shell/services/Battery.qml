@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Services.UPower
 import "BatteryLogic.js" as Logic
 
@@ -21,7 +22,7 @@ Singleton {
     // Low Power Mode = the power-saver profile (always on offer: when power-profiles-daemon is missing the switch has no effect
     // and the profile stays Balanced).
     readonly property bool lowPower: Logic.lowPower(PowerProfiles.profile)
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
     signal devSuppressed
 
     function setLowPower(on: bool): void {

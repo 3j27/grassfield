@@ -29,7 +29,10 @@ setup() { # setup <lid open|closed> <DP-3 connected|disconnected>
   printf '%s\n' "$2" >"$tmp/drm/card1-DP-3/status"
   printf '%s\n' disconnected >"$tmp/drm/card1-HDMI-A-1/status"
 }
+# A dev session: grassfield-lid honours its test hooks only there (ADR-0019 dev plumbing; the real-session case is
+# tests/security/lock_request_env.sh).
 lid() {
+  env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 \
   FAKE_DIR=$tmp PATH="$tmp/bin:$PATH" XDG_RUNTIME_DIR=$tmp/run GRASSFIELD_LID_PROC=$tmp/proc GRASSFIELD_DRM=$tmp/drm \
     GRASSFIELD_LID_LOCK="$tmp/bin/lock" GRASSFIELD_LID_FALLBACK="$tmp/bin/fallback" bash "$root/packaging/bin/grassfield-lid" "$@"
 }
@@ -50,7 +53,7 @@ desc="the lock request is sent first, before the panel changes (logind may suspe
 check bash -c '[[ $(head -n 1 "$1/calls.log") == lock ]]' _ "$tmp"
 
 desc="the default lock command is the shell's lid entry point (lock lid), never an unlock or another locker"
-check bash -c 'grep -qx "LOCK_CMD=\${GRASSFIELD_LID_LOCK:-qs ipc -p /usr/share/grassfield/shell call lock lid}" "$1"' _ "$root/packaging/bin/grassfield-lid"
+check bash -c 'grep -qx "LOCK_CMD=\"qs ipc -p /usr/share/grassfield/shell call lock lid\"" "$1"' _ "$root/packaging/bin/grassfield-lid"
 
 desc="the lid switch is bound once: system.lua, not bindings.lua"
 check bash -c '[[ $(grep -c "switch:on:Lid Switch" "$1") == 1 ]] && ! grep -q "Lid Switch" "$2"' _ "$root/config/hypr/grassfield/system.lua" "$root/config/hypr/grassfield/bindings.lua"

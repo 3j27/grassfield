@@ -23,7 +23,7 @@ printf 'hello\n' >"$tmp/note.txt"
 printf '\x00\xff\x13\x37\x00\xfe\x80\x81%.0s' {1..8} >"$tmp/blob.bin"
 log=$tmp/refusals.log
 # A dev session: the dev plumbing variables (FILES_CMD, PREVIEW_CMD) are honoured only there (ADR-0019).
-unset GRASSFIELD_SESSION # an inherited one would make this a packaged session: the plumbing below would be inert
+unset GRASSFIELD_SESSION # an inherited one would make this a packaged session and the plumbing below inert (dev needs no packaged session around it)
 export GRASSFIELD_DEV=1 GRASSFIELD_FILES_CMD=$tmp/fake-files GRASSFIELD_PREVIEW_CMD=$tmp/fake-preview GRASSFIELD_OPEN_LOG=$log
 wait_for() { for _ in $(seq 1 30); do [[ -s $1 ]] && return 0; sleep 0.1; done; return 1; }
 

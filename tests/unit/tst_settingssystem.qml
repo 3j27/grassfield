@@ -2,8 +2,9 @@ import QtQuick
 import QtTest
 import "../../apps/settings/qml/System.js" as System
 
-// Settings system sections (Wi-Fi, Bluetooth, Sound, Displays): parsers of the tools' output, action argument vectors,
-// arrangement, and the dev guard of SystemService (an action never reaches the backend with GRASSFIELD_DEV=1).
+// Settings system sections (Wi-Fi, Bluetooth, Sound, Displays): the parsers of the D-Bus states and of wpctl's output, the
+// D-Bus action maps and wpctl argument vectors, arrangement, and the dev guard of SystemService (an action never reaches the
+// backend with GRASSFIELD_DEV=1).
 TestCase {
     id: testCase
     name: "SettingsSystem"
@@ -22,6 +23,8 @@ TestCase {
             property bool devSession: false
             property var queries: []
             property var actions: []
+            property var busQueries: []
+            property var busActions: []
             signal finished(string tag, bool ok, string output)
             signal failed(string tag, string reason)
             function query(argv: var, tag: string): void {
@@ -29,6 +32,13 @@ TestCase {
             }
             function act(what: string, argv: var, tag: string): bool {
                 actions.push({what: what, argv: argv});
+                return true;
+            }
+            function busQuery(what: string, tag: string): void {
+                busQueries.push({what: what, tag: tag});
+            }
+            function busAct(what: string, op: var, tag: string): bool {
+                busActions.push({what: what, op: op});
                 return true;
             }
         }
@@ -55,6 +65,7 @@ TestCase {
             ["wifi connect", System.wifiConnectKnown(uuidA)],
             ["wifi connect", System.wifiConnectOpen("Cafe")],
             ["wifi disconnect", System.wifiDisconnect("wlo1")],
+            ["wifi scan", System.wifiScan()],
             ["bluetooth off", System.btPower(false)],
             ["bluetooth connect", System.btConnect("AA:BB:CC:DD:EE:FF", true)],
             ["output device", System.setDefaultDevice(52)],
@@ -63,41 +74,52 @@ TestCase {
         ];
         for (const a of actions) {
             verify(a[1] !== null, a[0]);
-                compare(t.service.act(a[0], a[1], "x"), false, a[0]);
+            compare(t.service.act(a[0], a[1], "x"), false, a[0]);
         }
         compare(t.backend.actions.length, 0);
+        compare(t.backend.busActions.length, 0);
         verify(t.service.suppressedNote);
     }
 
     function test_realSessionPassesActionsThrough() {
         const t = makeService(false);
         verify(!t.service.dev);
+        // Wi-Fi and Bluetooth go to the D-Bus door as maps, Sound to the wpctl door as an argv.
         compare(t.service.act("wifi off", System.wifiRadio(false), "x"), true);
+        compare(t.backend.busActions.length, 1);
+        compare(t.backend.busActions[0].op, {op: "wifi.radio", on: false});
+        compare(t.backend.actions.length, 0);
+        compare(t.service.act("mute", System.setMute(52, true), "x"), true);
         compare(t.backend.actions.length, 1);
-        compare(t.backend.actions[0].argv, ["nmcli", "radio", "wifi", "off"]);
+        compare(t.backend.actions[0].argv, ["wpctl", "set-mute", "52", "1"]);
         verify(!t.service.suppressedNote);
     }
 
     function test_invalidActionNeverRuns() {
         const t = makeService(false);
         compare(t.service.act("x", null, "x"), false);
-        compare(t.backend.actions.length, 0);
+        compare(t.backend.actions.length + t.backend.busActions.length, 0);
     }
 
     function test_queriesPass() {
         const t = makeService(true);
-        t.service.query(System.QUERY.wifiList, "wifi.list");
+        t.service.queryBus("wifi.state", "wifi.state");
+        compare(t.backend.busQueries.length, 1);
+        t.service.query(System.QUERY.audio, "audio.status");
         compare(t.backend.queries.length, 1);
+        // No command is left that reads the network or Bluetooth.
+        compare(Object.keys(System.QUERY), ["audio"]);
     }
 
-    // ---- argument vectors ----
+    // ---- actions ----
 
-    function test_argvRejectInvalidValues() {
+    function test_actionsRejectInvalidValues() {
         compare(System.wifiConnectKnown("-x"), null);
         compare(System.wifiConnectKnown("Home"), null);
-        compare(System.wifiProfileSsidQuery("Home; reboot"), null);
         compare(System.wifiConnectOpen(""), null);
         compare(System.wifiConnectOpen("a\nb"), null);
+        compare(System.wifiConnectOpen("-flag"), null);
+        compare(System.wifiConnectOpen("x".repeat(33)), null);
         compare(System.wifiDisconnect("wlo1; reboot"), null);
         compare(System.wifiDisconnect("-h"), null);
         compare(System.btConnect("not-a-mac", true), null);
@@ -108,10 +130,16 @@ TestCase {
         compare(System.setMute(1.5, true), null);
     }
 
-    function test_argvShapes() {
-        compare(System.wifiConnectKnown(uuidA), ["nmcli", "connection", "up", "uuid", uuidA]);
-        compare(System.wifiProfileSsidQuery(uuidA), ["nmcli", "-t", "-f", "802-11-wireless.ssid", "connection", "show", "uuid", uuidA]);
-        compare(System.btConnect("aa:bb:cc:dd:ee:ff", false), ["bluetoothctl", "disconnect", "aa:bb:cc:dd:ee:ff"]);
+    function test_actionShapes() {
+        compare(System.wifiRadio(true), {op: "wifi.radio", on: true});
+        compare(System.wifiRadio("yes"), {op: "wifi.radio", on: false});
+        compare(System.wifiConnectKnown(uuidA), {op: "wifi.connectKnown", uuid: uuidA});
+        compare(System.wifiConnectOpen("Cafe"), {op: "wifi.connectOpen", hex: "43616665"});
+        compare(System.wifiConnectOpen("x".repeat(32)).hex.length, 64);
+        compare(System.wifiDisconnect("wlo1"), {op: "wifi.disconnect"});
+        compare(System.wifiScan(), {op: "wifi.scan"});
+        compare(System.btPower(false), {op: "bt.power", on: false});
+        compare(System.btConnect("aa:bb:cc:dd:ee:ff", false), {op: "bt.connect", mac: "AA:BB:CC:DD:EE:FF", connect: false});
         compare(System.setVolume(52, 1.7), ["wpctl", "set-volume", "52", "1.00"]);
         compare(System.setVolume(52, -1), ["wpctl", "set-volume", "52", "0.00"]);
         compare(System.setMute(52, false), ["wpctl", "set-mute", "52", "0"]);
@@ -120,11 +148,36 @@ TestCase {
 
     // ---- Wi-Fi ----
 
-    // Exact `nmcli -t` output in the C locale (LC_ALL=C, which Backend forces): SSID-HEX never needs escaping.
-    readonly property string wifiListC: "*:486F6D653A203547:72:WPA2\n" + " :486F6D653A203547:40:WPA2\n" + " :43616665:55:--\n" + " :4F6666696365:90:WPA2 802.1X\n" + " ::30:WPA2\n" + " :5765616B:12:WPA3\n"
+    // The `wifi.state` JSON the Backend answers with (src/systembus.cpp wifiState): SSID bytes as hex, NetworkManager's flags.
+    function ap(hex, strength, flags, wpa, rsn, active) {
+        return {hex: hex, strength: strength, flags: flags, wpa: wpa, rsn: rsn, active: active === true};
+    }
 
-    function test_wifiList() {
-        const list = System.parseWifiList(wifiListC);
+    function wifiJson(aps, profiles, radio, device) {
+        return JSON.stringify({radio: radio !== false, device: device === undefined ? {name: "wlo1", connected: true} : device, aps: aps, profiles: profiles ?? []});
+    }
+
+    readonly property var homeAp: ap("486F6D653A203547", 72, 1, 0, 0x188, true)
+
+    function test_wifiSecurityLabels() {
+        compare(System.wifiSecurity(0, 0, 0), "");
+        compare(System.wifiSecurity(1, 0, 0), "WEP");
+        compare(System.wifiSecurity(1, 0x100, 0), "WPA1");
+        compare(System.wifiSecurity(1, 0, 0x188), "WPA2");          // PSK
+        compare(System.wifiSecurity(1, 0, 0x500), "WPA3 WPA2");     // SAE and PSK (transition)
+        compare(System.wifiSecurity(1, 0, 0x400), "WPA3");
+        compare(System.wifiSecurity(1, 0, 0x200), "802.1X");
+        compare(System.wifiSecurity(1, 0, 0x300), "WPA2 802.1X");
+        compare(System.wifiSecurity(0, 0, 0x800), "OWE");
+        compare(System.wifiSecurity(1, 0, 0x1), "WPA");            // encrypted, key management unknown: still secured
+    }
+
+    function test_wifiState() {
+        const aps = [homeAp, ap("486F6D653A203547", 40, 1, 0, 0x188), ap("43616665", 55, 0, 0, 0), ap("4F6666696365", 90, 1, 0, 0x300), ap("", 30, 1, 0, 0x188), ap("5765616B", 12, 1, 0, 0x400)];
+        const st = System.parseWifiState(wifiJson(aps, [{uuid: uuidA, hex: "486f6d653a203547"}, {uuid: "11111111-2222-3333-4444-555555555555", hex: "486F6D653A203547"}]));
+        compare(st.radio, true);
+        compare(st.device, {name: "wlo1", connected: true});
+        const list = st.networks;
         compare(list.map(n => n.ssid), ["Home: 5G", "Office", "Cafe", "Weak"]);
         compare(list[0].active, true);
         compare(list[0].strength, 72);
@@ -133,36 +186,39 @@ TestCase {
         compare(list[2].secured, false);
         compare(list[3].secured, true);
         verify(list[0].valid);
+        // The first saved profile of an SSID is the one a click on the network uses.
+        compare(st.known["486F6D653A203547"], uuidA);
     }
 
     function test_wifiDuplicateKeepsStrongest() {
-        const list = System.parseWifiList(" :4E6574:30:WPA2\n :4E6574:80:WPA2\n");
+        const list = System.parseWifiState(wifiJson([ap("4E6574", 30, 1, 0, 0x188), ap("4E6574", 80, 1, 0, 0x188)])).networks;
         compare(list.length, 1);
         compare(list[0].strength, 80);
         // Same name, other security: another row, another stable id.
-        compare(System.parseWifiList(" :4E6574:30:WPA2\n :4E6574:80:--\n").length, 2);
+        compare(System.parseWifiState(wifiJson([ap("4E6574", 30, 1, 0, 0x188), ap("4E6574", 80, 0, 0, 0)])).networks.length, 2);
+        // The connected access point wins over a stronger one of the same network.
+        const active = System.parseWifiState(wifiJson([ap("4E6574", 30, 1, 0, 0x188, true), ap("4E6574", 80, 1, 0, 0x188)])).networks;
+        compare(active.length, 1);
+        compare(active[0].active, true);
     }
 
     // A network name may hold any byte: newline, colon, backslash. It is only ever read from hex, so it can neither
     // add a row nor shift a field.
     function test_wifiHostileName() {
-        // "a\nb:c\\d" then a decoy line that would be a second row if the name were printed raw.
-        const hostile = "610A623A635C64";
-        const list = System.parseWifiList(" :" + hostile + ":50:WPA2\n" + " :4F6666696365:10:--\n");
+        // "a\nb:c\\d" then a decoy that would be a second row if the name were printed raw.
+        const list = System.parseWifiState(wifiJson([ap("610A623A635C64", 50, 1, 0, 0x188), ap("4F6666696365", 10, 0, 0, 0)])).networks;
         compare(list.length, 2);
         compare(list[0].ssid, "a\nb:c\\d");
-        compare(list[0].label, "a�b:c\\d");
+        compare(list[0].label, "a\uFFFDb:c\\d");
         compare(list[0].valid, false);
         compare(list[0].strength, 50);
         compare(list[0].secured, true);
         compare(list[1].ssid, "Office");
-        // The old raw line of such a network, as nmcli -t -f SSID would print it, is not accepted as a row either.
-        compare(System.parseWifiList("*:a\nb\\:c:50:WPA2\n").length, 0);
-        compare(System.parseWifiList(" :ZZ:50:WPA2\n").length, 0);
-        compare(System.parseWifiList(" :4:50:WPA2\n").length, 0);
-        // Invalid UTF-8 shows as replacement characters and can never be passed on to nmcli.
-        const bad = System.parseWifiList(" :FF4142:50:WPA2\n");
-        compare(bad[0].ssid, "�AB");
+        compare(System.parseWifiState(wifiJson([ap("ZZ", 50, 1, 0, 0x188)])).networks.length, 0);
+        compare(System.parseWifiState(wifiJson([ap("4", 50, 1, 0, 0x188)])).networks.length, 0);
+        // Invalid UTF-8 shows as replacement characters and can never be passed on.
+        const bad = System.parseWifiState(wifiJson([ap("FF4142", 50, 1, 0, 0x188)])).networks;
+        compare(bad[0].ssid, "\uFFFDAB");
         compare(bad[0].valid, false);
         compare(System.wifiConnectOpen(bad[0].ssid), null);
         compare(System.hexToText("E282AC").text, "€");
@@ -171,34 +227,26 @@ TestCase {
         compare(System.textToHex("a\nb:c\\d€"), "610A623A635C64E282AC");
     }
 
-    function test_wifiRadioProfilesDevices() {
-        compare(System.parseWifiRadio("enabled\n"), true);
-        compare(System.parseWifiRadio("disabled\n"), false);
-        compare(System.parseWifiRadio(""), null);
-        // French output (what an unforced locale printed) is not understood: Backend forces the C locale.
-        compare(System.parseWifiRadio("activé\n"), null);
-        compare(System.parseWifiProfiles(uuidA + ":802-11-wireless\n11111111-2222-3333-4444-555555555555:802-3-ethernet\n66666666-7777-8888-9999-000000000000:loopback\n"), [uuidA]);
-        const dev = System.parseWifiDevice("lo:loopback:connected (externally)\nwlo1:wifi:connected\np2p-dev-wlo1:wifi-p2p:disconnected\n");
-        compare(dev.name, "wlo1");
-        compare(dev.connected, true);
-        compare(System.parseWifiDevice("eno2:ethernet:unavailable\n"), null);
-        compare(System.parseWifiDevice("wlo1:wifi:connecté\n").connected, false);
-    }
-
-    function test_profileSsid() {
-        compare(System.parseProfileSsid("802-11-wireless.ssid:Home\n"), "486F6D65");
-        // ':' and '\\' are escaped by -t; a single-field query keeps even a newline inside the value.
-        compare(System.parseProfileSsid("802-11-wireless.ssid:a\nb\\:c\\\\d\n"), "610A623A635C64");
-        compare(System.parseProfileSsid("802-11-wireless.ssid:\n"), "");
-        compare(System.parseProfileSsid("Error: nope\n"), "");
-        compare(System.parseProfileSsid(""), "");
+    function test_wifiStateGarbageAndRadio() {
+        compare(System.parseWifiState(""), null);
+        compare(System.parseWifiState("not json"), null);
+        compare(System.parseWifiState("[]"), null);
+        compare(System.parseWifiState('{"radio": "yes", "aps": [], "profiles": []}'), null);
+        compare(System.parseWifiState('{"radio": true}'), null);
+        // Entries that are not what they should be are skipped, never thrown on.
+        const st = System.parseWifiState('{"radio": false, "device": null, "aps": [null, 5, {"hex": 7}, {"hex": "4E6574", "strength": 999, "flags": 0, "wpa": 0, "rsn": 0}], "profiles": [null, {"uuid": "x", "hex": "AA"}, {"uuid": "' + uuidA + '", "hex": "4E6574"}]}');
+        compare(st.radio, false);
+        compare(st.device, null);
+        compare(st.networks.length, 1);
+        compare(st.networks[0].strength, 100);
+        compare(st.known, {"4E6574": uuidA});
     }
 
     function test_wifiClickKind() {
         // The known networks match by the profile's SSID, whatever the profile is called.
         const known = {};
         known[System.textToHex("Home")] = uuidA;
-        const home = System.parseWifiList(" :" + System.textToHex("Home") + ":50:WPA2\n")[0];
+        const home = System.parseWifiState(wifiJson([ap(System.textToHex("Home"), 50, 1, 0, 0x188)])).networks[0];
         compare(System.wifiClickKind(home, known), "known");
         compare(System.wifiClickKind({hex: System.textToHex("Home"), active: true, secured: true}, known), "current");
         compare(System.wifiClickKind({hex: "43616665", active: false, secured: false}, known), "open");
@@ -211,17 +259,18 @@ TestCase {
     // ---- Bluetooth ----
 
     function test_bluetooth() {
-        const show = "Controller AA:BB:CC:DD:EE:FF (public)\n\tName: host\n\tPowered: yes\n\tDiscoverable: no\n";
-        compare(System.parseBtShow(show), {present: true, powered: true});
-        compare(System.parseBtShow(show.replace("yes", "no")), {present: true, powered: false});
-        compare(System.parseBtShow("No default controller available\n"), {present: false, powered: false});
-        const paired = System.parseBtDevices("\x1b[0mDevice 11:22:33:44:55:66 Headphones\nDevice 77:88:99:AA:BB:CC Zed\nNoise\n");
-        compare(paired.map(d => d.name), ["Headphones", "Zed"]);
-        const connected = System.parseBtDevices("Device 77:88:99:AA:BB:CC Zed\n");
-        const merged = System.bluetoothDevices(paired, connected);
-        compare(merged.map(d => d.name), ["Zed", "Headphones"]);
-        compare(merged[0].connected, true);
-        compare(merged[1].connected, false);
+        const st = System.parseBtState('{"present": true, "powered": true, "devices": [{"mac": "11:22:33:44:55:66", "name": "Headphones", "connected": false}, {"mac": "77:88:99:aa:bb:cc", "name": "Zed", "connected": true}, {"mac": "bad", "name": "x", "connected": true}, {"mac": "AA:AA:AA:AA:AA:AA", "name": "  ", "connected": false}]}');
+        compare(st.present, true);
+        compare(st.powered, true);
+        // Connected first, then by name; a bad address is dropped; no name shows the address.
+        compare(st.devices.map(d => d.name), ["Zed", "AA:AA:AA:AA:AA:AA", "Headphones"]);
+        compare(st.devices[0].mac, "77:88:99:AA:BB:CC");
+        compare(st.devices[0].connected, true);
+        // An adapter that is not there is never "powered".
+        compare(System.parseBtState('{"present": false, "powered": true, "devices": []}').powered, false);
+        compare(System.parseBtState(""), null);
+        compare(System.parseBtState("{}"), null);
+        compare(System.parseBtState('{"present": true, "powered": true}'), null);
     }
 
     // ---- Sound ----
@@ -345,15 +394,14 @@ TestCase {
     function test_wifiRefreshKeepsRowsAndFocus() {
         const t = makeService(false);
         const page = openPage("WifiPage.qml", t);
-        t.backend.finished("wifi.radio", true, "enabled\n");
-        t.backend.finished("wifi.list", true, " :486F6D65:50:WPA2\n :43616665:60:--\n :4F6666696365:40:WPA2\n");
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188), ap("43616665", 60, 0, 0, 0), ap("4F6666696365", 40, 1, 0, 0x188)]));
         const home = rowByTitle(page, "Home");
         const cafe = rowByTitle(page, "Cafe");
         verify(home && cafe && rowByTitle(page, "Office"));
         cafe.forceActiveFocus();
         verify(cafe.activeFocus);
         // The next reading: Cafe is now first and stronger, Office is gone, "Zed" appeared, Home changed.
-        t.backend.finished("wifi.list", true, " :43616665:90:--\n :486F6D65:55:WPA2\n :5A6564:30:--\n");
+        t.backend.finished("wifi.state", true, wifiJson([ap("43616665", 90, 0, 0, 0), ap("486F6D65", 55, 1, 0, 0x188), ap("5A6564", 30, 0, 0, 0)]));
         verify(rowByTitle(page, "Cafe") === cafe, "the focused row was rebuilt");
         verify(rowByTitle(page, "Home") === home, "a kept row was rebuilt");
         verify(cafe.activeFocus, "focus lost on refresh");
@@ -362,31 +410,61 @@ TestCase {
         compare(rowByTitle(page, "Office"), null);
         verify(rowByTitle(page, "Zed") !== null);
         // An unchanged reading changes nothing.
-        t.backend.finished("wifi.list", true, " :43616665:90:--\n :486F6D65:55:WPA2\n :5A6564:30:--\n");
+        t.backend.finished("wifi.state", true, wifiJson([ap("43616665", 90, 0, 0, 0), ap("486F6D65", 55, 1, 0, 0x188), ap("5A6564", 30, 0, 0, 0)]));
         verify(cafe.activeFocus);
         compare(rowsOf(page, []).length, 3);
+    }
+
+    function test_wifiAsksOneStateOverDBus() {
+        const t = makeService(false);
+        const page = openPage("WifiPage.qml", t);
+        verify(t.backend.busQueries.length >= 1);
+        compare(t.backend.busQueries[0], {what: "wifi.state", tag: "wifi.state"});
+        compare(t.backend.queries.length, 0, "no command is run to read the network");
+        verify(page);
     }
 
     function test_wifiKnownByProfileSsid() {
         const t = makeService(false);
         const page = openPage("WifiPage.qml", t);
-        t.backend.finished("wifi.radio", true, "enabled\n");
-        t.backend.finished("wifi.list", true, " :486F6D65:50:WPA2\n");
-        compare(page.subtitleOf(page.networks[0]).length > 0, true);
-        // A saved profile named "Maison" whose SSID is Home.
-        t.backend.finished("wifi.profiles", true, uuidA + ":802-11-wireless\n");
-        verify(t.backend.queries.some(q => q.join(" ").indexOf("802-11-wireless.ssid connection show uuid " + uuidA) >= 0));
-        t.backend.finished("wifi.ssid:" + uuidA, true, "802-11-wireless.ssid:Home\n");
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188)]));
+        compare(System.wifiClickKind(page.networks[0], page.known), "password");
+        // A saved profile named "Maison" whose SSID is Home: the same state, now with the profile.
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188)], [{uuid: uuidA, hex: "486F6D65"}]));
         compare(System.wifiClickKind(page.networks[0], page.known), "known");
         compare(page.subtitleOf(page.networks[0]), "Known network");
+    }
+
+    function test_wifiNetworkManagerNotAnswering() {
+        const t = makeService(false);
+        const page = openPage("WifiPage.qml", t);
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188)]));
+        verify(page.available);
+        t.backend.finished("wifi.state", false, "");
+        verify(!page.available);
+        verify(page.answered);
+        compare(page.networks.length, 0);
+        compare(page.radio, null);
+    }
+
+    function test_wifiClickActsThroughDBus() {
+        const t = makeService(false);
+        const page = openPage("WifiPage.qml", t);
+        t.backend.finished("wifi.state", true, wifiJson([ap("486F6D65", 50, 1, 0, 0x188), ap("43616665", 60, 0, 0, 0), ap("4F6666696365", 40, 1, 0, 0x188, true)], [{uuid: uuidA, hex: "486F6D65"}]));
+        page.activate(page.networks.find(n => n.ssid === "Home"));
+        page.activate(page.networks.find(n => n.ssid === "Cafe"));
+        page.activate(page.networks.find(n => n.ssid === "Office"));
+        // Opening the pane asks for a fresh scan first (never in a dev session); then one action per click.
+        compare(t.backend.busActions.map(a => a.op), [{op: "wifi.scan"}, {op: "wifi.connectKnown", uuid: uuidA}, {op: "wifi.connectOpen", hex: "43616665"}, {op: "wifi.disconnect"}]);
+        compare(t.backend.actions.length, 0);
     }
 
     function test_actionFailureShowsReason() {
         const t = makeService(false);
         const page = openPage("WifiPage.qml", t);
-        t.backend.finished("wifi.radio", true, "enabled\n");
-        t.backend.failed("wifi.act", "Error: Connection activation failed: Secrets were required");
-        compare(t.service.errors["wifi.act"], "Error: Connection activation failed: Secrets were required");
+        t.backend.finished("wifi.state", true, wifiJson([]));
+        t.backend.failed("wifi.act", "Connection activation failed: Secrets were required");
+        compare(t.service.errors["wifi.act"], "Connection activation failed: Secrets were required");
         // The next action clears it; a success clears it too.
         t.service.act("wifi on", System.wifiRadio(true), "wifi.act");
         compare(t.service.errors["wifi.act"], undefined);
@@ -395,25 +473,45 @@ TestCase {
         t.backend.finished("wifi.act", true, "");
         compare(t.service.errors["wifi.act"], undefined);
         // A failed query is not an action error.
-        t.backend.failed("wifi.list", "boom");
-        compare(t.service.errors["wifi.list"], undefined);
+        t.backend.failed("wifi.state", "boom");
+        compare(t.service.errors["wifi.state"], undefined);
+        verify(page);
     }
 
     function test_bluetoothRefreshKeepsRows() {
         const t = makeService(false);
         const page = openPage("BluetoothPage.qml", t);
-        t.backend.finished("bt.show", true, "Controller AA:BB:CC:DD:EE:FF (public)\n\tPowered: yes\n");
-        t.backend.finished("bt.paired", true, "Device 11:22:33:44:55:66 Headphones\nDevice 77:88:99:AA:BB:CC Zed\n");
-        t.backend.finished("bt.connected", true, "");
+        const state = connected => JSON.stringify({present: true, powered: true, devices: [{mac: "11:22:33:44:55:66", name: "Headphones", connected: false}, {mac: "77:88:99:AA:BB:CC", name: "Zed", connected: connected}]});
+        t.backend.finished("bt.state", true, state(false));
         const zed = rowByTitle(page, "Zed");
         verify(zed && rowByTitle(page, "Headphones"));
         zed.forceActiveFocus();
         verify(zed.activeFocus);
-        t.backend.finished("bt.connected", true, "Device 77:88:99:AA:BB:CC Zed\n");
+        t.backend.finished("bt.state", true, state(true));
         verify(rowByTitle(page, "Zed") === zed, "row rebuilt");
         verify(zed.activeFocus, "focus lost on refresh");
         compare(zed.subtitle, "Connected");
         compare(rowsOf(page, []).length, 2);
+        compare(t.backend.queries.length, 0, "no command is run to read Bluetooth");
+        verify(t.backend.busQueries.some(q => q.what === "bt.state"));
+    }
+
+    function test_bluetoothActsThroughDBusAndFailuresAreShown() {
+        const t = makeService(false);
+        const page = openPage("BluetoothPage.qml", t);
+        t.backend.finished("bt.state", true, JSON.stringify({present: true, powered: true, devices: [{mac: "77:88:99:AA:BB:CC", name: "Zed", connected: true}]}));
+        page.toggleDevice(page.devices[0]);
+        compare(t.backend.busActions.map(a => a.op), [{op: "bt.connect", mac: "77:88:99:AA:BB:CC", connect: false}]);
+        compare(page.pending, "77:88:99:AA:BB:CC");
+        t.backend.failed("bt.act", "Software caused connection abort");
+        t.backend.finished("bt.act", false, "");
+        compare(page.pending, "");
+        compare(t.service.errors["bt.act"], "Software caused connection abort");
+        // No adapter, or no BlueZ: the page says so.
+        t.backend.finished("bt.state", false, "");
+        verify(page.answered);
+        compare(page.controller.present, false);
+        compare(page.devices.length, 0);
     }
 
     function test_soundRefreshKeepsRowsAndUsesMicrophone() {

@@ -205,8 +205,8 @@ FocusScope {
 
             readonly property bool renaming: root.tab.isRenaming(root.model, row.url)
             readonly property bool emphasized: row.selected && list.activeFocus
-            readonly property color foreground: row.emphasized ? Appearance.colors.accentText : Appearance.colors.text
-            readonly property color secondary: row.emphasized ? Appearance.colors.accentText : Appearance.colors.textSecondary
+            readonly property color foreground: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
+            readonly property color secondary: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.textSecondary
 
             width: list.width
             height: Tokens.filesListRowHeight
@@ -223,7 +223,7 @@ FocusScope {
                 anchors.leftMargin: Tokens.spacingXs
                 anchors.rightMargin: Tokens.spacingXs
                 radius: Tokens.radiusControl
-                color: row.selected ? (row.emphasized ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2))
+                color: row.selected ? (row.emphasized ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2))
                      : row.index % 2 === 1 ? Appearance.withAlpha(Appearance.colors.fill, Tokens.filesStripeOpacity) : "transparent"
                 border.width: rowDrop.containsDrag ? Tokens.filesDropBorder : 0
                 border.color: Appearance.colors.accent
@@ -264,7 +264,7 @@ FocusScope {
                 colors: row.tagColors
                 x: nameText.x + nameText.paintedWidth + Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter
-                ringColor: row.emphasized ? Appearance.colors.accent : Appearance.colors.materialTint
+                ringColor: row.emphasized ? Appearance.colors.selection : Appearance.colors.materialTint
             }
 
             Loader {

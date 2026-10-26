@@ -87,7 +87,15 @@ ShellRoot {
             root.waited += interval;
             if (root.phase === "items") {
                 const pending = Object.keys(ThemeIcons.copies).some(k => ThemeIcons.copies[k].state === "pending");
-                if ((slots.count < root.expected || pending || root.waited < 1500) && root.waited < 25000)
+                // TrayButton's Image loads asynchronously: a copy that answered can still be loading (status 2). Record
+                // only once none is (the same 25 s bound; a load that never ends still shows as status 2).
+                let loading = false;
+                for (let i = 0; i < slots.count; i++) {
+                    const image = root.iconImage(slots.itemAt(i));
+                    if (image && image.status === Image.Loading)
+                        loading = true;
+                }
+                if ((slots.count < root.expected || pending || loading || root.waited < 1500) && root.waited < 25000)
                     return;
                 console.log("probe: items=" + slots.count);
                 for (let i = 0; i < slots.count; i++) {

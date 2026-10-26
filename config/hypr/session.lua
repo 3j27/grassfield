@@ -1,7 +1,11 @@
 -- Grassfield Desktop session (ADR-0001). Installed to /usr/share/grassfield/hypr/session.lua and started by
 -- /usr/share/wayland-sessions/grassfield.desktop through uwsm. The Omarchy session stays untouched.
 
-local config_dir = os.getenv("GRASSFIELD_CONFIG_DIR") or "/usr/share/grassfield/hypr"
+-- The modules come from this file's own directory, never from the environment: a stray GRASSFIELD_CONFIG_DIR (a developer
+-- setting leaked into the session) would have loaded another bindings.lua and system.lua, or none, and with them the lock
+-- key and the lid lock (follow-up of the re-review of bf9e280). --verify-config runs on a copy pass that copy's path.
+local self_path = debug and debug.getinfo and debug.getinfo(1, "S").source or ""
+local config_dir = self_path:match("^@(.+)/[^/]+$") or "/usr/share/grassfield/hypr"
 package.path = config_dir .. "/?.lua;" .. package.path
 
 -- Hardware/env from Omarchy (read-only). Grassfield defaults apply if it fails.
@@ -25,7 +29,9 @@ if not omarchy.ok or #omarchy.problems > 0 then
   end)
 end
 -- GF-032: the Omarchy shell must never start inside this session (updates, theme and font changes try to start it).
-omarchy.guard_path(os.getenv("GRASSFIELD_SHIM_DIR") or "/usr/lib/grassfield/omarchy-shims")
+-- The stand-ins' directory is fixed: a stray GRASSFIELD_SHIM_DIR would have let Omarchy's sleep-lock call Omarchy's own
+-- omarchy-shell instead of the stand-in that asks grassfield-shell to lock (the sleep-lock fallback, D-12).
+omarchy.guard_path("/usr/lib/grassfield/omarchy-shims")
 
 hl.env("XDG_SESSION_DESKTOP", "Grassfield")
 hl.env("GRASSFIELD_SESSION", "1")

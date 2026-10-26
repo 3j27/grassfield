@@ -21,7 +21,8 @@ fi
 tmp=$(mktemp -d "$root/.dev/i18n-cmake-run.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p -m 700 "$tmp/runtime" "$tmp/cache"
-out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u QT_QPA_PLATFORMTHEME QT_QPA_PLATFORM=offscreen \
+# A dev session (GRASSFIELD_DEV=1, no GRASSFIELD_SESSION): the loader honours GRASSFIELD_TRANSLATIONS_DIR only there.
+out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u QT_QPA_PLATFORMTHEME -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 QT_QPA_PLATFORM=offscreen \
   QML_IMPORT_PATH="$dest/usr/lib/qt6/qml" GRASSFIELD_TRANSLATIONS_DIR="$dest/usr/share/grassfield/translations" GRASSFIELD_LANG=en \
   XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" timeout 60 qs -p tests/shell/i18n_live --no-color 2>&1) \
   || { echo "$out"; echo "FAIL: i18n-cmake: i18n_live"; exit 1; }

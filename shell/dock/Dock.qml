@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
@@ -76,7 +77,7 @@ Scope {
     // pointer resting on it for Tokens.dockRevealDwell makes that output the Dock's (`moveDockTo`). It starts on the focused output.
     property string chosenScreen: ""
     // Development sessions name their primary output (GRASSFIELD_DESKTOP_SCREEN, as the desktop icons do); the Dock starts there.
-    readonly property string startHint: Quickshell.env("GRASSFIELD_DESKTOP_SCREEN") || ""
+    readonly property string startHint: Mode.devValue("DESKTOP_SCREEN")
     readonly property var screenNames: Quickshell.screens.map(s => s.name)
     readonly property string dockScreen: Geometry.dockScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint)
 
@@ -1923,13 +1924,13 @@ Scope {
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
-                                    color: Appearance.colors.accent
+                                    color: Appearance.colors.selection
 
                                     Icon {
                                         anchors.centerIn: parent
                                         size: Math.round(tile.iconPx * Tokens.dockTrashIconScale)
                                         name: "apps"
-                                        color: Appearance.colors.accentText
+                                        color: Appearance.colors.selectionText
                                     }
                                 }
 

@@ -1,8 +1,8 @@
 import QtQuick
 import Grassfield.Ui
 
-// Rounded inset list: rows (SettingsRow, or any Item) are stacked with a separator between them.
-// An optional caption sits above the list, a footnote below it.
+// Rounded inset list: rows (SettingsRow, or any Item) are stacked with a separator between them, on a light group fill
+// without a border (macOS 27). An optional caption (a bold section header) sits above the list, a footnote below it.
 Item {
     id: root
 
@@ -22,14 +22,14 @@ Item {
         textFormat: Text.PlainText
         visible: root.caption !== ""
         width: parent.width
-        leftPadding: Tokens.spacingMd
+        leftPadding: Tokens.settingsRowInset
         // The gap below is padding, not a height bound to implicitHeight: that self-reference looped on rewraps
         // (real session 2026-10-22, "Binding loop detected for property height").
         bottomPadding: Tokens.spacingSm
         text: root.caption
-        color: Appearance.colors.textSecondary
+        color: Appearance.colors.text
         font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyCaptionSize
+        font.pixelSize: Tokens.typographyBodySize
         font.weight: Tokens.typographyMenuBoldWeight
         wrapMode: Text.Wrap
     }
@@ -37,8 +37,9 @@ Item {
     Rectangle {
         anchors.fill: column
         radius: Tokens.radiusMenu
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: 1
+        color: Appearance.colors.groupFill
+        // Increase Contrast outlines the group; otherwise the fill alone separates it (macOS 27).
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -56,8 +57,8 @@ Item {
         topPadding: Tokens.spacingXs
         bottomPadding: Tokens.spacingSm
         width: parent.width
-        leftPadding: Tokens.spacingMd
-        rightPadding: Tokens.spacingMd
+        leftPadding: Tokens.settingsRowInset
+        rightPadding: Tokens.settingsRowInset
         text: root.footnote
         color: Appearance.colors.textSecondary
         font.family: Appearance.fontFamily

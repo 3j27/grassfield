@@ -226,9 +226,10 @@ clam=packaging/shims/omarchy-hyprland-monitor-clamshell
 printf '#!/bin/sh\necho "lid $*" >>"$STUB_LOG"\n' >"$tmp/sbin/grassfield-lid"
 chmod +x "$tmp/sbin/grassfield-lid"
 : >"$tmp/log"
-env -i PATH="$tmp/sbin:/usr/bin:/bin" STUB_LOG="$tmp/log" GRASSFIELD_LID_TOOL="$tmp/sbin/grassfield-lid" sh "$clam" && rc=0 || rc=$?
+# A dev session: the stand-in honours GRASSFIELD_LID_TOOL only there (the real-session case: lock_request_env.sh).
+env -i PATH="$tmp/sbin:/usr/bin:/bin" STUB_LOG="$tmp/log" GRASSFIELD_DEV=1 GRASSFIELD_LID_TOOL="$tmp/sbin/grassfield-lid" sh "$clam" && rc=0 || rc=$?
 [[ $rc == 0 && $(cat "$tmp/log") == "lid reconcile" ]] && pass "clamshell stand-in: runs grassfield-lid reconcile, nothing else" || bad "clamshell stand-in: rc $rc, calls '$(cat "$tmp/log")'"
-env -i PATH="/usr/bin:/bin" GRASSFIELD_LID_TOOL="$tmp/none" sh "$clam" && pass "clamshell stand-in: without grassfield-lid it does nothing and succeeds" || bad "clamshell stand-in: fails without grassfield-lid"
+env -i PATH="/usr/bin:/bin" GRASSFIELD_DEV=1 GRASSFIELD_LID_TOOL="$tmp/none" sh "$clam" && pass "clamshell stand-in: without grassfield-lid it does nothing and succeeds" || bad "clamshell stand-in: fails without grassfield-lid"
 grep -v '^#' "$clam" | grep -q "hyprctl\|monitors.lua\|toggles" && bad "clamshell stand-in: touches monitors itself" || pass "clamshell stand-in: never touches monitors itself"
 
 # --- package ---

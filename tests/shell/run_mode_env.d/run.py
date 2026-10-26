@@ -75,6 +75,10 @@ def jobs(names):
         out.append((f"dirs: {v['name']}", v["env"], {"configDir": v["configDir"], "stateDir": v["stateDir"]}))
     for v in VECTORS["plumbing"]:
         out.append((f"plumbing: {v['name']}", v["env"], {}))
+    for v in VECTORS["homes"]:
+        out.append((f"homes: {v['name']}", v["env"], {"stateHome": v["stateHome"]}))
+    for v in VECTORS["traces"]:
+        out.append((f"traces: {v['name']}", v["env"], {"appsTrace": v["appsTrace"]}))
     return out
 
 
