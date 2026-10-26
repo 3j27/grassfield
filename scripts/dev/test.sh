@@ -121,7 +121,7 @@ if want headless && compgen -G "tests/security/tst_*.qml" >/dev/null; then
   ((rc == 0)) || status=1
   record_run headless "tests/security (qmltestrunner)" "$rc" "PASS"
 fi
-# Quickshell-level tests (real FileView/JsonAdapter, reloads): each tests/shell/<name>/shell.qml and
+# Quickshell-level tests (real stores and files, reloads, hostile files): each tests/shell/<name>/shell.qml and
 # tests/security/<name>/shell.qml prints PASS/FAIL. Run offscreen and detached from any compositor session.
 # The i18n tests import the Grassfield.I18n plugin and read the compiled catalogs.
 if want headless; then
