@@ -115,6 +115,13 @@ Asked as questions with options after lot 2; the details are in the action plan,
 - Symbols: heavier everywhere (an ADR-0003 amendment).
 - Menu shortcuts: macOS symbols on a Mac, the text form on a PC (automatic, with a setting).
 
+After the F1 validation against macOS 27 (2026-10-26, `docs/audits/ui-finesse-2026-10-25/f1-macos27.md`):
+- Apps and Search take macOS 27's separate search capsule above their panel.
+- Notification Center: the "Notification Center" title row with a round x, and collapsed groups drawn as stacks; the
+  timestamps stay.
+- Dark glass keeps the near-black tint (G-6 is not pursued: a lifted grey fails A2 with today's colours).
+- The Dock shelf keeps 0.05 (macOS 26 glass).
+
 ## Plan (phases; each is a reviewed slice with `just check`, tests and `just shot`)
 Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/action-plan.md`.
 
