@@ -299,6 +299,9 @@ Window {
                 Accessible.searchEdit: true
 
                 Keys.onPressed: event => {
+                    // Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
+                    if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                        list.keyboardRing = true;
                     if (event.key === Qt.Key_Down) {
                         list.forceActiveFocus();
                         event.accepted = true;
@@ -346,12 +349,15 @@ Window {
             Accessible.role: Accessible.List
             Accessible.name: qsTr("Sections")
 
-            // The focus ring is for the keyboard (macOS): a click on a row takes the focus without it.
+            // The focus ring is for the keyboard (macOS): it appears with the first key that moves the focus or the selection
+            // (Tab, Down, Return in the search field; the arrows here) and goes with the focus, so a click on a row or the focus
+            // coming back when the window is activated again shows none.
             property bool keyboardRing: false
-            property bool pointerFocus: false
-            onActiveFocusChanged: keyboardRing = activeFocus && !pointerFocus
+            onActiveFocusChanged: if (!activeFocus)
+                keyboardRing = false
 
             Keys.onPressed: event => {
+                keyboardRing = true;
                 if (event.key === Qt.Key_Up) {
                     root.stepSection(-1);
                     event.accepted = true;
@@ -438,10 +444,8 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        list.pointerFocus = true;
-                        list.forceActiveFocus();
-                        list.pointerFocus = false;
                         list.keyboardRing = false;
+                        list.forceActiveFocus();
                         root.select(entry.modelData.id);
                     }
                 }
