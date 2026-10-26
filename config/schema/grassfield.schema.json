@@ -572,6 +572,39 @@
         }
       }
     },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Formats of dates, times and numbers (Settings > General > Language & Region). The language itself is Omarchy's (omarchy-language).",
+      "properties": {
+        "formats": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "pattern": "^(auto|[a-z]{2,3}(_[A-Z][a-z]{3})?_([A-Z]{2}|[0-9]{3}))$",
+          "description": "The locale whose formats the shell uses for dates, times and numbers (\"fr_CH\": Swiss French). \"auto\" (default) follows the language. The language's words stay; only the formats change.",
+          "default": "auto",
+          "x-grassfield": {
+            "rule": "localeName"
+          }
+        },
+        "firstDayOfWeek": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday"
+          ],
+          "description": "The first day of the week in the calendars. \"auto\" (default) follows the formats.",
+          "default": "auto"
+        }
+      }
+    },
     "icons": {
       "type": "object",
       "additionalProperties": false,

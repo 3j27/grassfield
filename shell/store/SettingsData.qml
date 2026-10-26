@@ -17,6 +17,7 @@ JsonAdapter {
     property MenubarConfig menubar: MenubarConfig {}
     property AccentConfig accent: AccentConfig {}
     property KeyboardConfig keyboard: KeyboardConfig {}
+    property RegionConfig region: RegionConfig {}
     property IconsConfig icons: IconsConfig {}
     property PointerConfig pointer: PointerConfig {}
     property WallpaperConfig wallpaper: WallpaperConfig {}
@@ -110,6 +111,11 @@ JsonAdapter {
 
     component KeyboardConfig: JsonObject {
         property var shortcutStyle: "automatic"
+    }
+
+    component RegionConfig: JsonObject {
+        property var formats: "auto"
+        property var firstDayOfWeek: "auto"
     }
 
     component IconsConfig: JsonObject {

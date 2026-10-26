@@ -58,6 +58,8 @@ Singleton {
 
     readonly property string accentColor: store.accentColor
     readonly property string keyboardShortcutStyle: store.keyboardShortcutStyle
+    readonly property string regionFormats: store.regionFormats
+    readonly property string regionFirstDayOfWeek: store.regionFirstDayOfWeek
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
     readonly property string folderColor: store.folderColor

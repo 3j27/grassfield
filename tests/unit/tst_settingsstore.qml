@@ -78,7 +78,7 @@ TestCase {
                 compare(r.min, s.minimum, path);
             if (s.maximum !== undefined)
                 compare(r.max, s.maximum, path);
-            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" || r.type === "notificationStyles" || r.type === "pathList" ? "array" : r.type, s.type, path);
+            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "localeName" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" || r.type === "notificationStyles" || r.type === "pathList" ? "array" : r.type, s.type, path);
             // Defaults satisfy their own rule.
             compare(Store.validate(path, Store.DEFAULTS[path]), "", path);
         }
@@ -119,6 +119,14 @@ TestCase {
         for (const m of ["automatic", "mac", "pc"])
             compare(Store.validate("keyboard.shortcutStyle", m), "");
         verify(Store.validate("keyboard.shortcutStyle", "windows") !== "");
+        compare(Store.DEFAULTS["region.formats"], "auto");
+        for (const m of ["auto", "fr_CH", "en_GB", "es_419", "sr_Latn_RS"])
+            compare(Store.validate("region.formats", m), "");
+        for (const m of ["", "fr", "fr-CH", "fr_CH.UTF-8", "fr_CH\n", "../x", "FR_ch"])
+            verify(Store.validate("region.formats", m) !== "");
+        compare(Store.DEFAULTS["region.firstDayOfWeek"], "auto");
+        compare(Store.validate("region.firstDayOfWeek", "monday"), "");
+        verify(Store.validate("region.firstDayOfWeek", "lundi") !== "");
         for (const m of ["always", "desktop", "fullscreen", "never"])
             compare(Store.validate("menubar.autoHide", m), "");
         verify(Store.validate("menubar.autoHide", "sometimes") !== "");
