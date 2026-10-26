@@ -62,3 +62,13 @@ function stateDir(stateHome, xdgStateHome, home) {
         return stateHome;
     return (xdgStateHome ? xdgStateHome : home + "/.local/state") + "/grassfield";
 }
+
+// GRASSFIELD_APPS_TRACE (always honoured): launcher tracing, exactly "1".
+function appsTrace(value) {
+    return value === "1";
+}
+
+// A raw home override such as GRASSFIELD_STATE_HOME (always honoured): its value, "" when unset or empty.
+function homeOverride(value) {
+    return value ? value : "";
+}

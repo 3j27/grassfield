@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
@@ -21,7 +22,7 @@ import "KeyboardFocus.js" as Focus
 // kicker and the drop on pointer leave go away and the desktop keeps the keyboard until another click (macOS Finder);
 // the file keys are enabled. Live: the capability can be withdrawn (plugin unload) at any time.
 Variants {
-    model: Quickshell.screens.filter(s => s.name === (Quickshell.env("GRASSFIELD_DESKTOP_SCREEN") || Quickshell.screens[0].name))
+    model: Quickshell.screens.filter(s => s.name === (Mode.devValue("DESKTOP_SCREEN") || Quickshell.screens[0].name))
 
     // qmllint disable uncreatable-type
     PanelWindow {

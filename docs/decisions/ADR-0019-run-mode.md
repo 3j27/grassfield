@@ -70,6 +70,14 @@ That call is the one exception to "only `Mode` reads `GRASSFIELD_*`" in QML; M8'
 exactly it in the security modules. Non-security modules use `Mode`. `tests/security/ipc_inventory.sh` holds both forms
 to the definitions.
 
+Amendment (slice M4, 2026-10-25): the QML half of the enforcement exists as `tests/ci/run_mode.py` (in `check-shell`, selftest in
+`just test`). It reads every .qml file outside `shell/lib` from Qt's syntax tree and refuses any string literal that starts with
+`GRASSFIELD_` and any `env` call whose name is not one string literal; a .js file that imports Quickshell is refused. The security
+exception is by name: `shell/security/**` may spell `GRASSFIELD_DEV`, `GRASSFIELD_SESSION` and (the lock) `GRASSFIELD_DEV_ALLOW_PAM`, and
+nothing else; it goes away when the packaged shell's import path is fixed. `Mode` also offers `stateHome` (the raw
+`GRASSFIELD_STATE_HOME`, for Apps and Capabilities) and `appsTrace`. The C++ half (`qEnvironmentVariable("GRASSFIELD_` outside
+`apps/runmode.h`) stays with M6/M8.
+
 ## macOS reference
 A debug default never changes a shipped app's behaviour unless the developer build reads it; there is no "developer
 mode" that disables Quick Settings toggles, power actions or global menus. The real session simply works.

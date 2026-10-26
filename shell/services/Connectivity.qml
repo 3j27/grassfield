@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Quickshell.Networking
 import Grassfield.Ui
@@ -83,7 +84,7 @@ Singleton {
 
     // A GRASSFIELD_DEV session runs on the owner's machine: radio and connection changes are
     // never executed there (the Control Center shows a "dev: not applied" note instead).
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
     signal devSuppressed(string what)
 
     function guarded(what: string): bool {
@@ -156,13 +157,7 @@ Singleton {
     readonly property bool airplane: Airplane.reconcile(airplaneState, radiosNow).on
     readonly property bool airplaneAvailable: rfkillMode || wifiDevice !== null || BluetoothState.available
     readonly property string airplaneFile: stateDir + "/airplane.json"
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
 
     // Written 0600 in a 0700 directory (the repo convention for state files).
     function saveAirplane(state: var): void {
