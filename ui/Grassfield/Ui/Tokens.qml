@@ -97,6 +97,28 @@ QtObject {
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
     })
 
+    // color roles, selectionDark appearance
+    readonly property var colorSelectionDark: ({
+        multicolor: "#2E8049",  // dark-appearance selection fill, multicolor: the Grassfield green: the owner's pick #2E8049 (white 4.88:1; lot 1 used the light accent #26763F) [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        multicolorText: "#FFFFFF",  // text on the dark-appearance multicolor selection fill (A2: tests/visual/test_contrast_tokens.py)
+        blue: "#2A6CDF",  // dark-appearance selection fill, blue: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        blueText: "#FFFFFF",  // text on the dark-appearance blue selection fill (A2: tests/visual/test_contrast_tokens.py)
+        purple: "#8B57CB",  // dark-appearance selection fill, purple: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        purpleText: "#FFFFFF",  // text on the dark-appearance purple selection fill (A2: tests/visual/test_contrast_tokens.py)
+        pink: "#CD3375",  // dark-appearance selection fill, pink: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        pinkText: "#FFFFFF",  // text on the dark-appearance pink selection fill (A2: tests/visual/test_contrast_tokens.py)
+        red: "#D23730",  // dark-appearance selection fill, red: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        redText: "#FFFFFF",  // text on the dark-appearance red selection fill (A2: tests/visual/test_contrast_tokens.py)
+        orange: "#B05A09",  // dark-appearance selection fill, orange: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        orangeText: "#FFFFFF",  // text on the dark-appearance orange selection fill (A2: tests/visual/test_contrast_tokens.py)
+        yellow: "#E0B000",  // dark-appearance selection fill, yellow: yellow keeps its light pair (dark text): a lighter shade would only lower the contrast [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        yellowText: "#241C00",  // text on the dark-appearance yellow selection fill (A2: tests/visual/test_contrast_tokens.py)
+        green: "#408014",  // dark-appearance selection fill, green: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        greenText: "#FFFFFF",  // text on the dark-appearance green selection fill (A2: tests/visual/test_contrast_tokens.py)
+        graphite: "#6C717D",  // dark-appearance selection fill, graphite: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        graphiteText: "#FFFFFF"  // text on the dark-appearance graphite selection fill (A2: tests/visual/test_contrast_tokens.py)
+    })
+
     // generic family: code and plain text views (Preview) [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property string typographyMonoFamily: "monospace"
     // ADR-0003 candidate (OFL); owner installs it

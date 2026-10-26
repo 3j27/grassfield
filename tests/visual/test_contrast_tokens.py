@@ -12,7 +12,7 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   accent         the solid accent colour
-  selection      the solid selection colour: the light appearance's accent in both appearances (Appearance.accentedDark/Light,
+  selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
   rename-field   colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper (the inline rename field)
   bar-light-tone / bar-dark-tone  the adaptive menu bar (shell/services/BarTone.qml): the opaque wallpaper itself, only for the
@@ -103,12 +103,17 @@ class Tokens:
 
     def color(self, palette, appearance, name):
         # palette "colors" follows the appearance; "darkColors" / "lightColors" are always the dark / light palette.
-        # selection / selectionText are derived, not tokens: the light palette's accent and accentText in both appearances
-        # (mirror of Accent.withSelection).
-        if name in ("selection", "selectionText"):
-            return self.color("lightColors", "light", "accent" if name == "selection" else "accentText")
+        # selection / selectionText (mirror of Accent.selectionPair): the light palette's accent and accentText in the light
+        # appearance, the color.selectionDark pair of the accent in the dark one.
         fixed = {"darkColors": "dark", "lightColors": "light"}
+        if name in ("selection", "selectionText"):
+            if fixed.get(palette, appearance) == "light":
+                return self.color("lightColors", "light", "accent" if name == "selection" else "accentText")
+            return hex_rgb(self.path("color.selectionDark.%s%s" % (self.accent_name(), "Text" if name == "selectionText" else "")))
         return hex_rgb(self.path("color.%s.%s" % (fixed.get(palette, appearance), name)))
+
+    def accent_name(self):
+        return "multicolor"
 
     def number(self, ref):
         return float(ref) if isinstance(ref, (int, float)) else float(self.path(ref))
@@ -292,6 +297,9 @@ class AccentTokens(Tokens):
     def __init__(self, data, accent):
         super().__init__(data)
         self.accent = accent
+
+    def accent_name(self):
+        return self.accent
 
     def color(self, palette, appearance, name):
         if self.accent != "multicolor" and name in ("accent", "accentText"):
@@ -529,13 +537,24 @@ class ContrastTokens(unittest.TestCase):
                 self.assertIn(name + "Text", roles)
             self.assertEqual(len(roles), 2 * (len(self.ACCENTS) - 1))
 
-    def test_selection_is_the_light_accent_with_its_text_in_both_appearances(self):
-        # macOS keeps white text on its accent fill in both appearances (ADR-0024): the selection pair is the light accent's.
+    def test_selection_pair_per_appearance(self):
+        # macOS keeps white text on its accent fill in both appearances (ADR-0024): the light accent's pair in the light
+        # appearance; in the dark one the color.selectionDark shade (owner decision 2026-10-26: #2E8049 for the Grassfield
+        # green), never darker than the light accent, white at 4.85:1 or more wherever the light pair has white text.
+        roles = self.tok.data["color"]["selectionDark"]
+        self.assertEqual(sorted(roles), sorted([n for n in self.ACCENTS] + [n + "Text" for n in self.ACCENTS]))
+        self.assertEqual(self.tok.path("color.selectionDark.multicolor"), "#2E8049")
         for accent in self.ACCENTS:
             tok = AccentTokens(self.tok.data, accent)
-            for ap in APPEARANCES:
-                self.assertEqual(tok.color("colors", ap, "selection"), tok.color("lightColors", "light", "accent"), accent)
-                self.assertEqual(tok.color("colors", ap, "selectionText"), tok.color("lightColors", "light", "accentText"), accent)
+            light = tok.color("lightColors", "light", "accent")
+            light_text = tok.color("lightColors", "light", "accentText")
+            self.assertEqual(tok.color("colors", "light", "selection"), light, accent)
+            self.assertEqual(tok.color("colors", "light", "selectionText"), light_text, accent)
+            fill = tok.color("colors", "dark", "selection")
+            text = tok.color("colors", "dark", "selectionText")
+            self.assertGreaterEqual(lum(fill), lum(light), accent)
+            self.assertGreaterEqual(wcag(text, fill), 4.85 if light_text == (255, 255, 255) else 4.5, accent)
+            self.assertEqual(text == (255, 255, 255), light_text == (255, 255, 255), accent)
 
     def test_search_selection_is_inside_the_material_fill_overlay(self):
         # The selected Search row is a neutral fill (colors.fill at search.selectionFillOpacity) under ordinary text (ADR-0024):

@@ -45,9 +45,9 @@ QtObject {
     // The palette of the appearance with the chosen accent applied (accent and accentText), live.
     readonly property var baseColors: dark ? accentedDark : accentedLight
     // Both carry `selection` and `selectionText`: the fill and the text of a selected row, a default button or a checked box,
-    // the light accent with its text in both appearances (Accent.withSelection).
-    readonly property var accentedDark: Accent.withSelection(Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast), accentedLightBase)
-    readonly property var accentedLight: Accent.withSelection(Accent.contrastBoost(accentedLightBase, increaseContrast), accentedLightBase)
+    // white on the accent in both appearances (Accent.selectionPair).
+    readonly property var accentedDark: Accent.withSelection(Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast), Accent.selectionPair(accentSetting, true, accentedLightBase, Tokens))
+    readonly property var accentedLight: Accent.withSelection(Accent.contrastBoost(accentedLightBase, increaseContrast), Accent.selectionPair(accentSetting, false, accentedLightBase, Tokens))
     readonly property var accentedLightBase: Accent.apply(Tokens.colorLight, accentSetting, false, Tokens)
     // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
     readonly property color focusRingColor: Accent.focusRing(baseColors.accent, baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
