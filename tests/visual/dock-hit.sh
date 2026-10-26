@@ -4,9 +4,11 @@
 # top, the middle and the bottom of a magnified icon (cross axis: "top" is the far side from the screen edge, the part that sticks
 # out of the tile box), for magnification 1.6 and 2.5 on a Dock at the bottom, left and right, with auto-hide on and magnification
 # on. Each click must run the tap handler of exactly the tile whose drawn icon holds the pointer (`dock iconrect`), once, no other.
-# The apps are never started: `dock forceinterrupt` makes every app tile refuse its activation after the tap handler ran (the
-# line "dock-launch: tapped <tile>" comes first). One more click, on the Apps tile (no interruption), must open the Apps panel
-# from the top of its magnified icon.
+# Nothing is started or opened by the clicks: `dock noactivate` (fixtures) makes the Dock's activation a no-op after the tap handler
+# logged "dock-launch: tapped <tile key>" (the key form `dock tiles` prints). One more click, on the Apps tile (key "grid") with
+# activation back on, must open the Apps panel from the top of its magnified icon. The shell runs with the fixture HOME
+# (.dev/apps-home/home, scripts/dev/shell-run.sh) and the test seeds a throwaway Downloads there: the owner's files are never read
+# (the test stops, exit 2, when the shell's HOME is not the fixture one).
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-hit.sh [edge ...] [-- scale ...]     default: bottom left right, scales 1.6 2.5
 # Exit status 1 when a check fails.
@@ -16,7 +18,7 @@ set +e
 was_running=0
 vs_nested_running && was_running=1
 cleanup() {
-  vs_ipc dock forceinterrupt false >/dev/null 2>&1 || true
+  vs_ipc dock noactivate false >/dev/null 2>&1 || true
   vs_nested_running && vs_kill_clients || true
   (( was_running )) || "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
   return 0
@@ -39,18 +41,25 @@ checks=0
 pass() { checks=$((checks + 1)); echo "PASS: $*"; }
 fail() { checks=$((checks + 1)); fails=$((fails + 1)); echo "FAIL: $*"; }
 
-vs_session en
+fix_home=$VS_DEV/apps-home/home
+mkdir -p "$fix_home/Downloads"
+printf 'fixture\n' > "$fix_home/Downloads/dock-hit-fixture.txt"
+vs_session en || { echo "dock-hit: the nested session did not come up"; exit 2; }
 vs_reset dark 0.25
+shell_pid=$(dev_live_pid "$VS_DEV/shell.pid")
+shell_home=$(tr '\0' '\n' < "/proc/$shell_pid/environ" 2>/dev/null | sed -n 's/^HOME=//p')
+[[ -n $shell_pid && $shell_home == "$fix_home" ]] || { echo "dock-hit: the shell's HOME is '$shell_home', not the fixture $fix_home: refusing to run (no owner files)"; exit 2; }
 size=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | "\(.width) \(.height)"')
 read -r W H <<<"$size"
 [[ -n $W && -n $H ]] || { echo "dock-hit: no output $VS_OUTPUT"; exit 2; }
 echo "dock-hit: $VS_OUTPUT ${W}x${H}; tiles: $(vs_ipc dock tiles)"
 vs_ipc dock autohide true >/dev/null
-vs_ipc dock forceinterrupt true >/dev/null
+vs_ipc dock noactivate true >/dev/null
 
 # Number of log lines now: what a click wrote is what comes after.
 mark() { wc -l < "$log"; }
-tapped_since() { tail -n +"$(($1 + 1))" "$log" | grep -a "dock-launch: tapped " | awk '{print $3}'; }
+# The keys tapped after line $1, one per line: the log lines carry a time stamp and a level before the message.
+tapped_since() { tail -n +"$(($1 + 1))" "$log" | grep -a "dock-launch: tapped " | sed 's/.*dock-launch: tapped //; s/ [0-9]*$//'; }
 
 # rects: "x y w h" of every tile's drawn icon, one line per tile index ("" for a separator).
 rects() {
@@ -88,7 +97,7 @@ for edge in "${edges[@]}"; do
     picks=()
     for i in $(seq 0 $((${#base[@]} - 1))); do
       k=$(jq -r --argjson i "$i" '.[$i]' <<<"$keys")
-      [[ -n ${base[$i]} && $k != apps && $k != trash && $k != separator && $k != divider ]] && picks+=("$i")
+      [[ -n ${base[$i]} && $k != grid && $k != trash && $k != separator && $k != divider ]] && picks+=("$i")
     done
     (( ${#picks[@]} >= 2 )) || { fail "$edge $scale: fewer than 2 app tiles ($keys)"; continue; }
     vs_ipc dock magnify "$scale" true >/dev/null
@@ -141,9 +150,9 @@ for edge in "${edges[@]}"; do
       done
     done
     # The Apps tile (no interruption): a real activation from the top of its magnified icon.
-    ai=$(jq -r 'index("apps")' <<<"$keys")
+    ai=$(jq -r 'index("grid")' <<<"$keys")
     if [[ $ai != null ]]; then
-      vs_ipc dock forceinterrupt false >/dev/null
+      vs_ipc dock noactivate false >/dev/null
       read -r bx by bw bh <<<"${base[$ai]}"
       if [[ $edge == bottom ]]; then m=$((bx + bw / 2)); else m=$((by + bh / 2)); fi
       c0=$((bx + bw / 2)); [[ $edge == bottom ]] && c0=$((by + bh / 2))
@@ -160,7 +169,7 @@ for edge in "${edges[@]}"; do
       st=$(vs_ipc apps status 2>/dev/null)
       vs_ipc apps close >/dev/null 2>&1
       if [[ $(jq -r '.open' <<<"$st" 2>/dev/null) == true ]]; then pass "$edge x$scale: a click on the outer part of the Apps icon opened the Apps panel ($st)"; else fail "$edge x$scale: the Apps panel did not open from the outer part of its icon (status '$st')"; fi
-      vs_ipc dock forceinterrupt true >/dev/null
+      vs_ipc dock noactivate true >/dev/null
     fi
     vs_pointer abs 960 300 >/dev/null 2>&1
     sleep 1

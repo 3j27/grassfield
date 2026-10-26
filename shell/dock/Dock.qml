@@ -318,6 +318,9 @@ Scope {
 
     function activateItem(item: var): void {
         keyboardMode = false;
+        // Fixtures only (dock noactivate): a click is logged ("dock-launch: tapped") but nothing starts, opens or comes forward.
+        if (VisualFixtures.active && root.testNoActivate)
+            return;
         if (item.kind === "apps") {
             root.appsRequested();
             return;
@@ -412,6 +415,8 @@ Scope {
     // Fixtures only (IPC dock forceinterrupt): every press on an app tile is interrupted (one interruption event, no popup, no menu) the
     // moment it goes down, so a test reaches "interrupted before the drag starts" without racing a real surface against the drag.
     property bool forceInterrupt: false
+    // Fixtures only: activateItem does nothing (the nested click test must not start apps or open stacks).
+    property bool testNoActivate: false
 
     function cancelClicks(): void {
         clickCancels++;
@@ -568,6 +573,11 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        function noactivate(on: bool): void {
+            if (VisualFixtures.active)
+                root.testNoActivate = on;
         }
 
         function forceinterrupt(on: bool): void {
@@ -1114,7 +1124,7 @@ Scope {
                 const boxes = [];
                 for (let i = 0; i < tileRepeater.count; i++) {
                     const t = tileRepeater.itemAt(i) as Item;
-                    const h = t && !t.isSeparator && t.visible ? t.hitItem : null;
+                    const h = t && !t.isSeparator && t.visible ? t.pressBox : null;
                     if (!h) {
                         boxes.push(null);
                         continue;
@@ -1491,7 +1501,7 @@ Scope {
                                 // The icon's place in the tile (it grows away from the screen edge) and the way out (bounce, hover rise).
                                 readonly property var iconPos: Geometry.iconOrigin(win.edge, win.iconSize, iconPx, win.indicatorArea)
                                 readonly property bool dragging: win.dragFrom === index
-                                readonly property Item hitItem: hit
+                                readonly property Item pressBox: hit
                                 // The button is held on an app tile: the icon darkens slightly (macOS).
                                 readonly property bool pressedDown: isApp && leftTap.pressed && ownsPress && !dragging
                                 property bool tipSuppressed: false
@@ -2267,7 +2277,7 @@ Scope {
                                         if (tile.menuByHold || !tile.ownsPress)
                                             return;
                                         if (VisualFixtures.active)
-                                            console.info("dock-launch: tapped", tile.tileId, Date.now());
+                                            console.info("dock-launch: tapped", tile.modelData.key !== undefined ? tile.modelData.key : tile.modelData.kind, Date.now());
                                         // Press taken away from the Dock (a shell surface or popup opened, the lock, or Qt cancelled it; see root.clickCancels): nothing happens.
                                         if (root.clickCancels !== tile.pressMark || tile.pressCancelled) {
                                             if (VisualFixtures.active)
