@@ -760,8 +760,7 @@ ListView {
 
         width: list.width
         leftPadding: list.panel.gutter
-        // Groups are set apart; cards of one group are one banner gap apart.
-        topPadding: item.headCount > 0 && !item.headFirst ? Tokens.spacingMd : 0
+        // Every card is one banner gap from the next, within a group and between groups (macOS: 6).
         bottomPadding: Tokens.notificationBannerGap
 
         Item {
@@ -906,8 +905,9 @@ ListView {
                 border.color: Appearance.focusRingColor
             }
 
-            // One floating card: the group header on the first card of a group, the notification, Show
-            // All / Show Less on the last visible card of a group.
+            // One floating card: the group header on the first card of a group of two or more (a single
+            // notification shows no app-name row, as on macOS), the notification, Show All / Show Less on the
+            // last visible card of a group.
             Component {
                 id: rowBody
 
@@ -931,7 +931,7 @@ ListView {
                         spacing: Tokens.spacingSm
 
                         Item {
-                            visible: item.headCount > 0
+                            visible: item.headCount > 1
                             width: parent.width
                             height: visible ? Math.max(clearGroup.height, showLess.implicitHeight) : 0
 

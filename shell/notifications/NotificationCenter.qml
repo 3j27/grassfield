@@ -155,10 +155,10 @@ Variants {
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 text: pill.text
-                color: Appearance.colors.text
+                color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyCaptionSize
-                font.weight: Tokens.typographyMenuBoldWeight
+                font.pixelSize: Tokens.notificationPillTextSize
+                font.weight: Tokens.typographyMenuWeight
             }
 
             Rectangle {

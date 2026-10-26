@@ -695,8 +695,16 @@ QtObject {
     readonly property int notificationBannerBodyLines: 4
     // estimate: older banners wait in the queue [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerMaxVisible: 5
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Notifications and widgets)
-    readonly property int notificationCloseSize: 18
+    // close badge of a banner and of a card on hover, 20 [ref: docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10]
+    readonly property int notificationCloseSize: 20
+    // action buttons: equal-width capsules 22 tall spanning the card [ref: docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10]
+    readonly property int notificationActionHeight: 22
+    // gap between the action capsules 8 [ref: docs/audits/visual-tahoe-2026-10-25.md § Banners — close, 7/10]
+    readonly property int notificationActionGap: 8
+    // timestamp 15 from the card edge: the 12-pt card padding plus 2 (measured 12.8 before) [ref: docs/audits/visual-tahoe-2026-10-25.md § Notifications column — partly close, 5/10]
+    readonly property int notificationTimeInset: 2
+    // footer pill label about 12, regular, secondary [ref: docs/audits/visual-tahoe-2026-10-25.md § Notifications column — partly close, 5/10]
+    readonly property int notificationPillTextSize: Math.round(12 * Appearance.textScale)
     // estimate: close glyph is this much smaller than its button [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCloseGlyphInset: 8
     // estimate: bell glyph is this much larger than a menu icon [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
