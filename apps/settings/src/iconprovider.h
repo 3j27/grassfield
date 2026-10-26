@@ -30,7 +30,7 @@ public:
         } else if (grassfield::settings::isIconFile(id)) {
             QString format = QFileInfo(id).suffix().toLower();
             if (format == QLatin1String("jpeg"))
-                format = QStringLiteral("jpg");
+                format = QStringLiteral("jpg"); // i18n-ignore: an image format name
             QImageReader reader(id, format.toLatin1());
             reader.setAutoDetectImageFormat(false);
             const QImage image = reader.read();
