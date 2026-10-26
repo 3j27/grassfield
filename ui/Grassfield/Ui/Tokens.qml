@@ -1355,8 +1355,52 @@ QtObject {
     readonly property int filesGalleryPreviewSize: 512
     // estimate: type icon in the gallery preview when no thumbnail exists [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryIconSize: 160
-    // estimate: gallery view info panel [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property int filesGalleryInfoWidth: 260
+    // macOS 27 Finder gallery: the preview pane 250 wide (Finder-Gallery at 2 px/pt) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewPaneWidth: 250
+    // macOS 27 Finder: the pane content 10 from both pane edges (Finder-Gallery at 2 px/pt) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewInset: 10
+    // macOS 27 Finder: the name's first line box 14 under the top of the content (ink 70 under the window top) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTop: 14
+    // own value: the large preview (icon and list views) takes at most this share of the pane height (no capture of that layout) [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewLargeShare: 0.4
+    // macOS 27 Finder gallery: the small preview beside the name, 42 wide [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumb: 42
+    // macOS 27 Finder gallery: the small preview centred in a 48 box at the content edge (the picture 13 from the pane edge) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbBox: 48
+    // macOS 27 Finder gallery: the small preview's corners, about 3 [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbRadius: 3
+    // macOS 27 Finder gallery: a soft shadow about 2 around the small preview [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbShadowBlur: 2
+    // macOS 27 Finder gallery: the shadow 0.5 lower than the picture [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewThumbShadowY: 0.5
+    // macOS 27 Finder gallery: the shadow darkens the pane fill by about 11% at the picture edge (236 to 209) [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewThumbShadowOpacity: 0.2
+    // macOS 27 Finder gallery: the name 11 after the small preview's box (69 from the pane edge) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbGap: 11
+    // macOS 27 Finder: the kind and size line right under the name's last line box [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewNameGap: 0
+    // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewNameLineHeight: 21.5
+    // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewNameLines: 3
+    // macOS 27 Finder: 10 between the name block and Information [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewSectionGap: 10
+    // macOS 27 Finder: Information rows every 23, a hairline at the top of every row but the first [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewRowHeight: 23
+    // macOS 27 Finder: 9 between the last Information row and the Tags heading row [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTagsGap: 9
+    // macOS 27 Finder: the tags field 2 under the Tags heading row [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTagsFieldGap: 2
+    // macOS 27 Finder: the tags field 33 high, the full content width, on the window background [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTagsFieldHeight: 33
+    // macOS 27 Finder: the quick actions bar, 70 at the bottom on the window background [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionsHeight: 70
+    // macOS 27 Finder: the action glyphs 16 under the top of the bar (own symbols in an 18 box from 15) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionTop: 15
+    // macOS 27 Finder: the action label 44 under the top of the bar (9 under the glyph box) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionGap: 9
+    // macOS 27 Finder: action glyphs about 15 tall (own symbols, 15 tall in an 18 box) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionIcon: 18
     // estimate: colour tag dot next to a file name [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTagDotSize: 10
     // estimate: overlap of stacked tag dots [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]

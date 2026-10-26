@@ -65,8 +65,17 @@ class FilesApp : public QObject
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY prefsChanged)
     // The gallery view shows its info panel (name, kind, dates, tags of the shown item).
     Q_PROPERTY(bool galleryInfo READ galleryInfo WRITE setGalleryInfo NOTIFY prefsChanged)
+    // View > Show Preview (Shift+Cmd+P) in the icon and list views (view/preview) and the column view's preview column
+    // (view/columnPreview); the gallery's is galleryInfo.
+    Q_PROPERTY(bool previewPane READ previewPane WRITE setPreviewPane NOTIFY prefsChanged)
+    Q_PROPERTY(bool columnPreview READ columnPreview WRITE setColumnPreview NOTIFY prefsChanged)
     // View > Show Tab Bar (Finder, Shift+Cmd+T): the tab bar stays visible with one tab (view/tabBar, every window).
     Q_PROPERTY(bool tabBarShown READ tabBarShown WRITE setTabBarShown NOTIFY prefsChanged)
+    // View > Show Path Bar (Alt+Cmd+P), Show Status Bar (Cmd+/), Show Sidebar (Ctrl+Cmd+S): hidden, hidden and shown by
+    // default, as in the Finder (decision F-11; view/pathBar, view/statusBar, view/sidebar, every window).
+    Q_PROPERTY(bool pathBarShown READ pathBarShown WRITE setPathBarShown NOTIFY prefsChanged)
+    Q_PROPERTY(bool statusBarShown READ statusBarShown WRITE setStatusBarShown NOTIFY prefsChanged)
+    Q_PROPERTY(bool sidebarShown READ sidebarShown WRITE setSidebarShown NOTIFY prefsChanged)
     // The size of the last browser window resized or closed (ADR-0026 part 1), 0 when none was kept yet. Read when a
     // window opens only: a window never follows another one's size.
     Q_PROPERTY(int windowWidth READ windowWidth NOTIFY windowSizeChanged)
@@ -123,6 +132,16 @@ public:
     void setGalleryInfo(bool on);
     bool tabBarShown() const;
     void setTabBarShown(bool on);
+    bool pathBarShown() const;
+    void setPathBarShown(bool on);
+    bool statusBarShown() const;
+    void setStatusBarShown(bool on);
+    bool sidebarShown() const;
+    void setSidebarShown(bool on);
+    bool previewPane() const;
+    void setPreviewPane(bool on);
+    bool columnPreview() const;
+    void setColumnPreview(bool on);
     int windowWidth() const;
     int windowHeight() const;
     QUrl newWindowUrl() const;
@@ -138,6 +157,11 @@ public:
     Q_INVOKABLE QVariantMap folderView(const QUrl &url) const;
     // Sets the given fields (mode, sortKey, sortDescending) for `url`; other fields stay as stored.
     Q_INVOKABLE void setFolderView(const QUrl &url, const QVariantMap &fields);
+
+    // Quick actions of the preview pane (ImageRotate): the local pictures among `urls` that Files can turn without a loss
+    // (JPEG through its orientation tag; PNG, BMP, TIFF), and the turn itself (errors in the banner).
+    Q_INVOKABLE QList<QUrl> rotatableImages(const QList<QUrl> &urls) const;
+    Q_INVOKABLE void rotateImages(const QList<QUrl> &urls, bool clockwise);
 
     // Makes `parent` the owner of `object` (QObject parent). A tab moved to another window must belong to it: setting an
     // item's visual parent in QML keeps its first owner, whose destruction would take the tab along.
@@ -200,6 +224,10 @@ public:
     Q_INVOKABLE void toggleColorTag(const QList<QUrl> &urls, int index);
     // Adds `tag` (a stored tag name) to the local items among `urls` (a drop on a sidebar tag).
     Q_INVOKABLE void addTag(const QList<QUrl> &urls, const QString &tag);
+    // Adds a tag the user typed (TagLogic::typedTag: a colour's shown name is that colour tag).
+    Q_INVOKABLE void addTypedTag(const QList<QUrl> &urls, const QString &typed);
+    // Removes `tag` (a stored tag name) from the local items among `urls`.
+    Q_INVOKABLE void removeTag(const QList<QUrl> &urls, const QString &tag);
     // A tag's shown name (colour tags translated).
     Q_INVOKABLE QString tagName(const QString &tag) const;
     // Palette index of a colour tag, -1 for other tags.

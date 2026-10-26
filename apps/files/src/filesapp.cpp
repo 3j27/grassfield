@@ -7,6 +7,7 @@
 #include "launchguard.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
+#include "imagerotate.h"
 #include "placesmodel.h"
 #include "taglogic.h"
 #include "tagstore.h"
@@ -31,6 +32,7 @@
 #include <memory>
 
 #include <KApplicationTrader>
+#include <KDirNotify>
 #include <KIO/ApplicationLauncherJob>
 #include <KIO/CopyJob>
 #include <KIO/DeleteJob>
@@ -395,6 +397,105 @@ void FilesApp::setTabBarShown(bool on)
         return;
     m_settings.setValue(QStringLiteral("view/tabBar"), on);
     emit prefsChanged();
+}
+
+bool FilesApp::pathBarShown() const
+{
+    return m_settings.value(QStringLiteral("view/pathBar"), false).toBool();
+}
+
+void FilesApp::setPathBarShown(bool on)
+{
+    if (on == pathBarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/pathBar"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::statusBarShown() const
+{
+    return m_settings.value(QStringLiteral("view/statusBar"), false).toBool();
+}
+
+void FilesApp::setStatusBarShown(bool on)
+{
+    if (on == statusBarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/statusBar"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::sidebarShown() const
+{
+    return m_settings.value(QStringLiteral("view/sidebar"), true).toBool();
+}
+
+void FilesApp::setSidebarShown(bool on)
+{
+    if (on == sidebarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/sidebar"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::previewPane() const
+{
+    return m_settings.value(QStringLiteral("view/preview"), false).toBool();
+}
+
+void FilesApp::setPreviewPane(bool on)
+{
+    if (on == previewPane())
+        return;
+    m_settings.setValue(QStringLiteral("view/preview"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::columnPreview() const
+{
+    return m_settings.value(QStringLiteral("view/columnPreview"), true).toBool();
+}
+
+void FilesApp::setColumnPreview(bool on)
+{
+    if (on == columnPreview())
+        return;
+    m_settings.setValue(QStringLiteral("view/columnPreview"), on);
+    emit prefsChanged();
+}
+
+QList<QUrl> FilesApp::rotatableImages(const QList<QUrl> &urls) const
+{
+    QList<QUrl> out;
+    static const QMimeDatabase mimes;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile())
+            continue;
+        const QFileInfo fi(url.toLocalFile());
+        if (fi.isSymLink() || !fi.isFile() || !fi.isWritable())
+            continue;
+        if (ImageRotate::methodFor(mimes.mimeTypeForFile(fi).name().toLatin1()) != ImageRotate::Method::None)
+            out.append(url);
+    }
+    return out;
+}
+
+void FilesApp::rotateImages(const QList<QUrl> &urls, bool clockwise)
+{
+    static const QMimeDatabase mimes;
+    QList<QUrl> changed;
+    for (const QUrl &url : rotatableImages(urls)) {
+        const QString path = url.toLocalFile();
+        const QString error = ImageRotate::rotate(path, mimes.mimeTypeForFile(path).name().toLatin1(), clockwise);
+        if (!error.isEmpty()) {
+            emit operationFailed(tr("“%1” couldn’t be turned: %2.").arg(FileLogic::displayName(QFileInfo(path).fileName()), error));
+            continue;
+        }
+        changed.append(url);
+    }
+    // Listings and thumbnails follow (KDirLister refreshes the items, the thumbnails are made again).
+    if (!changed.isEmpty())
+        org::kde::KDirNotify::emitFilesChanged(changed);
 }
 
 namespace
@@ -1146,6 +1247,17 @@ void FilesApp::addTag(const QList<QUrl> &urls, const QString &tag)
     if (tag.trimmed().isEmpty())
         return;
     rewriteTags(urls, tag, true);
+}
+
+void FilesApp::addTypedTag(const QList<QUrl> &urls, const QString &typed)
+{
+    addTag(urls, TagLogic::typedTag(typed));
+}
+
+void FilesApp::removeTag(const QList<QUrl> &urls, const QString &tag)
+{
+    if (!tag.trimmed().isEmpty())
+        rewriteTags(urls, tag, false);
 }
 
 void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)

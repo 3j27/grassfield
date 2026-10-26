@@ -26,6 +26,9 @@ Window {
     // Where this window's tabs live (Main.qml moves a tab into another window's host).
     readonly property alias tabHost: tabHost
     readonly property bool tabBarVisible: TabsLogic.barVisible(win.app.tabBarShown, win.tabs.length)
+    // How far a preview pane's fill reaches up behind the toolbar (macOS 27: to the top of the window); not past the tab
+    // bar or a banner.
+    readonly property real previewExtension: win.tabBarVisible || banner.visible ? 0 : tabHost.y
     property string notice: ""
     // ADR-0015: the window draws its own chrome; the apps' tagger (apps/windowchrome.h) names its role for the
     // compositor, whose plugin then draws no titlebar on it.
@@ -332,7 +335,7 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
-        sequences: ["Ctrl+Down", "Alt+Down"]
+        sequences: ["Ctrl+O", "Ctrl+Down", "Alt+Down"]
         onActivated: win.tab.openSelection()
         onActivatedAmbiguously: activated()
     }
@@ -446,8 +449,23 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        sequence: "Ctrl+Alt+P"
+        onActivated: win.app.pathBarShown = !win.app.pathBarShown
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+/"
+        onActivated: win.app.statusBarShown = !win.app.statusBarShown
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Meta+S"
+        onActivated: win.app.sidebarShown = !win.app.sidebarShown
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
         sequence: "Ctrl+Shift+P"
-        onActivated: win.tab.toggleGalleryInfo()
+        onActivated: win.tab.togglePreview()
         onActivatedAmbiguously: activated()
     }
 
@@ -492,9 +510,11 @@ Window {
             win.menuLayer.open(items, x, y, id => win.tab.navigate(segments[parseInt(id)].url, true), win.tab.view, false);
     }
 
+    // View > Hide Sidebar (Ctrl+Cmd+S): the lights move into the toolbar (macOS).
     Sidebar {
         id: sidebar
-        width: Tokens.filesSidebarWidth
+        visible: win.app.sidebarShown
+        width: visible ? Tokens.filesSidebarWidth : 0
         height: parent.height
         app: win.app
         tab: win.tab
@@ -504,6 +524,7 @@ Window {
     // The window lights in the corner of the sidebar (ADR-0015); the toolbar over the content holds the title.
     UnifiedToolbar {
         id: sidebarToolbar
+        visible: sidebar.visible
         width: sidebar.width
         window: win
         showTitle: false
@@ -514,16 +535,18 @@ Window {
     Item {
         id: main
         x: sidebar.width
-        width: parent.width - sidebar.width
+        width: parent.width - x
         height: parent.height
 
         // Toolbar: the title and the app's items in the unified toolbar of grassfield-ui (ADR-0015); the lights are in the
         // sidebar's corner (sidebarToolbar above).
         UnifiedToolbar {
             id: toolbar
+            // Over the tab's content: a preview pane's fill runs up behind it (previewExtension).
+            z: 1
             width: parent.width
             window: win
-            showControls: false
+            showControls: !sidebar.visible
             title: win.title
             doubleClickAction: win.app.titlebarDoubleClick
             canMinimize: win.app.canMinimize
@@ -814,11 +837,14 @@ Window {
             }
         }
 
+        // View > Show Path Bar / Show Status Bar: hidden by default (decision F-11). Until Files has a progress window
+        // (FP-68) the status bar also shows while a job runs or a notice is up, so that feedback is never lost.
         PathBar {
             id: pathBar
             anchors.bottom: statusBar.top
+            visible: win.app.pathBarShown
             width: parent.width
-            height: Tokens.filesPathBarHeight
+            height: visible ? Tokens.filesPathBarHeight : 0
             tab: win.tab
         }
 
@@ -826,8 +852,9 @@ Window {
         Item {
             id: statusBar
             anchors.bottom: parent.bottom
+            visible: win.app.statusBarShown || win.notice !== "" || win.app.activity !== ""
             width: parent.width
-            height: Tokens.filesStatusBarHeight
+            height: visible ? Tokens.filesStatusBarHeight : 0
             Accessible.role: Accessible.StatusBar
             Accessible.name: statusText.text
 

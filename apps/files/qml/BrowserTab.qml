@@ -199,10 +199,17 @@ FocusScope {
             root.setViewMode(m);
     }
 
-    // The gallery's info panel (Ctrl+Shift+P), only meaningful in the gallery view.
-    function toggleGalleryInfo(): void {
-        if (root.viewMode === "gallery")
+    // View > Show Preview (Shift+Cmd+P): the gallery's pane, the column view's preview column, or the pane beside the icon
+    // and list views (three settings, as each view keeps its own in the Finder).
+    readonly property bool previewShown: viewLoader.kind === "gallery" ? root.app.galleryInfo : viewLoader.kind === "columns" ? root.app.columnPreview : root.app.previewPane
+
+    function togglePreview(): void {
+        if (viewLoader.kind === "gallery")
             root.app.galleryInfo = !root.app.galleryInfo;
+        else if (viewLoader.kind === "columns")
+            root.app.columnPreview = !root.app.columnPreview;
+        else
+            root.app.previewPane = !root.app.previewPane;
     }
 
     function setSearch(text: string): void {
@@ -472,10 +479,11 @@ FocusScope {
             return;
         }
         switch (event.key) {
+        // Return renames the selected item (macOS, decision F-4); Cmd+O and Cmd+Down open.
         case Qt.Key_Return:
         case Qt.Key_Enter:
             if (!ctrl) {
-                root.openSelection();
+                root.renameSelection();
                 event.accepted = true;
             }
             return;
@@ -611,8 +619,7 @@ FocusScope {
         items.push(root.viewSubmenu());
         items.push(root.sortSubmenu());
         items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
-        if (root.viewMode === "gallery")
-            items.push({id: "galleryInfo", text: qsTr("Show Info Panel"), shortcut: qsTr("Ctrl+Shift+P"), checked: root.app.galleryInfo});
+        items.push({id: "preview", text: root.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview"), shortcut: qsTr("Ctrl+Shift+P")});
         return items;
     }
 
@@ -715,8 +722,8 @@ FocusScope {
         case "hidden":
             root.app.showHidden = !root.app.showHidden;
             break;
-        case "galleryInfo":
-            root.toggleGalleryInfo();
+        case "preview":
+            root.togglePreview();
             break;
         case "sortDescending":
             root.setSortDescending(!root.sortDescending);
@@ -731,11 +738,25 @@ FocusScope {
 
     Loader {
         id: viewLoader
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: previewPane.visible ? previewPane.left : parent.right
         focus: true
         readonly property string kind: Nav.effectiveView(root.viewMode, root.folder !== null && root.folder.isSearch)
         sourceComponent: viewLoader.kind === "list" ? listComponent : viewLoader.kind === "columns" ? columnComponent : viewLoader.kind === "gallery" ? galleryComponent : iconComponent
         onLoaded: Qt.callLater(root.focusView)
+    }
+
+    // The preview pane beside the icon and list views (the gallery and the column view have their own).
+    PreviewPane {
+        id: previewPane
+        visible: (viewLoader.kind === "icons" || viewLoader.kind === "list") && root.app.previewPane
+        anchors.right: parent.right
+        height: parent.height
+        topExtension: root.win ? root.win.previewExtension : 0
+        tab: root
+        model: root.activeFolder
     }
 
     Component {

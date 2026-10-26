@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QIcon>
+#include <QImageReader>
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QScopedValueRollback>
@@ -899,6 +900,7 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("url")] = item.url();
     m[QStringLiteral("iconName")] = resolvedIconName(item);
     m[QStringLiteral("thumbnail")] = thumbnailFor(m_small, item.url());
+    m[QStringLiteral("largeThumbnail")] = thumbnailFor(m_large, item.url());
     m[QStringLiteral("kind")] = item.mimeComment();
     m[QStringLiteral("mimeType")] = item.mimetype();
     m[QStringLiteral("isDir")] = item.isDir();
@@ -910,6 +912,16 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("created")] = FileLogic::formatDate(item.time(KFileItem::CreationTime), now);
     m[QStringLiteral("modified")] = FileLogic::formatDate(item.time(KFileItem::ModificationTime), now);
     m[QStringLiteral("accessed")] = FileLogic::formatDate(item.time(KFileItem::AccessTime), now);
+    // A picture's size in pixels (the preview pane's Dimensions): read from the file's header only, local files only.
+    if (row >= 0 && item.isLocalFile() && !item.isDir() && item.currentMimeType().name().startsWith(QLatin1String("image/"))) {
+        QImageReader reader(item.localPath());
+        reader.setAutoTransform(true);
+        QSize pixels = reader.size();
+        if (pixels.isValid() && (reader.transformation() & QImageIOHandler::TransformationRotate90))
+            pixels.transpose();
+        if (pixels.isValid())
+            m[QStringLiteral("dimensions")] = tr("%1 × %2").arg(pixels.width()).arg(pixels.height());
+    }
     m[QStringLiteral("permissions")] = item.permissionsString();
     m[QStringLiteral("owner")] = item.user();
     m[QStringLiteral("group")] = item.group();
@@ -922,6 +934,7 @@ QVariantMap FolderModel::info(int row) const
     for (const QString &tag : tags)
         names.append(TagLogic::displayName(tag));
     m[QStringLiteral("tags")] = names;
+    m[QStringLiteral("tagKeys")] = tags;
     QVariantList colors;
     const QList<int> indices = TagLogic::colorIndices(tags);
     for (int c : indices)

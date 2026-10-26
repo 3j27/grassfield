@@ -31,7 +31,8 @@ add_executable(grassfield-files
     src/tagsearch.cpp src/tagsearch.h
     src/folderstylelogic.cpp src/folderstylelogic.h
     src/folderstylestore.cpp src/folderstylestore.h
-    src/folderviews.cpp src/folderviews.h)
+    src/folderviews.cpp src/folderviews.h
+    src/imagerotate.cpp src/imagerotate.h)
 target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)
 # windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.
 find_package(PkgConfig REQUIRED)
@@ -54,9 +55,9 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_folderviews.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_runmode.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
-        src/folderstylelogic.cpp src/folderstylestore.cpp src/folderviews.cpp)
+        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_folderviews.cpp ../../tests/unit/files/tst_imagerotate.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_runmode.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
+        src/folderstylelogic.cpp src/folderstylestore.cpp src/folderviews.cpp src/imagerotate.cpp)
     target_include_directories(files-unit-tests PRIVATE src ..)
-    target_link_libraries(files-unit-tests PRIVATE Qt6::Core GTest::gtest GTest::gtest_main)
+    target_link_libraries(files-unit-tests PRIVATE Qt6::Core Qt6::Gui GTest::gtest GTest::gtest_main)
     add_test(NAME files-unit-tests COMMAND files-unit-tests)
 endif()

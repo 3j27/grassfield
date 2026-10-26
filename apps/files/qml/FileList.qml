@@ -11,10 +11,14 @@ FocusScope {
     required property var model
 
     readonly property real nameWidth: Math.max(Tokens.filesListNameMinWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
+    // The columns keep their widths: a list narrower than them (a narrow window, the preview pane) scrolls sideways, the
+    // header with it (macOS).
+    readonly property real columnsWidth: root.nameWidth + Tokens.filesListDateWidth + Tokens.filesListSizeWidth + Tokens.filesListKindWidth
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.filesListRowHeight))
     // The rows have moved up under the toolbar (the window draws the toolbar's hairline then, macOS).
     readonly property bool scrolled: list.contentY > list.originY
 
+    clip: true
     Accessible.role: Accessible.Table
     Accessible.name: qsTr("Files")
 
@@ -59,8 +63,8 @@ FocusScope {
     // Header ------------------------------------------------------------------------------------
     Row {
         id: header
-        x: list.x
-        width: list.width
+        x: list.x - (list.contentX - list.originX)
+        width: list.contentWidth
         height: Tokens.filesListHeaderHeight
 
         Repeater {
@@ -175,6 +179,8 @@ FocusScope {
         anchors.bottom: parent.bottom
         model: root.model
         clip: true
+        contentWidth: Math.max(list.width, root.columnsWidth)
+        flickableDirection: Flickable.AutoFlickIfNeeded
         focus: true
         activeFocusOnTab: true
         keyNavigationEnabled: false
@@ -210,7 +216,7 @@ FocusScope {
             readonly property color foreground: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
             readonly property color secondary: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.textSecondary
 
-            width: list.width
+            width: list.contentWidth
             height: Tokens.filesListRowHeight
             opacity: row.hidden ? Tokens.filesHiddenOpacity : 1
             Accessible.role: Accessible.Row

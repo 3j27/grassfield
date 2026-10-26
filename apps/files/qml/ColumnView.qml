@@ -144,66 +144,15 @@ FocusScope {
                 delegate: FileColumn {}
             }
 
-            // Preview column for a selected file.
-            Item {
-                width: root.previewInfo ? Tokens.filesPreviewWidth : 0
+            // Preview column for a selected file (View > Show Preview, the column view's own setting): the preview pane on the
+            // window's white.
+            PreviewPane {
+                visible: root.previewInfo !== null && root.tab.app.columnPreview
+                width: visible ? Tokens.filesPreviewPaneWidth : 0
                 height: strip.height
-                visible: root.previewInfo !== null
-
-                Column {
-                    anchors.centerIn: parent
-                    width: parent.width - 2 * Tokens.spacingLg
-                    spacing: Tokens.spacingSm
-
-                    FileIcon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        size: Tokens.filesPreviewIconSize
-                        iconName: root.previewInfo ? root.previewInfo.iconName : ""
-                        isDir: root.previewInfo ? root.previewInfo.isDir : false
-                        folderColor: root.previewInfo ? root.previewInfo.folderColor : ""
-                        folderGlyph: root.previewInfo ? root.previewInfo.folderGlyph : ""
-                        thumbnail: root.previewInfo ? root.previewInfo.thumbnail : ""
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? DisplayName.text(root.previewInfo.name) : ""
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                        color: Appearance.colors.text
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyBodySize
-                        font.weight: Tokens.typographyMenuBoldWeight
-                    }
-
-                    TagDots {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        colors: root.previewInfo && root.previewInfo.tagColors ? root.previewInfo.tagColors : []
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? qsTr("%1 · %2").arg(root.previewInfo.kind).arg(root.previewInfo.sizeText) : ""
-                        wrapMode: Text.Wrap
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? qsTr("Modified %1").arg(root.previewInfo.modified) : ""
-                        wrapMode: Text.Wrap
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                    }
-                }
+                tab: root.tab
+                model: root.activeModel
+                filled: false
             }
         }
     }

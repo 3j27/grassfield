@@ -49,6 +49,9 @@ TestCase {
         property bool showHidden: false
         property bool devSession: false
         property bool tabBarShown: false
+        property bool sidebarShown: true
+        property bool pathBarShown: false
+        property bool statusBarShown: false
         property url newWindowUrl: "file:///sandbox"
         property var places: ({trashEmpty: true})
         function folderStyleUnavailable(urls: var): string {
@@ -193,6 +196,35 @@ TestCase {
         fakeManager.windows = [fakeWin];
         compare(test.item(view, "Move Tab to New Window").enabled, false, "one tab");
         compare(test.item(file, "Close Window").visible, true, "one tab: Close Window is the Cmd-W item");
+    }
+
+    // View > Show/Hide Sidebar, Path Bar and Status Bar (decision F-11: the bars hidden, the sidebar shown by default).
+    function test_barItems() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        const view = bar.menus[2];
+        const sidebar = test.item(view, "Hide Sidebar");
+        verify(sidebar !== null);
+        compare(sidebar.shortcut.toString(), "Ctrl+Super+S");
+        sidebar.triggered();
+        compare(fakeApp.sidebarShown, false);
+        verify(test.item(view, "Show Sidebar") !== null);
+        fakeApp.sidebarShown = true;
+
+        const path = test.item(view, "Show Path Bar");
+        verify(path !== null);
+        compare(path.shortcut.toString(), "Ctrl+Alt+P");
+        path.triggered();
+        compare(fakeApp.pathBarShown, true);
+        verify(test.item(view, "Hide Path Bar") !== null);
+        fakeApp.pathBarShown = false;
+
+        const status = test.item(view, "Show Status Bar");
+        verify(status !== null);
+        compare(status.shortcut.toString(), "Ctrl+/");
+        status.triggered();
+        compare(fakeApp.statusBarShown, true);
+        fakeApp.statusBarShown = false;
     }
 
     // Sort By checks the tab's arrangement (the shown folder's own), not a global setting.

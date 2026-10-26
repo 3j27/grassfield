@@ -4,8 +4,8 @@ import Grassfield.Ui
 import "Nav.js" as Nav
 
 // Gallery view: a large preview of the current item (its KIO thumbnail at the gallery size, the icon-size thumbnail
-// or the type icon until then) above a horizontal strip of thumbnails, and an optional info panel on the right.
-// Left/Right move along the strip, Space opens Glance, Return opens. In the strip a click selects (Shift extends, Ctrl
+// or the type icon until then) above a horizontal strip of thumbnails, and the preview pane on the right (PreviewPane).
+// Left/Right move along the strip, Space opens Glance, Return renames, Cmd+O opens. In the strip a click selects (Shift extends, Ctrl
 // toggles), a double click opens, items drag out as text/uri-list and folders accept drops.
 FocusScope {
     id: root
@@ -111,7 +111,7 @@ FocusScope {
     // the request when it goes away, so the neighbours kept by cacheBuffer are ready before the arrows reach them.
     ListView {
         id: pager
-        width: parent.width - (root.showInfo ? Tokens.filesGalleryInfoWidth : 0)
+        width: parent.width - (root.showInfo ? Tokens.filesPreviewPaneWidth : 0)
         height: parent.height - Tokens.filesGalleryStripHeight
         orientation: ListView.Horizontal
         model: root.model
@@ -397,128 +397,17 @@ FocusScope {
         }
     }
 
-    // Info panel -----------------------------------------------------------------------------------
-    Item {
+    // Preview pane (View > Show Preview, the gallery's own setting): the shared pane with a small preview beside the name,
+    // the view's own preview being the large one.
+    PreviewPane {
         id: infoPanel
         visible: root.showInfo
         x: pager.width
-        width: Tokens.filesGalleryInfoWidth
         height: parent.height
-        Accessible.role: Accessible.Pane
-        Accessible.name: qsTr("Info Panel")
-
-        Rectangle {
-            width: Tokens.appsBorderWidth
-            height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-        }
-
-        Flickable {
-            anchors.fill: parent
-            anchors.leftMargin: Tokens.appsBorderWidth
-            acceptedButtons: Qt.NoButton
-            contentHeight: details.implicitHeight + 2 * Tokens.spacingLg
-            boundsBehavior: Flickable.StopAtBounds
-            clip: true
-
-            Column {
-                id: details
-                x: Tokens.spacingLg
-                y: Tokens.spacingLg
-                width: parent.width - 2 * Tokens.spacingLg
-                spacing: Tokens.spacingSm
-                visible: root.info !== null
-
-                Text {
-                    textFormat: Text.PlainText
-                    width: parent.width
-                    text: root.info ? DisplayName.text(root.info.name) : ""
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    color: Appearance.colors.text
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyTitleSize
-                    font.weight: Tokens.typographyMenuBoldWeight
-                    Accessible.role: Accessible.Heading
-                    Accessible.name: text
-                }
-
-                Text {
-                    textFormat: Text.PlainText
-                    width: parent.width
-                    text: !root.info ? "" : root.info.isDir ? root.info.kind : qsTr("%1 · %2").arg(root.info.kind).arg(root.info.sizeText)
-                    wrapMode: Text.Wrap
-                    color: Appearance.colors.textSecondary
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyCaptionSize
-                }
-
-                TagDots {
-                    colors: root.info && root.info.tagColors ? root.info.tagColors : []
-                }
-
-                Rectangle {
-                    width: parent.width
-                    height: Tokens.appsBorderWidth
-                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-                }
-
-                Text {
-                    textFormat: Text.PlainText
-                    text: qsTr("Information")
-                    color: Appearance.colors.text
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyCaptionSize
-                    font.weight: Tokens.typographyMenuBoldWeight
-                    Accessible.role: Accessible.Heading
-                    Accessible.name: text
-                }
-
-                Repeater {
-                    model: root.info ? [
-                        {label: qsTr("Created"), value: root.info.created},
-                        {label: qsTr("Modified"), value: root.info.modified},
-                        {label: qsTr("Last opened"), value: root.info.accessed},
-                        {label: qsTr("Where"), value: root.info.where},
-                        {label: qsTr("Tags"), value: root.info.tags ? root.info.tags.join(", ") : ""}
-                    ] : []
-
-                    delegate: Item {
-                        id: line
-                        required property var modelData
-
-                        width: details.width
-                        visible: line.modelData.value !== undefined && line.modelData.value !== ""
-                        height: visible ? Math.max(lineLabel.implicitHeight, lineValue.implicitHeight) : 0
-                        Accessible.role: Accessible.StaticText
-                        Accessible.name: line.modelData.label + " " + line.modelData.value
-
-                        Text {
-                            id: lineLabel
-                            textFormat: Text.PlainText
-                            width: Tokens.filesInfoLabelWidth
-                            text: line.modelData.label
-                            elide: Text.ElideRight
-                            color: Appearance.colors.textSecondary
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                        }
-
-                        Text {
-                            id: lineValue
-                            textFormat: Text.PlainText
-                            x: Tokens.filesInfoLabelWidth + Tokens.spacingSm
-                            width: parent.width - x
-                            horizontalAlignment: Text.AlignRight
-                            text: line.modelData.value
-                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                        }
-                    }
-                }
-            }
-        }
+        topExtension: root.tab.win ? root.tab.win.previewExtension : 0
+        tab: root.tab
+        model: root.model
+        large: false
     }
 
     Text {

@@ -77,7 +77,7 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    opened, link target, owner, group, permissions, access (read only).
 10. F10 Window: tabs (section "Tabs and windows": Ctrl+T, Ctrl+W, Ctrl+Shift+W, Ctrl+Alt+W, Ctrl+Tab, Ctrl+Shift+[ ],
     Ctrl+Shift+T, Ctrl+Alt+Shift+T, middle click, drag), new window (Ctrl+N), back/forward (Ctrl+[ / ],
-    Alt+Left/Right), enclosing folder (Ctrl+Up), open (Return, Ctrl+Down), Go to Folder (Ctrl+Shift+G / Ctrl+L:
+    Alt+Left/Right), enclosing folder (Ctrl+Up), open (Ctrl+O, Ctrl+Down), rename (Return, F2), Go to Folder (Ctrl+Shift+G / Ctrl+L:
     `~`, paths, `trash:/`), Home (Ctrl+Shift+H), reload (Ctrl+R/F5), hidden files (Ctrl+H), search (Ctrl+F),
     context menu (Menu, Shift+F10). Path bar (clickable, drop targets) and status bar ("N items, X available",
     "K of N selected", job progress).
@@ -114,7 +114,7 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
     neighbours kept around the current page are ready before the arrows reach them; until then the icon-size
     thumbnail, then the type icon, is shown (never enlarged past its pixels). The first item is selected once the
     folder is listed. Keyboard: Left/Right move along the strip, Home/End, PageUp/PageDown by the visible thumbnails
-    (`Nav.stripMove`), Space opens Glance, Return opens, Ctrl+Up/Down as everywhere. In the strip a click selects (Shift
+    (`Nav.stripMove`), Space opens Glance, Return renames, Ctrl+O and Ctrl+Down open, Ctrl+Up as everywhere. In the strip a click selects (Shift
     extends, Ctrl toggles), a double click opens, items drag out and folders accept drops; a right click opens the item
     menu, on the empty area the folder menu. The name under the preview is also the inline rename field (F2).
 16. F16 Tags (`src/taglogic.*`, `src/tagstore.*`, `src/tagsearch.*`):
@@ -294,7 +294,6 @@ installed (not built here).
   never emptied); Put Back cannot be undone (KIO keeps no undo record for restores).
 - The global menu has no Help menu (there is no help content) and no Window menu of its own: tab switching is under
   View, the window actions are the shell's T0 Window menu. Info windows export no menu (the bar shows T0 there).
-- Return opens (as specified), unlike macOS where Return renames; F2 renames.
 - Window position: a Wayland client cannot place its window, so a new window (New Window, a dragged-out tab) opens
   where the compositor puts it, today exactly over the previous one (centred); the size is remembered. Position memory and
   cascading belong to the compositor's placement rules (ADR-0026 part 2, not done: it needs the nested session).
@@ -391,7 +390,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-40 | Sort By (Name, Kind, Date Last Opened, Date Added, Date Modified, Date Created, Size, Tags) within groups | partial: Name, Kind, Date Modified, Size | none | KFileItem times, tags | — | 2 |
 | FP-41 | Rubber band (lasso) selection in every view | partial: icon view | none | — | — | 2 |
 | FP-42 | Spring-loaded folders during a drag (hover opens, Space opens at once) | missing | none | — | — | 2 |
-| FP-43 | Return renames, ⌘O and ⌘↓ open | partial: Return opens, F2 renames | none | — | — | 2 |
+| FP-43 | Return renames, ⌘O and ⌘↓ open | done (PR 2; F2 renames too) | none | — | — | 2 |
 | FP-44 | Type-to-select | done | — | — | — | — |
 | FP-45 | Quick Look: Space, ⌘Y, ⌥Space full screen, arrows walk the selection | partial: Space starts Glance (Preview) | Finder-Quick-Look, Finder-Quick-Look-Markup | `grassfield-preview --glance` | — | 2 (⌘Y), Preview spec (the rest) |
 | FP-46 | Recents (Go ⇧⌘F, sidebar) | missing | Finder-Home, Go-Menu | `$XDG_DATA_HOME/recently-used.xbel` (decision F-5) | KIO's `recentlyused:/` needs the activity manager daemon, absent on Omarchy | 2 |
@@ -408,7 +407,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-53 | Duplicate ⌘D | done | — | `KIO::copyAs` | — | — |
 | FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | missing | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
 | FP-55 | Show Original ⌘R | missing | none | KFileItem link target | — | 4 |
-| FP-56 | Inline rename | done (F2; Return in PR 2) | — | `KIO::moveAs` | — | 2 |
+| FP-56 | Inline rename | done (Return, F2) | — | `KIO::moveAs` | — | 2 |
 | FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | missing | none | `KIO::batchRename` / moveAs per item | — | 4 |
 | FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | partial: New Folder | none | `KIO::mkdir` + move | — | 4 |
 | FP-59 | Compress (zip) and Expand (double-click an archive) | missing | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
@@ -544,6 +543,31 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields, merge, round trip and order, the oldest goes when full, an
   unreadable or newer file is never overwritten, a missing version, another process's entries kept). Headless run of the
   real app (sway, virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1.
+
+## Preview pane
+PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Gallery (macOS 27, 2 px per pt).
+- **Measured** (pt): the pane 250 wide on the right, its own fill (235/255, the sidebar fill), no dividing line; content 11 from
+  both edges and 16.5 under the toolbar; in the gallery a 42-wide preview beside the name (the name 65 from the edge, about
+  15 bold, two lines), the kind and size under it (secondary); 24 to "Information" (13 bold) with Show More at the right in
+  the accent colour; rows every 22.75 (label secondary at the left, value at the right), a hairline between rows; 31 to
+  "Tags"; at the bottom a 70-high bar on the window background with the quick actions in three equal columns, glyphs 14
+  tall at 16.5, labels 10.5 under them. Tokens `files.preview*`.
+- **Where it shows** (View > Show Preview, Shift+Cmd+P; each view keeps its own setting as in the Finder): beside the icon
+  and list views with a large preview at the top (`view/preview`, off by default), in the gallery with the small preview
+  (`view/galleryInfo`, on), as the column view's last column on the window background (`view/columnPreview`, on). It
+  shows the selected item; with nothing selected the folder; with several items their number.
+- **Information**: Created, Modified, Dimensions (pictures: read from the file's header, turned by its EXIF orientation);
+  Show More adds Last opened, Size in bytes and Where.
+- **Quick actions** (pictures Files can turn without a loss: JPEG, PNG, BMP, TIFF; `imagerotate.h`): Rotate Left, and
+  More… with Rotate Right. A JPEG turns through its EXIF orientation tag, changed in place (two bytes), or a minimal EXIF
+  segment holding only the orientation when it has none; PNG, BMP and TIFF are decoded, turned and written again in
+  their own lossless format through a new file renamed over the old one, keeping its permissions and user extended
+  attributes (tags). WebP, HEIF, GIF and other kinds get no quick action (a lossy re-encode or a lost animation is never
+  risked). Markup is not offered: Grassfield has no annotation editor (`docs/specs/preview.md` non-goals). A turn is not
+  part of Undo.
+- Tests: `tests/unit/files/tst_imagerotate.cpp` (the EXIF table, the kinds, the minimal segment, little-endian tags,
+  broken files, a JPEG without EXIF keeps its tags and mode and leaves no temporary file, an in-place change keeps the
+  inode, a PNG turned pixel by pixel, links and other kinds refused).
 
 ## Folder colours and Customize Folder (owner request 2026-10-19; macOS 26 model)
 macOS 26 colours folders (System Settings > Appearance > Folder Color: the accent or a colour) and "Customize Folder…" gives one folder its own colour and an optional symbol or emoji drawn on it; a folder follows the global colour until it has its own. Grassfield copies that model.

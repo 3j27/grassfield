@@ -17,6 +17,7 @@ TestCase {
         id: listing
 
         property int currentRow: -1
+        property int selectedCount: 0
         property bool loading: false
         property string error: ""
         property url url: "file:///sandbox"
@@ -28,8 +29,22 @@ TestCase {
             listing.currentRow = row;
             for (let i = 0; i < listing.count; i++)
                 listing.setProperty(i, "selected", i === row);
+            listing.selectedCount = row >= 0 ? 1 : 0;
+        }
+        // The preview pane's reads (PreviewPane.qml).
+        function isSelected(row: int): bool {
+            return row >= 0 && row === listing.currentRow;
+        }
+        function selectedRows(): var {
+            return listing.currentRow >= 0 ? [listing.currentRow] : [];
+        }
+        function urlAt(row: int): url {
+            return listing.get(row).url;
         }
         function info(row: int): var {
+            // Nothing selected: the shown folder.
+            if (row < 0)
+                return {name: "sandbox", kind: "Folder", sizeText: "", isDir: true, created: "", modified: "", accessed: "", where: "/"};
             return {name: listing.get(row).name, kind: "Plain text document", sizeText: "1 KB", isDir: false, created: "Today at 10:00", modified: "Today at 11:00", accessed: "", where: "/sandbox"};
         }
         function requestPreview(row: int, large: bool): void {
@@ -73,9 +88,26 @@ TestCase {
 
         property string searchText: ""
         property int activated: -1
+        property int renamed: -1
         property int glances: 0
+        property var win: null
         property var app: QtObject {
             property bool galleryInfo: true
+            property var typedTags: []
+            property var removedTags: []
+
+            function rotatableImages(urls: var): var {
+                return [];
+            }
+            function tagsUnavailable(urls: var): string {
+                return "";
+            }
+            function addTypedTag(urls: var, text: string): void {
+                typedTags = typedTags.concat([text]);
+            }
+            function removeTag(urls: var, tag: string): void {
+                removedTags = removedTags.concat([tag]);
+            }
 
             function baseNameLength(name: string, isDir: bool): int {
                 return name.length;
@@ -85,6 +117,9 @@ TestCase {
             }
         }
 
+        function focusView(): void {
+            gallery.focusView();
+        }
         function isRenaming(model: var, url: url): bool {
             return false;
         }
@@ -115,7 +150,8 @@ TestCase {
                 tab.glances++;
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return) {
-                tab.activate(model.currentRow, model);
+                // BrowserTab: Return renames the selected item (macOS, docs/specs/files.md F-4).
+                tab.renamed = model.currentRow;
                 event.accepted = true;
             }
         }
@@ -170,7 +206,7 @@ TestCase {
         keyClick(Qt.Key_Space);
         compare(tab.glances, before + 1);
         keyClick(Qt.Key_Return);
-        compare(tab.activated, 1);
+        compare(tab.renamed, 1, "Return renames the shown item");
     }
 
     function test_largePreviewFollowsTheCurrentItem() {
@@ -189,6 +225,20 @@ TestCase {
         compare(gallery.info.name, "epsilon.md");
         // The previous page stays in the view's cache next to the new current one: its request is still held.
         tryVerify(() => listing.largeLive[delta] !== undefined);
+    }
+
+    function test_tagsFieldAddsWhatWasTyped() {
+        const input = findChild(gallery, "previewTagInput");
+        verify(input !== null);
+        input.forceActiveFocus();
+        input.text = "  Work ";
+        keyClick(Qt.Key_Return);
+        compare(tab.app.typedTags, ["  Work "], "the typed text goes to FilesApp, which resolves colour names");
+        compare(input.text, "", "the field empties once the tag is added");
+        keyClick(Qt.Key_Return);
+        compare(tab.app.typedTags.length, 1, "an empty field adds nothing");
+        keyClick(Qt.Key_Escape);
+        verify(!input.activeFocus, "Escape returns to the view");
     }
 
     function test_infoPanelFollowsItsPreference() {

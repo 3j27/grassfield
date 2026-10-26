@@ -121,12 +121,13 @@ kill -0 "$app" 2>/dev/null || { echo "FAIL: app exited"; cat "$log"; exit 1; }
 sleep 0.5
 "$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -c "{class, title, focus: .focusHistoryID}" | sed "s/^/files_sandbox: active window: /"
 
-# 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Ctrl+Up), open dest (type-to-select, Return), paste.
+# 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Ctrl+Up), open dest (type-to-select, Ctrl+O: Return renames, as in
+#    the Finder), paste.
 type_keys alpha
 ctrl -k c
 ctrl -k Up
 type_keys dest
-type_keys -k Return
+ctrl -k o
 sleep 0.8
 ctrl -k v
 check "paste copies alpha.txt into dest" 5 test -f "$scenario/dest/alpha.txt"

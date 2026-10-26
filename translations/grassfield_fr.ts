@@ -1586,10 +1586,6 @@
         <translation>Ctrl+H</translation>
     </message>
     <message>
-        <source>Show Info Panel</source>
-        <translation>Afficher le panneau d’informations</translation>
-    </message>
-    <message>
         <source>Ctrl+Shift+P</source>
         <translation>Ctrl+Maj+P</translation>
     </message>
@@ -1620,6 +1616,14 @@
     <message>
         <source>List</source>
         <translation>Liste</translation>
+    </message>
+    <message>
+        <source>Hide Preview</source>
+        <translation>Masquer l’aperçu</translation>
+    </message>
+    <message>
+        <source>Show Preview</source>
+        <translation>Afficher l’aperçu</translation>
     </message>
     <message>
         <source>Columns</source>
@@ -1886,14 +1890,6 @@
     <message>
         <source>Columns</source>
         <translation>Colonnes</translation>
-    </message>
-    <message>
-        <source>%1 · %2</source>
-        <translation>%1 · %2</translation>
-    </message>
-    <message>
-        <source>Modified %1</source>
-        <translation>Modifié le %1</translation>
     </message>
 </context>
 <context>
@@ -2947,6 +2943,10 @@
         <translation>«&#xa0;%1&#xa0;» ne peut pas être copié ou déplacé ici&#xa0;: le dossier contient «&#xa0;%2&#xa0;», qui a le même nom une fois les accents composés. Renommez l’un des deux d’abord.</translation>
     </message>
     <message>
+        <source>“%1” couldn’t be turned: %2.</source>
+        <translation>Impossible de faire pivoter «&#xa0;%1&#xa0;»&#xa0;: %2.</translation>
+    </message>
+    <message>
         <source>Links can’t carry tags.</source>
         <translation>Les liens ne peuvent pas recevoir de tags.</translation>
     </message>
@@ -2976,6 +2976,10 @@
     <message>
         <source>Trash</source>
         <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>%1 × %2</source>
+        <translation>%1 × %2</translation>
     </message>
     <message>
         <source>Tags are only searched in local folders.</source>
@@ -3060,38 +3064,6 @@
     <message>
         <source>Gallery</source>
         <translation>Galerie</translation>
-    </message>
-    <message>
-        <source>Info Panel</source>
-        <translation>Panneau d’informations</translation>
-    </message>
-    <message>
-        <source>%1 · %2</source>
-        <translation>%1 · %2</translation>
-    </message>
-    <message>
-        <source>Information</source>
-        <translation>Informations</translation>
-    </message>
-    <message>
-        <source>Created</source>
-        <translation>Création</translation>
-    </message>
-    <message>
-        <source>Modified</source>
-        <translation>Modification</translation>
-    </message>
-    <message>
-        <source>Last opened</source>
-        <translation>Dernière ouverture</translation>
-    </message>
-    <message>
-        <source>Where</source>
-        <translation>Emplacement</translation>
-    </message>
-    <message>
-        <source>Tags</source>
-        <translation>Tags</translation>
     </message>
     <message>
         <source>No Results</source>
@@ -3264,8 +3236,20 @@
         <translation>en galerie</translation>
     </message>
     <message>
-        <source>Show Info Panel</source>
-        <translation>Afficher le panneau d’informations</translation>
+        <source>Hide Sidebar</source>
+        <translation>Masquer la barre latérale</translation>
+    </message>
+    <message>
+        <source>Show Sidebar</source>
+        <translation>Afficher la barre latérale</translation>
+    </message>
+    <message>
+        <source>Hide Preview</source>
+        <translation>Masquer l’aperçu</translation>
+    </message>
+    <message>
+        <source>Show Preview</source>
+        <translation>Afficher l’aperçu</translation>
     </message>
     <message>
         <source>Sort By</source>
@@ -3306,6 +3290,22 @@
     <message>
         <source>Show Tab Bar</source>
         <translation>Afficher la barre d’onglets</translation>
+    </message>
+    <message>
+        <source>Hide Path Bar</source>
+        <translation>Masquer la barre du chemin d’accès</translation>
+    </message>
+    <message>
+        <source>Show Path Bar</source>
+        <translation>Afficher la barre du chemin d’accès</translation>
+    </message>
+    <message>
+        <source>Hide Status Bar</source>
+        <translation>Masquer la barre d’état</translation>
+    </message>
+    <message>
+        <source>Show Status Bar</source>
+        <translation>Afficher la barre d’état</translation>
     </message>
     <message>
         <source>Show Previous Tab</source>
@@ -3595,6 +3595,41 @@
     <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
+    </message>
+</context>
+<context>
+    <name>ImageRotate</name>
+    <message>
+        <source>its tags could not be read, so it was left as it is</source>
+        <translation>ses tags n’ont pas pu être lus, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>its tags could not be kept, so it was left as it is</source>
+        <translation>ses tags n’auraient pas pu être conservés, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>only pictures themselves can be turned, not links to them</source>
+        <translation>seules les images elles-mêmes peuvent pivoter, pas les liens vers elles</translation>
+    </message>
+    <message>
+        <source>you can’t change it</source>
+        <translation>vous ne pouvez pas la modifier</translation>
+    </message>
+    <message>
+        <source>this kind of picture can’t be turned without losing quality</source>
+        <translation>ce type d’image ne peut pas pivoter sans perte de qualité</translation>
+    </message>
+    <message>
+        <source>it is not a JPEG picture that can be read</source>
+        <translation>ce n’est pas une image JPEG lisible</translation>
+    </message>
+    <message>
+        <source>its EXIF data has no orientation that can be changed</source>
+        <translation>ses données EXIF n’ont pas d’orientation modifiable</translation>
+    </message>
+    <message>
+        <source>animated pictures are not turned</source>
+        <translation>les images animées ne pivotent pas</translation>
     </message>
 </context>
 <context>
@@ -4808,6 +4843,85 @@
     <message>
         <source>There is no preview for this kind of file.</source>
         <translation>Aucun aperçu n’est disponible pour ce type de fichier.</translation>
+    </message>
+</context>
+<context>
+    <name>PreviewPane</name>
+    <message>
+        <source>Preview</source>
+        <translation>Aperçu</translation>
+    </message>
+    <message>
+        <source>%1 items</source>
+        <translation>%1 éléments</translation>
+    </message>
+    <message>
+        <source>%1 – %2</source>
+        <translation>%1 – %2</translation>
+    </message>
+    <message>
+        <source>Information</source>
+        <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Show Less</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show More</source>
+        <translation>Afficher plus</translation>
+    </message>
+    <message>
+        <source>Created</source>
+        <translation>Création</translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation>Modification</translation>
+    </message>
+    <message>
+        <source>Dimensions</source>
+        <translation>Dimensions</translation>
+    </message>
+    <message>
+        <source>Last opened</source>
+        <translation>Dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>%1 bytes</source>
+        <translation>%1 octets</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
+    </message>
+    <message>
+        <source>Add Tags</source>
+        <translation>Ajouter des tags</translation>
+    </message>
+    <message>
+        <source>Add Tags…</source>
+        <translation>Ajouter des tags…</translation>
+    </message>
+    <message>
+        <source>Rotate Left</source>
+        <translation>Faire pivoter à gauche</translation>
+    </message>
+    <message>
+        <source>More…</source>
+        <translation>Plus…</translation>
+    </message>
+    <message>
+        <source>Rotate Right</source>
+        <translation>Faire pivoter à droite</translation>
     </message>
 </context>
 <context>

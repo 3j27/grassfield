@@ -97,7 +97,7 @@ Platform.MenuBar {
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Open")
-            shortcut: "Super+Down"
+            shortcut: "Ctrl+O"
             enabled: bar.count > 0
             onTriggered: bar.tab.openSelection()
         }
@@ -293,12 +293,16 @@ Platform.MenuBar {
             onChosen: bar.tab.setViewMode("gallery")
         }
         Platform.MenuSeparator {}
-        MenuCheckItem {
-            text: qsTr("Show Info Panel")
+        Platform.MenuItem {
+            text: bar.app.sidebarShown ? qsTr("Hide Sidebar") : qsTr("Show Sidebar")
+            shortcut: "Ctrl+Super+S"
+            onTriggered: bar.app.sidebarShown = !bar.app.sidebarShown
+        }
+        Platform.MenuItem {
+            text: bar.tab !== null && bar.tab.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview")
             shortcut: "Ctrl+Shift+P"
-            enabled: bar.tab !== null && bar.tab.viewMode === "gallery"
-            on: bar.app.galleryInfo
-            onChosen: bar.tab.toggleGalleryInfo()
+            enabled: bar.tab !== null
+            onTriggered: bar.tab.togglePreview()
         }
         Platform.MenuSeparator {}
         Platform.Menu {
@@ -350,6 +354,16 @@ Platform.MenuBar {
             shortcut: "Ctrl+Shift+T"
             enabled: bar.win.tabs.length <= 1
             onTriggered: bar.app.tabBarShown = !bar.app.tabBarShown
+        }
+        Platform.MenuItem {
+            text: bar.app.pathBarShown ? qsTr("Hide Path Bar") : qsTr("Show Path Bar")
+            shortcut: "Ctrl+Alt+P"
+            onTriggered: bar.app.pathBarShown = !bar.app.pathBarShown
+        }
+        Platform.MenuItem {
+            text: bar.app.statusBarShown ? qsTr("Hide Status Bar") : qsTr("Show Status Bar")
+            shortcut: "Ctrl+/"
+            onTriggered: bar.app.statusBarShown = !bar.app.statusBarShown
         }
         Platform.MenuItem {
             text: qsTr("Show Previous Tab")
