@@ -60,3 +60,12 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 ## Limitations (v1)
 - Ctrl+Return reveals with `gio open <parent folder>` (default file manager) until Grassfield Files exists (M4).
 - localsearch output parsing (`file://` URIs per line) could not be verified against real results: nothing is indexed on the dev machine.
+
+## Settings > Search (2026-10-26)
+Settings > Search (macOS 27's Spotlight pane) chooses which kinds of results Search shows: `search.showApps`,
+`showDocuments` (no `localsearch`/`plocate` process runs while it is off, and the results already in are dropped),
+`showRecents`, `showCalculator`, `showConversions`, `showSettings`, `showCommands`; a kind turned off never shows, the Top Hit
+included. Delete Search History writes `search.historyResetAt` (milliseconds); the shell forgets the results picked before it
+(`Ranking.forgetUsageBefore`), in memory and in `search-usage.json`, also when the deletion happened while it was not running.
+Tests: `tests/shell/search_chips` (the switches and the deletion on the real controller), `tests/unit/tst_searchranking.qml`.
+

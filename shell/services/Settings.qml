@@ -95,6 +95,14 @@ Singleton {
     readonly property bool lockShowUser: store.lockShowUser
     readonly property bool lockShowMessage: store.lockShowMessage
     readonly property string lockMessage: store.lockMessage
+    readonly property bool searchShowApps: store.searchShowApps
+    readonly property bool searchShowDocuments: store.searchShowDocuments
+    readonly property bool searchShowRecents: store.searchShowRecents
+    readonly property bool searchShowCalculator: store.searchShowCalculator
+    readonly property bool searchShowConversions: store.searchShowConversions
+    readonly property bool searchShowSettings: store.searchShowSettings
+    readonly property bool searchShowCommands: store.searchShowCommands
+    readonly property real searchHistoryResetAt: store.searchHistoryResetAt
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
     readonly property bool menubarShowBackground: store.menubarShowBackground

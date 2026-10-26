@@ -108,6 +108,34 @@ Scope {
     readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"
 
+    // The kinds of results shown (Settings > Search > Search Results; tests set them directly).
+    property bool showApps: Settings.searchShowApps
+    property bool showDocuments: Settings.searchShowDocuments
+    property bool showRecents: Settings.searchShowRecents
+    property bool showCalculator: Settings.searchShowCalculator
+    property bool showConversions: Settings.searchShowConversions
+    property bool showSettings: Settings.searchShowSettings
+    property bool showCommands: Settings.searchShowCommands
+    // Delete Search History: the results picked before this time are forgotten, in memory and in search-usage.json.
+    property real historyResetAt: Settings.searchHistoryResetAt
+    onHistoryResetAtChanged: forgetHistory()
+    onShowDocumentsChanged: {
+        if (!showDocuments) {
+            fileTimer.stop();
+            cancelFiles();
+            fileHits = [];
+        }
+    }
+
+    function forgetHistory(): void {
+        const kept = Ranking.forgetUsageBefore(usage, historyResetAt);
+        if (Object.keys(kept).length === Object.keys(usage).length)
+            return;
+        usage = kept;
+        if (usageFile.path !== "")
+            usageFile.setText(Ranking.serializeUsage(usage));
+    }
+
     // ---- state changes -------------------------------------------------------------------
 
     function focusedScreenName(): string {
@@ -161,7 +189,7 @@ Scope {
         cancelFiles();
         compute();
         const q = text.trim();
-        if (q.length >= 2 && !q.startsWith("-"))
+        if (showDocuments && q.length >= 2 && !q.startsWith("-"))
             fileTimer.restart();
         else
             fileTimer.stop();
@@ -220,13 +248,14 @@ Scope {
 
     function compute(): void {
         const q = query.trim();
-        const calc = q !== "" ? Calc.answer(q) : null;
-        const unit = q !== "" ? Units.answer(q) : null;
+        // Each kind of result only when Settings > Search shows it.
+        const calc = showCalculator && q !== "" ? Calc.answer(q) : null;
+        const unit = showConversions && q !== "" ? Units.answer(q) : null;
         const lq = Ranking.norm(q);
 
-        let apps = q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
+        let apps = showApps && q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
         let cmds = [];
-        if (q !== "") {
+        if (showCommands && q !== "") {
             for (const c of commandList()) {
                 const s = commandScore(c, lq);
                 if (s > 0)
@@ -234,16 +263,16 @@ Scope {
             }
             cmds.sort((a, b) => b.score - a.score);
         }
-        let pages = q !== "" ? SettingsPages.match(settingsPageList, q) : [];
+        let pages = showSettings && q !== "" ? SettingsPages.match(settingsPageList, q) : [];
         const seen = {};
         let docs = [];
-        for (const p of fileHits) {
+        for (const p of showDocuments ? fileHits : []) {
             seen[p] = true;
             docs.push(mkPath("file", p));
         }
         // macOS: an empty field shows no results; documents (recent included) appear from the first keystroke.
         let recents = [];
-        for (const r of q === "" ? [] : recentList) {
+        for (const r of q === "" || !showRecents ? [] : recentList) {
             if (recents.length >= Tokens.searchRecentCount)
                 break;
             if (seen[r.path])
@@ -365,7 +394,7 @@ Scope {
 
     function startFiles(): void {
         const term = query.trim();
-        if (term.length < 2 || term.startsWith("-"))
+        if (!showDocuments || term.length < 2 || term.startsWith("-"))
             return;
         fileSeq++;
         spawnSearch(fileSeq, term, "localsearch");
@@ -523,7 +552,11 @@ Scope {
         id: usageFile
         printErrors: false
         atomicWrites: true
-        onLoaded: root.usage = Ranking.parseUsage(usageFile.text())
+        // A history deleted while the shell was not running is forgotten now, on disk too.
+        onLoaded: {
+            root.usage = Ranking.parseUsage(usageFile.text());
+            root.forgetHistory();
+        }
     }
 
     // Recent documents, read only.

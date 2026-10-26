@@ -85,6 +85,40 @@ ShellRoot {
         check("non-matching recents stay out", JSON.stringify(search.groups).indexOf("notes.txt") < 0);
         // macOS: no group headers, every row is a result.
         check("rows carry no group header", search.rows.length > 0 && search.rows.every(r => !r.header));
+
+        // Settings > Search > Search Results: a kind of result turned off never shows, the top hit included.
+        const groupIds = text => {
+            search.query = text;
+            search.compute();
+            return search.groups.map(g => g.id);
+        };
+        check("the calculator answers", groupIds("2+3").indexOf("calc") >= 0);
+        search.showCalculator = false;
+        check("no calculator when off", groupIds("2+3").indexOf("calc") < 0);
+        check("commands match", JSON.stringify(groupIds("sleep")).match(/top|commands/) !== null);
+        search.showCommands = false;
+        groupIds("sleep");
+        check("no command when off", JSON.stringify(search.groups).indexOf("cmd:sleep") < 0);
+        groupIds("wallpaper");
+        check("settings pages match", JSON.stringify(search.groups).indexOf("setting:wallpaper") >= 0);
+        search.showSettings = false;
+        groupIds("wallpaper");
+        check("no settings page when off", JSON.stringify(search.groups).indexOf("setting:wallpaper") < 0);
+        search.showRecents = false;
+        groupIds("report");
+        check("no recent document when off", JSON.stringify(search.groups).indexOf("report.txt") < 0);
+        search.fileHits = ["/home/u/report.txt"];
+        search.showDocuments = false;
+        check("turning documents off drops the file results", search.fileHits.length === 0);
+        groupIds("report");
+        check("no document when off", JSON.stringify(search.groups).indexOf("report.txt") < 0);
+        search.startFiles();
+        check("no file search runs when off", search.filesPending === false);
+
+        // Delete Search History: the picks made before it are forgotten.
+        search.usage = {"app:a": {count: 3, last: 1000}, "app:b": {count: 1, last: 5000}};
+        search.historyResetAt = 2000;
+        check("picks before the deletion are forgotten", Object.keys(search.usage).join() === "app:b");
     }
 
     Timer {

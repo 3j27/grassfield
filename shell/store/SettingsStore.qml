@@ -273,6 +273,16 @@ Scope {
     readonly property bool lockShowUser: read("lock.showUser")
     readonly property bool lockShowMessage: read("lock.showMessage")
     readonly property string lockMessage: read("lock.message")
+    // The kinds of results Search shows (Settings > Search > Search Results), and the last Delete Search History (milliseconds
+    // since the epoch, 0 = never; a real: it does not fit an int).
+    readonly property bool searchShowApps: read("search.showApps")
+    readonly property bool searchShowDocuments: read("search.showDocuments")
+    readonly property bool searchShowRecents: read("search.showRecents")
+    readonly property bool searchShowCalculator: read("search.showCalculator")
+    readonly property bool searchShowConversions: read("search.showConversions")
+    readonly property bool searchShowSettings: read("search.showSettings")
+    readonly property bool searchShowCommands: read("search.showCommands")
+    readonly property real searchHistoryResetAt: read("search.historyResetAt")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")
