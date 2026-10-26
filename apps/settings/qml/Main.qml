@@ -27,7 +27,8 @@ Window {
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", search: "graphite", notifications: "red", focus: "purple", lock: "graphite",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
-            datetime: "blue", language: "blue", login: "graphite"
+            datetime: "blue", language: "blue", login: "graphite",
+            "accessibility-zoom": "graphite", "accessibility-display": "blue", "accessibility-motion": "green", "accessibility-keyboard": "graphite"
         })
     // The title of the shown section (the toolbar's title; the page itself repeats nothing). A hub shows its own header card
     // instead, so the toolbar has no title there (macOS 27 General).
@@ -53,7 +54,7 @@ Window {
         {id: "vpn", group: 1, title: qsTr("VPN"), icon: "vpn", keywords: qsTr("vpn wireguard openvpn tunnel")},
         {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit")},
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about storage date time language region login items startup")},
-        {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
+        {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("vision physical motor zoom display motion keyboard")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
         {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
         {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
@@ -73,7 +74,11 @@ Window {
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
         {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")},
-        {id: "dnd", parent: "focus", title: qsTr("Do Not Disturb"), icon: "moon", keywords: qsTr("focus silence quiet banners notifications")}
+        {id: "dnd", parent: "focus", title: qsTr("Do Not Disturb"), icon: "moon", keywords: qsTr("focus silence quiet banners notifications")},
+        {id: "accessibility-zoom", parent: "accessibility", title: qsTr("Zoom"), icon: "zoom-in", keywords: qsTr("accessibility magnify magnifier zoom level larger screen")},
+        {id: "accessibility-display", parent: "accessibility", title: qsTr("Display"), icon: "display", keywords: qsTr("accessibility contrast transparency text size larger pointer cursor size mouse large color colour outline fill")},
+        {id: "accessibility-motion", parent: "accessibility", title: qsTr("Motion"), icon: "motion", keywords: qsTr("accessibility reduce motion animations")},
+        {id: "accessibility-keyboard", parent: "accessibility", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("accessibility sticky keys slow keys")}
     ]
     // An app's sub-pane of Notifications: "notifications/<app name>" (the name as the shell saw it).
     readonly property string notificationAppPrefix: "notifications/"
@@ -723,6 +728,14 @@ Window {
                     return wallpaperPage;
                 case "accessibility":
                     return accessibilityPage;
+                case "accessibility-zoom":
+                    return accessibilityZoomPage;
+                case "accessibility-display":
+                    return accessibilityDisplayPage;
+                case "accessibility-motion":
+                    return accessibilityMotionPage;
+                case "accessibility-keyboard":
+                    return accessibilityKeyboardPage;
                 case "desktop":
                     return desktopPage;
                 case "menubar":
@@ -899,8 +912,34 @@ Window {
     Component {
         id: accessibilityPage
         AccessibilityPage {
+            onOpen: id => root.select(id)
+        }
+    }
+
+    Component {
+        id: accessibilityZoomPage
+        AccessibilityZoomPage {
             store: cfg
         }
+    }
+
+    Component {
+        id: accessibilityDisplayPage
+        AccessibilityDisplayPage {
+            store: cfg
+        }
+    }
+
+    Component {
+        id: accessibilityMotionPage
+        AccessibilityMotionPage {
+            store: cfg
+        }
+    }
+
+    Component {
+        id: accessibilityKeyboardPage
+        AccessibilityKeyboardPage {}
     }
 
     Component {

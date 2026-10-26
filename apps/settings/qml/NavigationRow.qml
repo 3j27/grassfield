@@ -4,19 +4,23 @@ import Grassfield.Ui
 
 // One row of a hub pane that opens a sub-pane (macOS 27 General): a coloured tile, the sub-pane's name and a chevron; an
 // optional value sits before the chevron. A click, Space or Return opens it (clicked). Inside a SettingsGroup, with the
-// group's separators (docs/audits/settings-parity-2026-10-26.md § General).
+// group's separators (docs/audits/settings-parity-2026-10-26.md § General). `compact` is the list hub's smaller row (macOS 27
+// Accessibility: 42 tall, a 23-pt tile; § Accessibility).
 T.AbstractButton {
     id: root
 
     property string glyph: ""
     property string tileColor: "graphite"
     property string value: ""
+    property bool compact: false
 
     width: parent ? parent.width : implicitWidth
     implicitWidth: Tokens.settingsContentMaxWidth
-    // The separator above every row but the first adds its point: rows are 48 tall, 49 apart (macOS 27).
+    // The separator above every row but the first adds its point: rows are 48 tall, 49 apart (macOS 27); compact, 42 and 43.
     readonly property int separator: root.Positioner.index > 0 ? 1 : 0
-    implicitHeight: Tokens.settingsNavRowHeight + root.separator
+    readonly property int rowHeight: root.compact ? Tokens.settingsNavCompactRowHeight : Tokens.settingsNavRowHeight
+    readonly property int tileSize: root.compact ? Tokens.settingsNavCompactTileSize : Tokens.settingsNavTileSize
+    implicitHeight: root.rowHeight + root.separator
     focusPolicy: Qt.StrongFocus
     hoverEnabled: true
     Accessible.role: Accessible.Button
@@ -69,17 +73,18 @@ T.AbstractButton {
     contentItem: Item {
         Rectangle {
             id: tile
-            x: Tokens.settingsNavTileInset
-            y: root.separator + Math.round((Tokens.settingsNavRowHeight - height) / 2)
-            width: Tokens.settingsNavTileSize
+            x: root.compact ? Tokens.settingsNavCompactTileInset : Tokens.settingsNavTileInset
+            y: root.separator + Math.round((root.rowHeight - height) / 2)
+            width: root.tileSize
             height: width
-            radius: Tokens.settingsNavTileRadius
+            // The compact tile keeps the large one's proportions.
+            radius: Math.round(root.tileSize * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
             color: Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite
 
             Icon {
                 anchors.centerIn: parent
                 name: root.glyph
-                size: Tokens.settingsNavGlyphSize
+                size: Math.round(root.tileSize * Tokens.settingsNavGlyphSize / Tokens.settingsNavTileSize)
                 color: Tokens.settingsSidebarTileGlyph
             }
         }
@@ -88,7 +93,7 @@ T.AbstractButton {
             textFormat: Text.PlainText
             anchors {
                 left: parent.left
-                leftMargin: Tokens.settingsNavLabelInset
+                leftMargin: root.compact ? Tokens.settingsNavCompactLabelInset : Tokens.settingsNavLabelInset
                 right: valueLabel.left
                 rightMargin: Tokens.spacingSm
                 verticalCenter: parent.verticalCenter

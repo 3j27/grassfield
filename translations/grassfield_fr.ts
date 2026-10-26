@@ -152,35 +152,7 @@
     </message>
 </context>
 <context>
-    <name>AccessibilityPage</name>
-    <message>
-        <source>Accessibility</source>
-        <translation>Accessibilité</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>Details: %1</source>
-        <translation>Détails&#xa0;: %1</translation>
-    </message>
-    <message>
-        <source>Pointer</source>
-        <translation>Pointeur</translation>
-    </message>
+    <name>AccessibilityDisplayPage</name>
     <message>
         <source>White</source>
         <translation>Blanc</translation>
@@ -218,19 +190,35 @@
         <translation>Vert</translation>
     </message>
     <message>
-        <source>%1×</source>
-        <translation>%1×</translation>
-    </message>
-    <message>
         <source>Display</source>
         <translation>Affichage</translation>
     </message>
     <message>
-        <source>Text Size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size, as on a Mac. Increase Contrast draws borders and separators stronger and secondary text in the primary colour.</source>
-        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages ; la barre des menus et les menus gardent leur taille, comme sur un Mac. Augmenter le contraste dessine les bordures et les séparateurs plus forts et le texte secondaire dans la couleur principale.</translation>
+        <source>The pointer colours could not be applied. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées. Le pointeur n’a pas changé.</translation>
     </message>
     <message>
-        <source>Increase Contrast</source>
+        <source>The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées : le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées : il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées : %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>Details: %1</source>
+        <translation>Détails : %1</translation>
+    </message>
+    <message>
+        <source>Increase contrast draws borders and separators stronger and secondary text in the primary colour.</source>
+        <translation>Augmenter le contraste renforce les bordures et les séparateurs et affiche le texte secondaire dans la couleur principale.</translation>
+    </message>
+    <message>
+        <source>Increase contrast</source>
         <translation>Augmenter le contraste</translation>
     </message>
     <message>
@@ -238,7 +226,7 @@
         <translation>Bordures et séparateurs plus marqués, texte à pleine intensité.</translation>
     </message>
     <message>
-        <source>Reduce Transparency</source>
+        <source>Reduce transparency</source>
         <translation>Réduire la transparence</translation>
     </message>
     <message>
@@ -246,72 +234,36 @@
         <translation>Surfaces opaques au lieu de translucides.</translation>
     </message>
     <message>
-        <source>Reduce Motion</source>
-        <translation>Réduire les animations</translation>
+        <source>Text</source>
+        <translation>Texte</translation>
     </message>
     <message>
-        <source>Animations are shortened to quick crossfades, windows and Spaces included.</source>
-        <translation>Les animations sont remplacées par de courts fondus enchaînés, fenêtres et bureaux compris.</translation>
+        <source>Text size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size, as on a Mac.</source>
+        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages ; la barre des menus et les menus gardent leur taille, comme sur un Mac.</translation>
     </message>
     <message>
-        <source>Text Size</source>
+        <source>Text size</source>
         <translation>Taille du texte</translation>
     </message>
     <message>
-        <source>The size of the text in the shell&apos;s panels and in Settings.</source>
-        <translation>La taille du texte dans les panneaux du shell et dans Réglages.</translation>
-    </message>
-    <message>
         <source>100%</source>
-        <translation>100&#xa0;%</translation>
+        <translation>100 %</translation>
     </message>
     <message>
         <source>110%</source>
-        <translation>110&#xa0;%</translation>
+        <translation>110 %</translation>
     </message>
     <message>
         <source>120%</source>
-        <translation>120&#xa0;%</translation>
+        <translation>120 %</translation>
     </message>
     <message>
         <source>130%</source>
-        <translation>130&#xa0;%</translation>
+        <translation>130 %</translation>
     </message>
     <message>
-        <source>Zoom</source>
-        <translation>Zoom</translation>
-    </message>
-    <message>
-        <source>Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.</source>
-        <translation>Super + Alt + 8 active ou désactive le zoom, Super + Alt + = et Super + Alt + - changent le niveau. L’écran est agrandi autour du pointeur.</translation>
-    </message>
-    <message>
-        <source>Magnify the screen.</source>
-        <translation>Agrandir l’écran.</translation>
-    </message>
-    <message>
-        <source>Zoom level</source>
-        <translation>Niveau de zoom</translation>
-    </message>
-    <message>
-        <source>Keyboard</source>
-        <translation>Clavier</translation>
-    </message>
-    <message>
-        <source>Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.</source>
-        <translation>Les touches rémanentes et les touches lentes demandent une prise en charge par le compositeur, que Hyprland n’a pas encore.</translation>
-    </message>
-    <message>
-        <source>Sticky Keys</source>
-        <translation>Touches rémanentes</translation>
-    </message>
-    <message>
-        <source>Not available</source>
-        <translation>Indisponible</translation>
-    </message>
-    <message>
-        <source>Slow Keys</source>
-        <translation>Touches lentes</translation>
+        <source>Pointer</source>
+        <translation>Pointeur</translation>
     </message>
     <message>
         <source>Applying the new pointer colours…</source>
@@ -344,6 +296,106 @@
     <message>
         <source>Reset Colour</source>
         <translation>Réinitialiser la couleur</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityKeyboardPage</name>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+    <message>
+        <source>Hardware</source>
+        <translation>Matériel</translation>
+    </message>
+    <message>
+        <source>Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.</source>
+        <translation>Les touches rémanentes et les touches lentes demandent une prise en charge par le compositeur, que Hyprland n’a pas encore.</translation>
+    </message>
+    <message>
+        <source>Sticky Keys</source>
+        <translation>Touches rémanentes</translation>
+    </message>
+    <message>
+        <source>Not available</source>
+        <translation>Indisponible</translation>
+    </message>
+    <message>
+        <source>Slow Keys</source>
+        <translation>Touches lentes</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityMotionPage</name>
+    <message>
+        <source>Motion</source>
+        <translation>Mouvement</translation>
+    </message>
+    <message>
+        <source>Reduce motion</source>
+        <translation>Réduire les animations</translation>
+    </message>
+    <message>
+        <source>Animations are shortened to quick crossfades, windows and Spaces included.</source>
+        <translation>Les animations sont remplacées par de courts fondus enchaînés, fenêtres et bureaux compris.</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityPage</name>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>Adapt this computer to the way you see and the way you move: zoom, the display, motion and the keyboard.</source>
+        <translation>Adaptez cet ordinateur à votre vue et à vos mouvements : zoom, affichage, mouvement et clavier.</translation>
+    </message>
+    <message>
+        <source>Vision</source>
+        <translation>Vue</translation>
+    </message>
+    <message>
+        <source>Motion</source>
+        <translation>Mouvement</translation>
+    </message>
+    <message>
+        <source>Physical and Motor</source>
+        <translation>Physique et motricité</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Affichage</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityZoomPage</name>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>%1×</source>
+        <translation>%1×</translation>
+    </message>
+    <message>
+        <source>Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.</source>
+        <translation>Super + Alt + 8 active ou désactive le zoom, Super + Alt + = et Super + Alt + - changent le niveau. L’écran est agrandi autour du pointeur.</translation>
+    </message>
+    <message>
+        <source>Magnify the screen.</source>
+        <translation>Agrandir l’écran.</translation>
+    </message>
+    <message>
+        <source>Zoom level</source>
+        <translation>Niveau de zoom</translation>
     </message>
 </context>
 <context>
@@ -4696,10 +4748,6 @@
         <translation>informations stockage date heure langue région ouverture éléments démarrage</translation>
     </message>
     <message>
-        <source>pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display</source>
-        <translation>pointeur curseur taille souris grand couleur contour remplissage contraste transparence animation texte taille agrandir affichage</translation>
-    </message>
-    <message>
         <source>Desktop &amp; Dock</source>
         <translation>Bureau et Dock</translation>
     </message>
@@ -4762,6 +4810,10 @@
     <message>
         <source>battery power low power mode energy health charging charge limit</source>
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
+    </message>
+    <message>
+        <source>vision physical motor zoom display motion keyboard</source>
+        <translation>vue physique motricité zoom affichage mouvement clavier</translation>
     </message>
     <message>
         <source>search results history calculator conversions documents commands</source>
@@ -4846,6 +4898,34 @@
     <message>
         <source>focus silence quiet banners notifications</source>
         <translation>concentration silence calme bannières notifications</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>accessibility magnify magnifier zoom level larger screen</source>
+        <translation>accessibilité agrandir loupe zoom niveau plus grand écran</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Affichage</translation>
+    </message>
+    <message>
+        <source>accessibility contrast transparency text size larger pointer cursor size mouse large color colour outline fill</source>
+        <translation>accessibilité contraste transparence taille du texte plus grand pointeur curseur taille souris grand couleur contour remplissage</translation>
+    </message>
+    <message>
+        <source>Motion</source>
+        <translation>Mouvement</translation>
+    </message>
+    <message>
+        <source>accessibility reduce motion animations</source>
+        <translation>accessibilité réduire les animations mouvement</translation>
+    </message>
+    <message>
+        <source>accessibility sticky keys slow keys</source>
+        <translation>accessibilité touches rémanentes touches lentes</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>

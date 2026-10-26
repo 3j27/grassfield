@@ -1324,6 +1324,14 @@ QtObject {
     readonly property int settingsNavChevronSize: 14
     // the row chevron's ink right edge 11 from the group edge; the glyph's own margin (4.1 at 14: its ink ends at 17 of 24) taken off [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsNavChevronInset: 7
+    // macOS 27 Accessibility: a hub row of a list pane is 42 tall; with its 1-pt separator the pitch is 43 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property int settingsNavCompactRowHeight: 42
+    // macOS 27 Accessibility: the hub row's tile is 23 x 23 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property int settingsNavCompactTileSize: 23
+    // macOS 27 Accessibility: the hub row's tile 8.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property real settingsNavCompactTileInset: 8.5
+    // macOS 27 Accessibility: the hub row's name, its ink from 40-41 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property int settingsNavCompactLabelInset: 40
     // the row chevron #B7B7B7 on #F7F7F7: the text colour (#262626) at 0.3 [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property real settingsNavChevronOpacity: 0.3
     // a pop-up button in a row: a 20-pt disc after its value [ref: docs/audits/settings-parity-2026-10-26.md § Controls]

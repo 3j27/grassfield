@@ -1,9 +1,9 @@
 import QtQuick
 import Grassfield.Ui
 
-// The header card of a pane that is not a hub (macOS 27 Notifications): the pane's tile on the left, its name and what it
-// holds beside it, on a card with the group fill. Placed by baselines, as measured (docs/audits/settings-parity-2026-10-26.md
-// § Notifications). The text wraps.
+// The header card of a pane (macOS 27 Notifications, Accessibility; General's hub has PaneHero): the pane's tile on the
+// left, its name and what it holds beside it, on a card with the group fill. Placed by baselines, as measured
+// (docs/audits/settings-parity-2026-10-26.md § Notifications). The text wraps.
 Rectangle {
     id: root
 
