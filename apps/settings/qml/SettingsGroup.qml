@@ -68,6 +68,8 @@ Item {
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.settingsCaptionDetailSize
         wrapMode: Text.Wrap
+        lineHeightMode: Text.FixedHeight
+        lineHeight: Tokens.settingsCaptionDetailLineHeight
     }
 
     Rectangle {

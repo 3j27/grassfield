@@ -1216,6 +1216,38 @@ QtObject {
     readonly property int settingsMenuBarTileSize: 23
     // macOS 27: a control row's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
     readonly property real settingsMenuBarTitleX: 63.5
+    // macOS 27 Notifications: the header card's tile [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTileSize: 28
+    // macOS 27 Notifications: the header card's tile from the card's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTileX: 10
+    // macOS 27 Notifications: the header card's tile under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsBannerTileTop: 11.5
+    // macOS 27 Notifications: the header card's name and text from the card's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTextX: 49
+    // macOS 27 Notifications: the header card's name, its baseline under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsBannerTitleBaseline: 22.5
+    // macOS 27 Notifications: the header card's text, its first baseline under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsBannerTextBaseline: 38.5
+    // macOS 27 Notifications: the header card's text lines 14 apart [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTextLineHeight: 14
+    // macOS 27 Notifications: the card ends 13 under the text's last baseline [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerBottom: 13
+    // macOS 27 Notifications and Focus: a row with a 28-pt picture, 52 tall (+1 separator) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsLargeRowHeight: 52
+    // macOS 27 Notifications and Focus: a row's app icon or tile [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsLargeRowPictureSize: 28
+    // macOS 27 Notifications: an app row's icon from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsAppRowIconX: 10
+    // macOS 27 Notifications: an app row's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsAppRowTitleX: 48.5
+    // macOS 27 Notifications: an app row's name, its baseline under the row's top (with a line under it) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsAppRowTitleBaseline: 23
+    // macOS 27 Notifications: an app row's second line, its baseline under the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsAppRowSubtitleBaseline: 39
+    // macOS 27 Focus: a focus's tile from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Focus]
+    readonly property int settingsFocusRowTileX: 12
+    // macOS 27 Focus: a focus's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Focus]
+    readonly property int settingsFocusRowTitleX: 53
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
@@ -1342,6 +1374,8 @@ QtObject {
     readonly property int settingsPreviewLineGap: 16
     // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
     readonly property int settingsCaptionDetailSize: 12
+    // macOS 27: a section title's explanation, its lines 14 apart (Notification Center) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsCaptionDetailLineHeight: 14
     // the explanation's baseline 16.5 below the section title's [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
     readonly property real settingsCaptionDetailGap: 16.5
     // a list's + / − footer: 23.5 tall with its top line [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]

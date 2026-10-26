@@ -17,6 +17,7 @@ const PAGES = [
     {id: "desktop", icon: "overview"},
     {id: "menubar", icon: "control-center"},
     {id: "notifications", icon: "bell"},
+    {id: "focus", icon: "moon"},
     {id: "lock", icon: "lock"},
     {id: "mouse", icon: "mouse"},
     {id: "trackpad", icon: "trackpad"},

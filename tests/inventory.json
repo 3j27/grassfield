@@ -154,6 +154,7 @@
  {"path": "tests/unit/tst_settingswallpaper.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsdesktop.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsmenubar.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_settingsnotifications.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingssystem.qml", "layer": "headless"},
  {"path": "tests/unit/tst_stagesfront.qml", "layer": "headless"},
  {"path": "tests/unit/tst_stages.qml", "layer": "headless"},

@@ -25,7 +25,7 @@ Window {
     // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
     readonly property var tileColors: ({
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
-            accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
+            accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", focus: "purple", lock: "graphite",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             datetime: "blue", language: "blue", login: "graphite"
         })
@@ -34,6 +34,8 @@ Window {
     readonly property string sectionTitle: {
         if (root.selectedId === "general")
             return "";
+        if (root.notificationApp !== "")
+            return root.notificationApp;
         for (const e of root.sections) {
             if (e.id === root.selectedId)
                 return e.title;
@@ -59,6 +61,7 @@ Window {
         {id: "wallpaper", group: 2, title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
         {id: "notifications", group: 3, title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
+        {id: "focus", group: 3, title: qsTr("Focus"), icon: "moon", keywords: qsTr("do not disturb silence quiet banners")},
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "mouse", group: 5, title: qsTr("Mouse"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural wheel bluetooth")},
@@ -68,8 +71,12 @@ Window {
         {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
-        {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")}
+        {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")},
+        {id: "dnd", parent: "focus", title: qsTr("Do Not Disturb"), icon: "moon", keywords: qsTr("focus silence quiet banners notifications")}
     ]
+    // An app's sub-pane of Notifications: "notifications/<app name>" (the name as the shell saw it).
+    readonly property string notificationAppPrefix: "notifications/"
+    readonly property string notificationApp: root.selectedId.indexOf(root.notificationAppPrefix) === 0 ? root.selectedId.substring(root.notificationAppPrefix.length) : ""
     property string selectedId: root.startSection !== "" ? root.pointerPane(root.startSection) : "appearance"
     property string query: ""
     // The state a pane shows under its title in the toolbar (Battery), "" for none.
@@ -91,6 +98,8 @@ Window {
 
     // The hub a sub-pane belongs to ("" for a sidebar section): the sidebar keeps the hub selected while one of its sub-panes is open.
     function parentOf(id: string): string {
+        if (id.indexOf(root.notificationAppPrefix) === 0)
+            return "notifications";
         for (const e of root.sections) {
             if (e.id === id)
                 return e.parent !== undefined ? e.parent : "";
@@ -692,6 +701,8 @@ Window {
             enabled: !cfg.blocked
             opacity: cfg.blocked ? Tokens.materialDisabledOpacity : 1
             sourceComponent: {
+                if (root.notificationApp !== "")
+                    return notificationAppPage;
                 switch (root.selectedId) {
                 case "wifi":
                     return wifiPage;
@@ -717,6 +728,10 @@ Window {
                     return menuBarPage;
                 case "notifications":
                     return notificationsPage;
+                case "focus":
+                    return focusPage;
+                case "dnd":
+                    return dndPage;
                 case "lock":
                     return lockPage;
                 case "mouse":
@@ -908,6 +923,30 @@ Window {
         NotificationsPage {
             store: cfg
             backend: root.backend
+            onAppRequested: name => root.select(root.notificationAppPrefix + name)
+        }
+    }
+
+    Component {
+        id: notificationAppPage
+        NotificationAppPage {
+            store: cfg
+            app: root.notificationApp
+        }
+    }
+
+    Component {
+        id: focusPage
+        FocusPage {
+            store: cfg
+            onOpen: id => root.select(id)
+        }
+    }
+
+    Component {
+        id: dndPage
+        DoNotDisturbPage {
+            store: cfg
         }
     }
 

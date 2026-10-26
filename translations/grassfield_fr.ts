@@ -2929,6 +2929,17 @@
     </message>
 </context>
 <context>
+    <name>DoNotDisturbPage</name>
+    <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>Silences banners except critical ones; notifications still collect in the Notifications panel.</source>
+        <translation>Désactive les bannières sauf les critiques ; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
+    </message>
+</context>
+<context>
     <name>Dock</name>
     <message>
         <source>Trash</source>
@@ -3400,6 +3411,25 @@
     <message>
         <source>The tags of %1 items couldn’t be changed: %2</source>
         <translation>Impossible de modifier les tags de %1 éléments&#xa0;: %2</translation>
+    </message>
+</context>
+<context>
+    <name>FocusPage</name>
+    <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>Do Not Disturb is also in Quick Settings and, while it is on, in the menu bar.</source>
+        <translation>Ne pas déranger se trouve aussi dans les Réglages rapides et, quand il est activé, dans la barre des menus.</translation>
+    </message>
+    <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
     </message>
 </context>
 <context>
@@ -4667,6 +4697,14 @@
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>do not disturb silence quiet banners</source>
+        <translation>ne pas déranger silence calme bannières concentration</translation>
+    </message>
+    <message>
         <source>shortcuts keys bindings</source>
         <translation>raccourcis touches clavier</translation>
     </message>
@@ -4729,6 +4767,14 @@
     <message>
         <source>language region formats locale date number first day of week calendar</source>
         <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier</translation>
+    </message>
+    <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>focus silence quiet banners notifications</source>
+        <translation>concentration silence calme bannières notifications</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>
@@ -5174,6 +5220,57 @@
     </message>
 </context>
 <context>
+    <name>NotificationAppPage</name>
+    <message>
+        <source>Banners go away by themselves, Alerts stay until you dismiss them, None shows no banner: the notifications still collect in the Notifications panel. Default follows Show previews in Notifications.</source>
+        <translation>Les bannières disparaissent d’elles-mêmes, les alertes restent jusqu’à ce que vous les fermiez, Aucune n’affiche pas de bannière : les notifications s’accumulent quand même dans le panneau Notifications. Par défaut suit « Afficher les aperçus » dans Notifications.</translation>
+    </message>
+    <message>
+        <source>Alert style</source>
+        <translation>Style d’alerte</translation>
+    </message>
+    <message>
+        <source>Alert style for %1</source>
+        <translation>Style d’alerte pour %1</translation>
+    </message>
+    <message>
+        <source>Banners</source>
+        <translation>Bannières</translation>
+    </message>
+    <message>
+        <source>Alerts</source>
+        <translation>Alertes</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Show previews</source>
+        <translation>Afficher les aperçus</translation>
+    </message>
+    <message>
+        <source>Show previews for %1</source>
+        <translation>Afficher les aperçus pour %1</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>When Unlocked</source>
+        <translation>Quand déverrouillé</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+</context>
+<context>
     <name>NotificationCenter</name>
     <message>
         <source>Notifications</source>
@@ -5268,24 +5365,20 @@
         <translation>Aucune</translation>
     </message>
     <message>
-        <source>Default</source>
-        <translation>Par défaut</translation>
+        <source>%1, previews: %2</source>
+        <translation>%1, aperçus : %2</translation>
     </message>
     <message>
-        <source>Do Not Disturb</source>
-        <translation>Ne pas déranger</translation>
+        <source>Choose how notifications appear, how long they are kept, and how each app&apos;s notifications show.</source>
+        <translation>Choisissez comment les notifications apparaissent, combien de temps elles sont conservées et comment s’affichent celles de chaque app.</translation>
     </message>
     <message>
-        <source>Silences banners except critical ones; notifications still collect in the Notifications panel.</source>
-        <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
+        <source>Notifications Panel</source>
+        <translation>Panneau Notifications</translation>
     </message>
     <message>
-        <source>Never hides the text of notifications. When Unlocked hides it while the screen is locked. Each app below can use its own setting.</source>
-        <translation>Jamais masque le texte des notifications. Si déverrouillé le masque tant que l’écran est verrouillé. Chaque app ci-dessous peut avoir son propre réglage.</translation>
-    </message>
-    <message>
-        <source>How long the Notifications panel keeps notifications after a restart. The text of notifications from apps whose previews are Never is not kept.</source>
-        <translation>Durée pendant laquelle le panneau Notifications conserve les notifications après un redémarrage. Le texte des notifications des apps dont les aperçus sont réglés sur Jamais n’est pas conservé.</translation>
+        <source>The Notifications panel shows your notifications on the right of the screen. Click the clock in the menu bar to show or hide it.</source>
+        <translation>Le panneau Notifications affiche vos notifications à droite de l’écran. Cliquez sur l’horloge dans la barre des menus pour l’afficher ou le masquer.</translation>
     </message>
     <message>
         <source>Keep history</source>
@@ -5306,18 +5399,6 @@
     <message>
         <source>Apps appear here after they send a notification.</source>
         <translation>Les apps apparaissent ici après avoir envoyé une notification.</translation>
-    </message>
-    <message>
-        <source>Alerts stay on screen until you dismiss them; None shows no banner. Default follows the Show previews setting above.</source>
-        <translation>Les alertes restent à l’écran jusqu’à ce que vous les fermiez ; Aucune n’affiche pas de bannière. Par défaut suit le réglage Afficher les aperçus ci-dessus.</translation>
-    </message>
-    <message>
-        <source>Alert style for %1</source>
-        <translation>Style d’alerte pour %1</translation>
-    </message>
-    <message>
-        <source>Show previews for %1</source>
-        <translation>Afficher les aperçus pour %1</translation>
     </message>
     <message>
         <source>Show previews</source>
@@ -6231,6 +6312,14 @@
     <message>
         <source>banners</source>
         <translation>bannières</translation>
+    </message>
+    <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>silence</source>
+        <translation>silence</translation>
     </message>
     <message>
         <source>idle</source>
