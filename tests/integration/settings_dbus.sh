@@ -14,7 +14,7 @@
 #      no new call)
 #   8  a service that is not there: the reason says so
 #   9  the window closes while a service is slow
-#  10  General (ADR-0026): hostname1, timedate1, timesync1, locale1 read; the name, NTP, the zone and the time set with
+#  10  General (ADR-0030): hostname1, timedate1, timesync1, locale1 read; the name, NTP, the zone and the time set with
 #      interactive = true (the service asks polkit); a polkit refusal's reason; a bad zone refused before the bus; the user's own
 #      services (the session bus) listed and switched, a shipped one refused; the dev guard sends none of these changes
 #
@@ -310,7 +310,7 @@ check "... and the process is gone long before the service answers (took $((SECO
 stop_service bluez
 
 say ""
-say "[10] General (ADR-0026)"
+say "[10] General (ADR-0030)"
 start_service general
 check "the probe refuses a session bus that is not the private one" bash -c '
   env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$1" DBUS_SYSTEM_BUS_ADDRESS="$2" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus timeout 10 "$1/probe" units-state >/dev/null 2>&1

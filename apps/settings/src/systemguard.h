@@ -52,7 +52,7 @@ bool isActionProgram(const QString &program);
 bool isAllowedAction(const QStringList &argv);
 
 // How long an allowed action may run: `requested`, or 130 s for Omarchy's language switch, which may wait for its own
-// pkexec prompt (a locale to generate) as long as a polkit call of ADR-0026 waits for the user.
+// pkexec prompt (a locale to generate) as long as a polkit call of ADR-0030 waits for the user.
 int actionTimeoutMs(const QStringList &argv, int requested);
 
 // The one file Login Items may write or remove (Backend::writeAutostart, removeAutostart): <autostartDir>/<plain name>.desktop

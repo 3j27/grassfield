@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """A fake NetworkManager, BlueZ or the General pane's services for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
-GF-049, ADR-0026).
+GF-049, ADR-0030).
 
     fake-system-service.py nm|bluez|general --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 

@@ -291,7 +291,7 @@ TEST(DevSession, FollowsTheRunModeRule)
 }
 
 // Login Items (Backend::writeAutostart, removeAutostart): only a plain <name>.desktop of the autostart folder, never through a
-// symlink, and in a dev session only in a folder whose real location lies under <root>/.dev (review of ADR-0026: a symlink in
+// symlink, and in a dev session only in a folder whose real location lies under <root>/.dev (review of ADR-0030: a symlink in
 // .dev led a QSaveFile write out of it).
 TEST(AutostartGuard, OnlyPlainEntriesOfTheFolder)
 {

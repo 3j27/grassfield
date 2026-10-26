@@ -556,7 +556,7 @@ TEST(SystemBusReason, IsShortOneLineAndPlain)
     EXPECT_EQ(reasonOf(QString()), QString());
 }
 
-// ---- General (PR #4, ADR-0026): hostname1, timedate1 / timesync1, locale1 on the system bus; the user's services on the session bus.
+// ---- General (PR #6, ADR-0030): hostname1, timedate1 / timesync1, locale1 on the system bus; the user's services on the session bus.
 
 namespace
 {

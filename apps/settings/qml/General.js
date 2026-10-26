@@ -1,6 +1,6 @@
 .pragma library
 
-// Pure logic of the General pane's sub-panes (PR #4): About, Storage, Date & Time, Language & Region and Login Items. The
+// Pure logic of the General pane's sub-panes (PR #6): About, Storage, Date & Time, Language & Region and Login Items. The
 // pages give it what the Backend read (the D-Bus states as JSON, command output, file text) and get back plain values and
 // the action maps the Backend checks again (systembus.cpp, systemguard.cpp). Tested by tests/unit/tst_settingsgeneral.qml.
 

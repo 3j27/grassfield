@@ -1,6 +1,7 @@
-# ADR-0026: Settings changes the system only through the system services' own polkit actions
+# ADR-0030: Settings changes the system only through the system services' own polkit actions
 Status: Proposed (cloud session, owner brief 2026-10-26: "toute action privilégiée passe par polkit et demande un ADR, plus une
-relecture opus") · Date: 2026-10-26 · Decider: owner (brief), integrator (merge after the opus review)
+relecture opus") · Date: 2026-10-26 · Decider: owner (brief), integrator (merge after the opus review) · Number: 0030 (it was 0025,
+then 0026; the integrator gave 0026 to 0029 to the Files decisions of PR #4)
 
 ## Context
 The General group of the Settings parity work (`docs/specs/settings.md` § macOS 27 parity inventory) needs the first changes

@@ -6,7 +6,7 @@ import "General.js" as General
 // General > Date & Time (the structure of the macOS 15 capture, docs/audits/settings-parity-2026-10-26.md § Date & Time):
 // automatic time and its source; the date and time (set by hand while the automatic time is off) and the 24-hour clock; the
 // time zone and the closest city. timedate1 and timesync1 are read over D-Bus; every change goes to timedate1 through polkit
-// (ADR-0026) and the page reads the state again when it answered. The 24-hour clock is the menu bar's (menubar.clockHours).
+// (ADR-0030) and the page reads the state again when it answered. The 24-hour clock is the menu bar's (menubar.clockHours).
 // Not built (docs/specs/settings.md): the time zone from the location, the Lock Screen's own 24-hour switch, editing the source.
 SettingsPage {
     id: root
