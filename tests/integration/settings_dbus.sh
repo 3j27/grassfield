@@ -573,7 +573,7 @@ for op in '{"op":"privacy.allow","category":"microphone","app":"org.example.Meet
 done
 check "an unknown category or kind, a malformed id or token, a switch that is not a boolean: refused before the bus" test "$fine" -eq 1
 check "... and none of these reached the store" test "$(calls permstore)" -eq "$before"
-check "in a dev session the state is read" py "$(probe --dev privacy-state)" 'len(j["location"]) == 2'
+check "in a dev session the state is read, the portals with it (NameHasOwner and Get only)" py "$(probe --dev privacy-state)" 'len(j["location"]) == 2 and j["portals"] == {"background": True, "remoteDesktop": False}'
 before=$(grep -vc '"member": "\(Lookup\|List\)"' "$work/permstore.log")
 fine=1
 for op in '{"op":"privacy.allow","category":"camera","app":"org.example.Meet","on":false}' '{"op":"privacy.forget","kind":"screencast","token":"abc"}'; do

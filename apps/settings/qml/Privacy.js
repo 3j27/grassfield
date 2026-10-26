@@ -91,9 +91,24 @@ function forget(key, token) {
 function hostApp(app, entries) {
     if (String(app).indexOf("snap.") === 0 || !Array.isArray(entries))
         return false;
-    if (entries.some(e => e && /\/exports\/share\/applications\/?$/.test(String(e.dir))))
+    if (entries.some(e => e && /\/(?:exports|linglong\/entries)\/share\/applications\/?$/.test(String(e.dir))))
         return false;
     return entries.some(e => e && typeof e.dir === "string" && e.hidden !== true);
+}
+
+// The folders the host check reads: the applications folders (`dirs`, the user's first), and the Flatpak export folders
+// even when the session's XDG_DATA_DIRS leaves them out (review of 4ca0246, L3): the user's (beside the user's
+// applications folder) and the system's.
+function hostCheckDirs(dirs) {
+    const out = Array.isArray(dirs) ? dirs.filter(d => typeof d === "string" && d !== "") : [];
+    const extra = ["/var/lib/flatpak/exports/share/applications"];
+    if (out.length > 0 && /\/applications$/.test(out[0]))
+        extra.unshift(out[0].replace(/\/applications$/, "/flatpak/exports/share/applications"));
+    for (const d of extra) {
+        if (out.indexOf(d) < 0)
+            out.push(d);
+    }
+    return out;
 }
 
 // The tag of a category's actions: its failure shows under its own list only.

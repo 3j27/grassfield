@@ -35,10 +35,15 @@ QtObject {
         let named = false;
         const entries = [];
         const file = Privacy.entryFile(app);
-        for (const dir of file !== "" ? root.backend.applicationDirs : []) {
+        for (const dir of file !== "" ? Privacy.hostCheckDirs(root.backend.applicationDirs) : []) {
             const r = root.backend.readText(dir + "/" + file);
-            if (!r.exists || !r.ok)
+            if (!r.exists)
                 continue;
+            // There but unreadable: it counts (in doubt, the switch stays), its name is not known.
+            if (!r.ok) {
+                entries.push({dir: dir, hidden: true});
+                continue;
+            }
             const e = General.parseDesktopEntry(r.text, Qt.locale().name);
             entries.push({dir: dir, hidden: e.hidden});
             if (!named && !e.hidden) {

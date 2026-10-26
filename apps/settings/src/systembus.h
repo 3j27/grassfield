@@ -116,7 +116,8 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //                  saved screen-sharing or remote-desktop selection (not a grant: it lets the app skip the picker next time)}.
 //                 A table the store does not have yet reads as empty; unsandboxed applications without an id ("") are left out.
 //                 "portals": {"background", "remoteDesktop"}: whether org.freedesktop.portal.Desktop exports those portals (its
-//                 Background or RemoteDesktop "version"; false when it has no such interface, left out when unknown).
+//                 Background or RemoteDesktop "version"; false when it has no such interface, left out when unknown). Asked
+//                 only when the portal already runs (NameHasOwner): Settings never starts it.
 StateResult privacyState(BusCaller &bus);
 
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused

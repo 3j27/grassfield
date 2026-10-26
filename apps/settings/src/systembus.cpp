@@ -95,6 +95,13 @@ const QList<PrivacyGrant> &privacyGrants()
 // Omarchy's backends may implement neither (ADR-0030).
 const QString kPortal = QStringLiteral("org.freedesktop.portal.Desktop");
 const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
+// The bus itself: whether the portal already runs. Settings never starts it: on a dev session's private bus that would start
+// xdg-desktop-portal and with it the document portal, which remounts $XDG_RUNTIME_DIR/doc, the owner's (review of 4ca0246,
+// M1); QtBusCaller does not auto-start it either. In a real session it runs (the session's Qt apps register with it).
+const QString kDBusName = QStringLiteral("org.freedesktop.DBus");
+const QString kDBusPath = QStringLiteral("/org/freedesktop/DBus");
+// A portal that does not answer costs this much, once per read (review of 4ca0246, L4).
+constexpr int kPortalReadMs = 1000;
 const QList<QPair<QString, QString>> &privacyPortals()
 {
     static const QList<QPair<QString, QString>> portals{{QStringLiteral("background"), QStringLiteral("org.freedesktop.portal.Background")},
@@ -454,6 +461,9 @@ bool isReadOnlyCall(const QString &service, const QString &iface, const QString 
     if (service == kSystemd)
         return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
             || (iface == kSystemdManager && member == QLatin1String("ListUnitFilesByPatterns"));
+    // The bus: only whether the desktop portal runs.
+    if (service == kDBusName)
+        return iface == kDBusName && member == QLatin1String("NameHasOwner") && args.size() == 1 && args.at(0).toString() == kPortal;
     // The desktop portal: only the version of the two portals Privacy & Security asks about.
     if (service == kPortal)
         return iface == kProps && member == QLatin1String("Get") && args.size() == 2 && args.at(1).toString() == QLatin1String("version")
@@ -1028,10 +1038,12 @@ StateResult privacyState(BusCaller &bus)
         json.insert(key, saved);
     }
     // Whether the portals for the background and remote desktop exist: true, false (the portal answers that it has no such
-    // interface), or left out when it is not known (no portal service, no answer: the second is then not asked).
+    // interface), or left out when it is not known (the portal not running, no answer: the second is then not asked).
     QJsonObject portals;
-    for (const auto &[key, iface] : privacyPortals()) {
-        const Result v = property(bus, kPortal, kPortalPath, iface, QStringLiteral("version"));
+    const BusReply owned = bus.call(kDBusName, kDBusPath, kDBusName, QStringLiteral("NameHasOwner"), {kPortal}, kPortalReadMs);
+    const bool running = owned.ok && !owned.args.isEmpty() && owned.args.first().toBool();
+    for (const auto &[key, iface] : running ? privacyPortals() : QList<QPair<QString, QString>>{}) {
+        const BusReply v = bus.call(kPortal, kPortalPath, kProps, QStringLiteral("Get"), {iface, QStringLiteral("version")}, kPortalReadMs);
         if (v.ok) {
             portals.insert(key, true);
         } else if (v.error.contains(QLatin1String("InvalidArgs")) || v.error.contains(QLatin1String("UnknownInterface"))

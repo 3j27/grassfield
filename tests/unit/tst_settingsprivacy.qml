@@ -48,9 +48,13 @@ TestCase {
                     "/apps/org.example.Ghost.desktop": "[Desktop Entry]\nType=Application\nName=Ghost\nHidden=true\n",
                     "/home/u/.local/share/flatpak/exports/share/applications/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=Studio\n"
                 })
+            // Entries that are there but cannot be read.
+            property var unreadable: []
             signal finished(string tag, bool ok, string output)
             signal failed(string tag, string reason)
             function readText(path: string): var {
+                if (unreadable.indexOf(path) >= 0)
+                    return {exists: true, ok: false, text: ""};
                 return {exists: files[path] !== undefined, ok: files[path] !== undefined, text: files[path] ?? ""};
             }
             function busQuery(what: string, tag: string): void {
@@ -171,6 +175,11 @@ TestCase {
         verify(!Privacy.hostApp("org.example.A", [{dir: "/home/u/.local/share/applications", hidden: true}]), "a hidden stub only: in doubt");
         verify(!Privacy.hostApp("snap.firefox", [plain]), "a Snap");
         verify(!Privacy.hostApp("org.example.A", []), "no entry found: not known to be the host's");
+        verify(!Privacy.hostApp("org.example.A", [plain, {dir: "/var/lib/linglong/entries/share/applications", hidden: false}]), "a Linyaps app");
+        compare(Privacy.hostCheckDirs(["/home/u/.local/share/applications", "/usr/share/applications"]),
+            ["/home/u/.local/share/applications", "/usr/share/applications", "/home/u/.local/share/flatpak/exports/share/applications",
+                "/var/lib/flatpak/exports/share/applications"], "the export folders are always read");
+        compare(Privacy.hostCheckDirs(["/home/u/.local/share/applications", "/var/lib/flatpak/exports/share/applications"]).length, 3, "once each");
         compare(Privacy.actTag("camera"), "privacy.camera.act");
         // Ids that are Object.prototype's names are keys like any other.
         const odd = Privacy.parse(JSON.stringify({screencast: [{app: "__proto__", token: "abc"}], camera: [{app: "constructor", allowed: true}]}));
@@ -198,6 +207,30 @@ TestCase {
         const booth = find(c.page, i => i.title === "Photo Booth" && i.showToggle !== undefined);
         verify(booth.showToggle, "the camera's grant is read for the host too");
         compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
+    }
+
+    // An export entry that cannot be read still counts: the user's copy elsewhere does not make the app the host's.
+    function test_unreadableExport() {
+        const t = make(categoryComp, {key: "location"});
+        t.backend.files = Object.assign({}, t.backend.files, {"/apps/org.example.Maps.desktop": "[Desktop Entry]\nType=Application\nName=Maps\n"});
+        t.backend.unreadable = ["/home/u/.local/share/flatpak/exports/share/applications/org.example.Maps.desktop"];
+        answer(t);
+        verify(find(t.page, i => i.title === "Maps" && i.showToggle !== undefined).showToggle);
+    }
+
+    // A failure shows under its own category only (the tags differ), not under another one's list.
+    function test_failureStaysInItsCategory() {
+        const backend = createTemporaryObject(fakeBackend, testCase);
+        const system = createTemporaryObject(serviceComp, testCase, {backend: backend});
+        const camera = createTemporaryObject(categoryComp, testCase, {backend: backend, system: system, key: "camera"});
+        answer({backend: backend});
+        find(camera, i => i.title === "Photo Booth" && i.checked !== undefined).toggled(true);
+        backend.failed("privacy.camera.act", "Rejected");
+        backend.finished("privacy.camera.act", false, "");
+        verify(find(camera, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("Rejected") >= 0));
+        const location = createTemporaryObject(categoryComp, testCase, {backend: backend, system: system, key: "location"});
+        answer({backend: backend});
+        verify(!find(location, i => i.footnote !== undefined && i.footnote.indexOf("Rejected") >= 0), "not under Location");
     }
 
     // A category whose portal this system does not have: its apps without a switch, and the footnote says why.

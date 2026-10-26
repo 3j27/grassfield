@@ -194,8 +194,11 @@ service ask the session's agent itself.
     dropped Background and RemoteDesktop in 1.15.0: on Omarchy the Background and RemoteDesktop portals may not be exported
     at all, owner check `busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop`). So
     `privacy.state` also reads `Properties.Get(<portal>, "version")` on `org.freedesktop.portal.Desktop` for those two (the
-    only portal read `isReadOnlyCall` allows; a missing interface is false, no portal service or no answer is unknown and
-    the second is not asked), and a category whose portal is missing stays, reading "Not used on this system", its footnote
+    only portal read `isReadOnlyCall` allows; a missing interface is false, no answer within 1 s is unknown and the second
+    is not asked). It asks only when the portal already runs (`NameHasOwner`, the one bus read allowed), and QtBusCaller
+    never auto-starts the portal: on a dev session's private bus that would start xdg-desktop-portal and with it the
+    document portal, which unmounts and remounts the owner's `$XDG_RUNTIME_DIR/doc` (re-check of 4ca0246, M1; a real
+    session runs it already). A category whose portal is missing stays, reading "Not used on this system", its footnote
     saying no app can ask for it (owner decision 2026-10-26: keep the category, with a line). A saved
     choice removed while the application is sharing is saved again when that session ends: the footnote says to stop
     sharing first. `["ask"]` reads as not allowed (the portal asks every time).
@@ -216,7 +219,11 @@ service ask the session's agent itself.
     named like Object.prototype's properties broke the page's maps), N3 (the footnote named Flatpak only and said host
     applications are not limited while their camera switch stays), N5 (one error tag for every category): all fixed in
     the commit after (every folder read, the portal check, maps without a prototype, "Flatpak, Snap", a tag per category);
-    L2, L3 and L5 accepted for merge by that review; N4 (a switch kept in doubt) accepted above.
+    L2, L3 and L5 accepted for merge by that review; N4 (a switch kept in doubt) accepted above. Re-check of that commit:
+    PASS, with M1 (the portal read could start the portal, above), L1 (a Linyaps app's entries folder now counts as a
+    sandbox's), L2 (an export entry that exists but cannot be read counts, in doubt), L3 (the Flatpak export folders are
+    read for the host check even when XDG_DATA_DIRS leaves them out), L4 (the portal read's timeout is 1 s), L5 (tests: a
+    failure stays in its category, every "missing" error name, the dev read of the portals): fixed in the commit after.
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password

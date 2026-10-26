@@ -1334,7 +1334,9 @@ struct PrivacyFixture {
     PrivacyFixture()
     {
         bus.handler = [](const Call &c) -> BusReply {
-            // The desktop portal exports Background, not RemoteDesktop (as with a backend that implements only the first).
+            // The desktop portal runs and exports Background, not RemoteDesktop (a backend that implements only the first).
+            if (c.service == QLatin1String("org.freedesktop.DBus") && c.member == QLatin1String("NameHasOwner"))
+                return ok({c.args.value(0).toString() == QLatin1String("org.freedesktop.portal.Desktop")});
             if (c.service == QLatin1String("org.freedesktop.portal.Desktop") && c.member == QLatin1String("Get")) {
                 if (c.args.value(0).toString() == QLatin1String("org.freedesktop.portal.Background"))
                     return ok({variant(2u)});
@@ -1407,6 +1409,12 @@ TEST(SystemBusPrivacy, TheStoreIsReadAsThePortalsReadIt)
                                 {QStringLiteral("org.freedesktop.portal.Camera"), QStringLiteral("version")}));
     EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Set"),
                                 {QStringLiteral("org.freedesktop.portal.Background"), QStringLiteral("version"), 3u}));
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("GetAll"),
+                                {QStringLiteral("org.freedesktop.portal.Background")}));
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameHasOwner"),
+                                {QStringLiteral("org.freedesktop.NetworkManager")}));
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("org.freedesktop.DBus"), QStringLiteral("StartServiceByName"),
+                                {QStringLiteral("org.freedesktop.portal.Desktop"), 0u}));
     for (const Call &c : f.bus.calls) {
         EXPECT_NE(c.args.value(1).toString(), QStringLiteral("../not/a/token"));
         EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args)) << c.member.toStdString();
@@ -1430,6 +1438,35 @@ TEST(SystemBusPrivacy, PortalsNotKnownAreLeftOut)
     ASSERT_TRUE(r.ok) << r.error.toStdString();
     EXPECT_TRUE(r.json.value("portals").toObject().isEmpty());
     EXPECT_EQ(portalCalls, 1);
+    // Each of the names the bus gives a missing interface, property or object reads as missing.
+    for (const char *name : {"org.freedesktop.DBus.Error.InvalidArgs", "org.freedesktop.DBus.Error.UnknownInterface",
+                             "org.freedesktop.DBus.Error.UnknownProperty", "org.freedesktop.DBus.Error.UnknownObject"}) {
+        f.bus.handler = [&, name](const Call &c) -> BusReply {
+            if (c.service == QLatin1String("org.freedesktop.portal.Desktop"))
+                return err(QString::fromLatin1(name) + QStringLiteral(": no"));
+            return store(c);
+        };
+        EXPECT_EQ(privacyState(f.bus).json.value("portals").toObject(), (QJsonObject{{"background", false}, {"remoteDesktop", false}})) << name;
+    }
+}
+
+// The portal not running: it is never asked (asking would start it), and the portals are not known.
+TEST(SystemBusPrivacy, APortalNotRunningIsNotStarted)
+{
+    PrivacyFixture f;
+    const auto store = f.bus.handler;
+    int portalCalls = 0;
+    f.bus.handler = [&](const Call &c) -> BusReply {
+        if (c.service == QLatin1String("org.freedesktop.DBus") && c.member == QLatin1String("NameHasOwner"))
+            return ok({false});
+        if (c.service == QLatin1String("org.freedesktop.portal.Desktop"))
+            ++portalCalls;
+        return store(c);
+    };
+    const StateResult r = privacyState(f.bus);
+    ASSERT_TRUE(r.ok);
+    EXPECT_EQ(portalCalls, 0);
+    EXPECT_TRUE(r.json.value("portals").toObject().isEmpty());
 }
 
 TEST(SystemBusPrivacy, NoStoreIsAReason)
