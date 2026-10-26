@@ -1108,6 +1108,25 @@
     </message>
 </context>
 <context>
+    <name>BatteryOptionsSheet</name>
+    <message>
+        <source>Battery Options</source>
+        <translation>Options de la batterie</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>Show Percentage</source>
+        <translation>Afficher le pourcentage</translation>
+    </message>
+    <message>
+        <source>Show the battery percentage in the menu bar</source>
+        <translation>Afficher le pourcentage de la batterie dans la barre des menus</translation>
+    </message>
+</context>
+<context>
     <name>BatteryPage</name>
     <message>
         <source>Battery</source>
@@ -4869,12 +4888,12 @@
         <translation>Barre des menus</translation>
     </message>
     <message>
-        <source>Automatically hide and show the menu bar</source>
-        <translation>Masquer et afficher automatiquement la barre des menus</translation>
+        <source>Show %1 in the menu bar</source>
+        <translation>Afficher « %1 » dans la barre des menus</translation>
     </message>
     <message>
-        <source>A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.</source>
-        <translation>Une barre des menus masquée glisse par-dessus la fenêtre quand le pointeur atteint le bord supérieur de l’écran.</translation>
+        <source>Automatically hide and show the menu bar</source>
+        <translation>Masquer et afficher automatiquement la barre des menus</translation>
     </message>
     <message>
         <source>Always</source>
@@ -4897,8 +4916,8 @@
         <translation>Afficher l’arrière-plan de la barre des menus</translation>
     </message>
     <message>
-        <source>Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.</source>
-        <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
+        <source>Battery Options…</source>
+        <translation>Options de la batterie…</translation>
     </message>
     <message>
         <source>Recent documents and applications</source>
@@ -4917,14 +4936,6 @@
         <translation>Options de l’horloge…</translation>
     </message>
     <message>
-        <source>Date, day of the week, 24-hour time, seconds.</source>
-        <translation>Date, jour de la semaine, heure sur 24 heures, secondes.</translation>
-    </message>
-    <message>
-        <source>The number of items the Recent Items menu lists. None hides the menu.</source>
-        <translation>Nombre d’éléments listés par le menu Éléments récents. « Aucune » masque le menu.</translation>
-    </message>
-    <message>
         <source>Menu Bar Controls</source>
         <translation>Commandes de la barre des menus</translation>
     </message>
@@ -4933,84 +4944,24 @@
         <translation>Wi-Fi</translation>
     </message>
     <message>
-        <source>The network status and its menu.</source>
-        <translation>L’état du réseau et son menu.</translation>
-    </message>
-    <message>
-        <source>Show Wi-Fi in the menu bar</source>
-        <translation>Afficher le Wi-Fi dans la barre des menus</translation>
-    </message>
-    <message>
         <source>Sound</source>
         <translation>Son</translation>
-    </message>
-    <message>
-        <source>The volume and the output devices.</source>
-        <translation>Le volume et les périphériques de sortie.</translation>
-    </message>
-    <message>
-        <source>Show Sound in the menu bar</source>
-        <translation>Afficher le son dans la barre des menus</translation>
     </message>
     <message>
         <source>Battery</source>
         <translation>Batterie</translation>
     </message>
     <message>
-        <source>Shown on a computer that has a battery.</source>
-        <translation>Affichée sur un ordinateur doté d’une batterie.</translation>
-    </message>
-    <message>
-        <source>Show Battery in the menu bar</source>
-        <translation>Afficher la batterie dans la barre des menus</translation>
-    </message>
-    <message>
-        <source>Show Percentage</source>
-        <translation>Afficher le pourcentage</translation>
-    </message>
-    <message>
-        <source>The charge level beside the battery.</source>
-        <translation>Le niveau de charge à côté de la batterie.</translation>
-    </message>
-    <message>
-        <source>Show the battery percentage in the menu bar</source>
-        <translation>Afficher le pourcentage de la batterie dans la barre des menus</translation>
-    </message>
-    <message>
         <source>Focus</source>
         <translation>Concentration</translation>
-    </message>
-    <message>
-        <source>A moon in the menu bar while Do Not Disturb is on; a click turns it off.</source>
-        <translation>Une lune dans la barre des menus tant que Ne pas déranger est activé ; un clic le désactive.</translation>
-    </message>
-    <message>
-        <source>Show Focus in the menu bar</source>
-        <translation>Afficher la concentration dans la barre des menus</translation>
     </message>
     <message>
         <source>Now Playing</source>
         <translation>En cours de lecture</translation>
     </message>
     <message>
-        <source>While a media player has a track, a button in the menu bar opens its controls.</source>
-        <translation>Tant qu’un lecteur multimédia a un morceau, un bouton de la barre des menus ouvre ses commandes.</translation>
-    </message>
-    <message>
-        <source>Show Now Playing in the menu bar</source>
-        <translation>Afficher « En cours de lecture » dans la barre des menus</translation>
-    </message>
-    <message>
         <source>Search</source>
         <translation>Recherche</translation>
-    </message>
-    <message>
-        <source>A magnifier button in the menu bar opens Search.</source>
-        <translation>Un bouton en forme de loupe dans la barre des menus ouvre la recherche.</translation>
-    </message>
-    <message>
-        <source>Show Search in the menu bar</source>
-        <translation>Afficher la recherche dans la barre des menus</translation>
     </message>
     <message>
         <source>Allow in the Menu Bar</source>
@@ -5023,10 +4974,6 @@
     <message>
         <source>Items from applications</source>
         <translation>Éléments des applications</translation>
-    </message>
-    <message>
-        <source>The status icons that applications such as chat and sync tools put in the menu bar.</source>
-        <translation>Les icônes d’état que des applications (messagerie, synchronisation) placent dans la barre des menus.</translation>
     </message>
     <message>
         <source>Show status items of applications in the menu bar</source>

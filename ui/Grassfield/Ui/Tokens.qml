@@ -1206,6 +1206,16 @@ QtObject {
     readonly property int settingsScreenCornersPictureHeight: 125
     // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): as the Wallpaper preview [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int settingsScreenCornersPictureRadius: 6
+    // macOS 27: the rows of the Menu Bar controls, 43 apart [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property int settingsMenuBarControlRowHeight: 43
+    // macOS 27: a control row's check box from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property real settingsMenuBarCheckX: 13.5
+    // macOS 27: a control row's tile from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property int settingsMenuBarTileX: 36
+    // macOS 27: a control row's tile [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property int settingsMenuBarTileSize: 23
+    // macOS 27: a control row's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property real settingsMenuBarTitleX: 63.5
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]

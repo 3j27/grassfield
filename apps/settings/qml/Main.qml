@@ -897,7 +897,9 @@ Window {
         id: menuBarPage
         MenuBarPage {
             store: cfg
+            hasBattery: root.hasBattery
             onClockOptionsRequested: clockSheet.open()
+            onBatteryOptionsRequested: batteryOptionsSheet.open()
         }
     }
 
@@ -1066,6 +1068,12 @@ Window {
     // Menu Bar > Clock Options…: a sheet over the whole window.
     ClockOptionsSheet {
         id: clockSheet
+        store: cfg
+    }
+
+    // Menu Bar > Battery Options…
+    BatteryOptionsSheet {
+        id: batteryOptionsSheet
         store: cfg
     }
 
