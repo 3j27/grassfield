@@ -4466,6 +4466,25 @@
     </message>
 </context>
 <context>
+    <name>LockMessageSheet</name>
+    <message>
+        <source>Set a message to show on the lock screen</source>
+        <translation>Définir un message à afficher sur l’écran verrouillé</translation>
+    </message>
+    <message>
+        <source>Message</source>
+        <translation>Message</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>The message must be one line of at most 200 characters.</source>
+        <translation>Le message doit tenir sur une ligne de 200 caractères au plus.</translation>
+    </message>
+</context>
+<context>
     <name>LockPage</name>
     <message>
         <source>Lock Screen</source>
@@ -4476,20 +4495,68 @@
         <translation>Jamais</translation>
     </message>
     <message>
-        <source>1 minute</source>
-        <translation>1 minute</translation>
+        <source>For 1 hour</source>
+        <translation>Pendant 1 heure</translation>
     </message>
     <message>
-        <source>%1 minutes</source>
-        <translation>%1 minutes</translation>
+        <source>For %1 hours</source>
+        <translation>Pendant %1 heures</translation>
     </message>
     <message>
-        <source>The screen locks after this much time without keyboard or pointer input.</source>
-        <translation>L’écran se verrouille après ce délai sans saisie au clavier ni au pointeur.</translation>
+        <source>For 1 minute</source>
+        <translation>Pendant 1 minute</translation>
     </message>
     <message>
-        <source>Lock screen after inactivity</source>
-        <translation>Verrouiller l’écran après inactivité</translation>
+        <source>For %1 minutes</source>
+        <translation>Pendant %1 minutes</translation>
+    </message>
+    <message>
+        <source>After 1 hour</source>
+        <translation>Après 1 heure</translation>
+    </message>
+    <message>
+        <source>After %1 hours</source>
+        <translation>Après %1 heures</translation>
+    </message>
+    <message>
+        <source>After 1 minute</source>
+        <translation>Après 1 minute</translation>
+    </message>
+    <message>
+        <source>After %1 minutes</source>
+        <translation>Après %1 minutes</translation>
+    </message>
+    <message>
+        <source>Turn display off on battery when inactive</source>
+        <translation>Éteindre l’écran sur batterie en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Turn display off on power adapter when inactive</source>
+        <translation>Éteindre l’écran sur l’adaptateur secteur en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Turn display off when inactive</source>
+        <translation>Éteindre l’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Require password after inactivity</source>
+        <translation>Exiger le mot de passe après une inactivité</translation>
+    </message>
+    <message>
+        <source>Show user name and photo</source>
+        <translation>Afficher le nom et la photo de l’utilisateur</translation>
+    </message>
+    <message>
+        <source>Show message when locked</source>
+        <translation>Afficher un message lorsque l’écran est verrouillé</translation>
+    </message>
+    <message>
+        <source>Set…</source>
+        <translation>Régler…</translation>
+    </message>
+    <message>
+        <source>Set the message</source>
+        <translation>Régler le message</translation>
     </message>
 </context>
 <context>

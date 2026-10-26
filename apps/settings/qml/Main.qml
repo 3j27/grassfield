@@ -954,6 +954,8 @@ Window {
         id: lockPage
         LockPage {
             store: cfg
+            hasBattery: root.hasBattery
+            onMessageRequested: lockMessageSheet.open()
         }
     }
 
@@ -1107,6 +1109,12 @@ Window {
     // Menu Bar > Clock Options…: a sheet over the whole window.
     ClockOptionsSheet {
         id: clockSheet
+        store: cfg
+    }
+
+    // Lock Screen > Show message when locked > Set…
+    LockMessageSheet {
+        id: lockMessageSheet
         store: cfg
     }
 
