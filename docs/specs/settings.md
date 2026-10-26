@@ -15,6 +15,86 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
   inside the group; section headers 13 bold in the text colour.
 - Typing in the search field filters the sidebar. Up/Down in the sidebar switch the pane.
 
+## macOS 27 parity inventory (owner brief 2026-10-26)
+Target: every pane indistinguishable from macOS 27 Golden Gate System Settings on close inspection (F1 strict, ADR-0024),
+except the accepted limits: Inter instead of SF Pro, Grassfield symbols, no lensing before phase 4, 1x screens, Grassfield
+colours. Work lands in three pull requests, in this order: General, Hardware, Desktop.
+
+**References.** The 512 Pixels Aqua Screenshot Library (Stephen Hackett) holds 31 macOS 27 System Settings captures at
+2 px per pt (window 740 x 690 pt, sidebar 232). They are downloaded into `design/reference/macos27/` (git-ignored),
+measured there, and never committed or redistributed; only numbers enter the repository. The macOS 26 Tahoe set lives in
+`design/reference/macos26/`. Neither library has the General sub-panes (About, Software Update, Storage, Login Items &
+Extensions, Language & Region, Date & Time, Sharing), Control Center or Screen Saver. For those panes the macOS 15 Sequoia
+captures in `design/reference/older/` give the structure only: rows, labels and controls. The look comes from the macOS 27
+panes, which share the group, row, header and control metrics. Every row below that uses a macOS 15 capture says so.
+File names are given without the `27-Golden-Gate-Settings-` prefix (and `15-Sequoia-Settings-` for macOS 15).
+
+**Sidebar (macOS 27, `General.png` and the scrolled captures `Keyboard.png`, `Printers-and-Scanners.png`).** The macOS
+sidebar runs in groups separated by a gap:
+1. Account
+2. Wi-Fi, Bluetooth, Network, VPN, Battery
+3. General, Accessibility, Appearance, Desktop & Dock, Displays, Menu Bar, Siri, Spotlight, Wallpaper
+4. Notifications, Sound, Focus, Screen Time
+5. Lock Screen, Privacy & Security, Touch ID & Password, Users & Groups
+6. Game Center, iCloud, Internet Accounts, Wallet & Apple Pay
+7. Keyboard, Mouse (only while a mouse is connected), Trackpad, Printers & Scanners
+
+Grassfield keeps the same order and grouping, without the panes that have no counterpart (below). Today the sidebar is one
+flat list of 14 sections, with About at the top level and no group gaps.
+
+macOS 27 removed two panes and moved what they held:
+- **Control Center:** its controls are now the "Menu Bar Controls" list of Menu Bar (`Menu-Bar.png`).
+- **Screen Saver:** it is now a sheet opened from Wallpaper > Screen Saver… (`Wallpaper.png`).
+
+Grassfield follows macOS 27 for both.
+
+**Out of scope (no Linux counterpart, or Apple services):** Account, iCloud, Internet Accounts, Game Center, Wallet & Apple
+Pay, Siri, Screen Time, AppleCare & Warranty, AirDrop & Continuity, AutoFill & Passwords, Startup Disk (the boot loader is
+never touched), Time Machine (snapshots are never touched), Device Management, Transfer or Reset, and Users & Groups (no
+account editing in 1.0). Touch ID & Password is out of scope as well: fingerprint enrolment belongs to Omarchy's own setup,
+and changing a password is not a Settings action here.
+
+### Group 1: General (PR #4)
+| Pane | Reference | Today | Missing | Backend | Out of scope / impossible |
+|---|---|---|---|---|---|
+| General (hub) | `General.png` (27) | none: About is a sidebar section | A header card (tile, bold title, description). Groups of navigation rows (a tile, a label and a chevron) that push a sub-pane. The toolbar shows the back/forward capsule and the sub-pane's title. Back returns to the hub. | none | the out-of-scope rows above |
+| About | `General-About.png` (15, structure); the look from the 27 panes | read-only Software (Grassfield, Omarchy, Hyprland, Quickshell, Qt) and Hardware (Processor, Memory, Graphics) groups | Header: the device glyph and the model name (DMI `product_name`, else "Computer"). Rows: Name (the computer name), Processor, Graphics, Memory. A Grassfield group: logo, name, version, Omarchy and the components. A Displays group (Qt screens). A Storage group (the start-up volume: free of total). | `hostname1` for Name: read `PrettyHostname` / `StaticHostname`; change with `SetPrettyHostname` + `SetStaticHostname` through polkit (ADR-0025). `/sys/class/dmi/id` (readable files only), `/proc`, `QStorageInfo`, `pacman -Q`, `lspci`. | Serial number: `product_serial` is root-only. Coverage, System Report, Regulatory. |
+| Software Update | none in 27/26; `General-Software-Update.png` (15) | none | Owner (2026-10-26): install the latest Grassfield from GitHub. | GitHub Releases of the Grassfield repository. The install itself would need root (`pacman -U` of the release packages), through polkit with an ADR and an opus review. | **Not built.** The repository is private until the legal review, so an unauthenticated client cannot see its releases, and no release exists. Owner: "if it is not possible, leave it". The hub shows no Software Update row until releases exist. |
+| Storage | `General-Storage.png` (15, structure) | none | The start-up volume: "X of Y used", a bar of categories with a legend, and a list of categories with their sizes (Applications, Documents, Downloads, Pictures, Music, Videos, Trash, System and Other). An "All Volumes…" sheet. | `QStorageInfo` for the volumes. Folder sizes are counted on a worker thread with a time budget. Applications is the sum of the installed packages' sizes (`pacman -Qi`, read-only). | Recommendations (Store in iCloud, Optimize, Empty Trash automatically: the last one needs a key and a shell timer; later). |
+| Login Items & Extensions | `General-Login-Items-Extensions.png` (15, structure) | none | **Open at Login:** a table (Item, Kind) with + and −. + picks an application and writes its desktop entry; − removes a user entry, or hides a system entry with a user override (`Hidden=true`). **Allow in the Background:** the user's systemd services, each with a switch. | XDG autostart: `~/.config/autostart`, `/etc/xdg/autostart`. Omarchy ships such entries, and uwsm starts them through the XDG autostart target. `org.freedesktop.systemd1` on the **session** bus: `ListUnitFiles` and `EnableUnitFiles` / `DisableUnitFiles` on user units. No root, no polkit. | Extensions (no counterpart). Hyprland `exec` lines in the owner's own files are never edited. |
+| Language & Region | `General-Language-Region.png` (15, structure) | none | **Preferred Languages:** the list with the primary language, + to choose another language, and a "Restart required" note. **Region, First day of week, Date format, Number format, Temperature, Measurement system:** a preview line of the formats. | Language (owner decision 2026-10-26): Omarchy's per-user path. `omarchy-language list` gives the list, `omarchy-language` the current choice. `omarchy-language <code>` writes `~/.config/uwsm/env.d/50-omarchy-language` and generates the locale through Omarchy's own sudoers grant or `pkexec`; that is Omarchy's privilege, not Grassfield's. `locale1` is read for the system locale. The formats become Grassfield keys: a separate schema commit for the integrator, held until c3-settings-store lands. The shell applies them to the clock, the calendar and the temperatures. | Calendar systems other than Gregorian, per-application languages, Live Text. |
+| Date & Time | `General-Date-Time.png` (15, structure) | the clock options live in Menu Bar > Clock Options… | **Set time and date automatically:** NTP. **Source:** the NTP servers, read-only. **Date and time:** read; settable while NTP is off. **24-hour time:** mirrors `menubar.clockHours`. **Time zone** and **Closest city:** a searchable list of zones. | `org.freedesktop.timedate1`: read `Timezone`, `NTP` and `TimeUSec`; change with `SetNTP`, `SetTime` and `SetTimezone` (interactive) through polkit (ADR-0025). `org.freedesktop.timesync1` for the servers. `zone1970.tab` for the city names. | "Set time zone automatically using your current location" (no location service). "Show 24-hour time on Lock Screen" (the lock clock follows the menu bar clock). Editing the NTP source. |
+| Sharing | `General-Sharing.png` (15) | none | Owner (2026-10-26): no Sharing pane. The computer name moves to About > Name (above). | none | File, Media and Screen Sharing, Remote Login, Remote Management and Printer Sharing: none of these services is installed by Omarchy. |
+
+### Group 2: Hardware (PR after #4)
+| Pane | Reference | Today | Missing | Backend | Out of scope / impossible |
+|---|---|---|---|---|---|
+| Wi-Fi | `Wi-Fi.png` (27) | switch, current network, list; click connects or disconnects (GF-049) | A header card (tile, description, switch). The current network with a "Details…" sheet. Known Network and Other Networks sections, a (…) menu on each row, "Join Other Network…", and the ask-to-join options. | NetworkManager over D-Bus (exists) | Privacy warnings (Apple heuristics) |
+| Bluetooth | `Bluetooth.png` (27) | switch and paired devices; connect and disconnect | A header card with the discoverable note. My Devices with (i) details. Nearby Devices, with discovery and pairing through an agent. | BlueZ: `Adapter1.StartDiscovery`, `Device1.Pair`, and an `Agent1` for confirmation codes | none |
+| Network | `Network.png` (27) | none | A list of services (Wi-Fi, Ethernet, …) with their state, and a detail sub-pane per service (IP, router, DNS). A Firewall row. | NetworkManager devices and `IP4Config` / `IP6Config` (read). The firewall state is read from systemd units. | Editing a firewall (root); Thunderbolt Bridge |
+| VPN | `VPN.png` (27) | none | The VPN and WireGuard connections with a connect switch, and "No VPN configurations" when there are none. | NetworkManager: VPN and WireGuard connections, `ActivateConnection` / `DeactivateConnection` | Creating a configuration (+ menu); importing a file may come later |
+| Battery | `Battery.png` (27) | the battery menu in the menu bar and Quick Settings | Low Power Mode (Never, Always, Only on Battery, Only on Power Adapter). Battery Health. The Last 24 Hours and Last 10 Days charts of battery level. Options…. | UPower (`Capacity`, `GetHistory`); power-profiles-daemon (`ActiveProfile`). Omarchy remembers a profile for AC and one for battery (`omarchy-powerprofiles-set`). | Screen On Usage (no data); charge limit where UPower or the hardware lacks it |
+| Sound | `Sound.png` (27) | output and input lists, volume, mute (`wpctl`) | The Output / Input segmented control over a Name / Type table, Output volume, Mute, Balance. The Sound Effects group, as far as Grassfield plays sounds. | PipeWire via `wpctl` (exists) | Alert sound choices that Grassfield does not play; startup sound |
+| Displays | `Display.png` (27) | read-only arrangement and modes | The display picture and name. The Larger Text … More Space choices, resolution, refresh rate. Brightness. Advanced…, Night Shift… (the shell already has Night Shift). | **An ADR first.** Changes go through a Grassfield-owned session file read by the session config, never through `hyprctl` on the real session, with the macOS revert countdown. Brightness through logind `Session.SetBrightness`. | Colour profiles, "When connected to TV", automatic brightness without a sensor |
+| Keyboard | `Keyboard.png` (27) | the bindings list and Shortcuts in menus | Key repeat rate and Delay until repeat. Keyboard navigation. Keyboard Shortcuts… (a sheet over the bindings list). Text Input > Input Sources. | A Grassfield-owned Lua file, like `mouse-trackpad.lua`, read by the session config. The input sources are Hyprland's `kb_layout`. | Text Replacements, Dictation, the 🌐 key |
+| Mouse, Trackpad | `Mouse.png`, `Trackpad.png` (27) | one "Mouse & Trackpad" pane | Two panes, as macOS does; Mouse shows only while a mouse is connected. Point & Click, Scroll & Zoom and More Gestures tabs, with the rows each gesture supports. | The Grassfield-owned `mouse-trackpad.lua` (exists) and Hyprland gestures | The device pictures and gesture videos (Apple artwork); Look up & data detectors; Force Click |
+| Printers & Scanners | `Printers-and-Scanners.png` (27) | none | Default printer, Default paper size, the printer list with its state, and "Add Printer, Scanner, or Fax…". | CUPS, read-only through `lpstat`. The default printer and paper size go through `lpoptions` (per user, no root). Adding a printer goes through `cups-pk-helper` over D-Bus via polkit, with an ADR and an opus review. | Scanners and fax |
+
+### Group 3: Desktop (PR after Hardware)
+| Pane | Reference | Today | Missing | Backend | Out of scope / impossible |
+|---|---|---|---|---|---|
+| Appearance | `Appearance.png` (27) | Light, Dark, Auto; accent; transparency; icon style; folder colour | F1 finish: the thumbnail pickers, a transparency preview over Grassfield artwork with its slider, Text highlight colour (Automatic or the accent), the group layout of the capture | Grassfield keys (exist) | Liquid Glass itself (the phase 4 lensing) |
+| Wallpaper | `Wallpaper.png` (27) | a full pane (ADR-0016) | F1 finish of the top block: preview, name pop-up, "Show on all Desktops", Screen Saver…, Clock Appearance…. "Show All (n)" in the sections. | Grassfield keys (exist) | Apple's aerial videos |
+| Screen Saver (macOS 27: a Wallpaper sheet) | `Screen-Saver.png` (15, structure) | none | "Start screen saver when inactive" and the choice of screen saver | Omarchy's screen saver (`omarchy-launch-screensaver`) started from the shell's idle timer. That needs a new key, so a separate schema commit. | Apple's savers |
+| Desktop & Dock | `Desktop-Dock.png` (27) | Dock, Desktop, windows, Stages, screen corners | F1 finish: Size and Magnification side by side, the rows and order of the capture. The Desktop & Stage Manager, Widgets, Windows and Mission Control sections, as far as the keys exist. Shortcuts… and Hot Corners… become sheets. | Grassfield keys (exist); new ones in separate commits | "Click wallpaper to show desktop" until the shell can do it |
+| Menu Bar (includes the old Control Center) | `Menu-Bar.png` (27) | a full pane | F1 finish: the Menu Bar Controls list with a checkbox, a tile and an options button or pop-up per control (Clock Options…, Battery Options…, Focus "Show When Active") | Grassfield keys (exist) | Control Gallery suggestions and "Add Controls…" (Quick Settings has no edit mode) |
+| Notifications | `Notifications.png` (27) | DND, previews, per-app style and previews, history | A header card. A Notification Center section with Show previews and the "Show Notifications" conditions. Application Notifications as rows with an icon and a sub-label, pushing a per-app sub-pane. | Grassfield keys (exist) | "when mirroring or sharing the display" (no mirroring) |
+| Focus | `Focus.png` (27) | DND switch in Notifications and Quick Settings | Do Not Disturb as a row pushing its sub-pane, with a schedule ("Turn on automatically") | A new schedule key (separate commit) and the shell's scheduler | Reduce Interruptions, Add Focus, Share across devices, Focus status |
+| Lock Screen | `Lock-Screen.png` (27) | `lock.idleMinutes` | The display-off rows on battery and on power adapter. "Require password after …". Show user name and photo. Show message when locked, with Set…. | Grassfield keys (new keys go in separate commits) and the shell's idle path | Password hints; the "When Switching User" login window section |
+| Spotlight | `Spotlight.png` (27) | none (Search has no settings) | A header card, "Results from Apps" switches per Search provider, Delete Search History… | A new key per provider (separate commit) and the shell's Search filter | Related Content, Quick Keys, Help Apple Improve Search |
+| Accessibility | `Accessibility.png` (27) | Display (contrast, transparency, motion, text size), Zoom, Pointer | A hub with a header card and Vision, Hearing, Physical and Motor sections whose rows push sub-panes: Zoom, Display, Motion, Keyboard, Pointer Control. Today's rows move into them. | Grassfield keys (exist) | VoiceOver, Hover Text, Read & Speak, Voice Control, Switch Control, Audio Descriptions, Captions |
+| Privacy & Security | `Privacy.png` (27) | none | A header card, then one row per permission category with the apps holding it (Camera, Microphone, Screen Recording, Location, Background…). Removing a grant. | `xdg-desktop-portal` PermissionStore (`org.freedesktop.impl.portal.PermissionStore`, session bus): `List`, `Lookup` and `DeletePermission`, all at user level | Location Services itself; FileVault (disk encryption is never touched); Apple app categories |
+
 ## Purpose and non-goals
 Edit the user-facing keys of `grassfield.json` (contract version 1, master-prompt 5.3) and show read-only system
 information. The feature is called "Settings" (code: `grassfield-settings`, app id `org.grassfield.Settings`).
