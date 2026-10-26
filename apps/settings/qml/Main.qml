@@ -941,6 +941,7 @@ Window {
     PrinterSheet {
         id: printerSheet
         onRemoveRequested: printer => removePrinter.openFor(printer)
+        onResumeRequested: name => (page.item as PrintersPage)?.resume(name)
     }
 
     RemovePrinterSheet {

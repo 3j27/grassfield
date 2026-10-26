@@ -64,9 +64,14 @@ What Grassfield already has:
      `keyword`, and nothing Hyprland would not also do when a configuration file is saved.
    - The shell owns the countdown. It survives a Settings that crashed or was closed.
    - Settings shows a sheet: "Keep these display settings?", "The previous settings come back in N seconds.", Revert and Keep.
-   - Keep: Settings first writes the new `displays.conf` (atomically), then marks the trial `kept <id>`. The shell removes the
-     trial file. There is no second reload: the configuration already holds what is on screen.
-   - Revert, the deadline, or a trial file the shell finds when it starts: the shell removes the trial file and reloads.
+   - Keep: Settings marks the trial `kept <id>` once the shell has published it `applied` (a Keep chosen earlier waits for
+     that). The shell stops its countdown, removes the trial file without a second reload (what is on screen stays) and
+     publishes `kept`; only then does Settings write the new `displays.conf` (atomically), which the next login reads. A Keep
+     the shell does not take (its deadline came first: it publishes `reverted`; or it does not answer within the applied
+     time) writes nothing, so a mode nobody confirmed can never reach `displays.conf` (review of 2026-10-26). If that last
+     write fails, the session keeps the mode until the next reload or login, and Settings says so.
+   - Revert, the deadline, or a trial file the shell finds when it starts: the shell removes the trial file (synchronously,
+     before it asks for the reload) and reloads. `displays.lua` no longer applies a trial at its deadline second either.
      `displays.conf` and `monitors.lua` then hold the previous set, whatever it was. No "previous state" is captured, so none
      can be wrong.
    - Logging out during a trial drops the runtime file. The next login reads only `displays.conf`.
@@ -107,8 +112,11 @@ What Grassfield already has:
 ## Amendment 2026-10-26: the input files apply at once
 Settings > Mouse & Trackpad has written `mouse-trackpad.lua` since GF-066, and its choices applied at the next login. Settings >
 Keyboard now writes `keyboard.lua` next to it, and Trackpad's More Gestures adds three switches to `mouse-trackpad.lua`. Both
-files are generated Lua chunks that return plain values, read in an empty environment by `config/hypr/grassfield/input.lua`
-(the gestures by `bindings.lua`, through it). The shell watches the two files (`shell/platform/SessionConfig.qml`). Once the
+files keep the form of Lua chunks that return plain values, but `config/hypr/grassfield/input.lua` reads them as text and
+never runs them (the gestures by `bindings.lua`, through it): only `key = value` pairs with a number, true, false or a plain
+double-quoted string count, as for `displays.conf` above (review of 2026-10-26: a chunk run even in an empty environment
+could stall Hyprland's configuration with an endless loop). The shell starts with the session config's watchers
+(`shell/platform/SessionConfig.qml`, started by `shell.qml`: Quickshell makes a singleton only when first used). Once the
 writes settle (`settings.inputReloadMs`), it asks Hyprland to read its configuration again, through the same one request as
 a display trial. A choice then applies at once, as on a Mac. No countdown is needed: a pointer or keyboard setting cannot
 leave the screen unusable. Keyboard choices stay in the order GF-066 set for the pointer: after Omarchy's defaults, before

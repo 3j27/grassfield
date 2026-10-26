@@ -123,6 +123,8 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //   printer.add {name, uri, info}   cups-pk-helper PrinterAdd (model "everywhere": cupsd builds the queue from the printer's IPP
 //                               attributes), then PrinterSetEnabled and PrinterSetAcceptJobs (polkit, kPrivilegedMs each, ADR-0026)
 //   printer.delete {name}       cups-pk-helper PrinterDelete (polkit, kPrivilegedMs)
+//   printer.resume {name}       cups-pk-helper PrinterSetEnabled and PrinterSetAcceptJobs (a stopped queue, or one an add left
+//                               stopped when its second dialog was refused; polkit, kPrivilegedMs each)
 // and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait
 // for the user's answer (kPrivilegedMs):
 //   host.setName {name}         hostname1 SetPrettyHostname, then SetStaticHostname with the name made a valid host name

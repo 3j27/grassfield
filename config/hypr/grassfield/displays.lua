@@ -113,7 +113,8 @@ function M.trial_rules(path, now)
   if not id then
     return nil
   end
-  if tonumber(deadline) < now then
+  -- At its deadline second the trial is over (the shell's countdown ends then too, DisplaysFile.action).
+  if tonumber(deadline) <= now then
     problem("display trial " .. id .. " is past its deadline: not applied")
     return nil
   end

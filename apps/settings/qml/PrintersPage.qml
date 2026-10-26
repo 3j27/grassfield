@@ -25,6 +25,8 @@ SettingsPage {
     property var printers: []
     property string defaultName: ""
     property var devices: ({})
+    // queue -> whether it accepts jobs (`lpstat -a`; a queue not listed is taken as accepting).
+    property var accepting: ({})
     // queue -> {choices, current}: each queue's paper sizes (read once per queue, again after a change).
     property var papers: ({})
     // Add Printer…: what cupsd and DNS-SD find, read while the sheet is open.
@@ -39,7 +41,14 @@ SettingsPage {
         return printer.description !== "" ? printer.description : Printers.infoOf(printer.name);
     }
 
+    // Stopped, or refusing new jobs: Resume (in its sheet) makes it print again.
+    function needsResume(printer: var): bool {
+        return printer.state === "stopped" || root.accepting[printer.name] === false;
+    }
+
     function stateText(printer: var): string {
+        if (printer.state !== "stopped" && root.accepting[printer.name] === false)
+            return qsTr("Not Accepting Jobs");
         switch (printer.state) {
         case "printing":
             return qsTr("Printing");
@@ -56,7 +65,8 @@ SettingsPage {
     }
 
     function dotOf(printer: var): color {
-        return printer.state === "stopped" ? Appearance.colors.statusOff : printer.state === "holding" ? Appearance.colors.statusWarn : Appearance.colors.statusOn;
+        return printer.state === "stopped" ? Appearance.colors.statusOff : printer.state === "holding" || root.accepting[printer.name] === false
+            ? Appearance.colors.statusWarn : Appearance.colors.statusOn;
     }
 
     function kindText(printer: var): string {
@@ -90,13 +100,14 @@ SettingsPage {
     // What a printer's sheet shows.
     function details(printer: var): var {
         return {name: printer.name, title: root.displayName(printer), status: root.stateText(printer), message: printer.message,
-            location: printer.location, kind: root.kindText(printer), isDefault: printer.name === root.defaultName};
+            location: printer.location, kind: root.kindText(printer), isDefault: printer.name === root.defaultName, needsResume: root.needsResume(printer)};
     }
 
     function refresh(): void {
         root.system.query(Printers.QUERY.printers, "printers.list");
         root.system.query(Printers.QUERY.defaultPrinter, "printers.default");
         root.system.query(Printers.QUERY.devices, "printers.devices");
+        root.system.query(Printers.QUERY.accepting, "printers.accepting");
     }
 
     function readPapers(): void {
@@ -129,6 +140,10 @@ SettingsPage {
 
     function remove(name: string): void {
         root.system.act("remove printer", Printers.deleteOp(name), "printers.act");
+    }
+
+    function resume(name: string): void {
+        root.system.act("resume printer", Printers.resumeOp(name), "printers.act");
     }
 
     function startSearching(): void {
@@ -164,6 +179,9 @@ SettingsPage {
                 break;
             case "printers.devices":
                 root.devices = ok ? Printers.parseDevices(output) : {};
+                break;
+            case "printers.accepting":
+                root.accepting = ok ? Printers.parseAccepting(output) : {};
                 break;
             case "printers.found":
                 if (root.searching) {

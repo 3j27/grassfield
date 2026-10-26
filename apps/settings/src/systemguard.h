@@ -69,7 +69,8 @@ bool isPrinterUri(const QString &uri);
 
 // A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
-// exactly `-q -d <backlight> set <0-100>%`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
+// exactly `-q -d <backlight> set <0-100>%`, for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
+// `set-mute <id> 0|1`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
 // ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions).
 bool isAllowedAction(const QStringList &argv);
 

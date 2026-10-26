@@ -9,6 +9,7 @@ var QUERY = {
     printers: ["lpstat", "-l", "-p"],
     defaultPrinter: ["lpstat", "-d"],
     devices: ["lpstat", "-v"],
+    accepting: ["lpstat", "-a"],
     found: ["lpstat", "-l", "-e"]
 };
 
@@ -86,6 +87,17 @@ function parseDevices(text) {
     return out;
 }
 
+// `lpstat -a`: {queue: whether it accepts jobs} ("<queue> accepting requests since …", "<queue> not accepting requests since …").
+function parseAccepting(text) {
+    const out = {};
+    for (const line of String(text || "").split("\n")) {
+        const m = /^(\S+) (not )?accepting requests/.exec(line);
+        if (m)
+            out[m[1].split("/")[0]] = m[2] === undefined;
+    }
+    return out;
+}
+
 // `lpstat -l -e`: the printers cupsd and DNS-SD found that are not queues yet ("<name> network none <device-uri>") and that
 // cupsd can make a driverless queue of: [{name, uri}], without the names in `queues`.
 function parseFound(text, queues) {
@@ -153,6 +165,11 @@ function addOp(printer) {
 
 function deleteOp(name) {
     return validName(name) ? {op: "printer.delete", name: name} : null;
+}
+
+// A queue that is stopped or refuses jobs (an add whose second dialog was refused) made to print again.
+function resumeOp(name) {
+    return validName(name) ? {op: "printer.resume", name: name} : null;
 }
 
 function setDefault(name) {

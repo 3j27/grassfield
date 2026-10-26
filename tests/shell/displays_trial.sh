@@ -69,4 +69,12 @@ if grep -qvE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log"; then
 else
   echo "PASS: displays_trial only reloads and JSON queries reached Hyprland"
 fi
+# Quickshell makes a singleton only when it is first used: the real shell must start SessionConfig itself, or the input files
+# are watched only after a display trial (review of 2026-10-26). The harness above starts it with the same line.
+if grep -qxF '    readonly property int sessionConfigReloads: SessionConfig.reloads' shell/shell.qml \
+  && grep -qxF '    readonly property int sessionConfigReloads: SessionConfig.reloads' tests/shell/displays_trial.d/trial.qml; then
+  echo "PASS: displays_trial shell.qml starts SessionConfig with the shell, as the harness does"
+else
+  echo "FAIL: displays_trial shell.qml (or the harness) does not start SessionConfig at start"; fail=1
+fi
 exit $fail

@@ -36,6 +36,10 @@ ShellRoot {
     // locale) before the surfaces below evaluate their qsTr() strings.
     readonly property string language: Translator.language
 
+    // The session configuration's watchers (keyboard.lua and mouse-trackpad.lua, SessionConfig, ADR-0027 amendment) start with
+    // the shell: Quickshell makes a singleton only when it is first used, and nothing else uses it before a display trial.
+    readonly property int sessionConfigReloads: SessionConfig.reloads
+
     // The formats of dates, times and numbers (region.formats, Settings > General > Language & Region): the Translator makes
     // them the default locale, so every Qt.locale() of the shell (menu bar clock, widgets, lock screen) follows.
     Binding {

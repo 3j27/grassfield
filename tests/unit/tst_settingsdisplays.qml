@@ -6,8 +6,8 @@ import "../../apps/settings/qml/System.js" as System
 // Settings > Displays (ADR-0027): the state the shell publishes, the resolution choices (Larger Text … More Space) and refresh
 // rates of a monitor, the lines of displays.conf and of a trial (the same rule as config/hypr/grassfield/displays.lua), the
 // merge of a change into the kept lines, and the arrangement's snap. Then the page on a fake backend: a choice writes a trial
-// with the kept lines of the other displays and asks for the keep sheet; Keep writes displays.conf before it marks the trial
-// kept; Revert marks it; the shell taking it back, or not answering, ends it; Arrange tries the moved displays; a display
+// with the kept lines of the other displays and asks for the keep sheet; Keep marks the trial kept once the shell applied it
+// and writes displays.conf only once the shell kept it (a Keep after the shell's deadline writes nothing); Revert marks it; the shell taking it back, or not answering, ends it; Arrange tries the moved displays; a display
 // without a usable name is never written; brightness is the shell's command and nothing in a dev session.
 TestCase {
     id: testCase
@@ -118,12 +118,51 @@ TestCase {
         verify(!t.page.settable);
         t.page.tryChange({scale: 1.6});
         compare(t.backend.calls.length, 1);
-        // The shell applied it; Keep writes displays.conf first, then marks the trial kept.
-        publish(t, {id: trial.id, state: "applied"});
+        // Keep before the shell applied the trial waits; a second Keep (Return twice) changes nothing.
         t.page.keep();
-        compare(t.backend.calls.slice(1), [{call: "conf", lines: trial.lines}, {call: "mark", state: "kept", id: trial.id}]);
+        t.page.keep();
+        compare(t.backend.calls.length, 1);
+        // The shell applied it: the trial is marked kept, once; displays.conf is not written yet.
+        publish(t, {id: trial.id, state: "applied"});
+        publish(t, {id: trial.id, state: "applied"});
+        compare(t.backend.calls.slice(1), [{call: "mark", state: "kept", id: trial.id}]);
+        compare(endSpy.count, 0);
+        // The shell kept it: now displays.conf, for the next login.
+        publish(t, {id: trial.id, state: "kept"});
+        compare(t.backend.calls.slice(1), [{call: "mark", state: "kept", id: trial.id}, {call: "conf", lines: trial.lines}]);
         compare(endSpy.count, 1);
         verify(t.page.settable);
+    }
+
+    function test_page_aLateKeepWritesNothing() {
+        const t = makePage(false, [panelIpc]);
+        endSpy.target = t.page;
+        endSpy.clear();
+        // The shell's deadline came before the Keep reached it: it took the trial back; nothing reaches displays.conf.
+        t.page.tryChange({scale: 2.5});
+        const id = t.backend.calls[0].id;
+        publish(t, {id: id, state: "applied"});
+        t.page.keep();
+        publish(t, {id: id, state: "reverted"});
+        compare(t.backend.calls.filter(c => c.call === "conf"), []);
+        compare(endSpy.count, 1);
+        verify(t.page.notice.indexOf("taken back") >= 0, t.page.notice);
+        // Keep after the shell already took it back: nothing at all.
+        t.page.tryChange({scale: 1.6});
+        const id2 = t.backend.calls[t.backend.calls.length - 1].id;
+        publish(t, {id: id2, state: "applied"});
+        publish(t, {id: id2, state: "reverted"});
+        const before = t.backend.calls.length;
+        t.page.keep();
+        compare(t.backend.calls.length, before);
+        // A shell that applied the trial but never answers the Keep: nothing written, said so.
+        t.page.tryChange({scale: 2.5});
+        const id3 = t.backend.calls[t.backend.calls.length - 1].id;
+        publish(t, {id: id3, state: "applied"});
+        t.page.keep();
+        tryCompare(t.page, "trialId", "", 6000);
+        compare(t.backend.calls.filter(c => c.call === "conf"), []);
+        verify(t.page.notice.indexOf("did not answer") >= 0, t.page.notice);
     }
 
     function test_page_revertAndTheShellsAnswers() {

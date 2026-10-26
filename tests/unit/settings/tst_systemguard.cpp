@@ -270,7 +270,8 @@ TEST(PrinterGuard, TheReadsAreExactAndChangeNothing)
             out << QString::fromLatin1(a);
         return out;
     };
-    for (const QStringList &ok : {q({"lpstat", "-l", "-p"}), q({"lpstat", "-d"}), q({"lpstat", "-v"}), q({"lpstat", "-l", "-e"}), q({"lpoptions", "-p", "GF_Office", "-l"})})
+    for (const QStringList &ok : {q({"lpstat", "-l", "-p"}), q({"lpstat", "-d"}), q({"lpstat", "-v"}), q({"lpstat", "-a"}), q({"lpstat", "-l", "-e"}),
+                                  q({"lpoptions", "-p", "GF_Office", "-l"})})
         EXPECT_TRUE(isReadOnlyQuery(ok)) << ok.join(QLatin1Char(' ')).toStdString();
     for (const QStringList &no : {q({"lpstat"}), q({"lpstat", "-p", "-l"}), q({"lpstat", "-t"}), q({"lpstat", "-h", "evil.example", "-p"}), q({"lpstat", "-e"}), q({"lpstat", "-e", "-l"}),
                                   q({"lpoptions", "-l"}), q({"lpoptions", "-p", "GF_Office"}), q({"lpoptions", "-d", "GF_Office"}), q({"lpoptions", "-p", "-x", "-l"}),
@@ -320,6 +321,25 @@ TEST(PrinterGuard, NamesAndUrisAreThoseCupsdTurnsIntoADriverlessQueue)
         EXPECT_TRUE(isPaperKeyword(QString::fromLatin1(ok))) << ok;
     for (const char *no : {"", "-A4", "A 4", "A4,B5", "Custom.4x6in,x", "Custom.WIDTHxHEIGHT", longKeyword.constData()})
         EXPECT_FALSE(isPaperKeyword(QString::fromLatin1(no))) << no;
+}
+
+// Sound: wpctl runs only the page's three forms (review of 2026-10-26: any argument list used to pass).
+TEST(ActionGuard, WpctlTakesThePagesThreeFormsOnly)
+{
+    const auto w = [](std::initializer_list<const char *> args) {
+        QStringList out{QStringLiteral("wpctl")};
+        for (const char *a : args)
+            out << QString::fromLatin1(a);
+        return out;
+    };
+    for (const QStringList &ok : {w({"set-default", "52"}), w({"set-volume", "52", "0.00"}), w({"set-volume", "52", "0.75"}), w({"set-volume", "52", "1.00"}),
+                                  w({"set-mute", "52", "0"}), w({"set-mute", "52", "1"})})
+        EXPECT_TRUE(isAllowedAction(ok)) << ok.join(QLatin1Char(' ')).toStdString();
+    for (const QStringList &no : {w({}), w({"set-default"}), w({"set-default", "@DEFAULT_AUDIO_SINK@"}), w({"set-default", "-1"}), w({"set-default", "52", "x"}),
+                                  w({"set-volume", "52", "1.5"}), w({"set-volume", "52", "5%+"}), w({"set-volume", "52", ".5"}), w({"set-volume", "52", "0.5"}),
+                                  w({"set-volume", "1234567890", "0.50"}), w({"set-mute", "52", "toggle"}), w({"set-mute", "52", "FAILCASE"}),
+                                  w({"set-profile", "52", "1"}), w({"clear-default"}), w({"settings", "--delete"}), w({"status"})})
+        EXPECT_FALSE(isAllowedAction(no)) << no.join(QLatin1Char(' ')).toStdString();
 }
 
 // ADR-0027: the lines Settings may write to displays.conf and to a trial, the rule config/hypr/grassfield/displays.lua applies.

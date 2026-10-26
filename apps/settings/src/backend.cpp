@@ -40,7 +40,7 @@ constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
-constexpr int kPrivilegedJobMs = 250000; // two calls that each wait for the polkit dialog (kPrivilegedMs, 120 s), ADR-0026
+constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0026
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)

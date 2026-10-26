@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.lib
 import qs.platform
 
 // ADR-0027: the shell's side of a display trial, on the real Displays singleton (tests/shell/displays_trial.sh runs it against a
@@ -14,6 +15,9 @@ import qs.platform
 ShellRoot {
     id: root
 
+    // As shell.qml starts SessionConfig (displays_trial.sh checks that line is there): nothing else here uses it before the
+    // input step, so a shell that did not start it would miss the input files' changes.
+    readonly property int sessionConfigReloads: SessionConfig.reloads
     readonly property string trialPath: Displays.trialPath
     readonly property int now: Math.floor(Date.now() / 1000)
     property int step: 0
@@ -47,14 +51,14 @@ ShellRoot {
 
     FileView {
         id: keyboardFile
-        path: SessionConfig.keyboardPath
+        path: Mode.configDir + "/keyboard.lua"
         atomicWrites: true
         printErrors: false
     }
 
     FileView {
         id: mouseFile
-        path: SessionConfig.mouseTrackpadPath
+        path: Mode.configDir + "/mouse-trackpad.lua"
         atomicWrites: true
         printErrors: false
     }

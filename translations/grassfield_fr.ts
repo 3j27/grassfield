@@ -2981,8 +2981,16 @@
         <translation>Le changement n’a pas pu être essayé&#xa0;: %1</translation>
     </message>
     <message>
-        <source>The display settings could not be kept: %1</source>
-        <translation>Les réglages d’affichage n’ont pas pu être conservés&#xa0;: %1</translation>
+        <source>The display settings could not be saved for the next login: %1</source>
+        <translation>Les réglages d’affichage n’ont pas pu être enregistrés pour la prochaine ouverture de session : %1</translation>
+    </message>
+    <message>
+        <source>The display settings were taken back before they were kept.</source>
+        <translation>Les réglages d’affichage ont été rétablis avant d’être conservés.</translation>
+    </message>
+    <message>
+        <source>The display settings were not kept: the Grassfield shell did not answer.</source>
+        <translation>Les réglages d’affichage n’ont pas été conservés : le shell Grassfield n’a pas répondu.</translation>
     </message>
     <message>
         <source>The change was not applied: the Grassfield shell did not answer.</source>
@@ -5782,6 +5790,10 @@
         <translation>File d’attente</translation>
     </message>
     <message>
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
         <source>Remove Printer…</source>
         <translation>Supprimer l’imprimante…</translation>
     </message>
@@ -5791,6 +5803,10 @@
     <message>
         <source>Printers</source>
         <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>Not Accepting Jobs</source>
+        <translation>N’accepte pas les tâches</translation>
     </message>
     <message>
         <source>Printing</source>
@@ -5850,7 +5866,7 @@
     </message>
     <message>
         <source>Printing is not available: CUPS did not answer.</source>
-        <translation>L’impression n’est pas disponible : CUPS n’a pas répondu.</translation>
+        <translation>L’impression n’est pas disponible&#xa0;: CUPS n’a pas répondu.</translation>
     </message>
     <message>
         <source>Default printer</source>
@@ -5962,7 +5978,7 @@
     <name>RemovePrinterSheet</name>
     <message>
         <source>Remove “%1”?</source>
-        <translation>Supprimer « %1 » ?</translation>
+        <translation>Supprimer «&#xa0;%1&#xa0;»&#xa0;?</translation>
     </message>
     <message>
         <source>The printer is removed from this computer, with the print jobs waiting for it. To use it again, add it again.</source>

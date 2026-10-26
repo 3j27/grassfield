@@ -29,10 +29,10 @@ service ask the session's agent itself.
   says yes.
 - No Grassfield code runs as root: no helper, no `pkexec`, no sudo, no setuid binary, no new polkit policy, no rule file. The
   defaults of each service's own policy apply: the administrator's password, kept for a few minutes (`auth_admin_keep`).
-- The call waits for the user's answer for up to 120 s (`kPrivilegedMs`). The job's deadline covers two such calls, 250 s
-  (`kPrivilegedJobMs`). The window never blocks. A refusal, a cancelled dialog or no agent at all comes back as the service's
-  error and is shown on one line under the group: "The name could not be changed: not allowed: the system refused the request".
-  The page then reads the state again. Nothing is retried on its own.
+- The call waits for the user's answer for up to 120 s (`kPrivilegedMs`). The job's deadline covers three such calls (Add
+  Printer's), 370 s (`kPrivilegedJobMs`). The window never blocks. A refusal, a cancelled dialog or no agent at all comes back
+  as the service's error and is shown on one line under the group: "The name could not be changed: not allowed: the system
+  refused the request". The page then reads the state again. Nothing is retried on its own.
 - Every op is validated twice:
   - in QML (`General.js` builds the map or returns null);
   - again in C++ (`validAction`):
@@ -79,7 +79,9 @@ service ask the session's agent itself.
     too. The password goes from the sheet's field to that one call: it is validated (8 to 63 printable ASCII characters or 64
     hex digits) in QML and in C++, never logged (a dev session logs only "wifi join"), and the field is emptied on Join and on
     Cancel; NetworkManager stores it in the profile, as nmcli does. A join that does not come up within 30 s deletes the
-    profile it added, so a wrong password leaves no saved network behind.
+    profile it added, so a wrong password leaves no saved network behind. A join cut short before NetworkManager answers (the
+    120 s run out while the dialog is open, or Settings closed during the join) cannot be followed: if NetworkManager then
+    adds the profile, it stays, with its password, until Forget This Network… (review of 2026-10-26, accepted).
   - VPN switches: `ActivateConnection` of a `vpn` or `wireguard` profile on no device, `DeactivateConnection` of its active
     connection (`vpn.connect`; `network-control`, `yes` for the active session by default). A VPN that needs a secret it does
     not store needs NetworkManager's secret agent, which Grassfield does not provide: the activation fails with
@@ -105,7 +107,7 @@ service ask the session's agent itself.
   `install/omarchy-base.packages` and `install/config/enable-services.sh`, branch quattro; owner check on the installed 4.x).
   - Reads are commands, run in the C locale like every tool of the app (English output): `lpstat -l -p` (the queues, their
     state, Description and Location), `lpstat -d` (the default: CUPS reads the user's `~/.cups/lpoptions` first), `lpstat -v`
-    (each queue's device URI: its kind), `lpstat -l -e` (Add Printer: what the local cupsd and a second of DNS-SD browsing
+    (each queue's device URI: its kind), `lpstat -a` (whether each queue accepts jobs), `lpstat -l -e` (Add Printer: what the local cupsd and a second of DNS-SD browsing
     find; a driverless printer not yet queued is a `network` line with its URI) and `lpoptions -p <queue> -l` (its PageSize
     choices, the one in effect marked `*`). Exactly these argument lists are allowed (`isReadOnlyQuery`); a queue name is
     validated first. They read, they change nothing, so a dev session runs them too.
@@ -117,17 +119,24 @@ service ask the session's agent itself.
     `org.opensuse.CupsPkHelper.Mechanism`, object `/`, the same interface; read in Debian's 0.2.6 sources, Arch ships 0.2.7),
     which asks polkit with user interaction and then asks cupsd as root:
     - Add (`printer.add`): `PrinterAdd(name, uri, "everywhere", info, "")`, then `PrinterSetEnabled(name, true)` and
-      `PrinterSetAcceptJobs(name, true, "")` (a new queue starts stopped and refusing jobs, as `lpadmin` without `-E`). The
+      `PrinterSetAcceptJobs(name, true, "")` (a new queue starts stopped and refusing jobs, as `lpadmin` without `-E`); three
+      calls, so the job's deadline is 370 s. The
       model "everywhere" makes cupsd build the queue's PPD itself from the printer's IPP attributes, in the background, for a
       `dnssd:`, `ipp:`, `ipps:` or `ippusb:` URI (CUPS `scheduler/ipp.c`, `add_printer`); a printer that does not describe its
       media is dropped again by cupsd. Only such driverless printers are offered (macOS adds AirPrint printers the same way);
       a printer that needs a driver is out of scope (Omarchy's `system-config-printer` does that).
     - Remove (`printer.delete`): `PrinterDelete(name)`, after a confirmation sheet ("Remove …?").
+    - Resume (`printer.resume`): `PrinterSetEnabled(name, true)` and `PrinterSetAcceptJobs(name, true, "")`, offered in a
+      printer's sheet while it is stopped or refuses jobs (`lpstat -p`, and `lpstat -a`, another read of the allow-list).
     - Polkit: `org.opensuse.cupspkhelper.mechanism.all-edit`, `.printeraddremove`, then `.printer-local-edit` or
       `.printer-remote-edit` (and `.printer-enable` for the two switches): all `auth_admin_keep` for the active session. The
-      helper asks interactively for the last one only; the authorisation kept for a few minutes lets the two calls after an add
-      through without a second dialog. 120 s for each call, as above (`kPrivilegedMs`). The helper returns CUPS's own message
-      on failure (shown under the list); a polkit refusal comes back as its `NotPrivileged` error, "not allowed".
+      helper asks interactively for the last one only. Polkit keeps an authorisation per action id, so the switches after an
+      add may ask a second time (whether the add's kept `printer-local-edit` or `printer-remote-edit` also covers them depends
+      on how the helper judges the new queue: not verified, owner check). A second dialog refused or cancelled leaves the queue
+      added, stopped and refusing jobs: the page shows it so ("Stopped", "Not Accepting Jobs") and its sheet offers Resume and
+      Remove Printer…; nothing is rolled back behind the user's back (a delete would ask again). 120 s for each call, as
+      above (`kPrivilegedMs`). The helper returns CUPS's own message on failure (shown under the list); a polkit refusal comes
+      back as its `NotPrivileged` error, "not allowed".
     - Validated in QML (`Printers.js`) and again in C++ (`validAction`): a queue name of 1 to 127 characters
       `[A-Za-z0-9_.+@-]` not starting with `-`; a URI of one of the four schemes, at most 1024 characters, without spaces or
       control characters; the description (`info`, the name with `_` shown as spaces) printable, at most 127 characters.

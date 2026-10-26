@@ -981,7 +981,7 @@ bool validAction(const QVariantMap &op)
     if (name == QLatin1String("printer.add"))
         return isPrinterName(op.value(QStringLiteral("name")).toString()) && isPrinterUri(op.value(QStringLiteral("uri")).toString())
             && isPrinterInfo(op.value(QStringLiteral("info")));
-    if (name == QLatin1String("printer.delete"))
+    if (name == QLatin1String("printer.delete") || name == QLatin1String("printer.resume"))
         return isPrinterName(op.value(QStringLiteral("name")).toString());
     return false;
 }
@@ -1111,18 +1111,23 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         return r.ok ? QString() : fail(r.error);
     }
     // Printers (ADR-0026). A new queue for a driverless printer: cupsd builds its PPD from the printer's IPP attributes
-    // ("everywhere"), then the queue is enabled and accepts jobs (it starts stopped, as lpadmin without -E). After the first
-    // dialog, polkit's kept authorisation lets the two other calls through.
-    if (name == QLatin1String("printer.add")) {
-        const QString printer = op.value(QStringLiteral("name")).toString();
-        QString error = cupsPk(bus, QStringLiteral("PrinterAdd"),
-                               {printer, op.value(QStringLiteral("uri")).toString(), QStringLiteral("everywhere"), op.value(QStringLiteral("info")).toString(), QString()}); // i18n-ignore: CUPS's model name
-        if (error.isEmpty())
-            error = cupsPk(bus, QStringLiteral("PrinterSetEnabled"), {printer, true});
+    // ("everywhere"), then the queue is enabled and accepts jobs (it starts stopped, as lpadmin without -E). The helper checks
+    // other polkit actions for the two switches, so it may ask again; refused there, the queue stays, stopped: the page shows it
+    // and its sheet offers Resume (printer.resume, the same two calls) and Remove Printer….
+    const auto resume = [&bus](const QString &printer) {
+        QString error = cupsPk(bus, QStringLiteral("PrinterSetEnabled"), {printer, true});
         if (error.isEmpty())
             error = cupsPk(bus, QStringLiteral("PrinterSetAcceptJobs"), {printer, true, QString()});
         return error;
+    };
+    if (name == QLatin1String("printer.add")) {
+        const QString printer = op.value(QStringLiteral("name")).toString();
+        const QString error = cupsPk(bus, QStringLiteral("PrinterAdd"),
+                                     {printer, op.value(QStringLiteral("uri")).toString(), QStringLiteral("everywhere"), op.value(QStringLiteral("info")).toString(), QString()}); // i18n-ignore: CUPS's model name
+        return error.isEmpty() ? resume(printer) : error;
     }
+    if (name == QLatin1String("printer.resume"))
+        return resume(op.value(QStringLiteral("name")).toString());
     if (name == QLatin1String("printer.delete"))
         return cupsPk(bus, QStringLiteral("PrinterDelete"), {op.value(QStringLiteral("name")).toString()});
 

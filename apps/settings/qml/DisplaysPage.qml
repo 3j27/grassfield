@@ -34,6 +34,10 @@ SettingsPage {
     property var trialChange: null
     // Why the last change did not happen.
     property string notice: ""
+    // Keep was chosen: the trial is marked kept once the shell says it applied it, and displays.conf is written once the shell
+    // says it kept it, never before (a Keep that comes too late, after the shell's deadline, writes nothing).
+    property bool keeping: false
+    property bool keepMarked: false
 
     readonly property var monitors: root.displayState ? root.displayState.monitors : []
     readonly property var monitor: root.monitors.find(m => m.name === root.selected) ?? root.monitors[0] ?? null
@@ -50,14 +54,19 @@ SettingsPage {
         root.answered = true;
         // The shell took the trial back (its deadline, or Revert): the sheet goes.
         const t = root.displayState ? root.displayState.trial : null;
-        if (root.trialId !== "" && t && t.id === root.trialId && t.state === "reverted")
+        if (root.keeping)
+            root.settleKeep();
+        else if (root.trialId !== "" && t && t.id === root.trialId && t.state === "reverted")
             root.endTrial();
     }
 
     function endTrial(): void {
         root.trialId = "";
         root.trialChange = null;
+        root.keeping = false;
+        root.keepMarked = false;
         applied.stop();
+        keepAnswer.stop();
         root.trialEnded();
     }
 
@@ -86,18 +95,34 @@ SettingsPage {
             root.tryLines([Displays.lineFor(root.monitor, change)], change);
     }
 
-    // DisplayKeepSheet's answers.
+    // DisplayKeepSheet's answers. Keep goes by the shell's state of the trial (settleKeep); a second Keep changes nothing.
     function keep(): void {
-        if (root.trialId === "")
+        if (root.trialId === "" || root.keeping)
             return;
-        const error = root.backend.writeDisplaysConf(root.trialLines);
-        if (error !== "") {
-            root.notice = qsTr("The display settings could not be kept: %1").arg(error);
-            root.backend.markDisplayTrial("revert", root.trialId);
-        } else {
+        root.keeping = true;
+        root.settleKeep();
+    }
+
+    // Keep's next step: the shell applied the trial → mark it kept; the shell kept it → write displays.conf (the next login
+    // reads it); the shell took it back first (its deadline) → nothing is written. Before the shell applied it, Keep waits
+    // (the applied timer still runs).
+    function settleKeep(): void {
+        const t = root.displayState ? root.displayState.trial : null;
+        if (!root.keeping || t === null || t.id !== root.trialId)
+            return;
+        if (t.state === "applied" && !root.keepMarked) {
+            root.keepMarked = true;
             root.backend.markDisplayTrial("kept", root.trialId);
+            keepAnswer.restart();
+        } else if (t.state === "kept") {
+            const error = root.backend.writeDisplaysConf(root.trialLines);
+            if (error !== "")
+                root.notice = qsTr("The display settings could not be saved for the next login: %1").arg(error);
+            root.endTrial();
+        } else if (t.state === "reverted") {
+            root.notice = qsTr("The display settings were taken back before they were kept.");
+            root.endTrial();
         }
-        root.endTrial();
     }
 
     function revert(): void {
@@ -132,6 +157,17 @@ SettingsPage {
         running: true
         repeat: true
         onTriggered: root.refresh()
+    }
+
+    // Keep marked: the shell says it kept the trial within this long; otherwise nothing is written and its own countdown takes
+    // the trial back.
+    Timer {
+        id: keepAnswer
+        interval: Tokens.settingsDisplayAppliedMs
+        onTriggered: {
+            root.notice = qsTr("The display settings were not kept: the Grassfield shell did not answer.");
+            root.endTrial();
+        }
     }
 
     // The shell says it applied the trial within this long, or the change did not happen (no shell, or a shell without ADR-0027).

@@ -1250,6 +1250,34 @@ TEST(SystemBusPrinters, CupsMessagesAndRefusalsAreTheReasonAndStopTheAdd)
     EXPECT_EQ(runAction(none, {{"op", "printer.delete"}, {"name", "GF_Office"}}), QStringLiteral("the service is not running"));
 }
 
+TEST(SystemBusPrinters, AnAddWhoseSwitchesAreRefusedLeavesTheQueueToResume)
+{
+    FakeBus bus;
+    bus.handler = [](const Call &c) {
+        return c.member == QLatin1String("PrinterSetEnabled") ? err(QStringLiteral("org.opensuse.CupsPkHelper.Mechanism.NotPrivileged: Not Authorized")) : ok({QString()});
+    };
+    const QVariantMap add{{"op", "printer.add"}, {"name", "GF_Office"}, {"uri", "ipp://192.0.2.7/ipp/print"}, {"info", "GF Office"}};
+    EXPECT_EQ(runAction(bus, add), QStringLiteral("not allowed: the system refused the request"));
+    EXPECT_EQ(bus.members(), (QStringList{QStringLiteral("Mechanism.PrinterAdd"), QStringLiteral("Mechanism.PrinterSetEnabled")}));
+    // Resume: the same two switches, nothing else.
+    FakeBus later;
+    later.handler = [](const Call &) { return ok({QString()}); };
+    const QVariantMap resume{{"op", "printer.resume"}, {"name", "GF_Office"}};
+    EXPECT_TRUE(privilegedAction(resume));
+    EXPECT_EQ(runAction(later, resume), QString());
+    ASSERT_EQ(later.calls.size(), 2);
+    EXPECT_EQ(later.calls[0].member, QStringLiteral("PrinterSetEnabled"));
+    EXPECT_EQ(later.calls[0].args, (QVariantList{QStringLiteral("GF_Office"), true}));
+    EXPECT_EQ(later.calls[1].member, QStringLiteral("PrinterSetAcceptJobs"));
+    EXPECT_EQ(later.calls[1].args, (QVariantList{QStringLiteral("GF_Office"), true, QString()}));
+    later.calls.clear();
+    EXPECT_EQ(runAction(later, {{"op", "printer.resume"}, {"name", "-x"}}), QStringLiteral("invalid request"));
+    EXPECT_TRUE(later.calls.isEmpty());
+    GuardedCaller dev(later, true);
+    EXPECT_TRUE(runAction(dev, resume).startsWith(QStringLiteral("dev guard")));
+    EXPECT_TRUE(later.calls.isEmpty());
+}
+
 TEST(SystemBusPrinters, RemovingIsPrinterDelete)
 {
     FakeBus bus;

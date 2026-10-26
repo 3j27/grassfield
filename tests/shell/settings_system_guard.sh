@@ -23,13 +23,13 @@ mkdir -p "$tmp/bin" "$tmp/qml"
 dead_bus="unix:path=$tmp/no-such-system-bus"
 [[ $dead_bus == unix:path=$tmp/* && ! -e $tmp/no-such-system-bus ]] || { echo "FAIL: the test bus is not a dead address"; exit 2; }
 for tool in nmcli bluetoothctl wpctl touch pacman lspci; do
-  # Records the arguments and the locale the tool was started with; a tool named "failing" in the first argument
-  # prints a reason on stderr and exits 1.
+  # Records the arguments and the locale the tool was started with; FAILCASE anywhere, or the device id 999999 (a wpctl form
+  # the guard allows), prints a reason on stderr and exits 1.
   cat >"$tmp/bin/$tool" <<EOF
 #!/bin/sh
 echo "$tool \$*" >> "$tmp/marker"
 echo "LC_ALL=\$LC_ALL LANG=\$LANG LANGUAGE=\${LANGUAGE-unset}" >> "$tmp/locale"
-case "\$*" in *FAILCASE*) echo "Error: simulated failure" >&2; exit 1;; esac
+case "\$*" in *FAILCASE*|*" 999999 "*) echo "Error: simulated failure" >&2; exit 1;; esac
 exit 0
 EOF
   chmod +x "$tmp/bin/$tool"
@@ -141,7 +141,7 @@ QtObject {
             for (const a of root.commands)
                 root.actReturns.push(root.backend.act("test", a, "a"));
             // A failing tool reports its reason (stderr) before finished(false).
-            root.backend.act("test", ["wpctl", "set-mute", "52", "FAILCASE"], "failing");
+            root.backend.act("test", ["wpctl", "set-mute", "999999", "1"], "failing");
             root.actReturns.push(root.backend.act("test", ["touch", "x"], "a"));
             root.actReturns.push(root.backend.act("test", ["nmcli", "radio", "wifi", "off"], "a"));
             root.actReturns.push(root.backend.act("test", ["bluetoothctl", "power", "off"], "a"));

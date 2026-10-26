@@ -14,7 +14,8 @@ import "DisplaysFile.js" as DisplaysFile
 // - it runs a trial: when Settings writes the trial file, it asks Hyprland to read its configuration again (the request
 //   `reload` through SessionConfig; config/hypr/grassfield/displays.lua applies the trial while it runs), and takes it back
 //   after its deadline, on Revert, or when it finds a trial at start: the file is emptied, then the configuration read again.
-//   Keep empties the file without a reload (Settings wrote displays.conf first). The countdown is the shell's, so a Settings
+//   Keep empties the file without a reload and publishes `kept`; Settings then writes displays.conf (a Keep the shell did not
+//   take, after its deadline, writes nothing). The countdown is the shell's, so a Settings
 //   that crashed or was closed cannot leave a display in a mode nobody confirmed.
 // In a dev session the files are under GRASSFIELD_STATE_HOME and the request socket is the nested Hyprland's.
 Singleton {
@@ -123,6 +124,9 @@ Singleton {
         printErrors: false
         watchChanges: true
         atomicWrites: true
+        // Emptied before the reload is asked for: the write is done when setText returns, so the configuration read again
+        // never finds the trial being taken back.
+        blockWrites: true
         onFileChanged: reload()
         onLoaded: root.handle(trialFile.text())
         onLoadFailed: root.handle("")

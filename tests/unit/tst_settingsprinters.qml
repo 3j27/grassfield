@@ -73,6 +73,12 @@ TestCase {
         compare(Printers.addOp(null), null);
         compare(Printers.deleteOp("GF_Office"), {op: "printer.delete", name: "GF_Office"});
         compare(Printers.deleteOp("-E"), null);
+        compare(Printers.resumeOp("GF_Office"), {op: "printer.resume", name: "GF_Office"});
+        compare(Printers.resumeOp("a b"), null);
+        compare(Printers.parseAccepting("GF_Office accepting requests since Mon 26 Oct 2026 09:00:00 AM CET\n"
+            + "New not accepting requests since Mon 26 Oct 2026 09:00:00 AM CET -\n\treason unknown\nOld/draft accepting requests since x\n"),
+            {GF_Office: true, New: false, Old: true});
+        compare(Printers.QUERY.accepting, ["lpstat", "-a"]);
         compare(Printers.setDefault("GF_Office"), ["lpoptions", "-d", "GF_Office"]);
         compare(Printers.setDefault("a/b"), null);
         compare(Printers.setPaper("GF_Office", "A4"), ["lpoptions", "-p", "GF_Office", "-o", "PageSize=A4"]);
@@ -124,7 +130,7 @@ TestCase {
 
     function test_pageReadsAndActs() {
         const t = makePage(false);
-        compare(t.backend.queries.map(q => q.tag), ["printers.list", "printers.default", "printers.devices"]);
+        compare(t.backend.queries.map(q => q.tag), ["printers.list", "printers.default", "printers.devices", "printers.accepting"]);
         t.backend.finished("printers.list", true, testCase.listing);
         t.backend.finished("printers.default", true, "system default destination: GF_Office\n");
         compare(t.page.printers.length, 4);
@@ -148,7 +154,7 @@ TestCase {
         // After an action: the state and every queue's sizes are read again.
         const before = t.backend.queries.length;
         t.backend.finished("printers.act", true, "");
-        compare(t.backend.queries.slice(before).map(q => q.tag), ["printers.list", "printers.default", "printers.devices"]);
+        compare(t.backend.queries.slice(before).map(q => q.tag), ["printers.list", "printers.default", "printers.devices", "printers.accepting"]);
         compare(t.page.papers, {});
         // Add Printer…: found while searching only, without the queues there already.
         t.page.startSearching();
@@ -161,6 +167,15 @@ TestCase {
         t.page.stopSearching();
         t.backend.finished("printers.found", true, "Late network none ipp://192.0.2.9/ipp/print\n");
         compare(t.page.found.length, 1);
+        // An added queue whose switches were refused: idle but refusing jobs; its sheet offers Resume, which sends the op.
+        t.backend.finished("printers.list", true, testCase.listing);
+        t.backend.finished("printers.accepting", true, "GF_Office not accepting requests since x -\n\treason unknown\nLabel accepting requests since x\n");
+        compare(t.page.statusOf(t.page.printers[0]), "Not Accepting Jobs, Default");
+        verify(t.page.details(t.page.printers[0]).needsResume);
+        verify(!t.page.details(t.page.printers[1]).needsResume);
+        verify(t.page.details(t.page.printers[2]).needsResume);
+        t.page.resume("GF_Office");
+        compare(t.backend.busActions[2], {op: "printer.resume", name: "GF_Office"});
     }
 
     function test_cupsNotAnsweringAndDevSession() {

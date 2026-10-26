@@ -56,7 +56,8 @@ bool isReadOnlyQuery(const QStringList &argv)
     // it changes nothing; any other lpoptions form may write and is an action.
     if (program == QLatin1String("lpstat"))
         return args == QStringList{QStringLiteral("-l"), QStringLiteral("-p")} || args == QStringList{QStringLiteral("-d")}
-            || args == QStringList{QStringLiteral("-v")} || args == QStringList{QStringLiteral("-l"), QStringLiteral("-e")};
+            || args == QStringList{QStringLiteral("-v")} || args == QStringList{QStringLiteral("-a")}
+            || args == QStringList{QStringLiteral("-l"), QStringLiteral("-e")};
     if (program == QLatin1String("lpoptions"))
         return args.size() == 3 && args.at(0) == QLatin1String("-p") && isPrinterName(args.at(1)) && args.at(2) == QLatin1String("-l");
     return false;
@@ -307,6 +308,18 @@ bool isAllowedAction(const QStringList &argv)
         static const QRegularExpression percent(QRegularExpression::anchoredPattern(QStringLiteral("(100|[1-9]?[0-9])%")));
         return argv.size() == 6 && argv.at(1) == QLatin1String("-q") && argv.at(2) == QLatin1String("-d") && isBacklightName(argv.at(3))
             && argv.at(4) == QLatin1String("set") && percent.match(argv.at(5)).hasMatch();
+    }
+    // Sound: exactly the three forms of the page (qml/System.js): a device made the default, its volume (0.00 to 1.00), its mute.
+    if (argv.first() == QLatin1String("wpctl")) {
+        static const QRegularExpression id(QRegularExpression::anchoredPattern(QStringLiteral("[0-9]{1,9}")));
+        static const QRegularExpression volume(QRegularExpression::anchoredPattern(QStringLiteral("0\\.[0-9]{2}|1\\.00")));
+        if (argv.size() == 3 && argv.at(1) == QLatin1String("set-default"))
+            return id.match(argv.at(2)).hasMatch();
+        if (argv.size() == 4 && argv.at(1) == QLatin1String("set-volume"))
+            return id.match(argv.at(2)).hasMatch() && volume.match(argv.at(3)).hasMatch();
+        if (argv.size() == 4 && argv.at(1) == QLatin1String("set-mute"))
+            return id.match(argv.at(2)).hasMatch() && (argv.at(3) == QLatin1String("0") || argv.at(3) == QLatin1String("1"));
+        return false;
     }
     // Printers: the user's default printer, or one queue's paper size (~/.cups/lpoptions).
     if (argv.first() == QLatin1String("lpoptions"))

@@ -26,7 +26,8 @@
 #  12  Bluetooth discovery and pairing: the adapter's name, the nearby device (an RSSI) and a paired one's battery; discovery on and
 #      off; Pair, Trusted and Connect on the nearby device, which is then paired; Forget removes a device; the dev guard
 #  14  Printers (ADR-0026, cups-pk-helper): Add makes an "everywhere" queue and switches it on and to accepting jobs, Remove
-#      deletes it; CUPS's message and a polkit refusal are the reason; bad values and the dev guard send nothing
+#      deletes it; CUPS's message and a polkit refusal are the reason; the switches refused after an add leave the queue, and
+#      Resume makes the two calls; bad values and the dev guard send nothing
 #
 # Needs a private dbus-daemon (a unix socket in the test's own directory; loopback TCP with anonymous auth where sockets cannot be
 # created, as in a sandbox), g++ with the Qt 6 headers, python3 + PyGObject. SKIPs (exit 0) without them. Exit: 0 PASS, 1 FAIL,
@@ -509,6 +510,22 @@ stop_service cupspk
 start_service cupspk --fail 'PrinterAdd=org.opensuse.CupsPkHelper.Mechanism.NotPrivileged|Not Authorized'
 out=$(probe act "$add")
 check "a polkit refusal: not allowed, and the queue is neither enabled nor opened ($out)" bash -c '[[ $1 == "failed: not allowed: the system refused the request" ]] && ! grep -q PrinterSetEnabled "$2"' _ "$out" "$work/cupspk.log"
+stop_service cupspk
+# The helper may ask again for the two switches (other polkit actions): refused there, the queue stays, stopped; Resume makes
+# the same two calls.
+start_service cupspk --fail 'PrinterSetEnabled=org.opensuse.CupsPkHelper.Mechanism.NotPrivileged|Not Authorized'
+out=$(probe act "$add")
+made=$(members cupspk)
+check "the switches refused after an add: not allowed ($out), PrinterAdd made, PrinterSetAcceptJobs not tried ($made)" bash -c '[[ $1 == "failed: not allowed: the system refused the request" && $2 == PrinterAdd,PrinterSetEnabled ]]' _ "$out" "$made"
+stop_service cupspk
+start_service cupspk
+out=$(probe act '{"op":"printer.resume","name":"GF_Office"}')
+made=$(members cupspk)
+check "Resume: ok ($out), PrinterSetEnabled then PrinterSetAcceptJobs on the queue, nothing else ($made)" bash -c '[[ $1 == ok && $2 == PrinterSetEnabled,PrinterSetAcceptJobs ]]' _ "$out" "$made"
+check "... with the queue's name" logged cupspk PrinterSetAcceptJobs / "'GF_Office', true, ''"
+out=$(probe --dev act '{"op":"printer.resume","name":"GF_Office"}')
+made=$(members cupspk)
+check "in a dev session Resume is refused by the guard ($out), nothing more reached the helper" bash -c '[[ $1 == "failed: dev guard"* && $2 == PrinterSetEnabled,PrinterSetAcceptJobs ]]' _ "$out" "$made"
 stop_service cupspk
 
 say ""
