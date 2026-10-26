@@ -12,7 +12,8 @@ T.Button {
     // macOS push button: buttonHeight (24) tall instead of the roomier default (a sheet sets it on its buttons).
     property bool push: false
 
-    implicitWidth: Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg)
+    // Whole pixels, so that a row of buttons keeps every edge sharp.
+    implicitWidth: Math.ceil(Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg))
     implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : (root.push ? Tokens.controlButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm)
     // Disabled: the whole button dims, once (callers no longer set an opacity of their own).
     opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
@@ -45,7 +46,7 @@ T.Button {
 
     background: Rectangle {
         radius: root.capsule ? height / 2 : Tokens.radiusControl
-        color: root.primary ? Appearance.colors.accent : Appearance.buttonFill
+        color: root.primary ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         // Increase Contrast: the border token carries a stronger value then.
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
@@ -65,7 +66,7 @@ T.Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: root.text
-        color: root.primary ? Appearance.colors.accentText : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
+        color: root.primary ? Appearance.colors.selectionText : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize
         font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)

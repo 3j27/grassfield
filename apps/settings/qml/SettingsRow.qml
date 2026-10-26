@@ -25,8 +25,8 @@ Item {
 
     Rectangle {
         visible: root.Positioner.index > 0
-        x: Tokens.spacingMd
-        width: parent.width - 2 * Tokens.spacingMd
+        x: Tokens.settingsRowInset
+        width: parent.width - 2 * Tokens.settingsRowInset
         height: 1
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
@@ -35,7 +35,7 @@ Item {
         id: labels
         anchors {
             left: parent.left
-            leftMargin: Tokens.spacingMd
+            leftMargin: Tokens.settingsRowInset
             right: slot.left
             rightMargin: Tokens.spacingLg
             verticalCenter: parent.verticalCenter
@@ -67,7 +67,7 @@ Item {
         id: slot
         anchors {
             right: parent.right
-            rightMargin: Tokens.spacingMd
+            rightMargin: Tokens.settingsRowInset
             verticalCenter: parent.verticalCenter
         }
         spacing: Tokens.spacingSm

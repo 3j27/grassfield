@@ -13,13 +13,6 @@ TestCase {
         {text: "More", submenu: [{text: "Sub A"}, {text: "Sub B"}]}
     ]
 
-    function test_leadSlotsPerSection() {
-        compare(MenuNav.leadSlots([{text: "a"}, {text: "b"}]), [false, false]);
-        compare(MenuNav.leadSlots([{text: "a", checked: true}, {text: "b"}, {separator: true}, {text: "c"}]), [true, true, false, false]);
-        compare(MenuNav.leadSlots([{text: "a"}, {separator: true}, {text: "b", iconName: "gear"}, {text: "c", checked: false}]), [false, false, true, true]);
-        compare(MenuNav.leadSlots([]), []);
-    }
-
     function test_downSkipsSeparatorsAndDisabled() {
         compare(MenuNav.handleKey(items, -1, "down", false).index, 0);
         compare(MenuNav.handleKey(items, 0, "down", false).index, 3);

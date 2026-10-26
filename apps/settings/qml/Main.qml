@@ -3,8 +3,8 @@ import QtQuick
 import Grassfield.Ui
 import "NavHistory.js" as NavHistory
 
-// Grassfield Settings: sidebar with search and sections on the left, detail pane on the right.
-// App windows are opaque (master-prompt 5.5), so the sidebar uses a flat surface, not the shell material.
+// Grassfield Settings: sidebar with search and sections on the left, detail pane on the right (macOS 27 layout, ADR-0024).
+// App windows are opaque (master-prompt 5.5): the sidebar is a flat, slightly darker surface edge to edge, not the shell material.
 Window {
     id: root
 
@@ -20,6 +20,12 @@ Window {
     property string gfChromeRole: "settings"
     // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b).
     property bool canMinimize: true
+    // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
+    readonly property var tileColors: ({
+            wifi: "blue", bluetooth: "blue", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
+            accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
+            mouse: "graphite", keyboard: "graphite", about: "green"
+        })
     // The title of the shown section (the toolbar's title; the page itself repeats nothing).
     readonly property string sectionTitle: {
         for (const e of root.sections) {
@@ -29,31 +35,21 @@ Window {
         return qsTr("Appearance");
     }
 
-    // The sidebar's icon tile colours (our own palette, tokens).
-    readonly property var tileColors: ({
-            blue: Tokens.settingsTileBlue,
-            teal: Tokens.settingsTileTeal,
-            pink: Tokens.settingsTilePink,
-            purple: Tokens.settingsTilePurple,
-            red: Tokens.settingsTileRed,
-            gray: Tokens.settingsTileGray
-        })
-
     readonly property var sections: [
-        {id: "wifi", tile: "blue", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
-        {id: "bluetooth", tile: "blue", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
-        {id: "sound", tile: "pink", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
-        {id: "displays", tile: "blue", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
-        {id: "appearance", tile: "gray", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
-        {id: "wallpaper", tile: "teal", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
-        {id: "accessibility", tile: "blue", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
-        {id: "desktop", tile: "purple", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
-        {id: "menubar", tile: "gray", title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
-        {id: "notifications", tile: "red", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
-        {id: "lock", tile: "gray", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
-        {id: "mouse", tile: "gray", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
-        {id: "keyboard", tile: "gray", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
-        {id: "about", tile: "gray", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
+        {id: "wifi", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
+        {id: "bluetooth", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
+        {id: "sound", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
+        {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
+        {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
+        {id: "wallpaper", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
+        {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
+        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
+        {id: "menubar", title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
+        {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
+        {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
+        {id: "mouse", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
+        {id: "keyboard", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
+        {id: "about", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
     ]
     property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
     property string query: ""
@@ -79,7 +75,7 @@ Window {
     minimumWidth: Tokens.settingsWindowMinWidth
     minimumHeight: Tokens.settingsWindowMinHeight
     visible: true
-    color: Appearance.colors.materialTint
+    color: Appearance.colors.windowBackground
 
     function readCapabilities(): void {
         const file = root.backend.readText(root.backend.capabilitiesFile);
@@ -110,6 +106,13 @@ Window {
         backend: root.backend
     }
 
+    // The window's own surface and its secondary text grey (Appearance.windowSurface, Appearance.windowSecondary).
+    Binding {
+        target: Appearance
+        property: "windowSurface"
+        value: true
+    }
+
     Binding {
         target: Appearance
         property: "dark"
@@ -130,13 +133,6 @@ Window {
         target: Appearance
         property: "transparency"
         value: 0
-    }
-
-    // The window's own white background and secondary text (Appearance.windowSurface).
-    Binding {
-        target: Appearance
-        property: "windowSurface"
-        value: true
     }
 
     Binding {
@@ -241,17 +237,10 @@ Window {
         width: Tokens.settingsSidebarWidth
         height: parent.height
 
-        // The floating panel (macOS): inset from the window edge, rounded, a feather-light fill and a light rim.
+        // Edge to edge and a step darker than the detail pane, with no dividing line (macOS 27).
         Rectangle {
-            id: panel
-            x: Tokens.settingsSidebarInset
-            y: Tokens.settingsSidebarInset
-            width: parent.width - Tokens.settingsSidebarInset
-            height: parent.height - 2 * Tokens.settingsSidebarInset
-            radius: Tokens.settingsSidebarRadius
-            color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.settingsSidebarFillOpacityDark : Tokens.settingsSidebarFillOpacity)
-            border.width: Appearance.dark ? 0 : 1
-            border.color: Appearance.withAlpha(Appearance.colors.materialHighlight, Tokens.materialHighlightOpacity)
+            anchors.fill: parent
+            color: Appearance.colors.sidebarFill
         }
 
         // The window lights, in the corner of the sidebar (ADR-0015); the toolbar over the detail pane holds the title.
@@ -264,14 +253,15 @@ Window {
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 
+        // A capsule search field, as wide as the selection (macOS 27).
         Rectangle {
             id: searchBox
-            x: Tokens.settingsSidebarInset + Tokens.spacingSm
-            y: sidebarToolbar.height
-            width: panel.width - 2 * Tokens.spacingSm
+            x: Tokens.settingsSidebarInset
+            y: sidebarToolbar.height + Tokens.spacingSm
+            width: parent.width - 2 * Tokens.settingsSidebarInset
             height: Tokens.settingsSearchHeight
-            radius: Tokens.settingsSidebarSearchRadius
-            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+            radius: height / 2
+            color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
             border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
             border.color: Appearance.focusRingColor
 
@@ -299,8 +289,8 @@ Window {
                 // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
                 persistentSelection: true
                 color: Appearance.colors.text
-                selectionColor: Appearance.colors.accent
-                selectedTextColor: Appearance.colors.accentText
+                selectionColor: Appearance.highlight
+                selectedTextColor: Appearance.highlightText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 onTextChanged: root.query = text
@@ -341,12 +331,11 @@ Window {
                 left: parent.left
                 right: parent.right
                 bottom: parent.bottom
-                leftMargin: Tokens.settingsSidebarInset + Tokens.spacingSm
-                rightMargin: Tokens.spacingSm
-                bottomMargin: Tokens.settingsSidebarInset
+                leftMargin: Tokens.settingsSidebarInset
+                rightMargin: Tokens.settingsSidebarInset
             }
             model: root.filtered
-            spacing: Tokens.spacingXs / 2
+            spacing: 0
             // Room for the focus ring outside the first and last rows (the list clips).
             topMargin: Tokens.controlFocusOutline
             bottomMargin: Tokens.controlFocusOutline
@@ -389,44 +378,43 @@ Window {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: Tokens.settingsSidebarSelectionRadius
-                    color: entry.selected ? Appearance.colors.accent : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                    radius: Tokens.settingsSidebarItemRadius
+                    color: entry.selected ? Appearance.colors.selection : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                 }
 
                 // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: -Tokens.controlFocusOutline
-                    radius: Tokens.radiusControl + Tokens.controlFocusOutline
+                    radius: Tokens.settingsSidebarItemRadius + Tokens.controlFocusOutline
                     visible: entry.selected && list.activeFocus
                     color: "transparent"
                     border.width: Tokens.controlFocusOutline
                     border.color: Appearance.focusRingColor
                 }
 
-                // The coloured icon tile (our own palette): a white glyph on a rounded square.
+                // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
                 Rectangle {
-                    id: tile
+                    id: glyph
                     x: Tokens.spacingSm
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Tokens.settingsSidebarTile
-                    height: width
+                    y: Math.round((parent.height - height) / 2)
+                    width: Tokens.settingsSidebarIconSize
+                    height: Tokens.settingsSidebarIconSize
                     radius: Tokens.settingsSidebarTileRadius
-                    color: root.tileColors[entry.modelData.tile]
+                    color: Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
 
                     Icon {
-                        id: glyph
                         anchors.centerIn: parent
                         name: entry.modelData.icon
-                        size: Tokens.settingsSidebarIconSize
-                        color: Appearance.colors.knob
+                        size: Tokens.settingsSidebarGlyphSize
+                        color: Tokens.settingsSidebarTileGlyph
                     }
                 }
 
                 Text {
                     textFormat: Text.PlainText
                     anchors {
-                        left: tile.right
+                        left: glyph.right
                         leftMargin: Tokens.spacingSm
                         right: parent.right
                         rightMargin: Tokens.spacingSm
@@ -434,7 +422,7 @@ Window {
                     }
                     text: entry.modelData.title
                     elide: Text.ElideRight
-                    color: entry.selected ? Appearance.colors.accentText : Appearance.colors.text
+                    color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                     font.weight: Tokens.typographyMenuWeight

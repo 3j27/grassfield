@@ -108,7 +108,48 @@ def _const_strings(tree):
     return found, value
 
 
-def _argv_problems(elements, resolve):
+def _candidates(node, multi):
+    """Every English text an expression can be made of, read without running anything: a string, a name of a module-level text,
+    both branches of a conditional, a concatenation, the LEFT side of a % format and of .format(), the constant parts of an
+    f-string. A call (tr(...), anything dynamic) is unknown: nothing, which is how a translated text passes."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.Name):
+        return list(multi.get(node.id, []))
+    if isinstance(node, ast.IfExp):
+        return _candidates(node.body, multi) + _candidates(node.orelse, multi)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = _candidates(node.left, multi), _candidates(node.right, multi)
+        return [a + b for a in left for b in right] if left and right else left + right
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        return _candidates(node.left, multi)
+    if isinstance(node, ast.JoinedStr):
+        return ["".join(v.value if isinstance(v, ast.Constant) else "{}" for v in node.values)]
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format":
+        return _candidates(node.func.value, multi)
+    return []
+
+
+def _text_model(tree):
+    """(module constants, strict resolver, candidates of a node, assigned) for a parsed helper. `assigned` maps a variable name to
+    [(line, texts)] for every assignment to it anywhere in the file (a function's local included)."""
+    consts, resolve = _const_strings(tree)
+    multi = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            texts = _candidates(node.value, multi)
+            if texts:
+                multi[node.targets[0].id] = texts
+    assigned = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            for target in (node.targets if isinstance(node, ast.Assign) else [node.target]):
+                if isinstance(target, ast.Name):
+                    assigned.setdefault(target.id, []).append((node.lineno, _candidates(node.value, multi)))
+    return consts, resolve, (lambda node: _candidates(node, multi)), assigned
+
+
+def _argv_problems(elements, resolve, cands=None, assigned=None):
     """Bare English in a notify-send argument list: positional text (before or after --) and action labels (-A id=Label)."""
     problems = []
     is_notify = bool(elements) and isinstance(elements[0], ast.Constant) and elements[0].value == "notify-send"
@@ -138,6 +179,15 @@ def _argv_problems(elements, resolve):
                 i += 1
         elif text is not None and _words(text) and text not in NOTIFY_ALLOWED and (positional or is_notify):
             problems.append((element.lineno, f"notify-send argument {text!r} is a bare English literal"))
+        elif text is None and cands is not None and (positional or is_notify):
+            # a conditional, a % or .format() on English text, an f-string; a name whose assignments hold English text
+            found = [t for t in cands(element) if _words(t) and t not in NOTIFY_ALLOWED]
+            if isinstance(element, ast.Name) and assigned is not None:
+                for line, texts in assigned.get(element.id, []):
+                    found += [t for t in texts if _words(t)]
+            for t in found[:1]:
+                problems.append((element.lineno, f"notify-send argument {t[:40]!r} is English text built in the code (a conditional, a "
+                                                 f"format, an f-string or a variable): wrap each in tr()"))
         i += 1
     return problems
 
@@ -149,7 +199,7 @@ def scan_python_helper(rel, text):
         tree = ast.parse(text)
     except SyntaxError as exc:
         return [f"{rel}: cannot be parsed as Python ({exc.msg})"]
-    consts, resolve = _const_strings(tree)
+    consts, resolve, cands, assigned = _text_model(tree)
     fr = None
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "CATALOG" for t in node.targets) \
@@ -178,27 +228,31 @@ def scan_python_helper(rel, text):
         if "i18n-ignore" in (lines[node.lineno - 1] if hasattr(node, "lineno") and node.lineno <= len(lines) else ""):
             continue
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "tr" and node.args:
-            stack, values = [node.args[0]], []
-            while stack:
-                arg = stack.pop()
-                if isinstance(arg, ast.IfExp):
-                    stack += [arg.body, arg.orelse]
-                elif resolve(arg) is not None:
-                    values.append(resolve(arg))
-            for value in values:
+            for value in cands(node.args[0]):
                 used.add(value)
                 if value not in fr:
                     violations.append(f"{rel}:{node.lineno}: tr({value[:40]!r}...) has no French text")
         if isinstance(node, ast.List):
-            for line, message in _argv_problems(node.elts, resolve):
+            for line, message in _argv_problems(node.elts, resolve, cands, assigned):
                 violations.append(f"{rel}:{line}: {message}")
         # English held in a variable that a notification will show (title = "..."), not wrapped in tr().
         if isinstance(node, (ast.Assign, ast.AnnAssign)) and id(node) not in in_catalog:
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             names = {t.id for t in targets if isinstance(t, ast.Name)}
-            literal = resolve(node.value) if node.value is not None else None
-            if names & TEXT_NAMES and literal is not None and _words(literal):
-                violations.append(f"{rel}:{node.lineno}: {sorted(names & TEXT_NAMES)[0]} holds the bare English text {literal[:40]!r}: wrap it in tr()")
+            for literal in (cands(node.value) if node.value is not None else []):
+                if names & TEXT_NAMES and _words(literal):
+                    violations.append(f"{rel}:{node.lineno}: {sorted(names & TEXT_NAMES)[0]} holds the bare English text {literal[:40]!r}: wrap it in tr()")
+                    break
+    # A local function whose parameter holds what a notification shows (title, body, ...) called with English text.
+    params = {n.name: [a.arg for a in n.args.args] for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name != "tr"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in params:
+            pairs = list(zip(params[node.func.id], node.args)) + [(k.arg, k.value) for k in node.keywords if k.arg]
+            for name, arg in pairs:
+                for literal in (cands(arg) if name in TEXT_NAMES else []):
+                    if _words(literal) and "i18n-ignore" not in lines[node.lineno - 1]:
+                        violations.append(f"{rel}:{node.lineno}: {node.func.id}({name}=...) is given the bare English text {literal[:40]!r}: wrap it in tr()")
+                        break
     # Module-level English text (constants, tuples, dicts) that is neither in the catalog nor passed to tr() is text nobody translates.
     for node in tree.body:
         if not isinstance(node, ast.Assign) or id(node) in in_catalog:
@@ -239,10 +293,22 @@ def scan_shell_helper(rel, text):
         for literal in re.findall(r"(?:^|\s)'([^']*)'", after):
             if _words(literal):
                 violations.append(f"{rel}: notify-send text {literal!r} is a bare English literal")
+    # English held in a shell variable: any variable that a notify-send line uses ("$msg", "${msg}") and the names in TEXT_NAMES,
+    # assigned a bare literal anywhere, also inside a one-line `if ...; then body="..."; fi` or after a `;`; and the format of a
+    # printf that makes it.
+    flows = set()
+    for line in logical.splitlines():
+        if "notify-send" in line and not line.lstrip().startswith("#"):
+            flows |= set(re.findall(r"\$\{?([A-Za-z_]\w*)\}?", re.sub(r"\$\((?:[^()]|\([^()]*\))*\)", "", line)))
+    watched = TEXT_NAMES | flows
+    assignment = re.compile(r'(?:^|[\s;&|{(])(?:local\s+|export\s+|declare\s+)?([A-Za-z_]\w*)=("(?:[^"\\$`]|\\.)*"|\'[^\']*\'|\$\(\s*printf\s+(?:-v\s+\S+\s+)?("(?:[^"\\$`]|\\.)*"|\'[^\']*\')[^)]*\))')
     for number, line in enumerate(text.splitlines(), 1):
-        match = re.match(r'\s*(?:local\s+)?(\w+)=("[^"$`]*"|\'[^\']*\')\s*(?:;|$|#)', line)
-        if match and match.group(1) in TEXT_NAMES and _words(match.group(2)) and "i18n-ignore" not in line:
-            violations.append(f"{rel}:{number}: {match.group(1)} holds the bare English text {match.group(2)[:40]}: use $(tr ...)")
+        if line.lstrip().startswith("#") or "i18n-ignore" in line:
+            continue
+        for match in assignment.finditer(line):
+            literal = match.group(3) or match.group(2)
+            if match.group(1) in watched and _words(literal):
+                violations.append(f"{rel}:{number}: {match.group(1)} holds the bare English text {literal[:40]}: use $(tr ...)")
     return violations
 
 

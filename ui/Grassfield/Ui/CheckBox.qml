@@ -9,7 +9,8 @@ T.CheckBox {
 
     property string accessibleName: ""
 
-    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding)
+    // Whole pixels, so that the next control in a row stays on the pixel grid.
+    implicitWidth: Math.ceil(Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding))
     implicitHeight: Math.max(Tokens.controlButtonHeight, implicitContentHeight + topPadding + bottomPadding)
     leftPadding: Tokens.controlCheckSize + Tokens.spacingSm
     hoverEnabled: true
@@ -36,7 +37,7 @@ T.CheckBox {
         width: Tokens.controlCheckSize
         height: Tokens.controlCheckSize
         radius: Tokens.controlCheckRadius
-        color: root.checkState !== Qt.Unchecked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.checkState !== Qt.Unchecked ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         border.width: Appearance.increaseContrast || root.checkState === Qt.Unchecked ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
@@ -58,7 +59,7 @@ T.CheckBox {
             anchors.centerIn: parent
             name: root.checkState === Qt.PartiallyChecked ? "minimize-glyph" : "checkmark"
             size: parent.width - 2 * Tokens.controlCheckMarkInset
-            color: Appearance.colors.accentText
+            color: Appearance.colors.selectionText
             visible: root.checkState !== Qt.Unchecked
         }
 

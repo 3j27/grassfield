@@ -17,9 +17,9 @@ TestCase {
 
     // Priority 2: Search rows.
     function test_searchRowMetrics() {
-        compare(Tokens.searchTitleSize, 17);
+        compare(Tokens.searchTitleSize, 18);
         compare(Tokens.searchSubtitleSize, 15);
-        // The text box starts 71 in (a whole number); the ink of the 17-pt glyphs about 1.5 further, macOS ink at 72.5.
+        // The text box starts 71 in (a whole number); the ink of the 18-pt glyphs about 1.5 further, macOS ink at 72.5.
         compare(Tokens.searchTextInset, 71);
         compare(Tokens.searchQueryInset, 61);
         compare(Tokens.searchRowRadius, 18);
@@ -58,10 +58,10 @@ TestCase {
         Appearance.dark = false;
         compare(Appearance.chipFill.r, 1);
         fuzzyCompare(Appearance.chipFill.a, Tokens.materialChipFillOpacityLight, 0.01);
-        fuzzyCompare(Appearance.buttonFill.a, Tokens.materialButtonFillOpacityLight, 0.01);
+        fuzzyCompare(Appearance.buttonFill.a, Tokens.materialFillOpacityLight, 0.01);
         verify(Appearance.buttonFill.r < 0.1);
         fuzzyCompare(Appearance.lightWellFill.a, Tokens.materialWellFillOpacityLight, 0.01);
-        verify(Tokens.materialButtonFillOpacityLight <= 0.08);
+        verify(Tokens.materialFillOpacityLight <= 0.08);
         Appearance.dark = true;
         fuzzyCompare(Appearance.chipFill.a, Tokens.materialFillOpacity, 0.01);
         fuzzyCompare(Appearance.buttonFill.a, Tokens.materialFillOpacity, 0.01);
@@ -86,15 +86,14 @@ TestCase {
         verify(toIcons >= 30 && toIcons <= 42, String(toIcons));
     }
 
-    // Priority 10: Settings floating sidebar (inset 8, radius 18, 32-pt rows, 20-pt tiles) and Files sidebar rows 32.
+    // Priority 10, ADR-0024 lot 1: the Settings sidebar is flush (10 pt inset for the selection, 32-pt rows, 20-pt tiles); Files rows 32.
     function test_sidebarMetrics() {
-        compare(Tokens.settingsSidebarInset, 8);
-        compare(Tokens.settingsSidebarRadius, 18);
+        compare(Tokens.settingsSidebarInset, 10);
         compare(Tokens.settingsSidebarItemHeight, 32);
-        compare(Tokens.settingsSidebarTile, 20);
-        verify(Tokens.settingsSidebarIconSize < Tokens.settingsSidebarTile);
+        compare(Tokens.settingsSidebarIconSize, 20);
+        verify(Tokens.settingsSidebarGlyphSize < Tokens.settingsSidebarIconSize);
         compare(Tokens.filesSidebarItemHeight, 32);
-        verify(Tokens.settingsSidebarSelectionRadius > Tokens.radiusControl);
+        verify(Tokens.settingsSidebarItemRadius > Tokens.radiusControl);
     }
 
     // Priority 11: toolbar capsules are 36 pt; two 34-pt buttons make the 72-pt back/forward capsule.
@@ -177,20 +176,21 @@ TestCase {
         verify(lum(Tokens.colorLight.windowTextSecondary) > lum(Tokens.colorLight.textSecondary));
     }
 
-    // Dark appearance keeps its previous values (no dark macOS reference): the window secondary text is the old textSecondary.
-    function test_darkWindowValuesAreTheOldOnes() {
+    // Dark appearance (no dark macOS secondary reference): the window secondary text is the old textSecondary; the window itself is
+    // the neutral grey of ADR-0024 lot 1.
+    function test_darkWindowValues() {
         compare(Tokens.colorDark.windowTextSecondary, Tokens.colorDark.textSecondary);
-        compare(Tokens.colorDark.windowBackground, Tokens.colorDark.materialTint);
+        compare(Tokens.colorDark.windowBackground, "#292929");
     }
 
     // Search rows follow Accessibility > Text Size like every other text.
     function test_searchTextFollowsTheTextSize() {
         const saved = Appearance.textScale;
         Appearance.textScale = 1;
-        compare(Tokens.searchTitleSize, 17);
+        compare(Tokens.searchTitleSize, 18);
         compare(Tokens.searchSubtitleSize, 15);
         Appearance.textScale = 1.3;
-        compare(Tokens.searchTitleSize, 22);
+        compare(Tokens.searchTitleSize, 23);
         compare(Tokens.searchSubtitleSize, 20);
         verify((Tokens.searchTitleSize + Tokens.searchSubtitleSize) * 1.2 < Tokens.searchRowHeight);
         Appearance.textScale = saved;
@@ -214,13 +214,11 @@ TestCase {
         Appearance.dark = dark;
     }
 
-    // Settings pane geometry (macOS: 460 wide content, 20 margins, groups 10 apart, rows 36, groups at about 3 %).
+    // Settings pane geometry (ADR-0024 lot 1: groups 468 wide, 20 margins, 10 apart, rows 38).
     function test_settingsMetrics() {
-        compare(Tokens.settingsContentMaxWidth, 460);
+        compare(Tokens.settingsContentMaxWidth, 468);
         compare(Tokens.settingsContentMargin, 20);
         compare(Tokens.settingsGroupGap, 10);
-        compare(Tokens.settingsRowHeight, 36);
-        compare(Tokens.settingsPageTop, 0);
-        verify(Tokens.settingsGroupFillOpacity > 0.02 && Tokens.settingsGroupFillOpacity < 0.05);
+        compare(Tokens.settingsRowHeight, 38);
     }
 }

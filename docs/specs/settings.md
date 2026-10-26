@@ -3,10 +3,16 @@
 UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section "Hot Corners" is "Screen Corners" (fr « Coins de l’écran »); the corner action "Notification Center" is "Notifications"; the app menu entry "System Settings…" is "Settings…" (fr « Réglages… »). Bindings descriptions "Next Space", "Previous Space", "Notification Center" of the bindings file are shown as "Next Desktop", "Previous Desktop", "Notifications" (`Bindings.uiName`).
 
 ## macOS reference behavior (described in words)
-- Settings is one opaque window (about 715 x 640): a sidebar on the left with a search field on top and
-  one row per section (small icon, name), a detail pane on the right with a large title and grouped, rounded
-  "inset" lists. Rows hold a label (optionally a grey caption) and a control on the right: switch, slider,
-  pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
+- Settings is one opaque window (about 740 x 640 in macOS 27): a sidebar on the left with a search field on top and
+  one row per section (a 20-pt coloured icon tile with a white glyph, the name), a detail pane on the right with the
+  title in the toolbar and grouped, rounded "inset" lists. Rows hold a label (optionally a grey caption) and a control on
+  the right: switch, slider, pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
+- macOS 27 layout (ADR-0024, measured on release captures, `docs/audits/ui-finesse-2026-10-25.md` section 7): the sidebar
+  runs edge to edge, 232 wide, a step darker than the white detail pane (light #ECECEC on #FFFFFF; dark tokens
+  `color.dark.sidebarFill` / `windowBackground`), with no dividing line; selection 212 x 32, radius 8, 10 from both
+  sidebar edges, in the selection colour with white text; a 28-pt capsule search field; groups #F7F7F7 without a border,
+  radius 12, 468 wide with 20-pt margins, 10 apart, the first 12 below the toolbar; rows 38, labels and separators 10
+  inside the group; section headers 13 bold in the text colour.
 - Typing in the search field filters the sidebar. Up/Down in the sidebar switch the pane.
 
 ## Purpose and non-goals
@@ -107,5 +113,5 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
 - The Settings app edits by parse and re-serialize (`Store.js`), which cannot keep integers beyond 2^53, duplicate keys or integer-like object keys. A file containing any of them is treated like a malformed file: read-only with a "cannot be edited safely" banner, file untouched. The schema has no such values, so only hand-made files are affected. The detection is shared (`ui/Grassfield/Ui/JsonSafety.js`, also catching duplicate `__proto__` keys and big integers written with a decimal point or exponent); the shell's `SettingsStore` applies it too: it never rewrites such a file (warns once, keeps the changes in memory, `writeBlocked`).
 - Without the AT-SPI bus the Qt accessibility tree is not published (Accessible properties are set but only verified by code review, not by a screen reader).
 
-## Floating sidebar (visual audit 2026-10-25, priority 10)
-macOS model, measured: the sidebar is a floating panel inset 8 from the window edge (`settings.sidebarInset`), radius 18, a feather-light fill (2 % in light, 12 % in dark so it stays 1.4:1 against the window) and a light rim; rows are 32 apart with an 8-pt selection radius; each row has a 20-pt coloured icon tile (`settings.sidebarTile`, own palette `settings.tile*`, white 13-pt glyph, every colour holds 3:1 against the glyph) in place of the bare glyph; the search is a 28-pt capsule. The Files sidebar rows are 32 (`files.sidebarItemHeight`). Tests: `tst_visualaudit.qml`, `WindowSurfacePairs` in `test_contrast_tokens.py`.
+## Toolbar navigation and secondary text (visual audit 2026-10-25, kept under ADR-0024)
+The sidebar is the flush macOS 27 one of ADR-0024 lot 1 (the floating panel of the audit's priority 10 was dropped). On top of it: the toolbar over the detail pane carries a 72 x 36 back / forward capsule (`files.toolbarCapsule`, `files.toolbarGroupButton`) that walks the panes visited (`NavHistory.js`, tests `tst_navhistory.qml`; a new pane forgets the forward list). Secondary text drawn directly on the window or on a group uses `Appearance.windowSecondary` (`color.*.windowTextSecondary`, the lighter macOS grey, 4.7:1 on the window and on `groupFill`); text on a hovered device row uses `textSecondary` (4.5:1 on the hover fill). Tests: `tst_visualaudit.qml`, `WindowSurfacePairs` in `test_contrast_tokens.py`.

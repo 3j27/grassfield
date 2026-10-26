@@ -37,6 +37,17 @@ function apply(base, setting, dark, tokens) {
     return c;
 }
 
+// Selection: macOS draws white text on its accent fill in both appearances (a selected row, a default button, a checked box).
+// The dark palette's accent is bright for glyphs, rings and indicators and holds 4.5:1 only with dark text, so a fill that
+// carries text or a mark uses the light appearance's accent and its text colour in both appearances (ADR-0024 section 1;
+// white on every light accent but yellow is 5.3:1 or more). `light` is the light palette with the same accent applied.
+function withSelection(palette, light) {
+    const c = Object.assign({}, palette);
+    c.selection = light.accent;
+    c.selectionText = light.accentText;
+    return c;
+}
+
 // ---- Focus ring colour and Increase Contrast ----
 
 // Channels (0..1) of a "#rrggbb" or "#aarrggbb" string; null for anything else.

@@ -381,7 +381,8 @@ Variants {
                         visible: row.selected
                         anchors.fill: parent
                         radius: Tokens.searchRowRadius
-                        color: Appearance.colors.accent
+                        // ADR-0024 (macOS 27): the selected row is a neutral fill over the panel, not the accent.
+                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.searchSelectionOpacity)
                     }
 
                     Item {
@@ -395,7 +396,6 @@ Variants {
                             anchors.fill: parent
                             size: Tokens.searchRowIconSize
                             oversample: Tokens.searchIconOversample
-                            overAccent: row.selected
                             visible: row.info.iconSource !== undefined
                             source: row.info.iconSource === undefined ? "" : (row.info.appIcon !== undefined ? ThemeIcons.appIcon(row.info.appIcon, "application-x-executable") : row.info.iconSource)
                             asynchronous: true
@@ -406,7 +406,7 @@ Variants {
                             visible: row.info.glyph !== undefined
                             size: Tokens.searchRowIconSize * Tokens.searchGlyphScale
                             name: row.info.glyph !== undefined ? row.info.glyph : ""
-                            color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                            color: Appearance.colors.text
                         }
 
                         Rectangle {
@@ -419,7 +419,7 @@ Variants {
                                 anchors.centerIn: parent
                                 text: row.info.badge !== undefined ? row.info.badge : ""
                                 textFormat: Text.PlainText
-                                color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                                color: Appearance.colors.text
                                 font.family: Appearance.fontFamily
                                 font.pixelSize: Tokens.typographyTitleSize
                             }
@@ -440,7 +440,7 @@ Variants {
                             text: row.info.title
                             textFormat: Text.PlainText
                             elide: Text.ElideRight
-                            color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                            color: Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.searchTitleSize
                             font.weight: Tokens.typographyMenuWeight
@@ -451,7 +451,7 @@ Variants {
                             text: row.info.subtitle
                             textFormat: Text.PlainText
                             elide: Text.ElideMiddle
-                            color: row.selected ? Appearance.withAlpha(Appearance.colors.accentText, Tokens.searchSelectedSubtitleOpacity) : Appearance.colors.textSecondary
+                            color: Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.searchSubtitleSize
                         }

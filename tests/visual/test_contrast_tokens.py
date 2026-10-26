@@ -12,6 +12,8 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   accent         the solid accent colour
+  selection      the solid selection colour: the light appearance's accent in both appearances (Appearance.accentedDark/Light,
+                 Accent.withSelection), the fill of a selected row, a default button or a checked box
   rename-field   colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper (the inline rename field)
   bar-light-tone / bar-dark-tone  the adaptive menu bar (shell/services/BarTone.qml): the opaque wallpaper itself, only for the
                  wallpaper colours the tone can be chosen for (light text up to menubar.toneDarkAbove, dark text from
@@ -101,6 +103,10 @@ class Tokens:
 
     def color(self, palette, appearance, name):
         # palette "colors" follows the appearance; "darkColors" / "lightColors" are always the dark / light palette.
+        # selection / selectionText are derived, not tokens: the light palette's accent and accentText in both appearances
+        # (mirror of Accent.withSelection).
+        if name in ("selection", "selectionText"):
+            return self.color("lightColors", "light", "accent" if name == "selection" else "accentText")
         fixed = {"darkColors": "dark", "lightColors": "light"}
         return hex_rgb(self.path("color.%s.%s" % (fixed.get(palette, appearance), name)))
 
@@ -139,11 +145,13 @@ def backdrops(tok, role, appearance, t, wallpaper):
             # The light control fills (Appearance.chipFill, buttonFill, lightWellFill): white chips and wells, a 6 % grey button.
             chip = tok.color(pal, appearance, "chipFill")
             out += [over(chip, tok.path("material.chipFillOpacityLight"), base),
-                    over(fill, tok.path("material.buttonFillOpacityLight"), base),
+                    over(fill, tok.path("material.fillOpacityLight"), base),
                     over(chip, tok.path("material.wellFillOpacityLight"), base)]
         return out
     if kind == "accent":
         return [tok.color(pal, appearance, "accent")]
+    if kind == "selection":
+        return [tok.color(pal, appearance, "selection")]
     if kind == "rename-field":
         return [over(tok.color("colors", appearance, "fieldFill"), tok.path("desktopIcon.renameFillOpacity"), wallpaper)]
     if kind == "desktop-label":
@@ -469,7 +477,7 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "accent", "rename-field", "desktop-label") + BAR_TONES + LOCK_BACKDROPS)
+            self.assertIn(r["backdrop"], ("material", "accent", "selection", "rename-field", "desktop-label") + BAR_TONES + LOCK_BACKDROPS)
             for site in r["sites"]:
                 self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",
                                               "backdrop"))
@@ -505,7 +513,8 @@ class ContrastTokens(unittest.TestCase):
         # appearance.accent: every accent, both appearances, every role that puts text or a graphic on the accent fill
         # (text 4.5:1, the lock band 3:1 against its field) over every wallpaper colour and transparency.
         ids = ("accent text on accent", "search selected subtitle on accent", "apps selected chip text",
-               "lock password selection (dots on the accent band)", "lock password selection band against the field")
+               "lock password selection (dots on the accent band)", "lock password selection band against the field",
+               "selection text on selection")
         roles = [r for r in self.roles if r["id"] in ids]
         self.assertEqual(len(roles), len(ids))
         for accent in self.ACCENTS:
@@ -526,6 +535,14 @@ class ContrastTokens(unittest.TestCase):
                 self.assertIn(name, roles)
                 self.assertIn(name + "Text", roles)
             self.assertEqual(len(roles), 2 * (len(self.ACCENTS) - 1))
+
+    def test_selection_is_the_light_accent_with_its_text_in_both_appearances(self):
+        # macOS keeps white text on its accent fill in both appearances (ADR-0024): the selection pair is the light accent's.
+        for accent in self.ACCENTS:
+            tok = AccentTokens(self.tok.data, accent)
+            for ap in APPEARANCES:
+                self.assertEqual(tok.color("colors", ap, "selection"), tok.color("lightColors", "light", "accent"), accent)
+                self.assertEqual(tok.color("colors", ap, "selectionText"), tok.color("lightColors", "light", "accentText"), accent)
 
     def test_selection_highlight_text_both_appearances(self):
         accent = next(r for r in self.roles if r["id"] == "accent text on accent")
@@ -568,11 +585,10 @@ class WindowSurfacePairs(unittest.TestCase):
         return self.tok.color("colors", ap, "windowBackground")
 
     def test_window_secondary_text_on_the_window_and_on_a_settings_group(self):
-        group = {"light": self.tok.path("settings.groupFillOpacity"), "dark": self.tok.path("material.fillOpacity")}
         for ap in APPEARANCES:
             fg = self.tok.color("colors", ap, "windowTextSecondary")
             win = self.window(ap)
-            on_group = over(self.tok.color("colors", ap, "fill"), group[ap], win)
+            on_group = self.tok.color("colors", ap, "groupFill")
             for bg, what in ((win, "the window"), (on_group, "a Settings group")):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
@@ -580,10 +596,9 @@ class WindowSurfacePairs(unittest.TestCase):
     def test_row_secondary_on_the_hover_fill(self):
         # Settings device rows (Wi-Fi, Bluetooth, Sound): while hovered, the hover fill sits on the window or on a Settings group.
         # The window grey is under 4.5:1 there (3.62:1 in light), so DeviceRow switches to textSecondary on hover.
-        group = {"light": self.tok.path("settings.groupFillOpacity"), "dark": self.tok.path("material.fillOpacity")}
         for ap in APPEARANCES:
             win = self.window(ap)
-            on_group = over(self.tok.color("colors", ap, "fill"), group[ap], win)
+            on_group = self.tok.color("colors", ap, "groupFill")
             for base, what in ((win, "the window"), (on_group, "a Settings group")):
                 hov = over(self.tok.color("colors", ap, "hover"), self.tok.path("material.hoverOpacity"), base)
                 r = wcag(self.tok.color("colors", ap, "textSecondary"), hov)
@@ -600,8 +615,9 @@ class WindowSurfacePairs(unittest.TestCase):
 
     def test_dark_settings_groups_stay_visible_against_the_window(self):
         win = self.window("dark")
-        group = over(self.tok.color("colors", "dark", "fill"), self.tok.path("material.fillOpacity"), win)
-        self.assertGreaterEqual(wcag(group, win), 1.3, "dark group against the window: %.2f:1" % wcag(group, win))
+        group = self.tok.color("colors", "dark", "groupFill")
+        # ADR-0024 lot 1: macOS 27 groups are #313131 on a #292929 window, a step the eye reads as a surface (1.1:1).
+        self.assertGreaterEqual(wcag(group, win), 1.1, "dark group against the window: %.2f:1" % wcag(group, win))
 
     def test_toolbar_capsules_and_their_selected_pill(self):
         # Priority 11: back/forward, the view group and the search capsule are a 6 % grey (light) or 14 % (dark) fill over the window;
@@ -610,7 +626,7 @@ class WindowSurfacePairs(unittest.TestCase):
             win = self.window(ap)
             fillc = self.tok.color("colors", ap, "fill")
             if ap == "light":
-                group = over(fillc, self.tok.path("material.buttonFillOpacityLight"), win)
+                group = over(fillc, self.tok.path("material.fillOpacityLight"), win)
                 pill = over(self.tok.color("colors", ap, "chipFill"), self.tok.path("material.chipFillOpacityLight"), group)
             else:
                 group = over(fillc, self.tok.path("material.fillOpacity"), win)
@@ -620,23 +636,13 @@ class WindowSurfacePairs(unittest.TestCase):
                     r = wcag(self.tok.color("colors", ap, name), bg)
                     self.assertGreaterEqual(r, 4.5, "%s on %s, %s: %.2f:1" % (name, what, ap, r))
 
-    def test_settings_sidebar_surfaces_and_tiles(self):
-        # The floating sidebar panel (priority 10): text on the panel over the window, the panel against the window in dark, and
-        # the white glyph on every icon tile colour (graphic, 3:1).
-        panel = {"light": self.tok.path("settings.sidebarFillOpacity"), "dark": self.tok.path("settings.sidebarFillOpacityDark")}
+    def test_settings_sidebar_surfaces(self):
+        # ADR-0024 lot 1: the flush sidebar (sidebarFill) carries the text, the secondary text and the search placeholder.
         for ap in APPEARANCES:
-            win = self.window(ap)
-            fill = over(self.tok.color("colors", ap, "fill"), panel[ap], win)
+            side = self.tok.color("colors", ap, "sidebarFill")
             for name in ("text", "textSecondary"):
-                r = wcag(self.tok.color("colors", ap, name), fill)
-                self.assertGreaterEqual(r, 4.5, "%s on the sidebar panel, %s: %.2f:1" % (name, ap, r))
-        win = self.window("dark")
-        r = wcag(over(self.tok.color("colors", "dark", "fill"), panel["dark"], win), win)
-        self.assertGreaterEqual(r, 1.3, "dark sidebar panel against the window: %.2f:1" % r)
-        white = self.tok.color("colors", "light", "knob")
-        for name in ("Blue", "Teal", "Pink", "Purple", "Red", "Gray"):
-            r = wcag(white, hex_rgb(self.tok.path("settings.tile" + name)))
-            self.assertGreaterEqual(r, 3.0, "white glyph on the %s tile: %.2f:1" % (name, r))
+                r = wcag(self.tok.color("colors", ap, name), side)
+                self.assertGreaterEqual(r, 4.5, "%s on the sidebar, %s: %.2f:1" % (name, ap, r))
 
     def test_quick_settings_slider_fill_against_its_track(self):
         # WCAG 1.4.11: the white fill against the track, and the empty track against the module (1.5:1), every wallpaper colour and

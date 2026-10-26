@@ -48,10 +48,9 @@ FocusScope {
 
     // Widest row; a Column sizes by width, not implicitWidth, so rows report through measure().
     property real rowsWidth: 0
-    // Rows that reserve the icon / check slot (MenuNav.leadSlots): the others start their text at the plain inset.
-    readonly property var leadSlots: MenuNav.leadSlots(root.model)
 
-    width: Math.max(Tokens.menuMinWidth, rowsWidth + 2 * Tokens.menuPadding)
+    // Whole pixels: the menu's right edge, its rim and the right-aligned shortcuts stay sharp.
+    width: Math.ceil(Math.max(Tokens.menuMinWidth, rowsWidth + 2 * Tokens.menuPadding))
     height: column.implicitHeight + 2 * Tokens.menuPadding
     activeFocusOnTab: true
     Accessible.role: Accessible.PopupMenu
@@ -68,6 +67,26 @@ FocusScope {
     }
 
     onModelChanged: Qt.callLater(measure)
+
+    // Per row: whether its section (the rows between two separators) holds a checkable row, so that every label of that
+    // section starts after the check column (macOS). A row is checkable when its model entry has a `checked` field.
+    readonly property var checkColumns: {
+        const out = [];
+        const m = root.model || [];
+        let start = 0;
+        for (let i = 0; i <= m.length; i++) {
+            if (i === m.length || (m[i] && m[i].separator)) {
+                let any = false;
+                for (let j = start; j < i; j++)
+                    any = any || (m[j] && m[j].checked !== undefined);
+                for (let j = start; j < i; j++)
+                    out[j] = any;
+                out[i] = false;
+                start = i + 1;
+            }
+        }
+        return out;
+    }
 
     function closeSubmenu(): void {
         openIndex = -1;
@@ -309,10 +328,10 @@ FocusScope {
                         shortcut: row.modelData.shortcut !== undefined ? row.modelData.shortcut : ""
                         iconName: row.modelData.iconName !== undefined ? row.modelData.iconName : ""
                         checked: row.modelData.checked === true
-                        reserveSlot: root.leadSlots[row.index] === true
                         destructive: row.modelData.destructive === true
                         enabled: row.modelData.enabled !== false
                         hasSubmenu: MenuNav.hasSubmenu(row.modelData)
+                        checkColumn: root.checkColumns[row.index] === true
                         highlighted: root.currentIndex === row.index
                         onHovered: {
                             root.currentIndex = row.index;
