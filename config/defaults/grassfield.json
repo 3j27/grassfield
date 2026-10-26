@@ -117,6 +117,11 @@
     "showCommands": true,
     "historyResetAt": 0
   },
+  "screensaver": {
+    "idleMinutes": 0,
+    "kind": "artwork",
+    "folder": ""
+  },
   "wallpaper": {
     "source": "builtin",
     "path": "",

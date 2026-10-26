@@ -148,6 +148,13 @@
     {"name": "search hides system commands", "path": "search.showCommands", "stored": false, "read": false, "valid": true},
     {"name": "search history reset time", "path": "search.historyResetAt", "stored": 1792832460000, "read": 1792832460000, "valid": true},
     {"name": "search history reset time negative is clamped to 0", "path": "search.historyResetAt", "stored": -5, "read": 0, "valid": false},
-    {"name": "search history reset time of the wrong type is the default", "path": "search.historyResetAt", "stored": "now", "default": true, "valid": false}
+    {"name": "search history reset time of the wrong type is the default", "path": "search.historyResetAt", "stored": "now", "default": true, "valid": false},
+    {"name": "screen saver after 10 minutes", "path": "screensaver.idleMinutes", "stored": 10, "read": 10, "valid": true},
+    {"name": "screen saver delay above 4 hours is clamped", "path": "screensaver.idleMinutes", "stored": 999, "read": 240, "valid": false},
+    {"name": "screen saver delay of the wrong type is the default", "path": "screensaver.idleMinutes", "stored": "5", "default": true, "valid": false},
+    {"name": "screen saver slideshow", "path": "screensaver.kind", "stored": "slideshow", "read": "slideshow", "valid": true},
+    {"name": "screen saver of an unknown kind is the default", "path": "screensaver.kind", "stored": "aerial", "default": true, "valid": false},
+    {"name": "screen saver folder absolute", "path": "screensaver.folder", "stored": "/home/u/Photos", "read": "/home/u/Photos", "valid": true},
+    {"name": "screen saver folder relative is the default", "path": "screensaver.folder", "stored": "Photos", "default": true, "valid": false}
   ]
 }

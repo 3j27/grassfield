@@ -772,6 +772,39 @@
         }
       }
     },
+    "screensaver": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Screen saver (Settings > Wallpaper > Screen Saver, ADR-0032).",
+      "properties": {
+        "idleMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 0,
+          "description": "Minutes without input before the screen saver starts while the session is unlocked; 0 = never. It never delays or replaces the idle lock (lock.idleMinutes) or the display power-off."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artwork",
+            "wallpaperClock",
+            "slideshow",
+            "clock"
+          ],
+          "default": "artwork",
+          "description": "Which screen saver: the Grassfield artwork drifting, the wallpaper with a clock, a folder's pictures as a slideshow, or a clock alone."
+        },
+        "folder": {
+          "type": "string",
+          "default": "",
+          "description": "The slideshow's folder: an absolute path (no control characters, at most 4096 bytes); \"\" = the user's Pictures folder.",
+          "x-grassfield": {
+            "rule": "wallpaperPath"
+          }
+        }
+      }
+    },
     "wallpaper": {
       "type": "object",
       "additionalProperties": false,
