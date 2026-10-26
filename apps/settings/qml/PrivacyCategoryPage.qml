@@ -30,6 +30,12 @@ SettingsPage {
             screencast: qsTr("These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time; if it is sharing now, stop sharing first.")
         })[root.key] ?? ""
 
+    // What the footnote says: the store's reason, the last change's, the portal that is not there, or what the list means.
+    readonly property string footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error)
+        : root.system.errors[Privacy.actTag(root.key)] !== undefined ? qsTr("The change could not be made: %1.").arg(root.system.errors[Privacy.actTag(root.key)])
+        : Privacy.portalMissing(grants.state, root.key) ? qsTr("This system's desktop portals do not provide this permission: no app can ask for it, and what is listed here changes nothing on this system.")
+        : root.explanation
+
     function forgetSelected(): void {
         if (root.selected !== null)
             grants.forget(root.key, root.selected);
@@ -43,22 +49,24 @@ SettingsPage {
 
     SettingsGroup {
         visible: !root.saved
-        footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error)
-            : root.system.errors["privacy.act"] !== undefined ? qsTr("The change could not be made: %1.").arg(root.system.errors["privacy.act"]) : root.explanation
+        footnote: root.footnote
 
         Repeater {
             model: root.saved ? [] : root.apps
 
             LoginItemRow {
                 required property var modelData
-                // An app of the host for a grant the portal does not read for it: no switch, it would change nothing.
+                // No switch where it would change nothing: an app of the host for a grant the portal does not read for it, or a
+                // category whose portal this system does not have (the footnote says so).
                 readonly property bool unlimited: modelData.host && Privacy.HOST_READ.indexOf(root.key) < 0
                 readonly property string appId: modelData.name !== modelData.app ? modelData.app : ""
+                // The host's apps: not limited at all, or (the camera) limited only on the portal's way.
+                readonly property string hostNote: !modelData.host ? "" : unlimited ? qsTr("Not sandboxed: not limited") : qsTr("Not sandboxed: may use the camera directly")
                 icon: modelData.icon
                 title: modelData.name
                 // An id that differs from the name says which app it is (a Flatpak id).
-                subtitle: !unlimited ? appId : appId !== "" ? appId + " · " + qsTr("Not sandboxed: not limited") : qsTr("Not sandboxed: not limited")
-                showToggle: !unlimited
+                subtitle: [appId, hostNote].filter(t => t !== "").join(" · ")
+                showToggle: !unlimited && !Privacy.portalMissing(grants.state, root.key)
                 checked: modelData.allowed
                 toggleEnabled: !grants.busy
                 onToggled: c => grants.setAllowed(root.key, modelData.app, c)
@@ -73,8 +81,7 @@ SettingsPage {
 
     SettingsGroup {
         visible: root.saved
-        footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error)
-            : root.system.errors["privacy.act"] !== undefined ? qsTr("The change could not be made: %1.").arg(root.system.errors["privacy.act"]) : root.explanation
+        footnote: root.footnote
 
         // The list is one focus stop: Up and Down move the selection, Delete forgets it (macOS table).
         FocusScope {

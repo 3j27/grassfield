@@ -32,7 +32,8 @@ The permission store world (Privacy & Security; on the same private bus, which t
 org.freedesktop.impl.portal.PermissionStore with Lookup, List, SetPermission and Delete as xdg-permission-store answers them
 (a missing entry is org.freedesktop.portal.Error.NotFound, an unknown table lists empty). Location: Maps allowed (EXACT), Weather
 not (NONE) and a malformed application id; the camera: Meet allowed, Booth "ask"; no background entry; saved screen-sharing
-selections for Meet (a legacy UUID) and Studio (a current token, beginning with _); no remote desktop table.
+selections for Meet (a legacy UUID) and Studio (a current token, beginning with _); no remote desktop table. It also owns
+org.freedesktop.portal.Desktop, which exports Background (version 2) and not RemoteDesktop.
 """
 import argparse
 import json
@@ -447,7 +448,12 @@ def permstore_world(svc):
                  '<method name="Delete">%s%s</method></interface>' % (name, s, s, s, s, s, s, s, s),
                  methods={"Lookup": lookup, "List": lambda p: V("(as)", (sorted(tables.get(p[0], {})),)),
                           "SetPermission": set_permission, "Delete": delete})
-    return name
+    # The desktop portal exports Background and not RemoteDesktop (a backend that implements only the first): GDBus itself
+    # answers a Get on the missing interface with InvalidArgs, as the real portal's does.
+    portal = "org.freedesktop.portal.Desktop"
+    svc.register("/org/freedesktop/portal/desktop", '<interface name="org.freedesktop.portal.Background">'
+                 '<property name="version" type="u" access="read"/></interface>', props={"version": V("u", 2)})
+    return [name, portal]
 
 
 def general_world(svc):

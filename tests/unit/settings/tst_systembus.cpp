@@ -1334,6 +1334,12 @@ struct PrivacyFixture {
     PrivacyFixture()
     {
         bus.handler = [](const Call &c) -> BusReply {
+            // The desktop portal exports Background, not RemoteDesktop (as with a backend that implements only the first).
+            if (c.service == QLatin1String("org.freedesktop.portal.Desktop") && c.member == QLatin1String("Get")) {
+                if (c.args.value(0).toString() == QLatin1String("org.freedesktop.portal.Background"))
+                    return ok({variant(2u)});
+                return err(QStringLiteral("org.freedesktop.DBus.Error.InvalidArgs: No such interface"));
+            }
             if (c.service != kStore || c.iface != kStore)
                 return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: no"));
             const QString table = c.args.value(0).toString();
@@ -1395,10 +1401,35 @@ TEST(SystemBusPrivacy, TheStoreIsReadAsThePortalsReadIt)
     EXPECT_EQ(shared[1].toObject().value("app").toString(), QStringLiteral("org.example.Studio"));
     EXPECT_EQ(shared[1].toObject().value("token").toString(), QStringLiteral("_fsassULUxs_Z2LjLZjJHA"));
     EXPECT_TRUE(r.json.value("remoteDesktop").toArray().isEmpty());
+    // The portals: Background exported, RemoteDesktop not; both asked with a read the dev guard lets through.
+    EXPECT_EQ(r.json.value("portals").toObject(), (QJsonObject{{"background", true}, {"remoteDesktop", false}}));
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"),
+                                {QStringLiteral("org.freedesktop.portal.Camera"), QStringLiteral("version")}));
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Set"),
+                                {QStringLiteral("org.freedesktop.portal.Background"), QStringLiteral("version"), 3u}));
     for (const Call &c : f.bus.calls) {
         EXPECT_NE(c.args.value(1).toString(), QStringLiteral("../not/a/token"));
         EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args)) << c.member.toStdString();
     }
+}
+
+// No portal service, or no answer: the portals are left out (not known), and after a silence the second is not asked.
+TEST(SystemBusPrivacy, PortalsNotKnownAreLeftOut)
+{
+    PrivacyFixture f;
+    const auto store = f.bus.handler;
+    int portalCalls = 0;
+    f.bus.handler = [&](const Call &c) -> BusReply {
+        if (c.service == QLatin1String("org.freedesktop.portal.Desktop")) {
+            ++portalCalls;
+            return err(QStringLiteral("org.freedesktop.DBus.Error.NoReply: Did not receive a reply"));
+        }
+        return store(c);
+    };
+    const StateResult r = privacyState(f.bus);
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    EXPECT_TRUE(r.json.value("portals").toObject().isEmpty());
+    EXPECT_EQ(portalCalls, 1);
 }
 
 TEST(SystemBusPrivacy, NoStoreIsAReason)

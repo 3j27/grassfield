@@ -6054,8 +6054,16 @@
         <translation>La modification n’a pas pu être effectuée&#xa0;: %1.</translation>
     </message>
     <message>
+        <source>This system&apos;s desktop portals do not provide this permission: no app can ask for it, and what is listed here changes nothing on this system.</source>
+        <translation>Les portails de bureau de ce système ne fournissent pas cette autorisation&#xa0;: aucune app ne peut la demander, et ce qui est listé ici ne change rien sur ce système.</translation>
+    </message>
+    <message>
         <source>Not sandboxed: not limited</source>
         <translation>Non isolée&#xa0;: pas limitée</translation>
+    </message>
+    <message>
+        <source>Not sandboxed: may use the camera directly</source>
+        <translation>Non isolée : peut utiliser l’appareil photo directement</translation>
     </message>
     <message>
         <source>No apps have asked</source>
@@ -6089,6 +6097,10 @@
         <translation>Confidentialité et sécurité</translation>
     </message>
     <message>
+        <source>Not used on this system</source>
+        <translation>Non utilisé sur ce système</translation>
+    </message>
+    <message>
         <source>None</source>
         <translation>Aucune</translation>
     </message>
@@ -6117,8 +6129,8 @@
         <translation>Les autorisations ne peuvent pas être lues&#xa0;: %1.</translation>
     </message>
     <message>
-        <source>Only sandboxed apps (Flatpak) ask for these permissions; other apps are not limited by them.</source>
-        <translation>Seules les apps isolées (Flatpak) demandent ces autorisations&#xa0;; les autres apps n’en sont pas limitées.</translation>
+        <source>Only sandboxed apps (Flatpak, Snap) are limited by these permissions; other apps are not.</source>
+        <translation>Seules les apps isolées (Flatpak, Snap) sont limitées par ces autorisations ; les autres apps ne le sont pas.</translation>
     </message>
     <message>
         <source>Background Apps</source>

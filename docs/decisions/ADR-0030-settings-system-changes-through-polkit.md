@@ -183,13 +183,20 @@ service ask the session's agent itself.
     C++ (`validAction`): a known category or table, a valid id or token, a boolean switch.
   - What it cannot do, said in the pane: only sandboxed applications (Flatpak) are limited by these grants. The portal allows
     an application of the host its location and the background without reading the store (`location.c`, `background.c`; it
-    still writes a location row for it), so such a row (its desktop entry found outside a Flatpak export, not a Snap:
-    `Privacy.hostApp`) has no switch there and says "Not sandboxed: not limited"; the camera's grant is read for every
-    application, so its switch stays. A `no` for the background refuses the application's request; stopping a Flatpak that
+    still writes a location row for it), so such a row has no switch there and says "Not sandboxed: not limited". An
+    application is taken for the host's (`Privacy.hostApp`) only when no Flatpak export holds its desktop entry, it is not
+    a Snap and a visible entry exists elsewhere; every applications folder is read, so a user's copy or hidden stub of a
+    Flatpak's entry does not hide its switch, and in doubt the switch stays (an id whose entry is not found, as one from a
+    subfolder, keeps a switch that may do nothing: accepted). The camera's grant is read for every application, so its
+    switch stays, and a host application's row says it may use the camera directly. A `no` for the background refuses the application's request; stopping a Flatpak that
     already runs needs a portal backend that implements Background (the security review read xdg-desktop-portal-hyprland
     1.4.1, which implements Screenshot, ScreenCast, GlobalShortcuts and InputCapture only, and xdg-desktop-portal-gtk, which
     dropped Background and RemoteDesktop in 1.15.0: on Omarchy the Background and RemoteDesktop portals may not be exported
-    at all, owner check `busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop`). A saved
+    at all, owner check `busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop`). So
+    `privacy.state` also reads `Properties.Get(<portal>, "version")` on `org.freedesktop.portal.Desktop` for those two (the
+    only portal read `isReadOnlyCall` allows; a missing interface is false, no portal service or no answer is unknown and
+    the second is not asked), and a category whose portal is missing stays, reading "Not used on this system", its footnote
+    saying no app can ask for it (owner decision 2026-10-26: keep the category, with a line). A saved
     choice removed while the application is sharing is saved again when that session ends: the footnote says to stop
     sharing first. `["ask"]` reads as not allowed (the portal asks every time).
   - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets only the three reads through: a nested
@@ -202,9 +209,14 @@ service ask the session's agent itself.
   - Security review (opus), 2026-10-26: FAIL on 5223a69 + f8a6b65 (H1: the token rule rejected the portal's tokens that begin
     with `_`, so those saved choices could neither be seen nor removed; M1 the cap counted malformed tokens; M2 a switch for
     the host's applications that does nothing; M3 the background footnote claimed more than the portal does; L1 removal while
-    sharing; L4 the id beside a saved choice) → fixed in the commit after them; still open: M3's runtime probe of the
-    portals, L2 (`ask` shown as such), L3 (no row cap, names looked up on the GUI thread), L5 (a removal's queue lives in the
-    page). Counter-review pending.
+    sharing; L4 the id beside a saved choice) → fixed in the commit after them, then M3's runtime check of the portals
+    (the owner's choice above); still open: L2 (`ask` shown as such), L3 (no row cap, names looked up on the GUI thread),
+    L5 (a removal's queue lives in the page). Counter-review of the three commits: PASS (no HIGH), with N1 (the host
+    check let a user's copy of a Flatpak's entry hide its switch), M3r (the portal check needed before merge), N2 (ids
+    named like Object.prototype's properties broke the page's maps), N3 (the footnote named Flatpak only and said host
+    applications are not limited while their camera switch stays), N5 (one error tag for every category): all fixed in
+    the commit after (every folder read, the portal check, maps without a prototype, "Flatpak, Snap", a tag per category);
+    L2, L3 and L5 accepted for merge by that review; N4 (a switch kept in doubt) accepted above.
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password

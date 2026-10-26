@@ -19,12 +19,15 @@ TestCase {
     // The portal's current tokens: base64 with + and / made _, so some begin with _.
     readonly property string tokenB: "_fsassULUxs_Z2LjLZjJHA"
     readonly property var stateJson: ({
-            location: [{app: "org.example.Maps", allowed: true}, {app: "org.example.Weather", allowed: false}],
+            location: [{app: "org.example.Maps", allowed: true}, {app: "org.example.Weather", allowed: false}, {app: "org.example.Studio", allowed: false},
+                {app: "org.example.Ghost", allowed: false}],
             background: [],
             camera: [{app: "org.example.Meet", allowed: true}, {app: "org.example.Booth", allowed: false}],
             remoteDesktop: [],
             screencast: [{app: "org.example.Meet", token: testCase.tokenA}, {app: "org.example.Meet", token: testCase.tokenB},
-                {app: "org.example.Studio", token: testCase.tokenA}]
+                {app: "org.example.Studio", token: testCase.tokenA}],
+            // The desktop portal exports Background, not RemoteDesktop.
+            portals: {background: true, remoteDesktop: false}
         })
 
     Component {
@@ -33,12 +36,16 @@ TestCase {
             property bool devSession: false
             property var busQueries: []
             property var busActions: []
-            readonly property var applicationDirs: ["/home/u/.local/share/flatpak/exports/share/applications", "/apps"]
-            // Booth and Weather are the host's (their entries in a plain applications folder), Studio a Flatpak; the others are
-            // shown by their id.
+            // The user's folder first, as XDG_DATA_HOME comes first.
+            readonly property var applicationDirs: ["/apps", "/home/u/.local/share/flatpak/exports/share/applications"]
+            // Booth and Weather are the host's (their entries in a plain applications folder only); Studio a Flatpak with the
+            // user's own copy of its entry; Ghost only a hidden stub (not known to be the host's); the others are shown by
+            // their id.
             property var files: ({
                     "/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Photo Booth\nIcon=booth\n",
                     "/apps/org.example.Weather.desktop": "[Desktop Entry]\nType=Application\nName=Weather\n",
+                    "/apps/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=My Studio\n",
+                    "/apps/org.example.Ghost.desktop": "[Desktop Entry]\nType=Application\nName=Ghost\nHidden=true\n",
                     "/home/u/.local/share/flatpak/exports/share/applications/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=Studio\n"
                 })
             signal finished(string tag, bool ok, string output)
@@ -123,6 +130,10 @@ TestCase {
         compare(s.background, []);
         compare(s.remoteDesktop, [], "every key is there");
         compare(s.screencast, [{app: "org.example.Meet", tokens: [testCase.tokenA, testCase.tokenB]}], "one entry per app, a token once");
+        compare(s.portals, {}, "not known: left out");
+        compare(Privacy.parse(JSON.stringify({portals: {background: false, remoteDesktop: "no"}})).portals, {background: false}, "only booleans");
+        verify(Privacy.portalMissing(Privacy.parse(JSON.stringify({portals: {remoteDesktop: false}})), "remoteDesktop"));
+        verify(!Privacy.portalMissing(s, "remoteDesktop"), "unknown is not missing");
         compare(Privacy.parse("not json").location, []);
         compare(Privacy.parse("null").screencast, []);
     }
@@ -152,11 +163,20 @@ TestCase {
         compare(Privacy.forget("screencast", ""), null);
         compare(Privacy.entryFile("org.example.Meet"), "org.example.Meet.desktop");
         compare(Privacy.entryFile("../../x"), "");
-        verify(Privacy.hostApp("org.example.A", "/usr/share/applications"));
-        verify(!Privacy.hostApp("org.example.A", "/var/lib/flatpak/exports/share/applications"), "a Flatpak export");
-        verify(!Privacy.hostApp("org.example.A", "/home/u/.local/share/flatpak/exports/share/applications/"));
-        verify(!Privacy.hostApp("snap.firefox", "/usr/share/applications"), "a Snap");
-        verify(!Privacy.hostApp("org.example.A", ""), "no entry found: not known to be the host's");
+        const plain = {dir: "/usr/share/applications", hidden: false};
+        verify(Privacy.hostApp("org.example.A", [plain]));
+        verify(!Privacy.hostApp("org.example.A", [{dir: "/var/lib/flatpak/exports/share/applications", hidden: false}]), "a Flatpak export");
+        verify(!Privacy.hostApp("org.example.A", [plain, {dir: "/home/u/.local/share/flatpak/exports/share/applications/", hidden: false}]),
+            "a Flatpak with an override elsewhere");
+        verify(!Privacy.hostApp("org.example.A", [{dir: "/home/u/.local/share/applications", hidden: true}]), "a hidden stub only: in doubt");
+        verify(!Privacy.hostApp("snap.firefox", [plain]), "a Snap");
+        verify(!Privacy.hostApp("org.example.A", []), "no entry found: not known to be the host's");
+        compare(Privacy.actTag("camera"), "privacy.camera.act");
+        // Ids that are Object.prototype's names are keys like any other.
+        const odd = Privacy.parse(JSON.stringify({screencast: [{app: "__proto__", token: "abc"}], camera: [{app: "constructor", allowed: true}]}));
+        compare(odd.screencast.length, 1);
+        compare(odd.screencast[0].app, "__proto__");
+        compare(odd.camera, [{app: "constructor", allowed: true}]);
     }
 
     // The portal allows the host's apps their location without reading the store: no switch for them there; the camera's
@@ -169,9 +189,28 @@ TestCase {
         compare(weather.subtitle, "org.example.Weather · Not sandboxed: not limited");
         const maps = find(t.page, i => i.title === "org.example.Maps" && i.showToggle !== undefined);
         verify(maps.showToggle, "no entry found: the switch stays");
+        const studio = find(t.page, i => i.title === "My Studio" && i.showToggle !== undefined);
+        verify(studio.showToggle, "a Flatpak whose entry the user copied: still sandboxed, the user's name");
+        compare(studio.subtitle, "org.example.Studio");
+        verify(find(t.page, i => i.title === "org.example.Ghost" && i.showToggle !== undefined).showToggle, "a hidden stub only: in doubt, the switch stays");
         const c = make(categoryComp, {key: "camera"});
         answer(c);
-        verify(find(c.page, i => i.title === "Photo Booth" && i.showToggle !== undefined).showToggle, "the camera's grant is read for the host too");
+        const booth = find(c.page, i => i.title === "Photo Booth" && i.showToggle !== undefined);
+        verify(booth.showToggle, "the camera's grant is read for the host too");
+        compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
+    }
+
+    // A category whose portal this system does not have: its apps without a switch, and the footnote says why.
+    function test_noPortalNoSwitch() {
+        const t = make(categoryComp, {key: "background"});
+        answer(t, Object.assign({}, testCase.stateJson, {background: [{app: "org.example.Maps", allowed: true}], portals: {background: false}}));
+        const maps = find(t.page, i => i.title === "org.example.Maps" && i.showToggle !== undefined);
+        verify(!maps.showToggle);
+        verify(find(t.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("do not provide this permission") >= 0));
+        // An id named like an object's own property still gets its row.
+        const c = make(categoryComp, {key: "camera"});
+        answer(c, Object.assign({}, testCase.stateJson, {camera: [{app: "constructor", allowed: true}]}));
+        verify(find(c.page, i => i.title === "constructor" && i.showToggle !== undefined));
     }
 
     // The hub asks the store once, then counts: Location's value, each category's "None", "1 app", "2 apps".
@@ -181,10 +220,10 @@ TestCase {
         const location = find(t.page, i => i.text === "Location Services" && i.value !== undefined);
         compare(location.value, "", "nothing until the store answers");
         answer(t);
-        compare(location.value, "1");
+        compare(location.value, "1", "Maps; Weather, Studio and Ghost are not allowed");
         compare(row(t.page, "Background Apps").subtitle, "None");
         compare(row(t.page, "Camera").subtitle, "1 app");
-        compare(row(t.page, "Remote Desktop").subtitle, "None");
+        compare(row(t.page, "Remote Desktop").subtitle, "Not used on this system", "its portal is not there");
         compare(row(t.page, "Screen Sharing").subtitle, "2 apps");
         let opened = "";
         t.page.open.connect(id => opened = id);
@@ -209,7 +248,7 @@ TestCase {
         answer(t);
         const booth = find(t.page, i => i.title === "Photo Booth" && i.checked !== undefined);
         verify(booth, "the name from org.example.Booth.desktop");
-        compare(booth.subtitle, "org.example.Booth");
+        compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
         compare(booth.checked, false);
         const meet = find(t.page, i => i.title === "org.example.Meet" && i.checked !== undefined);
         verify(meet, "no desktop entry: its id");
@@ -217,12 +256,14 @@ TestCase {
         booth.toggled(true);
         compare(t.backend.busActions.length, 1);
         compare(t.backend.busActions[0].op, {op: "privacy.allow", category: "camera", app: "org.example.Booth", on: true});
-        compare(t.backend.busActions[0].tag, "privacy.act");
+        compare(t.backend.busActions[0].tag, "privacy.camera.act", "a tag per category");
         verify(!booth.toggleEnabled, "busy until the store answers");
         meet.toggled(false);
         compare(t.backend.busActions.length, 1, "one change at a time");
         const queries = t.backend.busQueries.length;
-        t.backend.finished("privacy.act", true, "");
+        t.backend.finished("privacy.screencast.act", true, "");
+        compare(t.backend.busQueries.length, queries, "another category's answer is not this one's");
+        t.backend.finished("privacy.camera.act", true, "");
         compare(t.backend.busQueries.length, queries + 1, "read again");
         verify(booth.toggleEnabled);
     }
@@ -240,10 +281,10 @@ TestCase {
         verify(remove.enabled);
         remove.clicked();
         compare(t.backend.busActions.map(a => a.op), [{op: "privacy.forget", kind: "screencast", token: testCase.tokenA}]);
-        t.backend.finished("privacy.act", true, "");
+        t.backend.finished("privacy.screencast.act", true, "");
         compare(t.backend.busActions.map(a => a.op.token), [testCase.tokenA, testCase.tokenB]);
         const queries = t.backend.busQueries.length;
-        t.backend.finished("privacy.act", true, "");
+        t.backend.finished("privacy.screencast.act", true, "");
         compare(t.backend.busActions.length, 2);
         compare(t.backend.busQueries.length, queries + 1);
     }
@@ -254,8 +295,8 @@ TestCase {
         answer(t);
         find(t.page, i => i.title === "org.example.Meet" && i.showToggle !== undefined).clicked();
         t.page.forgetSelected();
-        t.backend.failed("privacy.act", "Unable to write the permission database");
-        t.backend.finished("privacy.act", false, "");
+        t.backend.failed("privacy.screencast.act", "Unable to write the permission database");
+        t.backend.finished("privacy.screencast.act", false, "");
         compare(t.backend.busActions.length, 1, "the second token is not tried");
         verify(find(t.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("Unable to write the permission database") >= 0));
     }
@@ -275,5 +316,10 @@ TestCase {
         const t = make(categoryComp, {key: "remoteDesktop"});
         answer(t);
         verify(find(t.page, i => i.title === "No saved choices" && i.visible));
+        // Its portal is not there: the footnote says so.
+        verify(find(t.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("do not provide this permission") >= 0));
+        const b = make(categoryComp, {key: "background"});
+        answer(b);
+        verify(find(b.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("may run in the background when they ask") >= 0), "its portal is there");
     }
 }

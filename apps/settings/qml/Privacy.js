@@ -21,7 +21,8 @@ function validToken(token) {
 }
 
 // The state as the panes use it: {location, background, camera: [{app, allowed}], remoteDesktop, screencast: [{app,
-// tokens}]}, one entry per application (its saved selections together), anything malformed dropped; every key is there.
+// tokens}], portals: {background, remoteDesktop}}, one entry per application (its saved selections together), anything
+// malformed dropped; every key is there (a portal true or false only when the Backend knows).
 function parse(text) {
     let v = null;
     try {
@@ -34,7 +35,7 @@ function parse(text) {
     for (const key of SWITCHES)
         out[key] = listOf(key).filter(e => e && validApp(e.app) && typeof e.allowed === "boolean").map(e => ({app: e.app, allowed: e.allowed}));
     for (const key of SAVED) {
-        const byApp = {};
+        const byApp = Object.create(null);
         out[key] = [];
         for (const e of listOf(key)) {
             if (!e || !validApp(e.app) || !validToken(e.token))
@@ -47,7 +48,19 @@ function parse(text) {
                 byApp[e.app].tokens.push(e.token);
         }
     }
+    out.portals = {};
+    const portals = v !== null && typeof v === "object" && v.portals !== null && typeof v.portals === "object" ? v.portals : {};
+    for (const key of ["background", "remoteDesktop"]) {
+        if (typeof portals[key] === "boolean")
+            out.portals[key] = portals[key];
+    }
     return out;
+}
+
+// The desktop portal this category's grant is for is known to be missing: no app can ask for it, and its settings change
+// nothing on this system (ADR-0030: Omarchy's portal backends may implement neither Background nor RemoteDesktop).
+function portalMissing(state, key) {
+    return !!state && !!state.portals && state.portals[key] === false;
 }
 
 // How many applications a row counts: those allowed (a switch), those with a saved selection.
@@ -70,14 +83,22 @@ function forget(key, token) {
     return {op: "privacy.forget", kind: key, token: token};
 }
 
-// Whether the portal takes an application for one of the host's (not sandboxed): its desktop entry was found (in `entryDir`)
-// in an applications folder that is not a Flatpak export, and it is not a Snap. The portal allows such an application its
-// location and the background without reading the store (location.c, background.c), so a switch would do nothing; one whose
-// entry was not found is not known to be one.
-function hostApp(app, entryDir) {
-    if (typeof entryDir !== "string" || entryDir === "" || String(app).indexOf("snap.") === 0)
+// Whether the portal takes an application for one of the host's (not sandboxed). `entries`: every applications folder that
+// has its desktop entry, [{dir, hidden}]. Not when any of them is a Flatpak export (a user's override or hidden copy of a
+// Flatpak's entry elsewhere does not make it the host's), not for a Snap, and only with an entry the user sees: when in
+// doubt the switch stays. The portal allows the host's applications their location and the background without reading the
+// store (location.c, background.c), so a switch would do nothing for them.
+function hostApp(app, entries) {
+    if (String(app).indexOf("snap.") === 0 || !Array.isArray(entries))
         return false;
-    return !/\/flatpak\/exports\/share\/applications\/?$/.test(entryDir);
+    if (entries.some(e => e && /\/exports\/share\/applications\/?$/.test(String(e.dir))))
+        return false;
+    return entries.some(e => e && typeof e.dir === "string" && e.hidden !== true);
+}
+
+// The tag of a category's actions: its failure shows under its own list only.
+function actTag(key) {
+    return "privacy." + key + ".act";
 }
 
 // The categories whose grant the portal reads for the host's applications too (camera.c).

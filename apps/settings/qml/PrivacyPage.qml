@@ -24,6 +24,8 @@ SettingsPage {
     function countText(key: string): string {
         if (!grants.loaded || grants.error !== "")
             return "";
+        if (Privacy.portalMissing(grants.state, key))
+            return qsTr("Not used on this system");
         const n = Privacy.count(grants.state, key);
         return n === 0 ? qsTr("None") : n === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(n);
     }
@@ -53,7 +55,7 @@ SettingsPage {
     }
 
     SettingsGroup {
-        footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error) : qsTr("Only sandboxed apps (Flatpak) ask for these permissions; other apps are not limited by them.")
+        footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error) : qsTr("Only sandboxed apps (Flatpak, Snap) are limited by these permissions; other apps are not.")
 
         Repeater {
             model: [{key: "background", section: "privacy-background", text: qsTr("Background Apps"), glyph: "background", tile: "graphite"},

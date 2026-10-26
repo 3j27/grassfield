@@ -544,6 +544,7 @@ check "location: Maps allowed (EXACT), Weather not (NONE), the malformed id drop
 check "camera: Meet allowed, Booth's \"ask\" is not" py "$st" 'j["camera"] == [{"app": "org.example.Booth", "allowed": False}, {"app": "org.example.Meet", "allowed": True}]'
 check "no background entry and no remote desktop table: none (NotFound is not an error)" py "$st" 'j["background"] == [] and j["remoteDesktop"] == []'
 check "screen sharing: Meet's and Studio's saved selections (a current token beginning with _ too)" py "$st" 'j["screencast"] == [{"app": "org.example.Meet", "token": "'"$token"'"}, {"app": "org.example.Studio", "token": "'"$token2"'"}]'
+check "the portals: Background exported, RemoteDesktop not" py "$st" 'j["portals"] == {"background": True, "remoteDesktop": False}'
 check "... read with Lookup and List only" bash -c '[[ -z $(grep -v "\"member\": \"\(Lookup\|List\)\"" "$1") ]]' _ "$work/permstore.log"
 out=$(probe act '{"op":"privacy.allow","category":"camera","app":"org.example.Booth","on":true}')
 check "allow Booth the camera: ok ($out)" test "$out" = ok

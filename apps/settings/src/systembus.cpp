@@ -90,6 +90,17 @@ const QList<PrivacyGrant> &privacyGrants()
     };
     return grants;
 }
+// The desktop portal (session bus): whether it exports the portals the background and remote desktop grants are for. A
+// portal that no backend implements is not exported at all (xdg-desktop-portal background.c, remote-desktop.c), and
+// Omarchy's backends may implement neither (ADR-0030).
+const QString kPortal = QStringLiteral("org.freedesktop.portal.Desktop");
+const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
+const QList<QPair<QString, QString>> &privacyPortals()
+{
+    static const QList<QPair<QString, QString>> portals{{QStringLiteral("background"), QStringLiteral("org.freedesktop.portal.Background")},
+                                                        {QStringLiteral("remoteDesktop"), QStringLiteral("org.freedesktop.portal.RemoteDesktop")}};
+    return portals;
+}
 // The saved selections of screen sharing and remote desktop: page key -> store table.
 const QList<QPair<QString, QString>> &privacySelections()
 {
@@ -443,6 +454,10 @@ bool isReadOnlyCall(const QString &service, const QString &iface, const QString 
     if (service == kSystemd)
         return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
             || (iface == kSystemdManager && member == QLatin1String("ListUnitFilesByPatterns"));
+    // The desktop portal: only the version of the two portals Privacy & Security asks about.
+    if (service == kPortal)
+        return iface == kProps && member == QLatin1String("Get") && args.size() == 2 && args.at(1).toString() == QLatin1String("version")
+            && std::any_of(privacyPortals().cbegin(), privacyPortals().cend(), [&](const QPair<QString, QString> &p) { return args.at(0).toString() == p.second; });
     // The permission store: its tables and entries.
     if (service == kPermStore)
         return iface == kPermStore
@@ -1012,6 +1027,21 @@ StateResult privacyState(BusCaller &bus)
         }
         json.insert(key, saved);
     }
+    // Whether the portals for the background and remote desktop exist: true, false (the portal answers that it has no such
+    // interface), or left out when it is not known (no portal service, no answer: the second is then not asked).
+    QJsonObject portals;
+    for (const auto &[key, iface] : privacyPortals()) {
+        const Result v = property(bus, kPortal, kPortalPath, iface, QStringLiteral("version"));
+        if (v.ok) {
+            portals.insert(key, true);
+        } else if (v.error.contains(QLatin1String("InvalidArgs")) || v.error.contains(QLatin1String("UnknownInterface"))
+                   || v.error.contains(QLatin1String("UnknownProperty")) || v.error.contains(QLatin1String("UnknownObject"))) {
+            portals.insert(key, false);
+        } else {
+            break;
+        }
+    }
+    json.insert(QStringLiteral("portals"), portals);
     r.json = json;
     r.ok = true;
     return r;

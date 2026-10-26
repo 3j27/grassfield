@@ -15,13 +15,16 @@ QtObject {
     property bool loaded: false
     // Why the store could not be read, "" when it was.
     property string error: ""
-    // app id -> {name, icon, host}, from the first applications folder that has its desktop entry (its id when none has; host:
-    // Privacy.hostApp).
-    property var apps: ({})
+    // app id -> {name, icon, host}: the name and icon of its first visible desktop entry (its id when none has one), host from
+    // every applications folder that has its entry (Privacy.hostApp). No prototype: an id such as "constructor" is a key like
+    // any other.
+    property var apps: Object.create(null)
     // An action is under way: the switches and − wait for it.
     property bool busy: false
     // The saved selections of one application still to forget (one action each): [{key, token}].
     property var forgetting: []
+    // The tag of the action under way (Privacy.actTag: one per category, so a failure shows only under its own list).
+    property string pendingTag: ""
 
     function reload(): void {
         root.system.queryBus("privacy.state", "privacy.state");
@@ -29,37 +32,47 @@ QtObject {
 
     function describe(app: string): var {
         let found = {name: app, icon: "", host: false};
+        let named = false;
+        const entries = [];
         const file = Privacy.entryFile(app);
         for (const dir of file !== "" ? root.backend.applicationDirs : []) {
             const r = root.backend.readText(dir + "/" + file);
             if (!r.exists || !r.ok)
                 continue;
             const e = General.parseDesktopEntry(r.text, Qt.locale().name);
-            found = {name: e.name !== "" ? e.name : app, icon: e.icon, host: Privacy.hostApp(app, dir)};
-            break;
+            entries.push({dir: dir, hidden: e.hidden});
+            if (!named && !e.hidden) {
+                found = {name: e.name !== "" ? e.name : app, icon: e.icon, host: false};
+                named = true;
+            }
         }
+        found.host = Privacy.hostApp(app, entries);
         return found;
     }
 
     // One category's applications by name: [{app, allowed} or {app, tokens}, with name, icon and host].
     function list(key: string): var {
-        return (root.state[key] || []).map(e => Object.assign({}, e, root.apps[e.app] || {name: e.app, icon: "", host: false}))
+        return (root.state[key] || []).map(e => Object.assign({}, e, root.apps[e.app] ?? {name: e.app, icon: "", host: false}))
             .sort((a, b) => a.name.localeCompare(b.name));
     }
 
     function setAllowed(key: string, app: string, on: bool): void {
-        if (!root.busy && root.system.act("privacy permission", Privacy.allow(key, app, on), "privacy.act"))
-            root.busy = true;
+        if (root.busy || !root.system.act("privacy permission", Privacy.allow(key, app, on), Privacy.actTag(key)))
+            return;
+        root.busy = true;
+        root.pendingTag = Privacy.actTag(key);
     }
 
     function forget(key: string, entry: var): void {
         if (root.busy || !entry || !Array.isArray(entry.tokens) || entry.tokens.length === 0)
             return;
         root.forgetting = entry.tokens.slice(1).map(t => ({key: key, token: t}));
-        if (root.system.act("saved screen selection", Privacy.forget(key, entry.tokens[0]), "privacy.act"))
+        if (root.system.act("saved screen selection", Privacy.forget(key, entry.tokens[0]), Privacy.actTag(key))) {
             root.busy = true;
-        else
+            root.pendingTag = Privacy.actTag(key);
+        } else {
             root.forgetting = [];
+        }
     }
 
     Component.onCompleted: root.reload()
@@ -70,7 +83,7 @@ QtObject {
         function onFailed(tag: string, reason: string): void {
             if (tag === "privacy.state")
                 root.error = reason !== "" ? reason : "-";
-            else if (tag === "privacy.act")
+            else if (tag !== "" && tag === root.pendingTag)
                 root.forgetting = [];
         }
 
@@ -81,7 +94,7 @@ QtObject {
                     return;
                 root.error = "";
                 root.state = Privacy.parse(output);
-                const names = Object.assign({}, root.apps);
+                const names = Object.assign(Object.create(null), root.apps);
                 for (const key of Privacy.SWITCHES.concat(Privacy.SAVED)) {
                     for (const e of root.state[key]) {
                         if (names[e.app] === undefined)
@@ -89,13 +102,14 @@ QtObject {
                     }
                 }
                 root.apps = names;
-            } else if (tag === "privacy.act") {
+            } else if (tag !== "" && tag === root.pendingTag) {
                 const next = root.forgetting[0];
                 root.forgetting = root.forgetting.slice(1);
-                if (ok && next !== undefined && root.system.act("saved screen selection", Privacy.forget(next.key, next.token), "privacy.act"))
+                if (ok && next !== undefined && root.system.act("saved screen selection", Privacy.forget(next.key, next.token), Privacy.actTag(next.key)))
                     return;
                 root.forgetting = [];
                 root.busy = false;
+                root.pendingTag = "";
                 root.reload();
             }
         }
