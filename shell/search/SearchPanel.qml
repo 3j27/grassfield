@@ -176,8 +176,8 @@ Variants {
                 height: Tokens.searchFieldHeight
                 verticalAlignment: TextInput.AlignVCenter
                 color: Appearance.colors.text
-                selectionColor: Appearance.colors.accent
-                selectedTextColor: Appearance.colors.accentText
+                selectionColor: Appearance.highlight
+                selectedTextColor: Appearance.highlightText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.searchFieldSize
                 clip: true
@@ -318,9 +318,9 @@ Variants {
             Text {
                 id: emptyNotice
                 visible: panel.noResults
-                x: Tokens.spacingLg
+                x: Tokens.searchFieldInset
                 y: Tokens.searchFieldHeight
-                width: panel.width - 2 * Tokens.spacingLg
+                width: panel.width - 2 * Tokens.searchFieldInset
                 height: Tokens.searchEmptyHeight
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
@@ -346,21 +346,15 @@ Variants {
                 interactive: contentHeight > height
                 boundsBehavior: Flickable.StopAtBounds
                 model: root.controller.rows
-                currentIndex: {
-                    const sel = root.controller.selected;
-                    const r = root.controller.rows;
-                    for (let i = 0; i < r.length; i++) {
-                        if (r[i].itemIndex === sel)
-                            return i;
-                    }
-                    return -1;
-                }
+                // One row per result (no group headers): the row index is the result index.
+                currentIndex: root.controller.selected
                 onCurrentIndexChanged: {
-                    if (currentIndex < 0)
-                        return;
-                    positionViewAtIndex(currentIndex, ListView.Contain);
+                    if (currentIndex >= 0)
+                        positionViewAtIndex(currentIndex, ListView.Contain);
                 }
 
+                // macOS 27: no group headers, 17 / 15 type, text 72 from the panel edge, and a neutral selected row (a light
+                // fill, not the accent) concentric with the panel.
                 delegate: Item {
                     id: row
 
@@ -381,8 +375,7 @@ Variants {
                         visible: row.selected
                         anchors.fill: parent
                         radius: Tokens.searchRowRadius
-                        // ADR-0024 (macOS 27): the selected row is a neutral fill over the panel, not the accent.
-                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.searchSelectionOpacity)
+                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.searchSelectionFillOpacity)
                     }
 
                     Item {
@@ -429,7 +422,7 @@ Variants {
                     Column {
                         anchors {
                             left: parent.left
-                            leftMargin: Tokens.searchTextInset - Tokens.searchRowInset
+                            leftMargin: Tokens.searchRowTextInset - Tokens.searchRowInset
                             right: parent.right
                             rightMargin: Tokens.spacingMd
                             verticalCenter: parent.verticalCenter
@@ -443,6 +436,7 @@ Variants {
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.searchTitleSize
+                            font.letterSpacing: Appearance.tracking(Tokens.searchTitleSize)
                             font.weight: Tokens.typographyMenuWeight
                         }
 
@@ -454,6 +448,7 @@ Variants {
                             color: Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.searchSubtitleSize
+                            font.letterSpacing: Appearance.tracking(Tokens.searchSubtitleSize)
                         }
                     }
 

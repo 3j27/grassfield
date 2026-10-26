@@ -69,7 +69,7 @@ Dialog {
                     Rectangle {
                         anchors.fill: parent
                         radius: Tokens.radiusControl
-                        color: Appearance.colors.accent
+                        color: Appearance.colors.selection
                         visible: row.current
                     }
 
@@ -95,7 +95,7 @@ Dialog {
                             elide: Text.ElideRight
                             text: Apps.nameFor(row.modelData.appId)
                             textFormat: Text.PlainText
-                            color: row.current ? Appearance.colors.accentText : Appearance.colors.text
+                            color: row.current ? Appearance.colors.selectionText : Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyMenuSize
                         }

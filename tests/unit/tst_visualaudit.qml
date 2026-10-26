@@ -17,10 +17,10 @@ TestCase {
 
     // Priority 2: Search rows.
     function test_searchRowMetrics() {
-        compare(Tokens.searchTitleSize, 18);
+        compare(Tokens.searchTitleSize, 17);
         compare(Tokens.searchSubtitleSize, 15);
-        // The text box starts 71 in (a whole number); the ink of the 18-pt glyphs about 1.5 further, macOS ink at 72.5.
-        compare(Tokens.searchTextInset, 71);
+        // ADR-0024 lot 2: the text starts 72 in (macOS ink at 72.5).
+        compare(Tokens.searchRowTextInset, 72);
         compare(Tokens.searchQueryInset, 61);
         compare(Tokens.searchRowRadius, 18);
         compare(Tokens.searchRowInset, 10);
@@ -28,7 +28,7 @@ TestCase {
         verify(Tokens.searchTitleSize * 1.2 + Tokens.searchSubtitleSize * 1.2 < Tokens.searchRowHeight);
         // The icon ends before the text starts, with a gap.
         const iconEnd = Tokens.searchFieldInset + Tokens.searchRowIconSize;
-        verify(Tokens.searchTextInset - iconEnd >= Tokens.spacingMd);
+        verify(Tokens.searchRowTextInset - iconEnd >= Tokens.spacingMd);
         // The query starts after the magnifier.
         verify(Tokens.searchQueryInset >= Tokens.searchFieldInset + Tokens.searchFieldIconSize);
     }
@@ -187,10 +187,10 @@ TestCase {
     function test_searchTextFollowsTheTextSize() {
         const saved = Appearance.textScale;
         Appearance.textScale = 1;
-        compare(Tokens.searchTitleSize, 18);
+        compare(Tokens.searchTitleSize, 17);
         compare(Tokens.searchSubtitleSize, 15);
         Appearance.textScale = 1.3;
-        compare(Tokens.searchTitleSize, 23);
+        compare(Tokens.searchTitleSize, 22);
         compare(Tokens.searchSubtitleSize, 20);
         verify((Tokens.searchTitleSize + Tokens.searchSubtitleSize) * 1.2 < Tokens.searchRowHeight);
         Appearance.textScale = saved;

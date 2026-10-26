@@ -6,7 +6,6 @@ import qs.platform
 import qs.services
 import qs.overlay.controlcenter
 import "controlcenter/Model.js" as Model
-import "InputSource.js" as IS
 
 // Quick Settings (spec controlcenter.md; internal name Control Center): floating glass modules on a
 // 4-column grid, the macOS model. Every module is its own frosted surface (no shared panel): the
@@ -47,44 +46,22 @@ FocusScope {
             open(id);
     }
 
-    // Whether the control that has the focus got it by the keyboard (a visible ring): the focus moved on by a click or a
-    // pointer-opened section shows none (macOS: the ring is for the keyboard only). The ring of a keyboard-focused control stays whatever
-    // the pointer does over it; only a pointer PRESS clears it (InputSource.js, tests/unit/tst_inputsource.qml), never a hover.
-    property var input: IS.start()
-    readonly property bool keyboardNav: input.keyboard
-
-    // The focus moved to a control with a keyboard reason (Tab, the arrows): keyboard navigation.
-    Connections {
-        target: root.Window.window
-
-        function onActiveFocusItemChanged(): void {
-            const item = root.Window.window.activeFocusItem;
-            root.input = IS.focusMoved(root.input, !!item && item.visualFocus === true);
-        }
-    }
-
-    // A passive handler: it sees the press and leaves it to the controls.
-    PointHandler {
-        acceptedButtons: Qt.AllButtons
-        grabPermissions: PointerHandler.ApprovesTakeOverByAnything
-        onActiveChanged: if (active) root.input = IS.pressed(root.input)
-    }
-
-    function keyboardFocused(): bool {
+    // The reason to pass on when focus moves after an action: a key (the focused control shows its ring) or a click.
+    function focusReason(): int {
         const item = root.Window.window ? root.Window.window.activeFocusItem : null;
-        return IS.ringShown(root.input, !!item && item.visualFocus === true);
+        return item && item.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
     }
 
     function open(id: string): void {
         expanded = id;
-        const reason = keyboardFocused() ? Qt.TabFocusReason : Qt.MouseFocusReason;
+        const reason = focusReason();
         Qt.callLater(() => back.forceActiveFocus(reason));
     }
 
     function collapse(): void {
         const id = expanded;
         expanded = "";
-        const reason = keyboardFocused() ? Qt.TabFocusReason : Qt.MouseFocusReason;
+        const reason = focusReason();
         Qt.callLater(() => {
             const target = id === "wifi" ? wifiRow : id === "bluetooth" ? bluetoothRow : id === "sound" ? soundChevron : appearanceBottomRow;
             target.forceActiveFocus(reason);
@@ -165,7 +142,6 @@ FocusScope {
         const i = Model.navTarget(rects, targets.indexOf(from), dx, dy);
         if (i < 0)
             return false;
-        // Arrow keys moved it: a keyboard focus, with its ring.
         targets[i].forceActiveFocus(Qt.TabFocusReason);
         return true;
     }

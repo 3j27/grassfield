@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import qs.services
@@ -10,16 +11,22 @@ Dialog {
     sheet: true
     panelWidth: Tokens.panelAboutWidth
 
+    // The label column fits the longest shown label ("Operating system" is about 107 pt in English, French runs longer),
+    // never narrower than the token: a fixed column let labels overflow the sheet's padding (visual-tahoe audit, sheets).
+    readonly property real labelWidth: Math.ceil(Math.max(Tokens.panelAboutLabelWidth, ...Array.from(root.content).map(r => r.labelImplicitWidth ?? 0)))
+
     component Row2: Row {
         id: line
         property string label: ""
         property string value: ""
+        readonly property real labelImplicitWidth: visible ? labelText.implicitWidth : 0
         width: parent.width
         spacing: Tokens.spacingMd
         visible: value !== ""
         Text {
+            id: labelText
             textFormat: Text.PlainText
-            width: Tokens.panelAboutLabelWidth
+            width: root.labelWidth
             text: line.label
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
@@ -28,7 +35,7 @@ Dialog {
         }
         Text {
             textFormat: Text.PlainText
-            width: line.width - Tokens.panelAboutLabelWidth - Tokens.spacingMd
+            width: line.width - root.labelWidth - Tokens.spacingMd
             text: line.value
             color: Appearance.colors.text
             font.family: Appearance.fontFamily

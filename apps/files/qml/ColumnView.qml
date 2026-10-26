@@ -347,7 +347,7 @@ FocusScope {
                     anchors.rightMargin: Tokens.spacingXs
                     radius: Tokens.radiusControl
                     visible: entry.selected || entryDrop.containsDrag
-                    color: entry.emphasized ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                    color: entry.emphasized ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
                     border.width: entryDrop.containsDrag ? Tokens.filesDropBorder : 0
                     border.color: Appearance.colors.accent
                 }
@@ -375,7 +375,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: DisplayName.text(entry.name)
                     elide: Text.ElideMiddle
-                    color: entry.emphasized ? Appearance.colors.accentText : Appearance.colors.text
+                    color: entry.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                 }
@@ -404,7 +404,7 @@ FocusScope {
                     anchors.right: chevron.left
                     anchors.rightMargin: Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
-                    ringColor: entry.emphasized ? Appearance.colors.accent : Appearance.colors.materialTint
+                    ringColor: entry.emphasized ? Appearance.colors.selection : Appearance.colors.materialTint
                 }
 
                 Icon {
@@ -415,7 +415,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "chevron-right"
                     size: Tokens.filesChevronSize
-                    color: entry.emphasized ? Appearance.colors.accentText : Appearance.colors.textSecondary
+                    color: entry.emphasized ? Appearance.colors.selectionText : Appearance.colors.textSecondary
                 }
 
                 DropArea {

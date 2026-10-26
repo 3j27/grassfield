@@ -507,7 +507,7 @@ TestCase {
         runTint(32, "#E25AA1");
     }
 
-    // The accent fill of a selected row (Search; Force Quit rows are 18 px and never in a mode): the ink follows the row's text colour (TintedIcon.overAccent), so
+    // The selection fill of a selected row (Files; Force Quit rows are 18 px and never in a mode): the ink follows the row's text colour (TintedIcon.overAccent), so
     // the plate and the ink are the opposite of the fill. The plate pixel (between the rim and the artwork) has at least 4.5:1 against the
     // accent in Clear (the old design measured 2.77:1 on main's 5.61:1 there) and 2.5:1 in Dark and Tinted (their plates are the mode's own).
     function test_a2_accentRow() {
@@ -520,8 +520,8 @@ TestCase {
         testCase.iconSize = 32;
         for (const dark of [true, false]) {
             Appearance.dark = dark;
-            const accent = Qt.color(Appearance.colors.accent);
-            const name = `32px ${dark ? "dark" : "light"} accent row ${Appearance.colors.accent}`;
+            const accent = Qt.color(Appearance.colors.selection);
+            const name = `32px ${dark ? "dark" : "light"} selection row ${Appearance.colors.selection}`;
             testCase.darkPass = dark;
             testCase.wallpaperPass = false;
             testCase.panelColor = accent;
@@ -855,8 +855,8 @@ TestCase {
         }
     }
 
-    // A selected, focused row of Files (list and columns: accent fill, icons of rowIconSize: Tokens.filesListIconSize, at least iconMode.minSize) draws FileIcon with overAccent:
-    // the mean of the top 20 percent of the icon's pixels (a folder and a document) has at least 3:1 (2.5:1 in Dark) against the accent in every mode and both appearances (the
+    // A selected, focused row of Files (list and columns: selection fill, icons of rowIconSize: Tokens.filesListIconSize, at least iconMode.minSize) draws FileIcon with overAccent:
+    // the mean of the top 20 percent of the icon's pixels (a folder and a document) has at least 3:1 (2.5:1 in Dark) against the selection fill in every mode and both appearances (the
     // merge base had 3.77:1 in Clear, the wiring missing gave 2.01:1).
     Component {
         id: accentCell
@@ -871,7 +871,7 @@ TestCase {
 
             width: 40
             height: 40
-            color: Appearance.colors.accent
+            color: Appearance.colors.selection
 
             FolderIcon {
                 id: folderPart
@@ -919,7 +919,7 @@ TestCase {
                     }
                     wait(300);
                     const img = grabImage(cell);
-                    const bg = Qt.color(Appearance.colors.accent);
+                    const bg = Qt.color(Appearance.colors.selection);
                     // A robust statistic: the mean contrast of the top 20 percent of the icon's own pixels (those that differ from the accent), so
                     // that a stray pixel cannot carry a failing icon.
                     const rs = [];

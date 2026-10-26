@@ -35,7 +35,8 @@ Scope {
     }
     property string query: ""
     property string screenName: ""
-    // Groups [{id, title, items}], the flat rows for the list ({header, title} | {item, itemIndex})
+    // Groups [{id, title, items}], the flat rows for the list ({item, itemIndex, groupId}: no header rows, as macOS 27 Spotlight;
+    // the groups still order the list and Tab moves between them)
     // and the flat items (actionable entries). `selected` indexes `items`.
     property var groups: []
     property var rows: []
@@ -310,11 +311,10 @@ Scope {
         let sel = -1;
         const prevKey = selected >= 0 && selected < items.length ? items[selected].key : "";
         for (const grp of g) {
-            // macOS: no group headers; the groups only order the rows.
             for (const it of grp.items) {
                 if (prevKey !== "" && it.key === prevKey && fileHitsOnly)
                     sel = flat.length;
-                rowList.push({header: false, item: it, itemIndex: flat.length, groupId: grp.id});
+                rowList.push({item: it, itemIndex: flat.length, groupId: grp.id});
                 flat.push(Object.assign({groupId: grp.id}, it));
             }
         }

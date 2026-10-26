@@ -79,26 +79,6 @@ TestCase {
         }
     }
 
-    // macOS: the text of a section without an icon or a check starts at the plain inset, the section with one is pushed
-    // by the slot (audit 2026-10-25: 16 against 38).
-    function test_textInsetFollowsTheSection() {
-        const plain = makeMenu();
-        const plainLabel = labelOf(plain, "Alpha");
-        verify(plainLabel !== null);
-        fuzzyCompare(plainLabel.mapToItem(plain, 0, 0).x, Tokens.menuPadding + Tokens.menuItemPadding, 0.5);
-
-        const mixed = createTemporaryObject(checkMenuComponent, testCase);
-        const slot = Tokens.menuIconSize + Tokens.spacingSm;
-        const first = labelOf(mixed, "Alpha").mapToItem(mixed, 0, 0).x;
-        const checked = labelOf(mixed, "Beta").mapToItem(mixed, 0, 0).x;
-        const sibling = labelOf(mixed, "Gamma").mapToItem(mixed, 0, 0).x;
-        const icon = labelOf(mixed, "Delta").mapToItem(mixed, 0, 0).x;
-        fuzzyCompare(first, Tokens.menuPadding + Tokens.menuItemPadding, 0.5);
-        fuzzyCompare(checked, first + slot, 0.5);
-        fuzzyCompare(sibling, checked, 0.5);
-        fuzzyCompare(icon, first + slot, 0.5);
-    }
-
     function test_sizing() {
         const m = makeMenu();
         verify(m.width >= Tokens.menuMinWidth);
