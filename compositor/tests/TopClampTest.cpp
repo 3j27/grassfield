@@ -75,6 +75,15 @@ TEST(TopClamp, TheOutputUnderTheTopEdgeHoldsTheWindow) {
     EXPECT_EQ(gf::topclamp::outputFor(Rect{1200, 10, 1000, 300}, Point{-500, -500}, kOutputs).value_or(kNone), 0U);
     // Above every output: the nearest output below the top edge (the pointer plays no part).
     EXPECT_EQ(gf::topclamp::outputFor(Rect{2100, -300, 400, 300}, Point{100, 1500}, kOutputs).value_or(kNone), 1U);
+    // Above two outputs whose tops are level: the one sharing most of the top edge's width, whatever their order (review
+    // of 9ba1d40: the lowest index won).
+    constexpr std::array<Output, 2> kLevel{Output{Rect{0, 100, 1000, 800}, 124}, Output{Rect{1000, 100, 1000, 800}, 132}};
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{900, 20, 600, 300}, Point{-500, -500}, kLevel).value_or(kNone), 1U) << "100 px on the first, 500 on the second";
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{500, 20, 600, 300}, Point{-500, -500}, kLevel).value_or(kNone), 0U) << "500 px on the first, 100 on the second";
+    constexpr std::array<Output, 2> kLevelSwapped{kLevel[1], kLevel[0]};
+    EXPECT_EQ(gf::topclamp::outputFor(Rect{900, 20, 600, 300}, Point{-500, -500}, kLevelSwapped).value_or(kNone), 0U) << "the same output in either order";
+    const auto held = gf::topclamp::afterDrag(Rect{900, 400, 600, 300}, Rect{900, 20, 600, 300}, false, 0, Point{1200, 150}, kLevel);
+    EXPECT_DOUBLE_EQ(held.value_or(Rect{}).y, 132) << "below the menu bar of the output sharing most of the width";
     // Nowhere near an output: the pointer, else nothing.
     EXPECT_EQ(gf::topclamp::outputFor(Rect{-900, -900, 100, 100}, Point{100, 1500}, kOutputs).value_or(kNone), 2U);
     EXPECT_FALSE(gf::topclamp::outputFor(Rect{-900, -900, 100, 100}, Point{-500, -500}, kOutputs).has_value()) << "nowhere: no clamp";
