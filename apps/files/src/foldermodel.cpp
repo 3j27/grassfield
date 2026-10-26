@@ -3,6 +3,7 @@
 #include "filelogic.h"
 #include "folderstylestore.h"
 #include "imageproviders.h"
+#include "recents.h"
 #include "taglogic.h"
 #include "tagsearch.h"
 #include "tagstore.h"
@@ -31,7 +32,7 @@
 // QT_LOGGING_RULES="grassfield.files.debug=true": listing times, selection and expectation traces.
 Q_LOGGING_CATEGORY(lcFiles, "grassfield.files", QtInfoMsg)
 
-// The matches of a tag search: a flat list of items (the proxy reads them through FolderModel::sourceItem).
+// The matches of a tag search, or the recent files: a flat list of items (the proxy reads them through FolderModel::sourceItem).
 class ItemListModel : public QAbstractListModel
 {
 public:
@@ -47,6 +48,7 @@ public:
 
     KFileItem item(int row) const { return row >= 0 && row < m_items.size() ? m_items.at(row) : KFileItem(); }
     int rowOf(const QUrl &url) const { return m_rows.value(url, -1); }
+    const KFileItemList &items() const { return m_items; }
 
     void append(const KFileItemList &items)
     {
@@ -360,7 +362,7 @@ FolderModel::~FolderModel()
 
 void FolderModel::setUrl(const QUrl &url)
 {
-    const bool search = TagLogic::isSearchUrl(url);
+    const bool search = TagLogic::isSearchUrl(url) || Recents::isRecentsUrl(url);
     const QUrl clean = search ? url : url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
     if (clean == m_url && (search || m_lister->url().isValid()))
         return;
@@ -377,13 +379,17 @@ void FolderModel::setUrl(const QUrl &url)
     m_freeSpace = -1;
     emit freeSpaceChanged();
     stopSearch();
+    stopRecents();
     if (search) {
-        // The folder listing stops; the matches of the search are the rows.
+        // The folder listing stops; the matches of the search (or the recent files) are the rows.
         m_lister->stop();
         m_results->clear();
         if (sourceModel() != m_results)
             setSourceModel(m_results);
-        startSearch();
+        if (Recents::isRecentsUrl(m_url))
+            startRecents();
+        else
+            startSearch();
     } else {
         if (sourceModel() != m_dirModel)
             setSourceModel(m_dirModel);
@@ -398,7 +404,78 @@ void FolderModel::setUrl(const QUrl &url)
 
 bool FolderModel::isSearch() const
 {
-    return TagLogic::isSearchUrl(m_url);
+    return TagLogic::isSearchUrl(m_url) || isRecents();
+}
+
+bool FolderModel::isRecents() const
+{
+    return Recents::isRecentsUrl(m_url);
+}
+
+void FolderModel::startRecents()
+{
+    const quint64 generation = ++m_recentsGeneration;
+    if (!m_recentsWatcher) {
+        m_recentsWatcher = new QFileSystemWatcher(this);
+        // Applications rewrite the file (a new inode): the folder is watched too. A burst of changes reads it once.
+        m_recentsTimer.setSingleShot(true);
+        m_recentsTimer.setInterval(300);
+        connect(&m_recentsTimer, &QTimer::timeout, this, [this] {
+            if (isRecents())
+                startRecents();
+        });
+        connect(m_recentsWatcher, &QFileSystemWatcher::fileChanged, &m_recentsTimer, qOverload<>(&QTimer::start));
+        connect(m_recentsWatcher, &QFileSystemWatcher::directoryChanged, &m_recentsTimer, qOverload<>(&QTimer::start));
+    }
+    const QString file = Recents::xbelPath();
+    m_recentsWatcher->removePaths(m_recentsWatcher->files() + m_recentsWatcher->directories());
+    if (QFileInfo::exists(file))
+        m_recentsWatcher->addPath(file);
+    if (QFileInfo::exists(QFileInfo(file).absolutePath()))
+        m_recentsWatcher->addPath(QFileInfo(file).absolutePath());
+    watchChanges();
+    m_listTimer.start();
+    m_loading = true;
+    emit loadingChanged();
+    auto *loader = new RecentsLoader(generation, file);
+    connect(loader, &RecentsLoader::loaded, this, [this](quint64 gen, const QStringList &paths, const QVariantList &used) {
+        if (gen != m_recentsGeneration || !isRecents())
+            return;
+        m_recentTimes.clear();
+        for (int i = 0; i < paths.size() && i < used.size(); ++i)
+            m_recentTimes.insert(QUrl::fromLocalFile(paths.at(i)), used.at(i).toDateTime());
+        // The list as it is now: files that left it go, new ones come (the selection keeps what is still listed).
+        QList<QUrl> gone;
+        const QSet<QString> now(paths.cbegin(), paths.cend());
+        for (const KFileItem &item : m_results->items()) {
+            if (!now.contains(item.localPath()))
+                gone.append(item.url());
+        }
+        removeResults(gone);
+        QStringList fresh;
+        for (const QString &path : paths) {
+            if (m_results->rowOf(QUrl::fromLocalFile(path)) < 0)
+                fresh.append(path);
+        }
+        addResults(fresh);
+        m_groupCache.clear();
+        invalidate();
+        qCDebug(lcFiles) << "recents" << rowCount() << "files in" << m_listTimer.elapsed() << "ms";
+        m_loading = false;
+        emit loadingChanged();
+    });
+    connect(loader, &QThread::finished, loader, &QObject::deleteLater);
+    loader->start();
+}
+
+void FolderModel::stopRecents()
+{
+    // A load in flight finishes on its own; its result is dropped (generation).
+    ++m_recentsGeneration;
+    m_recentTimes.clear();
+    m_recentsTimer.stop();
+    if (m_recentsWatcher)
+        m_recentsWatcher->removePaths(m_recentsWatcher->files() + m_recentsWatcher->directories());
 }
 
 void FolderModel::setSortKey(int key)
@@ -472,6 +549,8 @@ bool FolderModel::writable() const
 
 QString FolderModel::title() const
 {
+    if (isRecents())
+        return tr("Recents");
     if (isSearch())
         return TagLogic::displayName(TagLogic::searchTag(m_url));
     const QList<FileLogic::Segment> segments = FileLogic::pathSegments(m_url, QDir::homePath(), tr("Computer"), tr("Trash"));
@@ -707,7 +786,8 @@ void FolderModel::tagsChanged(const QList<QUrl> &urls)
     for (const QUrl &url : urls) {
         m_tags.remove(url);
         m_styles.remove(url);
-        if (!isSearch()) {
+        // Only a tag search's rows depend on tags; Recents lists its files whatever their tags.
+        if (!isSearch() || isRecents()) {
             emitRowChanged(url, {TagsRole, TagColorsRole});
             continue;
         }
@@ -756,7 +836,7 @@ FileLogic::SortEntry FolderModel::sortEntry(const KFileItem &item, FileLogic::So
     if (key == SortKey::Created || by == GroupBy::Created)
         e.created = item.time(KFileItem::CreationTime);
     if (key == SortKey::Opened || by == GroupBy::Opened)
-        e.opened = item.time(KFileItem::AccessTime);
+        e.opened = isRecents() ? m_recentTimes.value(item.url()) : item.time(KFileItem::AccessTime);
     if (key == SortKey::Size || by == GroupBy::Size)
         e.size = e.isDir ? -1 : qint64(item.size());
     if (key == SortKey::Tags || by == GroupBy::Tags)

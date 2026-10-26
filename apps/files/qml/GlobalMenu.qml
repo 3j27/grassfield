@@ -460,7 +460,7 @@ Platform.MenuBar {
 
                 visible: kind !== "tag"
                 text: bar.label(name)
-                shortcut: bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
+                shortcut: kind === "recents" ? "Ctrl+Shift+F" : bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
                 onTriggered: bar.win.openPlace(index, url, mounted)
             }
 

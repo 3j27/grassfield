@@ -3067,6 +3067,10 @@
         <translation>Impossible de faire pivoter «&#xa0;%1&#xa0;»&#xa0;: %2.</translation>
     </message>
     <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
+    <message>
         <source>Links can’t carry tags.</source>
         <translation>Les liens ne peuvent pas recevoir de tags.</translation>
     </message>
@@ -3089,6 +3093,10 @@
 </context>
 <context>
     <name>FolderModel</name>
+    <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
     <message>
         <source>Computer</source>
         <translation>Ordinateur</translation>
@@ -4871,6 +4879,10 @@
 </context>
 <context>
     <name>PlacesModel</name>
+    <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
     <message>
         <source>Home</source>
         <translation>Dossier personnel</translation>

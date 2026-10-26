@@ -459,6 +459,11 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        sequence: "Ctrl+Shift+F"
+        onActivated: win.tab.navigate(win.app.recentsUrl(), true)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
         sequence: "Ctrl+Meta+0"
         onActivated: win.tab.toggleGroups()
         onActivatedAmbiguously: activated()

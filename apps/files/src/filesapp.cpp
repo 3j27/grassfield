@@ -9,6 +9,7 @@
 #include "folderstylelogic.h"
 #include "imagerotate.h"
 #include "placesmodel.h"
+#include "recents.h"
 #include "taglogic.h"
 #include "tagstore.h"
 
@@ -592,6 +593,10 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 QVariantList FilesApp::pathSegments(const QUrl &url) const
 {
     QVariantList out;
+    if (Recents::isRecentsUrl(url)) {
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Recents")}, {QStringLiteral("url"), url}});
+        return out;
+    }
     // A tag search: the segments of its folder, then the tag.
     const bool search = TagLogic::isSearchUrl(url);
     const QUrl folder = search ? TagLogic::searchFolder(url) : url;
@@ -1060,6 +1065,9 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         trash(urls);
         return;
     }
+    // Recents is a list, not a place: nothing can be dropped into it.
+    if (Recents::isRecentsUrl(destination))
+        return;
     // A drop on a tag search (its background, its path segment) tags the items, like a drop on the sidebar tag.
     if (TagLogic::isSearchUrl(destination)) {
         addTag(urls, TagLogic::searchTag(destination));
@@ -1426,6 +1434,16 @@ QUrl FilesApp::tagSearchUrl(const QString &tag, const QUrl &from) const
 bool FilesApp::isTagSearch(const QUrl &url) const
 {
     return TagLogic::isSearchUrl(url);
+}
+
+bool FilesApp::isRecents(const QUrl &url) const
+{
+    return Recents::isRecentsUrl(url);
+}
+
+QUrl FilesApp::recentsUrl() const
+{
+    return Recents::locationUrl();
 }
 
 QString FilesApp::searchedTag(const QUrl &url) const

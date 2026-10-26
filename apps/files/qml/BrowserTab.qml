@@ -144,7 +144,9 @@ FocusScope {
             return;
         const stored = root.app.folderView(target);
         root.viewMode = Nav.viewFor(String(root.url) === "" && !root.restore ? "" : root.viewMode, stored.mode, root.app.viewMode);
-        const sort = Nav.sortFor(stored, root.app.sortKey, root.app.sortDescending, key => root.app.defaultDescending(key));
+        // Recents opens sorted by Date Last Opened, newest first, until arranged otherwise.
+        const recents = root.app.isRecents(target);
+        const sort = Nav.sortFor(stored, recents ? 5 : root.app.sortKey, recents ? true : root.app.sortDescending, key => root.app.defaultDescending(key));
         root.setArrangement(sort.key, sort.descending);
         root.groupBy = stored.groupBy !== undefined ? stored.groupBy : 0;
         root.applyGroups();

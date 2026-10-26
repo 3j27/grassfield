@@ -66,6 +66,8 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(int largePreviewSize READ largePreviewSize WRITE setLargePreviewSize NOTIFY previewSizeChanged)
     // A tag search location (see the class comment); searchLimited: a bound of TagSearch stopped it early.
     Q_PROPERTY(bool isSearch READ isSearch NOTIFY urlChanged)
+    // Recents (Recents::locationUrl): a search-like flat list of the recently used files; isSearch is true too.
+    Q_PROPERTY(bool isRecents READ isRecents NOTIFY urlChanged)
     Q_PROPERTY(bool searchLimited READ searchLimited NOTIFY loadingChanged)
 
 public:
@@ -128,6 +130,7 @@ public:
     int largePreviewSize() const { return m_large.size; }
     void setLargePreviewSize(int size);
     bool isSearch() const;
+    bool isRecents() const;
     bool searchLimited() const { return m_searchLimited; }
 
     // Where folder looks are read from (FilesApp's store; null: no folder is customised).
@@ -251,6 +254,10 @@ private:
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
     void emitRowChanged(const QUrl &url, const QList<int> &roles);
 
+    // Recents: read on a thread (RecentsLoader), again when the list changes on disk.
+    void startRecents();
+    void stopRecents();
+
     // Tag search.
     void startSearch();
     void stopSearch();
@@ -264,6 +271,11 @@ private:
     QUrl m_url;
     int m_sortKey = 0;
     int m_groupBy = 0;
+    // Recents: the load in flight is the current generation; when each file was last used (Date Last Opened there).
+    quint64 m_recentsGeneration = 0;
+    QHash<QUrl, QDateTime> m_recentTimes;
+    QFileSystemWatcher *m_recentsWatcher = nullptr;
+    QTimer m_recentsTimer;
     mutable QHash<QUrl, FileLogic::Group> m_groupCache;
     mutable QVariantList m_groups;
     mutable bool m_groupsValid = false;

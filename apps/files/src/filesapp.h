@@ -236,6 +236,9 @@ public:
     // local folder, the folder of a tag search, else the home folder.
     Q_INVOKABLE QUrl tagSearchUrl(const QString &tag, const QUrl &from) const;
     Q_INVOKABLE bool isTagSearch(const QUrl &url) const;
+    // Recents (Go > Recents, the sidebar's first place; docs/specs/files.md "Views and selection").
+    Q_INVOKABLE bool isRecents(const QUrl &url) const;
+    Q_INVOKABLE QUrl recentsUrl() const;
     Q_INVOKABLE QString searchedTag(const QUrl &url) const;
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.

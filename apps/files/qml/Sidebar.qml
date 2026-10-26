@@ -159,7 +159,9 @@ FocusScope {
             id: header
             required property string section
             width: ListView.view.width
-            height: Tokens.filesSidebarHeaderHeight
+            // Recents has no heading.
+            height: header.section === "recents" ? 0 : Tokens.filesSidebarHeaderHeight
+            visible: header.section !== "recents"
             // The Tags header has a menu (Show Hidden Tag) that a right click opens: the same menu through an accessible
             // action (A11Y-09). The other headers are plain headings.
             Accessible.role: header.section === "tags" ? Accessible.Button : Accessible.Heading
