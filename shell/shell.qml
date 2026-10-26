@@ -140,6 +140,13 @@ ShellRoot {
         value: Settings.validRead
     }
 
+    // Settings > Displays (ADR-0027): the backlight goes into the displays state the Settings app reads.
+    Binding {
+        target: Displays
+        property: "backlight"
+        value: Brightness.deviceAvailable ? {device: Brightness.device, level: Brightness.deviceLevel} : null
+    }
+
     // Pointer size (Settings > Accessibility > Pointer): the compositor is asked for the new size live.
     Binding {
         target: Pointer

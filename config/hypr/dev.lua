@@ -33,6 +33,11 @@ end
 -- Reference output for deterministic screenshots: 1920x1080 @ scale 1, like the reference machine panel.
 -- The visible WAYLAND-1 window is sized by the owner's session layout, so it can't be relied on.
 hl.monitor({ output = "GF-REF", mode = "1920x1080@60", position = "auto-right", scale = 1 })
+-- ADR-0027: Settings > Displays' choices, from the dev paths (GRASSFIELD_CONFIG_HOME, GRASSFIELD_STATE_HOME) only.
+local displays_ok, displays_err = pcall(require, "grassfield.displays")
+if not displays_ok then
+  print("grassfield: displays: " .. tostring(displays_err))
+end
 hl.on("hyprland.start", function()
   -- Runs as a child of the nested compositor, so it can only reach the nested instance.
   hl.exec_cmd("hyprctl output create headless GF-REF")

@@ -20,6 +20,12 @@ end
 if not omarchy.ok or not omarchy.monitors then
   hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 end
+-- ADR-0027: the displays set in Settings > Displays, after the user's monitors.lua (a display Settings never touched keeps
+-- the user's rule). A failure costs only these rules.
+local displays_ok, displays_err = pcall(require, "grassfield.displays")
+if not displays_ok then
+  print("grassfield: displays: " .. tostring(displays_err))
+end
 -- ADR-0001: a failed include is announced once (details in the journal, lines start with "grassfield: Omarchy include").
 if not omarchy.ok or #omarchy.problems > 0 then
   hl.on("hyprland.start", function()
