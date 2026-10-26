@@ -4764,6 +4764,10 @@
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
+        <source>search results history calculator conversions documents commands</source>
+        <translation>recherche résultats historique calculatrice conversions documents commandes</translation>
+    </message>
+    <message>
         <source>Focus</source>
         <translation>Concentration</translation>
     </message>
@@ -4858,6 +4862,18 @@
     <message>
         <source>Search settings</source>
         <translation>Rechercher dans les réglages</translation>
+    </message>
+    <message>
+        <source>Delete your search history?</source>
+        <translation>Supprimer votre historique de recherche ?</translation>
+    </message>
+    <message>
+        <source>Search forgets the results you picked, so it no longer puts them first.</source>
+        <translation>Recherche oublie les résultats que vous avez choisis et ne les place plus en premier.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
     </message>
     <message>
         <source>Search</source>
@@ -6365,6 +6381,18 @@
         <translation>pourcentage de la batterie</translation>
     </message>
     <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>search results</source>
+        <translation>résultats de recherche</translation>
+    </message>
+    <message>
+        <source>search history</source>
+        <translation>historique de recherche</translation>
+    </message>
+    <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
     </message>
@@ -6486,6 +6514,65 @@
     <message>
         <source>Clear search</source>
         <translation>Effacer la recherche</translation>
+    </message>
+</context>
+<context>
+    <name>SearchPage</name>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Show %1 in Search</source>
+        <translation>Afficher %1 dans Recherche</translation>
+    </message>
+    <message>
+        <source>Search finds apps, documents, settings and answers on this computer, and runs system commands. What you type never leaves this computer.</source>
+        <translation>Recherche trouve les apps, les documents, les réglages et des réponses sur cet ordinateur, et lance les commandes système. Ce que vous tapez ne quitte jamais cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Search History</source>
+        <translation>Historique de recherche</translation>
+    </message>
+    <message>
+        <source>Delete Search History…</source>
+        <translation>Supprimer l’historique de recherche…</translation>
+    </message>
+    <message>
+        <source>Search Results</source>
+        <translation>Résultats de recherche</translation>
+    </message>
+    <message>
+        <source>Allows these results to appear in Search.</source>
+        <translation>Permet à ces résultats d’apparaître dans Recherche.</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>Calculator</source>
+        <translation>Calculatrice</translation>
+    </message>
+    <message>
+        <source>Conversions</source>
+        <translation>Conversions</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Recent Documents</source>
+        <translation>Documents récents</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>Réglages</translation>
+    </message>
+    <message>
+        <source>System Commands</source>
+        <translation>Commandes système</translation>
     </message>
 </context>
 <context>

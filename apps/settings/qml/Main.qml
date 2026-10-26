@@ -25,7 +25,7 @@ Window {
     // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
     readonly property var tileColors: ({
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
-            accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", focus: "purple", lock: "graphite",
+            accessibility: "blue", desktop: "graphite", menubar: "graphite", search: "graphite", notifications: "red", focus: "purple", lock: "graphite",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             datetime: "blue", language: "blue", login: "graphite"
         })
@@ -58,6 +58,7 @@ Window {
         {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
         {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "menubar", group: 2, title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
+        {id: "search", group: 2, title: qsTr("Search"), icon: "search", keywords: qsTr("search results history calculator conversions documents commands")},
         {id: "wallpaper", group: 2, title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
         {id: "notifications", group: 3, title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
@@ -726,6 +727,8 @@ Window {
                     return desktopPage;
                 case "menubar":
                     return menuBarPage;
+                case "search":
+                    return searchPage;
                 case "notifications":
                     return notificationsPage;
                 case "focus":
@@ -928,6 +931,14 @@ Window {
     }
 
     Component {
+        id: searchPage
+        SearchPage {
+            store: cfg
+            onHistoryDeleteRequested: deleteSearchHistory.open()
+        }
+    }
+
+    Component {
         id: notificationAppPage
         NotificationAppPage {
             store: cfg
@@ -1110,6 +1121,16 @@ Window {
     ClockOptionsSheet {
         id: clockSheet
         store: cfg
+    }
+
+    // Search > Delete Search History…: asked first, as macOS does; Search forgets the results picked before now.
+    Sheet {
+        id: deleteSearchHistory
+        title: qsTr("Delete your search history?")
+        message: qsTr("Search forgets the results you picked, so it no longer puts them first.")
+        confirmText: qsTr("Delete")
+        destructive: true
+        onAccepted: cfg.set("search.historyResetAt", Date.now())
     }
 
     // Lock Screen > Show message when locked > Set…

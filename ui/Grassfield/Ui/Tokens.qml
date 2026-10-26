@@ -1252,6 +1252,16 @@ QtObject {
     readonly property int settingsFocusRowTitleX: 53
     // macOS 27 Lock Screen: a switch and its Set… push button 10 apart (609-645, 655-710) [ref: docs/audits/settings-parity-2026-10-26.md § Lock Screen]
     readonly property int settingsAccessoryGap: 10
+    // macOS 27 Spotlight: the Results from Apps header, title and explanation, above its separator [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property real settingsResultsHeaderHeight: 51.5
+    // macOS 27 Spotlight: the result rows 42 apart (41 + the separator) [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property int settingsResultRowHeight: 42
+    // macOS 27 Spotlight: a result row's icon from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property real settingsResultIconX: 8.5
+    // macOS 27 Spotlight: a result row's icon [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property int settingsResultIconSize: 23
+    // macOS 27 Spotlight: a result row's name (and its separator) from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property int settingsResultTitleX: 38
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
