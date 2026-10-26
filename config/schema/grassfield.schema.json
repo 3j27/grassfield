@@ -388,10 +388,9 @@
         },
         "message": {
           "type": "string",
-          "maxLength": 200,
-          "pattern": "^[^\\u0000-\\u001f\\u007f]{0,200}$",
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]{0,200}$",
           "default": "",
-          "description": "The message the lock screen shows (one line of plain text, at most 200 characters, no control characters).",
+          "description": "The message the lock screen shows: one line of plain text of at most 200 UTF-16 code units (as the settings contract counts), without control characters (C0, C1), line or paragraph separators or bidirectional overrides and isolates.",
           "x-grassfield": {
             "rule": "plainText"
           }

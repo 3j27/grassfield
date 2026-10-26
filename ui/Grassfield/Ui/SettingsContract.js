@@ -230,7 +230,7 @@ const RULES = {
     "lock.displayOffPower": {"type": "integer", "min": 0, "max": 240},
     "lock.showUser": {"type": "boolean"},
     "lock.showMessage": {"type": "boolean"},
-    "lock.message": {"type": "plainText", "pattern": "^[^\\u0000-\\u001f\\u007f]{0,200}$"},
+    "lock.message": {"type": "plainText", "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]{0,200}$"},
     "hotCorners.topLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.topRight": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.bottomLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
