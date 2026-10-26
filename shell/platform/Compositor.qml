@@ -10,6 +10,7 @@ import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice
+import "SpaceGeometry.js" as SpaceGeometry
 import "showdesktop"
 import "StagesFront.js" as StagesFront
 
@@ -913,12 +914,14 @@ Singleton {
 
     // Regular workspaces (id > 0) of an output, ordered by id:
     // [{id, name, active, windowCount, appIds, windows, screenW, screenH}]. `windows` (bottom to top as Hyprland lists them) are the
-    // windowsAcross entries of the Space, `screenW` x `screenH` the output size: what a desktop miniature needs.
+    // windowsAcross entries of the Space, `screenW` x `screenH` the output size in logical pixels (SpaceGeometry.js): what a desktop miniature needs.
     function spacesOn(screenName: string, revision: int): var {
         const out = [];
         const mon = monitorByName(screenName);
         const all = Hyprland.workspaces ? Hyprland.workspaces.values : [];
         const wins = windowsAcross(screenName);
+        // Window geometry is logical, so is the size it is scaled against (an output at scale 1.5 or 2 reports device pixels).
+        const size = SpaceGeometry.logicalSize(Quickshell.screens, screenName, mon);
         for (let i = 0; i < all.length; i++) {
             const ws = all[i];
             if (ws.id <= 0 || !ws.monitor || ws.monitor.name !== screenName)
@@ -941,8 +944,8 @@ Singleton {
                 windowCount: count,
                 appIds: appIds,
                 windows: inSpace,
-                screenW: mon ? mon.width : 0,
-                screenH: mon ? mon.height : 0
+                screenW: size.w,
+                screenH: size.h
             });
         }
         out.sort((a, b) => a.id - b.id);
