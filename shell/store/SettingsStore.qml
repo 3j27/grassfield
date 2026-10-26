@@ -36,6 +36,10 @@ Scope {
     // The file is looked at again this often (ms) whatever the watch says: replacing a symlinked grassfield.json with a regular
     // file leaves a file watch on the old target. A stat of the path, nothing more unless it changed.
     property int pollInterval: 10000
+    // A directory searched before PATH for the tools the bounded read runs (head, stat, ...): tests put a stalled or a failing
+    // `head` there. Empty in the shell (never taken from the environment).
+    property string toolDir: ""
+    readonly property var toolEnvironment: root.toolDir === "" ? ({}) : ({"PATH": root.toolDir + ":" + Quickshell.env("PATH")})
     // grassfield.json has been read at least once (also when it was malformed, too large or not a regular file).
     property bool loaded: false
     // True while the file on disk could not be parsed: nothing is written until it loads again.
@@ -49,9 +53,10 @@ Scope {
     property bool unsafeFile: false
 
     // The last document read from the file (JSON.parse of its text, the same path a fresh start takes) with the shell's own
-    // pending changes on top. Every view reads from it, never from the adapter's properties: the adapter does not replace a
-    // property whose new value loosely equals the old one (0 and false, 10 and "10", 1 and true), so on a running shell an
-    // edit of lock.idleMinutes from 0 to false left the auto-lock off while Settings and a restarted shell read 5.
+    // pending changes on top. Every view reads from it. (Quickshell's JsonAdapter is not used: it does not replace a property
+    // whose new value loosely equals the old one (0 and false, 10 and "10", 1 and true), so on a running shell an edit of
+    // lock.idleMinutes from 0 to false left the auto-lock off while Settings and a restarted shell read 5; and it reads without
+    // a bound.)
     property var parsedFile: ({})
     property int parsedFileRevision: 0
 
@@ -472,7 +477,7 @@ Scope {
         const read = root.splitRead(output);
         if (read.status !== "ok" && read.status !== "missing") {
             // Not a regular file, too large or unreadable: nothing is written, the change stays pending.
-            root.takeBadFile(read.status === "unreadable" ? "not readable" : "not a regular file or larger than " + root.maxFileBytes + " bytes");
+            root.takeBadFile(root.badReason(read.status));
             return;
         }
         const text = read.status === "missing" ? "" : read.text;
@@ -515,28 +520,44 @@ Scope {
         writer.running = true;
     }
 
-    // The two bounded reads. Output: the status (ok, missing, bad, unreadable), the signature of the file (device, inode, size,
-    // mtime of what the path leads to), then the text. A file that is not a regular file is not opened (a FIFO would block, a
-    // device such as /dev/zero would never end); `stat -L` and `-f` follow a symlink to its target. At most $2 bytes are read
-    // and a read that does not end in 5 s is cut: a file that grows while it is read, or is cut off, is malformed JSON.
+    // The two bounded reads. Output: the status (ok, missing, bad, unreadable, incomplete), the signature of the file (device, inode,
+    // size, mtime of what the path leads to), then the text. A file that is not a regular file is not opened (a FIFO would
+    // block, a device such as /dev/zero would never end); `stat -L` and `-f` follow a symlink to its target. At most $2 bytes
+    // are read, a read that does not end in 5 s is cut, and the status is "ok" ONLY when the read ended without error and
+    // returned exactly the size the file had: a read that was cut, failed, or met a file that changed under it is
+    // "incomplete" (it would otherwise look like an empty file, whose defaults a write would put over the user's settings).
+    // A read that returned another size than the stat said is tried once more (an atomic replacement between the two); a cut or failed read is not.
     readonly property string readScript: 'f=$1; max=$2\n'
         + 'if [ ! -e "$f" ]; then echo missing; exit 0; fi\n'
         + 'if [ ! -f "$f" ]; then echo bad; exit 0; fi\n'
-        + 'size=$(stat -L -c %s -- "$f" 2>/dev/null) || { echo bad; exit 0; }\n'
-        + 'if [ "$size" -gt "$max" ]; then echo bad; exit 0; fi\n'
-        + 'if [ ! -r "$f" ]; then echo unreadable; exit 0; fi\n'
-        + 'echo ok\n'
-        + 'stat -L -c "%d:%i:%s:%y" -- "$f" 2>/dev/null || echo -\n'
-        + 'timeout 5 head -c "$max" -- "$f" 2>/dev/null\n'
+        + 'tmp=$(mktemp) || { echo incomplete; exit 0; }\n'
+        + 'trap \'rm -f "$tmp"\' EXIT\n'
+        + 'for attempt in 1 2; do\n'
+        + '  size=$(stat -L -c %s -- "$f" 2>/dev/null) || { echo bad; exit 0; }\n'
+        + '  if [ "$size" -gt "$max" ]; then echo bad; exit 0; fi\n'
+        + '  if [ ! -r "$f" ]; then echo unreadable; exit 0; fi\n'
+        + '  sig=$(stat -L -c "%d:%i:%s:%y" -- "$f" 2>/dev/null) || sig=-\n'
+        + '  timeout 5 head -c "$max" -- "$f" > "$tmp" 2>/dev/null\n'
+        + '  rc=$?\n'
+        + '  if [ "$rc" -ne 0 ]; then echo incomplete; exit 0; fi\n'
+        + '  n=$(wc -c < "$tmp")\n'
+        + '  if [ "$n" -eq "$size" ]; then\n'
+        + '    echo ok; echo "$sig"; cat "$tmp"; exit 0\n'
+        + '  fi\n'
+        + 'done\n'
+        + 'echo incomplete\n'
         + 'exit 0\n'
     readonly property string signatureScript: 'stat -L -c "%d:%i:%s:%y" -- "$1" 2>/dev/null || echo -\n'
 
-    // The atomic write: stdin to a temporary file next to the target, renamed over it. A symlinked grassfield.json is followed
-    // to its target (the link is kept, the file it names is replaced). Exit 1 when anything fails; nothing is half written.
+    // The atomic write: stdin to a temporary file next to the target, synced, renamed over it. A symlinked grassfield.json is
+    // followed to its target (the link is kept, the file it names is replaced). The mode of the file that is replaced is kept (a
+    // new file gets 0666 minus the umask). `mv -T` refuses a target that became a directory. Exit 1 when anything fails; nothing
+    // is half written, and a crash after the rename leaves the synced file, never an empty one.
     readonly property string writeScript: 'f=$(realpath -m -- "$1") || exit 1\n'
         + 'd=$(dirname -- "$f")\n'
         + 't=$(mktemp -- "$d/.grassfield.json.XXXXXX") || exit 1\n'
-        + 'if cat > "$t" && mv -f -- "$t" "$f"; then exit 0; fi\n'
+        + 'm=$(stat -c %a -- "$f" 2>/dev/null) || m=$(printf "%03o" $((0666 & ~0$(umask))))\n'
+        + 'if chmod "$m" "$t" && cat > "$t" && sync -- "$t" && mv -fT -- "$t" "$f"; then exit 0; fi\n'
         + 'rm -f -- "$t"\n'
         + 'exit 1\n'
 
@@ -577,10 +598,20 @@ Scope {
 
     property string lastSignature: ""
 
+    function badReason(status: string): string {
+        switch (status) {
+        case "unreadable":
+            return "not readable";
+        case "incomplete":
+            return "not read completely (cut after 5 s, a read error, or changed while it was read)";
+        }
+        return "not a regular file or larger than " + root.maxFileBytes + " bytes";
+    }
+
     function applyRead(output: string): void {
         const read = root.splitRead(output);
         if (read.status === "missing") {
-            root.lastSignature = "";
+            root.lastSignature = "-";
             root.takeMissingFile();
         } else if (read.status === "ok") {
             root.lastSignature = read.signature;
@@ -588,11 +619,16 @@ Scope {
             root.checkText(read.text);
             root.takeDocument(read.text);
             root.reapplyDirty();
+            // A change that waited because the file could not be read (it is readable now) is written now.
+            if (Object.keys(root.dirty).length > 0)
+                root.save();
             root.loadedFile();
         } else {
-            root.lastSignature = "";
+            // A sentinel no signature equals: the poll reads such a file again every pollInterval, whether or not the watch
+            // reported its removal or repair (it does not for a symlink to a device, a directory, a file it could not read).
+            root.lastSignature = "!";
             root.loaded = true;
-            root.takeBadFile(read.status === "unreadable" ? "not readable" : "not a regular file or larger than " + root.maxFileBytes + " bytes");
+            root.takeBadFile(root.badReason(read.status));
         }
         root.armWatch();
     }
@@ -668,6 +704,7 @@ Scope {
     // The bounded read for the merge before a write.
     Process {
         id: diskRead
+        environment: root.toolEnvironment
         stdout: StdioCollector {
             onStreamFinished: root.mergeInto(text)
         }
@@ -720,6 +757,7 @@ Scope {
     // The bounded load of the file.
     Process {
         id: loader
+        environment: root.toolEnvironment
         stdout: StdioCollector {
             onStreamFinished: root.applyRead(text)
         }
@@ -737,8 +775,8 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 const now = text.trim();
-                // "-" is a path that leads to nothing: a missing file is read once, then stays missing.
-                if (now !== root.lastSignature && !(now === "-" && root.lastSignature === ""))
+                // "-" is a path that leads to nothing (read as missing); "!" is the sentinel of a file that could not be used.
+                if (now !== root.lastSignature)
                     root.readFile();
             }
         }

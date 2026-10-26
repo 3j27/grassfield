@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.store
 
-// Persistence of grassfield.json through the real Quickshell FileView/JsonAdapter.
+// Persistence of grassfield.json through the real SettingsStore (bounded reads, atomic writes, the file's own text as the document).
 // Run by scripts/dev/test.sh: `qs -p tests/shell/settings_roundtrip` (offscreen). Prints
 // "settings-roundtrip: PASS" and exits 0, or prints the failures and exits 1.
 // Phases: (1) defaults, clamping, write and read back; (2) a write keeps every schema key;

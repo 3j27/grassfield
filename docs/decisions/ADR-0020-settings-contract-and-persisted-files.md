@@ -64,12 +64,15 @@ adding `version` is safe for a downgrade.
    Known limit: no lock between the fresh read and the atomic replace, so a concurrent external edit can be lost.
    **The file is never read without a bound.** Both reads of the shell (the load, and the fresh read before a write) are one
    shell script: a file that is not a regular file (a FIFO, a device such as /dev/zero through a symlink, a directory) is
-   not opened, a file over 1 MiB (a real one is a few KiB) is not read, a read that hangs is cut after 5 s. Such a file, and
+   not opened, a file over 1 MiB (a real one is a few KiB) is not read, a read that hangs is cut after 5 s, and a read counts
+   only when it ended without error with exactly the file's size (otherwise it is "incomplete", never an empty file). Such a file, and
    one that is not readable (chmod 000), is read as malformed: the cosmetic keys keep their last good values, `lock.*`
    reads the default 5 (what a restart reads), nothing is written, the file is left as it is. A symlinked
    `grassfield.json` is followed for reading and for writing (the target is replaced, the link stays); the path is looked at
    again every 10 s and after each read, so replacing the link with a regular file is noticed. A write that fails (a
    read-only directory, a full disk) keeps its change pending and is retried (2 s, 4 s, ... 60 s) instead of being lost.
+   The write keeps the replaced file's mode, syncs before the rename and refuses a directory in the way; a file that could
+   not be used is read again at every poll.
 3. **Version policy.** Missing `version` is read as 1 and written on the next write. `1` reads normally. An integer above
    1 makes the file read-only: valid keys apply best-effort, nothing is written, in-memory changes last for the session;
    Settings shows one banner and disables its controls. A non-integer is malformed and refused, as today.

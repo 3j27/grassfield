@@ -9,6 +9,11 @@ import qs.store
 // /dev/zero made any toggle abort the shell (qBadAlloc), a 256 MB file cost 2.5 GB at its peak and froze the GUI for seconds, a FIFO
 // would block a read forever. The store reads a file only when it is a regular one of at most maxFileBytes (1 MiB), through one
 // bounded script, and reads anything else as malformed: lock.* fails closed to 5, nothing is written back, the file is left alone.
+// A read that does not complete (a `head` that stalls past the 5 s cut, one that fails, a file swapped for /dev/zero between the check
+// and the read) is NOT an empty file: reading it as one made a toggle rewrite the file with the schema defaults (every customised key
+// lost). Here such a read is malformed: lock.* reads 5, nothing is written, the file stays byte for byte as it was, and it is read
+// again (without any change of the file or its watch) once the reader works. The write script keeps the file's mode and refuses a
+// target that became a directory.
 // Also: a symlinked grassfield.json replaced by a regular file is followed (the watch is set again on the path, and the path is
 // looked at every pollInterval), and a write that fails (a read-only directory) keeps its change pending and is retried.
 // Each case runs on its own directory under ONE live shell; the shell must stay alive, finish each case within seconds, and its peak
@@ -23,6 +28,8 @@ ShellRoot {
 
     readonly property string lock0: '{"version":1,"lock":{"idleMinutes":0}}'
     readonly property string lock10: '{"version":1,"lock":{"idleMinutes":10}}'
+    // A customised file: the keys a rewrite from the defaults would lose.
+    readonly property string custom: '{"version":1,"lock":{"idleMinutes":10},"dock":{"size":70}}'
 
     // want: [store property, value]; run / verify: sh scripts, $B is the case directory; toggle: setDockAutohide(true) and flush
     readonly property var cases: [
@@ -56,6 +63,36 @@ ShellRoot {
                 {run: 'mkdir -p "$B" && printf \'%s\' \'' + '{"version":1,"lock":{"idleMinutes":0}}' + '\' > "$B/grassfield.json" && chmod 000 "$B/grassfield.json"',
                     want: [["lockIdleMinutes", 5], ["validRead", false], ["writeBlocked", true]]},
                 {run: 'chmod 600 "$B/grassfield.json"', want: [["lockIdleMinutes", 0], ["validRead", true], ["writeBlocked", false]]}
+            ]},
+        {name: "a stalled reader (head stops answering): not an empty file, nothing written, read again once it works", tools: true, stages: [
+                {run: 'mkdir -p "$B/bin" && printf \'#!/bin/sh\\nsleep 8\\nexit 0\\n\' > "$B/bin/head" && chmod +x "$B/bin/head" && printf \'%s\' \'' + root.custom + '\' > "$B/grassfield.json" && cp "$B/grassfield.json" "$B/orig"',
+                    want: [["lockIdleMinutes", 5], ["validRead", false], ["writeBlocked", true]]},
+                {toggle: true, want: [["dockAutohide", true], ["lockIdleMinutes", 5]], verify: 'cmp -s "$B/grassfield.json" "$B/orig"'},
+                {set: ["toolDir", ""], want: [["lockIdleMinutes", 10], ["dockSize", 70], ["validRead", true], ["writeBlocked", false]],
+                    verify: 'grep -q \'"autohide": true\' "$B/grassfield.json" && grep -q \'"idleMinutes": 10\' "$B/grassfield.json" && grep -q \'"size": 70\' "$B/grassfield.json"'}
+            ]},
+        {name: "a failing reader (head exits 1): not an empty file, nothing written, read again once it works", tools: true, stages: [
+                {run: 'mkdir -p "$B/bin" && printf \'#!/bin/sh\\nexit 1\\n\' > "$B/bin/head" && chmod +x "$B/bin/head" && printf \'%s\' \'' + root.custom + '\' > "$B/grassfield.json" && cp "$B/grassfield.json" "$B/orig"',
+                    want: [["lockIdleMinutes", 5], ["validRead", false], ["writeBlocked", true]]},
+                {toggle: true, want: [["dockAutohide", true], ["lockIdleMinutes", 5]], verify: 'cmp -s "$B/grassfield.json" "$B/orig"'},
+                {set: ["toolDir", ""], want: [["lockIdleMinutes", 10], ["dockSize", 70], ["validRead", true], ["writeBlocked", false]],
+                    verify: 'grep -q \'"autohide": true\' "$B/grassfield.json" && grep -q \'"idleMinutes": 10\' "$B/grassfield.json" && grep -q \'"size": 70\' "$B/grassfield.json"'}
+            ]},
+        {name: "a file swapped for /dev/zero between the check and the read", tools: true, stages: [
+                {run: 'mkdir -p "$B/bin" && printf \'#!/bin/sh\\nfor last; do :; done\\nrm -f -- "$last"; ln -s /dev/zero "$last"\\nexec /usr/bin/head "$@"\\n\' > "$B/bin/head" && chmod +x "$B/bin/head" && printf \'%s\' \'' + root.custom + '\' > "$B/grassfield.json"',
+                    want: [["lockIdleMinutes", 5], ["validRead", false], ["writeBlocked", true]]},
+                {toggle: true, want: [["dockAutohide", true]], verify: '[ "$(readlink "$B/grassfield.json")" = /dev/zero ] && ! ls -A "$B" | grep -q "^[.]grassfield[.]json[.]"'}
+            ]},
+        {name: "the write script: a directory in the way, the file's mode kept, a new file's mode from the umask", stages: [
+                {run: 'mkdir -p "$B/dir.json" && printf old > "$B/f.json" && chmod 640 "$B/f.json"', want: [], write: {path: "dir.json", text: "x"},
+                    verify: '[ "$EXIT" != 0 ] && [ -d "$B/dir.json" ] && [ -z "$(ls -A "$B/dir.json")" ] && [ "$(ls -A "$B" | grep -c "grassfield.json\\.")" = 0 ]'},
+                {want: [], write: {path: "f.json", text: "new"}, verify: '[ "$EXIT" = 0 ] && [ "$(cat "$B/f.json")" = new ] && [ "$(stat -c %a "$B/f.json")" = 640 ]'},
+                {want: [], write: {path: "n.json", text: "fresh"}, verify: '[ "$EXIT" = 0 ] && [ "$(cat "$B/n.json")" = fresh ] && [ "$(stat -c %a "$B/n.json")" = "$(printf "%03o" $((0666 & ~0$(umask))))" ]'}
+            ]},
+        {name: "a file that could not be used is removed: the next change is saved (the poll sees the removal)", stages: [
+                {run: 'mkdir -p "$B" && ln -s /dev/zero "$B/grassfield.json"', want: [["writeBlocked", true], ["lockIdleMinutes", 5]]},
+                {run: 'rm -f "$B/grassfield.json"', want: [["writeBlocked", false]]},
+                {toggle: true, want: [["dockAutohide", true]], verify: 'grep -q \'"autohide": true\' "$B/grassfield.json" && grep -q \'"idleMinutes": 5\' "$B/grassfield.json"'}
             ]},
         {name: "a symlinked grassfield.json replaced by a regular file", stages: [
                 {run: 'mkdir -p "$B/t" && printf \'%s\' \'' + '{"version":1,"lock":{"idleMinutes":0}}' + '\' > "$B/t/a.json" && ln -s t/a.json "$B/grassfield.json"', want: [["lockIdleMinutes", 0]]},
@@ -141,10 +178,44 @@ ShellRoot {
             runner.command = ["sh", "-c", "B=$1; " + st.run, "sh", root.dir()];
             runner.running = true;
         } else {
-            if (st.toggle === true) {
-                root.store.setDockAutohide(true);
-                root.store.flush();
-            }
+            root.act(st);
+        }
+    }
+
+    // What a stage does once the files are as it wants them: set a store property, toggle a setting, run the write script on a
+    // path; then its readings are polled.
+    function act(st: var): void {
+        if (st.set !== undefined)
+            root.store[st.set[0]] = st.set[1];
+        if (st.toggle === true) {
+            root.store.setDockAutohide(true);
+            root.store.flush();
+        }
+        if (st.write !== undefined) {
+            root.phase = "running";
+            scriptRun.text = st.write.text;
+            scriptRun.command = ["sh", "-c", root.store.writeScript, "sh", root.dir() + "/" + st.write.path];
+            scriptRun.stdinEnabled = true;
+            scriptRun.running = true;
+            return;
+        }
+        root.phase = "wait";
+    }
+
+    property int scriptExit: -1
+
+    // The store's write script run by hand on a path (the write script's own behaviour).
+    Process {
+        id: scriptRun
+        property string text: ""
+        stdinEnabled: true
+        onStarted: {
+            scriptRun.write(scriptRun.text);
+            scriptRun.stdinEnabled = false;
+        }
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => {
+            root.scriptExit = exitCode;
             root.phase = "wait";
         }
     }
@@ -161,13 +232,12 @@ ShellRoot {
                 root.finish(false, "the setup of case \"" + root.cases[root.caseIndex].name + "\" stage " + root.stageIndex + " failed (exit " + exitCode + ")");
                 return;
             }
-            if (root.store === null)
-                root.store = storeComponent.createObject(root, {configDir: root.dir()});
-            if (root.stage().toggle === true) {
-                root.store.setDockAutohide(true);
-                root.store.flush();
+            if (root.store === null) {
+                const c = root.cases[root.caseIndex];
+                // A case with fake tools (a `head` in $B/bin) has them searched before PATH from the first read on.
+                root.store = storeComponent.createObject(root, {configDir: root.dir(), toolDir: c.tools === true ? root.dir() + "/bin" : ""});
             }
-            root.phase = "wait";
+            root.act(root.stage());
         }
     }
 
@@ -243,7 +313,7 @@ ShellRoot {
             if (ok && st.verify !== undefined && !root.verified) {
                 if (!root.verifying) {
                     root.verifying = true;
-                    verifier.command = ["sh", "-c", "B=$1; " + st.verify, "sh", root.dir()];
+                    verifier.command = ["sh", "-c", "B=$1; EXIT=$2; " + st.verify, "sh", root.dir(), String(root.scriptExit)];
                     verifier.running = true;
                 }
                 ok = false;
