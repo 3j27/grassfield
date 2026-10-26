@@ -604,16 +604,18 @@ Variants {
                             height: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
                             width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
-                            // The add button is light glass (macOS); a thumbnail the material's fill.
-                            color: tile.isPlus ? Appearance.withAlpha(Appearance.colors.knob, (Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) * (tileMouse.containsMouse ? 1.5 : 1)) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
-                            border.width: 1
+                            // The add button is a bare plus at rest (macOS 27), a light glass circle under the pointer; a thumbnail
+                            // the material's fill.
+                            readonly property bool plusLit: tile.isPlus && (tileMouse.containsMouse || tile.focused)
+                            color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent") : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            border.width: tile.isPlus && !face.plusLit ? 0 : 1
                             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
                             // Selection ring outside the thumbnail (macOS), so the picture keeps its size.
                             Rectangle {
                                 anchors.fill: parent
-                                anchors.margins: -Tokens.overviewSelectionWidth
-                                radius: parent.radius + Tokens.overviewSelectionWidth
+                                anchors.margins: -Tokens.overviewSelectionWidth - Tokens.overviewRingGap
+                                radius: parent.radius + Tokens.overviewSelectionWidth + Tokens.overviewRingGap
                                 color: "transparent"
                                 visible: tile.modelData.active || tile.focused || tile.dropTarget
                                 border.width: Tokens.overviewSelectionWidth

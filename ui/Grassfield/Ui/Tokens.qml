@@ -340,10 +340,10 @@ QtObject {
     readonly property int dockRevealDuration: 240
     // the separator hairline, 1 wide [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property int dockSeparatorWidth: 1
-    // the running dot's centre about 5 above the shelf's screen-side edge, inside its padding (no band under the icons) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
-    readonly property int dockDotCentre: 5
-    // room on each side of the separator hairline inside its slot: app body to separator 20.5 (3.5 bearing + 7 spacing + 10) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
-    readonly property int dockSeparatorGap: 10
+    // the running dot's centre 6 above the shelf's screen-side edge, inside its padding (no band under the icons; macOS 26 about 5) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
+    readonly property int dockDotCentre: 6
+    // room on each side of the separator hairline inside its slot: app body to separator 18.5 (3.5 bearing + 7 spacing + 8; macOS 26 measured 20.5) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Dock]
+    readonly property int dockSeparatorGap: 8
     // separator about 34 percent darker than the shelf (was 8 percent: four times fainter): 0.3 of black, white in dark [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property real dockSeparatorOpacity: 0.3
     // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -673,8 +673,8 @@ QtObject {
     readonly property int quicksettingsSliderTitleTop: 10
     // slider track centre 41.7 below the module top (macOS 27 capture about 40.5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
     readonly property int quicksettingsSliderTrackCentre: 42
-    // slider track thickness 4.7 (macOS 27 capture about 5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
-    readonly property int quicksettingsSliderTrack: 5
+    // knobless module slider track 4 thick, fill and track (macOS 26 composites read 4.7) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Quick Settings]
+    readonly property int quicksettingsSliderTrack: 4
     // estimate: the glyph at the low end of a module slider (macOS 27: a small sun, about 14) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
     readonly property int quicksettingsSliderGlyphSmall: 14
     // estimate: the glyph at the high end of a module slider (macOS 27: a large sun, about 18) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
@@ -894,8 +894,8 @@ QtObject {
     readonly property int overviewMinGap: 24
     // estimate: margin around the window area [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAreaMargin: 32
-    // the wallpaper behind the windows is barely dimmed in macOS (was 0.45: about 55 percent) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
-    readonly property real overviewBackdropOpacity: 0.1
+    // the wallpaper behind the windows is not dimmed (luminance ratio 0.96-1.00 against the desktop) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
+    readonly property int overviewBackdropOpacity: 0
     // estimate: dim when blur is off (Reduce Transparency) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewBackdropOpacityOpaque: 0.92
     // F1 gap 15: Space thumbnail 138x90 +-1 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -936,6 +936,8 @@ QtObject {
     readonly property int overviewLabelMaxWidth: 280
     // estimate: selection outline [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewSelectionWidth: 3
+    // the selection ring sits 1 clear of the thumbnail, outside it [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
+    readonly property int overviewRingGap: 1
     // estimate: thumbnail corner radius [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewThumbRadius: 10
     // estimate: px before a press becomes a drag [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -960,11 +962,11 @@ QtObject {
     readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddSize: 32
-    // the add button's plus about 19 wide (the 24-grid glyph's ink is 16 of 24) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
-    readonly property int overviewAddGlyphSize: 28
-    // estimate: the add button is light glass, white at this opacity in light (it was a grey fill darker than the band) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    // the add button is a bare plus about 20 x 20 (the 24-grid glyph's ink is 16 of 24), no circle at rest [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
+    readonly property int overviewAddGlyphSize: 30
+    // estimate: the add button's circle shows only under the pointer, white at this opacity in light [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
     readonly property real overviewAddFillOpacity: 0.5
-    // estimate: the add button's white in dark, lighter than the band [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    // estimate: the add button's circle under the pointer, white at this opacity in dark [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Mission Control]
     readonly property real overviewAddFillOpacityDark: 0.18
 
     // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/apps.md]
