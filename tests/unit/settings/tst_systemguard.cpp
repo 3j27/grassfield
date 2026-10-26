@@ -329,3 +329,19 @@ TEST(AutostartGuard, ADevSessionWritesOnlyUnderDev)
     EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/sub/notes.desktop"), root + QStringLiteral("/.dev/link/sub"), root, true));
     EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("/notes.desktop"), inside, QString(), true)) << "no worktree";
 }
+
+// A path that only reads as the folder once normalised: <root>/.dev/link is a symlink to <root>/outside, so the kernel resolves
+// .dev/link/../config/autostart to <root>/config/autostart, outside .dev (counter-review of 2026-10-26).
+TEST(AutostartGuard, ATextualDotDotThroughALinkIsRefused)
+{
+    const QString root = tree().root;
+    const QString inside = root + QStringLiteral("/.dev/config/autostart");
+    QDir().mkpath(inside);
+    for (const bool dev : {true, false}) {
+        EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/../config/autostart/x.desktop"), inside, root, dev)) << dev;
+        EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("/./x.desktop"), inside, root, dev)) << dev;
+        EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("//x.desktop"), inside, root, dev)) << dev;
+        EXPECT_FALSE(isAutostartWrite(QStringLiteral("x.desktop"), QStringLiteral("."), root, dev)) << dev;
+    }
+    EXPECT_TRUE(isAutostartWrite(inside + QStringLiteral("/x.desktop"), inside, root, true));
+}

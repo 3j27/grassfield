@@ -146,8 +146,12 @@ bool numberIn(const QString &s, int min, int max)
 bool isAutostartWrite(const QString &path, const QString &autostartDir, const QString &devRoot, bool dev)
 {
     static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9._+-]{1,200}\\.desktop")));
+    // An absolute path already clean: "link/../autostart" would read as the folder in text while the kernel resolves the ".."
+    // through the link (counter-review of 2026-10-26).
+    if (!path.startsWith(QLatin1Char('/')) || QDir::cleanPath(path) != path)
+        return false;
     const QFileInfo file(path);
-    if (autostartDir.isEmpty() || QDir::cleanPath(file.path()) != QDir::cleanPath(autostartDir) || !name.match(file.fileName()).hasMatch())
+    if (autostartDir.isEmpty() || file.path() != QDir::cleanPath(autostartDir) || !name.match(file.fileName()).hasMatch())
         return false;
     if (file.isSymLink())
         return false;
