@@ -9,16 +9,16 @@ vs_reset
 vs_spawn "$VS_DEV/build/grassfield-settings"
 vs_wait_clients 1
 vs_sleep 2
-vs_pointer abs 690 306 sleep 300 click
+vs_pointer abs 690 314 sleep 300 click
 vs_sleep 1
 vs_capture audit-settings-wifi
-vs_pointer abs 851 221 sleep 300 click
+vs_pointer abs 855 221 sleep 300 click
 vs_sleep 1
 vs_capture audit-settings-back
-vs_pointer abs 885 221 sleep 300 click
+vs_pointer abs 889 221 sleep 300 click
 vs_sleep 1
 vs_capture audit-settings-forward
-vs_pointer abs 1000 330 sleep 400
+vs_pointer abs 1000 356 sleep 400
 VS_NOPARK=1 vs_capture audit-settings-hover
 vs_reset
 vs_spawn "$VS_DEV/build/grassfield-files"
