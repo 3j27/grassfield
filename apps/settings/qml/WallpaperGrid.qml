@@ -3,7 +3,7 @@ import QtQuick
 import Grassfield.Ui
 
 // Grid of 16:10 wallpaper tiles (Settings > Wallpaper, ADR-0016). One focus stop: arrows, Home and End move, Return or
-// Space applies (the IconModePicker pattern). model: [{label, kind, color, thumb, selected}] with kind "art" (the
+// Space applies (the ChoicePicker pattern). model: [{label, kind, color, thumb, selected}] with kind "art" (the
 // Grassfield artwork), "color", "image" or "video" (thumb is a file path, "" while it is prepared; a video tile has a play badge), "folder" or "add" (a button-like
 // tile). `wrap: true` lets a long label take three lines (the online tile) instead of eliding in the middle. The tiles are radio buttons for assistive technology, named after the picture. Names are untrusted: plain text.
 Item {

@@ -24,6 +24,8 @@ T.Control {
     // A stepped slider (macOS 27 Keyboard's key repeat): this many stops, drawn as dots under the track; a change snaps to the
     // nearest and the keys move from one to the next. 0: continuous.
     property int stops: 0
+    // Dots under the track at this many even places without stepping (macOS 27 Appearance's glass slider: one at each end).
+    property int ticks: 0
 
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
@@ -119,12 +121,12 @@ T.Control {
     }
 
     Repeater {
-        model: root.stops > 1 ? root.stops : 0
+        model: root.stops > 1 ? root.stops : (root.ticks > 1 ? root.ticks : 0)
 
         delegate: Rectangle {
             id: dot
             required property int index
-            x: root.knobWidth / 2 + dot.index / (root.stops - 1) * root.travel - dot.width / 2
+            x: root.knobWidth / 2 + dot.index / ((root.stops > 1 ? root.stops : root.ticks) - 1) * root.travel - dot.width / 2
             y: root.height / 2 + Tokens.controlSliderStopOffset - dot.height / 2
             width: Tokens.controlSliderStopSize
             height: dot.width

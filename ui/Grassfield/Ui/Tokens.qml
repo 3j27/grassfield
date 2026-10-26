@@ -1566,6 +1566,94 @@ QtObject {
     readonly property int settingsDisplayAppliedMs: 4000
     // estimate: ms the shell waits for Hyprland's answer to the reload that applies a display trial (reading the Lua configuration may take longer than a blur push's second; past it the trial stays applying and its deadline takes it back; ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTrialAnswerMs: 3000
+    // macOS 27: the Appearance row (thumbnails and their names) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceRowHeight: 86
+    // macOS 27: an appearance thumbnail's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbWidth: 67
+    // macOS 27: an appearance thumbnail's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbHeight: 44
+    // macOS 27: an appearance thumbnail's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbRadius: 4
+    // macOS 27: the thumbnails' top below the row's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbTop: 13.5
+    // macOS 27: from one thumbnail's left edge to the next one's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbPitch: 82
+    // macOS 27: the last thumbnail's right edge from the group's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbInset: 13.5
+    // macOS 27: between a chosen thumbnail and its accent ring [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbRingGap: 0.5
+    // macOS 27: a thumbnail's name, its baseline below the picture [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceCaptionBaseline: 16
+    // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsChoiceRingWidth: 3
+    // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassRowHeight: 232
+    // macOS 27: the glass preview's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewWidth: 268
+    // macOS 27: the glass preview's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewHeight: 180
+    // macOS 27: the glass preview's top below the row's separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewTop: 10
+    // macOS 27: the glass preview's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewRadius: 16
+    // macOS 27: the glass controls on the preview (a pill, a round button, a search capsule) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassControlHeight: 35
+    // macOS 27: the glass controls' distance from the preview's top and sides [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassControlInset: 8.5
+    // macOS 27: between the glass controls [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassControlGap: 8
+    // macOS 27: the two-button glass pill [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassControlPillWidth: 72.5
+    // macOS 27: the glass search capsule [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassControlSearchWidth: 126.5
+    // macOS 27: the caption band along the preview's bottom [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionHeight: 34.5
+    // macOS 27: the caption's start from the preview's left edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionX: 16.5
+    // macOS 27: the caption's baseline below the band's top [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionBaseline: 31.5
+    // macOS 27: the caption's size (bold) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassCaptionSize: 17
+    // estimate: the caption band's fill over the picture (the window colour, almost opaque) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionOpacity: 0.9
+    // macOS 27: the glass slider's centre below the row's separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassSliderCenter: 214.5
+    // macOS 27: the glass slider's track [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassSliderWidth: 221.5
+    // macOS 27: the clear and tinted symbols at the slider's ends [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassSymbolWidth: 16
+    // macOS 27: between a symbol and the slider [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassSymbolGap: 5.5
+    // macOS 27: the Color row (swatches and the chosen one's name) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAccentRowHeight: 61.5
+    // macOS 27: a colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentSwatchSize: 24
+    // macOS 27: between two colour swatches [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentSwatchGap: 12
+    // macOS 27: the swatches' top below the row's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentSwatchTop: 10
+    // macOS 27: between a chosen swatch or icon style and its accent ring [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentRingGap: 1
+    // macOS 27: the chosen colour's name, its baseline below the swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentCaptionBaseline: 15
+    // macOS 27: the colour dot before a pop-up's value (Text highlight color, Folder color) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsColorDotSize: 16
+    // macOS 27: between the colour dot and the pop-up's value: 7 to its text box, 8 to its ink [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsColorDotGap: 7
+    // macOS 27: the Icon & widget style row [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsIconStyleRowHeight: 88
+    // macOS 27: an icon style's sample icon [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsIconStyleSize: 30
+    // macOS 27: the sample icons' top below the row's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsIconStyleTop: 13.5
+    // macOS 27: from one sample icon's centre to the next one's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsIconStylePitch: 51.5
+    // macOS 27: the last sample icon's centre from the group's right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsIconStyleInset: 27.5
+    // macOS 27: an icon style's name, its baseline below the icon [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsIconStyleCaptionBaseline: 15
+    // macOS 27: the Folder color row, below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsFolderRowHeight: 40
     // estimate: the keep sheet's countdown is read again this often, so the seconds it shows are never late by more than a quarter (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTickMs: 250
     // Arrange…: Shift and an arrow key move a display along its edge by this part of its size (keyboard arrangement) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]

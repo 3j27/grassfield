@@ -616,12 +616,12 @@
         <translation>Apparence</translation>
     </message>
     <message>
-        <source>Accent colour</source>
-        <translation>Couleur d’accentuation</translation>
+        <source>Colour</source>
+        <translation>Couleur</translation>
     </message>
     <message>
-        <source>Colour of buttons, selections, toggles and focus rings in the shell and in the apps. Multicolour is the Grassfield green. The highlight colour follows the accent.</source>
-        <translation>Couleur des boutons, des sélections, des interrupteurs et des anneaux de focus dans le shell et dans les apps. Multicolore est le vert Grassfield. La couleur de surbrillance suit l’accent.</translation>
+        <source>Accent colour</source>
+        <translation>Couleur d’accentuation</translation>
     </message>
     <message>
         <source>Multicolour</source>
@@ -636,20 +636,8 @@
         <translation>Sombre</translation>
     </message>
     <message>
-        <source>Icon appearance</source>
-        <translation>Apparence des icônes</translation>
-    </message>
-    <message>
-        <source>Applies to app and file icons in the Dock, Apps, Search, the desktop and Files. Tinted maps each icon to shades of one colour.</source>
-        <translation>S’applique aux icônes d’app et de fichier du Dock, d’Apps, de la recherche, du bureau et de Fichiers. Teinté ramène chaque icône à des nuances d’une seule couleur.</translation>
-    </message>
-    <message>
         <source>Blue</source>
         <translation>Bleu</translation>
-    </message>
-    <message>
-        <source>Light or dark windows, menus and panels. Auto is light by day and dark at night.</source>
-        <translation>Fenêtres, menus et panneaux clairs ou sombres. Automatique est clair le jour et sombre la nuit.</translation>
     </message>
     <message>
         <source>Auto</source>
@@ -684,8 +672,24 @@
         <translation>Graphite</translation>
     </message>
     <message>
-        <source>Accent</source>
-        <translation>Accent</translation>
+        <source>Text highlight colour</source>
+        <translation>Couleur de surbrillance du texte</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Icon style</source>
+        <translation>Style des icônes</translation>
+    </message>
+    <message>
+        <source>Icon theme</source>
+        <translation>Thème d’icônes</translation>
+    </message>
+    <message>
+        <source>Glass effects</source>
+        <translation>Effets de verre</translation>
     </message>
     <message>
         <source>Default</source>
@@ -704,48 +708,16 @@
         <translation>Couleur de teinte</translation>
     </message>
     <message>
-        <source>Choose Tinted to use a tint colour.</source>
-        <translation>Choisissez Teinté pour utiliser une couleur de teinte.</translation>
-    </message>
-    <message>
         <source>Folder colour</source>
         <translation>Couleur des dossiers</translation>
-    </message>
-    <message>
-        <source>Applies to every folder icon in Files, the desktop and Get Info. A folder can have its own colour (Files, Customize Folder).</source>
-        <translation>S’applique à chaque icône de dossier dans Fichiers, sur le bureau et dans Lire les informations. Un dossier peut avoir sa propre couleur (Fichiers, Personnaliser le dossier).</translation>
     </message>
     <message>
         <source>Theme</source>
         <translation>Thème</translation>
     </message>
     <message>
-        <source>Material</source>
-        <translation>Matière</translation>
-    </message>
-    <message>
-        <source>Transparency applies to the menu bar, Dock, menus and panels. Reduce Transparency makes them opaque.</source>
-        <translation>La transparence s’applique à la barre des menus, au Dock, aux menus et aux panneaux. Réduire la transparence les rend opaques.</translation>
-    </message>
-    <message>
         <source>Transparency</source>
         <translation>Transparence</translation>
-    </message>
-    <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
-    </message>
-    <message>
-        <source>Reduce Transparency</source>
-        <translation>Réduire la transparence</translation>
-    </message>
-    <message>
-        <source>Opaque surfaces instead of translucent ones.</source>
-        <translation>Surfaces opaques au lieu de translucides.</translation>
-    </message>
-    <message>
-        <source>Material profile</source>
-        <translation>Profil de matière</translation>
     </message>
     <message>
         <source>Full uses live previews, Balanced refreshes them less often, Reduced uses still images.</source>
@@ -762,18 +734,6 @@
     <message>
         <source>Reduced</source>
         <translation>Réduit</translation>
-    </message>
-    <message>
-        <source>Motion</source>
-        <translation>Animation</translation>
-    </message>
-    <message>
-        <source>Reduce Motion</source>
-        <translation>Réduire les animations</translation>
-    </message>
-    <message>
-        <source>Animations are shortened to quick crossfades.</source>
-        <translation>Les animations sont remplacées par de courts fondus enchaînés.</translation>
     </message>
 </context>
 <context>
@@ -3728,6 +3688,21 @@
     <message>
         <source>Open with Preview</source>
         <translation>Ouvrir avec la Visionneuse</translation>
+    </message>
+</context>
+<context>
+    <name>GlassPreview</name>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Welcome to Grassfield</source>
+        <translation>Bienvenue dans Grassfield</translation>
+    </message>
+    <message>
+        <source>Transparency</source>
+        <translation>Transparence</translation>
     </message>
 </context>
 <context>
