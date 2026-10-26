@@ -354,10 +354,14 @@ QtObject {
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property real dockTrashIconScale: 0.6
-    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop). Light appearance: black dot, needs relative luminance 0.10 or more over a black backdrop (0.42 gives 0.133, 3.7:1), tested in tests/unit/tst_bartone.qml
-    readonly property real dockTintAlphaLight: 0.42
-    // Dock fix pass 2: dark appearance, white dot, needs relative luminance 0.30 or less over a white backdrop (a white window under an autohidden or floating shelf); 0.52 gives 0.256 (3.4:1), tested in tests/unit/tst_bartone.qml
-    readonly property real dockTintAlphaDark: 0.52
+    // ADR-0024 section 2 point 1 (G-7): the shelf is clear glass, 0.05 (macOS 26 about 0.03 mid-shelf); it holds no text and the running dot reads by its own halo (dock.dotHalo), tested in tests/unit/tst_bartone.qml [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property real dockTintAlphaLight: 0.05
+    // ADR-0024 section 2 point 1 (G-7): as tintAlphaLight in the dark appearance [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property real dockTintAlphaDark: 0.05
+    // ADR-0024 G-7: the running dot's ring of the opposite colour, so it keeps 3:1 over any backdrop on a clear shelf [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property real dockDotHalo: 1.5
+    // ADR-0024 G-7: the ring is the opposite of the dot at this opacity: over any backdrop it stays at or below 0.5 of white under a white dot (3.98:1) and at or above it under a black dot (5.3:1), tested in tests/unit/tst_bartone.qml [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property real dockDotHaloOpacity: 0.5
     // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockHighlightOpacity: 0.34
     // Dock fidelity pass: 1 px rim, white in both appearances (glass edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -765,6 +769,16 @@ QtObject {
     readonly property real glassApps: 0.55
     // added to 4.5:1 over a measured backdrop (a picture's 5th to 95th percentile, the blur's own lift and the grey approximation of a coloured backdrop); the unknown backdrop is the exact black-to-white worst case [ref: ADR-0024; tests/visual/test_contrast_tokens.py]
     readonly property real glassContrastMargin: 0.2
+    // ADR-0024 G-3 per surface: the output's luminance grid is this many cells across (a QS module or a notification card covers 2 to 4) [ref: ADR-0024]
+    readonly property int glassGridColumns: 16
+    // ADR-0024 G-3 per surface: cells down the output [ref: ADR-0024]
+    readonly property int glassGridRows: 10
+    // estimate: pixels per cell side in the small grab the grid is read from (128 x 80 for 16 x 10 cells) [ref: ADR-0024]
+    readonly property int glassGridSample: 8
+    // estimate: how far around a surface its backdrop counts (the compositor blur, size 18 at the default transparency, reaches about this far) [ref: ADR-0024]
+    readonly property int glassBackdropPad: 24
+    // estimate: Increase Contrast frosts the glass (ADR-0024 G-8; macOS turns transparency down with Increase Contrast), with the stronger rims and borders of its tokens [ref: ADR-0024]
+    readonly property real glassContrastFrost: 0.9
 
     // F1 gap 8: panel width with results 639 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchWidth: 640

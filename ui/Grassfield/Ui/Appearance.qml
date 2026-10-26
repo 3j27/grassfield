@@ -118,19 +118,23 @@ QtObject {
         return Tokens.materialTintAlphaClamp + (Tokens.materialTintAlphaMin - Tokens.materialTintAlphaClamp) * (x - until) / (1 - until);
     }
 
-    // Adaptive glass (ADR-0024 section 2, G-1 to G-3): {output name: {lumMin, lumMax}} for an output that shows the bare
-    // desktop (no window on its active workspace) over a wallpaper of known luminance, fed by the shell; on any other output
-    // the backdrop is unknown and a class takes the worst case.
+    // Adaptive glass (ADR-0024 section 2, G-1 to G-3): {output name: {lumMin, lumMax, grid}} for an output that shows the bare
+    // desktop (no window on its active workspace) over a wallpaper of known luminance, fed by the shell; `grid` (optional,
+    // GlassTint.gridRange) narrows the range to what lies under one surface. On any other output the backdrop is unknown and a
+    // class takes the worst case.
     property var backdrops: ({})
     readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps})
 
     // Tint alpha of a glass class at transparency t on an output (GlassTint.alpha): the class target at the default slider,
-    // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop.
-    function glassAlpha(glassClass: string, t: real, screenName: string): real {
+    // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop, or over the part of it
+    // under `rect` (output px; optional) when the output's luminance grid is known.
+    function glassAlpha(glassClass: string, t: real, screenName: string, rect: var): real {
         const target = glassTargets[glassClass];
         if (target === undefined)
             return tintAlpha(t);
-        const backdrop = backdrops[screenName] ?? null;
+        const known = backdrops[screenName] ?? null;
+        const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
+        const backdrop = under ?? known;
         return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
     }
 

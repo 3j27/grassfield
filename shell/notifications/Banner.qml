@@ -20,6 +20,8 @@ Item {
     property string actionsJson: "[]"
 
     readonly property Item cardItem: card
+    // The area of the output whose backdrop the card's glass is judged over (Material.backdropRect; set by the stack).
+    property alias backdropRect: material.backdropRect
     readonly property bool hovered: hover.hovered
     // Hover or drag pauses this notification's expiry timer.
     readonly property bool held: hovered || drag.active

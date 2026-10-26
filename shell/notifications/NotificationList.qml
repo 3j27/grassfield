@@ -917,6 +917,7 @@ ListView {
                     Material {
                         id: cardSurface
                         glassClass: "notification"
+                        backdropRect: list.panel.restRect ?? Qt.rect(0, 0, 0, 0)
                         anchors.fill: parent
                         radius: Tokens.radiusBanner
                         shadowEnabled: false

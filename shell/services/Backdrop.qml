@@ -15,15 +15,28 @@ Singleton {
     // {output name: {lumMin, lumMax}} of the wallpaper on screen; no entry: unknown (a video, a picture prepared before the
     // helper wrote its image statistics, the dev image override).
     property var wallpapers: ({})
+    // {output name: luminance grid} of what the output shows (GlassTint.gridOf, reported by Wallpaper.qml with the range): it
+    // narrows the range to the part of the output under each surface (GlassTint.gridRange). No entry: the whole range.
+    property var grids: ({})
 
     readonly property var known: {
         const out = {};
         const bare = Compositor.bareOutputs;
         for (let i = 0; i < bare.length; i++) {
-            if (root.wallpapers[bare[i]])
-                out[bare[i]] = root.wallpapers[bare[i]];
+            const range = root.wallpapers[bare[i]];
+            if (range)
+                out[bare[i]] = root.grids[bare[i]] ? Object.assign({grid: root.grids[bare[i]]}, range) : range;
         }
         return out;
+    }
+
+    function reportGrid(output: string, grid: var): void {
+        const next = Object.assign({}, root.grids);
+        if (grid)
+            next[output] = grid;
+        else
+            delete next[output];
+        root.grids = next;
     }
 
     function reportWallpaper(output: string, range: var): void {
@@ -54,14 +67,21 @@ Singleton {
         return null;
     }
 
-    // Test hook: qs ipc call backdrop status -> JSON {wallpapers, bare, known} (read-only; dev session only, SEC-04).
+    // Test hook: qs ipc call backdrop status -> JSON {wallpapers, grids (cells rounded to 0.001), bare, known (output names)}
+    // (read-only; dev session only, SEC-04).
     IpcHandler {
         target: "backdrop"
 
         function status(): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            return JSON.stringify({wallpapers: root.wallpapers, bare: Compositor.bareOutputs, known: root.known});
+            const grids = {};
+            for (const name of Object.keys(root.grids)) {
+                const g = root.grids[name];
+                const r3 = v => Math.round(v * 1000) / 1000;
+                grids[name] = {width: g.width, height: g.height, cols: g.cols, rows: g.rows, min: g.min.map(r3), max: g.max.map(r3)};
+            }
+            return JSON.stringify({wallpapers: root.wallpapers, grids: grids, bare: Compositor.bareOutputs, known: Object.keys(root.known)});
         }
     }
 }

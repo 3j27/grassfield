@@ -98,6 +98,56 @@ function targetAlpha(target, t, defaultT) {
     return target * (1 - (x - defaultT) / (1 - defaultT));
 }
 
+// The luminance range of the backdrop under one surface (G-3 per surface): the cells of the output's luminance grid that
+// `rect` (output px: x, y, width, height) touches, grown by `pad` px for the blur's reach. `grid` = {width, height, cols, rows,
+// min, max}: the output's size in px it was sampled for and, row-major, each cell's lowest and highest luminance of what the
+// output shows, sampled small (the glass blurs its backdrop far more than a cell). null when the grid or the rect cannot
+// answer (the caller keeps the whole output's range).
+function gridRange(grid, rect, pad) {
+    if (!grid || !(grid.cols > 0) || !(grid.rows > 0) || !(grid.width > 0) || !(grid.height > 0) || !grid.min || !grid.max)
+        return null;
+    if (!rect || !(rect.width > 0) || !(rect.height > 0) || grid.min.length !== grid.cols * grid.rows || grid.max.length !== grid.min.length)
+        return null;
+    const cw = grid.width / grid.cols;
+    const ch = grid.height / grid.rows;
+    const clampCell = (v, n) => Math.max(0, Math.min(n - 1, v));
+    const c0 = clampCell(Math.floor((rect.x - pad) / cw), grid.cols);
+    const c1 = clampCell(Math.floor((rect.x + rect.width + pad) / cw), grid.cols);
+    const r0 = clampCell(Math.floor((rect.y - pad) / ch), grid.rows);
+    const r1 = clampCell(Math.floor((rect.y + rect.height + pad) / ch), grid.rows);
+    let lo = 1;
+    let hi = 0;
+    for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) {
+            const i = r * grid.cols + c;
+            lo = Math.min(lo, grid.min[i]);
+            hi = Math.max(hi, grid.max[i]);
+        }
+    }
+    return lo <= hi ? {lumMin: lo, lumMax: hi} : null;
+}
+
+// The luminance grid of RGBA pixels (`data`, `w` x `h`, 0..255, as Context2D getImageData gives) cut into `cols` x `rows`
+// cells: each cell's lowest and highest pixel luminance. `outW` x `outH` is the output size the pixels stand for.
+function gridOf(data, w, h, cols, rows, outW, outH) {
+    const min = new Array(cols * rows).fill(1);
+    const max = new Array(cols * rows).fill(0);
+    for (let y = 0; y < h; y++) {
+        const r = Math.min(rows - 1, Math.floor(y * rows / h));
+        for (let x = 0; x < w; x++) {
+            const c = Math.min(cols - 1, Math.floor(x * cols / w));
+            const k = (y * w + x) * 4;
+            const l = luminance([data[k] / 255, data[k + 1] / 255, data[k + 2] / 255]);
+            const i = r * cols + c;
+            if (l < min[i])
+                min[i] = l;
+            if (l > max[i])
+                max[i] = l;
+        }
+    }
+    return {width: outW, height: outH, cols: cols, rows: rows, min: min, max: max};
+}
+
 // The tint of a class: `backdrop` is {lumMin, lumMax} when the shell knows what lies behind the surface, null otherwise.
 // `margin` is added to 4.5 over a measured backdrop (a picture's percentiles, the blur's own lift); none for the worst case,
 // which is exact (black and white bound every backdrop).

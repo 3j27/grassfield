@@ -1947,16 +1947,25 @@ Scope {
                                     border.color: Appearance.focusRingColor
                                 }
 
-                                // Running indicator.
+                                // Running indicator, ringed by a halo of the opposite colour: it reads over any backdrop on the clear
+                                // shelf (ADR-0024 G-7: black under a white dot in dark, white under a black dot in light).
                                 Rectangle {
                                     visible: tile.running && Settings.dockShowIndicators
-                                    width: Tokens.dockIndicatorSize
-                                    height: Tokens.dockIndicatorSize
+                                    width: Tokens.dockIndicatorSize + 2 * Tokens.dockDotHalo
+                                    height: width
                                     radius: width / 2
-                                    color: Appearance.colors.indicator
+                                    color: Appearance.withAlpha(Appearance.dark ? Appearance.colors.shadow : Appearance.colors.knob, Tokens.dockDotHaloOpacity)
                                     readonly property var dot: Geometry.dotOrigin(win.edge, tile.width, tile.height, win.iconSize, win.dotGap, Tokens.dockIndicatorSize, tile.hoverLift)
-                                    x: dot.x
-                                    y: dot.y
+                                    x: dot.x - Tokens.dockDotHalo
+                                    y: dot.y - Tokens.dockDotHalo
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: Tokens.dockIndicatorSize
+                                        height: width
+                                        radius: width / 2
+                                        color: Appearance.colors.indicator
+                                    }
                                 }
 
                                 Tooltip {

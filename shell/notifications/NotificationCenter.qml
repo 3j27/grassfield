@@ -395,6 +395,9 @@ Variants {
                 // swept the column across the whole screen from the left (owner, real session 2026-10-22).
                 property real slideOffset: host.shown ? 0 : width + Tokens.notificationCenterInset
                 property bool glide: false
+                // The column at rest on the output (the window covers it): every card's glass is judged over this area, wherever
+                // the list scrolls it (G-3 per surface).
+                readonly property rect restRect: Qt.rect(host.width - width - Tokens.notificationCenterInset, y, width, height)
                 x: host.width - width - Tokens.notificationCenterInset + slideOffset
                 y: Tokens.menubarHeight + Tokens.notificationCenterInset
                 width: Tokens.notificationCenterWidth
