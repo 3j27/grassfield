@@ -384,9 +384,16 @@ shell no longer relies on that alone:
   it appeared (the click goes on to what it hit: the field, Cancel, Allow). Both delays are timed by Timers in the model
   (`noteUnlock`, `noteShown`; a monotonic clock), never by `Date.now()` (review of 6e24d36: a wall-clock step would stretch
   or end a hold); a click before the sheet was ever noted as shown does not count. polkit gives no program name to the agent
-  (only the message, which names the program for pkexec). Tests: `tst_authdialogmodel` `test_heldGuard`,
-  `test_heldJustAfterUnlock` (real timers), `tst_authdialog` `test_11_heldNotice`, `tests/security/lock_surfaces.sh`
-  (wiring, no `Date` in the hold functions, eight polkit mutations). Seen on screen: NOT VERIFIED (L5).
+  (only the message, which names the program for pkexec). The screen saver holds a request the same way (ADR-0032, owner
+  decision 2026-10-26: over the opaque saver an unheld sheet looked like the lock's prompt and took the keys at once): one
+  that arrives while `SessionState.saverShown` (a mirror of the saver, set in shell.qml), or is open when the saver comes up
+  (its field emptied), is held and says "…and waited while the screen saver was on"; while the saver shows a press on the
+  sheet goes nowhere (the waking click), and when the saver ends the click guard starts over (`noteUncovered`), so the
+  click that woke the screen never answers the sheet, whichever of the press and the saver's end comes first. The saver
+  keeps the keyboard meanwhile (the held sheet takes none). A wrong `saverShown` can only hold a request. Tests:
+  `tst_authdialogmodel` `test_heldGuard` (with `noteUncovered`), `test_heldJustAfterUnlock` (real timers), `tst_authdialog`
+  `test_11_heldNotice`, `tests/security/lock_surfaces.sh` (wiring, no `Date` in the hold functions, fourteen polkit
+  mutations). Seen on screen: NOT VERIFIED (L5).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").

@@ -984,6 +984,10 @@
         <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
     </message>
     <message>
+        <source>This request arrived at %1 and waited while the screen saver was on. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1 et a attendu pendant que l’économiseur d’écran était affiché. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
     </message>
@@ -6027,7 +6031,7 @@
     </message>
     <message>
         <source>Apps you allow may run in the background when they ask. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks.</source>
-        <translation>Les apps que vous autorisez peuvent s’exécuter en arrière-plan quand elles le demandent. Une app que vous n’autorisez pas est refusée quand elle le demande ; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
+        <translation>Les apps que vous autorisez peuvent s’exécuter en arrière-plan quand elles le demandent. Une app que vous n’autorisez pas est refusée quand elle le demande&#xa0;; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
     </message>
     <message>
         <source>Apps you allow can use the camera. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
@@ -6051,7 +6055,7 @@
     </message>
     <message>
         <source>Not sandboxed: not limited</source>
-        <translation>Non isolée : pas limitée</translation>
+        <translation>Non isolée&#xa0;: pas limitée</translation>
     </message>
     <message>
         <source>No apps have asked</source>

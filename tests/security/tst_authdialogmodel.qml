@@ -181,12 +181,19 @@ TestCase {
         verify(Date.now() - start >= 450, "not before about heldGuardMs (Qt coarse timers: 5%)");
         model.noteShown();
         verify(!model.heldClickAccepted(), "shown again: the guard starts over");
-        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), true);
+        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), "locked");
         verify(notice.indexOf("while the screen was locked") !== -1, notice);
         verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
-        verify(model.heldNotice(Date.now(), false).indexOf("just as the screen was unlocked") !== -1);
+        verify(model.heldNotice(Date.now(), "unlock").indexOf("just as the screen was unlocked") !== -1);
+        // ADR-0032: held while the screen saver showed.
+        verify(model.heldNotice(Date.now(), "saver").indexOf("while the screen saver was on") !== -1);
         // AuthAgent passes the arrival time as a Date (display only; shell/security reads no Date.now).
-        compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), true), notice);
+        compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), "locked"), notice);
+        // The screen saver ended over a held sheet: the guard starts over, so the click that woke the screen never counts.
+        tryVerify(() => model.heldClickAccepted(), 3000, "the guard ended");
+        model.noteUncovered();
+        verify(!model.heldClickAccepted(), "uncovered: the guard starts over");
+        tryVerify(() => model.heldClickAccepted(), 3000, "and ends again");
     }
 
     // Review of d8e654c: a request arriving within heldAfterUnlockMs after an unlock is held like one that arrived while locked.

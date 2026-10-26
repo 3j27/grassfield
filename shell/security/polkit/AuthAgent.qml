@@ -42,20 +42,22 @@ Scope {
         // qmllint enable unresolved-type
 
         onActiveChanged: {
-            root.heldWhileLocked = active && SessionState.locked;
-            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked);
+            root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : "unlock";
+            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown);
             root.userFocused = false;
             root.requestStartedAt = active ? new Date() : null;
         }
     }
 
-    // The request arrived, or was open, while the session was locked (review of 1d2c856), or arrived within
-    // AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the keyboard until the
-    // user clicks it (AuthDialogModel.heldGuardMs after it appeared), so keys typed right after the unlock never reach its
-    // field; it says when the request arrived. Both delays are timed by the model's Timers (monotonic, review of 6e24d36);
-    // requestStartedAt is only the wall-clock time the notice prints (display, never compared).
+    // The request arrived, or was open, while the session was locked (review of 1d2c856) or the screen saver showed (ADR-0032,
+    // owner decision 2026-10-26: over the opaque saver the sheet looked like the lock's prompt and took the keys at once), or
+    // arrived within AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the
+    // keyboard until the user clicks it (AuthDialogModel.heldGuardMs after it appeared, or after the saver ended), so keys
+    // typed right after the unlock or the wake never reach its field; it says when the request arrived and why it waited
+    // (`heldWhy`). Both delays are timed by the model's Timers (monotonic, review of 6e24d36); requestStartedAt is only the
+    // wall-clock time the notice prints (display, never compared).
     property bool heldByLock: false
-    property bool heldWhileLocked: false
+    property string heldWhy: "unlock"
     property bool userFocused: false
     property var requestStartedAt: null
 
@@ -67,8 +69,24 @@ Scope {
                 dialogModel.noteUnlock();
             } else if (dialogModel.active) {
                 root.heldByLock = true;
-                root.heldWhileLocked = true;
+                root.heldWhy = "locked";
                 root.userFocused = false;
+            }
+        }
+
+        // The screen saver came up over an open request: held as by the lock, its field emptied; the saver holds the keyboard
+        // meanwhile. It ended over a held one: the click guard starts over (the waking click never answers the sheet).
+        function onSaverShownChanged(): void {
+            if (!dialogModel.active || SessionState.locked)
+                return;
+            if (SessionState.saverShown) {
+                if (!root.heldByLock || root.userFocused)
+                    root.heldWhy = "saver";
+                root.heldByLock = true;
+                root.userFocused = false;
+                dialogModel.clearRequested();
+            } else if (root.heldByLock) {
+                dialogModel.noteUncovered();
             }
         }
     }
@@ -150,7 +168,7 @@ Scope {
                 // The action's theme icon (sanitized by the model), only when the theme has it (no broken image) and every
                 // file Qt could read for it is a regular file of bounded size (ThemeIcons, review of 2dfd992).
                 appIconSource: ThemeIcons.source(dialogModel.iconName)
-                heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhileLocked) : ""
+                heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhy) : ""
             }
         }
 
@@ -168,6 +186,14 @@ Scope {
                 if (dialog)
                     dialog.focusField();
             }
+        }
+
+        // While the screen saver shows, a press on the sheet goes nowhere: it is the click that wakes the screen (the saver
+        // ends on it), never an answer (Cancel, Allow) or the field's focus.
+        MouseArea {
+            anchors.fill: parent
+            enabled: SessionState.saverShown
+            onPressed: mouse => mouse.accepted = true
         }
     }
 

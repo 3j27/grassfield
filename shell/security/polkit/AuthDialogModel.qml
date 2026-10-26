@@ -78,17 +78,27 @@ QtObject {
         return priv.shown && !clickGuard.running;
     }
 
-    // A request is held when it arrives while the session is locked, or within heldAfterUnlockMs of the last unlock.
+    // The screen saver that covered a held sheet ended: a click counts only heldGuardMs from now, so the click that woke the
+    // screen never answers the sheet (ADR-0032).
+    function noteUncovered(): void {
+        clickGuard.restart();
+    }
+
+    // A request is held when it arrives while the session is locked or the screen saver shows (`locked`), or within
+    // heldAfterUnlockMs of the last unlock.
     function arrivesHeld(locked: bool): bool {
         return locked || unlockHold.running;
     }
 
     // What the held sheet says, with the time the request arrived (the message names the program for pkexec).
-    // `arrivedAt`: a Date (or milliseconds), only formatted.
-    function heldNotice(arrivedAt: var, whileLocked: bool): string {
+    // `arrivedAt`: a Date (or milliseconds), only formatted. `why`: "locked", "saver" (the screen saver showed) or "unlock".
+    function heldNotice(arrivedAt: var, why: string): string {
         const at = Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat));
-        return whileLocked ? qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at)
-                           : qsTr("This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.").arg(at);
+        if (why === "locked")
+            return qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at);
+        if (why === "saver")
+            return qsTr("This request arrived at %1 and waited while the screen saver was on. Click the sheet to answer it.").arg(at);
+        return qsTr("This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.").arg(at);
     }
 
     // The dialog must empty its password field (after every attempt and outcome).

@@ -61,6 +61,11 @@ ShellRoot {
         property: "locked"
         value: Lock.locked
     }
+    Binding {
+        target: SessionState
+        property: "saverShown"
+        value: saver.shown
+    }
 
     Connections {
         target: SessionState
@@ -377,6 +382,7 @@ ShellRoot {
     }
     // The screen saver (ADR-0032): the same inhibitors keep it off; its slideshow stops while the displays are off.
     Saver {
+        id: saver
         busInhibited: MenuBridge.screenSaverInhibited
         displaysOff: idle.displayOff
     }

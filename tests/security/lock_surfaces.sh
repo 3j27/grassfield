@@ -155,7 +155,7 @@ expect("polkit sheet: a held request takes the keyboard only after a click past 
        re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?if\s*\(!dialogModel\.heldClickAccepted\(\)\)\s*return;.*?root\.userFocused\s*=\s*true", agent, re.S) is not None
        and re.search(r"onShownChanged:\s*\{\s*if\s*\(shown\)\s*dialogModel\.noteShown\(\);", agent) is not None)
 expect("polkit sheet: a request arriving while locked, or just after an unlock, is held",
-       re.search(r"heldByLock\s*=\s*active\s*&&\s*dialogModel\.arrivesHeld\(SessionState\.locked\);", agent) is not None
+       re.search(r"heldByLock\s*=\s*active\s*&&\s*dialogModel\.arrivesHeld\(SessionState\.locked\s*\|\|\s*SessionState\.saverShown\);", agent) is not None
        and re.search(r"if\s*\(!SessionState\.locked\)\s*\{\s*dialogModel\.noteUnlock\(\);", agent) is not None)
 # Review of 6e24d36: the unlock hold and the click guard are timed by Timers (monotonic), never by the wall clock; the
 # agent reads Date.now() only for the arrival time the notice shows.
@@ -169,7 +169,17 @@ expect("polkit holds: timed by Timers, never by the wall clock",
        and re.search(r"^\s*unlockHold\.restart\(\);\s*$", bodies["noteUnlock"], re.M) is not None
        and re.search(r"priv\.shown\s*=\s*true;\s*clickGuard\.restart\(\);", bodies["noteShown"]) is not None
        and re.search(r"^\s*return\s+priv\.shown\s*&&\s*!clickGuard\.running;\s*$", bodies["heldClickAccepted"], re.M) is not None
-       and re.search(r"^\s*return\s+locked\s*\|\|\s*unlockHold\.running;\s*$", bodies["arrivesHeld"], re.M) is not None)
+       and re.search(r"^\s*return\s+locked\s*\|\|\s*unlockHold\.running;\s*$", bodies["arrivesHeld"], re.M) is not None
+       and re.search(r"^\s*clickGuard\.restart\(\);\s*$", code(function(model, "noteUncovered") or ""), re.M) is not None)
+# ADR-0032 (owner decision 2026-10-26): the screen saver holds a request as the lock does, its waking click answers nothing,
+# and the click guard starts over when it ends.
+saver_hold = code(function(agent, "onSaverShownChanged") or "")
+expect("polkit sheet: a request open when the screen saver comes up is held, its field emptied",
+       re.search(r"if\s*\(SessionState\.saverShown\)\s*\{.*?root\.heldByLock\s*=\s*true;\s*root\.userFocused\s*=\s*false;\s*dialogModel\.clearRequested\(\);", saver_hold, re.S) is not None)
+expect("polkit sheet: the click guard starts over when the screen saver ends",
+       re.search(r"else if\s*\(root\.heldByLock\)\s*\{\s*dialogModel\.noteUncovered\(\);", saver_hold) is not None)
+expect("polkit sheet: a press goes nowhere while the screen saver shows",
+       re.search(r"MouseArea\s*\{\s*anchors\.fill:\s*parent\s*enabled:\s*SessionState\.saverShown\s*onPressed:\s*mouse\s*=>\s*mouse\.accepted\s*=\s*true\s*\}", agent) is not None)
 expect("polkit sheet: a request open when the lock engages is held", re.search(r"else if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true", agent) is not None)
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
@@ -279,7 +289,12 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
   'shell/security/polkit/AuthAgent.qml#shown && (!root.heldByLock || root.userFocused)#shown' \
   'shell/security/polkit/AuthAgent.qml#if (shown && !root.heldByLock)#if (shown)' \
-  'shell/security/polkit/AuthAgent.qml#dialogModel.arrivesHeld(SessionState.locked)#SessionState.locked' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown)#SessionState.locked || SessionState.saverShown' \
+  'shell/security/polkit/AuthAgent.qml#arrivesHeld(SessionState.locked || SessionState.saverShown)#arrivesHeld(SessionState.locked)' \
+  'shell/security/polkit/AuthAgent.qml#                root.heldByLock = true;\n                root.userFocused = false;\n                dialogModel.clearRequested();#                root.userFocused = false;' \
+  'shell/security/polkit/AuthAgent.qml#dialogModel.noteUncovered();#;' \
+  'shell/security/polkit/AuthAgent.qml#enabled: SessionState.saverShown#enabled: false' \
+  'shell/security/polkit/AuthDialogModel.qml#        clickGuard.restart();\n    }\n\n    // A request is held#    }\n\n    // A request is held' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteUnlock();#root.unlockedAt = Date.now();' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteShown();#root.shownAt = Date.now();' \
   'shell/security/polkit/AuthDialogModel.qml#return locked || unlockHold.running;#return locked || Date.now() - priv.unlockedAt < heldAfterUnlockMs;' \
@@ -311,7 +326,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b = sys.argv[1], sys.argv[2].replace("\\n", "\n"), sys.argv[3]
 s = open(p).read()
 assert a in s, a
 open(p, "w").write(s.replace(a, b.replace("\\n", "\n"), 1))

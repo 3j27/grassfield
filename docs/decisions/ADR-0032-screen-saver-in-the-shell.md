@@ -57,15 +57,24 @@ black; and the waking key or click consumed, as on macOS.
 
 ## Consequences
 - A new shell module and three keys; Settings gains a sheet. No new service, dependency or language.
-- The saver takes the keyboard while shown. It is never up while the session is locked; a prompt that appears meanwhile
-  (the polkit agent's dialog) gets the keyboard once the first input has ended the saver. An opus review covers this input
-  handling before merge.
+- The saver takes the keyboard while shown. It is never up while the session is locked. A polkit request that arrives
+  while it shows, or is open when it comes up, is held as behind the lock (owner decision 2026-10-26, opus review of
+  0231b44 M1): the sheet shows over the saver without the keyboard, its field empty, says it waited while the screen saver
+  was on, and takes the keyboard only after a click that comes at least `heldGuardMs` after the saver ended; a press on the
+  sheet while the saver shows goes nowhere. `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the
+  saver's state to `shell/security/polkit`, the one change there (docs/specs/security.md § Nothing opens over the lock); it
+  can only hold a request, never release one. An opus review covers this input handling before merge.
+- Only the waking key or click is consumed: the keys typed after it reach the focused window, as on macOS (owner decision
+  2026-10-26, opus review of 0231b44 M2: the wallpaper-with-clock saver uses the lock screen's clock, and a password typed
+  out of habit after the first key goes to that window; the owner kept macOS's behaviour).
 - The `saver` IPC target is in `docs/specs/security.md` § IPC surface (checked by `tests/security/ipc_inventory.sh`);
   `SaverModel.js` has unit tests.
 
 ## To verify in a nested session (owner checks before merge)
 1. Set a delay of 1 minute; wait: the saver starts on every display; move the mouse: it ends and the window under it gets
-   nothing; press a key: same; click: same.
+   nothing; press a key: same; click: same. With the saver up, run `pkexec true` in a terminal started before: the sheet
+   shows over the saver without the keyboard; the waking key ends the saver and reaches nothing; the sheet takes the
+   keyboard only after a click on it.
 2. Play a video in a browser (an idle inhibitor): the saver does not start.
 3. Lock delay shorter than the saver's: the lock comes first and the saver never shows over or after it until the next
    delay; unlock with the saver running: it is gone.
