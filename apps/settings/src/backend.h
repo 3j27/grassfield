@@ -44,6 +44,8 @@ class Backend : public QObject
     Q_PROPERTY(QStringList currentDesktops READ currentDesktops CONSTANT)
     // Storage: the folders whose size the pane shows lie in the home.
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
+    // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
+    Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -66,6 +68,7 @@ public:
     QStringList applicationDirs() const;
     QStringList currentDesktops() const;
     QString homeDir() const { return QDir::cleanPath(QDir::homePath()); }
+    bool omarchyLanguage() const;
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
     Q_INVOKABLE QVariantMap readText(const QString &path) const;

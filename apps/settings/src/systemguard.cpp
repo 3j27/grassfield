@@ -43,9 +43,8 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Storage pane: the size of the user's folders.
     if (program == QLatin1String("du"))
         return isFolderSizeQuery(args);
-    // Language & Region: Omarchy's language (owner decision 2026-10-26), the current one and the list.
-    if (program == QLatin1String("omarchy-language"))
-        return args.isEmpty() || args == QStringList{QStringLiteral("list")};
+    // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
+    // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
     return false;
 }
 

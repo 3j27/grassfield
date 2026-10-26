@@ -6,6 +6,8 @@ import "General.js" as General
 // General > Language & Region (the structure of the macOS 15 capture, docs/audits/settings-parity-2026-10-26.md § Language
 // & Region). The language is Omarchy's (owner decision 2026-10-26): `omarchy-language list` and `omarchy-language` read it,
 // `omarchy-language <code>` changes it for the next login (it generates the locale through Omarchy's own grant or pkexec).
+// Only in a real session and only when it is installed (Omarchy 4.0.4 has none): otherwise the row shows the session's
+// language, and the group says that changing it needs a newer Omarchy (General.languageNote).
 // The formats are Grassfield's keys (region.formats, region.firstDayOfWeek): the shell formats its dates, times and numbers
 // with them at once (Translator.formats). Not built (docs/specs/settings.md): more than one preferred language, calendars
 // other than the Gregorian one, temperature and measurement units (nothing in Grassfield shows one), per-app languages.
@@ -19,7 +21,12 @@ SettingsPage {
     title: qsTr("Language & Region")
 
     property var languages: []
+    property bool listAnswered: false
     property string language: ""
+    readonly property bool installed: root.backend.omarchyLanguage === true
+    readonly property string note: General.languageNote(root.installed, root.system.dev, root.listAnswered, root.languages.length)
+    // The session's language (its LANG: the locale Settings itself runs in).
+    readonly property string sessionLanguage: General.languageName(Qt.locale().nativeLanguageName, Qt.locale().name)
     // The language sent to omarchy-language until it answered, then the one to log in again for.
     property string pending: ""
     property string changed: ""
@@ -55,6 +62,8 @@ SettingsPage {
     }
 
     Component.onCompleted: {
+        if (!root.installed || root.system.dev)
+            return;
         root.system.query(["omarchy-language", "list"], "language.list");
         root.system.query(["omarchy-language"], "language.current");
     }
@@ -65,6 +74,7 @@ SettingsPage {
         function onFinished(tag: string, ok: bool, output: string): void {
             if (tag === "language.list") {
                 root.languages = ok ? General.parseLanguages(output) : [];
+                root.listAnswered = true;
             } else if (tag === "language.current") {
                 root.language = ok ? General.currentLanguage(output) : "";
             } else if (tag === "language.act") {
@@ -86,13 +96,15 @@ SettingsPage {
 
     SettingsGroup {
         caption: qsTr("Preferred Languages")
-        footnote: root.system.errors["language.act"] !== undefined ? qsTr("The language could not be changed: %1.").arg(root.system.errors["language.act"])
+        footnote: root.note === "tool" ? qsTr("Changing the language needs a newer version of Omarchy.")
+            : root.note === "list" ? qsTr("Omarchy did not give its list of languages.")
+            : root.system.errors["language.act"] !== undefined ? qsTr("The language could not be changed: %1.").arg(root.system.errors["language.act"])
             : root.changed !== "" ? qsTr("Log out and back in to use %1 everywhere.").arg(root.nameOf(root.changed)) : ""
 
         SettingsRow {
             title: qsTr("Primary language")
             subtitle: root.pending !== "" ? qsTr("Changing the language…") : ""
-            valueText: root.languages.length === 0 ? qsTr("Unknown") : ""
+            valueText: root.languages.length === 0 ? root.sessionLanguage : ""
 
             ComboBox {
                 visible: root.languages.length > 0

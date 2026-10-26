@@ -292,6 +292,21 @@ function currentLanguage(text) {
     return validLanguage(t) ? t : "";
 }
 
+// Why Language & Region shows the session's language instead of Omarchy's list: "tool" when the installed Omarchy has no
+// `omarchy-language` (4.0.4 has none), "list" when it gave no list in a real session, "" otherwise (the list is there, it is
+// still being read, or this is a dev session, which reads nothing from it and whose own note says so).
+function languageNote(installed, dev, answered, count) {
+    if (!installed)
+        return "tool";
+    return !dev && answered && count === 0 ? "list" : "";
+}
+
+// The session's language as a name ("Français", "American English"), from its locale's own name of it.
+function languageName(nativeName, code) {
+    const t = String(nativeName || "");
+    return t !== "" ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : String(code || "");
+}
+
 function languageArgv(code) {
     return validLanguage(code) ? ["omarchy-language", code] : null;
 }

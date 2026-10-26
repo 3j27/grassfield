@@ -16,7 +16,7 @@ bool devSession();
 //   wpctl      1 fixed (status), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
-//   omarchy-language and omarchy-language list                       Language & Region (Omarchy's per-user language)
+// Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
 

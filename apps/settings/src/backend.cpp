@@ -395,6 +395,11 @@ QVariantList Backend::regionLocales() const
     return out;
 }
 
+bool Backend::omarchyLanguage() const
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("omarchy-language")).isEmpty();
+}
+
 QString Backend::autostartDir() const
 {
     const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");

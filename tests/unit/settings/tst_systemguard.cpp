@@ -216,9 +216,10 @@ TEST(QueryGuard, TheGeneralPanesReadsAreExact)
     EXPECT_FALSE(isReadOnlyQuery(du(many)));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("--"), home}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--exclude=x"), home}));
-    // Language & Region: Omarchy's current language and its list; never a change.
-    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-language")}));
-    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("list")}));
+    // Language & Region: omarchy-language is never a query, not even its reads (a dev session runs no script nobody here has
+    // read; Omarchy 4.0.4 does not ship it). Integrator review of PR #6.
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("list")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("locale")}));
 }

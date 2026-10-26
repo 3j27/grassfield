@@ -49,9 +49,16 @@ service ask the session's agent itself.
   `Properties.Get/GetAll`, timedate1 `ListTimezones`, systemd `ListUnitFilesByPatterns`. A nested session can therefore never
   change the owner's clock or name, whatever the QML asks.
 - The language goes through Omarchy's own per-user command (`omarchy-language <code>`, owner decision 2026-10-26). Grassfield
-  runs that command as an action: one validated code, one argument vector, no shell, no action in a dev session. What the
-  command does is Omarchy's, not Grassfield's (read in Omarchy's upstream sources at commit 58858ae; the installed 4.0.4
-  may differ, owner check below):
+  runs that command as an action: one validated code, one argument vector, no shell, no action in a dev session.
+  **Not on Omarchy 4.0.4** (integrator review of PR #6, on the owner's machine): 4.0.4-1 ships no `omarchy-language` (no
+  package owns it, it is in neither /usr/bin nor /usr/share/omarchy) and no `omarchy-locale-generate`. So:
+  - it is not a read-only query (`isReadOnlyQuery`): a dev session never runs a script nobody here has read on the machine
+    (ADR-0019). A real session reads it (`omarchy-language list`, `omarchy-language`) only when it is installed
+    (`Backend.omarchyLanguage`: found on PATH, never run to find out);
+  - without it, Language & Region shows the session's language (its LANG, the locale Settings runs in) and says that
+    changing it needs a newer version of Omarchy: no picker that cannot work, and no bare "Unknown" (R11).
+  What the command does is Omarchy's, not Grassfield's. **Everything in the list below is NOT VERIFIED on Omarchy 4.0.4**: it
+  was read in Omarchy's upstream sources at commit 58858ae, and a later release that ships the command may differ:
   - it generates the locale when it is missing: `sudo -n` through Omarchy's passwordless sudoers rule for its own helper
     `omarchy-locale-generate`, else `pkexec omarchy-locale-generate <code>`, whose password dialog is Grassfield's polkit
     agent (the same sheet as the services above);
