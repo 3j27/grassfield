@@ -52,7 +52,7 @@ Item {
     width: Tokens.desktopIconCellWidth
     height: Tokens.desktopIconCellHeight
     Accessible.role: Accessible.ListItem
-    Accessible.name: root.label
+    Accessible.name: DisplayName.text(root.label)
     Accessible.selected: root.selected
 
     // Name and Icon of a launcher file, shown as text only: nothing is executed.
@@ -230,7 +230,7 @@ Item {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.desktopIconLabelSize
             font.weight: Tokens.typographyMenuWeight
-            Accessible.name: qsTr("Rename %1").arg(root.label)
+            Accessible.name: qsTr("Rename %1").arg(DisplayName.text(root.label))
             onAccepted: if (root.renaming && visible)
                 root.renameAccepted(text)
             onTextChanged: if (root.renaming)
