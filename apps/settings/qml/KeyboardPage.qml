@@ -1,12 +1,15 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Grassfield.Ui
 import "Bindings.js" as Bindings
 
-// Read-only list of the Grassfield shortcuts, parsed from the bindings file.
+// How menus show shortcuts (keyboard.shortcutStyle), then the read-only list of the Grassfield shortcuts, parsed from the
+// bindings file.
 SettingsPage {
     id: root
 
     required property var backend
+    required property var store
 
     title: qsTr("Keyboard")
 
@@ -15,6 +18,20 @@ SettingsPage {
         // The keys forwarded to the focused application (word and line navigation, Command+[ ]) live next to it.
         const forwarded = root.backend.readText(root.backend.bindingsFile.replace(/bindings\.lua$/, "forwarding.lua"));
         return file.ok ? Bindings.parse(file.text + "\n" + (forwarded.ok ? forwarded.text : "")) : [];
+    }
+
+    // Menu shortcuts by device (owner decision 2026-10-26, ADR-0024 C-8): the macOS symbols on a Mac, the key names elsewhere.
+    SettingsGroup {
+        SettingsRow {
+            title: qsTr("Shortcuts in menus")
+            subtitle: qsTr("Automatic shows the Mac symbols (⌘ for Super) on a Mac or with an Apple keyboard, and the key names on other computers.")
+            ComboBox {
+                accessibleName: qsTr("Shortcuts in menus")
+                model: [{id: "automatic", text: qsTr("Automatic")}, {id: "mac", text: qsTr("Mac Symbols")}, {id: "pc", text: qsTr("Key Names")}]
+                value: root.store.value("keyboard.shortcutStyle")
+                onPicked: id => root.store.set("keyboard.shortcutStyle", id)
+            }
+        }
     }
 
     SettingsGroup {

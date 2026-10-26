@@ -150,6 +150,15 @@ Window {
         value: cfg.value("accent.color")
     }
 
+    // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26); the device facts are read once.
+    readonly property bool macDevice: MenuShortcut.macDevice(root.backend.readText("/sys/class/dmi/id/sys_vendor").text, root.backend.readText("/proc/bus/input/devices").text)
+
+    Binding {
+        target: Appearance
+        property: "shortcutStyle"
+        value: MenuShortcut.style(cfg.value("keyboard.shortcutStyle"), root.macDevice)
+    }
+
     // Icon appearance (ADR-0014): the previews and any app icon follow the file live.
     Binding {
         target: Appearance
@@ -603,6 +612,7 @@ Window {
         id: keyboardPage
         KeyboardPage {
             backend: root.backend
+            store: cfg
         }
     }
 

@@ -63,6 +63,7 @@ Singleton {
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor
+    readonly property string keyboardShortcutStyle: store.keyboardShortcutStyle
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
     readonly property string folderColor: store.folderColor

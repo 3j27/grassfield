@@ -65,6 +65,8 @@ ShellRoot {
         ["menubar.clockHours", "24", () => Settings.menubarClockHours === "24"],
         ["menubar.clockHours", "bogus", () => Settings.menubarClockHours === "auto"],
         ["menubar.clockShowSeconds", true, () => Settings.menubarClockShowSeconds === true],
+        ["keyboard.shortcutStyle", "mac", () => Settings.keyboardShortcutStyle === "mac" && Appearance.shortcutStyle === "mac"],
+        ["keyboard.shortcutStyle", "bogus", () => Settings.keyboardShortcutStyle === "automatic"],
         ["windows.titlebarDoubleClick", "minimize", () => Settings.titlebarDoubleClick === "minimize"],
         ["windows.tilingEdges", false, () => Settings.windowsTilingEdges === false],
         ["windows.tilingMenuBar", false, () => Settings.windowsTilingMenuBar === false],
@@ -101,6 +103,12 @@ ShellRoot {
         target: Appearance
         property: "dark"
         value: Settings.dark
+    }
+
+    Binding {
+        target: Appearance
+        property: "shortcutStyle"
+        value: MenuShortcut.style(Settings.keyboardShortcutStyle, SystemInfo.macDevice)
     }
 
     property var doc: ({

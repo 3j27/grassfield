@@ -24,6 +24,9 @@ QtObject {
     property string folderColorSetting: "theme"
     // Accent colour (`accent.color`): "multicolor" (the Grassfield green) | blue | purple | pink | red | orange | yellow | green | graphite.
     property string accentSetting: "multicolor"
+    // How menus label keyboard shortcuts: "pc" (the text, "Ctrl+Shift+N") or "mac" (the macOS symbols). Set by the host from
+    // `keyboard.shortcutStyle` and the device (MenuShortcut.style).
+    property string shortcutStyle: "pc"
 
     // A sample app icon (an SVG shipped with this module) for the icon appearance previews: it goes through the same
     // TintedIcon pipeline as every icon.

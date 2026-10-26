@@ -93,6 +93,13 @@ ShellRoot {
         value: Settings.accentColor
     }
 
+    // Menu shortcuts: the macOS symbols on a Mac, the text on a PC (keyboard.shortcutStyle, owner decision 2026-10-26).
+    Binding {
+        target: Appearance
+        property: "shortcutStyle"
+        value: MenuShortcut.style(Settings.keyboardShortcutStyle, SystemInfo.macDevice)
+    }
+
     Binding {
         target: Appearance
         property: "iconMode"

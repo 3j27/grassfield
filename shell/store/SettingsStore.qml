@@ -66,6 +66,8 @@ Scope {
     readonly property string menubarClockHours: ["auto", "12", "24"].indexOf(config.menubar.clockHours) >= 0 ? config.menubar.clockHours : "auto"
     readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
+    // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
+    readonly property string keyboardShortcutStyle: MenuShortcut.normalizeStyle(config.keyboard.shortcutStyle)
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
     readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
     readonly property string folderColor: FolderStyle.normalizeColor(config.icons.folderColor)
@@ -224,6 +226,11 @@ Scope {
     component AccentConfig: JsonObject {
         // multicolor | blue | purple | pink | red | orange | yellow | green | graphite (Settings > Appearance > Accent colour).
         property string color: "multicolor"
+    }
+
+    component KeyboardConfig: JsonObject {
+        // automatic | mac | pc: menu shortcuts as macOS symbols or as text (owner decision 2026-10-26, ADR-0024 C-8).
+        property string shortcutStyle: "automatic"
     }
 
     component IconsConfig: JsonObject {
@@ -597,6 +604,7 @@ Scope {
         property DesktopConfig desktop: DesktopConfig {}
         property MenubarConfig menubar: MenubarConfig {}
         property AccentConfig accent: AccentConfig {}
+        property KeyboardConfig keyboard: KeyboardConfig {}
         property IconsConfig icons: IconsConfig {}
         property PointerConfig pointer: PointerConfig {}
         property WallpaperJson wallpaper: WallpaperJson {}

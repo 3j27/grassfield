@@ -43,6 +43,12 @@ QtObject {
             property: "accentSetting"
             value: root.app.accentColor
         },
+        // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26).
+        Binding {
+            target: Appearance
+            property: "shortcutStyle"
+            value: root.app.shortcutStyle
+        },
         // Icon appearance (ADR-0014): file and app icons follow the shell live.
         Binding {
             target: Appearance
