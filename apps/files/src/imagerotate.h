@@ -5,15 +5,16 @@
 
 // The Rotate Left / Rotate Right quick actions of the preview pane (docs/specs/files.md "Preview pane"). A JPEG turns
 // without touching its pixels: its EXIF orientation tag is changed in place (or a minimal EXIF segment holding only the
-// orientation is added when the file has none). PNG, BMP and TIFF are decoded, turned and written again in their own
-// lossless format. Every other kind is left alone (a lossy re-encode or the loss of an animation is never risked). A
-// file that is rewritten keeps its permissions and its user extended attributes (tags, folder looks are folders only).
+// orientation is added when the file has none). PNG and BMP are decoded, turned and written again in their own lossless
+// format. Every other kind is left alone (a lossy re-encode, the loss of an animation or of TIFF tags is never risked). A
+// file that is rewritten keeps its permissions, its user extended attributes (tags) and access lists; a file owned by
+// someone else, with hard links or animated is refused.
 namespace ImageRotate
 {
 enum class Method {
     None,
     Orientation, // JPEG: the EXIF orientation tag
-    Reencode,    // PNG, BMP, TIFF: lossless formats written again
+    Reencode,    // PNG, BMP: lossless formats written again
 };
 
 // How `path` would turn, from its content type (`mimeType`, as KIO reports it).

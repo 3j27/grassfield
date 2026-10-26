@@ -3780,6 +3780,10 @@
         <translation>ce type d’image ne peut pas pivoter sans perte de qualité</translation>
     </message>
     <message>
+        <source>it could not be read whole, so it was left as it is</source>
+        <translation>elle n’a pas pu être lue en entier, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
         <source>it is not a JPEG picture that can be read</source>
         <translation>ce n’est pas une image JPEG lisible</translation>
     </message>
@@ -3790,6 +3794,18 @@
     <message>
         <source>animated pictures are not turned</source>
         <translation>les images animées ne pivotent pas</translation>
+    </message>
+    <message>
+        <source>its orientation tag would no longer match, so it was left as it is</source>
+        <translation>sa balise d’orientation ne correspondrait plus, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it belongs to someone else, so it was left as it is</source>
+        <translation>elle appartient à quelqu’un d’autre, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it has other names (hard links), so it was left as it is</source>
+        <translation>elle a d’autres noms (liens physiques), elle a été laissée telle quelle</translation>
     </message>
 </context>
 <context>

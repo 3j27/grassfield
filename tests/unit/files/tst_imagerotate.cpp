@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 
+#include <unistd.h>
+
 #include <gtest/gtest.h>
 
 using namespace ImageRotate;
@@ -80,7 +82,7 @@ TEST(ImageRotate, OnlyLosslessKindsTurn)
 {
     EXPECT_EQ(methodFor("image/jpeg"), Method::Orientation);
     EXPECT_EQ(methodFor("image/png"), Method::Reencode);
-    EXPECT_EQ(methodFor("image/tiff"), Method::Reencode);
+    EXPECT_EQ(methodFor("image/tiff"), Method::None) << "Qt would write it uncompressed and without its tags";
     EXPECT_EQ(methodFor("image/bmp"), Method::Reencode);
     EXPECT_EQ(methodFor("image/webp"), Method::None);
     EXPECT_EQ(methodFor("image/gif"), Method::None);
@@ -191,6 +193,41 @@ TEST(ImageRotate, APngIsWrittenAgainTurned)
     // Anticlockwise: the red left half is now the bottom half.
     EXPECT_EQ(turnedImage.pixel(10, 35), qRgb(255, 0, 0));
     EXPECT_EQ(turnedImage.pixel(10, 5), qRgb(0, 0, 255));
+}
+
+TEST(ImageRotate, AnimatedPngsAndHardLinkedFilesAreRefused)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    // An APNG: an acTL chunk (animation control) right after IHDR. Qt reads its first frame only.
+    const QString still = dir->filePath(QStringLiteral("still.png"));
+    ASSERT_TRUE(picture().save(still, "PNG"));
+    QFile in(still);
+    ASSERT_TRUE(in.open(QIODevice::ReadOnly));
+    QByteArray png = in.readAll();
+    in.close();
+    const qint64 afterIhdr = 8 + 12 + 13;
+    QByteArray actl("\x00\x00\x00\x08"
+                    "acTL"
+                    "\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00",
+                    20);
+    png.insert(afterIhdr, actl);
+    const QString animated = dir->filePath(QStringLiteral("animated.png"));
+    QFile out(animated);
+    ASSERT_TRUE(out.open(QIODevice::WriteOnly));
+    out.write(png);
+    out.close();
+    EXPECT_EQ(rotate(animated, "image/png", true), QStringLiteral("animated pictures are not turned"));
+    QFile check(animated);
+    ASSERT_TRUE(check.open(QIODevice::ReadOnly));
+    EXPECT_EQ(check.readAll(), png) << "untouched, byte for byte";
+
+    // A file with another name: a new file would leave the other name on the old picture.
+    const QString twin = dir->filePath(QStringLiteral("twin.png"));
+    ASSERT_EQ(::link(QFile::encodeName(still).constData(), QFile::encodeName(twin).constData()), 0);
+    EXPECT_EQ(rotate(still, "image/png", true), QStringLiteral("it has other names (hard links), so it was left as it is"));
+    EXPECT_EQ(QImage(still).size(), QSize(40, 20));
 }
 
 TEST(ImageRotate, LinksAndOtherKindsAreRefused)
