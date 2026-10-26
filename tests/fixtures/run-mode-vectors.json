@@ -1,15 +1,55 @@
 {
 "comment": "Shared vectors for the run-mode rule (ADR-0019). QML: shell/lib/RunMode.js via tests/unit/tst_runmode.qml; C++ (slice M6): apps/runmode.h via tests/unit/files/tst_runmode.cpp. The processes outside Qt or with their own read (slice M7): the compositor plugin (compositor/src/core/RunMode.hpp via compositor/tests/RunModeTest.cpp) and the menu bridge (bridges/menu-bridge/src/Safety.h via tests/unit/menu-bridge/tst_menubridge.cpp) read the modes (dev, session). A key missing from env is an unset variable. Expected values are the whole truth: nothing but the exact strings opens a gate.",
-"modeReads": {
- "comment": "What each shell/lib/Mode.qml member calls and the environment variables it reads, in argument order (checked statically by tests/unit/tst_runmode.qml: the runtime tests run with most variables unset, so a misspelled name or a wrong RunMode function would not show there). devValue's last argument is the dynamic GRASSFIELD_<name>. The C++ side lists the same names in apps/runmode.h from M6.",
- "dev": {"call": "dev", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION"]},
- "session": {"call": "session", "reads": ["GRASSFIELD_SESSION"]},
- "fixtures": {"call": "fixtures", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_VISUAL_FIXTURES"]},
- "ownBus": {"call": "ownBus", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_PRIVATE_BUS"]},
- "updateNotices": {"call": "updateNotices", "reads": ["GRASSFIELD_SESSION"]},
- "configDir": {"call": "configDir", "reads": ["GRASSFIELD_CONFIG_HOME", "XDG_CONFIG_HOME", "HOME"]},
- "stateDir": {"call": "stateDir", "reads": ["GRASSFIELD_STATE_HOME", "XDG_STATE_HOME", "HOME"]},
- "devValue": {"call": "devPlumbing", "reads": ["GRASSFIELD_DEV", "GRASSFIELD_SESSION"], "function": true}
+"refused": "refused",
+"members": {
+ "comment": "Every member of shell/lib/Mode.qml, exactly: its type and the canonical form of its expression, as Qt's syntax tree reads it (checked by tests/shell/run_mode_env.sh, which also runs the real singleton in every environment below). A member that is not here, a second root child, a timer or any other expression fails. The C++ side lists the same names in apps/runmode.h from M6.",
+ "root": "Singleton",
+ "pragmas": ["Singleton"],
+ "imports": ["QtQuick", "Quickshell", "\"RunMode.js\" as RunMode"],
+ "properties": {
+  "dev": ["bool", "RunMode.dev(%(DEV)s, %(SESSION)s)"],
+  "session": ["bool", "RunMode.session(%(SESSION)s)"],
+  "fixtures": ["bool", "RunMode.fixtures(%(DEV)s, %(SESSION)s, %(VISUAL_FIXTURES)s)"],
+  "ownBus": ["bool", "RunMode.ownBus(%(DEV)s, %(SESSION)s, %(PRIVATE_BUS)s)"],
+  "updateNotices": ["bool", "RunMode.updateNotices(%(SESSION)s)"],
+  "refused": ["string", "RunMode.REFUSED"],
+  "configDir": ["string", "RunMode.configDir(%(CONFIG_HOME)s, %(XDG_CONFIG_HOME)s, %(HOME)s)"],
+  "stateDir": ["string", "RunMode.stateDir(%(STATE_HOME)s, %(XDG_STATE_HOME)s, %(HOME)s)"],
+  "shellDir": ["string", "Quickshell.shellDir"],
+  "stateHome": ["string", "RunMode.homeOverride(%(STATE_HOME)s)"],
+  "appsTrace": ["bool", "RunMode.appsTrace(%(APPS_TRACE)s)"]
+ },
+ "functions": {
+  "devValue": [["name"], "return RunMode.devPlumbing(%(DEV)s, %(SESSION)s, Quickshell.env((\"GRASSFIELD_\" op0 name)))"]
+ },
+ "env": {
+  "DEV": "Quickshell.env(\"GRASSFIELD_DEV\")",
+  "SESSION": "Quickshell.env(\"GRASSFIELD_SESSION\")",
+  "VISUAL_FIXTURES": "Quickshell.env(\"GRASSFIELD_VISUAL_FIXTURES\")",
+  "PRIVATE_BUS": "Quickshell.env(\"GRASSFIELD_PRIVATE_BUS\")",
+  "CONFIG_HOME": "Quickshell.env(\"GRASSFIELD_CONFIG_HOME\")",
+  "STATE_HOME": "Quickshell.env(\"GRASSFIELD_STATE_HOME\")",
+  "XDG_CONFIG_HOME": "Quickshell.env(\"XDG_CONFIG_HOME\")",
+  "XDG_STATE_HOME": "Quickshell.env(\"XDG_STATE_HOME\")",
+  "HOME": "Quickshell.env(\"HOME\")",
+  "APPS_TRACE": "Quickshell.env(\"GRASSFIELD_APPS_TRACE\")"
+ }
+},
+"runmode": {
+ "comment": "RunMode.js as Qt's syntax tree reads it (checked by tests/shell/run_mode_env.sh; qmldom reads no .js, so the body is wrapped in a scratch QML function). Comments and layout may change, nothing else: update on purpose with `python3 -I tests/shell/run_mode_env.d/run.py --print-runmode` after a review of the rule.",
+ "functions": {
+  "dev": [["devValue", "sessionValue"], "return ((devValue op1f \"1\") op1 (sessionValue op20 \"1\"))"],
+  "session": [["sessionValue"], "return (sessionValue op1f \"1\")"],
+  "fixtures": [["devValue", "sessionValue", "fixturesValue"], "return (dev(devValue, sessionValue) op1 (fixturesValue op1f \"1\"))"],
+  "ownBus": [["devValue", "sessionValue", "privateBusValue"], "return (!dev(devValue, sessionValue) op1b (privateBusValue op1f \"1\"))"],
+  "updateNotices": [["sessionValue"], "return session(sessionValue)"],
+  "devPlumbing": [["devValue", "sessionValue", "value"], "if (!dev(devValue, sessionValue)) return \"\" ; return (((value op1f undefined) op1b (value op1f null)) ? \"\" : String(value))"],
+  "configDir": [["configHome", "xdgConfigHome", "home"], "if (configHome) return configHome ; return (((xdgConfigHome ? xdgConfigHome : (home op0 \"/.config\"))) op0 \"/grassfield\")"],
+  "stateDir": [["stateHome", "xdgStateHome", "home"], "if (stateHome) return stateHome ; return (((xdgStateHome ? xdgStateHome : (home op0 \"/.local/state\"))) op0 \"/grassfield\")"],
+  "appsTrace": [["value"], "return (value op1f \"1\")"],
+  "homeOverride": [["value"], "return (value ? value : \"\")"]
+ },
+ "vars": {"REFUSED": "\"refused\""}
 },
 "modes": [
  {"name": "nothing set", "env": {}, "dev": false, "session": false, "fixtures": false, "ownBus": true, "updateNotices": false},
@@ -41,10 +81,25 @@
  {"name": "empty grassfield homes are unset", "env": {"HOME": "/home/u", "XDG_CONFIG_HOME": "/x/c", "GRASSFIELD_CONFIG_HOME": "", "GRASSFIELD_STATE_HOME": ""}, "configDir": "/x/c/grassfield", "stateDir": "/home/u/.local/state/grassfield"},
  {"name": "grassfield homes are honoured in a packaged session", "env": {"HOME": "/home/u", "GRASSFIELD_SESSION": "1", "GRASSFIELD_CONFIG_HOME": "/g/c", "GRASSFIELD_STATE_HOME": "/g/s"}, "configDir": "/g/c", "stateDir": "/g/s"}
 ],
+"homes": [
+ {"name": "unset", "env": {}, "stateHome": ""},
+ {"name": "empty", "env": {"GRASSFIELD_STATE_HOME": ""}, "stateHome": ""},
+ {"name": "set (always honoured, dev or not)", "env": {"GRASSFIELD_STATE_HOME": "/g/s"}, "stateHome": "/g/s"},
+ {"name": "set in a packaged session", "env": {"GRASSFIELD_SESSION": "1", "GRASSFIELD_STATE_HOME": "/g/s"}, "stateHome": "/g/s"}
+],
+"traces": [
+ {"name": "unset", "env": {}, "appsTrace": false},
+ {"name": "1", "env": {"GRASSFIELD_APPS_TRACE": "1"}, "appsTrace": true},
+ {"name": "1 in a packaged session", "env": {"GRASSFIELD_SESSION": "1", "GRASSFIELD_APPS_TRACE": "1"}, "appsTrace": true},
+ {"name": "true is not 1", "env": {"GRASSFIELD_APPS_TRACE": "true"}, "appsTrace": false},
+ {"name": "0", "env": {"GRASSFIELD_APPS_TRACE": "0"}, "appsTrace": false}
+],
 "plumbing": [
  {"name": "dev: value honoured", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": "12:00"},
  {"name": "dev: unset is empty", "env": {"GRASSFIELD_DEV": "1"}, "variable": "GRASSFIELD_FIXED_TIME", "value": ""},
  {"name": "no dev: inert", "env": {"GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": ""},
- {"name": "leaked dev in a packaged session: inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_OPEN_POLICY": "allow"}, "variable": "GRASSFIELD_OPEN_POLICY", "value": ""}
+ {"name": "leaked dev in a packaged session: inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_OPEN_POLICY": "allow"}, "variable": "GRASSFIELD_OPEN_POLICY", "value": ""},
+ {"name": "dev: the shell directory is honoured", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SHELL_DIR": "/work/shell"}, "variable": "GRASSFIELD_SHELL_DIR", "value": "/work/shell"},
+ {"name": "leaked dev in a packaged session: the shell directory is inert", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_SESSION": "1", "GRASSFIELD_SHELL_DIR": "/tmp/evil"}, "variable": "GRASSFIELD_SHELL_DIR", "value": ""}
 ]
 }

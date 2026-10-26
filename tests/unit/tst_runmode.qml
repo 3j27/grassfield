@@ -2,9 +2,9 @@ import QtQuick
 import QtTest
 import "../../shell/lib/RunMode.js" as RunMode
 
-// ADR-0019 (GF-089): the one run-mode rule, held to tests/fixtures/run-mode-vectors.json (the C++ side, apps/runmode.h,
-// is held to the same file from slice M6). The runtime check of the singleton (Quickshell.env) is
-// tests/shell/run_mode_import/shell.qml.
+// ADR-0019 (GF-089): the one run-mode rule (RunMode.js), held to tests/fixtures/run-mode-vectors.json (the C++ side, apps/runmode.h,
+// is held to the same file from slice M6). The real Mode singleton (Quickshell.env) is held to the same vectors, in each environment,
+// by tests/shell/run_mode_env.sh; that `import qs.lib` resolves, by tests/shell/run_mode_import/shell.qml.
 TestCase {
     name: "RunMode"
 
@@ -38,6 +38,16 @@ TestCase {
         }
     }
 
+    function test_homeAndTraceVectors() {
+        const v = vectors();
+        for (const h of v.homes)
+            compare(RunMode.homeOverride(h.env.GRASSFIELD_STATE_HOME), h.stateHome, h.name + " (stateHome)");
+        for (const t of v.traces)
+            compare(RunMode.appsTrace(t.env.GRASSFIELD_APPS_TRACE), t.appsTrace, t.name + " (appsTrace)");
+        for (const x of [undefined, null, "", "true", "yes", " 1", 1, true])
+            verify(!RunMode.appsTrace(x), JSON.stringify(x));
+    }
+
     function test_plumbingVectors() {
         const rows = vectors().plumbing;
         verify(rows.length >= 4, "vectors read: " + rows.length);
@@ -45,50 +55,6 @@ TestCase {
             const e = v.env;
             compare(RunMode.devPlumbing(e.GRASSFIELD_DEV, e.GRASSFIELD_SESSION, e[v.variable]), v.value, v.name);
         }
-    }
-
-    // Mode.qml calls the right rule on the right variables, by name: the runtime test (tests/shell/run_mode_import) runs with most of
-    // them unset, so a misspelled GRASSFIELD_SESION or `fixtures: RunMode.ownBus(...)` would pass there. Each member's RunMode function
-    // and Quickshell.env names, in order, against the table; devValue (the gate of every dev-plumbing variable) is checked the same way.
-    function test_modeCallsTheRightRuleOnTheRightVariables() {
-        const request = new XMLHttpRequest();
-        request.open("GET", Qt.resolvedUrl("../../shell/lib/Mode.qml"), false);
-        request.send();
-        const source = request.responseText.replace(/\/\/[^\n]*/g, "");
-        const table = vectors().modeReads;
-        const literal = /Quickshell\.env\("([A-Za-z0-9_]+)"\)/g;
-        const allowed = {};
-        let seen = 0;
-        for (const member of Object.keys(table)) {
-            if (member === "comment")
-                continue;
-            const row = table[member];
-            const pattern = row["function"] === true
-                ? "function " + member + "\\(name\\) \\{\\s*return RunMode\\.(\\w+)\\(([^\\n]*)\\);"
-                : "readonly property \\w+ " + member + ": RunMode\\.(\\w+)\\(([^\\n]*)\\)\\n";
-            const m = new RegExp(pattern).exec(source);
-            verify(m !== null, "Mode." + member + " is a RunMode call");
-            compare(m[1], row.call, "Mode." + member + " calls RunMode." + row.call);
-            const names = [];
-            let e;
-            literal.lastIndex = 0;
-            while ((e = literal.exec(m[2])) !== null)
-                names.push(e[1]);
-            compare(names.join(","), row.reads.join(","), "Mode." + member + " reads");
-            if (row["function"] === true)
-                verify(/, Quickshell\.env\("GRASSFIELD_" \+ name\)$/.test(m[2]), "Mode." + member + " ends with the dynamic GRASSFIELD_<name>: " + m[2]);
-            row.reads.forEach(n => allowed[n] = true);
-            seen++;
-        }
-        verify(seen >= 8, "members checked: " + seen);
-        // No other read: every Quickshell.env("...") literal of the file is in the table, and the one dynamic read is devValue's.
-        let e2;
-        literal.lastIndex = 0;
-        while ((e2 = literal.exec(source)) !== null)
-            verify(allowed[e2[1]] === true, "unexpected read of " + e2[1]);
-        const dynamic = (source.match(/Quickshell\.env\([^)]*\)/g) || []).filter(c => !/^Quickshell\.env\("[A-Za-z0-9_]+"\)$/.test(c));
-        compare(dynamic.length, 1, "one dynamic read");
-        verify(dynamic[0].indexOf('"GRASSFIELD_" + name') >= 0, "the dynamic read is GRASSFIELD_<name>: " + dynamic[0]);
     }
 
     // Only exact strings open a gate, whatever else the caller passes.

@@ -140,6 +140,8 @@ FocusScope {
                     anchors.fill: parent
                     text: Audio.describe(deviceRow.modelData)
                     checked: Audio.sink === deviceRow.modelData
+                    // Every device row is checkable: all labels start after the check column (macOS).
+                    checkColumn: true
                     highlighted: deviceRow.activeFocus || hover.hovered
                     onClicked: Audio.select(deviceRow.modelData)
 

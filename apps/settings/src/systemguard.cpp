@@ -1,5 +1,7 @@
 #include "systemguard.h"
 
+#include "runmode.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
@@ -10,7 +12,7 @@ namespace grassfield::settings {
 
 bool devSession()
 {
-    return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1");
+    return grassfield::apps::runmode::dev();
 }
 
 bool isUuid(const QString &s)
@@ -25,26 +27,8 @@ bool isReadOnlyQuery(const QStringList &argv)
         return false;
     const QString &program = argv.first();
     const QStringList args = argv.mid(1);
-    if (program == QLatin1String("nmcli")) {
-        static const QList<QStringList> queries = {
-            {"-t", "-f", "WIFI", "radio"},
-            {"-t", "-f", "IN-USE,SSID-HEX,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "no"},
-            {"-t", "-f", "UUID,TYPE", "connection", "show"},
-            {"-t", "-f", "DEVICE,TYPE,STATE", "device"},
-        };
-        if (queries.contains(args))
-            return true;
-        // SSID of one saved profile, by UUID.
-        return args.size() == 7 && args.mid(0, 6) == QStringList{"-t", "-f", "802-11-wireless.ssid", "connection", "show", "uuid"} && isUuid(args.at(6));
-    }
-    if (program == QLatin1String("bluetoothctl")) {
-        static const QList<QStringList> queries = {
-            {"show"},
-            {"devices", "Paired"},
-            {"devices", "Connected"},
-        };
-        return queries.contains(args);
-    }
+    // Wi-Fi and Bluetooth are not commands any more: they go over D-Bus (systembus.h, whose own guard allows only reads in a dev
+    // session). nmcli and bluetoothctl are therefore neither queries nor actions here.
     if (program == QLatin1String("wpctl"))
         return args == QStringList{"status"};
     // About pane (Backend::run): package versions and graphics adapters.
@@ -148,7 +132,7 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("nmcli") || program == QLatin1String("bluetoothctl") || program == QLatin1String("wpctl") || program == QLatin1String("xdg-open");
+    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open");
 }
 
 bool isAllowedAction(const QStringList &argv)

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Grassfield.Ui
 import qs.store
 import "../dock/Geometry.js" as DockGeometry // layering-exception: GF-087
@@ -11,14 +12,8 @@ import "../dock/Geometry.js" as DockGeometry // layering-exception: GF-087
 Singleton {
     id: root
 
-    // GRASSFIELD_CONFIG_HOME (dev) wins; otherwise $XDG_CONFIG_HOME/grassfield.
-    readonly property string configDir: {
-        const dev = Quickshell.env("GRASSFIELD_CONFIG_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_CONFIG_HOME");
-        return (xdg ? xdg : Quickshell.env("HOME") + "/.config") + "/grassfield";
-    }
+    // GRASSFIELD_CONFIG_HOME wins; otherwise $XDG_CONFIG_HOME/grassfield.
+    readonly property string configDir: Mode.configDir
 
     // Validated by the store (out-of-range or unknown values fall back to the schema defaults).
     readonly property string appearance: store.appearance
@@ -98,6 +93,19 @@ Singleton {
     readonly property string menubarAutoHide: store.menubarAutoHide
     readonly property bool menubarShowNowPlaying: store.data.menubar.showNowPlaying
     readonly property bool menubarShowSearch: store.data.menubar.showSearch
+    readonly property bool menubarShowWifi: store.data.menubar.showWifi
+    readonly property bool menubarShowSound: store.data.menubar.showSound
+    readonly property bool menubarShowBattery: store.data.menubar.showBattery
+    readonly property bool menubarShowBatteryPercentage: store.data.menubar.showBatteryPercentage
+    readonly property bool menubarShowFocus: store.data.menubar.showFocus
+    readonly property string menubarClockDate: store.menubarClockDate
+    readonly property bool menubarClockShowAmPm: store.data.menubar.clockShowAmPm
+    readonly property bool menubarClockFlashSeparators: store.data.menubar.clockFlashSeparators
+    readonly property bool menubarShowTrayItems: store.data.menubar.showTrayItems
+    readonly property int menubarRecentItems: store.menubarRecentItems
+    readonly property bool menubarClockShowDayOfWeek: store.data.menubar.clockShowDayOfWeek
+    readonly property string menubarClockHours: store.menubarClockHours
+    readonly property bool menubarClockShowSeconds: store.data.menubar.clockShowSeconds
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft

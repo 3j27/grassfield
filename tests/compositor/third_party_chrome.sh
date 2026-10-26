@@ -311,7 +311,7 @@ if command -v chromium >/dev/null; then
   if wait_mapped '^chromium$' 80; then
     sleep 2
     judge chromium '^chromium$' 1
-    own_buttons chromium '^chromium$' 17 50 83 21
+    own_buttons chromium '^chromium$' 17 50 83 21  # isolation-ok: a label for the judge, not a launch
   else
     check "chromium: mapped as chromium" 1 "$(ctl clients -j | jq -c '[.[].class]')"
   fi

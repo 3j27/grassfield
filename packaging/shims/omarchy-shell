@@ -14,6 +14,11 @@
 #                 marker says "locked">} (read-only: hyprctl -j monitors, the marker file)
 # Every other call fails as Omarchy's wrapper does when its shell is not running ("-q": silent success). Nothing here
 # unlocks. Test: tests/security/sleep_lock_units.sh.
+# Quickshell's option variables are cleared: a stray QS_MANIFEST or QS_CONFIG_NAME made `qs ipc -p` exit 108 ("--path
+# excludes --manifest"), so the sleep-lock fallback's lock request failed (re-review of bf9e280, M1; the list is the one
+# grassfield-shell.service clears; tests/security/lock_request_env.sh).
+unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+
 quiet=0
 if [ "${1:-}" = "-q" ]; then
   quiet=1

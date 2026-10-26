@@ -129,6 +129,12 @@ env_ok=$(grep -c 'FONTCONFIG_FILE=/usr/share/grassfield/fontconfig/fonts.conf' "
 if [[ $env_ok == 1 ]] && grep -q '^if \[ -r /usr/share/grassfield/fontconfig/fonts.conf \]; then' "$root/packaging/uwsm/env-grassfield"; then
   echo "PASS: env-grassfield exports FONTCONFIG_FILE behind a readability test"; else echo "FAIL: env-grassfield FONTCONFIG_FILE guard"; fail=1; fi
 
+# QtQuick distance-field text is grayscale only by QSG_DISTANCEFIELD_ANTIALIASING=gray (ADR-0003): sourced env, unconditional.
+qsg=$(env -i sh -c '. "$1"; echo "${QSG_DISTANCEFIELD_ANTIALIASING-unset}"' _ "$root/packaging/uwsm/env-grassfield")
+if [[ $qsg == gray ]]; then echo "PASS: env-grassfield exports QSG_DISTANCEFIELD_ANTIALIASING=gray (sourced with sh, unconditionally)"; else echo "FAIL: env-grassfield QSG_DISTANCEFIELD_ANTIALIASING is '$qsg'"; fail=1; fi
+qsg=$(env -i HOME="$tmp" PATH="$PATH" bash -c "cd \"$root\" && . scripts/dev/devenv.sh && echo \"\${QSG_DISTANCEFIELD_ANTIALIASING-unset}\"" 2>/dev/null | tail -n1)
+if [[ $qsg == gray ]]; then echo "PASS: scripts/dev/devenv.sh (dev and nested sessions) exports the same value"; else echo "FAIL: devenv.sh QSG_DISTANCEFIELD_ANTIALIASING is '$qsg'"; fail=1; fi
+
 # User hook ~/.config/grassfield/fonts.conf (XDG_CONFIG_HOME) is the last rule and wins over Inter and the rendering.
 for mode in none omarchy; do
   mkdir -p "$tmp/$mode/.config/grassfield"

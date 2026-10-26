@@ -22,7 +22,9 @@ printf 'hello\n' >"$tmp/note.txt"
 # x-dosexec in ~3 % of runs, which made the refusal checks flaky).
 printf '\x00\xff\x13\x37\x00\xfe\x80\x81%.0s' {1..8} >"$tmp/blob.bin"
 log=$tmp/refusals.log
-export GRASSFIELD_FILES_CMD=$tmp/fake-files GRASSFIELD_PREVIEW_CMD=$tmp/fake-preview GRASSFIELD_OPEN_LOG=$log
+# A dev session: the dev plumbing variables (FILES_CMD, PREVIEW_CMD) are honoured only there (ADR-0019).
+unset GRASSFIELD_SESSION  # the run-mode rule: dev needs no packaged session around it (this may run inside one)
+export GRASSFIELD_DEV=1 GRASSFIELD_FILES_CMD=$tmp/fake-files GRASSFIELD_PREVIEW_CMD=$tmp/fake-preview GRASSFIELD_OPEN_LOG=$log
 wait_for() { for _ in $(seq 1 30); do [[ -s $1 ]] && return 0; sleep 0.1; done; return 1; }
 
 "$policy" "$tmp/d" 2>/dev/null

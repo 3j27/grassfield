@@ -50,7 +50,7 @@ ShellRoot {
     // The curl processes of this sandbox (none must outlive a stopped run).
     Process {
         id: ps
-        command: ["sh", "-c", "for d in /proc/[0-9]*; do tr '\\0' ' ' <\"$d/cmdline\" 2>/dev/null | grep -q '^curl -q' && echo x; done | wc -l"]
+        command: ["sh", "-c", "pgrep -c -f -- \"^curl -q .*$1/\" || true", "gf-curls", root.base]
         stdout: StdioCollector {
             onStreamFinished: root.curls = text.trim()
         }

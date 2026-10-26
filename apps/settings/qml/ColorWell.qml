@@ -337,7 +337,7 @@ Item {
                     width: Tokens.settingsColorHexWidth
                     height: Tokens.menuItemHeight + Tokens.spacingXs
                     radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
                     border.width: hexField.activeFocus ? Tokens.controlFocusOutline : 0
                     border.color: Appearance.focusRingColor
 

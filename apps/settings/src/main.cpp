@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
     new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
-    app.setApplicationName(QStringLiteral("Grassfield Settings"));
+    app.setApplicationName(QStringLiteral("Grassfield Settings")); // i18n-ignore: the application name
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));
     // Wayland app_id: matches org.grassfield.Settings.desktop.

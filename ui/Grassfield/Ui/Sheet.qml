@@ -17,6 +17,10 @@ Item {
     // function(text) returning an error message to keep the sheet open, or "" to close it.
     property var confirmHandler: null
     property Item focusBack: null
+    // False: only the confirm button (an options sheet whose changes apply at once, macOS "Done").
+    property bool showCancel: true
+    // Content between the text and the buttons.
+    default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
     readonly property bool shown: root.visible
 
@@ -140,6 +144,12 @@ Item {
                     onTextChanged: root.errorText = ""
                 }
 
+                Column {
+                    id: bodySlot
+                    width: parent.width
+                    spacing: Tokens.spacingMd
+                }
+
                 Text {
                     textFormat: Text.PlainText
                     visible: root.errorText !== ""
@@ -158,6 +168,7 @@ Item {
                     spacing: Tokens.spacingSm
 
                     Button {
+                        visible: root.showCancel
                         text: qsTr("Cancel")
                         onClicked: root.cancel()
                     }

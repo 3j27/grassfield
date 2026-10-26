@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
@@ -35,7 +36,8 @@ Scope {
     }
     property string query: ""
     property string screenName: ""
-    // Groups [{id, title, items}], the flat rows for the list ({header, title} | {item, itemIndex})
+    // Groups [{id, title, items}], the flat rows for the list ({item, itemIndex, groupId}: no header rows, as macOS 27 Spotlight;
+    // the groups still order the list and Tab moves between them)
     // and the flat items (actionable entries). `selected` indexes `items`.
     property var groups: []
     property var rows: []
@@ -73,7 +75,8 @@ Scope {
         {id: "appearance", title: qsTr("Appearance"), keywords: [qsTr("dark"), qsTr("light"), qsTr("auto"), qsTr("theme"), qsTr("accent"), qsTr("transparency"), qsTr("icons")]},
         {id: "wallpaper", title: qsTr("Wallpaper"), keywords: [qsTr("background"), qsTr("picture"), qsTr("shuffle")]},
         {id: "accessibility", title: qsTr("Accessibility"), keywords: [qsTr("pointer"), qsTr("cursor"), qsTr("contrast"), qsTr("reduce motion"), qsTr("text size")]},
-        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("menu bar"), qsTr("screen corners")]},
+        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("screen corners")]},
+        {id: "menubar", title: qsTr("Menu Bar"), keywords: [qsTr("clock"), qsTr("menu bar background"), qsTr("status items"), qsTr("hide menu bar"), qsTr("battery percentage")]},
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
         {id: "lock", title: qsTr("Lock Screen"), keywords: [qsTr("idle"), qsTr("password")]},
         {id: "mouse", title: qsTr("Mouse & Trackpad"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling"), qsTr("tap to click"), qsTr("touchpad")]},
@@ -92,20 +95,14 @@ Scope {
     readonly property string home: Quickshell.env("HOME")
     // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
     // another database, so tests do not depend on the owner's index.
-    readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home
-    readonly property string plocateDb: Quickshell.env("GRASSFIELD_SEARCH_PLOCATE_DB")
+    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
+    readonly property string plocateDb: Mode.devValue("SEARCH_PLOCATE_DB")
     readonly property string dataHome: {
         const xdg = Quickshell.env("XDG_DATA_HOME");
         return xdg ? xdg : home + "/.local/share";
     }
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"
 
     // ---- state changes -------------------------------------------------------------------
@@ -241,13 +238,14 @@ Scope {
             seen[p] = true;
             docs.push(mkPath("file", p));
         }
+        // macOS: an empty field shows no results; documents (recent included) appear from the first keystroke.
         let recents = [];
-        for (const r of recentList) {
+        for (const r of q === "" ? [] : recentList) {
             if (recents.length >= Tokens.searchRecentCount)
                 break;
             if (seen[r.path])
                 continue;
-            if (lq === "" || Ranking.norm(Files.baseName(r.path)).indexOf(lq) >= 0)
+            if (Ranking.norm(Files.baseName(r.path)).indexOf(lq) >= 0)
                 recents.push(mkPath("recent", r.path));
         }
         if (lq !== "")
@@ -308,11 +306,10 @@ Scope {
         let sel = -1;
         const prevKey = selected >= 0 && selected < items.length ? items[selected].key : "";
         for (const grp of g) {
-            rowList.push({header: true, title: grp.title, groupId: grp.id});
             for (const it of grp.items) {
                 if (prevKey !== "" && it.key === prevKey && fileHitsOnly)
                     sel = flat.length;
-                rowList.push({header: false, item: it, itemIndex: flat.length, groupId: grp.id});
+                rowList.push({item: it, itemIndex: flat.length, groupId: grp.id});
                 flat.push(Object.assign({groupId: grp.id}, it));
             }
         }

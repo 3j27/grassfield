@@ -21,6 +21,17 @@ RestartSec=3
 TimeoutStopSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
+# ProtectSystem=strict makes /run read-only, so dconf could not create $XDG_RUNTIME_DIR/dconf/user (92 warnings in the first
+# real session). RuntimeDirectory= makes %t/dconf writable inside the sandbox AND creates it before the unit's sandbox is set up:
+# the first attempt, ReadWritePaths=-%t/dconf, dropped the path when the directory did not exist yet at udiskie's start (at login
+# the shell and udiskie start in the same second, before anything has made it), so the warnings came back in that session. The
+# alternative, a '+' ExecStartPre that runs mkdir outside the sandbox, would run a command with no hardening at all. The directory
+# is shared with the shell and every GSettings client of the session: Preserve=yes keeps it when this unit stops (the default
+# removes it under the other clients), and 0700 is what dconf itself creates. udiskie's dialogs keep the user's
+# real GSettings (theme, text scaling), which a memory backend would drop.
+RuntimeDirectory=dconf
+RuntimeDirectoryPreserve=yes
+RuntimeDirectoryMode=0700
 ProtectHome=read-only
 PrivateTmp=yes
 RestrictNamespaces=yes

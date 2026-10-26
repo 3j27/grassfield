@@ -61,6 +61,9 @@ Scope {
     readonly property var notificationsAppStyles: NotificationPrefs.normalizeStyles(config.notifications.appStyles)
     readonly property string notificationsHistory: NotificationPrefs.validHistory(config.notifications.history) ? config.notifications.history : "week"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
+    readonly property string menubarClockDate: ["auto", "always", "never"].indexOf(config.menubar.clockDate) >= 0 ? config.menubar.clockDate : "auto"
+    readonly property int menubarRecentItems: Math.round(clampNumber(config.menubar.recentItems, 0, 50, 10))
+    readonly property string menubarClockHours: ["auto", "12", "24"].indexOf(config.menubar.clockHours) >= 0 ? config.menubar.clockHours : "auto"
     readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
@@ -197,10 +200,25 @@ Scope {
         property bool showBackground: false
         // always | desktop | fullscreen | never: "Automatically hide and show the menu bar" (BarHide.js).
         property string autoHide: "fullscreen"
-        // Now Playing item of the bar (Settings > Desktop & Dock > Menu Bar): shown while a player has a session.
+        // Now Playing item of the bar (Settings > Menu Bar): shown while a player has a session.
         property bool showNowPlaying: true
         // Search item (magnifier) of the bar.
         property bool showSearch: true
+        // Status items (Settings > Menu Bar, macOS Control Center menu bar modules).
+        property bool showWifi: true
+        property bool showSound: true
+        property bool showBattery: true
+        property bool showBatteryPercentage: true
+        property bool showFocus: true
+        // Clock (macOS Clock options): date, day of the week, hour format (auto | 12 | 24), seconds.
+        property string clockDate: "auto"
+        property bool clockShowAmPm: true
+        property bool clockFlashSeparators: false
+        property bool showTrayItems: true
+        property int recentItems: 10
+        property bool clockShowDayOfWeek: true
+        property string clockHours: "auto"
+        property bool clockShowSeconds: false
     }
 
     component AccentConfig: JsonObject {
@@ -219,7 +237,7 @@ Scope {
 
     component PointerConfig: JsonObject {
         // Cursor size in pixels, 24 to 96 (Settings > Accessibility > Pointer). A var, not an int: an int property
-        // would turn 51.5 or "64" into a valid size before PointerSize.fromStored could refuse them.
+        // would turn "64" into a valid size before PointerSize.fromStored could refuse it (a number is rounded and clamped there).
         property var size: 24
         // #rrggbb colours of the pointer (outline white, fill black = the packaged theme). Vars for the same reason.
         property var outlineColor: "#ffffff"

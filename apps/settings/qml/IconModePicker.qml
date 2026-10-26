@@ -94,7 +94,7 @@ FocusScope {
                     width: parent.width
                     height: Tokens.iconModePreviewTileHeight
                     radius: Tokens.iconModePreviewRadius
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
                     border.width: tile.selected ? Tokens.controlFocusOutline : Tokens.appsBorderWidth
                     border.color: tile.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 

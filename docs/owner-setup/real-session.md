@@ -103,8 +103,10 @@ must be unchanged. In the Grassfield session, changing the icon theme with `gset
 
 ## 4. Log out, enter Grassfield, come back
 
-**Normal route (after section 3 with the SDDM drop-in): log out of Omarchy and log in.** The greeter (or the autologin after a
-reboot) now starts Grassfield. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
+**Normal route (after section 3 with the SDDM drop-in): restart the computer once after the first install.** SDDM reads its
+configuration only when its daemon starts, so a daemon that ran before the install still starts your previous session (this
+happened on the first 1.0.0-rc1 install). After that one reboot the greeter (and the autologin) starts Grassfield; later
+logouts and logins need nothing. `grassfield-login-check` says "restart the computer once" while SDDM is older than the drop-in. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
 Check once, read-only, in either session:
 ```bash
 grassfield-login-check ; grassfield-login get
@@ -202,7 +204,7 @@ grassfield-compositor-0.4.0-10-x86_64.pkg.tar.zst` from `packaging/arch`, then l
       Windows has the three switches.
 - [ ] Menu bar: the icons of your apps (Spotify, Discord, Steam...) with their menus; Now Playing while music plays
       (artwork and controls); the Search magnifier; it reveals over a full-screen window at the top edge; Settings >
-      Desktop & Dock > Menu Bar > "Automatically hide and show the menu bar".
+      Menu Bar > "Automatically hide and show the menu bar".
 - [ ] Menu bar: a second click on an open menu title closes it even without moving the mouse.
 - [ ] Grassfield menu > Recent Items: the apps you launched and your recent documents; Clear Menu.
 - [ ] Dock: its menu lists the app's windows; Option (Alt) shows Force Quit and Hide Others; Trash > Empty Trash…;
@@ -255,8 +257,17 @@ can run these; the ones marked (VM) are best done on a snapshot or a spare machi
 - [ ] Screenshots: Super+Shift+3 (the screen), Super+Shift+4 (drag a selection), Super+Shift+5 (the picker); Print also. A notice
       shows, the picture is in `~/Pictures` and on the clipboard (`wl-paste -t image/png | file -`). Clicking the notice does not open an
       editor (known: it needs a hint Grassfield's server does not run).
-- [ ] Crash notice: `sleep 300 & kill -SEGV %1` (or `kill -ABRT`): within seconds a banner "sleep quit unexpectedly" appears
-      (needs a core dump: `coredumpctl list` shows it). A second one within 60 s for the same program does not repeat.
+- [ ] Crash notice (macOS model: "<App> quit unexpectedly" only when an application of yours is gone after a crash; needs a
+      core dump, `coredumpctl list` shows it). No banner: from a terminal `sleep 300 & kill -SEGV %1` (the terminal's scope
+      still holds the shell), a crashing helper of an app that keeps running, the shell's own crashes (systemd restarts it).
+      With a banner, safe procedure (one throwaway Foot in a scope of its own, one PID, checked before it is killed):
+      `uwsm-app -u app-Hyprland-foot-gfcrashtest.scope -- foot`, then in your first terminal
+      `s=/sys/fs/cgroup/user.slice/user-$UID.slice/user@$UID.service/app.slice/app-graphical.slice/app-Hyprland-foot-gfcrashtest.scope`,
+      `cat $s/cgroup.procs` (the new Foot and its shell), `ps -o pid,comm,args -p <the pid whose comm is foot>` (must be the
+      throwaway one; a `foot --server` serves all its windows from one process, never use it for this), `kill -SEGV <that pid>`.
+      Within about 10 s a banner "Foot quit unexpectedly" (French session: « Foot » a quitté de façon inattendue) with a
+      "Reopen" button (« Rouvrir ») appears; Reopen starts Foot again in its own scope (`systemctl --user list-units 'app-*foot*'`).
+      A second crash of the same app within 10 minutes does not repeat.
 - [ ] Low battery (unplugged laptop): at 20 %, 10 % and 5 % one banner each ("Low battery" / "Very low battery"). To test without
       draining: `GRASSFIELD_POWER_SUPPLY` cannot be faked in the running unit; read the log instead after a real discharge:
       `journalctl --user -u grassfield-battery-watch`. Desktop without battery: the unit is "inactive (condition)".

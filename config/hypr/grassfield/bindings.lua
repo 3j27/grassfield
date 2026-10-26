@@ -3,11 +3,20 @@
 
 -- The dev session runs the shell from the repository (-p $GRASSFIELD_SHELL_DIR); the installed session always from the
 -- system location, never by name (`-c` would also search the user-writable ~/.config/quickshell, GF-115).
-local shell_dir = os.getenv("GRASSFIELD_SHELL_DIR")
+-- GRASSFIELD_SHELL_DIR is dev plumbing (ADR-0019): honoured only in a dev session (GRASSFIELD_DEV exactly "1" and
+-- GRASSFIELD_SESSION not "1"; session.lua sets GRASSFIELD_SESSION=1 before this file loads), so a stray value in a real
+-- session cannot send the lock key's request to another shell (follow-up of the re-review of bf9e280).
+local dev_session = os.getenv("GRASSFIELD_DEV") == "1" and os.getenv("GRASSFIELD_SESSION") ~= "1"
+local shell_dir = dev_session and os.getenv("GRASSFIELD_SHELL_DIR") or nil
 local shell_selector = (shell_dir and shell_dir ~= "") and ("-p '" .. shell_dir .. "'") or "-p '/usr/share/grassfield/shell'"
 
+-- Every request runs with Quickshell's option variables cleared: a stray QS_MANIFEST or QS_CONFIG_NAME in the session
+-- made `qs ipc -p` exit 108 ("--path excludes --manifest"), so the lock key did nothing (re-review of bf9e280, M1;
+-- the list is the one grassfield-shell.service clears; tests/security/lock_request_env.sh).
+local qs_ipc = "env -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST qs ipc " .. shell_selector
+
 local function shell(target, fn)
-  return hl.dsp.exec_cmd("qs ipc " .. shell_selector .. " call " .. target .. " " .. fn)
+  return hl.dsp.exec_cmd(qs_ipc .. " call " .. target .. " " .. fn)
 end
 
 local function bind(keys, description, dispatcher, opts)
@@ -135,6 +144,22 @@ for n = 1, 4 do
 end
 bind("SUPER + ALT + S", "Move the window to a stage of its own", shell("stages", "newStage"))
 
+-- Keyboard launch keys: each opens the user's default app, resolved at press time by grassfield-launch-key (desktop entries
+-- and xdg-mime, no package names). Search is Spotlight. Keys with no target here stay unbound.
+local launch_key = os.getenv("GRASSFIELD_LAUNCH_KEY") or "/usr/lib/grassfield/grassfield-launch-key"
+local function launch(kind)
+  return hl.dsp.exec_cmd("'" .. launch_key .. "' " .. kind)
+end
+bind("XF86Calculator", "Calculator", launch("calculator"), { locked = false })
+bind("XF86Mail", "Mail", launch("mail"), { locked = false })
+bind("XF86WWW", "Web browser", launch("web"), { locked = false })
+bind("XF86HomePage", "Web browser", launch("web"), { locked = false })
+bind("XF86Search", "Search", shell("search", "toggle"), { locked = false })
+bind("XF86Explorer", "Files", launch("files"), { locked = false })
+bind("XF86MyComputer", "Files", launch("files"), { locked = false })
+bind("XF86Tools", "Grassfield Settings", launch("settings"), { locked = false })
+bind("XF86AudioMedia", "Music", launch("music"), { locked = false })
+
 -- Hardware keys: real volume/brightness changes plus the OSD (shell/osd).
 bind("XF86AudioRaiseVolume", "Volume up", shell("volume", "up"), { repeating = true, locked = true })
 bind("XF86AudioLowerVolume", "Volume down", shell("volume", "down"), { repeating = true, locked = true })
@@ -146,8 +171,8 @@ bind("XF86KbdBrightnessDown", "Keyboard brightness down", shell("keyboard", "dow
 
 -- Trackpad gestures (L2: verified by the owner on real hardware; nested sessions have no touchpad).
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
-hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call overview open") end })
-hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call overview close") end })
+hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd(qs_ipc .. " call overview open") end })
+hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd(qs_ipc .. " call overview close") end })
 -- Apps: pinch with the thumb and three fingers opens it, spreading them closes it (macOS 26, docs/specs/apps.md A11).
-hl.gesture({ fingers = 4, direction = "pinchin", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call apps open") end })
-hl.gesture({ fingers = 4, direction = "pinchout", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call apps close") end })
+hl.gesture({ fingers = 4, direction = "pinchin", action = function() hl.exec_cmd(qs_ipc .. " call apps open") end })
+hl.gesture({ fingers = 4, direction = "pinchout", action = function() hl.exec_cmd(qs_ipc .. " call apps close") end })

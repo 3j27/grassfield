@@ -19,7 +19,7 @@ for tool in brightnessctl wpctl pactl; do
   printf '#!/bin/sh\necho "%s $*" >> "%s/marker"\nexit 0\n' "$tool" "$tmp" >"$tmp/bin/$tool"
   chmod +x "$tmp/bin/$tool"
 done
-out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE GRASSFIELD_DEV=1 PATH="$tmp/bin:$PATH" QT_QPA_PLATFORM=offscreen \
+out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 PATH="$tmp/bin:$PATH" QT_QPA_PLATFORM=offscreen \
   QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" \
   timeout 60 qs -p "$tmp/cfg" --no-color 2>&1 || true)
 fail=0

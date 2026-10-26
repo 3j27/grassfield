@@ -9,11 +9,11 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-upstream check-version check-licenses check-tidy check-secrets
+check: check-config check-schema check-cmake check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-upstream check-version check-licenses check-tidy check-secrets
 
 # Every offline check except clang-tidy, for a tree that leaves compositor/ unchanged (`just check` runs them all). One
 # recipe on purpose: `just check-schema check-shell` would pass check-shell to check-schema as a file argument.
-check-quick: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-upstream check-version check-licenses check-secrets
+check-quick: check-config check-schema check-cmake check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-upstream check-version check-licenses check-secrets
 
 # clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
 check-tidy:
@@ -50,6 +50,14 @@ check-config:
 check-schema *files:
     python3 -I scripts/dev/check-schema.py {{files}}
 
+# The apps' CMake definitions configure as the PKGBUILD configures them (scripts/dev/check-cmake.sh; --build builds them).
+check-cmake:
+    scripts/dev/check-cmake.sh
+
+# The same, and every target is built (minutes; run it before a release or after changing a CMakeLists.txt or a Qt module request).
+check-cmake-build:
+    scripts/dev/check-cmake.sh --build
+
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
@@ -57,6 +65,8 @@ check-shell:
     python3 -I tests/ci/qmldir_types.py
     python3 -I tests/ci/import_graph.py --selftest
     python3 -I tests/ci/import_graph.py
+    python3 -I tests/ci/run_mode.py --selftest
+    python3 -I tests/ci/run_mode.py
 
 # The committed .qsb shaders are current with their .frag sources (rebuild: scripts/dev/build-shaders.sh).
 check-shaders:

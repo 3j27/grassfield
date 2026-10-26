@@ -77,4 +77,34 @@ cp "$root/packaging/systemd/grassfield-menu-bridge.service" "$tmp/b.service"
 sed -i 's/^ProtectHome=read-only/ProtectHome=yes/' "$tmp/b.service"
 desc="mutation: ProtectHome=yes on grassfield-menu-bridge.service is caught, and the bridge is in the bus list"
 if hides_bus "$tmp/b.service" && [[ " $BINARY_BUS_UNITS " == *" grassfield-menu-bridge.service "* ]]; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi
+# FINDINGS 3 (first real session): a unit with ProtectSystem=strict cannot create $XDG_RUNTIME_DIR/dconf, so a GSettings client in
+# it needs %t/dconf writable (not the memory backend: udiskie's dialogs keep the user's real settings). A ReadWritePaths=-%t/dconf
+# does not do it: the - drops the path when the directory is missing at start (at login qs and udiskie start in the same second),
+# and the warnings came back in that session. RuntimeDirectory=dconf creates it before the sandbox is set up and keeps it
+# writable; Preserve=yes because the shell and every GSettings client share it; 0700 as dconf creates it; and no unsandboxed
+# '+' command to make it.
+u=$root/packaging/systemd/grassfield-automount.service
+automount_ok() { # FILE
+  grep -qx 'RuntimeDirectory=dconf' "$1" && grep -qx 'RuntimeDirectoryPreserve=yes' "$1" && grep -qx 'RuntimeDirectoryMode=0700' "$1" &&
+    grep -qx 'ProtectSystem=strict' "$1" && ! grep -qE '^ReadWritePaths=.*dconf' "$1" && ! grep -q GSETTINGS_BACKEND "$1" &&
+    ! grep -qE '^ExecStartPre=[-@:+!]*\+' "$1"
+}
+desc="the removable-media unit keeps ProtectSystem=strict and has %t/dconf created and writable by RuntimeDirectory=dconf (kept after stop, 0700), with the real GSettings backend and no unsandboxed command"
+if automount_ok "$u"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi
+# Mutants: each way of going back to the failing shape is caught.
+amutant() { cp "$u" "$tmp/a.service"; sed -i "$1" "$tmp/a.service"; }
+amutants=(
+  's/^RuntimeDirectory=dconf$/RuntimeDirectory=other/|the runtime directory is not dconf'
+  's/^RuntimeDirectory=dconf$/ReadWritePaths=-%t\/dconf/|the - form that drops a missing path'
+  's/^RuntimeDirectoryPreserve=yes$//|the directory is removed when the unit stops'
+  's/^RuntimeDirectoryMode=0700$/RuntimeDirectoryMode=0755/|the mode is not what dconf creates'
+  's/^ProtectSystem=strict$/ProtectSystem=full/|the sandbox is weakened'
+  '/^\[Service\]$/a ExecStartPre=+/usr/bin/mkdir -p %t/dconf|an unsandboxed mkdir is added'
+  '/^\[Service\]$/a Environment=GSETTINGS_BACKEND=memory|the memory backend'
+)
+for spec in "${amutants[@]}"; do
+  amutant "${spec%%|*}"
+  desc="mutation (${spec#*|}) is caught"
+  if automount_ok "$tmp/a.service"; then echo "FAIL: $desc"; fail=1; else echo "PASS: $desc"; fi
+done
 exit "$fail"

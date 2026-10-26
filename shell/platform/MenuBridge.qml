@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Grassfield.Ui
 import qs.services // layering-exception: GF-087
+import qs.lib
 import "MenuBridge.js" as Logic
 import "Minimized.js" as Minimized
 
@@ -21,13 +22,14 @@ import "Minimized.js" as Minimized
 Singleton {
     id: root
 
-    // Bridge socket. In development only GRASSFIELD_MENU_BRIDGE_SOCKET counts (scripts/dev/shell-run.sh sets it
-    // together with the private bus); in the session the default is $XDG_RUNTIME_DIR/grassfield/menu-bridge.sock.
+    // Bridge socket. In a dev session only GRASSFIELD_MENU_BRIDGE_SOCKET counts (scripts/dev/shell-run.sh sets it together
+    // with the private bus; Mode.devValue is empty anywhere else); in the session the default is
+    // $XDG_RUNTIME_DIR/grassfield/menu-bridge.sock, also when a GRASSFIELD_DEV=1 leaked into it (the bridge follows the same rule).
     readonly property string socketPath: {
-        const explicit = Quickshell.env("GRASSFIELD_MENU_BRIDGE_SOCKET");
+        const explicit = Mode.devValue("MENU_BRIDGE_SOCKET");
         if (explicit)
             return String(explicit);
-        if (Quickshell.env("GRASSFIELD_DEV") === "1")
+        if (Mode.dev)
             return "";
         const runtime = Quickshell.env("XDG_RUNTIME_DIR");
         return runtime ? String(runtime) + "/grassfield/menu-bridge.sock" : "";

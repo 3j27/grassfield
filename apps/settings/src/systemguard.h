@@ -8,14 +8,12 @@
 // read-only queries below may run. Kept free of QML and QObject so the rule is easy to read and to test.
 namespace grassfield::settings {
 
-// GRASSFIELD_DEV === "1", like Quickshell.env("GRASSFIELD_DEV") in the shell services.
+// The run-mode rule (apps/runmode.h, the same as shell/lib/RunMode.js): GRASSFIELD_DEV "1" and GRASSFIELD_SESSION not "1".
 bool devSession();
 
 // Exactly the read-only commands the pages issue (qml/System.js builds the same argument vectors; tst_settingssystem
 // checks that every System.QUERY entry is accepted here). Anything else, also a variation of these, is not a query:
-//   nmcli      4 fixed (radio, wifi list, connection list, device list) + 1 per saved profile (its SSID, by UUID)
-//   bluetoothctl 3 fixed (show, devices Paired, devices Connected)
-//   wpctl      1 fixed (status)                                     => 8 fixed + 1 parameterised, system sections
+//   wpctl      1 fixed (status), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
@@ -37,7 +35,8 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 // A program that names the helper (its file name), whatever its directory: such a command is judged by isWallpaperQuery only.
 bool namesWallpaperTool(const QString &program);
 
-// Programs the pages may run as actions in a real session. Anything else is refused.
+// Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links). Anything else is refused:
+// Wi-Fi and Bluetooth actions are D-Bus calls (Backend::busAct), never commands.
 bool isActionProgram(const QString &program);
 
 // A whole action command line: an allowed program, and for xdg-open exactly one clean https link (xdg-open hands

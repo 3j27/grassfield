@@ -1,10 +1,13 @@
 #include "backend.h"
 
+#include "runmode.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -13,7 +16,10 @@
 #include <QStandardPaths>
 #include <QTimer>
 
+#include "busjobs.h"
+#include "qtbuscaller.h"
 #include "systemguard.h"
+
 
 #ifndef GRASSFIELD_DEV_BINDINGS
 #define GRASSFIELD_DEV_BINDINGS ""
@@ -23,6 +29,8 @@ namespace {
 constexpr qint64 kMaxRead = 4 * 1024 * 1024;
 constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
+constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
+constexpr int kActionJobMs = 30000; // a D-Bus action (up to three calls of 15 s)
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -50,12 +58,8 @@ QString reasonOf(const QByteArray &err, const QByteArray &out)
 
 QString resolveConfigFile()
 {
-    // GRASSFIELD_CONFIG_HOME (dev) wins, like the shell; else $XDG_CONFIG_HOME/grassfield.
-    const QString dev = qEnvironmentVariable("GRASSFIELD_CONFIG_HOME");
-    if (!dev.isEmpty())
-        return dev + "/grassfield.json";
-    const QString xdg = qEnvironmentVariable("XDG_CONFIG_HOME");
-    return (xdg.isEmpty() ? QDir::homePath() + "/.config" : xdg) + "/grassfield/grassfield.json";
+    // GRASSFIELD_CONFIG_HOME wins, like the shell; else $XDG_CONFIG_HOME/grassfield (runmode.h).
+    return grassfield::apps::runmode::configDir() + "/grassfield.json";
 }
 
 QString resolveBindingsFile()
@@ -81,6 +85,8 @@ Backend::Backend(QObject *parent)
     , m_bindingsFile(resolveBindingsFile())
     , m_dev(grassfield::settings::devSession())
 {
+    grassfield::settings::registerBusTypes();
+    m_bus = std::make_unique<Bus>();
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &Backend::onPath);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &Backend::onPath);
     if (m_dev) {
@@ -89,13 +95,13 @@ Backend::Backend(QObject *parent)
         m_devRoot = QFileInfo(dev).dir().absolutePath();
         m_wallpaperTool = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-wallpaper");
         m_wallpaperCache = dev + QStringLiteral("/cache/wallpapers");
-        const QString pictures = qEnvironmentVariable("GRASSFIELD_PICTURES_DIR");
+        const QString pictures = grassfield::apps::runmode::devValue("PICTURES_DIR");
         m_picturesDir = pictures.isEmpty() ? dev + QStringLiteral("/wallpapers") : pictures;
     } else {
         m_wallpaperTool = QStringLiteral("/usr/lib/grassfield/grassfield-wallpaper");
         const QString xdg = qEnvironmentVariable("XDG_CACHE_HOME");
         m_wallpaperCache = (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.cache") : xdg) + QStringLiteral("/grassfield/wallpapers");
-        const QString pictures = qEnvironmentVariable("GRASSFIELD_PICTURES_DIR");
+        const QString pictures = grassfield::apps::runmode::devValue("PICTURES_DIR");
         m_picturesDir = pictures.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) : pictures;
     }
 }
@@ -110,8 +116,14 @@ QString Backend::wallpaperRecentFile() const
     return QFileInfo(m_configFile).absolutePath() + QStringLiteral("/wallpaper-recent.json");
 }
 
+struct Backend::Bus {
+    grassfield::settings::SystemBusConnection connection;
+    grassfield::settings::BusJobs jobs{[this] { return connection.caller(); }};
+};
+
 Backend::~Backend()
 {
+    m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
     // Never destroy a running QProcess.
     const auto procs = findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly);
     for (QProcess *p : procs) {
@@ -144,7 +156,7 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
         const bool ok = status == QProcess::NormalExit && code == 0;
         const QByteArray out = p->readAllStandardOutput();
         if (!ok)
-            emit failed(tag, p->property("timedOut").toBool() ? QStringLiteral("timed out") : reasonOf(p->readAllStandardError(), out));
+            emit failed(tag, p->property("timedOut").toBool() ? QCoreApplication::translate("SystemBus", "timed out") : reasonOf(p->readAllStandardError(), out));
         emit finished(tag, ok, QString::fromUtf8(out));
         p->deleteLater();
     });
@@ -183,6 +195,62 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         return false;
     }
     start(argv, tag, timeoutMs);
+    return true;
+}
+
+// One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
+// nothing a job holds outlives the Backend: busjobs.h). `job` returns "" on success, else the reason; its second argument
+// receives the output (JSON) of a query.
+void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs)
+{
+    const bool dev = m_dev;
+    m_bus->jobs.start(
+        [dev, job = std::move(job)](grassfield::settings::BusCaller &real, QString *output) {
+            grassfield::settings::GuardedCaller guarded(real, dev);
+            return job(guarded, output);
+        },
+        [this, tag](const QString &reason, const QString &output) {
+            if (!reason.isEmpty()) {
+                emit failed(tag, reason);
+                emit finished(tag, false, QString());
+            } else {
+                emit finished(tag, true, output);
+            }
+        },
+        timeoutMs);
+}
+
+void Backend::busQuery(const QString &what, const QString &tag)
+{
+    using namespace grassfield::settings;
+    if (what != QLatin1String("wifi.state") && what != QLatin1String("bt.state")) {
+        qWarning().noquote() << "refused a bus query that is not known:" << what;
+        emit finished(tag, false, QString());
+        return;
+    }
+    const bool wifi = what == QLatin1String("wifi.state");
+    runBus(tag, [wifi](BusCaller &bus, QString *output) {
+        const StateResult r = wifi ? wifiState(bus) : bluetoothState(bus);
+        if (!r.ok)
+            return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
+        *output = QString::fromUtf8(QJsonDocument(r.json).toJson(QJsonDocument::Compact));
+        return QString();
+    }, kQueryJobMs);
+}
+
+bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &tag)
+{
+    using namespace grassfield::settings;
+    if (m_dev) {
+        qInfo().noquote() << "dev guard:" << what << "suppressed";
+        emit suppressed(what);
+        return false;
+    }
+    if (!validAction(op)) {
+        qWarning().noquote() << "refused a bus action that is not well formed:" << what;
+        return false;
+    }
+    runBus(tag, [op](BusCaller &bus, QString *) { return runAction(bus, op); }, kActionJobMs);
     return true;
 }
 
@@ -237,7 +305,7 @@ QVariantMap Backend::readText(const QString &path) const
 QString Backend::writeText(const QString &path, const QString &text) const
 {
     if (!QDir().mkpath(QFileInfo(path).absolutePath()))
-        return QStringLiteral("cannot create the directory of %1").arg(path);
+        return QCoreApplication::translate("SystemBus", "cannot create the directory of %1").arg(path);
     QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly))
         return f.errorString();

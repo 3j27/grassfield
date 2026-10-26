@@ -77,6 +77,29 @@ TestCase {
         compare(Appearance.colors.text, Tokens.colorLight.text);
     }
 
+    // macOS keeps white text on its accent fill in both appearances (ADR-0024): a selected row, a default button or a checked
+    // box uses the light appearance's accent and text colour, also in the dark appearance; 4.5:1 for every accent.
+    function test_selectionIsTheLightAccentInBothAppearances() {
+        for (const n of ["multicolor"].concat(testCase.named)) {
+            Appearance.accentSetting = n;
+            const fill = n === "multicolor" ? Tokens.colorLight.accent : Tokens.colorAccentLight[n];
+            const text = n === "multicolor" ? Tokens.colorLight.accentText : Tokens.colorAccentLight[n + "Text"];
+            for (const dark of [true, false]) {
+                Appearance.dark = dark;
+                compare(Qt.color(Appearance.colors.selection), Qt.color(fill), n + (dark ? " dark" : " light"));
+                compare(Qt.color(Appearance.colors.selectionText), Qt.color(text), n + (dark ? " dark" : " light"));
+                verify(ratio(Appearance.colors.selectionText, Appearance.colors.selection) >= 4.5, n + " " + ratio(Appearance.colors.selectionText, Appearance.colors.selection));
+            }
+        }
+        // The multicolor green in the dark appearance: white text, not the dark text of the bright accent.
+        Appearance.accentSetting = "multicolor";
+        Appearance.dark = true;
+        compare(Qt.color(Appearance.colors.selectionText), Qt.color("#ffffff"));
+        Appearance.devGlyphMode = "white";
+        compare(Qt.color(Appearance.colors.selectionText), Qt.color("#fffffe"));
+        Appearance.devGlyphMode = "";
+    }
+
     function test_highlightFollowsTheAccent() {
         compare(Appearance.highlight, Qt.color(Tokens.colorDark.accent));
         Appearance.accentSetting = "pink";

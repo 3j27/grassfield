@@ -1,0 +1,109 @@
+#!/bin/sh
+# Launches the app behind a keyboard launch key (XF86Calculator, XF86Mail, ...): config/hypr/grassfield/bindings.lua binds
+# the keys to this script. The target is resolved when the key is pressed, from the desktop entries and the user's default
+# applications (xdg-mime), never from a package name. A key with no target here does nothing.
+#
+#   grassfield-launch-key calculator|mail|web|files|settings|music
+#
+# Test hook: GRASSFIELD_LAUNCH_DRY_RUN=1 prints the resolved desktop entry id instead of starting it (empty line: no target).
+
+# Run-mode rule (ADR-0019, shell/lib/RunMode.js): a dev session (GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1",
+# the nested instance) never starts apps through the owner's uwsm profiles: the key does nothing there.
+if [ "${GRASSFIELD_DEV:-}" = 1 ] && [ "${GRASSFIELD_SESSION:-}" != 1 ]; then
+  echo "grassfield-launch-key: refused in a dev session" >&2
+  exit 3
+fi
+
+kind=${1:-}
+dirs=${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
+
+# Prints the path of the desktop entry with the given id (name.desktop), searching the data directories.
+find_entry() {
+  old_ifs=$IFS
+  IFS=:
+  for d in $dirs; do
+    if [ -r "$d/applications/$1" ]; then
+      IFS=$old_ifs
+      echo "$d/applications/$1"
+      return 0
+    fi
+  done
+  IFS=$old_ifs
+  return 1
+}
+
+# The default handler of a MIME type, if its desktop entry is installed. The user's mimeapps.list files are read in the
+# order of the desktop entry specification (user config, system config, data directories); xdg-mime answers when none
+# names an installed handler.
+default_for() {
+  old_ifs=$IFS
+  IFS=:
+  for f in "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" $(printf '%s' "${XDG_CONFIG_DIRS:-/etc/xdg}" | sed 's|:|/mimeapps.list:|g; s|$|/mimeapps.list|') \
+    $(printf '%s' "$dirs" | sed 's|:|/applications/mimeapps.list:|g; s|$|/applications/mimeapps.list|'); do
+    [ -r "$f" ] || continue
+    ids=$(sed -n '/^\[Default Applications\]/,/^\[/{s/^'"$(printf '%s' "$1" | sed 's|/|\\/|g')"'=//p}' "$f" | head -n 1)
+    IFS=';'
+    for id in $ids; do
+      if [ -n "$id" ] && find_entry "$id" >/dev/null; then
+        IFS=$old_ifs
+        echo "$id"
+        return
+      fi
+    done
+    IFS=:
+  done
+  IFS=$old_ifs
+  id=$(xdg-mime query default "$1" 2>/dev/null | head -n 1)
+  if [ -n "$id" ] && find_entry "$id" >/dev/null; then
+    echo "$id"
+  fi
+}
+
+# The installed calculator: Omarchy's own first, else the first entry (by file name) with Categories=...Calculator...
+calculator() {
+  if find_entry omacalc.desktop >/dev/null; then
+    echo omacalc.desktop
+    return
+  fi
+  old_ifs=$IFS
+  IFS=:
+  for d in $dirs; do
+    for f in "$d"/applications/*.desktop; do
+      [ -r "$f" ] || continue
+      if grep -q '^Categories=\(.*;\)\?Calculator\(;.*\)\?$' "$f" && ! grep -q '^\(NoDisplay\|Hidden\)=true' "$f"; then
+        IFS=$old_ifs
+        basename "$f"
+        return
+      fi
+    done
+  done
+  IFS=$old_ifs
+}
+
+case $kind in
+  calculator) id=$(calculator) ;;
+  mail) id=$(default_for x-scheme-handler/mailto) ;;
+  web) id=$(default_for x-scheme-handler/https) ;;
+  files) id=org.grassfield.Files.desktop ;;
+  settings) id=org.grassfield.Settings.desktop ;;
+  music) id=$(default_for audio/mpeg) ;;
+  *)
+    echo "usage: grassfield-launch-key calculator|mail|web|files|settings|music" >&2
+    exit 2
+    ;;
+esac
+if [ -n "$id" ] && ! find_entry "$id" >/dev/null; then
+  id=
+fi
+
+if [ -n "${GRASSFIELD_LAUNCH_DRY_RUN:-}" ]; then
+  echo "$id"
+  exit 0
+fi
+[ -n "$id" ] || exit 0
+if command -v uwsm >/dev/null 2>&1; then
+  exec uwsm app -- "$id"
+elif command -v gtk-launch >/dev/null 2>&1; then
+  exec gtk-launch "${id%.desktop}"
+fi
+exec gio launch "$(find_entry "$id")"

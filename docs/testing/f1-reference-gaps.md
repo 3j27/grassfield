@@ -4,6 +4,11 @@ Status: analysis only (2026-10-18). Nothing in Grassfield was changed. The numbe
 measurements, proportions and behaviour notes, taken from two privately held macOS 26 ("Tahoe") training guides. This file
 contains no image, crop or text from those guides. The guides, their extracted images and the per-image index
 (`design/reference/macos/INDEX.md`) stay in `design/reference/`, which is git-ignored and never committed or packaged.
+Re-audited on 2026-10-25 from light-appearance captures of main, surface by surface:
+`docs/audits/visual-tahoe-2026-10-25.md` (scores, current Grassfield values, priorities).
+macOS 27 references (the master-prompt target) were added on 2026-10-25 from public sources (release screenshots of the
+512 Pixels Aqua Screenshot Library, among others): list and rules in `docs/testing/visual.md` "Public reference
+sources", values in `docs/audits/ui-finesse-2026-10-25.md` section 7.
 Gate F1 (master-prompt §11) still needs the owner's side-by-side sign-off. These numbers are input for that sign-off,
 not a substitute for it.
 

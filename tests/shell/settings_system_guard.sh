@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Dev guard of the Settings system sections, on the real Backend (apps/settings/src): with GRASSFIELD_DEV=1 only the
 # read-only queries run, no action does; without it actions run (and unknown programs are refused).
-# The tools are shims first on PATH that only record their arguments, so nothing here can touch the machine.
+# The tools are shims first on PATH that only record their arguments, and the system bus is an address that does not exist
+# (DBUS_SYSTEM_BUS_ADDRESS, checked below): the Wi-Fi and Bluetooth actions are D-Bus calls that find no bus here, so nothing
+# in this test can touch the machine's network, Bluetooth or audio. The D-Bus services are tested on a private bus with fakes
+# (tests/integration/settings_dbus.sh).
 # Plain shell test: prints PASS/FAIL, exits non-zero on failure. Offscreen, no compositor needed.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -16,6 +19,9 @@ apps/settings/build-direct.sh >/dev/null
 tmp=$(mktemp -d "$root/.dev/settings-guard.XXXXXX" 2>/dev/null || { mkdir -p "$root/.dev" && mktemp -d "$root/.dev/settings-guard.XXXXXX"; })
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/qml"
+# The bus every run below uses: a socket that is not there. Never the real system bus (a real Wi-Fi radio is not a test fixture).
+dead_bus="unix:path=$tmp/no-such-system-bus"
+[[ $dead_bus == unix:path=$tmp/* && ! -e $tmp/no-such-system-bus ]] || { echo "FAIL: the test bus is not a dead address"; exit 2; }
 for tool in nmcli bluetoothctl wpctl touch pacman lspci; do
   # Records the arguments and the locale the tool was started with; a tool named "failing" in the first argument
   # prints a reason on stderr and exits 1.
@@ -46,11 +52,12 @@ QtObject {
     property var reasons: []
 
     readonly property string uuid: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
-    readonly property var actions: [
+    // Wi-Fi and Bluetooth actions are D-Bus maps (busAct), Sound's are wpctl argument vectors (act).
+    readonly property var busOps: [
         System.wifiRadio(false), System.wifiConnectKnown(root.uuid), System.wifiConnectOpen("Cafe"), System.wifiDisconnect("wlo1"),
-        System.btPower(false), System.btConnect("AA:BB:CC:DD:EE:FF", true), System.setDefaultDevice(52), System.setVolume(52, 0.5),
-        System.setMute(52, true)
+        System.wifiScan(), System.btPower(false), System.btConnect("AA:BB:CC:DD:EE:FF", true), System.btConnect("AA:BB:CC:DD:EE:FF", false)
     ]
+    readonly property var commands: [System.setDefaultDevice(52), System.setVolume(52, 0.5), System.setMute(52, true)]
 
     readonly property Connections conn: Connections {
         target: root.backend
@@ -91,11 +98,12 @@ QtObject {
 
     // Commands that are not in the allow-list: run() must refuse them in every session (no output, nothing started).
     readonly property var stray: [["touch", "x"], ["nmcli", "radio", "wifi", "off"], ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], ["pacman", "-S", "hyprland"],
-        ["pacman", "-Q", "bash"], ["lspci", "-vv"], ["nmcli", "-t", "-f", "802-11-wireless.ssid", "connection", "show", "uuid", "not-a-uuid"]]
+        ["pacman", "-Q", "bash"], ["lspci", "-vv"], ["nmcli", "-t", "-f", "802-11-wireless.ssid", "connection", "show", "uuid", "not-a-uuid"],
+        ["bluetoothctl", "show"], ["bluetoothctl", "power", "off"]]
 
     Component.onCompleted: {
-        // The 8 fixed queries of the pages, the SSID query of a saved profile, and the 4 commands of the About pane.
-        const queries = Object.keys(System.QUERY).map(k => System.QUERY[k]).concat([System.wifiProfileSsidQuery(root.uuid)]);
+        // The command-line query of the Sound page, and the 4 commands of the About pane.
+        const queries = Object.keys(System.QUERY).map(k => System.QUERY[k]);
         const about = [["pacman", "-Q", "hyprland"], ["pacman", "-Q", "quickshell"], ["pacman", "-Q", "quickshell-git"], ["lspci"]];
         // run() takes the same allow-list in both sessions.
         for (const c of about)
@@ -103,22 +111,34 @@ QtObject {
         for (const c of root.stray)
             root.runs.push(root.backend.run(c) === "" ? "empty" : "out");
         if (root.backend.devSession) {
-            // Queries must run; actions sent as queries or as actions must not.
-            root.expected = queries.length + root.actions.length;
+            // Queries must run; wpctl actions sent as queries must not; no action of either kind may start.
+            root.expected = queries.length + root.commands.length;
             for (const q of queries)
                 root.backend.query(q, "q");
-            for (const a of root.actions) {
+            for (const a of root.commands) {
                 root.backend.query(a, "a");
-                root.actReturns.push(root.backend.act("test", a, "a"));
             }
+            for (const o of root.busOps)
+                root.actReturns.push(root.backend.busAct("test", o, "b"));
+            for (const a of root.commands)
+                root.actReturns.push(root.backend.act("test", a, "a"));
+            // A malformed D-Bus action is refused in a real session too, here in the dev one first.
+            root.actReturns.push(root.backend.busAct("test", {op: "Properties.Set"}, "b"));
         } else {
-            // Real session: every action runs; a program outside nmcli, bluetoothctl and wpctl is refused.
-            root.expected = root.actions.length + 1;
-            for (const a of root.actions)
+            // Real session: every wpctl action runs; a D-Bus action is attempted and, with no bus, fails with a reason; a program
+            // outside wpctl and xdg-open (nmcli and bluetoothctl are not programs of the pages any more) is refused.
+            root.expected = root.busOps.length + root.commands.length + 1;
+            for (const o of root.busOps)
+                root.actReturns.push(root.backend.busAct("test", o, "b.act"));
+            for (const a of root.commands)
                 root.actReturns.push(root.backend.act("test", a, "a"));
             // A failing tool reports its reason (stderr) before finished(false).
-            root.backend.act("test", ["nmcli", "radio", "wifi", "FAILCASE"], "failing");
+            root.backend.act("test", ["wpctl", "set-mute", "52", "FAILCASE"], "failing");
             root.actReturns.push(root.backend.act("test", ["touch", "x"], "a"));
+            root.actReturns.push(root.backend.act("test", ["nmcli", "radio", "wifi", "off"], "a"));
+            root.actReturns.push(root.backend.act("test", ["bluetoothctl", "power", "off"], "a"));
+            // A malformed D-Bus action never starts anything.
+            root.actReturns.push(root.backend.busAct("test", {op: "Properties.Set"}, "b"));
         }
         // Always start from a French user locale: the tools must still see C.
         root.actReturns = root.actReturns.slice();
@@ -126,11 +146,11 @@ QtObject {
 }
 EOF
 
-run() { # mode (1 = dev, 0 = real)
+run() { # GRASSFIELD_DEV value, then an optional GRASSFIELD_SESSION value (1 with 1 = a dev value that leaked into a real session)
   : >"$tmp/marker"
   : >"$tmp/locale"
   QT_FORCE_STDERR_LOGGING=1 PATH="$tmp/bin:$PATH" GRASSFIELD_SETTINGS_QML="$tmp/qml" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
-    timeout 30 scripts/dev/isolated.sh --name settings-guard env GRASSFIELD_DEV="$1" LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 LANGUAGE=fr "$root/.dev/build/grassfield-settings" 2>&1
+    timeout 30 scripts/dev/isolated.sh --name settings-guard env DBUS_SYSTEM_BUS_ADDRESS="$dead_bus" GRASSFIELD_DEV="$1" GRASSFIELD_SESSION="${2:-}" LC_ALL=fr_FR.UTF-8 LANG=fr_FR.UTF-8 LANGUAGE=fr "$root/.dev/build/grassfield-settings" 2>&1
 }
 
 out=$(run 1) || true
@@ -138,26 +158,39 @@ res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
 queries=$(wc -l <"$tmp/marker")
 has() { grep -q -- "$1" <<<"$2" && echo 0 || echo 1; }
-# 8 fixed queries + the saved-profile SSID query = 9 allowed in the sections; About's 4 commands go through run().
-check "dev: the 9 queries run, the 9 actions sent as queries are refused" "$(has 'dev=true ok=9 refused=9' "$res")"
-check "dev: only the 9 queries and the 4 About commands reached a tool ($queries)" "$([[ $queries -eq 13 ]] && echo 0 || echo 1)"
-check "dev: run() answered the 4 About commands and refused the 7 stray ones" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
-check "dev: no stray command reached a tool" "$(grep -qE 'get-volume|touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid|radio wifi off' "$tmp/marker" && echo 1 || echo 0)"
+# One command-line query of the Sound page (wpctl status), 3 wpctl actions sent as queries (refused); About's 4 commands go
+# through run(). Wi-Fi and Bluetooth are D-Bus: in a dev session their actions start nothing.
+check "dev: the Sound query runs, the 3 wpctl actions sent as queries are refused" "$(has 'dev=true ok=1 refused=3' "$res")"
+check "dev: only the Sound query and the 4 About commands reached a tool ($queries)" "$([[ $queries -eq 5 ]] && echo 0 || echo 1)"
+check "dev: run() answered the 4 About commands and refused the 9 stray ones" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
+check "dev: no stray command reached a tool" "$(grep -qE 'get-volume|touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid|radio wifi off|bluetoothctl' "$tmp/marker" && echo 1 || echo 0)"
 check "tools always see the C locale, whatever the user locale" "$([[ $(sort -u "$tmp/locale") == 'LC_ALL=C LANG=C LANGUAGE=unset' ]] && echo 0 || echo 1)"
-check "dev: no action verb reached a tool" "$(grep -qE "radio wifi|connection up|wifi connect|device disconnect|power |bluetoothctl (connect|disconnect)|set-|wifi rescan" "$tmp/marker" && echo 1 || echo 0)"
-check "dev: act() returns false for every action" "$(has 'actReturns=false,false,false,false,false,false,false,false,false' "$res")"
+check "dev: no action verb reached a tool" "$(grep -qE "radio wifi|connection up|wifi connect|device disconnect|power |bluetoothctl|set-|wifi rescan|nmcli" "$tmp/marker" && echo 1 || echo 0)"
+check "dev: busAct and act return false for every action, also for a malformed one" "$(has 'actReturns=false,false,false,false,false,false,false,false,false,false,false,false' "$res")"
 check "dev: one log line per suppressed action" "$(has 'dev guard: test suppressed' "$out")"
 [[ $fail -eq 0 ]] || echo "$out" | tail -20
 
 out=$(run 0) || true
 res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
-check "real: the 9 actions run, the failing one reports its reason" "$(has 'dev=false ok=9 refused=1' "$res")"
-check "real: failure reason is the tool's stderr line" "$(has 'reasons=failing=Error: simulated failure' "$res")"
-check "real: run() takes the same allow-list" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
-check "real: no stray run() command reached a tool" "$(grep -qE 'get-volume|^touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid' "$tmp/marker" && echo 1 || echo 0)"
+check "real: the 3 wpctl actions run, the failing one and the 8 D-Bus actions (no bus here) report" "$(has 'dev=false ok=3 refused=9' "$res")"
+check "real: failure reason is the tool's stderr line" "$(has 'failing=Error: simulated failure' "$res")"
+check "real: a D-Bus action with no bus fails with a reason, not silently" "$(grep -o 'b.act=no connection to the system bus' <<<"$res" | wc -l | grep -qx 8 && echo 0 || echo 1)"
+check "real: run() takes the same allow-list" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
+check "real: no stray run() command reached a tool" "$(grep -qE 'get-volume|^touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid|bluetoothctl' "$tmp/marker" && echo 1 || echo 0)"
 check "real: tools always see the C locale" "$([[ $(sort -u "$tmp/locale") == 'LC_ALL=C LANG=C LANGUAGE=unset' ]] && echo 0 || echo 1)"
-check "real: an unknown program is refused" "$(has 'actReturns=true,true,true,true,true,true,true,true,true,false' "$res")"
-check "real: touch never ran" "$(grep -q '^touch' "$tmp/marker" && echo 1 || echo 0)"
+check "real: the D-Bus actions start (true), wpctl runs, nmcli, bluetoothctl, touch and a malformed action are refused" "$(has 'actReturns=true,true,true,true,true,true,true,true,true,true,true,false,false,false,false' "$res")"
+check "real: neither nmcli, bluetoothctl nor touch ever ran" "$(grep -qE '^(touch|nmcli|bluetoothctl)' "$tmp/marker" && echo 1 || echo 0)"
+[[ $fail -eq 0 ]] || echo "$out" | tail -20
+
+# A GRASSFIELD_DEV=1 that leaked into a packaged session (GRASSFIELD_SESSION=1) is a real session (ADR-0019): the same
+# answers as the real run above, never the dev guard.
+out=$(run 1 1) || true
+res=$(grep -E 'RESULT' <<<"$out" || true)
+echo "$res"
+check "leaked dev in a real session: it is not a dev session, the actions run" "$(has 'dev=false ok=3 refused=9' "$res")"
+check "leaked dev in a real session: the actions were attempted (no dev guard line)" "$(grep -q 'dev guard' <<<"$out" && echo 1 || echo 0)"
+check "leaked dev in a real session: unknown programs are still refused" "$(has 'actReturns=true,true,true,true,true,true,true,true,true,true,true,false,false,false,false' "$res")"
+check "leaked dev in a real session: touch never ran" "$(grep -q '^touch' "$tmp/marker" && echo 1 || echo 0)"
 [[ $fail -eq 0 ]] || echo "$out" | tail -20
 exit $fail

@@ -157,14 +157,23 @@ echo "hyprctl $*" >>"$STUB_LOG"
 [ "$*" = "-j monitors" ] || exit 9
 printf '%s\n' "$STUB_MONITORS"
 SH
-chmod +x "$tmp/sbin/systemctl" "$tmp/sbin/qs" "$tmp/sbin/hyprctl"
+# The stand-in's retry loop (lock lock: up to 100 tries of qs, `sleep 0.1` between them, a 10 s budget) is counted, not
+# waited out: a stub sleep records each pause. With real pauses the "never answers" case needed 10 s of sleep plus 100
+# rounds of forks inside the hang guard, and timed out (rc 124) on a loaded machine (12.0 s at load 14 on 8 cores).
+cat >"$tmp/sbin/sleep" <<'SH'
+#!/bin/sh
+echo "sleep $*" >>"$STUB_LOG"
+SH
+chmod +x "$tmp/sbin/systemctl" "$tmp/sbin/qs" "$tmp/sbin/hyprctl" "$tmp/sbin/sleep"
+# Hang guard only (no case measures time): generous, so that a slow fork on a loaded machine never reads as a failure.
+shim_guard=120
 shimrun() { # <state> <qs answer> <monitors json> args... -> stdout; exit status in $shim_rc
   local state=$1 answer=$2 monitors=$3
   shift 3
   : >"$tmp/log"
   shim_rc=0
   env -i PATH="$tmp/sbin:/usr/bin:/bin" STUB_LOG="$tmp/log" STUB_STATE="$state" STUB_QS="$answer" STUB_MONITORS="$monitors" \
-    XDG_RUNTIME_DIR="$tmp/run" HYPRLAND_INSTANCE_SIGNATURE="sig/1 x" timeout 15 sh "$shim" "$@" 2>/dev/null || shim_rc=$?
+    XDG_RUNTIME_DIR="$tmp/run" HYPRLAND_INSTANCE_SIGNATURE="sig/1 x" timeout "$shim_guard" sh "$shim" "$@" 2>/dev/null || shim_rc=$?
 }
 locked='[{"name":"eDP-1","solitaryBlockedBy":["LOCK"]},{"name":"DP-1","solitaryBlockedBy":["LOCK","WINDOWED"]}]'
 half='[{"name":"eDP-1","solitaryBlockedBy":["LOCK"]},{"name":"DP-1","solitaryBlockedBy":["WINDOWED"]}]'
@@ -180,7 +189,12 @@ for state in failed inactive; do
     || bad "stand-in: shell $state: $out / $(tr '\n' ';' <"$tmp/log")"
 done
 out=$(shimrun failed "" "$locked" lock lock; echo "rc=$shim_rc")
-[[ $out == "rc=1" ]] && pass "stand-in: a shell that never answers -> failure (Omarchy keeps asking, then reports it)" || bad "stand-in: no answer gave '$out'"
+tries=$(grep -cx "qs ipc -p /usr/share/grassfield/shell call lock lock" "$tmp/log" || true)
+naps=$(grep -cx "sleep 0.1" "$tmp/log" || true)
+others=$(grep -vc "^qs ipc -p /usr/share/grassfield/shell call lock lock$\|^sleep 0.1$\|^systemctl --user " "$tmp/log" || true)
+[[ $out == "rc=1" && $tries == 100 && $naps == 100 && $others == 0 ]] \
+  && pass "stand-in: a shell that never answers -> failure after exactly 100 tries 0.1 s apart (a bounded 10 s; Omarchy keeps asking, then reports it)" \
+  || bad "stand-in: no answer gave '$out' after $tries tries and $naps pauses ($others other calls)"
 out=$(shimrun active ok "$locked" lock status)
 [[ $(jq -r '.secure' <<<"$out") == true ]] && pass "stand-in: status secure when Hyprland lists LOCK on every monitor" || bad "stand-in: status '$out' with LOCK everywhere"
 out=$(shimrun active ok "$half" lock status)
@@ -212,9 +226,10 @@ clam=packaging/shims/omarchy-hyprland-monitor-clamshell
 printf '#!/bin/sh\necho "lid $*" >>"$STUB_LOG"\n' >"$tmp/sbin/grassfield-lid"
 chmod +x "$tmp/sbin/grassfield-lid"
 : >"$tmp/log"
-env -i PATH="$tmp/sbin:/usr/bin:/bin" STUB_LOG="$tmp/log" GRASSFIELD_LID_TOOL="$tmp/sbin/grassfield-lid" sh "$clam" && rc=0 || rc=$?
+# A dev session: the stand-in honours GRASSFIELD_LID_TOOL only there (the real-session case: lock_request_env.sh).
+env -i PATH="$tmp/sbin:/usr/bin:/bin" STUB_LOG="$tmp/log" GRASSFIELD_DEV=1 GRASSFIELD_LID_TOOL="$tmp/sbin/grassfield-lid" sh "$clam" && rc=0 || rc=$?
 [[ $rc == 0 && $(cat "$tmp/log") == "lid reconcile" ]] && pass "clamshell stand-in: runs grassfield-lid reconcile, nothing else" || bad "clamshell stand-in: rc $rc, calls '$(cat "$tmp/log")'"
-env -i PATH="/usr/bin:/bin" GRASSFIELD_LID_TOOL="$tmp/none" sh "$clam" && pass "clamshell stand-in: without grassfield-lid it does nothing and succeeds" || bad "clamshell stand-in: fails without grassfield-lid"
+env -i PATH="/usr/bin:/bin" GRASSFIELD_DEV=1 GRASSFIELD_LID_TOOL="$tmp/none" sh "$clam" && pass "clamshell stand-in: without grassfield-lid it does nothing and succeeds" || bad "clamshell stand-in: fails without grassfield-lid"
 grep -v '^#' "$clam" | grep -q "hyprctl\|monitors.lua\|toggles" && bad "clamshell stand-in: touches monitors itself" || pass "clamshell stand-in: never touches monitors itself"
 
 # --- package ---

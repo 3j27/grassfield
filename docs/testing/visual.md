@@ -16,6 +16,7 @@ the dev scripts as child processes).
 | `just visual --only menubar,dock --lang en --keep` | Subset; `--keep` leaves the nested session up. |
 | `just contrast` / `tests/visual/contrast.sh` | A2: capture 5 wallpapers x light/dark x transparency 0.25/0.6 (four glyph modes each), print the contrast table. |
 | `tests/visual/scenarios/<name>.sh` | One scenario on its own (shot in `.dev/visual/shots/<name>.<lang>.png`; `VISUAL_LANG=fr`). |
+| `tests/visual/f1-audit.sh [--only a,b]` | F1 audit captures, not a regression run: every scenario plus extra states (Dock tooltip and icon menu, desktop widgets and menu, volume overlay, four more Settings panes) in the **light** appearance of the macOS references, and the f2c.sh banners, Search states, alerts and widget gallery; shots in `.dev/f1-audit/` and `.dev/f2c/*-f1audit-*`. `VISUAL_APPEARANCE` (light/dark) sets the default of `vs_reset`. |
 | `tests/visual/ipc.sh <target> <fn> [args]` | `qs ipc --pid <.dev/shell.pid> call` against the nested shell only (refuses the owner's socket/instance). |
 | `python3 -I tests/visual/test_contrast.py` | Unit tests of the contrast tooling on synthetic images (also run by `scripts/dev/test.sh`). |
 
@@ -137,6 +138,27 @@ Light and dark for each item when possible:
 | `preview` | Preview with a PDF and the sidebar |
 | `settings` | System Settings: General, Wi-Fi, Bluetooth, Sound, Displays, Desktop & Dock, Notifications |
 | `osd` | volume and brightness indicators |
+
+### Public reference sources (found 2026-10-25)
+
+Found during the UI finesse audit (`docs/audits/ui-finesse-2026-10-25.md` section 7). They fill gaps until the owner's
+own captures exist. They are Apple screenshots or press images: download them into `design/reference/` (git-ignored),
+use them for measurement only, and never commit, package or redistribute them (master-prompt §2, §14). The repository
+keeps only the numbers measured on them, with their source.
+
+| Source | What it holds | Use |
+|---|---|---|
+| **512 Pixels, Aqua Screenshot Library** (Stephen Hackett, © Hackett Technical Media): <https://512pixels.net/projects/aqua-screenshot-library/macos-27-golden-gate/> (macOS 27, about 159 files) and <https://512pixels.net/projects/aqua-screenshot-library/macos-26-tahoe/> (macOS 26, about 153 files) | full-resolution captures of the release builds, 2 px per pt (full screens 2816 x 1762). Window captures carry an alpha channel that includes the window shadow. Files: `https://media.512pixels.net/downloads/macos-screenshots/<version>/<version>-<Name>-<Surface>.png`; the page's thumbnails add `-scaled` before `.png`. Covers System Settings (31 panes), the Apple, Finder and Go menus, Control Center, Notification Center, Spotlight, Mission Control, Stage Manager, the login window, desktop widgets, Finder views, Force Quit, Get Info, alerts, and the Appearance pane in light and dark for every theme colour | the main source: window radius and shadow (alpha), menus, Settings, the dark appearance |
+| MacRumors, macOS 26 vs 27 System Settings: <https://images.macrumors.com/article-new/2026/06/macOS-26-vs-27-Unified-Sidebar.jpg> | one side-by-side image, WWDC26 beta 1, 1.568 px per pt (from the 14-pt traffic lights) | the 26 → 27 change of radius and sidebar, same scale |
+| MacStories, macOS 26 vs 27 menus: <https://cdn.macstories.net/images/uploads/2026/09/12/download-1789223230153-5996c7aeb0.png> | the Preview File menu in both versions, 2 px per pt | menu insets, highlight, icon use |
+| Six Colors, macOS 27 review: <https://sixcolors.com/post/2026/09/macos-27-golden-gate-review-bridging-the-tahoe-gap/> | Finder and Photos, Tahoe vs Golden Gate (scaled down) | structure only |
+| Apple Human Interface Guidelines as data: `https://developer.apple.com/tutorials/data/design/human-interface-guidelines/<page>.json` (for example `typography`, `materials`, `toolbars`, `windows`, `motion`) | the HIG text and tables (macOS text styles, SF tracking, concentric corners), plus light/dark 2x illustration URLs | Apple's own values and rules |
+| Apple developer documentation as data: `https://developer.apple.com/tutorials/data/documentation/<framework>/<symbol>.json` (for example `swiftui/animation/default`) | API defaults (the default spring: response 0.55, damping fraction 1.0) | motion |
+
+Measurement tools: `docs/audits/ui-finesse-2026-10-25/tools/cornermeas.py` (corner radius at 45°, luminance or
+`--alpha`) and `shadowfit.py` (window shadow profile vs Hyprland's model); the exact files used are listed in
+`docs/audits/ui-finesse-2026-10-25/tools/webref-urls.txt`. Press statements (reviews) are data to confirm on a capture,
+not values.
 
 ## Baseline approval (F1)
 

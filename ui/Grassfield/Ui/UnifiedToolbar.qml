@@ -5,7 +5,7 @@ import "WindowActions.js" as Actions
 // in one bar, as in a macOS toolbar window. The app declares the style and places its items; it never draws or wires the
 // lights. Place it at the top of the window; it takes the width of its parent.
 //
-// style "unified": a 52-pt row, the lights' first centre at 25.75 / 25.75, the title left-aligned and bold after the
+// style "unified": a 52-pt row, the lights' first centre at 26 / 26, the title left-aligned and bold after the
 //   leading items. A window whose sidebar holds the lights puts one toolbar over the sidebar (showControls, no title,
 //   no items) and one over the content (showControls false).
 // style "titlebar": a 32-pt row with the lights and a centred title (Get Info, Customize Folder).

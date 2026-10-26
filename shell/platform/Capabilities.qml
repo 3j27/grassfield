@@ -136,7 +136,7 @@ Singleton {
 
     // What the apps learn about the plugin (ADR-0015 Q4b: the minimize light is greyed without it): written once the answer is
     // known (the plugin replied or the hello timed out) and on every change. CapabilitiesFile.js has the format and location.
-    readonly property string capabilitiesPath: CapabilitiesFile.path(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR"))
+    readonly property string capabilitiesPath: CapabilitiesFile.path(Mode.stateHome, Quickshell.env("XDG_RUNTIME_DIR"))
 
     function writeCapabilitiesFile(): void {
         if (!root.settled || root.capabilitiesPath === "")

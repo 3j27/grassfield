@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 
 // Night Shift (warmer screen colours) through packaging/bin/grassfield-nightshift on|off|status (hyprsunset behind it).
@@ -15,7 +16,7 @@ Singleton {
     property bool on: false
     // The helper reported a failure on the last change (hyprsunset missing or not starting).
     property bool failed: false
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
     signal devSuppressed
 
     function refresh(): void {

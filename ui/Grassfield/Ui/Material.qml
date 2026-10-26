@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 
-// "Restrained glass" surface (master-prompt 5.5): high-opacity tint, subtle top
-// highlight, 1 px inner border and a diffused shadow drawn outside the shape.
+// Glass surface (master-prompt 5.5, ADR-0024): the tint, a diffused shadow drawn outside the shape, and the macOS glass
+// edge: one device pixel of darker edge outside, one of brighter specular rim inside (stronger along the top).
 //
 // This item does NOT blur. Blur comes from the compositor: the hosting window must
 // declare this item's geometry as its blur region, e.g.
@@ -24,10 +24,12 @@ Item {
     // Surfaces without text (the Dock shelf) may be more translucent than the A2 clamp allows: an explicit tint alpha
     // (0..1, -1 = from `transparency`) that applies only while the surface is not opaque (Reduce Transparency wins).
     property real tintAlphaOverride: -1
-    // Rim: highlight gradient and border strength and the border colour (default: the material tokens).
-    property real highlightOpacity: Tokens.materialHighlightOpacity
-    property real borderOpacity: Tokens.materialBorderOpacity
-    property color borderColor: Appearance.colors.materialBorder
+    // Rims (default: the material tokens): the inner specular rim (highlight) and the outer edge (border), each one device
+    // pixel wide at every scale. The outer edge is dark in both appearances, the inner rim light.
+    property real highlightOpacity: Appearance.dark ? Tokens.materialHighlightOpacity : Tokens.materialHighlightOpacityLight
+    property real borderOpacity: Appearance.dark ? Math.max(Tokens.materialEdgeOpacityDark, Tokens.materialBorderOpacity) : Tokens.materialBorderOpacity
+    property color borderColor: Appearance.dark ? Appearance.colors.shadow : Appearance.colors.materialBorder
+    readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
     readonly property real tintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : Appearance.tintAlpha(transparency)
     // The host window needs this much room around the shape for the shadow.
     readonly property int shadowMargin: Tokens.shadowBlur + Tokens.shadowOffsetY
@@ -95,34 +97,34 @@ Item {
         color: Appearance.withAlpha(Appearance.colors.materialTint, root.tintAlpha)
     }
 
-    // Top highlight: a gradient fading out within the top spacingMd pixels.
+    // Inner specular rim: one device pixel inside the edge, half strength all round and full strength along the straight
+    // part of the top edge (the light comes from above).
     Rectangle {
         visible: root.highlightEnabled
         anchors.fill: parent
-        radius: root.radius
-        gradient: Gradient {
-            GradientStop {
-                position: 0.0
-                color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
-            }
-            GradientStop {
-                position: Math.min(1, Tokens.spacingMd / Math.max(root.height, 1))
-                color: Appearance.withAlpha(Appearance.colors.materialHighlight, 0)
-            }
-            GradientStop {
-                position: 1.0
-                color: Appearance.withAlpha(Appearance.colors.materialHighlight, 0)
-            }
-        }
+        anchors.margins: root.hairline
+        radius: Math.max(0, root.radius - root.hairline)
+        color: "transparent"
+        border.width: root.hairline
+        border.color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity / 2)
     }
 
-    // 1 px inner border.
+    Rectangle {
+        visible: root.highlightEnabled
+        x: root.radius
+        y: root.hairline
+        width: Math.max(0, root.width - 2 * root.radius)
+        height: root.hairline
+        color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
+    }
+
+    // Outer edge: one device pixel.
     Rectangle {
         visible: root.borderEnabled
         anchors.fill: parent
         radius: root.radius
         color: "transparent"
-        border.width: 1
+        border.width: root.hairline
         border.color: Appearance.withAlpha(root.borderColor, root.borderOpacity)
     }
 

@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Io
 import "RecentItemsLogic.js" as Logic
 import "../search/Files.js" as Files // layering-exception: GF-087
@@ -13,21 +14,16 @@ import "../dock/DockModel.js" as DockModel // layering-exception: GF-087
 Singleton {
     id: root
 
-    readonly property int max: 10
+    // Settings > Menu Bar > Recent items (macOS: Recent documents, applications, and servers); 0 hides the submenu.
+    readonly property int max: Settings.menubarRecentItems
     readonly property string home: Quickshell.env("HOME")
     // Documents outside this root (default $HOME; tests point it at their fixtures, like Search) are not listed.
-    readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home
+    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
     readonly property string dataHome: {
         const xdg = Quickshell.env("XDG_DATA_HOME");
         return xdg ? xdg : home + "/.local/share";
     }
-    readonly property string stateDir: {
-        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
-        if (dev)
-            return dev;
-        const xdg = Quickshell.env("XDG_STATE_HOME");
-        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
-    }
+    readonly property string stateDir: Mode.stateDir
     readonly property string statePath: stateDir + "/recent-items.json"
 
     property var state: ({apps: [], clearedAt: 0})
