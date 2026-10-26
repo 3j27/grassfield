@@ -6,8 +6,9 @@ import qs.lib
 import qs.platform
 
 // ADR-0027: the shell's side of a display trial, on the real Displays singleton (tests/shell/displays_trial.sh runs it against a
-// fake Hyprland that only records requests). A trial left by a stopped shell is taken back at start; a new trial is applied (one
-// reload) and published; Keep empties the file without a reload; the deadline, Revert and a trial already past its deadline take
+// fake Hyprland that records requests and answers a reload a moment later). A trial left by a stopped shell is taken back at
+// start; a new trial is asked for (one reload) and published `applying`, then `applied` once Hyprland answered that reload "ok"
+// (a trial whose reload Hyprland refuses stays `applying`); Keep empties the file without a reload; the deadline, Revert and a trial already past its deadline take
 // it back (the file emptied, then one reload); Keep or Revert of a trial the shell does not run changes nothing. The trial file is
 // written atomically (a rename), as Settings writes it. Then the input files (ADR-0027 amendment): three quick writes of a
 // keyboard.lua that did not exist give one reload once they settle, a change of mouse-trackpad.lua one more. Prints
@@ -22,6 +23,17 @@ ShellRoot {
     readonly property int now: Math.floor(Date.now() / 1000)
     property int step: 0
     property var failures: []
+    // Every state the shell gave a trial, in order ("t1 applying", "t1 applied", ...).
+    property var seen: []
+
+    Connections {
+        target: Displays
+
+        function onTrialStateChanged(): void {
+            if (Displays.trialState)
+                root.seen.push(Displays.trialState.id + " " + Displays.trialState.state);
+        }
+    }
 
     function check(name: string, ok: bool): void {
         if (!ok) {
@@ -101,6 +113,8 @@ ShellRoot {
                 root.check("a new trial is applied with one reload", Displays.reloads === 2 && Displays.running === "t1");
                 const s = root.published();
                 root.check("the state says it", s !== null && JSON.stringify(s.trial) === '{"id":"t1","state":"applied"}');
+                root.check("applying until Hyprland answered the reload", JSON.stringify(root.seen.filter(x => x.startsWith("t1 ")))
+                    === '["t1 applying","t1 applied"]');
                 root.write("kept t1\n");
                 break;
             case 3:
@@ -112,7 +126,7 @@ ShellRoot {
                 root.write("trial t2 until " + (root.stamp() + 2) + "\n" + root.line);
                 break;
             case 4:
-                root.check("t2 applied", Displays.reloads === 3 && Displays.running === "t2");
+                root.check("t2 asked for", Displays.reloads === 3 && Displays.running === "t2");
                 break;
             case 5:
             case 6:
@@ -124,7 +138,8 @@ ShellRoot {
                 root.write("trial t3 until " + (root.stamp() + 30) + "\n" + root.line);
                 break;
             case 8:
-                root.check("t3 applied", Displays.reloads === 5 && Displays.running === "t3");
+                root.check("t3 asked for", Displays.reloads === 5 && Displays.running === "t3");
+                root.check("Hyprland refused t3's reload: it stays applying", JSON.stringify(Displays.trialState) === '{"id":"t3","state":"applying"}');
                 root.write("revert t3\n");
                 break;
             case 9:

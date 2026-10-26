@@ -19,18 +19,24 @@ Singleton {
 
     property int reloads: 0
 
+    // Hyprland's answer to a request reload() made: its ticket (what reload() returned) and whether it said "ok" (it answers
+    // once it has read its configuration again; a late answer counts as no).
+    signal answered(int ticket, bool ok)
+
     readonly property string mouseTrackpadPath: Mode.configDir + "/mouse-trackpad.lua"
     readonly property string keyboardPath: Mode.configDir + "/keyboard.lua"
 
-    function reload(why: string): void {
+    // The request's ticket (answered() names it), or 0 when there is no Hyprland to ask.
+    function reload(why: string): int {
         const path = Hyprland.requestSocketPath || "";
         if (path === "") {
             console.info("grassfield-shell: session config: no Hyprland request socket, not read again (" + why + ")");
-            return;
+            return 0;
         }
         root.reloads++;
         console.info("grassfield-shell: session config read again (" + why + ")");
-        reloadSocket.createObject(root, {"path": path});
+        reloadSocket.createObject(root, {"path": path, "ticket": root.reloads});
+        return root.reloads;
     }
 
     // Settings writes a file on every step of a slider: one reload once the writes settle.
@@ -61,6 +67,7 @@ Singleton {
 
         Socket {
             id: sock
+            property int ticket: 0
             property string reply: ""
             property bool judged: false
 
@@ -72,6 +79,7 @@ Singleton {
                 if (sock.reply.trim() !== "ok")
                     console.info("grassfield-shell: session config: Hyprland answered the reload with \"" + sock.reply.trim() + "\"");
                 sock.connected = false;
+                root.answered(sock.ticket, sock.reply.trim() === "ok");
                 Qt.callLater(() => sock.destroy());
             }
 

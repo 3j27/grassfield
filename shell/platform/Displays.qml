@@ -12,8 +12,10 @@ import "DisplaysFile.js" as DisplaysFile
 // - it publishes the monitors (Hyprland's own `monitors` answer, through Quickshell), the backlight and the trial's state in
 //   a runtime file the Settings app reads (DisplaysFile.js has the format and the paths);
 // - it runs a trial: when Settings writes the trial file, it asks Hyprland to read its configuration again (the request
-//   `reload` through SessionConfig; config/hypr/grassfield/displays.lua applies the trial while it runs), and takes it back
-//   after its deadline, on Revert, or when it finds a trial at start: the file is emptied, then the configuration read again.
+//   `reload` through SessionConfig; config/hypr/grassfield/displays.lua applies the trial while it runs), publishes it
+//   `applying`, then `applied` once Hyprland answers that very request (it has read the configuration: Settings takes Keep
+//   only then), and takes it back after its deadline, on Revert, or when it finds a trial at start: the file is emptied, then
+//   the configuration read again.
 //   Keep empties the file without a reload and publishes `kept`; Settings then writes displays.conf (a Keep the shell did not
 //   take, after its deadline, writes nothing). The countdown is the shell's, so a Settings
 //   that crashed or was closed cannot leave a display in a mode nobody confirmed.
@@ -33,6 +35,8 @@ Singleton {
     // The first look at the trial file since the shell started (a trial found then is taken back).
     property bool starting: true
     property int reloads: 0
+    // The ticket of the reload that applies the trial being run (SessionConfig.answered; 0 for none).
+    property int applying: 0
 
     function publish(): void {
         if (root.statePath === "")
@@ -46,9 +50,9 @@ Singleton {
     onBacklightChanged: publishDebounce.restart()
 
     // Hyprland reads its configuration again (the trial applied or taken back): SessionConfig's one request.
-    function reload(): void {
+    function reload(): int {
         root.reloads++;
-        SessionConfig.reload("display trial");
+        return SessionConfig.reload("display trial");
     }
 
     function empty(): void {
@@ -61,13 +65,14 @@ Singleton {
         root.starting = false;
         if (what === "apply") {
             root.running = trial.id;
-            root.trialState = {id: trial.id, state: "applied"};
+            root.trialState = {id: trial.id, state: "applying"};
             deadline.interval = Math.max(0, trial.until * 1000 - Date.now());
             deadline.restart();
-            console.info("grassfield-shell: displays: trial " + trial.id + " applied");
-            root.reload();
+            console.info("grassfield-shell: displays: trial " + trial.id + " applying");
+            root.applying = root.reload();
         } else if (what === "keep") {
             deadline.stop();
+            root.applying = 0;
             root.trialState = {id: root.running, state: "kept"};
             console.info("grassfield-shell: displays: trial " + root.running + " kept");
             root.running = "";
@@ -80,6 +85,7 @@ Singleton {
 
     function revert(id: string): void {
         deadline.stop();
+        root.applying = 0;
         root.trialState = id !== "" ? {id: id, state: "reverted"} : null;
         console.info("grassfield-shell: displays: trial " + (id !== "" ? id : "(none)") + " taken back");
         root.running = "";
@@ -109,6 +115,20 @@ Singleton {
                 Hyprland.refreshMonitors();
                 publishDebounce.restart();
             }
+        }
+    }
+
+    Connections {
+        target: SessionConfig
+
+        function onAnswered(ticket: int, ok: bool): void {
+            const next = DisplaysFile.answered(root.trialState, root.running, root.applying, ticket, ok);
+            if (next === root.trialState)
+                return;
+            root.applying = 0;
+            root.trialState = next;
+            console.info("grassfield-shell: displays: trial " + root.running + " applied");
+            publishDebounce.restart();
         }
     }
 

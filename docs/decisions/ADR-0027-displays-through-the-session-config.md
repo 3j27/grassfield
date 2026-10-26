@@ -62,6 +62,13 @@ What Grassfield already has:
    - The shell watches the trial file and asks Hyprland to read its configuration again: the request `reload` on the request
      socket, the same channel and the same one-connection-per-request code as the blur push. No `hyprctl` process, no
      `keyword`, and nothing Hyprland would not also do when a configuration file is saved.
+   - The shell publishes the trial `applying` when it asks for the reload, and `applied` only when Hyprland answers `ok` to
+     that same request: Hyprland answers once it has read its configuration (counter-review of 2026-10-26: the request alone
+     does not mean the mode is set). Each request has its own connection and ticket, so the answer to another reload (the
+     previous trial taken back, the input files) cannot stand for it; the `configreloaded` event could (it names no
+     request). If the answer is not `ok` or never comes, the trial stays `applying`, Keep stays refused and the deadline
+     takes it back. A display can still take a moment to show the new mode after that (the monitor resyncs): no event says
+     when it is done.
    - The shell owns the countdown. It survives a Settings that crashed or was closed.
    - Settings shows a sheet: "Keep these display settings?", "The previous settings come back in N seconds.", Revert and Keep.
    - Keep is taken only while the shell has published the trial `applied` (the mode is on screen); pressed earlier (Return

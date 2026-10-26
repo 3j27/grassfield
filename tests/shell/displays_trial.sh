@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ADR-0027: the shell's side of a display trial (shell/platform/Displays.qml) and of the input files (SessionConfig.qml),
 # offscreen, against a fake Hyprland: a request
-# socket that records every request and answers it ("ok", "[]" for the JSON queries), and a silent event socket. Runs
+# socket that records every request and answers it ("[]" for the JSON queries; "ok" to a reload a moment later, as Hyprland
+# answers once it has read its configuration, except the fifth reload, which it refuses), and a silent event socket. Runs
 # tests/shell/displays_trial.d/trial.qml as a dev session (the trial and state files under GRASSFIELD_STATE_HOME), then checks
 # that the fake saw exactly the reloads the QML counted. Nothing here can reach a real Hyprland: HYPRLAND_INSTANCE_SIGNATURE
 # and XDG_RUNTIME_DIR point at the test's own directory.
@@ -25,19 +26,32 @@ cp tests/shell/displays_trial.d/trial.qml "$tmp/cfg/shell.qml"
 
 # The fake Hyprland. Python's standard library only.
 cat >"$tmp/fake.py" <<'PY'
-import os, socket, sys, threading
+import os, socket, sys, threading, time
 base, log = sys.argv[1], sys.argv[2]
+lock = threading.Lock()
+reloads = 0
+def answer(c):
+    global reloads
+    data = c.recv(65536).decode(errors="replace")
+    with lock:
+        with open(log, "a") as f:
+            f.write(data.replace("\n", "\\n") + "\n")
+        if data == "reload":
+            reloads += 1
+            n = reloads
+    if data == "reload":
+        time.sleep(0.3)
+        c.sendall(b"error: refused" if n == 5 else b"ok")
+    else:
+        c.sendall(b"[]" if data.startswith("j/") or "j/" in data[:8] else b"ok")
+    c.close()
 def serve_requests():
     s = socket.socket(socket.AF_UNIX)
     s.bind(os.path.join(base, ".socket.sock"))
     s.listen(16)
     while True:
         c, _ = s.accept()
-        data = c.recv(65536).decode(errors="replace")
-        with open(log, "a") as f:
-            f.write(data.replace("\n", "\\n") + "\n")
-        c.sendall(b"[]" if data.startswith("j/") or "j/" in data[:8] else b"ok")
-        c.close()
+        threading.Thread(target=answer, args=(c,), daemon=True).start()
 def serve_events():
     s = socket.socket(socket.AF_UNIX)
     s.bind(os.path.join(base, ".socket2.sock"))

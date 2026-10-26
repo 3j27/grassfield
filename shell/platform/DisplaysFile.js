@@ -9,7 +9,7 @@
 //       "transform":0,"disabled":false,
 //       "availableModes":["2880x1800@120.00Hz",...]}],
 //      "backlight":{"device":"intel_backlight","level":0.5}|null,
-//      "trial":{"id":"a1b2","state":"applied"|"kept"|"reverted"}|null}
+//      "trial":{"id":"a1b2","state":"applying"|"applied"|"kept"|"reverted"}|null}
 //   trial  (Settings writes it, the shell and config/hypr/grassfield/displays.lua read it)
 //     trial <id> until <unix time>     a change on trial, then the lines of the would-be displays.conf
 //     kept <id>                        the user kept it (Settings wrote displays.conf first)
@@ -85,4 +85,15 @@ function action(trial, running, starting, now) {
     if (trial.id !== running)
         return "";
     return trial.state === "kept" ? "keep" : "revert";
+}
+
+// The trial's state once Hyprland answered a reload (SessionConfig's ticket, and whether it said "ok": it answers once it has
+// read its configuration again). Only the answer to the reload that applies the trial the shell runs (`applying` is that
+// reload's ticket) makes it "applied" (the mode is set: Keep can be taken); any other answer, a refusal, or no answer leaves it
+// as it is (the deadline takes back a trial Hyprland did not apply).
+function answered(trialState, running, applying, ticket, ok) {
+    if (ok && ticket > 0 && ticket === applying && trialState && running !== "" && trialState.id === running
+        && trialState.state === "applying")
+        return {id: running, state: "applied"};
+    return trialState;
 }

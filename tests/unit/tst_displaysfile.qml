@@ -64,4 +64,19 @@ TestCase {
         compare(DisplaysFile.action(null, "", true, now), "");
         compare(DisplaysFile.action(null, "a", false, now), "revert");
     }
+
+    function test_answered() {
+        // Hyprland answered "ok" to the reload that applies the trial being run: it is applied.
+        const applying = {id: "a", state: "applying"};
+        compare(DisplaysFile.answered(applying, "a", 2, 2, true), {id: "a", state: "applied"});
+        // The answer to another reload (one asked for earlier: the previous trial taken back, the input files), a refusal, or
+        // an answer that comes after the trial ended changes nothing.
+        verify(DisplaysFile.answered(applying, "a", 2, 1, true) === applying);
+        verify(DisplaysFile.answered(applying, "a", 2, 2, false) === applying);
+        verify(DisplaysFile.answered(applying, "a", 0, 0, true) === applying);
+        verify(DisplaysFile.answered(applying, "", 2, 2, true) === applying);
+        verify(DisplaysFile.answered(applying, "b", 2, 2, true) === applying);
+        for (const t of [null, {id: "a", state: "applied"}, {id: "a", state: "kept"}, {id: "a", state: "reverted"}])
+            verify(DisplaysFile.answered(t, "a", 2, 2, true) === t, JSON.stringify(t));
+    }
 }
