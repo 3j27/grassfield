@@ -147,7 +147,8 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      `LoginItemsPage.qml`): "Open at Login" (a section title with its explanation, `SettingsGroup.captionDetail`) lists the XDG
      autostart entries that start in this session (the user's folder over `$XDG_CONFIG_DIRS/autostart`, OnlyShowIn and
      NotShowIn against XDG_CURRENT_DESKTOP; `General.loginItems`) with the app's icon (`image://icon`, the icon theme through
-     QIcon, `src/iconprovider.h`; an unknown icon shows a graphite tile), its name, "Added by you" for the user's own, and a
+     QIcon as in Files, `src/iconprovider.h`; an absolute `Icon=` path only when it is a clean path to a regular PNG, XPM or
+     JPEG file of at most 1 MiB, `isIconFile`, never a FIFO, device or SVG; an unknown icon shows a graphite tile), its name, "Added by you" for the user's own, and a
      switch. Switching a system item off writes a user override (`Hidden=true`); back on removes that override when it held
      nothing else, else clears Hidden in it. The list is one focus stop (Up/Down select, Space switches, Delete removes) with a
      + / − footer (`ListFooter.qml`): + opens a sheet of the applications (the XDG applications folders, `General.applications`;

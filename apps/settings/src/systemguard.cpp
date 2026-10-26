@@ -163,6 +163,16 @@ bool isAutostartWrite(const QString &path, const QString &autostartDir, const QS
     return !devDir.isEmpty() && !real.isEmpty() && (real == devDir || real.startsWith(devDir + QLatin1Char('/')));
 }
 
+bool isIconFile(const QString &path)
+{
+    static const QRegularExpression raster(QRegularExpression::anchoredPattern(QStringLiteral(".+\\.(png|xpm|jpe?g)")),
+                                           QRegularExpression::CaseInsensitiveOption);
+    if (!path.startsWith(QLatin1Char('/')) || QDir::cleanPath(path) != path || !raster.match(path).hasMatch())
+        return false;
+    const QFileInfo info(path);
+    return info.isFile() && info.size() <= 1024 * 1024;
+}
+
 bool namesWallpaperTool(const QString &program)
 {
     return program == QLatin1String("grassfield-wallpaper") || program.endsWith(QLatin1String("/grassfield-wallpaper"));

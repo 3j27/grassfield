@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "systemguard.h"
@@ -344,4 +345,34 @@ TEST(AutostartGuard, ATextualDotDotThroughALinkIsRefused)
         EXPECT_FALSE(isAutostartWrite(QStringLiteral("x.desktop"), QStringLiteral("."), root, dev)) << dev;
     }
     EXPECT_TRUE(isAutostartWrite(inside + QStringLiteral("/x.desktop"), inside, root, true));
+}
+
+// Login Items' image://icon with an absolute Icon= path: only a small regular raster file (a FIFO, a device, a link to one,
+// an SVG, a huge file or an unclean path shows the page's own tile).
+TEST(IconFile, OnlySmallRegularRasterFiles)
+{
+    QTemporaryDir tmp;
+    const QString d = QFileInfo(tmp.path()).canonicalFilePath();
+    QFile png(d + QStringLiteral("/app.png"));
+    ASSERT_TRUE(png.open(QIODevice::WriteOnly));
+    png.write("x");
+    png.close();
+    QFile big(d + QStringLiteral("/big.png"));
+    ASSERT_TRUE(big.open(QIODevice::WriteOnly));
+    big.write(QByteArray(1024 * 1024 + 1, 'x'));
+    big.close();
+    QFile svg(d + QStringLiteral("/app.svg"));
+    ASSERT_TRUE(svg.open(QIODevice::WriteOnly));
+    svg.close();
+    ASSERT_EQ(::mkfifo(QFile::encodeName(d + QStringLiteral("/fifo.png")).constData(), 0600), 0);
+    ASSERT_EQ(::symlink("/dev/zero", QFile::encodeName(d + QStringLiteral("/zero.png")).constData()), 0);
+    ASSERT_EQ(::symlink(QFile::encodeName(d + QStringLiteral("/fifo.png")).constData(), QFile::encodeName(d + QStringLiteral("/tofifo.png")).constData()), 0);
+    ASSERT_EQ(::symlink(QFile::encodeName(d + QStringLiteral("/app.png")).constData(), QFile::encodeName(d + QStringLiteral("/link.png")).constData()), 0);
+
+    EXPECT_TRUE(isIconFile(d + QStringLiteral("/app.png")));
+    EXPECT_TRUE(isIconFile(d + QStringLiteral("/link.png"))) << "a link to a small regular file";
+    for (const char *bad : {"/fifo.png", "/zero.png", "/tofifo.png", "/big.png", "/app.svg", "/missing.png", "/./app.png", "/sub/../app.png"})
+        EXPECT_FALSE(isIconFile(d + QString::fromLatin1(bad))) << bad;
+    EXPECT_FALSE(isIconFile(QStringLiteral("app.png")));
+    EXPECT_FALSE(isIconFile(d));
 }

@@ -61,6 +61,11 @@ int actionTimeoutMs(const QStringList &argv, int requested);
 // <devRoot>/.dev (the isolated XDG_CONFIG_HOME), never the owner's ~/.config/autostart.
 bool isAutostartWrite(const QString &path, const QString &autostartDir, const QString &devRoot, bool dev);
 
+// An Icon= that is an absolute path (Login Items, image://icon): a clean path to a regular file (stat follows a link: never a
+// FIFO, a device or a directory, which would stall the GUI thread), at most 1 MiB, a raster picture (PNG, XPM, JPEG: an SVG's
+// references are followed by QtSvg). Anything else shows the page's own tile.
+bool isIconFile(const QString &path);
+
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);
 
