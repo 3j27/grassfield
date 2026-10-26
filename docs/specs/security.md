@@ -834,7 +834,13 @@ deleted file's `"idleMinutes": 0` back). The one exception to "a running shell r
 file: the cosmetic keys keep their last good values until the file is fixed (a restart would show the defaults), but the lock
 timing fails closed: `lock.*` reads the default 5 at once, as a restart does, and nothing is written while the file is
 malformed. Known limit (pre-existing): there is no lock between the fresh read of the file and its atomic replacement, so an
-external edit made in that instant can be lost. `IdleModel.timings` is a stricter backstop: anything that is not a number,
+external edit made in that instant can be lost. The file is never read without a bound: both reads (the load and the fresh
+read before a write) are one script that opens only a regular file of at most 1 MiB (a symlink to /dev/zero, a FIFO, a
+directory, a 300 MB file are read as malformed without being opened or read: `tests/shell/settings_bounds` measures the
+shell's peak memory, +3 MB for each of them where the unbounded read cost 3.7 GB), cuts a read after 5 s, and reads a file
+that is not readable (chmod 000) as malformed too: `lock.*` reads 5, the cosmetic keys keep their last good values, nothing
+is written. A symlinked `grassfield.json` is followed (its target is read and replaced, the link stays) and a replacement
+of the link by a regular file is noticed within 10 s. A failed write keeps its change pending and is retried. `IdleModel.timings` is a stricter backstop: anything that is not a number,
 above 240 or not whole reads 5, and only a number that is exactly 0 is never.
 
 Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
