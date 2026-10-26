@@ -128,6 +128,22 @@ click_title() { # <title>
   # shellcheck disable=SC2086
   point abs $xy sleep 150 click sleep 300
 }
+# Opens a title's menu until it shows a row: Obsidian builds its full menu once its vault is loaded, and until then the
+# same titles hold a short menu (File: Open Vault..., Close, Quit; one round in ten in a run of 2026-10-26). The menu is
+# closed (Escape: the popup holds the keyboard) and opened again, 8 times at most; a try beyond the first is logged.
+open_menu_with() { # <title> <row regex>
+  local i
+  for i in 1 2 3 4 5 6 7 8; do
+    if click_title "$1" && wait_for 3 row_present "$2"; then
+      ((i > 1)) && say "    ($1 showed '$2' at try $i: the application was still building its menu)"
+      return 0
+    fi
+    "$root/scripts/dev/keys.sh" -k Escape >/dev/null 2>&1
+    sleep 1
+  done
+  return 1
+}
+
 click_row() { # <regex>
   local x y w h
   read -r x y w h <<<"$(row_of "$1")"
@@ -186,8 +202,7 @@ scenario() { # <round>: one Obsidian from start to Quit; returns 1 when a check 
   check "[$r] the bridge served the registration to the window's client pid $cpid" round_log_has "window $first: menu :[0-9.]+ /com/canonical/menu/[0-9A-F]+ \(pid $cpid,"
   ((r == 1)) && say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-bar "$output")"
 
-  click_title File
-  check "[$r] File menu open with New Window" wait_for 5 row_present '^New Window$'
+  check "[$r] File menu open with New Window" open_menu_with File '^New Window$'
   ((r == 1)) && say "  File rows: $(state | jq -c '[.popup[]?.text]')"
   ((r == 1)) && say "  screenshot: $("$root/scripts/dev/shot.sh" electron-menus-file "$output")"
   click_row '^New Window$'
@@ -196,14 +211,12 @@ scenario() { # <round>: one Obsidian from start to Quit; returns 1 when a check 
   check "[$r] the second window shows Obsidian's menus" wait_for 20 menus_are "$second" '(.menus | index("File")) != null'
   check "[$r] no layout failure in the bridge log (registrations served once settled)" test -z "$(round_log | grep -a 'GetLayout on .*failed\|refused: this application')"
 
-  click_title File
-  check "[$r] second window's File menu open with Close Window" wait_for 5 row_present '^Close( Window)?$'
+  check "[$r] second window's File menu open with Close Window" open_menu_with File '^Close( Window)?$'
   click_row '^Close( Window)?$'
   check "[$r] pointer click on File > Close Window closed the second window" wait_for 15 windows_at_most 1
   check "[$r] the remaining window shows Obsidian's menus again" wait_for 20 menus_are "$first" "$obsidian_menus"
 
-  click_title File
-  check "[$r] File menu open with Quit" wait_for 5 row_present '^Quit$'
+  check "[$r] File menu open with Quit" open_menu_with File '^Quit$'
   click_row '^Quit$'
   check "[$r] pointer click on File > Quit closed every window" wait_for 15 windows_at_most 0
   check "[$r] Obsidian exited" wait_for 15 exited "$ob_pid"

@@ -11,6 +11,8 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cerrno>
+#include <csignal>
 #include <sys/stat.h>
 #include <time.h>
 
@@ -335,7 +337,16 @@ namespace gf::menubridge {
             sendError(msg.window, QStringLiteral("backoff"), QStringLiteral("the menu bridge gave up after repeated unexplained crashes; menus are not served until it is restarted later"));
             return;
         }
-        // A sandbox (a Flatpak app, a nested pid namespace) is never served a registrar menu.
+        // A process that is gone (a window address Hyprland reused, a late line): nothing to serve, said as such.
+        if (::kill(static_cast<pid_t>(msg.pid), 0) != 0 && errno == ESRCH) {
+            m_waiting.remove(msg.window);
+            m_viaRegistrar.remove(msg.window);
+            close(msg.window);
+            log(QStringLiteral("window %1: pid %2 is gone: no registrar menu").arg(msg.window).arg(msg.pid));
+            sendError(msg.window, QStringLiteral("no-owner"), QStringLiteral("the window's process is gone"));
+            return;
+        }
+        // A sandbox (a Flatpak app, any other pid namespace) is never served a registrar menu.
         if (!inBridgePidNamespace(msg.pid)) {
             m_waiting.remove(msg.window);
             m_viaRegistrar.remove(msg.window);

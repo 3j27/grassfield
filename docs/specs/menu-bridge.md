@@ -232,8 +232,9 @@ top-level menus (Left/Right).
     - the plugin's `appmenu` event for a Wayland window without a `set_address` registration carries the window's client
       pid (compositor FR20; 0 for X11/XWayland windows and for a window that is gone);
     - the shell sends `{"type":"open-registered","window":"<hex>","pid":N}` when such a window is shown;
-    - the bridge refuses a pid outside its own pid namespace (`/proc/<pid>/ns/pid` names another inode than
-      `/proc/self/ns/pid`, or cannot be read: Flatpak, any sandbox with its own pid namespace) with `foreign-namespace`, answers `backoff` while degraded
+    - the bridge answers `no-owner` for a process that is gone (a window address Hyprland reused, a late line), refuses a
+      pid outside its own pid namespace (`/proc/<pid>/ns/pid` names another inode than `/proc/self/ns/pid`, or cannot be
+      read: Flatpak, any sandbox with its own pid namespace) with `foreign-namespace`, answers `backoff` while degraded
       (MB14), else opens the newest settled registration (MB2) of a sender whose process is that pid, through `open`
       (MB5's check again: a pid reused after the registering process exited gets nothing). Without one the window waits:
       a registration that settles later opens it, and an open window follows a newer settled registration of its
