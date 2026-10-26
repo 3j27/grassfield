@@ -226,6 +226,7 @@
  {"path": "tests/shell/settings_vectors/shell.qml", "layer": "headless"},
  {"path": "tests/shell/settings_reload/shell.qml", "layer": "headless"},
  {"path": "tests/shell/settings_bounds/shell.qml", "layer": "headless"},
+ {"path": "tests/shell/settings_backoff/shell.qml", "layer": "headless"},
  {"path": "tests/shell/pointer_theme/shell.qml", "layer": "headless"},
  {"path": "tests/shell/usable/shell.qml", "layer": "headless"},
  {"path": "tests/shell/search_chips/shell.qml", "layer": "headless"},
