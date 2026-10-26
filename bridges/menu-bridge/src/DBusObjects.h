@@ -2,28 +2,34 @@
 
 // D-Bus objects exported by grassfield-menu-bridge.
 //
-// Registrar (com.canonical.AppMenu.Registrar at /com/canonical/AppMenu/Registrar): its only job is to EXIST while
-// the whole global-menu chain works, because Qt and Chromium export their menus (and announce them through
-// org_kde_kwin_appmenu) only when this name is owned. Wayland clients never call it (spike S5). Every method
-// answers an error, so nothing pretends to keep a registration:
-//   RegisterWindow(u, o), UnregisterWindow(u) -> com.canonical.AppMenu.Registrar.Error.NotSupported
+// Registrar (com.canonical.AppMenu.Registrar at /com/canonical/AppMenu/Registrar): it EXISTS while the whole
+// global-menu chain works, because Qt and Chromium export their menus (and announce them through
+// org_kde_kwin_appmenu) only when this name is owned; Qt and Chromium never call it on Wayland (spike S5). Electron
+// does (ADR-0008 amendment 2026-10-25): its registrations are kept per sender (Registrations.h) and served to the
+// windows of the sender's process:
+//   RegisterWindow(u, o), UnregisterWindow(u) -> () kept / forgotten (LimitsExceeded past the caps)
 //   GetMenuForWindow(u)                      -> com.canonical.AppMenu.Registrar.Error.NotFound
 //   GetMenus()                               -> org.freedesktop.DBus.Error.NotSupported
-// Only these four methods get an answer (tiny, stateless: X11 clients would otherwise wait for a timeout); every
-// other call, signal or interface on the registrar and diagnostics paths is dropped without a reply, so nothing is
-// built for traffic nobody asked for. (libdbus buffers any incoming message before it reaches here: see MB14.)
-// (X11/XWayland windows, which do call RegisterWindow, are not supported; see docs/specs/menu-bridge.md.)
+// Only these four methods get an answer; every other call, signal or interface on the registrar and diagnostics paths
+// is dropped without a reply, so nothing is built for traffic nobody asked for. (libdbus buffers any incoming message
+// before it reaches here: see MB14.) A sender that registers is watched; its pid is asked from the bus daemon once
+// (its departure, or no answer, drops its registrations).
 //
 // Diagnostics (org.grassfield.MenuBridge1 at /org/grassfield/MenuBridge1, XML in bridges/menu-bridge/dbus/):
 //   Version() -> s      "<bridge version> menu/1"
 //   Status()  -> a{sv}  {"state": s, "registrar": b, "degraded": b, "shell": b, "menus": u}
 
+#include "Registrations.h"
+
+#include <QDBusConnection>
 #include <QDBusVirtualObject>
 #include <QSet>
 #include <QString>
 #include <QVariantMap>
 
 #include <functional>
+
+class QDBusServiceWatcher;
 
 namespace gf::menubridge {
 
@@ -41,11 +47,36 @@ namespace gf::menubridge {
 
     class RegistrarObject : public QDBusVirtualObject {
       public:
+        // `changed` runs after every change of the book that can matter to a waiting or open window: a registration
+        // settled (registrar::kSettleMs after it was kept) or forgotten, a sender's pid learnt, a sender gone.
+        explicit RegistrarObject(std::function<void()> changed = {});
+        ~RegistrarObject() override;
+
+        RegistrarObject(const RegistrarObject&)            = delete;
+        RegistrarObject& operator=(const RegistrarObject&) = delete;
+
+        // Attaches the sender watcher and the pid queries to `connection` (call once, before the object is registered).
+        void    setConnection(const QDBusConnection& connection);
         QString introspect(const QString& path) const override;
         bool    handleMessage(const QDBusMessage& message, const QDBusConnection& connection) override;
 
+        const registrar::Book& book() const {
+            return m_book;
+        }
+        // Forgets every registration (the registrar name was released: applications register again when it returns).
+        void clear();
+
       private:
-        QSet<QString> m_logged; // "<sender> <member>": one log line each
+        static constexpr int kPidTimeoutMs = 2000;
+        // Asks the bus daemon for `sender`'s process (after its watch was added: a sender that left before is answered
+        // with an error and dropped, a later departure reaches the watch).
+        void askPid(const QDBusConnection& connection, const QString& sender);
+        void dropSender(const QString& sender);
+
+        registrar::Book       m_book;
+        std::function<void()> m_changed;
+        QDBusServiceWatcher*  m_watcher = nullptr;
+        QSet<QString>         m_logged; // "<sender> <member>": one log line each
     };
 
     class DiagnosticsObject : public QDBusVirtualObject {

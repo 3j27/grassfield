@@ -347,9 +347,13 @@ CPP_NOT_TEXT = {"qDebug", "qInfo", "qWarning", "qCritical", "qFatal", "qCDebug",
 CPP_WRAPPER_OPEN = re.compile(r"(?:\b(?:Q\w+::)?(?:QStringLiteral|QLatin1String|QLatin1StringView|QStringView|QUtf8StringView|QAnyStringView|QString|QByteArray|fromUtf8|fromLatin1|fromLocal8Bit|fromStdString)\s*)\($")
 CPP_WRAPPERS = {"QStringLiteral", "QLatin1String", "QLatin1StringView", "QStringView", "QUtf8StringView", "QAnyStringView", "QString", "QByteArray",
                 "fromUtf8", "fromLatin1", "fromLocal8Bit", "fromStdString", "QString::fromUtf8", "QString::fromLatin1", "QString::fromLocal8Bit"}
-CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|hint|notif|show|caption|tooltip|done|settle|finish|^arg$|^return$", re.I)
-# calls whose arguments from this index on are values stored for later display (insert(key, VALUE), append(VALUE))
-CPP_STORES = {"insert": 1, "insertMulti": 1, "append": 0, "push_back": 0, "prepend": 0}
+CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|hint|notif|show|caption|tooltip|^arg$|^return$|^init$"
+                      r"|^(?:done|settle\w*|finish\w*)$", re.I)
+# insert(KEY, VALUE): the VALUE is text that can reach the screen when the KEY says so (reason, error, message, text, title...)
+CPP_STORES = {"insert", "insertMulti"}
+CPP_TEXT_KEY = re.compile(r"reason|error|message|text|title|label|status|note|hint|description|summary|failure", re.I)
+CPP_DECL_TYPES = {"QString", "QByteArray", "QStringView", "QLatin1String", "QLatin1StringView", "QAnyStringView", "auto"}
+CPP_NOT_A_NAME = {"else", "do", "try", "const", "noexcept", "override", "final", "namespace", "struct", "class", "union", "enum", "mutable", "return"}
 CPP_LOG_STREAM = re.compile(r"\bq(?:C)?(?:Debug|Info|Warning|Critical|Fatal)\b")
 CPP_VALUE_POSITION = re.compile(r"(?:\breturn|\?|(?<!:):(?!:))$")
 CPP_ASSIGN = re.compile(r"(?:(?<![=!<>+\-*/|&^%])=|\+=)$")
@@ -363,7 +367,9 @@ def _cpp_literals(text):
     calls = []  # one entry per open "(" or brace-init "{": the identifier before it ("" for none; "return" for `return {`)
     kinds = []  # "(" or "{", parallel to calls
     argidx = []  # index of the argument being read, parallel to calls
-    statement = ""  # code since the last ; { }  (literals shown as "")
+    firstlit = []  # the first literal read in the scope (the key of insert(KEY, VALUE)), parallel to calls
+    swords = []  # identifiers of the current statement (to see `QString x(`)
+    statement = ""; swords = []  # code since the last ; { }  (literals shown as "")
     last_word = ""
     pending = []  # (line, literal, calls snapshot, statement before it)
     while i < n:
@@ -398,7 +404,11 @@ def _cpp_literals(text):
                 literal = text[i + 1:j]
                 start_line = line
                 i = j + 1
-            pending.append((start_line, literal, list(calls), statement, list(argidx)))
+            owner = max((k for k, c in enumerate(calls) if c not in CPP_WRAPPERS), default=-1)
+            key = firstlit[owner] if owner >= 0 and firstlit[owner] is not None else ""
+            if owner >= 0 and firstlit[owner] is None:
+                firstlit[owner] = literal
+            pending.append((start_line, literal, list(calls), statement, list(argidx), key))
             statement += '""'
             last_word = ""
         elif c == "'":  # a character literal
@@ -410,42 +420,51 @@ def _cpp_literals(text):
         elif c.isalpha() or c == "_":
             m = re.compile(r"[A-Za-z_][A-Za-z_0-9:]*").match(text, i)
             last_word = m.group(0)
+            swords.append(last_word)
             statement += last_word
             i = m.end()
         elif c == "(":
-            calls.append("" if last_word in ("return", "if", "while", "for", "switch", "else", "do") else last_word)
+            declares = len(swords) >= 2 and swords[-1] == last_word and swords[-2] in CPP_DECL_TYPES
+            calls.append("" if last_word in ("return", "if", "while", "for", "switch", "else", "do") else "init" if declares else last_word)
             kinds.append("(")
             argidx.append(0)
+            firstlit.append(None)
             statement += c
             last_word = ""
             i += 1
         elif c == ")":
             while kinds and kinds[-1] == "{":  # a brace-init left open inside the call
-                calls.pop(), kinds.pop(), argidx.pop()
+                calls.pop(), kinds.pop(), argidx.pop(), firstlit.pop()
             if kinds:
-                calls.pop(), kinds.pop(), argidx.pop()
+                calls.pop(), kinds.pop(), argidx.pop(), firstlit.pop()
             statement += c
             last_word = ""
             i += 1
         elif c == "{":
             # Every open brace is a scope: `name{...}` (a brace-initialized variable or type) and `return {...}` are named like a
             # call by the word before them; a code block or a nested pair `{a, b}` has no name.
-            named = last_word if last_word and (last_word == "return" or (i > 0 and (text[i - 1].isalnum() or text[i - 1] == "_"))) \
-                and last_word not in ("else", "do", "try") else ""
+            declares = len(swords) >= 2 and swords[-1] == last_word and swords[-2] in CPP_DECL_TYPES
+            if statement.rstrip().endswith("=") and not statement.rstrip().endswith(("==", "!=", "<=", ">=")):
+                named = "init"  # `x = {...}`
+            elif declares:
+                named = "init"  # `QString x{...}`
+            else:
+                named = last_word if last_word and last_word not in CPP_NOT_A_NAME or last_word == "return" else ""
             if not named:
-                statement = ""
+                statement = ""; swords = []
             calls.append(named)
             kinds.append("{")
             argidx.append(0)
+            firstlit.append(None)
             statement += c if named else ""
             last_word = ""
             i += 1
         elif c == "}":
             while kinds and kinds[-1] == "(":  # an unbalanced paren inside the block
-                calls.pop(), kinds.pop(), argidx.pop()
+                calls.pop(), kinds.pop(), argidx.pop(), firstlit.pop()
             if kinds:
-                calls.pop(), kinds.pop(), argidx.pop()
-            statement = ""
+                calls.pop(), kinds.pop(), argidx.pop(), firstlit.pop()
+            statement = ""; swords = []
             last_word = ""
             i += 1
         elif c == "," and argidx:
@@ -457,7 +476,7 @@ def _cpp_literals(text):
             if kinds and kinds[-1] == "(":
                 statement += c
             else:
-                statement = ""
+                statement = ""; swords = []
             last_word = ""
             i += 1
         else:
@@ -473,7 +492,7 @@ def _cpp_literals(text):
 def scan_cpp_text(rel, text):
     lines = text.splitlines()
     violations = []
-    for line, literal, calls, before, argument_indexes in _cpp_literals(text):
+    for line, literal, calls, before, argument_indexes, key in _cpp_literals(text):
         if any(c.split("::")[-1] in CPP_TRANSLATING | CPP_NOT_TEXT for c in calls):
             continue
         marked = any("i18n-ignore" in lines[k] for k in (line - 1, line - 2) if 0 <= k < len(lines))
@@ -486,7 +505,8 @@ def scan_cpp_text(rel, text):
         #  - a return value, a branch of ?:, the right side of = or += (member, local, any name),
         #  - an argument of a call or brace-init that reports or stores text: fail/error/reason/text/message/title/label/status/
         #    note/show..., done/settle/finished (results handed back), arg() (parts of a message), `return {...}`, name{...};
-        #    and the VALUE of insert(key, VALUE)/append(VALUE)/push_back(VALUE),
+        #    a declaration `QString x(...)`/`QString x{...}`/`x = {...}` (name "init"), and the VALUE of insert(KEY, VALUE) when KEY
+        #    names text (reason, error, message...); append()/push_back() build argument lists and are not text,
         #  - never an operand of ==, never an argument of other calls (D-Bus member names, JSON keys).
         tail = before.rstrip()
         while CPP_WRAPPER_OPEN.search(tail):
@@ -494,7 +514,7 @@ def scan_cpp_text(rel, text):
         pos = max((k for k, c in enumerate(calls) if c not in CPP_WRAPPERS), default=-1)
         argument_of = calls[pos] if pos >= 0 else ""
         name = argument_of.split("::")[-1]
-        stored = name in CPP_STORES and argument_indexes[pos] >= CPP_STORES[name]
+        stored = name in CPP_STORES and argument_indexes[pos] >= 1 and bool(CPP_TEXT_KEY.search(key))
         visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
                    or bool(argument_of and CPP_SINK.search(name)) or stored)
         wordlike = bool(CPP_WORDLIKE.match(literal))
