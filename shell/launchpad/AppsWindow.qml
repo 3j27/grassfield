@@ -8,8 +8,8 @@ import qs.services
 import "Model.js" as Model
 
 // Apps overlay, one per screen, mapped on the controller's screen only: a transparent full-screen
-// layer-shell window (a click outside the panel closes it) holding the floating panel: search field,
-// category chips and the scrolling grid. Keyboard exclusive while open. The panel is a frosted
+// layer-shell window (a click outside the panel closes it) holding the search capsule and, under it, the floating panel
+// (macOS 27): category chips and the scrolling grid. Keyboard exclusive while open. The panel is a frosted
 // Material; the compositor blurs the region of `frame` (never faked).
 Variants {
     id: root
@@ -56,6 +56,11 @@ Variants {
             id: blur
             item: frame
             radius: Tokens.launcherPanelRadius
+
+            Region {
+                item: capsuleFrame
+                radius: Tokens.searchCapsuleHeight / 2
+            }
         }
 
         Region {
@@ -309,6 +314,98 @@ Variants {
                 Keys.onPressed: event => host.handleKey(event, false)
             }
 
+            // The search capsule above the panel (macOS 27): its own glass, its footprint unscaled like the panel's.
+            Item {
+                id: capsuleFrame
+
+                x: host.c.panel.x + (host.c.panel.w - width) / 2
+                y: host.c.panel.y - Tokens.searchCapsuleGap - height
+                width: Math.min(Tokens.searchCapsuleWidth, host.c.panel.w)
+                height: Tokens.searchCapsuleHeight
+
+                Item {
+                    id: capsule
+
+                    anchors.fill: parent
+                    opacity: win.progress
+                    scale: Appearance.reduceMotion ? 1 : Tokens.launcherOpenScale + (1 - Tokens.launcherOpenScale) * win.progress
+
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.AllButtons
+                        onPressed: field.forceActiveFocus()
+                    }
+
+                    Material {
+                        glassClass: "apps"
+                        anchors.fill: parent
+                        radius: height / 2
+                    }
+
+                    // The query, or its grey placeholder, after the glyph at display size; no ring at rest (the caret shows
+                    // where typing goes), the ring only in keyboard navigation.
+                    Rectangle {
+                        id: searchBox
+
+                        anchors.fill: parent
+                        radius: height / 2
+                        color: "transparent"
+                        border.width: field.activeFocus && root.controller.keyNav ? Tokens.controlFocusOutline : 0
+                        border.color: Appearance.focusRingColor
+                        Accessible.role: Accessible.Pane
+                        Accessible.name: qsTr("Search")
+
+                        Icon {
+                            id: glass
+                            x: Tokens.searchCapsuleGlyphInset
+                            y: (parent.height - height) / 2
+                            size: Tokens.searchCapsuleGlyph
+                            name: "apps"
+                            color: Appearance.colors.textSecondary
+                        }
+
+                        TextInput {
+                            id: field
+                            x: Tokens.searchCapsuleTextInset
+                            width: parent.width - x - Tokens.searchCapsuleGlyphInset
+                            height: parent.height
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Appearance.colors.text
+                            selectionColor: Appearance.highlight
+                            selectedTextColor: Appearance.highlightText
+                            font.family: Appearance.fontFamilyFor(Tokens.searchCapsuleTextSize)
+                            font.pixelSize: Tokens.searchCapsuleTextSize
+                            clip: true
+                            focus: true
+                            // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
+                            cursorVisible: activeFocus && !VisualFixtures.active
+                            Accessible.role: Accessible.EditableText
+                            Accessible.name: qsTr("Search")
+                            Accessible.description: qsTr("Type to filter applications")
+
+                            TextCursor {}
+
+                            onTextChanged: {
+                                if (win.shown)
+                                    root.controller.setQuery(text);
+                            }
+                            Keys.onPressed: event => host.handleKey(event, true)
+
+                            Text {
+                                anchors.fill: parent
+                                verticalAlignment: Text.AlignVCenter
+                                visible: field.text === "" && field.preeditText === ""
+                                text: qsTr("Search")
+                                textFormat: Text.PlainText
+                                color: Appearance.colors.textSecondary
+                                font: field.font
+                            }
+                        }
+                    }
+
+                }
+            }
+
             // The panel's footprint: unscaled, so that the blur region does not follow the open animation.
             Item {
                 id: frame
@@ -340,91 +437,12 @@ Variants {
                         radius: Tokens.launcherPanelRadius
                     }
 
-                    // Search: a borderless header row (macOS): the glyph and the query, or its grey placeholder, at title size; no
-                    // fill and no ring at rest (the caret shows where typing goes); the ring only in keyboard navigation.
-                    Rectangle {
-                        id: searchBox
-
-                        x: 0
-                        y: 0
-                        width: panel.width
-                        height: Tokens.launcherHeaderHeight
-                        radius: Tokens.launcherPanelRadius
-                        color: "transparent"
-                        border.width: field.activeFocus && root.controller.keyNav ? Tokens.controlFocusOutline : 0
-                        border.color: Appearance.focusRingColor
-                        Accessible.role: Accessible.Pane
-                        Accessible.name: qsTr("Search")
-
-                        Icon {
-                            id: glass
-                            x: Tokens.launcherPadding
-                            y: (parent.height - height) / 2
-                            size: Tokens.launcherHeaderGlyph
-                            name: "search"
-                            color: Appearance.colors.textSecondary
-                        }
-
-                        TextInput {
-                            id: field
-                            x: glass.x + glass.width + Tokens.spacingSm
-                            width: parent.width - x - Tokens.launcherPadding
-                            height: parent.height
-                            verticalAlignment: TextInput.AlignVCenter
-                            color: Appearance.colors.text
-                            selectionColor: Appearance.highlight
-                            selectedTextColor: Appearance.highlightText
-                            font.family: Appearance.fontFamilyFor(Tokens.launcherHeaderTextSize)
-                            font.pixelSize: Tokens.launcherHeaderTextSize
-                            clip: true
-                            focus: true
-                            // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
-                            cursorVisible: activeFocus && !VisualFixtures.active
-                            Accessible.role: Accessible.EditableText
-                            Accessible.name: qsTr("Search")
-                            Accessible.description: qsTr("Type to filter applications")
-
-                            TextCursor {}
-
-                            onTextChanged: {
-                                if (win.shown)
-                                    root.controller.setQuery(text);
-                            }
-                            Keys.onPressed: event => host.handleKey(event, true)
-
-                            Text {
-                                anchors.fill: parent
-                                verticalAlignment: Text.AlignVCenter
-                                visible: field.text === "" && field.preeditText === ""
-                                text: qsTr("Search")
-                                textFormat: Text.PlainText
-                                color: Appearance.colors.textSecondary
-                                font: field.font
-                            }
-                        }
-                    }
-
-                    // Hairlines under the header and under the chips (macOS).
-                    Repeater {
-                        model: [searchBox.y + searchBox.height, chipFlick.y + chipFlick.height + Tokens.launcherGridGap / 2]
-
-                        Rectangle {
-                            required property real modelData
-
-                            x: 0
-                            y: modelData
-                            width: panel.width
-                            height: 1
-                            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-                        }
-                    }
-
                     // Category chips (scroll sideways when the panel is narrower than the row).
                     Flickable {
                         id: chipFlick
 
                         x: Tokens.launcherPadding
-                        y: searchBox.y + searchBox.height + Tokens.launcherChipsTop
+                        y: Tokens.launcherChipsTop
                         width: panel.width - 2 * Tokens.launcherPadding
                         height: Tokens.launcherChipHeight
                         contentWidth: chipRow.width
@@ -467,13 +485,13 @@ Variants {
                         id: grid
 
                         x: Tokens.launcherPadding
-                        y: chipFlick.y + chipFlick.height + Tokens.launcherGridGap / 2 + 1
+                        y: chipFlick.y + chipFlick.height
                         width: panel.width - 2 * Tokens.launcherPadding
                         // Down to the panel's edge (inside its border): rows scroll out under it, the last one clears it.
                         height: panel.height - y - Tokens.appsBorderWidth
                         // Room for the focus ring above the first row and below the last one; the first row starts launcherGridGap
-                        // below the chips, the grid itself right under the hairline (rows scroll up to it).
-                        topMargin: Tokens.spacingSm + Tokens.launcherGridGap / 2 - 1
+                        // below the chips (rows scroll up to them).
+                        topMargin: Tokens.spacingSm + Tokens.launcherGridGap
                         bottomMargin: Tokens.spacingMd
                         cellWidth: root.controller.grid.cellW
                         cellHeight: root.controller.grid.cellH

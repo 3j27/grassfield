@@ -82,6 +82,8 @@ Scope {
             heightFraction: Tokens.launcherHeightFraction,
             minHeight: Tokens.launcherMinHeight,
             topFraction: Tokens.launcherTopFraction,
+            // The search capsule sits above the panel (macOS 27).
+            topOffset: Tokens.searchCapsuleHeight + Tokens.searchCapsuleGap,
             // Never into the Dock (its size and edge are the user's): the tokens are the floor.
             bottomClearance: Math.max(Tokens.launcherBottomClearance, Settings.dockFootprint.bottom)
         }))

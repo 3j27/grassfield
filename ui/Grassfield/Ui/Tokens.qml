@@ -784,38 +784,26 @@ QtObject {
     // estimate: Increase Contrast frosts the glass (ADR-0024 G-8; macOS turns transparency down with Increase Contrast), with the stronger rims and borders of its tokens [ref: ADR-0024]
     readonly property real glassContrastFrost: 0.9
 
-    // F1 gap 8: panel width with results 639 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchWidth: 640
-    // panel top at 0.199 of the screen height (macOS 26 composite gs-086-210) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
-    readonly property real searchTopFraction: 0.2
-    // F1 gap 8: field row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchFieldHeight: 56
-    // F1 gap 8: query text ~26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchFieldSize: Math.round(26 * Appearance.textScale)
-    // magnifier glyph about 21 pt, drawn by the 26-pt icon box (22 drew 17) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
-    readonly property int searchFieldIconSize: 26
-    // magnifier, hairline (19.4-20.4) and chip row (20) inset from the panel edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
+    // the results panel under the capsule, 520 wide (macOS 26: one 639-wide panel) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchWidth: 520
+    // chip row 19-20 from the results panel's sides [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
     readonly property int searchFieldInset: 20
-    // query text left inset 61 from the panel edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
-    readonly property int searchQueryInset: 61
-    // F1 gap 8: result row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchRowHeight: 56
-    // F1 gap 8: result icon ~32 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchRowIconSize: 32
-    // selected row 10 from the panel sides [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
-    readonly property int searchRowInset: 10
+    // two-line result rows, pitch about 63 (macOS 26: 56) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchRowHeight: 63
+    // result icon about 35 [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchRowIconSize: 36
+    // the selected row 12 from the panel sides [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchRowInset: 12
     // selected row radius 17.8 (the panel's 26 less the 10 inset is 16; macOS draws it rounder) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/audits/ui-finesse-2026-10-25.md § F9. Concentric radii — side by side]
     readonly property int searchRowRadius: 18
-    // result title and subtitle 72.5 from the panel edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]
-    readonly property int searchRowTextInset: 72
+    // result title and subtitle 80 from the panel edge in the 520-wide panel [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchRowTextInset: 80
     // result title: macOS 27 cap height 12.5 pt (about 17.7-pt SF), Inter 17 has the same cap height (cap 0.727 em against SF's 0.705) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10]
     readonly property int searchTitleSize: Math.round(17 * Appearance.textScale)
     // result subtitle about 15 pt (macOS 26 and 27) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10]
     readonly property int searchSubtitleSize: Math.round(15 * Appearance.textScale)
     // selected row: a neutral fill, not the accent; macOS 27 lifts the dark panel by 8-10 luminance (white at about 0.06); the light appearance darkens by the same alpha (no light reference). At most material.fillOpacity, so the A2 material roles cover the text on it (tests/visual/test_contrast_tokens.py) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target]
     readonly property real searchSelectionFillOpacity: 0.06
-    // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
-    readonly property int searchChipTop: 10
     // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchChipBottom: 4
     // estimate: no usable reference (f1-reference-gaps.md, no capture of the empty state at a verified scale): notice area under the field
@@ -832,6 +820,26 @@ QtObject {
     readonly property int searchMaxFiles: 20
     // estimate: recent documents shown for an empty query [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRecentCount: 5
+    // the search capsule of Search and Apps, 520 wide, fully round [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleWidth: 520
+    // the search capsule 85.5 tall [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleHeight: 85
+    // Search's capsule top at 0.157 of the output (138.5 of 881) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property real searchCapsuleTopFraction: 0.157
+    // capsule to the panel under it (Search results, Apps) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleGap: 11
+    // the capsule glyph about 26.5 x 23 [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleGlyph: 26
+    // the capsule glyph 32.5 from the capsule edge [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleGlyphInset: 32
+    // the query or placeholder after the glyph, 75 from the capsule edge [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleTextInset: 75
+    // the query and placeholder about 22 pt (cap 15.5-16), regular [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchCapsuleTextSize: Math.round(22 * Appearance.textScale)
+    // the results panel starts with its chips, 20 below its top [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchPanelTop: 20
+    // result icon 26 from the panel edge [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
+    readonly property int searchRowIconInset: 26
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockTopMargin: 64
@@ -1404,14 +1412,14 @@ QtObject {
 
     // F1 reference (docs/testing/f1-reference-gaps.md, Apps launcher): panel 844 +-1 pt wide (2x capture)
     readonly property int launcherPanelWidth: 844
-    // F1 reference: radius about 28 +-2 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
-    readonly property int launcherPanelRadius: 28
+    // panel radius about 34 (macOS 26: 27-28) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property int launcherPanelRadius: 34
     // estimate: smallest gap between the panel and the screen sides on narrow outputs [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherEdgeMargin: 24
-    // panel top at 0.199 of the output (was 0.18: 0.179) [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property real launcherTopFraction: 0.2
-    // panel height 0.60 of the output (was 0.62) [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property real launcherHeightFraction: 0.6
+    // the search capsule's top at 0.157 of the output (138.5 of 881); the panel starts 11 under the capsule (0.267) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property real launcherTopFraction: 0.157
+    // panel height 0.59 of the output [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property real launcherHeightFraction: 0.59
     // estimate: smallest panel height (search field, chips and two rows) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherMinHeight: 320
     // estimate: space kept free at the bottom of the output for the Dock [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
@@ -1436,22 +1444,18 @@ QtObject {
     readonly property real launcherLabelLineHeight: 1.2
     // estimate: icon to label [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherLabelGap: 6
-    // borderless header row 56 tall (glyph, the query or its grey placeholder), a hairline under it; it replaced the 36-pt capsule field [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property int launcherHeaderHeight: 56
-    // header title or query about 24-25, regular; the placeholder in the secondary colour [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property int launcherHeaderTextSize: Math.round(24 * Appearance.textScale)
-    // search glyph of the header row, 24 [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property int launcherHeaderGlyph: 24
-    // header hairline to the category chips, so the first icon row starts 120.5 below the panel top [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property int launcherChipsTop: 10
-    // chips to the first icon 30 with a hairline between (was 7.5 with a 4-pt gap) [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
-    readonly property int launcherGridGap: 26
-    // F1 reference: category chips about 23-24 tall [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
-    readonly property int launcherChipHeight: 24
+    // the panel starts with its chips, 20 below its top and 19.5 from its sides [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property int launcherChipsTop: 20
+    // chips to the first icon row 34 (the grid's own focus-ring room adds the rest) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property int launcherGridGap: 30
+    // category chips 26 tall with about 15-pt labels, in Apps and in Search (macOS 26: 23-24) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property int launcherChipHeight: 26
     // F1 reference: chip gap about 7.6 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipGap: 8
     // estimate: side padding inside a chip (F1: about 14 around the text) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipPadding: 12
+    // chip labels about 15 pt (cap 11) [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Apps]
+    readonly property int launcherChipTextSize: Math.round(15 * Appearance.textScale)
     // estimate: keyboard focus ring (same as control.focusRing + 1, F1 reference ring about 3.5) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherSelectionWidth: 3
     // estimate: hover and focus ring corner radius relative to the icon [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
