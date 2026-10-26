@@ -460,6 +460,7 @@
  {"path": "tests/visual/scenarios/menubar.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/notificationcenter.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/audit-interact.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/scenarios/audit-menus.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/overview-desktops.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/overview.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/search.sh", "layer": "visual", "runner": "bare"},
