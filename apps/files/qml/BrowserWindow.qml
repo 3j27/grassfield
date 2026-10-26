@@ -29,6 +29,22 @@ Window {
     // How far a preview pane's fill reaches up behind the toolbar (macOS 27: to the top of the window); not past the tab
     // bar or a banner.
     readonly property real previewExtension: win.tabBarVisible || banner.visible ? 0 : tabHost.y
+    // The views in toolbar order (Nav.viewModes), with the switcher's names.
+    readonly property var viewModes: [
+        {mode: "icons", name: qsTr("as Icons")},
+        {mode: "list", name: qsTr("as List")},
+        {mode: "columns", name: qsTr("as Columns")},
+        {mode: "gallery", name: qsTr("as Gallery")}
+    ]
+    // The view switcher folds into its pop-up while the search field is open (Finder-Search), or where the whole switcher
+    // would leave the title less than its room (measured with the whole switcher, so folding cannot unfold it again).
+    readonly property bool compactViews: {
+        if (searchCapsule.expanded)
+            return true;
+        const trailing = 4 * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
+        const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
+        return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
+    }
     property string notice: ""
     // ADR-0015: the window draws its own chrome; the apps' tagger (apps/windowchrome.h) names its role for the
     // compositor, whose plugin then draws no titlebar on it.
@@ -630,9 +646,11 @@ Window {
                 id: tools
                 spacing: Tokens.spacingSm
 
-                // View switcher: a 36-pt capsule, the selected view a lighter pill (macOS)
+                // View switcher (macOS 27 Finder, measured on Finder-Home): four segments in a capsule, the selected view a pill
+                // darker than the capsule, a rule between two views that are not selected.
                 Rectangle {
-                    width: viewRow.width + Tokens.spacingXs
+                    visible: !win.compactViews
+                    width: 4 * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
                     height: Tokens.filesToolbarCapsule
                     radius: height / 2
                     color: Appearance.buttonFill
@@ -641,31 +659,98 @@ Window {
                     Accessible.name: qsTr("View")
 
                     Row {
-                        id: viewRow
-                        anchors.centerIn: parent
+                        x: Tokens.filesViewGroupPadding
+                        height: parent.height
 
                         Repeater {
-                            model: [
-                                {mode: "icons", name: qsTr("as Icons")},
-                                {mode: "list", name: qsTr("as List")},
-                                {mode: "columns", name: qsTr("as Columns")},
-                                {mode: "gallery", name: qsTr("as Gallery")}
-                            ]
-                            delegate: ToolButton {
-                                id: viewButton
+                            model: win.viewModes
+                            delegate: Item {
+                                id: segment
                                 required property var modelData
-                                capsule: true
-                                buttonSize: Tokens.filesToolbarGroupButton
-                                checkedColor: Appearance.chipFill
-                                checkable: true
-                                radio: true
-                                checked: win.tab !== null && win.tab.viewMode === modelData.mode
-                                accessibleName: modelData.name
-                                onClicked: win.tab.setViewMode(modelData.mode)
+                                required property int index
+                                readonly property bool current: win.tab !== null && win.tab.viewMode === segment.modelData.mode
+                                width: Tokens.filesViewSegmentWidth
+                                height: parent.height
 
-                                ViewGlyph {
+                                ToolButton {
                                     anchors.centerIn: parent
-                                    kind: viewButton.modelData.mode
+                                    width: Tokens.filesViewPillWidth
+                                    height: Tokens.filesViewPillHeight
+                                    capsule: true
+                                    checkedColor: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesViewPillOpacity)
+                                    checkable: true
+                                    radio: true
+                                    checked: segment.current
+                                    accessibleName: segment.modelData.name
+                                    onClicked: win.tab.setViewMode(segment.modelData.mode)
+
+                                    ViewGlyph {
+                                        anchors.centerIn: parent
+                                        kind: segment.modelData.mode
+                                    }
+                                }
+
+                                // The rule before this segment, where neither view beside it is the selected one.
+                                Rectangle {
+                                    visible: segment.index > 0 && win.tab !== null && !segment.current && win.tab.viewMode !== win.viewModes[segment.index - 1].mode
+                                    x: -width / 2
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Tokens.appsBorderWidth
+                                    height: Tokens.filesViewSeparatorHeight
+                                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesViewSeparatorOpacity)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // The switcher folded into one pop-up button while the search field is open or the title has no room
+                // (Finder-Search): the current view's glyph and up and down chevrons; it opens View As.
+                Rectangle {
+                    visible: win.compactViews
+                    width: Tokens.filesViewPopupWidth
+                    height: Tokens.filesToolbarCapsule
+                    radius: height / 2
+                    color: Appearance.buttonFill
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    ToolButton {
+                        id: viewPopup
+                        anchors.fill: parent
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarCapsule
+                        enabled: win.tab !== null
+                        accessibleName: qsTr("View")
+                        onClicked: {
+                            const p = viewPopup.mapToItem(null, 0, viewPopup.height + Tokens.spacingXs);
+                            win.menuLayer.open(win.tab.viewSubmenu().submenu, p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                        }
+
+                        Item {
+                            width: viewPopup.width
+                            height: viewPopup.height
+
+                            // In the slot of the icon glyph (15 wide); the wider glyphs keep its centre.
+                            ViewGlyph {
+                                x: Tokens.filesViewPopupInset
+                                anchors.verticalCenter: parent.verticalCenter
+                                size: 2 * Tokens.filesViewIconsSquare + Tokens.filesViewIconsGap
+                                kind: win.tab !== null ? win.tab.viewMode : "icons"
+                                color: viewPopup.foreground
+                            }
+
+                            Repeater {
+                                model: [-1, 1]
+
+                                Icon {
+                                    required property int modelData
+                                    x: Tokens.filesViewPopupInset + 2 * Tokens.filesViewIconsSquare + Tokens.filesViewIconsGap + Tokens.filesViewPopupChevronGap
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.verticalCenterOffset: modelData * Tokens.filesViewPopupChevronOffset
+                                    name: "chevron-down"
+                                    rotation: modelData < 0 ? 180 : 0
+                                    size: Tokens.filesViewPopupChevronSize
+                                    color: viewPopup.foreground
                                 }
                             }
                         }

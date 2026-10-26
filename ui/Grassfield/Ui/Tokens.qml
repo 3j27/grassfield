@@ -1455,6 +1455,68 @@ QtObject {
     readonly property int filesGroupChevronGap: 3
     // macOS 27 Finder: the chevron 7 x 4 (own chevron-down symbol, its mark 0.56 of the box) [ref: docs/specs/files.md § Views and selection]
     readonly property real filesGroupChevronSize: 12.5
+    // macOS 27 Finder: the view switcher's four segments 39.5 apart (glyph centres 21.25, 60.5, 101, 139.75 from the capsule's left end; Finder-Home at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewSegmentWidth: 39.5
+    // macOS 27 Finder: 1.5 between the capsule's ends and the first and last segments (the capsule 161 wide) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGroupPadding: 1.5
+    // macOS 27 Finder: the selected view's pill 34 wide, 4.5 inside the capsule [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPillWidth: 34
+    // macOS 27 Finder: the selected view's pill 28 high, 4.5 under the capsule's top and above its bottom [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPillHeight: 28
+    // macOS 27 Finder: the selected view's pill darker than the capsule (230 on 252: the fill colour at 0.09) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewPillOpacity: 0.09
+    // macOS 27 Finder: a 1-wide, 20-high rule between two views that are not selected [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewSeparatorHeight: 20
+    // macOS 27 Finder: the rule 196 on the 252 capsule (the fill colour at 0.22) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewSeparatorOpacity: 0.22
+    // macOS 27 Finder: the view glyphs' outlines 1.5 thick [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGlyphStroke: 1.5
+    // macOS 27 Finder: the icon glyph's squares rounded 2 [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewGlyphRadius: 2
+    // macOS 27 Finder: the column and gallery glyphs' frames rounded 2.5 [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGlyphFrameRadius: 2.5
+    // macOS 27 Finder: the icon glyph four 7 squares, the glyph 15 x 15 [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewIconsSquare: 7
+    // macOS 27 Finder: 1 between the icon glyph's squares [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewIconsGap: 1
+    // macOS 27 Finder: the list glyph's bullets 2 across [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListBullet: 2
+    // macOS 27 Finder: 2 between a bullet and its line [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListGap: 2
+    // macOS 27 Finder: the list glyph's lines 13 long (the glyph 17 x 12) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListLine: 13
+    // macOS 27 Finder: the list glyph's lines 1.25 thick [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewListThickness: 1.25
+    // macOS 27 Finder: the list glyph's rows 5 apart [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListPitch: 5
+    // macOS 27 Finder: the column glyph a 19.5 x 15 frame in three panes [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewColumnsWidth: 19.5
+    // macOS 27 Finder: the column glyph 15 high [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewColumnsHeight: 15
+    // macOS 27 Finder: the gallery glyph 19 wide, 14.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewGalleryWidth: 19
+    // macOS 27 Finder: the gallery glyph's frame 10.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryFrameHeight: 10.5
+    // macOS 27 Finder: 1.5 between the gallery glyph's frame and its strip [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryGap: 1.5
+    // macOS 27 Finder: five cells in the gallery glyph's strip [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewGalleryCells: 5
+    // macOS 27 Finder: the strip's cells 2.75 x 2.5, spread across the frame's width [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryCellWidth: 2.75
+    // macOS 27 Finder: the strip's cells 2.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryCellHeight: 2.5
+    // macOS 27 Finder: the view switcher as one pop-up button, 46 x 36, while the search field is open (Finder-Search at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPopupWidth: 46
+    // macOS 27 Finder: the current view's glyph 10.5 from the pop-up's left end [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewPopupInset: 10.5
+    // macOS 27 Finder: the up and down chevrons' marks 6.5 after the glyph (their 12 box from 3.75 after; the marks end 8 from the right end) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewPopupChevronGap: 3.75
+    // macOS 27 Finder: each chevron mark 6.5 wide (own chevron-down symbol, its mark 0.54 of the box) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPopupChevronSize: 12
+    // estimate: the room the folder title keeps before the view switcher folds into its pop-up (no capture of a narrow Finder window) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesToolbarTitleMinWidth: 120
+    // macOS 27 Finder: the up and down chevrons' marks centred 3 above and below the middle [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPopupChevronOffset: 3
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

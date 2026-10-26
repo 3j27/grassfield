@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// Small glyphs drawn from rectangles (Grassfield's own, no icon assets): "icons" (2x2 grid),
-// "list" (rows), "columns" (three panes), "gallery" (a large pane over a strip), "more" (three dots), "plus",
+// Small glyphs drawn from rectangles (Grassfield's own, no icon assets): the view glyphs "icons" (2x2 grid), "list" (rows),
+// "columns" (three panes) and "gallery" (a frame over a strip), at the sizes measured on Finder-Home; "more" (three dots), "plus",
 // "group" (two groups: a rule over three small squares each; the Group By button, measured on Finder-Home).
 Item {
     id: root
@@ -19,43 +19,44 @@ Item {
     Accessible.role: Accessible.Graphic
     Accessible.ignored: true
 
-    // icons: four rounded squares
+    // icons: four outlined rounded squares (the view glyphs are measured on Finder-Home: Tokens.filesView*)
     Grid {
         visible: root.kind === "icons"
         anchors.centerIn: parent
         columns: 2
-        spacing: root.stroke * 1.5
+        spacing: Tokens.filesViewIconsGap
         Repeater {
             model: 4
             Rectangle {
-                width: (root.size - root.stroke * 1.5) / 2 - root.stroke
+                width: Tokens.filesViewIconsSquare
                 height: width
-                radius: root.stroke
+                radius: Tokens.filesViewGlyphRadius
                 color: "transparent"
-                border.width: root.stroke
+                border.width: Tokens.filesViewGlyphStroke
                 border.color: root.color
             }
         }
     }
 
-    // list: bullet + line per row
+    // list: a bullet and a line per row
     Column {
         visible: root.kind === "list"
         anchors.centerIn: parent
-        spacing: root.size / 5
+        spacing: Tokens.filesViewListPitch - Tokens.filesViewListBullet
         Repeater {
             model: 3
             Row {
-                spacing: root.stroke * 1.5
+                spacing: Tokens.filesViewListGap
                 Rectangle {
-                    width: root.stroke * 1.5
-                    height: root.stroke * 1.5
+                    width: Tokens.filesViewListBullet
+                    height: width
                     radius: width / 2
                     color: root.color
                 }
                 Rectangle {
-                    width: root.size * 0.7
-                    height: root.stroke * 1.5
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Tokens.filesViewListLine
+                    height: Tokens.filesViewListThickness
                     radius: height / 2
                     color: root.color
                 }
@@ -63,58 +64,50 @@ Item {
         }
     }
 
-    // columns: outlined box split in three
+    // columns: an outlined frame in three panes
     Rectangle {
         id: columnsBox
         visible: root.kind === "columns"
         anchors.centerIn: parent
-        width: root.size
-        height: root.size * 0.75
-        radius: root.stroke
+        width: Tokens.filesViewColumnsWidth
+        height: Tokens.filesViewColumnsHeight
+        radius: Tokens.filesViewGlyphFrameRadius
         color: "transparent"
-        border.width: root.stroke
+        border.width: Tokens.filesViewGlyphStroke
         border.color: root.color
-        Row {
-            anchors.fill: parent
-            Repeater {
-                model: 3
-                Item {
-                    id: pane
-                    required property int index
-                    width: columnsBox.width / 3
-                    height: columnsBox.height
-                    Rectangle {
-                        visible: pane.index > 0
-                        width: root.stroke
-                        height: columnsBox.height
-                        color: root.color
-                    }
-                }
+        Repeater {
+            model: 2
+            Rectangle {
+                required property int index
+                // The dividers split the inside of the frame in three.
+                x: Tokens.filesViewGlyphStroke + (columnsBox.width - 2 * Tokens.filesViewGlyphStroke) * (index + 1) / 3 - width / 2
+                width: Tokens.filesViewGlyphStroke
+                height: columnsBox.height
+                color: root.color
             }
         }
     }
 
-    // gallery: an outlined preview pane over a strip of three small squares
+    // gallery: an outlined frame over a strip of small cells
     Column {
         visible: root.kind === "gallery"
         anchors.centerIn: parent
-        spacing: root.stroke
+        spacing: Tokens.filesViewGalleryGap
         Rectangle {
-            width: root.size
-            height: root.size * 0.55
-            radius: root.stroke
+            width: Tokens.filesViewGalleryWidth
+            height: Tokens.filesViewGalleryFrameHeight
+            radius: Tokens.filesViewGlyphFrameRadius
             color: "transparent"
-            border.width: root.stroke
+            border.width: Tokens.filesViewGlyphStroke
             border.color: root.color
         }
         Row {
-            spacing: root.stroke * 1.5
+            spacing: (Tokens.filesViewGalleryWidth - Tokens.filesViewGalleryCells * Tokens.filesViewGalleryCellWidth) / (Tokens.filesViewGalleryCells - 1)
             Repeater {
-                model: 3
+                model: Tokens.filesViewGalleryCells
                 Rectangle {
-                    width: (root.size - 2 * root.stroke * 1.5) / 3
-                    height: root.size * 0.25
-                    radius: root.stroke / 2
+                    width: Tokens.filesViewGalleryCellWidth
+                    height: Tokens.filesViewGalleryCellHeight
                     color: root.color
                 }
             }
