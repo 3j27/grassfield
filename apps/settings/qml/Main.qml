@@ -886,7 +886,25 @@ Window {
         KeyboardPage {
             backend: root.backend
             store: cfg
+            onShortcutsRequested: list => keyboardShortcuts.openWith(list, root.backend.bindingsFile)
+            onSourcesRequested: (sources, layouts) => inputSources.openWith(sources, layouts)
         }
+    }
+
+    // Keyboard: the shortcuts, read-only; Input Sources and the layout to add (the page writes each change).
+    KeyboardShortcutsSheet {
+        id: keyboardShortcuts
+    }
+
+    InputSourcesSheet {
+        id: inputSources
+        onChanged: list => (page.item as KeyboardPage)?.setSources(list)
+        onAddRequested: (layouts, used) => layoutPicker.openWith(layouts, used)
+    }
+
+    LayoutPickerSheet {
+        id: layoutPicker
+        onPicked: source => inputSources.add(source)
     }
 
     Component {

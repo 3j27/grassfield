@@ -94,6 +94,47 @@ elseif case == "pointer-file" then
   say("broken", tostring(s.sensitivity), tostring(s.natural_scroll))
   s = gi.settings(d .. "/missing.lua")
   say("missing", tostring(s.sensitivity), tostring(s.natural_scroll), s.secondary_click)
+elseif case == "keyboard-file" then
+  -- Settings > Keyboard: keyboard.lua applies between Omarchy's defaults and the user's input.lua, only the keys it holds.
+  local d = os.getenv("TMPCASE")
+  fixture(d .. "/omarchy", 'hl.config({ input = { kb_layout = "us", kb_options = "compose:caps", repeat_rate = 40, repeat_delay = 250 } })\n')
+  os.execute("mkdir -p " .. d .. "/home/.config/hypr " .. d .. "/cfg")
+  local f = io.open(d .. "/cfg/keyboard.lua", "w")
+  f:write('return { repeat_rate = 15, repeat_delay = 600, kb_layout = "us,fr", kb_variant = ",bepo", numlock_by_default = false }\n'); f:close()
+  f = io.open(d .. "/home/.config/hypr/input.lua", "w"); f:write('hl.config({ input = { repeat_delay = 333 } })\n'); f:close()
+  dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
+  say("keyboard rate", tostring(flat("repeat_rate")), "delay-user-wins", tostring(flat("repeat_delay")), "layout", tostring(flat("kb_layout")),
+      "variant", tostring(flat("kb_variant")), "options", tostring(flat("kb_options")), "numlock", tostring(flat("numlock_by_default")))
+  local gi = dofile(repo .. "/config/hypr/grassfield/input.lua")
+  local function put(body) local w = io.open(d .. "/k.lua", "w"); w:write(body); w:close(); return gi.keyboard(d .. "/k.lua") end
+  local k = put('return { repeat_rate = 0, kb_layout = "de" }')
+  say("one-layout", tostring(k.repeat_rate), k.kb_layout, "[" .. tostring(k.kb_variant) .. "]", tostring(k.kb_options))
+  k = put('return { repeat_rate = 1.5, repeat_delay = 50, kb_layout = "us,FR", kb_variant = "x" }')
+  say("invalid", tostring(next(k)))
+  k = put('return { kb_layout = "us,fr,de,es,it" }')
+  say("too-many", tostring(k.kb_layout))
+  k = put('return { kb_layout = "us,fr", kb_variant = "intl;rm" }')
+  say("bad-variant", k.kb_layout, "[" .. k.kb_variant .. "]")
+  k = put('os.execute("touch ' .. d .. '/pwned") return { repeat_rate = 10 }')
+  say("no-code-runs", tostring(io.open(d .. "/pwned") == nil), tostring(k.repeat_rate))
+  say("missing", tostring(next(gi.keyboard(d .. "/none.lua"))))
+elseif case == "gestures" then
+  -- Settings > Trackpad > More Gestures: bindings.lua sets only the gestures the Settings file leaves on.
+  local count = {}
+  hl.gesture = function(g) local key = g.fingers .. ":" .. g.direction; count[key] = (count[key] or 0) + 1 end
+  hl.bind = function() end
+  local function run(flags)
+    count = {}
+    package.loaded["grassfield.input"] = flags and { settings = function() return flags end } or nil
+    dofile(repo .. "/config/hypr/grassfield/bindings.lua")
+    local keys = {}
+    for k in pairs(count) do keys[#keys + 1] = k end
+    table.sort(keys)
+    return table.concat(keys, " ")
+  end
+  say("all", run(nil))
+  say("spaces-off apps-off", run({ gesture_spaces = false, gesture_overview = true, gesture_apps = false }))
+  say("none", "[" .. run({ gesture_spaces = false, gesture_overview = false, gesture_apps = false }) .. "]")
 elseif case == "fallback" then
   local d = os.getenv("TMPCASE")
   fixture(d .. "/omarchy", "error('renamed upstream')\n")
@@ -159,6 +200,23 @@ check grep -q "^no-code-runs true 0$" <<<"$out"
 check grep -q "^broken 0 true$" <<<"$out"
 check grep -q "^missing 0 true two_finger$" <<<"$out"
 
+out=$(run keyboard-file GRASSFIELD_CONFIG_HOME="$tmp/keyboard-file/cfg" OMARCHY_PATH="$tmp/keyboard-file/omarchy")
+desc="Settings > Keyboard: its file applies after Omarchy (rate 15, two layouts with Ctrl+Space), the user's input.lua still wins (delay 333), numlock is never set"
+check grep -q "^keyboard rate 15 delay-user-wins 333 layout us,fr variant ,bepo options compose:caps,shift:both_capslock_cancel,grp:ctrl_space_toggle numlock nil$" <<<"$out"
+desc="Settings > Keyboard: one layout gets no switch and an empty variant; 0 turns repeat off"
+check grep -q "^one-layout 0 de \[\] nil$" <<<"$out"
+desc="Settings > Keyboard: mistyped or out-of-range entries, more than four layouts and a bad variant are left out"
+check grep -q "^invalid nil$" <<<"$out"
+check grep -q "^too-many nil$" <<<"$out"
+check grep -q "^bad-variant us,fr \[,\]$" <<<"$out"
+desc="Settings > Keyboard: the file is read in an empty environment, a missing file sets nothing"
+check grep -q "^no-code-runs true nil$" <<<"$out"
+check grep -q "^missing nil$" <<<"$out"
+out=$(run gestures)
+desc="Settings > Trackpad > More Gestures: every gesture without the Settings file, only those left on with it"
+check grep -q "^all 3:down 3:horizontal 3:up 4:pinchin 4:pinchout$" <<<"$out"
+check grep -q "^spaces-off apps-off 3:down 3:up$" <<<"$out"
+check grep -q "^none \[\]$" <<<"$out"
 out=$(run fallback OMARCHY_PATH="$tmp/fallback/omarchy")
 desc="when Omarchy's input module cannot load, the same defaults are applied (compose:caps, 40/250, numlock) and logged"
 check grep -q "^ok true input fallback problems 1$" <<<"$out"

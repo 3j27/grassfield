@@ -1,6 +1,7 @@
--- Input defaults (ADR-0002) and the user's Mouse & Trackpad choices (GF-066). Pointer behaviour only. The keyboard (layout
--- from /etc/vconsole.conf, compose:caps, repeat rate and delay, numlock) is set by omarchy.lua, which loads Omarchy's
--- default.hypr.input (or reproduces it); this file must not set any kb_*, repeat_* or numlock key.
+-- Input defaults (ADR-0002) and the user's Mouse, Trackpad and Keyboard choices (GF-066, ADR-0027 amendment). The keyboard's
+-- defaults (layout from /etc/vconsole.conf, compose:caps, repeat rate and delay, numlock) are set by omarchy.lua, which loads
+-- Omarchy's default.hypr.input (or reproduces it); this file sets a kb_* or repeat_* key only when the user chose it in
+-- Settings > Keyboard (keyboard.lua below), never numlock.
 --
 -- Order (macOS: the Mouse and Trackpad settings belong to the user): omarchy.lua applies this file AFTER Omarchy's input
 -- defaults and BEFORE the user's own ~/.config/hypr/input.lua, so anything the user writes there wins over Grassfield's
@@ -15,6 +16,18 @@
 --   mouse_natural_scroll boolean        mouse wheel direction
 --   tap_to_click         boolean
 --   secondary_click      "two_finger" | "corner"   (clickfinger_behavior true | false: bottom-right corner area)
+--   gesture_spaces       boolean        swipe left or right with three fingers between Spaces (bindings.lua)
+--   gesture_overview     boolean        swipe up and down with three fingers for the Overview
+--   gesture_apps         boolean        pinch with the thumb and three fingers for Apps
+--
+-- Settings > Keyboard writes keyboard.lua next to it, the same kind of chunk; only the keys it holds are applied:
+--   repeat_rate          integer 0..100     repeats per second (0: keys do not repeat)
+--   repeat_delay         integer 100..3000  milliseconds before a held key repeats
+--   kb_layout            "us" or "us,fr"    1 to 4 xkb layouts
+--   kb_variant           ",bepo"            one field per layout, each empty or an xkb variant
+-- With two layouts or more, Ctrl+Space selects the next one (xkb grp:ctrl_space_toggle, added to Omarchy's own options).
+-- The shell reads the configuration again when either file changes (shell/platform/SessionConfig.qml), so a choice applies
+-- at once.
 
 local M = {}
 
@@ -24,28 +37,86 @@ M.defaults = {
   mouse_natural_scroll = false,
   tap_to_click = true,
   secondary_click = "two_finger",
+  gesture_spaces = true,
+  gesture_overview = true,
+  gesture_apps = true,
 }
 
-function M.path()
+-- Omarchy's keyboard options (default.hypr.input, and omarchy.lua's fallback), kept when Ctrl+Space is added.
+M.kb_options = "compose:caps,shift:both_capslock_cancel"
+
+local function config_file(name)
   local dev = os.getenv("GRASSFIELD_CONFIG_HOME")
-  if dev and dev ~= "" then return dev .. "/mouse-trackpad.lua" end
+  if dev and dev ~= "" then return dev .. "/" .. name end
   local xdg = os.getenv("XDG_CONFIG_HOME")
   local base = (xdg and xdg ~= "") and xdg or ((os.getenv("HOME") or "") .. "/.config")
-  return base .. "/grassfield/mouse-trackpad.lua"
+  return base .. "/grassfield/" .. name
+end
+
+function M.path()
+  return config_file("mouse-trackpad.lua")
+end
+
+function M.keyboard_path()
+  return config_file("keyboard.lua")
+end
+
+-- A generated chunk's table, read in an empty environment, or nil.
+local function read_table(path)
+  local chunk = loadfile(path, "t", {})
+  if not chunk then return nil end
+  local ok, saved = pcall(chunk)
+  if not ok or type(saved) ~= "table" then return nil end
+  return saved
+end
+
+local function whole(v, lo, hi)
+  return type(v) == "number" and v == math.floor(v) and v >= lo and v <= hi
+end
+
+-- The keyboard choices the file holds, each checked; unknown or invalid entries are left out (the session's value stays).
+function M.keyboard(path)
+  local out = {}
+  local saved = read_table(path or M.keyboard_path())
+  if not saved then return out end
+  if whole(saved.repeat_rate, 0, 100) then out.repeat_rate = saved.repeat_rate end
+  if whole(saved.repeat_delay, 100, 3000) then out.repeat_delay = saved.repeat_delay end
+  local layouts = 0
+  if type(saved.kb_layout) == "string" and #saved.kb_layout <= 64 then
+    local good = true
+    for field in (saved.kb_layout .. ","):gmatch("([^,]*),") do
+      layouts = layouts + 1
+      if not field:match("^[a-z][a-z0-9_-]*$") then good = false end
+    end
+    if good and layouts >= 1 and layouts <= 4 then out.kb_layout = saved.kb_layout else layouts = 0 end
+  end
+  if out.kb_layout and type(saved.kb_variant) == "string" and #saved.kb_variant <= 128 then
+    local fields, good = 0, true
+    for field in (saved.kb_variant .. ","):gmatch("([^,]*),") do
+      fields = fields + 1
+      if field ~= "" and not field:match("^[a-z0-9][a-z0-9_-]*$") then good = false end
+    end
+    if good and fields == layouts then out.kb_variant = saved.kb_variant end
+  end
+  if out.kb_layout and not out.kb_variant then
+    out.kb_variant = string.rep(",", layouts - 1)
+  end
+  if layouts >= 2 then
+    out.kb_options = M.kb_options .. ",grp:ctrl_space_toggle"
+  end
+  return out
 end
 
 -- The user's saved values over the defaults; invalid or unknown entries are ignored (the default stays).
 function M.settings(path)
   local out = {}
   for k, v in pairs(M.defaults) do out[k] = v end
-  local chunk = loadfile(path or M.path(), "t", {})
-  if not chunk then return out end
-  local ok, saved = pcall(chunk)
-  if not ok or type(saved) ~= "table" then return out end
+  local saved = read_table(path or M.path())
+  if not saved then return out end
   if type(saved.sensitivity) == "number" and saved.sensitivity >= -1 and saved.sensitivity <= 1 then
     out.sensitivity = saved.sensitivity
   end
-  for _, k in ipairs({ "natural_scroll", "mouse_natural_scroll", "tap_to_click" }) do
+  for _, k in ipairs({ "natural_scroll", "mouse_natural_scroll", "tap_to_click", "gesture_spaces", "gesture_overview", "gesture_apps" }) do
     if type(saved[k]) == "boolean" then out[k] = saved[k] end
   end
   if saved.secondary_click == "two_finger" or saved.secondary_click == "corner" then
@@ -54,8 +125,12 @@ function M.settings(path)
   return out
 end
 
-function M.apply(path)
+function M.apply(path, keyboard_path)
   local s = M.settings(path)
+  local k = M.keyboard(keyboard_path)
+  if next(k) ~= nil then
+    hl.config({ input = k })
+  end
   hl.config({
     input = {
       -- Click to focus keyboard; pointer focus (scrolling, hover) follows the mouse, like macOS.

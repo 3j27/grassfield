@@ -4235,10 +4235,69 @@
     </message>
 </context>
 <context>
+    <name>InputSourcesSheet</name>
+    <message>
+        <source>Input Sources</source>
+        <translation>Méthodes de saisie</translation>
+    </message>
+    <message>
+        <source>Press Control-Space to select the next input source.</source>
+        <translation>Appuyez sur Contrôle-Espace pour sélectionner la méthode de saisie suivante.</translation>
+    </message>
+    <message>
+        <source>Add an input source to type in another layout.</source>
+        <translation>Ajoutez une méthode de saisie pour écrire avec une autre disposition.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Add an input source</source>
+        <translation>Ajouter une méthode de saisie</translation>
+    </message>
+    <message>
+        <source>Remove the selected input source</source>
+        <translation>Supprimer la méthode de saisie sélectionnée</translation>
+    </message>
+</context>
+<context>
     <name>KeyboardPage</name>
     <message>
         <source>Keyboard</source>
         <translation>Clavier</translation>
+    </message>
+    <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>Le changement n’a pas pu être enregistré : %1.</translation>
+    </message>
+    <message>
+        <source>Key repeat rate</source>
+        <translation>Fréquence de répétition des touches</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivée</translation>
+    </message>
+    <message>
+        <source>Slow</source>
+        <translation>Lente</translation>
+    </message>
+    <message>
+        <source>Fast</source>
+        <translation>Rapide</translation>
+    </message>
+    <message>
+        <source>Delay until repeat</source>
+        <translation>Délai avant répétition</translation>
+    </message>
+    <message>
+        <source>Long</source>
+        <translation>Long</translation>
+    </message>
+    <message>
+        <source>Short</source>
+        <translation>Court</translation>
     </message>
     <message>
         <source>Shortcuts in menus</source>
@@ -4261,9 +4320,24 @@
         <translation>Noms des touches</translation>
     </message>
     <message>
-        <source>The shortcuts file could not be read: %1</source>
-        <translation>Le fichier des raccourcis n’a pas pu être lu&#xa0;: %1</translation>
+        <source>Keyboard Shortcuts…</source>
+        <translation>Raccourcis clavier…</translation>
     </message>
+    <message>
+        <source>Text Input</source>
+        <translation>Saisie de texte</translation>
+    </message>
+    <message>
+        <source>Input Sources</source>
+        <translation>Méthodes de saisie</translation>
+    </message>
+    <message>
+        <source>Edit…</source>
+        <translation>Modifier…</translation>
+    </message>
+</context>
+<context>
+    <name>KeyboardShortcutsSheet</name>
     <message>
         <source>Keyboard Shortcuts</source>
         <translation>Raccourcis clavier</translation>
@@ -4271,6 +4345,14 @@
     <message>
         <source>Shortcuts are read-only here. They are defined in %1.</source>
         <translation>Les raccourcis sont en lecture seule ici. Ils sont définis dans %1.</translation>
+    </message>
+    <message>
+        <source>The shortcuts file could not be read: %1</source>
+        <translation>Le fichier des raccourcis n’a pas pu être lu : %1</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
     </message>
 </context>
 <context>
@@ -4330,6 +4412,33 @@
     <message>
         <source>Number format</source>
         <translation>Format des nombres</translation>
+    </message>
+</context>
+<context>
+    <name>LayoutPickerSheet</name>
+    <message>
+        <source>Add an Input Source</source>
+        <translation>Ajouter une méthode de saisie</translation>
+    </message>
+    <message>
+        <source>Choose a keyboard layout.</source>
+        <translation>Choisissez une disposition de clavier.</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Keyboard layouts</source>
+        <translation>Dispositions de clavier</translation>
+    </message>
+    <message>
+        <source>No layouts</source>
+        <translation>Aucune disposition</translation>
     </message>
 </context>
 <context>

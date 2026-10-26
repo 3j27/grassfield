@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# ADR-0027: the shell's side of a display trial (shell/platform/Displays.qml), offscreen, against a fake Hyprland: a request
+# ADR-0027: the shell's side of a display trial (shell/platform/Displays.qml) and of the input files (SessionConfig.qml),
+# offscreen, against a fake Hyprland: a request
 # socket that records every request and answers it ("ok", "[]" for the JSON queries), and a silent event socket. Runs
 # tests/shell/displays_trial.d/trial.qml as a dev session (the trial and state files under GRASSFIELD_STATE_HOME), then checks
 # that the fake saw exactly the reloads the QML counted. Nothing here can reach a real Hyprland: HYPRLAND_INSTANCE_SIGNATURE
@@ -14,7 +15,7 @@ tmp=$(mktemp -d "$root/.dev/displays-trial.XXXXXX" 2>/dev/null || { mkdir -p "$r
 fake=""
 trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp"' EXIT
 sig=gf-displays-trial
-mkdir -p "$tmp/runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/cfg"
+mkdir -p "$tmp/runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg"
 chmod 700 "$tmp/runtime" "$tmp/cache"
 # The test shell.qml next to links to every module of the real shell (qs.platform's qmldir names singletons of its siblings).
 for entry in shell/*; do
@@ -62,7 +63,7 @@ res=$(grep -o 'displays-trial: .*' <<<"$out" || true)
 echo "${res:-FAIL: displays-trial: no result}"
 grep -q 'displays-trial: PASS' <<<"$res" || { fail=1; echo "$out" | tail -20; }
 reloads=$(grep -cx 'reload' "$tmp/requests.log" 2>/dev/null || true)
-if [[ $reloads == 7 ]]; then echo "PASS: displays_trial the fake Hyprland received the 7 reloads"; else echo "FAIL: displays_trial the fake Hyprland received ${reloads:-0} reloads, not 7"; fail=1; fi
+if [[ $reloads == 9 ]]; then echo "PASS: displays_trial the fake Hyprland received the 9 reloads"; else echo "FAIL: displays_trial the fake Hyprland received ${reloads:-0} reloads, not 9"; fail=1; fi
 if grep -qvE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log"; then
   echo "FAIL: displays_trial a request other than reload or a JSON query: $(grep -vE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log" | head -3)"; fail=1
 else

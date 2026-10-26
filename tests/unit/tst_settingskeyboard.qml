@@ -1,0 +1,137 @@
+import QtQuick
+import QtTest
+import "../../apps/settings/qml/Keyboard.js" as Keyboard
+
+// Settings > Keyboard (ADR-0027 amendment): the Grassfield-owned keyboard.lua (only the keys chosen, the rules of
+// config/hypr/grassfield/input.lua), the session's layout from /etc/vconsole.conf, xkb's base.lst, the repeat stops; then the page
+// writing the file and the Input Sources sheet adding, removing and moving layouts.
+TestCase {
+    id: testCase
+    name: "SettingsKeyboard"
+    width: 700
+    height: 900
+    visible: true
+    when: windowShown
+
+    function test_parseAndSerialize() {
+        compare(Keyboard.parse(""), {});
+        const text = Keyboard.serialize({rate: 15, delay: 600, sources: [{layout: "us", variant: ""}, {layout: "fr", variant: "bepo"}]});
+        verify(text.indexOf("  repeat_rate = 15,\n") >= 0);
+        verify(text.indexOf("  kb_layout = \"us,fr\",\n") >= 0);
+        verify(text.indexOf("  kb_variant = \",bepo\",\n") >= 0);
+        compare(Keyboard.parse(text), {rate: 15, delay: 600, sources: [{layout: "us", variant: ""}, {layout: "fr", variant: "bepo"}]});
+        // Only what was chosen: no key, no line (the session's value stays).
+        compare(Keyboard.serialize({rate: 0}).match(/=/g).length, 1);
+        compare(Keyboard.parse(Keyboard.serialize({})), {});
+        // Out of range, mistyped, too many layouts, a bad variant: left out, as input.lua does.
+        compare(Keyboard.parse("return {\n  repeat_rate = 101,\n  repeat_delay = 50,\n}\n"), {});
+        compare(Keyboard.parse("  repeat_rate = 1.5,\n"), {});
+        compare(Keyboard.parse('  kb_layout = "us,fr,de,es,it",\n'), {});
+        compare(Keyboard.parse('  kb_layout = "us,FR",\n'), {});
+        // Variants that do not fit are dropped and the layouts stay, as input.lua does.
+        compare(Keyboard.parse('  kb_layout = "us,fr",\n  kb_variant = "intl;x,bepo",\n').sources, [{layout: "us", variant: ""}, {layout: "fr", variant: ""}]);
+        // A variant list of the wrong length: no variants.
+        compare(Keyboard.parse('  kb_layout = "us,fr",\n  kb_variant = "intl",\n').sources, [{layout: "us", variant: ""}, {layout: "fr", variant: ""}]);
+        // The writer never writes what the reader would refuse.
+        compare(Keyboard.serialize({rate: 500, delay: 7, sources: [{layout: "US", variant: ""}]}).indexOf("="), -1);
+    }
+
+    function test_sessionAndStops() {
+        compare(Keyboard.sessionSources("KEYMAP=fr\nXKBLAYOUT=fr\nXKBVARIANT=bepo\n"), [{layout: "fr", variant: "bepo"}]);
+        compare(Keyboard.sessionSources('XKBLAYOUT="us,de"\nXKBVARIANT=",nodeadkeys"\n'), [{layout: "us", variant: ""}, {layout: "de", variant: "nodeadkeys"}]);
+        compare(Keyboard.sessionSources(""), [{layout: "us", variant: ""}]);
+        // Omarchy's 40 and 250 are stops: the session's values sit on a stop.
+        compare(Keyboard.RATES[Keyboard.nearestIndex(Keyboard.RATES, Keyboard.SESSION_RATE)], 40);
+        compare(Keyboard.DELAYS[Keyboard.nearestIndex(Keyboard.DELAYS, Keyboard.SESSION_DELAY)], 250);
+        compare(Keyboard.RATES.length, 8);
+        compare(Keyboard.DELAYS.length, 6);
+        compare(Keyboard.RATES[0], 0);
+    }
+
+    function test_layouts() {
+        const l = Keyboard.parseLayouts("! model\n  pc105 Generic 105-key PC\n! layout\n  us              English (US)\n  fr              French\n"
+            + "! variant\n  intl            us: English (US, intl., with dead keys)\n  bepo            fr: French (BEPO)\n! option\n  grp:ctrl_space_toggle Ctrl+Space\n");
+        compare(l.all.map(x => x.name), ["English (US)", "English (US, intl., with dead keys)", "French", "French (BEPO)"]);
+        compare(Keyboard.sourceName({layout: "fr", variant: "bepo"}, l.names), "French (BEPO)");
+        compare(Keyboard.sourceName({layout: "xx", variant: ""}, l.names), "xx");
+    }
+
+    Component {
+        id: fakeBackend
+        QtObject {
+            property string configFile: "/home/u/.config/grassfield/grassfield.json"
+            property string bindingsFile: "/nowhere/bindings.lua"
+            property var files: ({})
+            property var writes: []
+            function readText(path: string): var {
+                return {exists: files[path] !== undefined, ok: files[path] !== undefined, text: files[path] ?? ""};
+            }
+            function writeText(path: string, text: string): string {
+                writes.push({path: path, text: text});
+                files[path] = text;
+                return "";
+            }
+        }
+    }
+
+    Component {
+        id: fakeStore
+        QtObject {
+            function value(key: string): var {
+                return "automatic";
+            }
+            function set(key: string, value: var): void {
+            }
+        }
+    }
+
+    function test_pageWritesOnlyWhatIsChosen() {
+        const backend = createTemporaryObject(fakeBackend, testCase);
+        backend.files = {"/etc/vconsole.conf": "XKBLAYOUT=fr\n"};
+        const store = createTemporaryObject(fakeStore, testCase);
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/KeyboardPage.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const page = createTemporaryObject(comp, testCase, {backend: backend, store: store, width: 700, height: 900});
+        // Nothing chosen: the session's values and layout.
+        compare(page.rateIndex, 6);
+        compare(page.delayIndex, 5);
+        compare(page.sources, [{layout: "fr", variant: ""}]);
+        page.change("rate", 15);
+        compare(backend.writes.length, 1);
+        compare(backend.writes[0].path, "/home/u/.config/grassfield/keyboard.lua");
+        compare(Keyboard.parse(backend.writes[0].text), {rate: 15});
+        page.setSources([{layout: "fr", variant: ""}, {layout: "us", variant: "intl"}]);
+        compare(Keyboard.parse(backend.writes[1].text), {rate: 15, sources: [{layout: "fr", variant: ""}, {layout: "us", variant: "intl"}]});
+        compare(page.sources.length, 2);
+    }
+
+    SignalSpy {
+        id: changedSpy
+        signalName: "changed"
+    }
+
+    function test_inputSourcesSheet() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/InputSourcesSheet.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const sheet = createTemporaryObject(comp, testCase, {width: 700, height: 900});
+        changedSpy.target = sheet;
+        changedSpy.clear();
+        sheet.openWith([{layout: "us", variant: ""}], {names: {}, all: []});
+        sheet.add({layout: "fr", variant: "bepo"});
+        compare(sheet.sources, [{layout: "us", variant: ""}, {layout: "fr", variant: "bepo"}]);
+        compare(sheet.selected, 1);
+        // A source already there is not added twice.
+        sheet.add({layout: "us", variant: ""});
+        compare(sheet.sources.length, 2);
+        sheet.move(-1);
+        compare(sheet.sources[0], {layout: "fr", variant: "bepo"});
+        compare(sheet.selected, 0);
+        sheet.add({layout: "de", variant: ""});
+        sheet.add({layout: "es", variant: ""});
+        sheet.add({layout: "it", variant: ""});
+        compare(sheet.sources.length, Keyboard.MAX_LAYOUTS);
+        // The fifth layout was not added: four changes (two adds, a move, two more adds less the refused one).
+        compare(changedSpy.count, 4);
+        compare(changedSpy.signalArguments[3][0].length, 4);
+    }
+}

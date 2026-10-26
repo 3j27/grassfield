@@ -8,7 +8,9 @@ import qs.platform
 // fake Hyprland that only records requests). A trial left by a stopped shell is taken back at start; a new trial is applied (one
 // reload) and published; Keep empties the file without a reload; the deadline, Revert and a trial already past its deadline take
 // it back (the file emptied, then one reload); Keep or Revert of a trial the shell does not run changes nothing. The trial file is
-// written atomically (a rename), as Settings writes it. Prints "displays-trial: PASS" or the failing step.
+// written atomically (a rename), as Settings writes it. Then the input files (ADR-0027 amendment): three quick writes of a
+// keyboard.lua that did not exist give one reload once they settle, a change of mouse-trackpad.lua one more. Prints
+// "displays-trial: PASS" or the failing step.
 ShellRoot {
     id: root
 
@@ -41,6 +43,20 @@ ShellRoot {
         watchChanges: true
         printErrors: false
         onFileChanged: reload()
+    }
+
+    FileView {
+        id: keyboardFile
+        path: SessionConfig.keyboardPath
+        atomicWrites: true
+        printErrors: false
+    }
+
+    FileView {
+        id: mouseFile
+        path: SessionConfig.mouseTrackpadPath
+        atomicWrites: true
+        printErrors: false
     }
 
     FileView {
@@ -129,7 +145,22 @@ ShellRoot {
                 root.check("a line that is not a trial: nothing", Displays.reloads === 7 && Displays.running === "");
                 const last = root.published();
                 root.check("the state is published", last !== null && last.v === 1 && Array.isArray(last.monitors));
-                console.log(root.failures.length === 0 ? "displays-trial: PASS (" + Displays.reloads + " reloads)" : "displays-trial: FAIL " + root.failures.join("; "));
+                root.check("the session config counted the trial's reloads", SessionConfig.reloads === 7);
+                keyboardFile.setText("return { repeat_rate = 10 }\n");
+                keyboardFile.setText("return { repeat_rate = 15 }\n");
+                keyboardFile.setText("return { repeat_rate = 25 }\n");
+                break;
+            case 14:
+                break;
+            case 15:
+                root.check("three writes of a new keyboard.lua: one reload", SessionConfig.reloads === 8 && Displays.reloads === 7);
+                mouseFile.setText("return { tap_to_click = false }\n");
+                break;
+            case 16:
+                break;
+            case 17:
+                root.check("a change of mouse-trackpad.lua: one more", SessionConfig.reloads === 9);
+                console.log(root.failures.length === 0 ? "displays-trial: PASS (" + SessionConfig.reloads + " reloads)" : "displays-trial: FAIL " + root.failures.join("; "));
                 Qt.quit();
                 break;
             }

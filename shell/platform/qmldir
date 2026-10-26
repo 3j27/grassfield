@@ -13,3 +13,4 @@ UsableProbe 1.0 UsableProbe.qml
 singleton InputSource 1.0 InputSource.qml
 singleton Zoom 1.0 Zoom.qml
 singleton Displays 1.0 Displays.qml
+singleton SessionConfig 1.0 SessionConfig.qml

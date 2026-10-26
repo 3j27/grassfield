@@ -573,6 +573,12 @@ QtObject {
     readonly property int controlSliderKnobWidth: 20
     // F1 gap 18: Quick Settings slider track stays 4 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderTrackCompact: 4
+    // a stepped slider's stops: dots 2 wide under the track (macOS 27 Keyboard, key repeat) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int controlSliderStopSize: 2
+    // a stepped slider's stops centred 6.5 under the track's centre [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property real controlSliderStopOffset: 6.5
+    // a stepped slider's stops: the text colour at 0.27 (183 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property real controlSliderStopOpacity: 0.27
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
@@ -1560,6 +1566,22 @@ QtObject {
     readonly property real settingsDisplayNudge: 0.1
     // Arrange…: the menu bar drawn along the top of each display's tile [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayMenuBarHeight: 3
+    // estimate: the shell reads the session configuration again this long after the last write of a Mouse, Trackpad or Keyboard choice (a slider writes on every step; ADR-0027 amendment) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsInputReloadMs: 500
+    // Keyboard's first group, the two repeat sliders side by side, 75 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatHeight: 75
+    // a repeat slider's title (13 pt): baseline 23 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatTitleBaseline: 23
+    // a repeat slider's track centred 42 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatSliderCenter: 42
+    // each repeat slider 214 wide [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatSliderWidth: 214
+    // Delay until repeat's column at 244 from the group's left edge [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatSecondX: 244
+    // a repeat slider's end labels: baseline 62 below the group's top (cap top 54.5) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatLabelBaseline: 62
+    // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsPushRowHeight: 44
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

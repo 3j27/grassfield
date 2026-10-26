@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
 
@@ -20,6 +21,9 @@ T.Control {
     // macOS Control Center module slider: no knob, a white fill with a round cap on a darker translucent track (the fill
     // keeps a minimum of one cap so the slider never vanishes); the keyboard ring goes round the track.
     property bool knobless: false
+    // A stepped slider (macOS 27 Keyboard's key repeat): this many stops, drawn as dots under the track; a change snaps to the
+    // nearest and the keys move from one to the next. 0: continuous.
+    property int stops: 0
 
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
@@ -54,7 +58,8 @@ T.Control {
         // A hidden or disabled slider reports nothing, whoever asks.
         if (!root.visible || !root.enabled)
             return;
-        const next = clampValue(v);
+        const k = root.stops > 1 && to > from ? Math.round((clampValue(v) - from) / (to - from) * (root.stops - 1)) : -1;
+        const next = k >= 0 ? from + k * (to - from) / (root.stops - 1) : clampValue(v);
         if (next === shown)
             return;
         local = next;
@@ -67,7 +72,7 @@ T.Control {
     }
 
     function nudge(direction: int): void {
-        commit(shown + direction * stepSize * (to - from));
+        commit(shown + direction * (root.stops > 1 ? 1 / (root.stops - 1) : stepSize) * (to - from));
     }
 
     Keys.onPressed: event => {
@@ -110,6 +115,21 @@ T.Control {
         FocusRing {
             shapeRadius: parent.radius
             visible: root.knobless && root.visualFocus
+        }
+    }
+
+    Repeater {
+        model: root.stops > 1 ? root.stops : 0
+
+        delegate: Rectangle {
+            id: dot
+            required property int index
+            x: root.knobWidth / 2 + dot.index / (root.stops - 1) * root.travel - dot.width / 2
+            y: root.height / 2 + Tokens.controlSliderStopOffset - dot.height / 2
+            width: Tokens.controlSliderStopSize
+            height: dot.width
+            radius: dot.width / 2
+            color: Appearance.withAlpha(Appearance.colors.text, Tokens.controlSliderStopOpacity)
         }
     }
 

@@ -12,7 +12,7 @@ import "DisplaysFile.js" as DisplaysFile
 // - it publishes the monitors (Hyprland's own `monitors` answer, through Quickshell), the backlight and the trial's state in
 //   a runtime file the Settings app reads (DisplaysFile.js has the format and the paths);
 // - it runs a trial: when Settings writes the trial file, it asks Hyprland to read its configuration again (the request
-//   `reload` on the request socket; config/hypr/grassfield/displays.lua applies the trial while it runs), and takes it back
+//   `reload` through SessionConfig; config/hypr/grassfield/displays.lua applies the trial while it runs), and takes it back
 //   after its deadline, on Revert, or when it finds a trial at start: the file is emptied, then the configuration read again.
 //   Keep empties the file without a reload (Settings wrote displays.conf first). The countdown is the shell's, so a Settings
 //   that crashed or was closed cannot leave a display in a mode nobody confirmed.
@@ -44,15 +44,10 @@ Singleton {
 
     onBacklightChanged: publishDebounce.restart()
 
-    // Hyprland reads its configuration again (the trial applied or taken back): one connection per request, as the blur push.
+    // Hyprland reads its configuration again (the trial applied or taken back): SessionConfig's one request.
     function reload(): void {
-        const path = Hyprland.requestSocketPath || "";
-        if (path === "") {
-            console.info("grassfield-shell: displays: no Hyprland request socket, the configuration is not read again");
-            return;
-        }
         root.reloads++;
-        reloadSocket.createObject(root, {"path": path});
+        SessionConfig.reload("display trial");
     }
 
     function empty(): void {
@@ -131,54 +126,6 @@ Singleton {
         onFileChanged: reload()
         onLoaded: root.handle(trialFile.text())
         onLoadFailed: root.handle("")
-    }
-
-    // One connection per request: it sends `reload` and collects the answer until Hyprland closes the connection (or the
-    // answer is late), then it is judged once and destroyed later (a Socket cannot be destroyed from its own error signal).
-    Component {
-        id: reloadSocket
-
-        Socket {
-            id: sock
-            property string reply: ""
-            property bool judged: false
-
-            function finish(): void {
-                if (sock.judged)
-                    return;
-                sock.judged = true;
-                sock.answerTimeout.stop();
-                if (sock.reply.trim() !== "ok")
-                    console.info("grassfield-shell: displays: Hyprland answered the reload with \"" + sock.reply.trim() + "\"");
-                sock.connected = false;
-                Qt.callLater(() => sock.destroy());
-            }
-
-            parser: SplitParser {
-                // No separator: Hyprland's answer has no newline, take what arrives and add it up.
-                splitMarker: ""
-                onRead: data => sock.reply += data
-            }
-            onConnectedChanged: {
-                if (connected) {
-                    write("reload");
-                    flush();
-                    sock.answerTimeout.start();
-                } else {
-                    sock.finish();
-                }
-            }
-
-            readonly property Timer answerTimeout: Timer {
-                interval: Tokens.materialBlurAnswerMs
-                onTriggered: sock.finish()
-            }
-
-            Component.onCompleted: {
-                sock.error.connect(() => sock.finish());
-                sock.connected = true;
-            }
-        }
     }
 
     Component.onCompleted: {
