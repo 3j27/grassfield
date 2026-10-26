@@ -6,7 +6,7 @@ import "General.js" as General
 
 // Date & Time > Closest city (macOS): the city of the time zone, as text at rest; typing turns it into a field with the
 // cities that match under it (General.cityMatches over timedate1's zones). Down moves into the list, Return or a click picks,
-// Escape gives the city back. `picked(zone)` reports the choice; the page applies it (time.zone through polkit, ADR-0026).
+// Escape gives the city back. `picked(zone)` reports the choice; the page applies it (time.zone through polkit, ADR-0030).
 TextField {
     id: root
 

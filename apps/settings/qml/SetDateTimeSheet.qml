@@ -4,7 +4,7 @@ import Grassfield.Ui
 
 // Date & Time > Set… (macOS: a sheet with the date and the time as stepper fields, shown while the automatic time is off).
 // The fields hold the time zone's wall clock; Set hands it back (`chosen`) and the page sends it to timedate1 through polkit
-// (ADR-0026). Cancel and Escape change nothing.
+// (ADR-0030). Cancel and Escape change nothing.
 Sheet {
     id: root
 

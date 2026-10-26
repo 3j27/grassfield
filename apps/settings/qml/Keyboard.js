@@ -1,6 +1,6 @@
 .pragma library
 
-// Settings > Keyboard: the Grassfield-owned keyboard.lua (ADR-0027 amendment), next to mouse-trackpad.lua, a Lua chunk returning
+// Settings > Keyboard: the Grassfield-owned keyboard.lua (ADR-0031 amendment), next to mouse-trackpad.lua, a Lua chunk returning
 // plain values that config/hypr/grassfield/input.lua reads (and checks again) after Omarchy's keyboard defaults and before the
 // user's own input.lua. It holds only what the user chose: without a key, the session's value stays. Also the xkb layouts of
 // /usr/share/X11/xkb/rules/base.lst for Input Sources. Pure functions, unit-tested (tests/unit/tst_settingskeyboard.qml).

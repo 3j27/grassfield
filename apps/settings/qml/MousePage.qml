@@ -8,7 +8,7 @@ import "MouseTrackpad.js" as MT
 // gestures). The row under the pointer, or holding the focus, shows its gesture on the device card. The choices go to the
 // Grassfield-owned mouse-trackpad.lua next to grassfield.json (MouseTrackpad.js, GF-066), which Trackpad writes too: the tracking
 // speed is one for every pointer (Hyprland's input:sensitivity). The shell has Hyprland read its configuration again when the
-// file changes (ADR-0027 amendment), so a choice applies at once; the user's own ~/.config/hypr/input.lua still wins.
+// file changes (ADR-0031 amendment), so a choice applies at once; the user's own ~/.config/hypr/input.lua still wins.
 SettingsPage {
     id: root
 

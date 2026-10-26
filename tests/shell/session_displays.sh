@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ADR-0027: config/hypr/grassfield/displays.lua turns Settings > Displays' data files into hl.monitor rules. Run by a plain
+# ADR-0031: config/hypr/grassfield/displays.lua turns Settings > Displays' data files into hl.monitor rules. Run by a plain
 # Lua interpreter against a stub of Hyprland's `hl` table: the kept choices, a running trial in their place, a trial past its
 # deadline or with a bad first line ignored, every malformed field refused line by line (the others still apply), the paths
 # of a real and of a nested dev session, a rule Hyprland refuses, and text that looks like Lua staying text. Needs `lua`.

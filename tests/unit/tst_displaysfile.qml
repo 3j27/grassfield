@@ -2,7 +2,7 @@ import QtQuick
 import QtTest
 import "../../shell/platform/DisplaysFile.js" as DisplaysFile
 
-// ADR-0027: the runtime files between the shell and Settings > Displays. Paths of a real and of a dev session, the state the
+// ADR-0031: the runtime files between the shell and Settings > Displays. Paths of a real and of a dev session, the state the
 // shell publishes (only typed fields, monitors without a name left out), the trial file's first line, and what the shell does
 // with it: apply a new trial, keep or take back the one it runs, take back any trial it finds when it starts or past its
 // deadline, and ignore what is not its trial.

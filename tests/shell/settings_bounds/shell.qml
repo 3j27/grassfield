@@ -263,6 +263,8 @@ ShellRoot {
         SettingsStore {
             saveDelay: 10
             pollInterval: 300
+            // The backoff of an unusable file stays short (5 polls) so a recovery that needs no signature change is seen in seconds.
+            badRetryCap: 1500
         }
     }
 

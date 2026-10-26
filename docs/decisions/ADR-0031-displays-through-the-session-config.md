@@ -1,7 +1,8 @@
-# ADR-0027: Display changes go through a Grassfield session file, with a revert countdown
+# ADR-0031: Display changes go through a Grassfield session file, with a revert countdown
 Status: Proposed (cloud session, owner brief 2026-10-26: "Écrans : ADR d'abord. Jamais hyprctl sur la session réelle ; une
 modification passe par la config de session, avec un compte à rebours de retour en arrière comme sur macOS") · Date: 2026-10-26 ·
-Decider: owner (brief), integrator (merge after the review of group 2)
+Decider: owner (brief), integrator (merge after the review of group 2) · Number: 0031 (it was 0027; the integrator gave
+0026 to 0029 to the Files decisions of PR #4, and the Settings polkit ADR became 0030)
 
 ## Context
 Settings > Displays has been read-only so far (`docs/specs/settings.md` S12): the Settings app sees the outputs only as Qt

@@ -1,6 +1,6 @@
 .pragma library
 
-// Pure logic of the General pane's sub-panes (PR #4): About, Storage, Date & Time, Language & Region and Login Items. The
+// Pure logic of the General pane's sub-panes (PR #6): About, Storage, Date & Time, Language & Region and Login Items. The
 // pages give it what the Backend read (the D-Bus states as JSON, command output, file text) and get back plain values and
 // the action maps the Backend checks again (systembus.cpp, systemguard.cpp). Tested by tests/unit/tst_settingsgeneral.qml.
 
@@ -261,6 +261,13 @@ function uses24Hour(setting, shortTimeFormat) {
     return !/[aA]/.test(String(shortTimeFormat).replace(/'[^']*'/g, ""));
 }
 
+// The Date & Time change still waiting for its answer ("ntp", "set", "zone"; "" for none), from Backend.pendingActions (tag ->
+// what). The Backend holds it, so the page shows it again when it is opened while the polkit dialog is still up.
+function pendingTimeOp(pending) {
+    const what = (pending || {})["time.act"];
+    return what === "automatic time" ? "ntp" : what === "date and time" ? "set" : what === "time zone" ? "zone" : "";
+}
+
 // SetTime: a date between 2000 and 2200 (systembus.cpp isUsec), as microseconds in a string.
 function timeSet(ms) {
     const n = Math.floor(Number(ms));
@@ -290,6 +297,21 @@ function validLanguage(code) {
 function currentLanguage(text) {
     const t = String(text).trim();
     return validLanguage(t) ? t : "";
+}
+
+// Why Language & Region shows the session's language instead of Omarchy's list: "tool" when the installed Omarchy has no
+// `omarchy-language` (4.0.4 has none), "list" when it gave no list in a real session, "" otherwise (the list is there, it is
+// still being read, or this is a dev session, which reads nothing from it and whose own note says so).
+function languageNote(installed, dev, answered, count) {
+    if (!installed)
+        return "tool";
+    return !dev && answered && count === 0 ? "list" : "";
+}
+
+// The session's language as a name ("Français", "American English"), from its locale's own name of it.
+function languageName(nativeName, code) {
+    const t = String(nativeName || "");
+    return t !== "" ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : String(code || "");
 }
 
 function languageArgv(code) {

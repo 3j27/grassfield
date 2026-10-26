@@ -46,10 +46,10 @@ const QString kUPower = QStringLiteral("org.freedesktop.UPower");
 const QString kUPowerPath = QStringLiteral("/org/freedesktop/UPower");
 const QString kUPowerDevice = QStringLiteral("org.freedesktop.UPower.Device");
 const QString kUPowerDisplay = QStringLiteral("/org/freedesktop/UPower/devices/DisplayDevice");
-// cups-pk-helper (ADR-0026): its bus name is also its interface; one object, "/".
+// cups-pk-helper (ADR-0030): its bus name is also its interface; one object, "/".
 const QString kCupsPk = QStringLiteral("org.opensuse.CupsPkHelper.Mechanism");
 const QString kCupsPkPath = QStringLiteral("/");
-// The General pane's services (ADR-0026).
+// The General pane's services (ADR-0030).
 const QString kHostService = QStringLiteral("org.freedesktop.hostname1");
 const QString kHostPath = QStringLiteral("/org/freedesktop/hostname1");
 const QString kTimeService = QStringLiteral("org.freedesktop.timedate1");
@@ -1019,7 +1019,7 @@ QString awaitJoin(BusCaller &bus, const QString &profile, const QString &active)
 }
 
 // Joins a WPA/WPA2/WPA3 personal network with its passphrase: the strongest access point of that SSID that takes one (PSK or
-// SAE), with a new profile of the whole system (NetworkManager may ask polkit, ADR-0026). WPA3-only access points get
+// SAE), with a new profile of the whole system (NetworkManager may ask polkit, ADR-0030). WPA3-only access points get
 // key-mgmt sae, the others wpa-psk (which NetworkManager also uses for WPA2/WPA3 transition). An enterprise (802.1X), WEP or
 // open network is not joined this way.
 QString joinWithPassphrase(BusCaller &bus, const QString &devicePath, const QByteArray &ssid, const QString &psk)
@@ -1060,7 +1060,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         return QCoreApplication::translate("SystemBus", "invalid request");
     const QString name = op.value(QStringLiteral("op")).toString();
 
-    // General (ADR-0026): the service asks the polkit agent (interactive = true) and answers once the user did.
+    // General (ADR-0030): the service asks the polkit agent (interactive = true) and answers once the user did.
     if (name == QLatin1String("host.setName")) {
         const QString pretty = op.value(QStringLiteral("name")).toString().trimmed();
         const QString error = privileged(bus, kHostService, kHostPath, QStringLiteral("SetPrettyHostname"), {pretty, true});
@@ -1101,7 +1101,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());
 
     // Battery > Charging: UPower's charge limit (EnableChargeThreshold on the battery; its polkit action
-    // org.freedesktop.UPower.enable-charging-limit lets the active session by default, ADR-0026).
+    // org.freedesktop.UPower.enable-charging-limit lets the active session by default, ADR-0030).
     if (name == QLatin1String("power.chargeLimit")) {
         QString error;
         const QString battery = upowerBattery(bus, &error);
@@ -1110,7 +1110,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         const BusReply r = bus.call(kUPower, battery, kUPowerDevice, QStringLiteral("EnableChargeThreshold"), {op.value(QStringLiteral("on")).toBool()}, kPrivilegedMs);
         return r.ok ? QString() : fail(r.error);
     }
-    // Printers (ADR-0026). A new queue for a driverless printer: cupsd builds its PPD from the printer's IPP attributes
+    // Printers (ADR-0030). A new queue for a driverless printer: cupsd builds its PPD from the printer's IPP attributes
     // ("everywhere"), then the queue is enabled and accepts jobs (it starts stopped, as lpadmin without -E). The helper checks
     // other polkit actions for the two switches, so it may ask again; refused there, the queue stays, stopped: the page shows it
     // and its sheet offers Resume (printer.resume, the same two calls) and Remove Printer….
@@ -1132,7 +1132,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
         return cupsPk(bus, QStringLiteral("PrinterDelete"), {op.value(QStringLiteral("name")).toString()});
 
     // Forget This Network: the saved Wi-Fi profile with that uuid goes. NetworkManager asks polkit itself for a profile of the
-    // whole system (settings.modify.system, ADR-0026), so the call waits for the user's answer.
+    // whole system (settings.modify.system, ADR-0030), so the call waits for the user's answer.
     if (name == QLatin1String("wifi.forget")) {
         const QString uuid = op.value(QStringLiteral("uuid")).toString();
         for (const AnyProfile &p : allProfiles(bus)) {
@@ -1220,7 +1220,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
             settings.insert(QStringLiteral("802-11-wireless"), QVariantMap{{QStringLiteral("ssid"), ssid}, {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
             if (isOwe(ap)) // NetworkManager joins an OWE access point only with key-mgmt owe (no secret: there is none)
                 settings.insert(QStringLiteral("802-11-wireless-security"), QVariantMap{{QStringLiteral("key-mgmt"), QStringLiteral("owe")}});
-            // A new profile of the whole system: NetworkManager may ask polkit (settings.modify.system, ADR-0026).
+            // A new profile of the whole system: NetworkManager may ask polkit (settings.modify.system, ADR-0030).
             const BusReply r = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("AddAndActivateConnection"),
                                         {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(dev.path)), QVariant::fromValue(QDBusObjectPath(ap.path))}, kPrivilegedMs);
             return r.ok ? QString() : fail(r.error);

@@ -7,7 +7,7 @@ import "System.js" as System
 // Displays as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Displays): the band with each display's picture
 // and name (a click chooses which one the groups set), the resolution choices (Larger Text … More Space), Brightness for a
 // built-in panel, Refresh rate and Rotation, and Arrange… with several displays. The displays come from the state the shell
-// publishes (ADR-0027: this app never talks to Hyprland). A change is a trial: the page writes the trial file, the shell applies
+// publishes (ADR-0031: this app never talks to Hyprland). A change is a trial: the page writes the trial file, the shell applies
 // it and takes it back after 15 seconds unless the sheet's Keep came first (Keep writes displays.conf, which the session reads
 // at every start). Brightness goes through SystemService (`brightnessctl`, never in a dev session).
 SettingsPage {
@@ -170,7 +170,7 @@ SettingsPage {
         }
     }
 
-    // The shell says it applied the trial within this long, or the change did not happen (no shell, or a shell without ADR-0027).
+    // The shell says it applied the trial within this long, or the change did not happen (no shell, or a shell without ADR-0031).
     Timer {
         id: applied
         interval: Tokens.settingsDisplayAppliedMs

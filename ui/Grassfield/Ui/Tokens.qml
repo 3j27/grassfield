@@ -1560,17 +1560,17 @@ QtObject {
     readonly property int settingsBrightnessHighGlyphSize: 20
     // the push buttons under a pane's groups (Displays: Advanced…, Night Shift…) 20 under the last group [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsPushRowGap: 20
-    // macOS's 15 seconds before the previous display settings come back (ADR-0027) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    // macOS's 15 seconds before the previous display settings come back (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTrialSeconds: 15
-    // estimate: how long the shell may take to say that it applied a trial before the page calls it not applied (ADR-0027) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    // estimate: how long the shell may take to say that it applied a trial before the page calls it not applied (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayAppliedMs: 4000
-    // estimate: the keep sheet's countdown is read again this often, so the seconds it shows are never late by more than a quarter (ADR-0027) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    // estimate: the keep sheet's countdown is read again this often, so the seconds it shows are never late by more than a quarter (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTickMs: 250
     // Arrange…: Shift and an arrow key move a display along its edge by this part of its size (keyboard arrangement) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property real settingsDisplayNudge: 0.1
     // Arrange…: the menu bar drawn along the top of each display's tile [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayMenuBarHeight: 3
-    // estimate: the shell reads the session configuration again this long after the last write of a Mouse, Trackpad or Keyboard choice (a slider writes on every step; ADR-0027 amendment) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    // estimate: the shell reads the session configuration again this long after the last write of a Mouse, Trackpad or Keyboard choice (a slider writes on every step; ADR-0031 amendment) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsInputReloadMs: 500
     // Keyboard's first group, the two repeat sliders side by side, 75 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsKeyboardRepeatHeight: 75

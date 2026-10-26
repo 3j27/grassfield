@@ -1,6 +1,6 @@
 .pragma library
 
-// Settings > Displays (ADR-0027): the state the shell publishes, the choices of the pane, and the lines of displays.conf and of a
+// Settings > Displays (ADR-0031): the state the shell publishes, the choices of the pane, and the lines of displays.conf and of a
 // trial (the rule of config/hypr/grassfield/displays.lua, checked again in C++ by systemguard.h::isDisplayLine). Pure functions,
 // unit-tested (tests/unit/tst_settingsdisplays.qml).
 

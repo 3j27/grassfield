@@ -1,4 +1,4 @@
--- Input defaults (ADR-0002) and the user's Mouse, Trackpad and Keyboard choices (GF-066, ADR-0027 amendment). The keyboard's
+-- Input defaults (ADR-0002) and the user's Mouse, Trackpad and Keyboard choices (GF-066, ADR-0031 amendment). The keyboard's
 -- defaults (layout from /etc/vconsole.conf, compose:caps, repeat rate and delay, numlock) are set by omarchy.lua, which loads
 -- Omarchy's default.hypr.input (or reproduces it); this file sets a kb_* or repeat_* key only when the user chose it in
 -- Settings > Keyboard (keyboard.lua below), never numlock.

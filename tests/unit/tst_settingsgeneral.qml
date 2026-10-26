@@ -156,8 +156,31 @@ TestCase {
         compare(General.currentLanguage("fr\n"), "fr");
         compare(General.currentLanguage("fr; rm\n"), "");
         compare(General.languageArgv("fr"), ["omarchy-language", "fr"]);
+        // Omarchy 4.0.4 has no omarchy-language: the page says a newer Omarchy is needed (never a bare "Unknown" without a
+        // picker); installed but no list in a real session: it says so; a dev session reads nothing and says nothing more.
+        compare(General.languageNote(false, false, false, 0), "tool");
+        compare(General.languageNote(false, true, false, 0), "tool");
+        compare(General.languageNote(true, false, true, 0), "list");
+        compare(General.languageNote(true, false, false, 0), "");
+        compare(General.languageNote(true, false, true, 12), "");
+        compare(General.languageNote(true, true, false, 0), "");
+        compare(General.languageName("français", "fr_FR"), "Français");
+        compare(General.languageName("American English", "en_US"), "American English");
+        compare(General.languageName("", "C"), "C");
         compare(General.languageArgv("--help"), null);
         compare(General.languageArgv("fr\n"), null);
+    }
+
+    function test_pendingActions() {
+        // The waiting state of a change that may ask for a password is the Backend's (integrator review of PR #6): a page opened
+        // again while a polkit dialog is up shows which change waits, and its controls stay off (the Backend refuses a second
+        // one of the tag anyway).
+        compare(General.pendingTimeOp({}), "");
+        compare(General.pendingTimeOp(undefined), "");
+        compare(General.pendingTimeOp({"time.act": "automatic time"}), "ntp");
+        compare(General.pendingTimeOp({"time.act": "date and time"}), "set");
+        compare(General.pendingTimeOp({"time.act": "time zone"}), "zone");
+        compare(General.pendingTimeOp({"host.act": "computer name"}), "");
     }
 
     function test_desktopEntries() {

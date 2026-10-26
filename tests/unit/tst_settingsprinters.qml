@@ -2,7 +2,7 @@ import QtQuick
 import QtTest
 import "../../apps/settings/qml/Printers.js" as Printers
 
-// Settings > Printers (ADR-0026): CUPS's output as `lpstat` and `lpoptions` print it in the C locale, the ops and commands the pane
+// Settings > Printers (ADR-0030): CUPS's output as `lpstat` and `lpoptions` print it in the C locale, the ops and commands the pane
 // may send (the C++ guard checks them again, tests/unit/settings/tst_systemguard.cpp), and the pane: what it reads, the paper
 // size written only to the queues that have it, Add and Remove through SystemService, nothing in a dev session.
 TestCase {

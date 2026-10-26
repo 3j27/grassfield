@@ -1,6 +1,6 @@
 .pragma library
 
-// Settings > Printers (ADR-0026): CUPS read through `lpstat` and `lpoptions` (run in the C locale, apps/settings/src/backend.cpp),
+// Settings > Printers (ADR-0030): CUPS read through `lpstat` and `lpoptions` (run in the C locale, apps/settings/src/backend.cpp),
 // the user's defaults through `lpoptions` (actions), a new or removed queue through cups-pk-helper (busAct ops). Pure functions,
 // unit-tested (tests/unit/tst_settingsprinters.qml); the C++ side checks every argument again (src/systemguard.cpp).
 

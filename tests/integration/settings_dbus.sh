@@ -14,10 +14,10 @@
 #      no new call)
 #   8  a service that is not there: the reason says so
 #   9  the window closes while a service is slow
-#  10  General (ADR-0026): hostname1, timedate1, timesync1, locale1 read; the name, NTP, the zone and the time set with
+#  10  General (ADR-0030): hostname1, timedate1, timesync1, locale1 read; the name, NTP, the zone and the time set with
 #      interactive = true (the service asks polkit); a polkit refusal's reason; a bad zone refused before the bus; the user's own
 #      services (the session bus) listed and switched, a shipped one refused; the dev guard sends none of these changes
-#  11  the network panes (ADR-0026, NetworkManager): net-state (wlan0's addresses, router, name servers, band, link rate; the VPN
+#  11  the network panes (ADR-0030, NetworkManager): net-state (wlan0's addresses, router, name servers, band, link rate; the VPN
 #      and WireGuard profiles with their state); a join with a password (key-mgmt wpa-psk, the password, the access point) kept
 #      when it comes up, its new profile deleted when it goes down; Forget This Network deletes that profile and nothing else;
 #      a VPN switched off and on; the dev guard sends none of these
@@ -25,7 +25,7 @@
 #      the charge history; EnableChargeThreshold, which then reads enabled; no battery service: the reason; the dev guard
 #  12  Bluetooth discovery and pairing: the adapter's name, the nearby device (an RSSI) and a paired one's battery; discovery on and
 #      off; Pair, Trusted and Connect on the nearby device, which is then paired; Forget removes a device; the dev guard
-#  14  Printers (ADR-0026, cups-pk-helper): Add makes an "everywhere" queue and switches it on and to accepting jobs, Remove
+#  14  Printers (ADR-0030, cups-pk-helper): Add makes an "everywhere" queue and switches it on and to accepting jobs, Remove
 #      deletes it; CUPS's message and a polkit refusal are the reason; the switches refused after an add leave the queue, and
 #      Resume makes the two calls; bad values and the dev guard send nothing
 #
@@ -321,7 +321,7 @@ check "... and the process is gone long before the service answers (took $((SECO
 stop_service bluez
 
 say ""
-say "[10] General (ADR-0026)"
+say "[10] General (ADR-0030)"
 start_service general
 check "the probe refuses a session bus that is not the private one" bash -c '
   env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$1" DBUS_SYSTEM_BUS_ADDRESS="$2" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus timeout 10 "$1/probe" units-state >/dev/null 2>&1

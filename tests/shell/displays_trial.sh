@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ADR-0027: the shell's side of a display trial (shell/platform/Displays.qml) and of the input files (SessionConfig.qml),
+# ADR-0031: the shell's side of a display trial (shell/platform/Displays.qml) and of the input files (SessionConfig.qml),
 # offscreen, against a fake Hyprland: a request
 # socket that records every request and answers it ("[]" for the JSON queries; "ok" to a reload a moment later, as Hyprland
 # answers once it has read its configuration, except the fifth reload, which it refuses), and a silent event socket. Runs

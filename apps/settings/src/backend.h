@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 
+#include "busjobs.h"
 #include "systembus.h"
 
 #include "chromecaps.h"
@@ -26,7 +27,7 @@ class Backend : public QObject
     Q_PROPERTY(QString bindingsFile READ bindingsFile CONSTANT)
     // The shell's capabilities file (apps/chromecaps.h, ADR-0015 Q4b), read from QML through readText() and watch().
     Q_PROPERTY(QString capabilitiesFile READ capabilitiesFile CONSTANT)
-    // Settings > Displays (ADR-0027): the state the shell publishes (shell/platform/DisplaysFile.js), read through readText();
+    // Settings > Displays (ADR-0031): the state the shell publishes (shell/platform/DisplaysFile.js), read through readText();
     // "" when its directory is not known.
     Q_PROPERTY(QString displaysStateFile READ displaysStateFile CONSTANT)
     // GRASSFIELD_DEV=1: the system sections show state but never act on the owner's machine (systemguard.h).
@@ -49,6 +50,12 @@ class Backend : public QObject
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
     // XDG_STATE_HOME (else ~/.local/state): Battery reads Omarchy's remembered power profiles there (read-only).
     Q_PROPERTY(QString stateDir READ stateDir CONSTANT)
+    // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
+    Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
+    // The actions that may wait for a password and still run, tag -> what (polkit actions of busAct, omarchy-language of act:
+    // one per tag, busjobs.h InFlight). A page shows its waiting state from it, also when it is opened again while the dialog
+    // is up.
+    Q_PROPERTY(QVariantMap pendingActions READ pendingActions NOTIFY pendingActionsChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -77,6 +84,8 @@ public:
         const QString xdg = qEnvironmentVariable("XDG_STATE_HOME");
         return QDir::cleanPath(xdg.startsWith(QLatin1Char('/')) ? xdg : homeDir() + QStringLiteral("/.local/state"));
     }
+    bool omarchyLanguage() const;
+    QVariantMap pendingActions() const { return m_actions.map(); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
     Q_INVOKABLE QVariantMap readText(const QString &path) const;
@@ -88,10 +97,12 @@ public:
     // Every command (query, act, run) runs with LC_ALL=C and LANG=C (LANGUAGE unset): the parsers expect English output.
     // Read-only query without blocking the window: runs argv (no shell), emits finished(tag, ok, stdout). In a dev
     // session only the queries of systemguard.h::isReadOnlyQuery run; anything else is refused (logged, finished(false)).
+    // The same command still running under the same tag is not started again: its answer comes under that tag.
     Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000);
     // State-changing action (Wi-Fi, Bluetooth, volume). Only nmcli, bluetoothctl and wpctl run. In a dev session
     // nothing runs: one "dev guard: <what> suppressed" line is logged, suppressed(what) is emitted, false returned.
-    // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started.
+    // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started. An action that may wait
+    // for a password is refused (false) while one of its tag still runs (pendingActions); busAct does the same for polkit.
     Q_INVOKABLE bool act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs = 15000);
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
@@ -105,8 +116,9 @@ public:
     // height, scale, pixelWidth, pixelHeight, refreshRate, physicalWidth, physicalHeight (mm), primary}]. Read-only; never
     // talks to Hyprland.
     Q_INVOKABLE QVariantList screens() const;
-    // Mounted volumes with a real file system (Storage, About): [{root, name, device, type, total, available, free, readOnly,
-    // isRoot, holdsHome}], the start-up volume first. Read-only (QStorageInfo).
+    // Mounted local volumes (Storage, About): [{root, name, device, type, total, available, free, readOnly, isRoot, holdsHome}],
+    // the start-up volume first. Read-only; never a network or FUSE mount, whose statfs could block this thread
+    // (systemguard.h isLocalVolume).
     Q_INVOKABLE QVariantList volumes() const;
     // Date & Time: a zone's names in the UI language {longName, shortName, offset, offsetSeconds, territory}; {} for a zone Qt
     // does not know.
@@ -122,7 +134,7 @@ public:
     Q_INVOKABLE QString removeAutostart(const QString &path) const;
     // Emit fileChanged(path) whenever the file is created, replaced, changed or removed.
     Q_INVOKABLE bool watch(const QString &path);
-    // Settings > Displays (ADR-0027). displays.conf holds the kept choices (read at every parse by
+    // Settings > Displays (ADR-0031). displays.conf holds the kept choices (read at every parse by
     // config/hypr/grassfield/displays.lua); the trial file a change on trial, which the shell applies and takes back. Only
     // lines systemguard.h::isDisplayLine accepts are read or written, at most 16 and one per display; in a dev session only
     // under GRASSFIELD_CONFIG_HOME and GRASSFIELD_STATE_HOME, never the owner's own files. The writes return "" or a reason.
@@ -140,15 +152,23 @@ signals:
     // or the start error), at most 160 characters. Plain text from a tool: show it as text only.
     void failed(const QString &tag, const QString &reason);
     void suppressed(const QString &what);
+    void pendingActionsChanged();
 
 private:
     bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
-    void start(const QStringList &argv, const QString &tag, int timeoutMs);
-    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false);
+    // What a process ends when it finishes: nothing, its query (m_queries) or its action (m_actions).
+    enum class Track { None, Query, Action };
+    void start(const QStringList &argv, const QString &tag, int timeoutMs, Track track);
+    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false,
+                bool action = false);
+    bool beginAction(const QString &tag, const QString &what);
+    void endAction(const QString &tag);
+    grassfield::settings::InFlight m_actions;
+    grassfield::settings::InFlight m_queries;
     QStringList userUnitDirs() const;
     bool autostartWriteAllowed(const QString &path) const;
-    // ADR-0027 paths: "" when the directory is not known (or, in a dev session, not one of the dev directories).
+    // ADR-0031 paths: "" when the directory is not known (or, in a dev session, not one of the dev directories).
     QString displaysConfFile() const;
     QString displayTrialFile() const;
     QString displayLinesProblem(const QStringList &lines) const;

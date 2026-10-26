@@ -40,7 +40,7 @@ constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
-constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0026
+constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0030
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -149,9 +149,16 @@ Backend::~Backend()
     m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
 }
 
-void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
+void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs, Track track)
 {
     auto *p = new QProcess(this);
+    // Once, whichever way the process ends: the query or action it held is over.
+    const auto settle = [this, tag, track] {
+        if (track == Track::Query)
+            m_queries.end(tag);
+        else if (track == Track::Action)
+            endAction(tag);
+    };
     forceCLocale(*p);
     auto *timer = new QTimer(p);
     timer->setSingleShot(true);
@@ -159,14 +166,16 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
         p->setProperty("timedOut", true);
         p->kill();
     });
-    connect(p, &QProcess::errorOccurred, this, [this, p, tag](QProcess::ProcessError e) {
+    connect(p, &QProcess::errorOccurred, this, [this, p, tag, settle](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
+            settle();
             emit failed(tag, p->errorString().left(kMaxReason));
             emit finished(tag, false, QString());
             p->deleteLater();
         }
     });
-    connect(p, &QProcess::finished, this, [this, p, tag](int code, QProcess::ExitStatus status) {
+    connect(p, &QProcess::finished, this, [this, p, tag, settle](int code, QProcess::ExitStatus status) {
+        settle();
         const bool ok = status == QProcess::NormalExit && code == 0;
         const QByteArray out = p->readAllStandardOutput();
         if (!ok)
@@ -194,7 +203,27 @@ void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
         emit finished(tag, false, QString());
         return;
     }
-    start(argv, tag, timeoutMs);
+    // A page shown again asks for what still runs (Storage's counts, up to two minutes each): it gets that answer.
+    const QString key = argv.join(QChar(0x1f));
+    if (m_queries.runs(tag, key))
+        return;
+    start(argv, tag, timeoutMs, m_queries.begin(tag, key) ? Track::Query : Track::None);
+}
+
+bool Backend::beginAction(const QString &tag, const QString &what)
+{
+    if (!m_actions.begin(tag, what)) {
+        qWarning().noquote() << "refused" << what << "while the previous action of" << tag << "still runs";
+        return false;
+    }
+    emit pendingActionsChanged();
+    return true;
+}
+
+void Backend::endAction(const QString &tag)
+{
+    m_actions.end(tag);
+    emit pendingActionsChanged();
 }
 
 bool Backend::act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs)
@@ -208,14 +237,19 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         qWarning().noquote() << "refused an action with an unknown program:" << what;
         return false;
     }
-    start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs));
+    // One at a time per tag when it may wait for a password (a page shown again cannot start a second prompt).
+    const bool latch = grassfield::settings::asksForPassword(argv);
+    if (latch && !beginAction(tag, what))
+        return false;
+    start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs), latch ? Track::Action : Track::None);
     return true;
 }
 
 // One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
 // nothing a job holds outlives the Backend: busjobs.h). `job` returns "" on success, else the reason; its second argument
 // receives the output (JSON) of a query.
-void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session)
+void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session,
+                     bool action)
 {
     const bool dev = m_dev;
     (session ? m_bus->sessionJobs : m_bus->jobs).start(
@@ -223,7 +257,9 @@ void Backend::runBus(const QString &tag, std::function<QString(grassfield::setti
             grassfield::settings::GuardedCaller guarded(real, dev);
             return job(guarded, output);
         },
-        [this, tag](const QString &reason, const QString &output) {
+        [this, tag, action](const QString &reason, const QString &output) {
+            if (action)
+                endAction(tag);
             if (!reason.isEmpty()) {
                 emit failed(tag, reason);
                 emit finished(tag, false, QString());
@@ -266,8 +302,9 @@ void Backend::busQuery(const QString &what, const QString &tag)
 QStringList Backend::userUnitDirs() const
 {
     // The user's own unit directories (systemd.unit(5), the user manager's search path): config, then data.
-    const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");
-    const QString data = qEnvironmentVariableIsSet("XDG_DATA_HOME") ? qEnvironmentVariable("XDG_DATA_HOME") : QDir::homePath() + QStringLiteral("/.local/share");
+    using grassfield::settings::xdgHome;
+    const QString config = xdgHome(qEnvironmentVariable("XDG_CONFIG_HOME"), QDir::homePath() + QStringLiteral("/.config"));
+    const QString data = xdgHome(qEnvironmentVariable("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
     return {QDir::cleanPath(config + QStringLiteral("/systemd/user")), QDir::cleanPath(data + QStringLiteral("/systemd/user"))};
 }
 
@@ -283,8 +320,13 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
         qWarning().noquote() << "refused a bus action that is not well formed:" << what;
         return false;
     }
+    // A polkit action runs one at a time per tag: a page shown again while the dialog is up cannot send a second one, and
+    // blocked calls cannot fill the jobs' kMaxInFlight (integrator review of PR #6).
+    const bool latch = privilegedAction(op);
+    if (latch && !beginAction(tag, what))
+        return false;
     const QStringList own = userUnitDirs();
-    runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, privilegedAction(op) ? kPrivilegedJobMs : kActionJobMs, sessionAction(op));
+    runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, latch ? kPrivilegedJobMs : kActionJobMs, sessionAction(op), latch);
     return true;
 }
 
@@ -317,14 +359,17 @@ QVariantList Backend::screens() const
 
 QVariantList Backend::volumes() const
 {
-    // Real file systems only (no tmpfs, proc, overlay or the like): the start-up volume first, then the others by mount point.
-    static const QStringList virtualTypes{QStringLiteral("tmpfs"), QStringLiteral("devtmpfs"), QStringLiteral("proc"), QStringLiteral("sysfs"),
-                                          QStringLiteral("overlay"), QStringLiteral("squashfs"), QStringLiteral("efivarfs"), QStringLiteral("ramfs"),
-                                          QStringLiteral("autofs"), QStringLiteral("fuse.portal"), QStringLiteral("cgroup2"), QStringLiteral("debugfs")};
+    // Local volumes only (systemguard.h isLocalVolume): this runs on the GUI thread, and the statfs of a network or FUSE mount
+    // whose server or daemon does not answer would block the window. The mount table is /proc/self/mounts (reading it stats
+    // nothing); the volume of the home is found in it, not by a statfs of the home. The start-up volume first, then the others
+    // by mount point; a btrfs subvolume mounted twice is one volume.
+    using namespace grassfield::settings;
+    QFile table(QStringLiteral("/proc/self/mounts"));
+    QList<Mount> mounts = table.open(QIODevice::ReadOnly) ? parseMounts(table.readAll()) : QList<Mount>{};
+    const QString homeMount = mountPointOf(mounts, QDir::homePath());
     QVariantList out;
     QStringList seen;
-    const QString home = QDir::homePath();
-    auto entry = [&home](const QStorageInfo &v) {
+    auto entry = [&homeMount](const QStorageInfo &v) {
         return QVariantMap{{"root", v.rootPath()},
                            {"name", v.name()},
                            {"device", QString::fromUtf8(v.device())},
@@ -334,21 +379,21 @@ QVariantList Backend::volumes() const
                            {"free", double(v.bytesFree())},
                            {"readOnly", v.isReadOnly()},
                            {"isRoot", v.isRoot()},
-                           {"holdsHome", QStorageInfo(home).rootPath() == v.rootPath()}};
+                           {"holdsHome", v.rootPath() == homeMount}};
     };
     const QStorageInfo root = QStorageInfo::root();
     if (root.isValid() && root.isReady()) {
         out.append(entry(root));
         seen << QString::fromUtf8(root.device());
     }
-    QList<QStorageInfo> others = QStorageInfo::mountedVolumes();
-    std::sort(others.begin(), others.end(), [](const QStorageInfo &a, const QStorageInfo &b) { return a.rootPath() < b.rootPath(); });
-    for (const QStorageInfo &v : others) {
-        const QString device = QString::fromUtf8(v.device());
-        if (!v.isValid() || !v.isReady() || v.bytesTotal() <= 0 || virtualTypes.contains(QString::fromUtf8(v.fileSystemType())) || seen.contains(device)
-            || v.rootPath().startsWith(QLatin1String("/boot")))
+    std::sort(mounts.begin(), mounts.end(), [](const Mount &a, const Mount &b) { return a.mountPoint < b.mountPoint; });
+    for (const Mount &m : mounts) {
+        if (!isLocalVolume(m.device, m.type) || seen.contains(m.device) || m.mountPoint == QLatin1String("/") || m.mountPoint.startsWith(QLatin1String("/boot")))
             continue;
-        seen << device; // a btrfs subvolume mounted twice is one volume
+        const QStorageInfo v(m.mountPoint);
+        if (!v.isValid() || !v.isReady() || v.bytesTotal() <= 0)
+            continue;
+        seen << m.device;
         out.append(entry(v));
     }
     return out;
@@ -399,21 +444,23 @@ QVariantList Backend::regionLocales() const
     return out;
 }
 
+bool Backend::omarchyLanguage() const
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("omarchy-language")).isEmpty();
+}
+
 QString Backend::autostartDir() const
 {
-    const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");
+    const QString config = grassfield::settings::xdgHome(qEnvironmentVariable("XDG_CONFIG_HOME"), QDir::homePath() + QStringLiteral("/.config"));
     return QDir::cleanPath(config + QStringLiteral("/autostart"));
 }
 
 QStringList Backend::systemAutostartDirs() const
 {
     // $XDG_CONFIG_DIRS (default /etc/xdg), each with autostart/ (the XDG Autostart specification).
-    const QString dirs = qEnvironmentVariableIsSet("XDG_CONFIG_DIRS") ? qEnvironmentVariable("XDG_CONFIG_DIRS") : QStringLiteral("/etc/xdg");
     QStringList out;
-    for (const QString &d : dirs.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
-        if (d.startsWith(QLatin1Char('/')))
-            out << QDir::cleanPath(d + QStringLiteral("/autostart"));
-    }
+    for (const QString &d : grassfield::settings::xdgDirs(qEnvironmentVariable("XDG_CONFIG_DIRS"), QStringLiteral("/etc/xdg")))
+        out << QDir::cleanPath(d + QStringLiteral("/autostart"));
     return out;
 }
 
@@ -421,12 +468,12 @@ QStringList Backend::applicationDirs() const
 {
     // The XDG Base Directory folders of the desktop entries: $XDG_DATA_HOME (default ~/.local/share) first, then $XDG_DATA_DIRS
     // (default /usr/local/share:/usr/share), each with applications/.
-    const QString home = qEnvironmentVariableIsSet("XDG_DATA_HOME") ? qEnvironmentVariable("XDG_DATA_HOME") : QDir::homePath() + QStringLiteral("/.local/share");
-    const QString dirs = qEnvironmentVariableIsSet("XDG_DATA_DIRS") ? qEnvironmentVariable("XDG_DATA_DIRS") : QStringLiteral("/usr/local/share:/usr/share");
+    using namespace grassfield::settings;
+    const QString home = xdgHome(qEnvironmentVariable("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
     QStringList out;
-    for (const QString &d : (QStringList{home} + dirs.split(QLatin1Char(':'), Qt::SkipEmptyParts))) {
+    for (const QString &d : QStringList{home} + xdgDirs(qEnvironmentVariable("XDG_DATA_DIRS"), QStringLiteral("/usr/local/share:/usr/share"))) {
         const QString dir = QDir::cleanPath(d + QStringLiteral("/applications"));
-        if (d.startsWith(QLatin1Char('/')) && !out.contains(dir))
+        if (!out.contains(dir))
             out << dir;
     }
     return out;
@@ -586,7 +633,7 @@ QString Backend::writeDisplaysConf(const QStringList &lines) const
     const QString problem = displayLinesProblem(lines);
     if (!problem.isEmpty())
         return problem;
-    const QString head = QStringLiteral("# Grassfield displays (Settings > Displays, ADR-0027): one display per line.\n"); // i18n-ignore: a file comment
+    const QString head = QStringLiteral("# Grassfield displays (Settings > Displays, ADR-0031): one display per line.\n"); // i18n-ignore: a file comment
     return writeText(path, head + lines.join(QLatin1Char('\n')) + (lines.isEmpty() ? QString() : QStringLiteral("\n")));
 }
 

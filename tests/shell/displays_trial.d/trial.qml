@@ -5,12 +5,12 @@ import Quickshell.Io
 import qs.lib
 import qs.platform
 
-// ADR-0027: the shell's side of a display trial, on the real Displays singleton (tests/shell/displays_trial.sh runs it against a
+// ADR-0031: the shell's side of a display trial, on the real Displays singleton (tests/shell/displays_trial.sh runs it against a
 // fake Hyprland that records requests and answers a reload a moment later). A trial left by a stopped shell is taken back at
 // start; a new trial is asked for (one reload) and published `applying`, then `applied` once Hyprland answered that reload "ok"
 // (a trial whose reload Hyprland refuses stays `applying`); Keep empties the file without a reload; the deadline, Revert and a trial already past its deadline take
 // it back (the file emptied, then one reload); Keep or Revert of a trial the shell does not run changes nothing. The trial file is
-// written atomically (a rename), as Settings writes it. Then the input files (ADR-0027 amendment): three quick writes of a
+// written atomically (a rename), as Settings writes it. Then the input files (ADR-0031 amendment): three quick writes of a
 // keyboard.lua that did not exist give one reload once they settle, a change of mouse-trackpad.lua one more. Prints
 // "displays-trial: PASS" or the failing step.
 ShellRoot {

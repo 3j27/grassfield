@@ -93,7 +93,7 @@ StateResult networkState(BusCaller &bus);
 //                points, the last 10 days in 240; only when UPower keeps a history)}
 StateResult powerState(BusCaller &bus);
 
-// The General pane's system services (PR #4, ADR-0026), on the system bus:
+// The General pane's system services (PR #6, ADR-0030), on the system bus:
 //   hostState: hostname1  {"pretty", "static", "hostname", "chassis", "vendor", "model"}       (About)
 //   timeState: timedate1 and timesync1  {"zone", "ntp", "canNtp", "synced", "usec" (microseconds since the epoch, as a string),
 //              "localRtc", "server" (the server in use, "" when none), "servers": [the configured ones, link then system then fallback]}
@@ -118,14 +118,14 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //   bt.pair {mac}               Device1 Pair (no agent: Just Works; it may wait for the device, kPrivilegedMs), Trusted, Connect
 //   bt.forget {mac}             Adapter1 RemoveDevice
 //   power.chargeLimit {on}      UPower EnableChargeThreshold on the battery (its polkit action, kPrivilegedMs)
-//   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0026)
+//   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0030)
 //   vpn.connect {uuid, on}      a VPN or WireGuard profile: ActivateConnection on no device, or its DeactivateConnection
 //   printer.add {name, uri, info}   cups-pk-helper PrinterAdd (model "everywhere": cupsd builds the queue from the printer's IPP
-//                               attributes), then PrinterSetEnabled and PrinterSetAcceptJobs (polkit, kPrivilegedMs each, ADR-0026)
+//                               attributes), then PrinterSetEnabled and PrinterSetAcceptJobs (polkit, kPrivilegedMs each, ADR-0030)
 //   printer.delete {name}       cups-pk-helper PrinterDelete (polkit, kPrivilegedMs)
 //   printer.resume {name}       cups-pk-helper PrinterSetEnabled and PrinterSetAcceptJobs (a stopped queue, or one an add left
 //                               stopped when its second dialog was refused; polkit, kPrivilegedMs each)
-// and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait
+// and the General pane's (ADR-0030): the system service asks the session's polkit agent itself (interactive), so these calls wait
 // for the user's answer (kPrivilegedMs):
 //   host.setName {name}         hostname1 SetPrettyHostname, then SetStaticHostname with the name made a valid host name
 //   time.ntp {on}               timedate1 SetNTP

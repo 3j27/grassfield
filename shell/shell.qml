@@ -36,7 +36,7 @@ ShellRoot {
     // locale) before the surfaces below evaluate their qsTr() strings.
     readonly property string language: Translator.language
 
-    // The session configuration's watchers (keyboard.lua and mouse-trackpad.lua, SessionConfig, ADR-0027 amendment) start with
+    // The session configuration's watchers (keyboard.lua and mouse-trackpad.lua, SessionConfig, ADR-0031 amendment) start with
     // the shell: Quickshell makes a singleton only when it is first used, and nothing else uses it before a display trial.
     readonly property int sessionConfigReloads: SessionConfig.reloads
 
@@ -144,7 +144,7 @@ ShellRoot {
         value: Settings.validRead
     }
 
-    // Settings > Displays (ADR-0027): the backlight goes into the displays state the Settings app reads.
+    // Settings > Displays (ADR-0031): the backlight goes into the displays state the Settings app reads.
     Binding {
         target: Displays
         property: "backlight"

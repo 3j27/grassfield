@@ -738,7 +738,7 @@ TEST(SystemBusReason, IsShortOneLineAndPlain)
     EXPECT_EQ(reasonOf(QString()), QString());
 }
 
-// ---- General (PR #4, ADR-0026): hostname1, timedate1 / timesync1, locale1 on the system bus; the user's services on the session bus.
+// ---- General (PR #6, ADR-0030): hostname1, timedate1 / timesync1, locale1 on the system bus; the user's services on the session bus.
 
 namespace
 {
@@ -1211,7 +1211,7 @@ TEST(SystemBusPower, TheChargeLimitIsUPowersOwnMethod)
         EXPECT_NE(call.member, QStringLiteral("EnableChargeThreshold"));
 }
 
-// Printers (ADR-0026): cups-pk-helper, which asks polkit and then cupsd; each method answers with CUPS's message, "" when it worked.
+// Printers (ADR-0030): cups-pk-helper, which asks polkit and then cupsd; each method answers with CUPS's message, "" when it worked.
 TEST(SystemBusPrinters, AddingMakesAnEverywhereQueueEnablesItAndAcceptsJobs)
 {
     FakeBus bus;

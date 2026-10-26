@@ -222,9 +222,10 @@ TEST(QueryGuard, TheGeneralPanesReadsAreExact)
     EXPECT_FALSE(isReadOnlyQuery(du(many)));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("--"), home}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--exclude=x"), home}));
-    // Language & Region: Omarchy's current language and its list; never a change.
-    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-language")}));
-    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("list")}));
+    // Language & Region: omarchy-language is never a query, not even its reads (a dev session runs no script nobody here has
+    // read; Omarchy 4.0.4 does not ship it). Integrator review of PR #6.
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("list")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("locale")}));
 }
@@ -261,7 +262,7 @@ TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
     EXPECT_FALSE(isReadOnlyQuery(cmd("intel_backlight", "50%")));
 }
 
-// Printers (ADR-0026): the CUPS reads are exact; the user's defaults are the only lpoptions actions.
+// Printers (ADR-0030): the CUPS reads are exact; the user's defaults are the only lpoptions actions.
 TEST(PrinterGuard, TheReadsAreExactAndChangeNothing)
 {
     const auto q = [](std::initializer_list<const char *> args) {
@@ -342,7 +343,7 @@ TEST(ActionGuard, WpctlTakesThePagesThreeFormsOnly)
         EXPECT_FALSE(isAllowedAction(no)) << no.join(QLatin1Char(' ')).toStdString();
 }
 
-// ADR-0027: the lines Settings may write to displays.conf and to a trial, the rule config/hypr/grassfield/displays.lua applies.
+// ADR-0031: the lines Settings may write to displays.conf and to a trial, the rule config/hypr/grassfield/displays.lua applies.
 TEST(DisplayFiles, LinesAreCheckedFieldByField)
 {
     const QString t = QStringLiteral("\t");
@@ -398,6 +399,11 @@ TEST(ActionGuard, PowerProfilesTakeASourceAndAProfileOnly)
 
 TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
 {
+    // It may ask for a password: one at a time per tag (Backend::act, InFlight); wpctl and xdg-open never do.
+    EXPECT_TRUE(asksForPassword({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
+    EXPECT_FALSE(asksForPassword({QStringLiteral("wpctl"), QStringLiteral("set-volume")}));
+    EXPECT_FALSE(asksForPassword({QStringLiteral("xdg-open"), QStringLiteral("https://example.org")}));
+    EXPECT_FALSE(asksForPassword({}));
     EXPECT_EQ(actionTimeoutMs({QStringLiteral("omarchy-language"), QStringLiteral("fr")}, 15000), 130000);
     EXPECT_EQ(actionTimeoutMs({QStringLiteral("wpctl"), QStringLiteral("set-mute")}, 15000), 15000);
     EXPECT_EQ(actionTimeoutMs({}, 15000), 15000);
@@ -452,7 +458,7 @@ TEST(DevSession, FollowsTheRunModeRule)
 }
 
 // Login Items (Backend::writeAutostart, removeAutostart): only a plain <name>.desktop of the autostart folder, never through a
-// symlink, and in a dev session only in a folder whose real location lies under <root>/.dev (review of ADR-0026: a symlink in
+// symlink, and in a dev session only in a folder whose real location lies under <root>/.dev (review of ADR-0030: a symlink in
 // .dev led a QSaveFile write out of it).
 TEST(AutostartGuard, OnlyPlainEntriesOfTheFolder)
 {
@@ -510,6 +516,68 @@ TEST(AutostartGuard, ATextualDotDotThroughALinkIsRefused)
 
 // Login Items' image://icon with an absolute Icon= path: only a small regular raster file (a FIFO, a device, a link to one,
 // an SVG, a huge file or an unclean path shows the page's own tile).
+TEST(Volumes, OnlyLocalOnesAreRead)
+{
+    // Integrator review of PR #6: volumes() ran statfs on every mount on the GUI thread; a stuck network or FUSE mount froze the
+    // window. The table comes from /proc/self/mounts and only local volumes are stat'ed.
+    const QByteArray table = "/dev/nvme0n1p2 / btrfs rw,relatime 0 0\n"
+                             "proc /proc proc rw 0 0\n"
+                             "/dev/nvme0n1p2 /home btrfs rw,subvol=/@home 0 0\n"
+                             "/dev/nvme0n1p1 /boot vfat rw 0 0\n"
+                             "nas:/export/media /mnt/media nfs4 rw,hard 0 0\n"
+                             "//nas/share /mnt/share cifs rw 0 0\n"
+                             "me@host: /home/u/remote fuse.sshfs rw 0 0\n"
+                             "/dev/sdb1 /run/media/u/Win fuseblk rw 0 0\n"
+                             "/dev/sdc1 /run/media/u/My\\040Disk exfat rw 0 0\n"
+                             "tank/data /tank/data zfs rw 0 0\n"
+                             "tmpfs /tmp tmpfs rw 0 0\n"
+                             "/dev/loop0 /snap/x squashfs ro 0 0\n";
+    const QList<Mount> mounts = parseMounts(table);
+    ASSERT_EQ(mounts.size(), 12);
+    EXPECT_EQ(mounts.at(8).mountPoint, QStringLiteral("/run/media/u/My Disk"));
+    EXPECT_EQ(mounts.at(8).type, QStringLiteral("exfat"));
+    QStringList local;
+    for (const Mount &m : mounts) {
+        if (isLocalVolume(m.device, m.type))
+            local << m.mountPoint;
+    }
+    EXPECT_EQ(local, (QStringList{QStringLiteral("/"), QStringLiteral("/home"), QStringLiteral("/boot"), QStringLiteral("/run/media/u/My Disk"),
+                                  QStringLiteral("/tank/data")}));
+    // A network file system names a server, not a /dev device; FUSE is refused whatever its device (fuseblk names /dev/sdb1).
+    for (const char *net : {"nfs", "nfs4", "cifs", "smb3", "ceph", "9p", "virtiofs"})
+        EXPECT_FALSE(isLocalVolume(QStringLiteral("server:/export"), QString::fromLatin1(net))) << net;
+    for (const char *fuse : {"fuse", "fuseblk", "fuse.sshfs", "fuse.rclone"})
+        EXPECT_FALSE(isLocalVolume(QStringLiteral("/dev/sdb1"), QString::fromLatin1(fuse))) << fuse;
+    // The home's volume without a statfs of the home: the longest mount point above it.
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/home/u")), QStringLiteral("/home"));
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/home/u/remote/x")), QStringLiteral("/home/u/remote"));
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/homework")), QStringLiteral("/"));
+    EXPECT_EQ(mountPointOf({}, QStringLiteral("/home/u")), QString());
+    // A broken line is skipped; a backslash that is not an escape stays.
+    EXPECT_EQ(parseMounts("only-two fields\n\n/dev/sda1 /a\\b ext4 rw 0 0\n").size(), 1);
+    EXPECT_EQ(parseMounts("/dev/sda1 /a\\b ext4 rw 0 0\n").at(0).mountPoint, QStringLiteral("/a\\b"));
+}
+
+TEST(XdgDirs, EmptyOrRelativeMeansNotSet)
+{
+    // Integrator review of PR #6: an empty XDG_CONFIG_HOME made the autostart folder "/autostart" and the user's units
+    // "/systemd/user". Unset, empty or relative: the default (XDG Base Directory specification).
+    const QString config = QStringLiteral("/home/u/.config");
+    EXPECT_EQ(xdgHome(QString(), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral(""), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral("relative/dir"), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral("/srv/cfg/"), config), QStringLiteral("/srv/cfg"));
+    EXPECT_EQ(xdgHome(QStringLiteral("/srv//cfg/../x"), config), QStringLiteral("/srv/x"));
+    const QString data = QStringLiteral("/usr/local/share:/usr/share");
+    const QStringList defaults{QStringLiteral("/usr/local/share"), QStringLiteral("/usr/share")};
+    EXPECT_EQ(xdgDirs(QString(), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral(""), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("::"), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("rel:also/rel"), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("/opt/share::rel:/usr/share/"), data), (QStringList{QStringLiteral("/opt/share"), QStringLiteral("/usr/share")}));
+    EXPECT_EQ(xdgDirs(QString(), QStringLiteral("/etc/xdg")), QStringList{QStringLiteral("/etc/xdg")});
+}
+
 TEST(IconFile, OnlySmallRegularRasterFiles)
 {
     QTemporaryDir tmp;

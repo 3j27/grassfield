@@ -2,7 +2,7 @@ import QtQuick
 import QtTest
 import "../../apps/settings/qml/Keyboard.js" as Keyboard
 
-// Settings > Keyboard (ADR-0027 amendment): the Grassfield-owned keyboard.lua (only the keys chosen, the rules of
+// Settings > Keyboard (ADR-0031 amendment): the Grassfield-owned keyboard.lua (only the keys chosen, the rules of
 // config/hypr/grassfield/input.lua), the session's layout from /etc/vconsole.conf, xkb's base.lst, the repeat stops; then the page
 // writing the file and the Input Sources sheet adding, removing and moving layouts.
 TestCase {

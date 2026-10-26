@@ -2,7 +2,7 @@ import QtQuick
 import Grassfield.Ui
 
 // Displays: after a change, "Keep these display settings?" with the seconds left before the previous settings come back
-// (macOS's 15). Keep and Revert go back to the page; the countdown is only shown here: the shell owns the real one (ADR-0027),
+// (macOS's 15). Keep and Revert go back to the page; the countdown is only shown here: the shell owns the real one (ADR-0031),
 // so the previous settings come back even when this window is gone. Keep is taken only once the new settings are on screen
 // (`canKeep`, the shell says the trial is applied); before that the sheet stays open and says so. Closes itself at zero.
 Sheet {

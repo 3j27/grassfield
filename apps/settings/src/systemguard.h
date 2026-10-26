@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -16,7 +18,7 @@ bool devSession();
 //   wpctl      2 fixed (status, status -n), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
-//   omarchy-language and omarchy-language list                       Language & Region (Omarchy's per-user language)
+// Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
 
@@ -52,14 +54,14 @@ bool isActionProgram(const QString &program);
 // A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
 bool isBacklightName(const QString &name);
 
-// Settings > Displays (ADR-0027): one line of displays.conf or of a display trial, the rule config/hypr/grassfield/displays.lua
+// Settings > Displays (ADR-0031): one line of displays.conf or of a display trial, the rule config/hypr/grassfield/displays.lua
 // applies: v1 <TAB> desc:<1 to 160 bytes, no control character> <TAB> <W>x<H>@<Hz> (1-16384, 1-1000 Hz) <TAB> <X>x<Y>
 // (-32768 to 32768) <TAB> <scale> (0.5 to 4) <TAB> <transform> (0 to 7).
 bool isDisplayLine(const QString &line);
 // A trial's id: 1 to 32 ASCII letters and digits.
 bool isDisplayTrialId(const QString &id);
 
-// Settings > Printers (ADR-0026): a CUPS queue name as Settings takes it, 1 to 127 of [A-Za-z0-9_.+@-], not starting with "-"
+// Settings > Printers (ADR-0030): a CUPS queue name as Settings takes it, 1 to 127 of [A-Za-z0-9_.+@-], not starting with "-"
 // (CUPS allows more; a queue named otherwise is shown but cannot be chosen); a PPD paper size keyword ("A4", "Letter",
 // "Custom.WIDTHxHEIGHT" is not one), 1 to 40 of [A-Za-z0-9._-] starting with a letter or a digit; a URI cupsd turns into an
 // IPP Everywhere queue (dnssd, ipp, ipps or ippusb), at most 1024 characters, without spaces or control characters.
@@ -74,8 +76,12 @@ bool isPrinterUri(const QString &uri);
 // ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions).
 bool isAllowedAction(const QStringList &argv);
 
+// An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt). Backend::act runs one per
+// tag at a time (busjobs.h InFlight), as busAct does for the polkit actions of ADR-0030 (privilegedAction).
+bool asksForPassword(const QStringList &argv);
+
 // How long an allowed action may run: `requested`, or 130 s for Omarchy's language switch, which may wait for its own
-// pkexec prompt (a locale to generate) as long as a polkit call of ADR-0026 waits for the user.
+// pkexec prompt (a locale to generate) as long as a polkit call of ADR-0030 waits for the user.
 int actionTimeoutMs(const QStringList &argv, int requested);
 
 // The one file Login Items may write or remove (Backend::writeAutostart, removeAutostart): <autostartDir>/<plain name>.desktop
@@ -89,6 +95,30 @@ bool isAutostartWrite(const QString &path, const QString &autostartDir, const QS
 // The name alone does not make it one: iconprovider.h decodes it only in the format its extension names, so an SVG (whose
 // references QtSvg follows) named .png is refused there. Anything else shows the page's own tile.
 bool isIconFile(const QString &path);
+
+// The XDG Base Directory rule (Login Items, the user's services, the applications): a variable that is unset, empty or not an
+// absolute path counts as not set (an empty XDG_CONFIG_HOME must not make ~/.config/autostart "/autostart", or the user's units
+// "/systemd/user"). xdgHome: one folder, `value` when absolute, else `fallback`. xdgDirs: the absolute entries of a ':' list,
+// else those of `fallback`.
+QString xdgHome(const QString &value, const QString &fallback);
+QStringList xdgDirs(const QString &value, const QString &fallback);
+
+// Storage and About read the volumes on the GUI thread, so only local ones (integrator review of PR #6): the statfs of a
+// network or FUSE mount blocks while its server or daemon does not answer, and the window with it.
+// One line of /proc/self/mounts (reading that file stats nothing), its octal escapes (\040 for a space) decoded.
+struct Mount {
+    QString device;
+    QString mountPoint;
+    QString type;
+};
+QList<Mount> parseMounts(const QByteArray &text);
+// A volume that may be stat'ed: a local block device's file system (or ZFS, whose "device" is its dataset), never a network
+// file system (nfs, cifs, ceph, 9p: their device is not under /dev), never FUSE (fuse, fuseblk, fuse.sshfs...), never a
+// virtual one (tmpfs, overlay, squashfs...).
+bool isLocalVolume(const QString &device, const QString &type);
+// The mount point that holds `path` (the longest one that is `path` or one of its parents), "" when none does: which volume
+// holds the home, without a statfs of the home.
+QString mountPointOf(const QList<Mount> &mounts, const QString &path);
 
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);

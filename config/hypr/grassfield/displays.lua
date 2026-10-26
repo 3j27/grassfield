@@ -1,4 +1,4 @@
--- Display choices made in Settings > Displays (ADR-0027). Required by session.lua after grassfield.omarchy (the user's
+-- Display choices made in Settings > Displays (ADR-0031). Required by session.lua after grassfield.omarchy (the user's
 -- monitors.lua), and by dev.lua: a display Settings set takes its values, the others keep the user's rules.
 --
 -- Two files, both data read line by line and checked field by field (nothing in them is ever run):

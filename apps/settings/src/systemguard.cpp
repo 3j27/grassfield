@@ -24,6 +24,72 @@ bool isUuid(const QString &s)
     return re.match(s).hasMatch();
 }
 
+QList<Mount> parseMounts(const QByteArray &text)
+{
+    // fstab(5) escaping: \ooo (three octal digits) for a space, a tab, a newline or a backslash.
+    const auto unescape = [](const QByteArray &field) {
+        QByteArray out;
+        for (qsizetype i = 0; i < field.size(); ++i) {
+            if (field.at(i) == '\\' && i + 3 < field.size()) {
+                const QByteArray digits = field.mid(i + 1, 3);
+                bool ok = digits.size() == 3;
+                for (const char c : digits)
+                    ok = ok && c >= '0' && c <= '7';
+                if (ok) {
+                    out.append(char(digits.toInt(nullptr, 8)));
+                    i += 3;
+                    continue;
+                }
+            }
+            out.append(field.at(i));
+        }
+        return QString::fromUtf8(out);
+    };
+    QList<Mount> out;
+    for (const QByteArray &line : text.split('\n')) {
+        const QList<QByteArray> f = line.simplified().split(' ');
+        if (f.size() >= 3 && !f.at(0).isEmpty())
+            out.append({unescape(f.at(0)), unescape(f.at(1)), unescape(f.at(2))});
+    }
+    return out;
+}
+
+bool isLocalVolume(const QString &device, const QString &type)
+{
+    static const QStringList virtualTypes{QStringLiteral("tmpfs"), QStringLiteral("devtmpfs"), QStringLiteral("proc"), QStringLiteral("sysfs"),
+                                          QStringLiteral("overlay"), QStringLiteral("squashfs"), QStringLiteral("efivarfs"), QStringLiteral("ramfs"),
+                                          QStringLiteral("autofs"), QStringLiteral("cgroup2"), QStringLiteral("debugfs")};
+    if (type.startsWith(QLatin1String("fuse")) || virtualTypes.contains(type))
+        return false;
+    return device.startsWith(QLatin1String("/dev/")) || type == QLatin1String("zfs");
+}
+
+QString mountPointOf(const QList<Mount> &mounts, const QString &path)
+{
+    QString best;
+    for (const Mount &m : mounts) {
+        const bool holds = m.mountPoint == QLatin1String("/") || path == m.mountPoint || path.startsWith(m.mountPoint + QLatin1Char('/'));
+        if (holds && m.mountPoint.size() > best.size())
+            best = m.mountPoint;
+    }
+    return best;
+}
+
+QString xdgHome(const QString &value, const QString &fallback)
+{
+    return value.startsWith(QLatin1Char('/')) ? QDir::cleanPath(value) : fallback;
+}
+
+QStringList xdgDirs(const QString &value, const QString &fallback)
+{
+    QStringList out;
+    for (const QString &d : value.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+        if (d.startsWith(QLatin1Char('/')))
+            out << QDir::cleanPath(d);
+    }
+    return out.isEmpty() && value != fallback ? xdgDirs(fallback, fallback) : out;
+}
+
 bool isReadOnlyQuery(const QStringList &argv)
 {
     if (argv.isEmpty())
@@ -45,13 +111,10 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Storage pane: the size of the user's folders.
     if (program == QLatin1String("du"))
         return isFolderSizeQuery(args);
-    // Language & Region: Omarchy's language (owner decision 2026-10-26), the current one and the list.
-    if (program == QLatin1String("omarchy-language"))
-        return args.isEmpty() || args == QStringList{QStringLiteral("list")};
     // Battery: the power profiles this machine offers (Omarchy's list of power-profiles-daemon's).
     if (program == QLatin1String("omarchy-powerprofiles-list"))
         return args.isEmpty();
-    // Printers (ADR-0026): the queues with their state, description and location; the default (the user's first); the device
+    // Printers (ADR-0030): the queues with their state, description and location; the default (the user's first); the device
     // URIs; what cupsd and DNS-SD find (Add Printer); one queue's options (its paper sizes). `lpoptions -p <queue> -l` lists,
     // it changes nothing; any other lpoptions form may write and is an action.
     if (program == QLatin1String("lpstat"))
@@ -60,6 +123,8 @@ bool isReadOnlyQuery(const QStringList &argv)
             || args == QStringList{QStringLiteral("-l"), QStringLiteral("-e")};
     if (program == QLatin1String("lpoptions"))
         return args.size() == 3 && args.at(0) == QLatin1String("-p") && isPrinterName(args.at(1)) && args.at(2) == QLatin1String("-l");
+    // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
+    // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
     return false;
 }
 
@@ -283,6 +348,11 @@ bool isDisplayLine(const QString &line)
         return false;
     static const QRegularExpression transform(QRegularExpression::anchoredPattern(QStringLiteral("[0-7]")));
     return transform.match(f.at(5)).hasMatch();
+}
+
+bool asksForPassword(const QStringList &argv)
+{
+    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language");
 }
 
 int actionTimeoutMs(const QStringList &argv, int requested)

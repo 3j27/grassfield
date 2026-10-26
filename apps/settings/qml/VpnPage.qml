@@ -6,7 +6,7 @@ import "System.js" as System
 // VPN as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Network and VPN): the VPN and WireGuard profiles of
 // NetworkManager, each with its state and a switch (`vpn.connect` through SystemService, so never in a dev session), or one
 // group saying there are none. Creating or importing a configuration is not built. A VPN that needs a secret it does not store
-// fails with NetworkManager's reason (Grassfield is no secret agent, ADR-0026).
+// fails with NetworkManager's reason (Grassfield is no secret agent, ADR-0030).
 SettingsPage {
     id: root
 

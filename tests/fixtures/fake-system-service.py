@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """A fake NetworkManager, BlueZ or the General pane's services for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
-GF-049, ADR-0026).
+GF-049, ADR-0030).
 
     fake-system-service.py nm|bluez|general|upower|cupspk --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
@@ -25,7 +25,7 @@ the user's own services under GF_TEST_BUS_DIR/units, one a package ships; Enable
 hostname1 and timedate1 keep what they were given, so a read afterwards shows it.
 The UPower world: on battery; a laptop battery (70 %, discharging, 91.5 % of its design capacity, 212 cycles, a charge limit
 at 80 % that EnableChargeThreshold switches, a charge history), a mouse's battery (not the computer's) and the display device.
-The cups-pk-helper world (Printers, ADR-0026): org.opensuse.CupsPkHelper.Mechanism at "/", the methods Settings calls
+The cups-pk-helper world (Printers, ADR-0030): org.opensuse.CupsPkHelper.Mechanism at "/", the methods Settings calls
 (PrinterAdd, PrinterSetEnabled, PrinterSetAcceptJobs, PrinterDelete) and DevicesGet (which it never calls); each answers "" (CUPS
 said yes) and keeps the queues it was given, a queue it does not know answers CUPS's "client-error-not-found".
 """

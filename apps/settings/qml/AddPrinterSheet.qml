@@ -4,7 +4,7 @@ import Grassfield.Ui
 
 // Printers > Add Printer…: the printers on the network that print without a driver (IPP Everywhere, AirPrint), as cupsd and
 // DNS-SD find them (PrintersPage.found, read again while the sheet is open). Add (or a double-click) hands the choice back
-// (`picked`); the page then asks cups-pk-helper, which asks for the administrator's password (ADR-0026).
+// (`picked`); the page then asks cups-pk-helper, which asks for the administrator's password (ADR-0030).
 Sheet {
     id: root
 

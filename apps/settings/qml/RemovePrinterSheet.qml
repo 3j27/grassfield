@@ -2,7 +2,7 @@ import QtQuick
 import Grassfield.Ui
 
 // Printers > Remove Printer…: the confirmation (macOS asks before it deletes a printer). The removal then asks for the
-// administrator's password (cups-pk-helper, ADR-0026).
+// administrator's password (cups-pk-helper, ADR-0030).
 Sheet {
     id: root
 

@@ -4,7 +4,7 @@ import "../../apps/settings/qml/Displays.js" as Displays
 import "../../apps/settings/qml/System.js" as System
 import "../../apps/settings/qml" as SettingsQml
 
-// Settings > Displays (ADR-0027): the state the shell publishes, the resolution choices (Larger Text … More Space) and refresh
+// Settings > Displays (ADR-0031): the state the shell publishes, the resolution choices (Larger Text … More Space) and refresh
 // rates of a monitor, the lines of displays.conf and of a trial (the same rule as config/hypr/grassfield/displays.lua), the
 // merge of a change into the kept lines, and the arrangement's snap. Then the page on a fake backend: a choice writes a trial
 // with the kept lines of the other displays and asks for the keep sheet; Keep is taken only while the shell says the trial is

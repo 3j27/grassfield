@@ -6,7 +6,7 @@ import "General.js" as General
 // General > Date & Time (the structure of the macOS 15 capture, docs/audits/settings-parity-2026-10-26.md § Date & Time):
 // automatic time and its source; the date and time (set by hand while the automatic time is off) and the 24-hour clock; the
 // time zone and the closest city. timedate1 and timesync1 are read over D-Bus; every change goes to timedate1 through polkit
-// (ADR-0026) and the page reads the state again when it answered. The 24-hour clock is the menu bar's (menubar.clockHours).
+// (ADR-0030) and the page reads the state again when it answered. The 24-hour clock is the menu bar's (menubar.clockHours).
 // Not built (docs/specs/settings.md): the time zone from the location, the Lock Screen's own 24-hour switch, editing the source.
 SettingsPage {
     id: root
@@ -26,8 +26,9 @@ SettingsPage {
     // When the state was read (Date.now()): the clock runs on from timedate1's time.
     property real readAt: 0
     property real now: Date.now()
-    // The change sent to timedate1 until it answered ("ntp", "set", "zone"): the polkit dialog may be up.
-    property string pending: ""
+    // The change sent to timedate1 until it answered ("ntp", "set", "zone"): the polkit dialog may be up. Held by the Backend,
+    // so a visit while it is up shows it too and cannot send a second one.
+    readonly property string pending: General.pendingTimeOp(root.backend.pendingActions)
     // The last change, whose group shows the error if it failed.
     property string lastOp: ""
 
@@ -53,8 +54,7 @@ SettingsPage {
 
     function apply(op: string, what: string, spec: var): void {
         root.lastOp = op;
-        if (root.system.act(what, spec, "time.act"))
-            root.pending = op;
+        root.system.act(what, spec, "time.act");
     }
 
     function setWallClock(wall: var): void {
@@ -77,7 +77,6 @@ SettingsPage {
             } else if (tag === "time.zones") {
                 root.zones = ok ? General.parseZones(output) : [];
             } else if (tag === "time.act") {
-                root.pending = "";
                 root.system.queryBus("time.state", "time.state");
             }
         }

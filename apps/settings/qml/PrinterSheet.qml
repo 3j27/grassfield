@@ -3,7 +3,7 @@ import Grassfield.Ui
 
 // Printers > a printer (macOS 27 opens its sheet): its state (and CUPS's message while it is stopped), its location, its kind,
 // Resume while it is stopped or refuses jobs, and Remove Printer…, which Main.qml confirms first (RemovePrinterSheet). `printer`
-// is PrintersPage.details(); both changes ask for the administrator's password (cups-pk-helper, ADR-0026).
+// is PrintersPage.details(); both changes ask for the administrator's password (cups-pk-helper, ADR-0030).
 Sheet {
     id: root
 

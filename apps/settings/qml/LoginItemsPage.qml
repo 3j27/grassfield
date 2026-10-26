@@ -7,7 +7,7 @@ import "General.js" as General
 // Open at Login: the XDG autostart entries that start in this session (the user's folder over the system's, General.loginItems),
 // each with a switch; + adds an application (a copy of its desktop entry in the user's folder), − removes an item the user
 // added. A system item is switched off by a user override (Hidden=true) and back on by removing it again. Allow in the
-// Background: the user's own systemd services (the session bus, ADR-0026: no privilege), each with a switch. Writes go only to
+// Background: the user's own systemd services (the session bus, ADR-0030: no privilege), each with a switch. Writes go only to
 // the user's autostart folder (Backend.writeAutostart, removeAutostart; a dev session only under the worktree's .dev).
 // Not built (docs/specs/settings.md): Extensions; the Hyprland exec lines of the user's own files are never touched.
 SettingsPage {

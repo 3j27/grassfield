@@ -4416,6 +4416,14 @@
         <translation>Langues préférées</translation>
     </message>
     <message>
+        <source>Changing the language needs a newer version of Omarchy.</source>
+        <translation>Pour changer de langue, il faut une version plus récente d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Omarchy did not give its list of languages.</source>
+        <translation>Omarchy n’a pas donné sa liste de langues.</translation>
+    </message>
+    <message>
         <source>The language could not be changed: %1.</source>
         <translation>La langue n’a pas pu être modifiée : %1.</translation>
     </message>
@@ -4430,10 +4438,6 @@
     <message>
         <source>Changing the language…</source>
         <translation>Changement de langue…</translation>
-    </message>
-    <message>
-        <source>Unknown</source>
-        <translation>Inconnue</translation>
     </message>
     <message>
         <source>%1 — %2</source>

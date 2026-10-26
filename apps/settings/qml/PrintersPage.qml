@@ -3,7 +3,7 @@ import QtQuick
 import Grassfield.Ui
 import "Printers.js" as Printers
 
-// Printers as macOS 27 lays out Printers & Scanners (docs/audits/settings-parity-2026-10-26.md § Printers; ADR-0026): Default
+// Printers as macOS 27 lays out Printers & Scanners (docs/audits/settings-parity-2026-10-26.md § Printers; ADR-0030): Default
 // printer and Default paper size, the printers with their state, and Add Printer… under them. CUPS is read with `lpstat` and
 // `lpoptions -p <queue> -l` (Printers.js); the two defaults are the user's own (`lpoptions`, ~/.cups/lpoptions, no password);
 // adding and removing a printer go to cups-pk-helper, which asks for the administrator's password (polkit). Every change goes

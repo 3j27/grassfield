@@ -1,6 +1,6 @@
 .pragma library
 
-// The two runtime files of Settings > Displays (ADR-0027). Pure functions, unit-tested (tests/unit/tst_displaysfile.qml); the
+// The two runtime files of Settings > Displays (ADR-0031). Pure functions, unit-tested (tests/unit/tst_displaysfile.qml); the
 // Settings app reads and writes the same files (apps/settings/qml/Displays.js, apps/settings/src/displayfiles.h).
 //
 //   state  (the shell writes it, Settings reads it)

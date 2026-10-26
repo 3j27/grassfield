@@ -7,7 +7,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.lib
 
-// The session configuration read again (ADR-0027 and its amendment). Hyprland reads the files Settings writes for the session
+// The session configuration read again (ADR-0031 and its amendment). Hyprland reads the files Settings writes for the session
 // (displays.conf and a display trial through config/hypr/grassfield/displays.lua; mouse-trackpad.lua and keyboard.lua through
 // grassfield/input.lua and bindings.lua) only when it parses its configuration, so a choice made in Settings applies when the
 // shell asks it to read the configuration again: the request `reload` on the request socket, one connection per request (as

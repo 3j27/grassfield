@@ -8,7 +8,7 @@ import Grassfield.Ui
 import qs.lib
 import "DisplaysFile.js" as DisplaysFile
 
-// Settings > Displays' link to the compositor (ADR-0027). The shell is the only Grassfield process that talks to Hyprland:
+// Settings > Displays' link to the compositor (ADR-0031). The shell is the only Grassfield process that talks to Hyprland:
 // - it publishes the monitors (Hyprland's own `monitors` answer, through Quickshell), the backlight and the trial's state in
 //   a runtime file the Settings app reads (DisplaysFile.js has the format and the paths);
 // - it runs a trial: when Settings writes the trial file, it asks Hyprland to read its configuration again (the request

@@ -20,7 +20,7 @@ end
 if not omarchy.ok or not omarchy.monitors then
   hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 end
--- ADR-0027: the displays set in Settings > Displays, after the user's monitors.lua (a display Settings never touched keeps
+-- ADR-0031: the displays set in Settings > Displays, after the user's monitors.lua (a display Settings never touched keeps
 -- the user's rule). A failure costs only these rules.
 local displays_ok, displays_err = pcall(require, "grassfield.displays")
 if not displays_ok then

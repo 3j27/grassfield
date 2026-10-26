@@ -6,7 +6,7 @@ import "General.js" as General
 
 // Battery as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Battery): Low Power Mode, Battery Health and
 // Charging with their (i) sheets, and the level of the last 24 hours or 10 days. UPower over D-Bus (`power.state`, read-only;
-// the charge limit through UPower's own polkit action, ADR-0026). Low Power Mode keeps Omarchy's model: a power profile
+// the charge limit through UPower's own polkit action, ADR-0030). Low Power Mode keeps Omarchy's model: a power profile
 // remembered for the power adapter and one for the battery (read from Omarchy's state files, set with
 // omarchy-powerprofiles-set, the source in use last). Every change goes through SystemService, so never in a dev session.
 SettingsPage {

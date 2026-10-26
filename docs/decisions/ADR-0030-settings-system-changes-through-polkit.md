@@ -1,6 +1,7 @@
-# ADR-0026: Settings changes the system only through the system services' own polkit actions
+# ADR-0030: Settings changes the system only through the system services' own polkit actions
 Status: Proposed (cloud session, owner brief 2026-10-26: "toute action privilégiée passe par polkit et demande un ADR, plus une
-relecture opus") · Date: 2026-10-26 · Decider: owner (brief), integrator (merge after the opus review)
+relecture opus") · Date: 2026-10-26 · Decider: owner (brief), integrator (merge after the opus review) · Number: 0030 (it was 0025,
+then 0026; the integrator gave 0026 to 0029 to the Files decisions of PR #4)
 
 ## Context
 The General group of the Settings parity work (`docs/specs/settings.md` § macOS 27 parity inventory) needs the first changes
@@ -33,6 +34,11 @@ service ask the session's agent itself.
   Printer's), 370 s (`kPrivilegedJobMs`). The window never blocks. A refusal, a cancelled dialog or no agent at all comes back
   as the service's error and is shown on one line under the group: "The name could not be changed: not allowed: the system
   refused the request". The page then reads the state again. Nothing is retried on its own.
+- One polkit action per tag at a time, held by the Backend and not by the page (integrator review of PR #6): a page is created
+  anew on each visit, so a waiting state kept there let a second request go out while the first dialog was up, and four such
+  blocked calls filled the jobs' `kMaxInFlight`, after which every read of the system bus answered "timed out". `busAct` now
+  refuses a polkit action while one of its tag runs (`InFlight`, busjobs.h; `omarchy-language` of `act` likewise), and the
+  pages show "Waiting for permission…" from `Backend.pendingActions`, also when opened again while the dialog is up.
 - Every op is validated twice:
   - in QML (`General.js` builds the map or returns null);
   - again in C++ (`validAction`):
@@ -48,9 +54,16 @@ service ask the session's agent itself.
   `Properties.Get/GetAll`, timedate1 `ListTimezones`, systemd `ListUnitFilesByPatterns`. A nested session can therefore never
   change the owner's clock or name, whatever the QML asks.
 - The language goes through Omarchy's own per-user command (`omarchy-language <code>`, owner decision 2026-10-26). Grassfield
-  runs that command as an action: one validated code, one argument vector, no shell, no action in a dev session. What the
-  command does is Omarchy's, not Grassfield's (read in Omarchy's upstream sources at commit 58858ae; the installed 4.0.4
-  may differ, owner check below):
+  runs that command as an action: one validated code, one argument vector, no shell, no action in a dev session.
+  **Not on Omarchy 4.0.4** (integrator review of PR #6, on the owner's machine): 4.0.4-1 ships no `omarchy-language` (no
+  package owns it, it is in neither /usr/bin nor /usr/share/omarchy) and no `omarchy-locale-generate`. So:
+  - it is not a read-only query (`isReadOnlyQuery`): a dev session never runs a script nobody here has read on the machine
+    (ADR-0019). A real session reads it (`omarchy-language list`, `omarchy-language`) only when it is installed
+    (`Backend.omarchyLanguage`: found on PATH, never run to find out);
+  - without it, Language & Region shows the session's language (its LANG, the locale Settings runs in) and says that
+    changing it needs a newer version of Omarchy: no picker that cannot work, and no bare "Unknown" (R11).
+  What the command does is Omarchy's, not Grassfield's. **Everything in the list below is NOT VERIFIED on Omarchy 4.0.4**: it
+  was read in Omarchy's upstream sources at commit 58858ae, and a later release that ships the command may differ:
   - it generates the locale when it is missing: `sudo -n` through Omarchy's passwordless sudoers rule for its own helper
     `omarchy-locale-generate`, else `pkexec omarchy-locale-generate <code>`, whose password dialog is Grassfield's polkit
     agent (the same sheet as the services above);
@@ -68,7 +81,7 @@ service ask the session's agent itself.
   would go through the link, to a dotfile manager's file or out of `.dev`), and in a dev session only a folder whose real
   location lies under the worktree's `.dev` (`isAutostartWrite`, systemguard.h; review finding of 2026-10-26).
 
-- Hardware group (PR after #6), NetworkManager. NetworkManager checks its own polkit actions for every client call and lets
+- Hardware group (PR #8), NetworkManager. NetworkManager checks its own polkit actions for every client call and lets
   polkit ask the session's agent; the method has no `interactive` argument. Grassfield sends these calls only:
   - Wi-Fi > Forget This Network: `Settings.Connection.Delete` on the saved Wi-Fi profile with that uuid (`wifi.forget`).
     A profile of the whole system needs `org.freedesktop.NetworkManager.settings.modify.system`, `auth_admin_keep` or `yes`

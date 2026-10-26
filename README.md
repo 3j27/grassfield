@@ -68,7 +68,7 @@ Wayland session lock held by the compositor, so killing the shell never unlocks 
 - After an update, a running session keeps the old compositor plugin until you log out. The shell has a "Log out to finish
   updating" notice for that, but it works only once the release build ships `/usr/share/grassfield/VERSION` and the plugin
   reports its version (not merged yet): until then nothing is announced.
-- Settings > Mouse, Trackpad and Keyboard apply a choice through a reload of the session configuration (ADR-0027
+- Settings > Mouse, Trackpad and Keyboard apply a choice through a reload of the session configuration (ADR-0031
   amendment); not yet verified on real hardware.
 - Fonts requested by name that are not installed fall back to Liberation Sans, not Inter.
 - Omarchy's own shell (bar, launcher, lock) does not run inside Grassfield, by design.

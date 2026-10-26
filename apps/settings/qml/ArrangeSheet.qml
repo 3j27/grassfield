@@ -5,7 +5,7 @@ import "Displays.js" as Displays
 
 // Displays > Arrange…: the displays as tiles in proportion to their logical size; drag one (or move a focused one with the arrow
 // keys) and it snaps beside the nearest other along a whole edge (Displays.snapBeside). Done hands the new positions back
-// (`arranged`), which the page tries as one change (ADR-0027).
+// (`arranged`), which the page tries as one change (ADR-0031).
 Sheet {
     id: root
 
