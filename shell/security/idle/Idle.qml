@@ -45,11 +45,13 @@ Scope {
 
     // The compositor also switches the displays on at a key press or pointer motion, so "off" is sent whenever the state is
     // recomputed, never skipped as already done (a stale "off" would keep the next "off" from being sent); "on" only when this
-    // module had them off (a repeated enable can flicker on some hardware).
+    // module had them off (a repeated enable can flicker on some hardware), and always while a lock is being acquired: an
+    // instance restarted with the displays dark starts with displayOff false, and the compositor confirms a lock only once it
+    // has drawn it.
     function setDisplays(on: bool): void {
-        if (on && !displayOff)
+        if (on && !displayOff && !(Lock.locked && !Lock.holding))
             return;
-        if (on || !displayOff)
+        if (on === displayOff)
             console.info("grassfield-idle: displays " + (on ? "on" : (Lock.locked ? "off (locked, no input)" : "off (inactive)")));
         displayOff = !on;
         const action = on ? "enable" : "disable";
@@ -61,17 +63,36 @@ Scope {
     }
 
     // A lock that starts lights the displays until it holds (IdleModel.displaysOff); an unlock without Wayland input (a
-    // fingerprint) lights a session that went dark for inactivity.
+    // fingerprint) lights a session that went dark for inactivity. Later in the turn (Qt.callLater runs one call for all the
+    // requests of a turn): once locked and holding have both settled, and after the lock request has been queued.
     Connections {
         target: Lock
 
         function onLockedChanged(): void {
             if (!Lock.locked)
                 root.offForInactivity = false;
-            root.updateDisplays();
+            root.acquireOnTries = 0;
+            Qt.callLater(root.updateDisplays);
         }
 
         function onHoldingChanged(): void {
+            root.acquireOnTries = 0;
+            Qt.callLater(root.updateDisplays);
+        }
+    }
+
+    // A lock restored at start (a restarted shell) may not change Lock.locked: light the displays it has to draw on.
+    Component.onCompleted: updateDisplays()
+
+    // While a lock is being acquired, "on" again until it holds (a lost request would leave it undrawn until input), a few
+    // times only.
+    property int acquireOnTries: 0
+    Timer {
+        interval: IdleModel.ACQUIRE_DISPLAYS_ON_MS
+        repeat: true
+        running: Lock.locked && !Lock.holding && root.acquireOnTries < IdleModel.ACQUIRE_DISPLAYS_ON_TRIES
+        onTriggered: {
+            root.acquireOnTries++;
             root.updateDisplays();
         }
     }
@@ -140,7 +161,7 @@ Scope {
         onEnabledChanged: {
             if (!enabled)
                 root.offForInactivity = false;
-            root.updateDisplays();
+            Qt.callLater(root.updateDisplays);
         }
         // The power source changed (or the setting): re-enable so that the new timeout applies (see `rearming`).
         onTimeoutChanged: {

@@ -98,6 +98,14 @@ TestCase {
         verify(IdleModel.DISPLAY_OFF_SECONDS > 0 && IdleModel.DISPLAY_OFF_SECONDS <= 60);
     }
 
+    // A lost "on" while a lock is being acquired is sent again before the lock before sleep runs out of time.
+    function test_acquireDisplaysOnRetry() {
+        verify(IdleModel.ACQUIRE_DISPLAYS_ON_MS > 0);
+        verify(IdleModel.ACQUIRE_DISPLAYS_ON_MS < IdleModel.sleepBudgetMs(""));
+        // A few tries, not one per 2 s all night.
+        verify(IdleModel.ACQUIRE_DISPLAYS_ON_TRIES >= 2 && IdleModel.ACQUIRE_DISPLAYS_ON_TRIES <= 10);
+    }
+
     // Settings > Lock Screen: Turn display off on battery / on power adapter when inactive (lock.displayOffBattery/Power).
     function test_inactiveDisplayOff() {
         compare(IdleModel.inactiveDisplayOffSeconds(2, 10, true), 120);

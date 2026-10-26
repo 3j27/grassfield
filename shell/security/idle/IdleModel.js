@@ -41,6 +41,12 @@ function idleArmed(enabled, locked, rearming, busInhibited) {
 // while locked before the displays go off (Hyprland DPMS); any input switches them on again.
 var DISPLAY_OFF_SECONDS = 30;
 
+// While a lock is being acquired, "on" is sent again this often, at most this many times: a lost request (a restarted shell,
+// a dispatch the compositor refused) must not keep the lock undrawn, hence unconfirmed, until input; a lock that cannot hold
+// (no display connected) is not woken all night.
+var ACQUIRE_DISPLAYS_ON_MS = 2000;
+var ACQUIRE_DISPLAYS_ON_TRIES = 5;
+
 // Display power-off while the session is unlocked (macOS 27 Lock Screen: Turn display off on battery / on power adapter when
 // inactive): the minutes of the power source in use, as seconds; 0 = never. The values arrive read through the contract
 // (integers 0..240); anything else is never: turning the displays off is not what keeps the session safe (the lock is, and it

@@ -111,7 +111,11 @@ the setting re-arms the monitor and lights the displays (as a Mac wakes its disp
 locked it then leaves the dark lock screen to its own 30 s delay. An invalid or 0 value means never (turning the displays off
 is not what keeps the session safe). `IdleModel.inactiveDisplayOffSeconds`, `inactiveOffArmed`, `displaysOff`; tests/security/tst_idlemodel.qml. "Off" is
 now sent whenever the wanted state is recomputed (the compositor may have switched the displays on by itself, so a remembered
-"off" must not suppress the next one); "on" only when this module had them off. In the nested dev session it is off unless a test sets it
+"off" must not suppress the next one); "on" only when this module had them off, or while a lock is being acquired (an
+instance restarted with the displays dark believes them on; counter-review of a15c05e): at start, then every 2 s until the
+lock holds, at most 5 times (`IdleModel.ACQUIRE_DISPLAYS_ON_MS`, `ACQUIRE_DISPLAYS_ON_TRIES`: a lock that cannot hold, with no
+display connected, is not woken all night); only a change of state is logged. The changes of the lock's state are handled later in the turn, once
+(`Qt.callLater`), so a lock or an unlock sends no repeated "on". In the nested dev session it is off unless a test sets it
 (`idle devInactiveOff <seconds>`), as the lock screen's display-off.
 
 **What the lock surface shows.** `lock.showUser` (default true) hides the account's picture and name (the password field
