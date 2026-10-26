@@ -41,7 +41,6 @@ Singleton {
     readonly property var dockMetrics: DockGeometry.metrics(dockSize, {
         iconSize: Tokens.dockIconSize,
         padding: Tokens.dockPadding,
-        indicatorSize: Tokens.dockIndicatorSize,
         spacing: Tokens.dockSpacing,
         bottomMargin: Tokens.dockBottomMargin,
         separatorHeight: Tokens.dockSeparatorHeight,

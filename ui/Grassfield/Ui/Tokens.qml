@@ -300,11 +300,11 @@ QtObject {
     readonly property int dockSizeMax: 96
     // F1 gap 4: vertical padding ~9.5 and end margin ~10 (integer for crisp tiles) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockPadding: 10
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
-    readonly property int dockSpacing: 4
+    // icon pitch 55.8 at the reference proportions for a 48-pt tile: 48 + 7 (was 4: pitch 52) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property int dockSpacing: 7
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockBottomMargin: 6
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
+    // running dot about 4 across [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property int dockIndicatorSize: 4
     // task spec default; user value in grassfield.json dock.magnification [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockMagnificationMax: 1.6
@@ -334,11 +334,17 @@ QtObject {
     readonly property int dockRevealDwell: 120
     // estimate: auto-hide slide in, ms (Reduce Motion caps it) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRevealDuration: 240
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
+    // the separator hairline, 1 wide [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property int dockSeparatorWidth: 1
+    // the running dot's centre about 5 above the shelf's screen-side edge, inside its padding (no band under the icons) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property int dockDotCentre: 5
+    // room on each side of the separator hairline inside its slot: app body to separator 20.5 (3.5 bearing + 7 spacing + 10) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property int dockSeparatorGap: 10
+    // separator about 34 percent darker than the shelf (was 8 percent: four times fainter): 0.3 of black, white in dark [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
+    readonly property real dockSeparatorOpacity: 0.3
     // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockSeparatorHeight: 49
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
+    // the label's tail tip 8 +-1 above the shelf (or above a magnified icon) [ref: docs/audits/visual-tahoe-2026-10-25.md § Dock — partly close, 6.5/10]
     readonly property int dockTooltipGap: 8
     // estimate: height reserved above the shelf for the label [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipArea: 36
