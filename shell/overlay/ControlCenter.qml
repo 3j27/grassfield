@@ -31,7 +31,9 @@ FocusScope {
     // Inset of the icon disk inside a capsule (the disk is vertically centred, so it is centred in a 1x1 too).
     readonly property real diskInset: (cell - Tokens.quicksettingsIconDisk) / 2
     // Stages (only with the plugin's `stages-available`) sits beside Airplane Mode; while Now Playing takes that slot it gets a row of its own.
-    readonly property bool stagesRow: StagesLink.available && Media.available
+    // macOS 27 keeps the Now Playing module in its 2x2 slot while nothing plays ("Not Playing", the transport dimmed).
+    readonly property bool nowPlayingShown: true
+    readonly property bool stagesRow: StagesLink.available && nowPlayingShown
     readonly property real groupHeight: stagesRow ? 4 * cell + 3 * gap : 3 * cell + 2 * gap
     readonly property real gridBottom: sliders.height > 0 ? sliders.y + sliders.height : groupHeight
     readonly property real bodyHeight: expanded === "" ? gridBottom : detail.height
@@ -203,8 +205,8 @@ FocusScope {
 
     // Bold title of a slider module.
     component ModuleTitle: Label {
-        x: root.pad
-        y: Tokens.spacingSm
+        x: Tokens.quicksettingsSliderTitleX
+        y: Tokens.quicksettingsSliderTitleTop
         width: parent.width - 2 * root.pad
         font.pixelSize: Tokens.quicksettingsTitleSize
         font.weight: Tokens.typographyMenuBoldWeight
@@ -280,7 +282,7 @@ FocusScope {
 
         NowPlaying {
             id: nowPlaying
-            visible: Media.available
+            visible: root.nowPlayingShown
             x: 2 * root.pitch
             y: root.pitch
         }
@@ -288,7 +290,7 @@ FocusScope {
         // Appearance sits beside Do Not Disturb while there is no player, below the sliders otherwise.
         Module {
             id: appearanceSide
-            visible: !Media.available
+            visible: !root.nowPlayingShown
             x: 2 * root.pitch
             y: root.pitch
             cols: 2
@@ -313,7 +315,7 @@ FocusScope {
             id: airplane
             y: 2 * root.pitch
             // Full width while no player takes the 2x2 slot at the right.
-            cols: Media.available || StagesLink.available ? 2 : 4
+            cols: root.nowPlayingShown || StagesLink.available ? 2 : 4
 
             RadioRow {
                 width: parent.width
@@ -330,8 +332,8 @@ FocusScope {
 
         StagesToggle {
             id: stagesToggle
-            x: Media.available ? 0 : 2 * root.pitch
-            y: Media.available ? 3 * root.pitch : 2 * root.pitch
+            x: root.nowPlayingShown ? 0 : 2 * root.pitch
+            y: root.nowPlayingShown ? 3 * root.pitch : 2 * root.pitch
             inset: root.diskInset
         }
 
@@ -377,23 +379,25 @@ FocusScope {
 
                 Row {
                     x: root.pad
-                    y: parent.height - height - Tokens.spacingXs
+                    y: Tokens.quicksettingsSliderTrackCentre - height / 2
                     width: parent.width - 2 * root.pad
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight
 
+                    // macOS 27: a small sun at the low end, a large one at the high end, a knobless white fill.
                     Icon {
                         id: displayIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        size: Tokens.menuIconSize
-                        name: "display"
+                        size: Tokens.quicksettingsSliderGlyphSmall
+                        name: "sun"
                     }
 
                     Slider {
                         id: displaySlider
-                        trackHeight: Tokens.controlSliderTrackCompact
+                        knob: false
+                        trackHeight: Tokens.quicksettingsSliderTrack
                         verticalKeys: false
-                        width: parent.width - displayIcon.width - parent.spacing
+                        width: parent.width - displayIcon.width - displayIconHigh.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Display brightness")
                         value: Brightness.level
@@ -405,6 +409,13 @@ FocusScope {
                                     root.showDevNote();
                             }
                         }
+                    }
+
+                    Icon {
+                        id: displayIconHigh
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Tokens.quicksettingsSliderGlyphLarge
+                        name: "sun"
                     }
                 }
             }
@@ -422,7 +433,7 @@ FocusScope {
 
                 Row {
                     x: root.pad
-                    y: parent.height - height - Tokens.spacingXs
+                    y: Tokens.quicksettingsSliderTrackCentre - height / 2
                     width: parent.width - 2 * root.pad
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight
@@ -436,7 +447,8 @@ FocusScope {
 
                     Slider {
                         id: kbdSlider
-                        trackHeight: Tokens.controlSliderTrackCompact
+                        knob: false
+                        trackHeight: Tokens.quicksettingsSliderTrack
                         verticalKeys: false
                         width: parent.width - kbdIcon.width - parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
@@ -466,7 +478,7 @@ FocusScope {
 
                 Row {
                     x: root.pad
-                    y: parent.height - height - Tokens.spacingXs
+                    y: Tokens.quicksettingsSliderTrackCentre - height / 2
                     width: parent.width - 2 * root.pad
                     spacing: Tokens.spacingSm
                     height: Tokens.controlSliderHeight
@@ -497,7 +509,8 @@ FocusScope {
 
                     Slider {
                         id: volumeSlider
-                        trackHeight: Tokens.controlSliderTrackCompact
+                        knob: false
+                        trackHeight: Tokens.quicksettingsSliderTrack
                         verticalKeys: false
                         width: parent.width - mute.width - soundChevron.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
@@ -612,7 +625,7 @@ FocusScope {
 
             Module {
                 id: appearanceBottom
-                visible: Media.available
+                visible: root.nowPlayingShown
                 cols: 4
 
                 RadioRow {

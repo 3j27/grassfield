@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Templates as T
 
 // Horizontal slider with a pill track and a pill knob, on a QtQuick.Templates Control: the host owns the value. value is
-// within [from, to]; moved(value) reports a user change.
+// within [from, to]; moved(value) reports a user change. `knob: false` is the macOS Control Center module style: no knob, a
+// round-ended fill (white unless Increase Contrast, then the accent) on a darker translucent track.
 T.Control {
     id: root
 
@@ -11,7 +12,8 @@ T.Control {
     property real value: 0
     property real stepSize: 0.05
     property string accessibleName: ""
-    property color fillColor: Appearance.colors.accent
+    property bool knob: true
+    property color fillColor: root.knob || Appearance.increaseContrast ? Appearance.colors.accent : Appearance.colors.knob
     // Up/Down change the value too. Quick Settings turns this off: there the vertical arrows move focus between
     // modules (macOS model), and a focused slider changes with Left/Right, Home/End only.
     property bool verticalKeys: true
@@ -28,7 +30,9 @@ T.Control {
     onValueChanged: local = NaN
 
     readonly property real position: to > from ? Math.max(0, Math.min(1, (shown - from) / (to - from))) : 0
-    readonly property real travel: Math.max(0, width - Tokens.controlSliderKnobWidth)
+    // The knob's width, or for the knobless style the track's own height (the fill never gets shorter than its round cap).
+    readonly property real endWidth: root.knob ? Tokens.controlSliderKnobWidth : root.trackHeight
+    readonly property real travel: Math.max(0, width - root.endWidth)
 
     implicitWidth: Tokens.controlSliderDefaultWidth
     implicitHeight: Tokens.controlSliderHeight
@@ -97,15 +101,23 @@ T.Control {
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Rectangle {
-            width: Tokens.controlSliderKnobWidth / 2 + root.position * root.travel
+            width: root.knob ? Tokens.controlSliderKnobWidth / 2 + root.position * root.travel : root.endWidth + root.position * root.travel
             height: parent.height
             radius: height / 2
             color: root.fillColor
         }
     }
 
+    // Keyboard focus for the knobless style: the ring around the track.
+    FocusRing {
+        visible: !root.knob && root.visualFocus
+        anchors.fill: track
+        shapeRadius: track.radius
+    }
+
     Rectangle {
         id: knob
+        visible: root.knob
         width: Tokens.controlSliderKnobWidth
         height: Tokens.controlSliderKnob
         radius: height / 2
@@ -126,7 +138,7 @@ T.Control {
         cursorShape: Qt.ArrowCursor
         function at(mouseX: real): void {
             root.forceActiveFocus();
-            const t = root.travel > 0 ? (mouseX - Tokens.controlSliderKnobWidth / 2) / root.travel : 0;
+            const t = root.travel > 0 ? (mouseX - root.endWidth / 2) / root.travel : 0;
             root.commit(root.from + Math.max(0, Math.min(1, t)) * (root.to - root.from));
         }
         onPressed: mouse => at(mouse.x)

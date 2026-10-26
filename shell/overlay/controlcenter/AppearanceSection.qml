@@ -126,7 +126,8 @@ Column {
         }
 
         Slider {
-            trackHeight: Tokens.controlSliderTrackCompact
+            knob: false
+            trackHeight: Tokens.quicksettingsSliderTrack
             width: parent.width - transparencyLabel.width - percent.width - 2 * parent.spacing
             anchors.verticalCenter: parent.verticalCenter
             accessibleName: qsTr("Transparency")

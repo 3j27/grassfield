@@ -1,7 +1,7 @@
 import QtQuick
 import Grassfield.Ui
 
-// Radio / mode row: round icon button (accent when on), title, state, optional chevron.
+// Radio / mode row: round icon button (macOS 27: a white disk with the accent glyph when on), title, state, optional chevron.
 // The icon toggles; the text and the chevron expand the section. Keyboard: Space toggles (Return too, except on an
 // expandable row where Return opens the section); Left/Right move to the capsule beside, and Right on the last
 // capsule of a row opens the section.
@@ -55,7 +55,7 @@ NavItem {
         width: Tokens.panelCcIconButton
         height: width
         radius: width / 2
-        color: root.on ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.on ? Appearance.colors.knob : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Behavior on color {
             ColorAnimation {
@@ -65,9 +65,11 @@ NavItem {
 
         Icon {
             anchors.centerIn: parent
-            size: Tokens.menuIconSize
+            size: Tokens.quicksettingsDiskGlyph
             name: root.iconName
-            color: root.on ? Appearance.colors.selectionText : Appearance.colors.text
+            // On: the accent glyph on the white disk (the selection shade, which holds 3:1 on white for every accent but
+            // yellow; yellow takes its dark selection text).
+            color: !root.on ? Appearance.colors.text : (Accent.contrast(String(Appearance.colors.selection), String(Appearance.colors.knob)) >= 3 ? Appearance.colors.selection : Appearance.colors.selectionText)
         }
 
         MouseArea {
@@ -80,7 +82,7 @@ NavItem {
 
     Item {
         anchors.left: circle.right
-        anchors.leftMargin: Tokens.spacingSm
+        anchors.leftMargin: Tokens.quicksettingsDiskTextGap
         anchors.right: parent.right
         anchors.rightMargin: root.inset > 0 ? Tokens.spacingXs : 0
         height: parent.height
@@ -97,18 +99,19 @@ NavItem {
                 text: root.title
                 // The title is the emphasized line, the state is regular (macOS model).
                 font.weight: Tokens.typographyMenuBoldWeight
-                // Long module titles wrap to a second line inside the tile (GF-097, macOS: Control Center wraps). A single
-                // word wider than the capsule ("Appearance" in a narrow language) shrinks down to the caption size
-                // before it would be elided.
+                // Long module titles wrap to a second line inside the tile at their own 13 bold (GF-097; macOS: Control
+                // Center wraps and never shrinks a title, visual-tahoe audit); a single word wider than the capsule is elided.
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: Tokens.typographyCaptionSize
+                elide: Text.ElideRight
             }
 
+            // The state line: regular, in the title colour, a little larger than a caption (macOS 27).
             Caption {
                 width: parent.width
                 text: root.subtitle
+                color: Appearance.colors.text
+                font.pixelSize: Tokens.quicksettingsStatusSize
                 visible: text !== ""
                 // Fixed states wrap to two lines; only a device or network name that
                 // is longer still ends in an ellipsis.

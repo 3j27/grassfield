@@ -4,7 +4,7 @@ import qs.services
 import qs.overlay.controlcenter
 
 // Now Playing module (CC7, 2x2): artwork, title, artist and transport controls of the active MPRIS
-// player. Hidden by the host when Media.available is false.
+// player. Shown while nothing plays too (macOS 27): "Not playing", the transport dimmed and inactive.
 Module {
     id: root
 
@@ -89,6 +89,8 @@ Module {
 
                 required property var modelData
 
+                enabled: Media.available
+                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
                 width: Tokens.panelCcTransportButton
                 height: width
                 accessibleName: modelData.name

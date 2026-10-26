@@ -645,6 +645,24 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsNoteHeight: 26
+    // glyph inside the 36-pt disk of a 2x1 module, about 20 x 14 (macOS 26 composites; the macOS 27 capture draws it as large) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsDiskGlyph: 20
+    // disk to title gap 6.2 [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsDiskTextGap: 6
+    // status line of a 2x1 module about 12, in the title colour [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsStatusSize: Math.round(12 * Appearance.textScale)
+    // slider module title 15.6 from the module's left edge [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsSliderTitleX: 16
+    // slider module title: its cap 13.7 below the module top (a 13-pt label box starts about 3.5 above its cap) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsSliderTitleTop: 10
+    // slider track centre 41.7 below the module top (macOS 27 capture about 40.5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsSliderTrackCentre: 42
+    // slider track thickness 4.7 (macOS 27 capture about 5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsSliderTrack: 5
+    // estimate: the glyph at the low end of a module slider (macOS 27: a small sun, about 14) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsSliderGlyphSmall: 14
+    // estimate: the glyph at the high end of a module slider (macOS 27: a large sun, about 18) [ref: docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10]
+    readonly property int quicksettingsSliderGlyphLarge: 18
     // ms after Airplane Mode is switched on, or at start, before a persisted on that no radio backs is erased: the rfkill and NetworkManager state settle in this time (behaviour pinned by tests/unit/tst_airplane.qml) [ref: docs/specs/controlcenter.md § Functional requirements]
     readonly property int quicksettingsAirplaneSettleMs: 3000
     // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
