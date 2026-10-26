@@ -325,7 +325,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 ### Windows and tabs
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
-| FP-1 | New Finder Window ⌘N | done | Finder-Home | — | a new window opens over the previous one: placement is the compositor's (ADR-0025) | 1 |
+| FP-1 | New Finder Window ⌘N | done | Finder-Home | — | a new window opens over the previous one: placement is the compositor's (ADR-0026) | 1 |
 | FP-2 | New Tab ⌘T; the tab bar appears with the second tab | partial: opens the current folder | none | — | — | 1 |
 | FP-3 | View > Show/Hide Tab Bar ⇧⌘T (bar shown with one tab) | missing (bar only from two tabs) | none | — | — | 1 |
 | FP-4 | Tab bar look (equal-width tabs, close × on hover, + at the end, selected tab) | partial: flat rectangles, × and + exist | none (visual NOT verified until a capture is supplied) | — | — | 1 |
@@ -333,11 +333,11 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-6 | Show Previous/Next Tab ⇧⌘[ ⇧⌘], ⌃⇥ ⌃⇧⇥ | done | none | — | — | 1 |
 | FP-7 | Window > Move Tab to New Window | missing | none | — | — | 1 |
 | FP-8 | Window > Merge All Windows | missing | none | — | — | 1 |
-| FP-9 | Drag a tab out of the window → new window; drag tabs to reorder; drop a tab on another window's tab bar | missing | none | Qt drag with an app-internal MIME type | the new window's position is the compositor's (ADR-0025) | 1 |
+| FP-9 | Drag a tab out of the window → new window; drag tabs to reorder; drop a tab on another window's tab bar | missing | none | Qt drag with an app-internal MIME type | the new window's position is the compositor's (ADR-0026) | 1 |
 | FP-10 | Drop files on a tab: copy or move into its folder; hovering a tab during a drag switches to it (spring-loaded) | missing | none | KIO copy/move (`FilesApp.drop`) | — | 1 |
 | FP-11 | Reopen the last closed tab | missing | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
 | FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | partial: menu item only | none | — | — | 1 |
-| FP-13 | The window remembers its size and position; new windows cascade | missing | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0025) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
+| FP-13 | The window remembers its size and position; new windows cascade | missing | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0026) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
 | FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | missing: one global setting | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (View Options) |
 | FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
 | FP-16 | Windows and tabs restored at the next launch | missing | none | QSettings | — | later |
@@ -395,9 +395,9 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-56 | Inline rename | done (F2; Return in PR 2) | — | `KIO::moveAs` | — | 2 |
 | FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | missing | none | `KIO::batchRename` / moveAs per item | — | 4 |
 | FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | partial: New Folder | none | `KIO::mkdir` + move | — | 4 |
-| FP-59 | Compress (zip) and Expand (double-click an archive) | missing | none | `bsdtar` (libarchive) out of process (ADR-0028) | — | 4 |
+| FP-59 | Compress (zip) and Expand (double-click an archive) | missing | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
 | FP-60 | Get Info ⌘I: General, More Info, Name & Extension, Comments, Open with + Change All…, Preview, Sharing & Permissions | partial: read-only General and permissions; tags; Customize Folder | Finder-Get-Info | KIO stat, `KIO::chmod`, `KIO::chown` | Locked: no user-level lock flag (`chattr +i` needs root, never); Stationery pad: n/a | 4 (permissions), 5 (Open with) |
-| FP-61 | Sharing & Permissions editable, the padlock for items you do not own | missing | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0027 (polkit) | — | 4 |
+| FP-61 | Sharing & Permissions editable, the padlock for items you do not own | missing | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0028 (polkit) | — | 4 |
 | FP-62 | Inspector ⌥⌘I (one Info window that follows the selection) | missing | none | — | — | later |
 | FP-63 | Tags… editor: named tags, Add Tags field in Info and the preview pane | partial: the seven colour tags | Finder-Gallery, Finder-Get-Info | `user.xdg.tags` | — | 5 |
 | FP-64 | Copy as Pathname ⌥⌘C | missing | none | clipboard | — | 4 |
@@ -411,9 +411,9 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 ### Search
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
-| FP-71 | Find ⌘F; title "Searching “This Mac”"; scope bar This Mac / "folder" (Grassfield says "This Computer", F-12) | partial: filters the shown folder by name | Finder-Search | ADR-0026 | — | 3 |
-| FP-72 | Filters: Kind, Last opened, Last modified, Created, Name, Contents, Size, Tags (the + rows) | missing | Finder-Search (+) | ADR-0026 | contents only where localsearch indexed them, or a bounded scan of the folder | 3 |
-| FP-73 | Saved searches (Save, a smart folder in the sidebar), New Smart Folder ⌥⌘N | missing | Finder-Search (Save) | JSON saved searches (ADR-0026) | — | 3 |
+| FP-71 | Find ⌘F; title "Searching “This Mac”"; scope bar This Mac / "folder" (Grassfield says "This Computer", F-12) | partial: filters the shown folder by name | Finder-Search | ADR-0027 | — | 3 |
+| FP-72 | Filters: Kind, Last opened, Last modified, Created, Name, Contents, Size, Tags (the + rows) | missing | Finder-Search (+) | ADR-0027 | contents only where localsearch indexed them, or a bounded scan of the folder | 3 |
+| FP-73 | Saved searches (Save, a smart folder in the sidebar), New Smart Folder ⌥⌘N | missing | Finder-Search (Save) | JSON saved searches (ADR-0027) | — | 3 |
 | FP-74 | The path bar shows the selected result's path | missing (path bar shows the folder) | Finder-Search | — | — | 3 |
 
 ### Go menu and Linux power, the macOS way
@@ -457,7 +457,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
   lookup; the working directory is the folder. Launches keep `launchguard.cpp`'s rules (Files never runs a program from a
   folder; the terminal itself is an application the user chose).
 - **F-8 Archives**: Compress makes a `.zip` (Finder's Archive Utility default) and Expand reads zip, tar, tar.gz, tar.bz2,
-  tar.xz, tar.zst and 7z with `bsdtar` in a child process (ADR-0028).
+  tar.xz, tar.zst and 7z with `bsdtar` in a child process (ADR-0029).
 - **F-9 Connect to Server**: Files asks for nothing itself; KIO's worker asks kiod's password server, whose dialog is KDE's
   (a QWidget). Restyling it needs a replacement of the password server (a new service): not done; listed as a limit.
   Recent and favourite servers are stored in Files' QSettings (no password ever).
@@ -471,12 +471,12 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
   in the system menu's About This Computer; Quick Look is Glance; Archive Utility has no name of its own (Files expands).
 
 ### ADRs opened by this step
-- ADR-0025 Files window frames: size by Files, position and cascade by the compositor (cross-module: Files and
+- ADR-0026 Files window frames: size by Files, position and cascade by the compositor (cross-module: Files and
   `config/hypr`).
-- ADR-0026 Files search: backends and saved searches (cross-module: the shell's Search uses the same backends).
-- ADR-0027 Privileged ownership and permission changes in Files through polkit (privileged action; opus review before
+- ADR-0027 Files search: backends and saved searches (cross-module: the shell's Search uses the same backends).
+- ADR-0028 Privileged ownership and permission changes in Files through polkit (privileged action; opus review before
   any code).
-- ADR-0028 Archives through `bsdtar` in a child process (a runtime dependency of the package; untrusted input).
+- ADR-0029 Archives through `bsdtar` in a child process (a runtime dependency of the package; untrusted input).
 
 ### Not decided here
 - Toolbar customization (FP-24), sidebar editing (FP-27), Finder Settings (FP-31), the Inspector (FP-62) and window

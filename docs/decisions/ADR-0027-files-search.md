@@ -1,4 +1,4 @@
-# ADR-0026: Files search: scopes, backends and saved searches
+# ADR-0027: Files search: scopes, backends and saved searches
 Status: Proposed (integrator, under owner delegation D-5); applied with Files PR 3 · Date: 2026-10-26 · Decider: integrator
 
 ## Context
