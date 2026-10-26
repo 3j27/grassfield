@@ -30,6 +30,7 @@ TestCase {
             return "item" + row;
         }
         property bool isTrash: false
+        property bool isApplications: false
         property bool writable: true
         property bool isSearch: false
     }
