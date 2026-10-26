@@ -82,7 +82,8 @@
     "clockShowSeconds": false
   },
   "accent": {
-    "color": "multicolor"
+    "color": "multicolor",
+    "highlight": "automatic"
   },
   "keyboard": {
     "shortcutStyle": "automatic"

@@ -550,8 +550,24 @@
             "green",
             "graphite"
           ],
-          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent.",
+          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent unless `accent.highlight` names its own.",
           "default": "multicolor"
+        },
+        "highlight": {
+          "type": "string",
+          "enum": [
+            "automatic",
+            "blue",
+            "purple",
+            "pink",
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "graphite"
+          ],
+          "description": "Text highlight colour (Settings > Appearance > Text highlight colour, macOS 27): the colour of selected text in fields and editors, in the shell and the apps. \"automatic\" follows the accent (default); a name uses that accent colour whatever the accent is.",
+          "default": "automatic"
         }
       }
     },

@@ -91,6 +91,8 @@
     {"name": "hot corner lock", "path": "hotCorners.bottomRight", "stored": "lock", "read": "lock", "valid": true},
     {"name": "accent colour unknown is the default", "path": "accent.color", "stored": "Blue", "default": true, "valid": false},
     {"name": "accent colour blue", "path": "accent.color", "stored": "blue", "read": "blue", "valid": true},
+    {"name": "text highlight colour unknown is the default", "path": "accent.highlight", "stored": "Blue", "default": true, "valid": false},
+    {"name": "text highlight colour pink", "path": "accent.highlight", "stored": "pink", "read": "pink", "valid": true},
     {"name": "shortcut style mac", "path": "keyboard.shortcutStyle", "stored": "mac", "read": "mac", "valid": true},
     {"name": "shortcut style unknown is the default", "path": "keyboard.shortcutStyle", "stored": "windows", "default": true, "valid": false},
     {"name": "shortcut style of the wrong type is the default", "path": "keyboard.shortcutStyle", "stored": 1, "default": true, "valid": false},
