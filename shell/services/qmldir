@@ -21,6 +21,7 @@ singleton FixedTime 1.0 FixedTime.qml
 singleton VisualFixtures 1.0 VisualFixtures.qml
 singleton DesktopState 1.0 DesktopState.qml
 singleton BarTone 1.0 BarTone.qml
+singleton Backdrop 1.0 Backdrop.qml
 singleton WallpaperState 1.0 WallpaperState.qml
 singleton WallpaperOnline 1.0 WallpaperOnline.qml
 singleton RecentItems 1.0 RecentItems.qml

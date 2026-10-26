@@ -24,6 +24,7 @@ FocusScope {
     Keys.onDownPressed: slider.nudge(-1)
 
     Material {
+        glassClass: "menu"
         anchors.fill: parent
         radius: Tokens.radiusMenu
     }

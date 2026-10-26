@@ -91,6 +91,69 @@ def wcag(a, b):
     return contrast.ratio(lum(a), lum(b))
 
 
+def grey_of(l):
+    """The sRGB grey (0-255) of a relative luminance (mirror of GlassTint.greyOf)."""
+    l = max(0.0, min(1.0, l))
+    v = l * 12.92 if l <= 0.03928 / 12.92 else 1.055 * l ** (1 / 2.4) - 0.055
+    return (v * 255, v * 255, v * 255)
+
+
+GLASS_WEIGHTS = (0.2126, 0.7152, 0.0722)
+
+
+def glass_backdrops(l):
+    """Mirror of GlassTint.backdropsOf: the grey of luminance l and the linear-light vertices of the colours of that luminance."""
+    l = max(0.0, min(1.0, l))
+    out = [grey_of(l)]
+    for c in range(3):
+        others = [k for k in range(3) if k != c]
+        for bits in range(4):
+            x = [0.0, 0.0, 0.0]
+            x[others[0]] = float(bits & 1)
+            x[others[1]] = float((bits >> 1) & 1)
+            free = (l - GLASS_WEIGHTS[others[0]] * x[others[0]] - GLASS_WEIGHTS[others[1]] * x[others[1]]) / GLASS_WEIGHTS[c]
+            if free < -1e-9 or free > 1 + 1e-9:
+                continue
+            x[c] = max(0.0, min(1.0, free))
+            out.append(tuple(grey_of(v)[0] for v in x))
+    return out
+
+
+def glass_floor(tok, appearance, lum_min, lum_max, need):
+    """Mirror of GlassTint.floorAlpha for the appearance's tint, text and secondary text, with and without the fill overlay."""
+    tint = tok.color("colors", appearance, "materialTint")
+    fill = tok.color("colors", appearance, "fill")
+    inks = [tok.color("colors", appearance, "text"), tok.color("colors", appearance, "textSecondary")]
+    for i in range(101):
+        a = i / 100
+        ok = True
+        for back in glass_backdrops(lum_min) + glass_backdrops(lum_max):
+            base = over(tint, a, back)
+            filled = over(fill, tok.path("material.fillOpacity"), base)
+            if any(wcag(ink, base) < need or wcag(ink, filled) < need for ink in inks):
+                ok = False
+                break
+        if ok:
+            return a
+    return 1.0
+
+
+def glass_target(target, t, default):
+    x = max(0.0, min(1.0, t))
+    return 1 - (1 - target) * x / default if x <= default else target * (1 - (x - default) / (1 - default))
+
+
+def glass_alpha(tok, appearance, target, t, backdrop):
+    """Mirror of GlassTint.alpha: backdrop (lum_min, lum_max) or None for the worst case."""
+    if t <= 0:
+        return 1.0
+    if backdrop is None:
+        floor = glass_floor(tok, appearance, 0.0, 1.0, 4.5)
+    else:
+        floor = glass_floor(tok, appearance, backdrop[0], backdrop[1], 4.5 + tok.path("glass.contrastMargin"))
+    return max(floor, glass_target(target, t, tok.path("material.defaultTransparency")))
+
+
 class Tokens:
     def __init__(self, data):
         self.data = data
@@ -555,6 +618,49 @@ class ContrastTokens(unittest.TestCase):
             self.assertGreaterEqual(lum(fill), lum(light), accent)
             self.assertGreaterEqual(wcag(text, fill), 4.85 if light_text == (255, 255, 255) else 4.5, accent)
             self.assertEqual(text == (255, 255, 255), light_text == (255, 255, 255), accent)
+
+    GLASS_CLASSES = ("menu", "notification", "controls", "apps")
+
+    def test_glass_classes_hold_a2_over_any_backdrop(self):
+        # ADR-0024 G-1 to G-3: a glass class whose backdrop the shell does not know takes the worst case; its text and secondary
+        # text keep 4.5:1 over every wallpaper colour, with and without the fill overlay, at every slider value tested.
+        for ap in APPEARANCES:
+            tint = self.tok.color("colors", ap, "materialTint")
+            fill = self.tok.color("colors", ap, "fill")
+            inks = [self.tok.color("colors", ap, "text"), self.tok.color("colors", ap, "textSecondary")]
+            for cls in self.GLASS_CLASSES:
+                target = self.tok.path("glass." + cls)
+                for t in TRANSPARENCIES + (self.tok.path("material.defaultTransparency"), 1.0):
+                    a = glass_alpha(self.tok, ap, target, t, None)
+                    for wp in WALLPAPER_COLORS:
+                        base = over(tint, a, wp)
+                        filled = over(fill, self.tok.path("material.fillOpacity"), base)
+                        for ink in inks:
+                            self.assertGreaterEqual(min(wcag(ink, base), wcag(ink, filled)), 4.5, "%s %s t=%s wp=%s a=%.2f" % (ap, cls, t, wp, a))
+
+    def test_glass_classes_hold_a2_over_a_known_backdrop(self):
+        # Over a bare desktop the class tint may drop to its target; each wallpaper colour as its own (exact) range, coloured
+        # backdrops approximated by the grey of their luminance plus glass.contrastMargin.
+        for ap in APPEARANCES:
+            tint = self.tok.color("colors", ap, "materialTint")
+            fill = self.tok.color("colors", ap, "fill")
+            inks = [self.tok.color("colors", ap, "text"), self.tok.color("colors", ap, "textSecondary")]
+            for cls in self.GLASS_CLASSES:
+                target = self.tok.path("glass." + cls)
+                for t in TRANSPARENCIES + (1.0,):
+                    for wp in WALLPAPER_COLORS:
+                        l = lum(wp)
+                        a = glass_alpha(self.tok, ap, target, t, (l, l))
+                        base = over(tint, a, wp)
+                        filled = over(fill, self.tok.path("material.fillOpacity"), base)
+                        for ink in inks:
+                            self.assertGreaterEqual(min(wcag(ink, base), wcag(ink, filled)), 4.5, "%s %s t=%s wp=%s a=%.2f" % (ap, cls, t, wp, a))
+
+    def test_glass_worst_case_matches_the_qml_test(self):
+        # tests/unit/tst_glasstint.qml asserts the same two numbers for GlassTint.js.
+        d = self.tok.path("material.defaultTransparency")
+        self.assertEqual(glass_alpha(self.tok, "light", self.tok.path("glass.menu"), d, None), 0.78)
+        self.assertEqual(glass_alpha(self.tok, "dark", self.tok.path("glass.menu"), d, None), 0.82)
 
     def test_search_selection_is_inside_the_material_fill_overlay(self):
         # The selected Search row is a neutral fill (colors.fill at search.selectionFillOpacity) under ordinary text (ADR-0024):

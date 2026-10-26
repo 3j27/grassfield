@@ -118,6 +118,22 @@ QtObject {
         return Tokens.materialTintAlphaClamp + (Tokens.materialTintAlphaMin - Tokens.materialTintAlphaClamp) * (x - until) / (1 - until);
     }
 
+    // Adaptive glass (ADR-0024 section 2, G-1 to G-3): {output name: {lumMin, lumMax}} for an output that shows the bare
+    // desktop (no window on its active workspace) over a wallpaper of known luminance, fed by the shell; on any other output
+    // the backdrop is unknown and a class takes the worst case.
+    property var backdrops: ({})
+    readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps})
+
+    // Tint alpha of a glass class at transparency t on an output (GlassTint.alpha): the class target at the default slider,
+    // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop.
+    function glassAlpha(glassClass: string, t: real, screenName: string): real {
+        const target = glassTargets[glassClass];
+        if (target === undefined)
+            return tintAlpha(t);
+        const backdrop = backdrops[screenName] ?? null;
+        return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
+    }
+
     // Compositor blur follows the transparency (GF-125, docs/specs/ui.md "Material blur"): Hyprland carries one blur size and
     // pass count for every surface (ext-background-effect and layer rules take no per-surface strength), so the shell asks
     // for the value of the current transparency. Linear from blurSizeMin (0+) to blurSizeMax (1), 18 at the default 0.25.

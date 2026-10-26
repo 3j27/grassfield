@@ -194,6 +194,7 @@ ListView {
 
         Material {
             id: emptySurface
+            glassClass: "notification"
             x: list.panel.gutter
             width: parent.width - list.panel.gutter
             height: parent.height - Tokens.notificationBannerGap
@@ -915,6 +916,7 @@ ListView {
 
                     Material {
                         id: cardSurface
+                        glassClass: "notification"
                         anchors.fill: parent
                         radius: Tokens.radiusBanner
                         shadowEnabled: false

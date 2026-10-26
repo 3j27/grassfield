@@ -62,6 +62,7 @@ Item {
 
         Material {
             id: material
+            glassClass: "notification"
             anchors.fill: parent
             radius: Tokens.radiusBanner
         }

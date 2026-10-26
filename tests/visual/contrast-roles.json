@@ -50,6 +50,7 @@
    {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 2},
    {"file": "shell/widgets/builtin/system/System.qml", "class": "secondary", "count": 2},
    {"file": "shell/widgets/builtin/nowplaying/NowPlaying.qml", "class": "secondary", "count": 3},
+   {"file": "ui/Grassfield/Ui/Appearance.qml", "class": "secondary", "count": 1},
    {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "secondary", "count": 1},
    {"file": "ui/Grassfield/Ui/SwatchRow.qml", "class": "secondary", "count": 1},
     {"file": "ui/Grassfield/Ui/Sheet.qml", "class": "secondary", "count": 1},

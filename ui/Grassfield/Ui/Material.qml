@@ -24,13 +24,19 @@ Item {
     // Surfaces without text (the Dock shelf) may be more translucent than the A2 clamp allows: an explicit tint alpha
     // (0..1, -1 = from `transparency`) that applies only while the surface is not opaque (Reduce Transparency wins).
     property real tintAlphaOverride: -1
+    // Glass class (ADR-0024 section 2): "menu", "notification", "controls" or "apps" take the class tint, raised to keep
+    // the text legible over the backdrop the shell knows for this output (Appearance.glassAlpha); "" keeps the one material
+    // tint (Appearance.tintAlpha).
+    property string glassClass: ""
+    // The output this surface is shown on (the Screen attached property of its window).
+    readonly property string screenName: Screen.name
     // Rims (default: the material tokens): the inner specular rim (highlight) and the outer edge (border), each one device
     // pixel wide at every scale. The outer edge is dark in both appearances, the inner rim light.
     property real highlightOpacity: Appearance.dark ? Tokens.materialHighlightOpacity : Tokens.materialHighlightOpacityLight
     property real borderOpacity: Appearance.dark ? Math.max(Tokens.materialEdgeOpacityDark, Tokens.materialBorderOpacity) : Tokens.materialBorderOpacity
     property color borderColor: Appearance.dark ? Appearance.colors.shadow : Appearance.colors.materialBorder
     readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
-    readonly property real tintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : Appearance.tintAlpha(transparency)
+    readonly property real tintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : (glassClass !== "" ? Appearance.glassAlpha(glassClass, transparency, screenName) : Appearance.tintAlpha(transparency))
     // The host window needs this much room around the shape for the shadow.
     readonly property int shadowMargin: Tokens.shadowBlur + Tokens.shadowOffsetY
 

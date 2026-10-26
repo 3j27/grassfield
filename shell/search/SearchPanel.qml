@@ -154,6 +154,7 @@ Variants {
             }
 
             Material {
+                glassClass: "menu"
                 anchors.fill: parent
                 radius: Tokens.radiusSearch
             }

@@ -448,7 +448,11 @@ Scope {
             }
 
             function reportTone(desc: var): void {
-                if (VisualFixtures.wallpaperFile !== "" || !win.modelData)
+                if (!win.modelData)
+                    return;
+                // The backdrop of the adaptive glass (ADR-0024 G-3): the luminance range of what is on screen, when known.
+                Backdrop.reportWallpaper(win.modelData.name, VisualFixtures.wallpaperFile !== "" ? null : Backdrop.rangeOf(desc, slotA.art));
+                if (VisualFixtures.wallpaperFile !== "")
                     return;
                 if (desc.kind === "picture")
                     BarTone.reportStrip(win.modelData.name, desc.strip);

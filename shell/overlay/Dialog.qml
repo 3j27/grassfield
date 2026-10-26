@@ -38,6 +38,7 @@ FocusScope {
 
     Material {
         id: material
+        glassClass: "menu"
         anchors.fill: parent
         radius: root.cornerRadius
     }

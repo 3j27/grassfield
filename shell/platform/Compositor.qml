@@ -43,6 +43,9 @@ Singleton {
     }
 
     readonly property var focusedWorkspace: Hyprland.focusedWorkspace
+    // Outputs whose active workspace holds no window: glass over them sees only the wallpaper (services/Backdrop.qml, ADR-0024
+    // G-3). Empty without Hyprland, and then every glass takes the worst case.
+    readonly property var bareOutputs: Hyprland.monitors.values.filter(m => m.activeWorkspace && m.activeWorkspace.toplevels.values.length === 0).map(m => m.name)
     // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
     readonly property string focusedScreenName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
     // Where a surface opens when nobody named an output (SUPER+N, IPC, keyboard): the active display, the first output only as

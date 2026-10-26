@@ -721,6 +721,17 @@ QtObject {
     // estimate [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdHideDelay: 1600
 
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value (macOS 26 measured menus and Search 0.56-0.76); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py)
+    readonly property real glassMenu: 0.65
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value (macOS 26 measured notification cards and banners 0.45-0.60); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py)
+    readonly property real glassNotification: 0.6
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value (macOS 26 measured Control Center modules and OSD 0-0.2); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py)
+    readonly property real glassControls: 0.15
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value (macOS 26 measured the Apps panel 0.35-0.70); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py)
+    readonly property real glassApps: 0.55
+    // added to 4.5:1 over a measured backdrop (a picture's 5th to 95th percentile, the blur's own lift and the grey approximation of a coloured backdrop); the unknown backdrop is the exact black-to-white worst case [ref: ADR-0024; tests/visual/test_contrast_tokens.py]
+    readonly property real glassContrastMargin: 0.2
+
     // F1 gap 8: panel width with results 639 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchWidth: 640
     // panel top at 0.199 of the screen height (macOS 26 composite gs-086-210) [ref: docs/audits/visual-tahoe-2026-10-25.md § Search — partly close, 6/10; docs/specs/search.md]

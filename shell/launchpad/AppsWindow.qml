@@ -335,6 +335,7 @@ Variants {
                     }
 
                     Material {
+                        glassClass: "apps"
                         anchors.fill: parent
                         radius: Tokens.launcherPanelRadius
                     }

@@ -140,6 +140,7 @@ Variants {
 
             Material {
                 id: pillSurface
+                glassClass: "notification"
                 anchors.fill: parent
                 radius: height / 2
                 shadowEnabled: false
@@ -532,6 +533,7 @@ Variants {
 
                         Material {
                             id: closeSurface
+                            glassClass: "notification"
                             anchors.fill: parent
                             radius: width / 2
                             shadowEnabled: false
