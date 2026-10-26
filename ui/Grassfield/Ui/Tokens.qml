@@ -876,8 +876,8 @@ QtObject {
     readonly property int overviewMinGap: 24
     // estimate: margin around the window area [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAreaMargin: 32
-    // estimate: dim over the blurred wallpaper [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property real overviewBackdropOpacity: 0.45
+    // the wallpaper behind the windows is barely dimmed in macOS (was 0.45: about 55 percent) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    readonly property real overviewBackdropOpacity: 0.1
     // estimate: dim when blur is off (Reduce Transparency) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewBackdropOpacityOpaque: 0.92
     // F1 gap 15: Space thumbnail 138x90 +-1 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -886,14 +886,14 @@ QtObject {
     readonly property int overviewTileHeight: 90
     // F1 gap 15: thumbnail gap 32 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileGap: 32
-    // F1 gap 15 (gs-066-145): thumbnail top 42 pt from the screen top, minus the 24 menu bar [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property int overviewBarTopMargin: 18
+    // thumbnail top 45.3 pt from the screen top with its selection ring outside it (the ring at 42), minus the 24 menu bar [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    readonly property int overviewBarTopMargin: 21
     // F1 gap 15 (gs-066-145): full-width band 164 pt tall from the screen top (+-1), minus the 24 menu bar the surface starts below [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewBarHeight: 140
     // F1 gap 15 (gs-066-145): 13 pt Desktop name under the thumbnail [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileLabelHeight: 18
-    // F1 gap 15 (gs-066-145): thumbnail bottom to name top, about 8 pt [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
-    readonly property int overviewTileLabelGap: 8
+    // thumbnail bottom to name 9.1 ink to ink (was 11 at 8) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    readonly property int overviewTileLabelGap: 6
     // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddEdgeInset: 18
     // estimate: app icons in a Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
@@ -942,6 +942,12 @@ QtObject {
     readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddSize: 32
+    // the add button's plus about 19 wide (the 24-grid glyph's ink is 16 of 24) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    readonly property int overviewAddGlyphSize: 28
+    // estimate: the add button is light glass, white at this opacity in light (it was a grey fill darker than the band) [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    readonly property real overviewAddFillOpacity: 0.5
+    // estimate: the add button's white in dark, lighter than the band [ref: docs/audits/visual-tahoe-2026-10-25.md § Overview — partly close, 5/10]
+    readonly property real overviewAddFillOpacityDark: 0.18
 
     // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/apps.md]
     readonly property int appsBorderWidth: 1
