@@ -1023,6 +1023,8 @@ QtObject {
     readonly property string settingsColorSquareBlackClear: "#00000000"
     // estimate: Sound pane, width of the percentage next to a slider [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsVolumeValueWidth: 44
+    // A list that takes the keyboard focus within this long after a pointer press got it from the pointer, so it draws no focus ring (macOS: the ring is for the keyboard); estimate [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int settingsFocusPressMs: 300
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

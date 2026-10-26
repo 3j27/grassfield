@@ -305,7 +305,8 @@ FocusScope {
 
         StagesToggle {
             id: stagesToggle
-            x: root.pitch
+            // A hidden Airplane module leaves no empty slot: Stages moves to the first (macOS reflows the modules).
+            x: airplane.visible ? root.pitch : 0
             y: 2 * root.pitch
         }
 
