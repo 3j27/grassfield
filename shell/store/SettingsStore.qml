@@ -36,6 +36,14 @@ Scope {
     // The file is looked at again this often (ms) whatever the watch says: replacing a symlinked grassfield.json with a regular
     // file leaves a file watch on the old target. A stat of the path, nothing more unless it changed.
     property int pollInterval: 10000
+    // A file found unusable is re-read at once when its signature changes (or the watch reports it); while the signature stays the
+    // same the full re-read backs off: pollInterval, then twice, four times, ... up to this (ms). What can still change without the
+    // signature is the reader (a `head` that stalled or failed), which is worth a try now and then, not every tick: a 1 MiB+ file or
+    // a FIFO cost a bounded read and parse each time. 5 minutes: a reader that recovers is noticed within 5 minutes, and a
+    // permanently unusable file costs one read per 5 minutes (against one per 10 s).
+    property int badRetryCap: 300000
+    // The full reads started (tests count them).
+    property int fullReads: 0
     // A directory searched before PATH for the tools the bounded read runs (head, stat, ...): tests put a stalled or a failing
     // `head` there. Empty in the shell (never taken from the environment); a relative path is ignored.
     property string toolDir: ""
@@ -146,8 +154,13 @@ Scope {
         root.validRead = false;
         root.unsafeFile = false;
         // The sentinel no signature equals: whichever read found the file unusable (the load, or the read before a write), the poll
-        // reads it again, so the store recovers when the file or the reader does, whatever the file's signature says.
+        // reads it again (at once when the signature changed, else with a growing pause), so the store recovers when the file or
+        // the reader does, whatever the watch says (it does not report the repair of a symlink to a device, a directory, ...).
         root.lastSignature = "!";
+        // The signature it was found at is not known here (applyRead sets it); until then the next poll reads it once more.
+        root.badSignature = "";
+        root.badLevel = 0;
+        root.badTicks = 0;
         saveTimer.stop();
         retryTimer.stop();
         if ("lock" in root.parsedFile) {
@@ -598,10 +611,37 @@ Scope {
             return;
         }
         loader.command = ["sh", "-c", root.readScript, "sh", root.filePath, String(root.maxFileBytes)];
+        // The signature the poll saw just before this read (empty for a read the poll did not start): a file found unusable is
+        // remembered at that signature, so a change after it cannot be missed.
+        loader.startSignature = root.probedSignature;
+        root.probedSignature = "";
+        root.fullReads++;
         loader.running = true;
     }
 
     property string lastSignature: ""
+    // The unusable file's state (lastSignature is "!" then): the signature it was found at ("" if unknown), how many times in a row
+    // it was read again at that same signature (the backoff level), and the polls since its last read.
+    property string badSignature: ""
+    property int badLevel: 0
+    property int badTicks: 0
+    property string probedSignature: ""
+
+    // The polls to let pass before the next full read of an unusable file whose signature did not change: 1, 2, 4, ... up to badRetryCap.
+    function badWaitTicks(): int {
+        const cap = Math.max(1, Math.floor(root.badRetryCap / Math.max(1, root.pollInterval)));
+        return Math.min(cap, Math.pow(2, Math.min(root.badLevel, 30)));
+    }
+
+    // A poll's signature of the path: true when the file is to be read in full now. A usable file: when its signature changed. An
+    // unusable one: also then (or when it was never known), else only once the backoff has run out.
+    function pollWantsRead(now: string): bool {
+        if (root.lastSignature !== "!")
+            return now !== root.lastSignature;
+        if (root.badSignature === "" || now !== root.badSignature)
+            return true;
+        return ++root.badTicks >= root.badWaitTicks();
+    }
 
     function badReason(status: string): string {
         switch (status) {
@@ -629,10 +669,13 @@ Scope {
                 root.save();
             root.loadedFile();
         } else {
-            // A sentinel no signature equals: the poll reads such a file again every pollInterval, whether or not the watch
-            // reported its removal or repair (it does not for a symlink to a device, a directory, a file it could not read).
+            // Found at the very signature it was already found unusable at: the backoff grows; any other case starts it over.
+            const same = root.lastSignature === "!" && loader.startSignature !== "" && loader.startSignature === root.badSignature;
+            const level = same ? root.badLevel + 1 : 0;
             root.loaded = true;
             root.takeBadFile(root.badReason(read.status));
+            root.badSignature = loader.startSignature;
+            root.badLevel = level;
         }
         root.armWatch();
     }
@@ -762,6 +805,7 @@ Scope {
     Process {
         id: loader
         environment: root.toolEnvironment
+        property string startSignature: ""
         stdout: StdioCollector {
             onStreamFinished: root.applyRead(text)
         }
@@ -780,8 +824,10 @@ Scope {
             onStreamFinished: {
                 const now = text.trim();
                 // "-" is a path that leads to nothing (read as missing); "!" is the sentinel of a file that could not be used.
-                if (now !== root.lastSignature)
+                if (root.pollWantsRead(now)) {
+                    root.probedSignature = now;
                     root.readFile();
+                }
             }
         }
     }
