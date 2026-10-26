@@ -42,6 +42,10 @@ const QString kObjectManager = QStringLiteral("org.freedesktop.DBus.ObjectManage
 const QString kAdapter = QStringLiteral("org.bluez.Adapter1");
 const QString kDevice1 = QStringLiteral("org.bluez.Device1");
 const QString kBattery1 = QStringLiteral("org.bluez.Battery1");
+const QString kUPower = QStringLiteral("org.freedesktop.UPower");
+const QString kUPowerPath = QStringLiteral("/org/freedesktop/UPower");
+const QString kUPowerDevice = QStringLiteral("org.freedesktop.UPower.Device");
+const QString kUPowerDisplay = QStringLiteral("/org/freedesktop/UPower/devices/DisplayDevice");
 // The General pane's services (ADR-0026).
 const QString kHostService = QStringLiteral("org.freedesktop.hostname1");
 const QString kHostPath = QStringLiteral("/org/freedesktop/hostname1");
@@ -386,6 +390,11 @@ bool isReadOnlyCall(const QString &service, const QString &iface, const QString 
             return member == QLatin1String("Get") || member == QLatin1String("GetAll");
         return service == kTimeService && iface == kTimeService && member == QLatin1String("ListTimezones");
     }
+    // UPower: its properties, its devices and their history.
+    if (service == kUPower)
+        return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
+            || (iface == kUPower && (member == QLatin1String("EnumerateDevices") || member == QLatin1String("GetDisplayDevice")))
+            || (iface == kUPowerDevice && member == QLatin1String("GetHistory"));
     if (service == kSystemd)
         return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
             || (iface == kSystemdManager && member == QLatin1String("ListUnitFilesByPatterns"));
@@ -652,6 +661,92 @@ StateResult networkState(BusCaller &bus)
     return r;
 }
 
+namespace {
+constexpr uint kUPowerTypeBattery = 2;
+
+// The laptop battery among UPower's devices (a battery that powers the computer), "" when there is none.
+QString upowerBattery(BusCaller &bus, QString *error)
+{
+    const BusReply r = bus.call(kUPower, kUPowerPath, kUPower, QStringLiteral("EnumerateDevices"), {}, kReadMs);
+    if (!r.ok) {
+        *error = r.error;
+        return {};
+    }
+    for (const QDBusObjectPath &p : paths(r)) {
+        const Props d = allProperties(bus, kUPower, p.path(), kUPowerDevice);
+        if (d.ok && d.map.value(QStringLiteral("Type")).toUInt() == kUPowerTypeBattery && d.map.value(QStringLiteral("PowerSupply")).toBool())
+            return p.path();
+    }
+    return {};
+}
+
+// GetHistory("charge", timespan, resolution): [[time (s since the epoch), percent, state]], oldest first; [] when UPower keeps
+// none.
+QJsonArray chargeHistory(BusCaller &bus, const QString &battery, uint timespan, uint resolution)
+{
+    QJsonArray out;
+    const BusReply r = bus.call(kUPower, battery, kUPowerDevice, QStringLiteral("GetHistory"), {QStringLiteral("charge"), timespan, resolution}, kReadMs);
+    if (!r.ok || r.args.isEmpty())
+        return out;
+    const QVariant v = unwrap(r.args.first());
+    if (v.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        const QDBusArgument arg = qvariant_cast<QDBusArgument>(v);
+        arg.beginArray();
+        while (!arg.atEnd()) {
+            uint time = 0, state = 0;
+            double value = 0;
+            arg.beginStructure();
+            arg >> time >> value >> state;
+            arg.endStructure();
+            out.append(QJsonArray{static_cast<qint64>(time), value, static_cast<qint64>(state)});
+        }
+        arg.endArray();
+        return out;
+    }
+    for (const QVariant &e : v.toList()) { // canned: a list of [time, value, state]
+        const QVariantList t = e.toList();
+        if (t.size() == 3)
+            out.append(QJsonArray{t.at(0).toLongLong(), t.at(1).toDouble(), t.at(2).toLongLong()});
+    }
+    return out;
+}
+} // namespace
+
+StateResult powerState(BusCaller &bus)
+{
+    StateResult r;
+    const Result onBattery = property(bus, kUPower, kUPowerPath, kUPower, QStringLiteral("OnBattery"));
+    if (!onBattery.ok) {
+        r.error = reasonOf(onBattery.error);
+        return r;
+    }
+    QString error;
+    const QString battery = upowerBattery(bus, &error);
+    QJsonObject out{{QStringLiteral("present"), false}, {QStringLiteral("onBattery"), onBattery.value.toBool()}};
+    if (!battery.isEmpty()) {
+        const Props display = allProperties(bus, kUPower, kUPowerDisplay, kUPowerDevice);
+        const Props b = allProperties(bus, kUPower, battery, kUPowerDevice);
+        const QVariantMap &d = display.ok ? display.map : b.map;
+        out.insert(QStringLiteral("present"), b.ok && b.map.value(QStringLiteral("IsPresent")).toBool());
+        out.insert(QStringLiteral("percent"), d.value(QStringLiteral("Percentage")).toDouble());
+        out.insert(QStringLiteral("state"), static_cast<qint64>(d.value(QStringLiteral("State")).toUInt()));
+        out.insert(QStringLiteral("timeToEmpty"), d.value(QStringLiteral("TimeToEmpty")).toLongLong());
+        out.insert(QStringLiteral("timeToFull"), d.value(QStringLiteral("TimeToFull")).toLongLong());
+        out.insert(QStringLiteral("capacity"), b.map.value(QStringLiteral("Capacity")).toDouble());
+        out.insert(QStringLiteral("cycles"), b.map.contains(QStringLiteral("ChargeCycles")) ? b.map.value(QStringLiteral("ChargeCycles")).toInt() : -1);
+        out.insert(QStringLiteral("limitSupported"), b.map.value(QStringLiteral("ChargeThresholdSupported")).toBool());
+        out.insert(QStringLiteral("limitEnabled"), b.map.value(QStringLiteral("ChargeThresholdEnabled")).toBool());
+        out.insert(QStringLiteral("limitEnd"), static_cast<qint64>(b.map.value(QStringLiteral("ChargeEndThreshold")).toUInt()));
+        if (b.map.value(QStringLiteral("HasHistory")).toBool()) {
+            out.insert(QStringLiteral("history24"), chargeHistory(bus, battery, 24 * 3600, 96));
+            out.insert(QStringLiteral("history10"), chargeHistory(bus, battery, 10 * 24 * 3600, 240));
+        }
+    }
+    r.json = out;
+    r.ok = true;
+    return r;
+}
+
 StateResult bluetoothState(BusCaller &bus)
 {
     StateResult r;
@@ -834,7 +929,8 @@ bool privilegedAction(const QVariantMap &op)
 {
     const QString name = op.value(QStringLiteral("op")).toString();
     return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget")
-        || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure") || name == QLatin1String("bt.pair");
+        || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure") || name == QLatin1String("bt.pair")
+        || name == QLatin1String("power.chargeLimit");
 }
 
 bool validAction(const QVariantMap &op)
@@ -866,7 +962,7 @@ bool validAction(const QVariantMap &op)
         return isUuid(op.value(QStringLiteral("uuid")).toString()) && isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("bt.connect"))
         return isMac(op.value(QStringLiteral("mac")).toString()) && isBool(op.value(QStringLiteral("connect")));
-    if (name == QLatin1String("bt.discover"))
+    if (name == QLatin1String("bt.discover") || name == QLatin1String("power.chargeLimit"))
         return isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("bt.pair") || name == QLatin1String("bt.forget"))
         return isMac(op.value(QStringLiteral("mac")).toString());
@@ -978,6 +1074,16 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
     if (name == QLatin1String("wifi.radio"))
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());
 
+    // Battery > Charging: UPower's charge limit (EnableChargeThreshold on the battery; its polkit action
+    // org.freedesktop.UPower.enable-charging-limit lets the active session by default, ADR-0026).
+    if (name == QLatin1String("power.chargeLimit")) {
+        QString error;
+        const QString battery = upowerBattery(bus, &error);
+        if (battery.isEmpty())
+            return error.isEmpty() ? QCoreApplication::translate("SystemBus", "no battery") : fail(error);
+        const BusReply r = bus.call(kUPower, battery, kUPowerDevice, QStringLiteral("EnableChargeThreshold"), {op.value(QStringLiteral("on")).toBool()}, kPrivilegedMs);
+        return r.ok ? QString() : fail(r.error);
+    }
     // Forget This Network: the saved Wi-Fi profile with that uuid goes. NetworkManager asks polkit itself for a profile of the
     // whole system (settings.modify.system, ADR-0026), so the call waits for the user's answer.
     if (name == QLatin1String("wifi.forget")) {

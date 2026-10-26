@@ -993,6 +993,64 @@
     </message>
 </context>
 <context>
+    <name>BatteryChart</name>
+    <message>
+        <source>%1 %</source>
+        <translation>%1 %</translation>
+    </message>
+</context>
+<context>
+    <name>BatteryInfoSheet</name>
+    <message>
+        <source>Battery Health</source>
+        <translation>État de la batterie</translation>
+    </message>
+    <message>
+        <source>Charging</source>
+        <translation>Charge</translation>
+    </message>
+    <message>
+        <source>Batteries hold less charge as they age. The maximum capacity is measured against the battery&apos;s design capacity.</source>
+        <translation>Les batteries conservent moins de charge en vieillissant. La capacité maximale est mesurée par rapport à la capacité d’origine de la batterie.</translation>
+    </message>
+    <message>
+        <source>Stopping the charge before the battery is full helps it last longer when the computer stays on its power adapter.</source>
+        <translation>Arrêter la charge avant que la batterie soit pleine prolonge sa durée de vie quand l’ordinateur reste sur son adaptateur secteur.</translation>
+    </message>
+    <message>
+        <source>This battery does not offer a charge limit.</source>
+        <translation>Cette batterie ne propose pas de limite de charge.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Maximum capacity</source>
+        <translation>Capacité maximale</translation>
+    </message>
+    <message>
+        <source>%1 %</source>
+        <translation>%1 %</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnue</translation>
+    </message>
+    <message>
+        <source>Cycle count</source>
+        <translation>Nombre de cycles</translation>
+    </message>
+    <message>
+        <source>Limit charging to %1 %</source>
+        <translation>Limiter la charge à %1 %</translation>
+    </message>
+    <message>
+        <source>Limit charging</source>
+        <translation>Limiter la charge</translation>
+    </message>
+</context>
+<context>
     <name>BatteryMenu</name>
     <message>
         <source>%1:%2</source>
@@ -1029,6 +1087,118 @@
     <message>
         <source>Battery: %1%</source>
         <translation>Batterie&#xa0;: %1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>BatteryPage</name>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>Fully Charged</source>
+        <translation>Chargée</translation>
+    </message>
+    <message>
+        <source>%1 % · %2 until full</source>
+        <translation>%1 % · %2 avant charge complète</translation>
+    </message>
+    <message>
+        <source>%1 % · Charging</source>
+        <translation>%1 % · En charge</translation>
+    </message>
+    <message>
+        <source>%1 % · %2 remaining</source>
+        <translation>%1 % · %2 restantes</translation>
+    </message>
+    <message>
+        <source>%1 %</source>
+        <translation>%1 %</translation>
+    </message>
+    <message>
+        <source>12 A</source>
+        <translation>0 h</translation>
+    </message>
+    <message>
+        <source>12 P</source>
+        <translation>12 h</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <comment>short month name, day of the month</comment>
+        <translation>%2 %1</translation>
+    </message>
+    <message>
+        <source>Power profiles are not available: power-profiles-daemon is not running.</source>
+        <translation>Les profils d’énergie ne sont pas disponibles : power-profiles-daemon n’est pas lancé.</translation>
+    </message>
+    <message>
+        <source>Low Power Mode</source>
+        <translation>Mode Économie d’énergie</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>Only on Battery</source>
+        <translation>Sur batterie uniquement</translation>
+    </message>
+    <message>
+        <source>Only on Power Adapter</source>
+        <translation>Sur adaptateur secteur uniquement</translation>
+    </message>
+    <message>
+        <source>Battery Health</source>
+        <translation>État de la batterie</translation>
+    </message>
+    <message>
+        <source>Service Recommended</source>
+        <translation>Réparation recommandée</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <source>Battery Health details</source>
+        <translation>Détails de l’état de la batterie</translation>
+    </message>
+    <message>
+        <source>Charging</source>
+        <translation>Charge</translation>
+    </message>
+    <message>
+        <source>Charging details</source>
+        <translation>Détails de la charge</translation>
+    </message>
+    <message>
+        <source>Period</source>
+        <translation>Période</translation>
+    </message>
+    <message>
+        <source>Last 24 Hours</source>
+        <translation>Dernières 24 heures</translation>
+    </message>
+    <message>
+        <source>Last 10 Days</source>
+        <translation>10 derniers jours</translation>
+    </message>
+    <message>
+        <source>Battery Level</source>
+        <translation>Niveau de la batterie</translation>
+    </message>
+    <message>
+        <source>The battery cannot be read: UPower did not answer.</source>
+        <translation>La batterie ne peut pas être lue : UPower n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>This computer has no battery.</source>
+        <translation>Cet ordinateur n’a pas de batterie.</translation>
     </message>
 </context>
 <context>
@@ -1406,7 +1576,7 @@
     <name>BluetoothDeviceRow</name>
     <message>
         <source>%1 %</source>
-        <translation>%1 %</translation>
+        <translation>%1&#xa0;%</translation>
     </message>
     <message>
         <source>Details of %1</source>
@@ -1441,7 +1611,7 @@
     </message>
     <message>
         <source>%1 %</source>
-        <translation>%1 %</translation>
+        <translation>%1&#xa0;%</translation>
     </message>
     <message>
         <source>Status</source>
@@ -1527,7 +1697,7 @@
     </message>
     <message>
         <source>Other devices see this computer as “%1”.</source>
-        <translation>Les autres appareils voient cet ordinateur sous le nom « %1 ».</translation>
+        <translation>Les autres appareils voient cet ordinateur sous le nom «&#xa0;%1&#xa0;».</translation>
     </message>
     <message>
         <source>My Devices</source>
@@ -3310,7 +3480,7 @@
     <name>ForgetDeviceSheet</name>
     <message>
         <source>Forget “%1”?</source>
-        <translation>Oublier « %1 » ?</translation>
+        <translation>Oublier «&#xa0;%1&#xa0;»&#xa0;?</translation>
     </message>
     <message>
         <source>The device is removed from this computer. To use it again, pair it again.</source>
@@ -4361,6 +4531,14 @@
     <message>
         <source>vpn wireguard openvpn tunnel</source>
         <translation>vpn wireguard openvpn tunnel réseau privé virtuel</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>battery power low power mode energy health charging charge limit</source>
+        <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
         <source>shortcuts keys bindings</source>
@@ -6338,6 +6516,10 @@
     <message>
         <source>that network does not take a password</source>
         <translation>Ce réseau ne prend pas de mot de passe</translation>
+    </message>
+    <message>
+        <source>no battery</source>
+        <translation>Aucune batterie</translation>
     </message>
     <message>
         <source>that VPN is no longer saved</source>

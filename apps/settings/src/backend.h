@@ -44,6 +44,8 @@ class Backend : public QObject
     Q_PROPERTY(QStringList currentDesktops READ currentDesktops CONSTANT)
     // Storage: the folders whose size the pane shows lie in the home.
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
+    // XDG_STATE_HOME (else ~/.local/state): Battery reads Omarchy's remembered power profiles there (read-only).
+    Q_PROPERTY(QString stateDir READ stateDir CONSTANT)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -66,6 +68,11 @@ public:
     QStringList applicationDirs() const;
     QStringList currentDesktops() const;
     QString homeDir() const { return QDir::cleanPath(QDir::homePath()); }
+    QString stateDir() const
+    {
+        const QString xdg = qEnvironmentVariable("XDG_STATE_HOME");
+        return QDir::cleanPath(xdg.startsWith(QLatin1Char('/')) ? xdg : homeDir() + QStringLiteral("/.local/state"));
+    }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
     Q_INVOKABLE QVariantMap readText(const QString &path) const;

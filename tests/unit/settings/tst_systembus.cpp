@@ -1101,3 +1101,112 @@ TEST(SystemBusNetwork, BadValuesNeverReachTheBusAndADevSessionOnlyReads)
     for (const QString &m : f.bus.members())
         EXPECT_FALSE(m.endsWith(QLatin1String(".Delete")) || m.endsWith(QLatin1String("ActivateConnection"))) << qPrintable(m);
 }
+
+namespace
+{
+// UPower: on battery, a laptop battery (and a mouse's, which does not power the computer), the display device, a history.
+struct PowerFixture {
+    FakeBus bus;
+    bool historyKept = true;
+    PowerFixture()
+    {
+        bus.handler = [this](const Call &c) -> BusReply {
+            const QString m = c.member, target = c.args.value(0).toString();
+            if (m == QLatin1String("Get") && c.args.value(1).toString() == QLatin1String("OnBattery"))
+                return ok({variant(true)});
+            if (m == QLatin1String("EnumerateDevices"))
+                return ok({paths({QStringLiteral("/upower/mouse"), QStringLiteral("/upower/bat0")})});
+            if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.UPower.Device")) {
+                if (c.path == QLatin1String("/upower/mouse"))
+                    return ok({QVariant::fromValue(QVariantMap{{"Type", u32(2)}, {"PowerSupply", false}, {"Percentage", 50.0}})});
+                if (c.path == QLatin1String("/upower/bat0"))
+                    return ok({QVariant::fromValue(QVariantMap{{"Type", u32(2)}, {"PowerSupply", true}, {"IsPresent", true}, {"Capacity", 91.5},
+                                                               {"ChargeCycles", 212}, {"ChargeThresholdSupported", true}, {"ChargeThresholdEnabled", false},
+                                                               {"ChargeEndThreshold", u32(80)}, {"HasHistory", historyKept}, {"Percentage", 70.0}})});
+                return ok({QVariant::fromValue(QVariantMap{{"Percentage", 71.0}, {"State", u32(2)}, {"TimeToEmpty", qlonglong(7200)}, {"TimeToFull", qlonglong(0)}})});
+            }
+            if (m == QLatin1String("GetHistory"))
+                return ok({QVariant::fromValue(QVariantList{QVariantList{1792800000u, 80.0, 2u}, QVariantList{1792803600u, 75.5, 2u}})});
+            if (m == QLatin1String("EnableChargeThreshold"))
+                return ok();
+            return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: ") + m);
+        };
+    }
+};
+} // namespace
+
+TEST(SystemBusPower, StateIsTheLaptopBatteryWithItsHistory)
+{
+    PowerFixture f;
+    const StateResult r = powerState(f.bus);
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    EXPECT_TRUE(r.json["present"].toBool());
+    EXPECT_TRUE(r.json["onBattery"].toBool());
+    EXPECT_DOUBLE_EQ(r.json["percent"].toDouble(), 71.0); // the display device's
+    EXPECT_EQ(r.json["state"].toInt(), 2);
+    EXPECT_EQ(r.json["timeToEmpty"].toInt(), 7200);
+    EXPECT_DOUBLE_EQ(r.json["capacity"].toDouble(), 91.5);
+    EXPECT_EQ(r.json["cycles"].toInt(), 212);
+    EXPECT_TRUE(r.json["limitSupported"].toBool());
+    EXPECT_FALSE(r.json["limitEnabled"].toBool());
+    EXPECT_EQ(r.json["limitEnd"].toInt(), 80);
+    const QJsonArray h = r.json["history24"].toArray();
+    ASSERT_EQ(h.size(), 2);
+    EXPECT_EQ(h[1].toArray()[0].toInteger(), 1792803600);
+    EXPECT_DOUBLE_EQ(h[1].toArray()[1].toDouble(), 75.5);
+    // The history asked for: the last 24 hours in 96 points and the last 10 days in 240, of the laptop battery only.
+    QStringList asked;
+    for (const Call &c : f.bus.calls) {
+        if (c.member == QLatin1String("GetHistory"))
+            asked << QStringLiteral("%1 %2 %3 %4").arg(c.path, c.args[0].toString()).arg(c.args[1].toUInt()).arg(c.args[2].toUInt());
+        EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args)) << qPrintable(c.member);
+    }
+    EXPECT_EQ(asked, (QStringList{QStringLiteral("/upower/bat0 charge 86400 96"), QStringLiteral("/upower/bat0 charge 864000 240")}));
+    // No history kept: none asked for.
+    PowerFixture g;
+    g.historyKept = false;
+    EXPECT_FALSE(powerState(g.bus).json.contains(QStringLiteral("history24")));
+    for (const Call &c : g.bus.calls)
+        EXPECT_NE(c.member, QStringLiteral("GetHistory"));
+}
+
+TEST(SystemBusPower, NoBatteryAndNoUPowerAreTold)
+{
+    PowerFixture f;
+    f.bus.handler = [](const Call &c) -> BusReply {
+        if (c.member == QLatin1String("Get"))
+            return ok({variant(false)});
+        if (c.member == QLatin1String("EnumerateDevices"))
+            return ok({paths({})});
+        return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: x"));
+    };
+    const StateResult desktop = powerState(f.bus);
+    ASSERT_TRUE(desktop.ok);
+    EXPECT_FALSE(desktop.json["present"].toBool());
+    EXPECT_EQ(runAction(f.bus, {{"op", "power.chargeLimit"}, {"on", true}}), QStringLiteral("no battery"));
+    FakeBus none;
+    const StateResult gone = powerState(none);
+    EXPECT_FALSE(gone.ok);
+    EXPECT_EQ(gone.error, QStringLiteral("the service is not running"));
+}
+
+TEST(SystemBusPower, TheChargeLimitIsUPowersOwnMethod)
+{
+    PowerFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "power.chargeLimit"}, {"on", true}}), QString());
+    const Call c = f.bus.calls.last();
+    EXPECT_EQ(c.member, QStringLiteral("EnableChargeThreshold"));
+    EXPECT_EQ(c.path, QStringLiteral("/upower/bat0"));
+    EXPECT_EQ(c.iface, QStringLiteral("org.freedesktop.UPower.Device"));
+    EXPECT_EQ(c.args, (QVariantList{true}));
+    EXPECT_EQ(c.timeoutMs, 120000);
+    EXPECT_TRUE(privilegedAction({{"op", "power.chargeLimit"}}));
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "power.chargeLimit"}, {"on", "yes"}}), QStringLiteral("invalid request"));
+    EXPECT_TRUE(f.bus.calls.isEmpty());
+    GuardedCaller dev(f.bus, true);
+    EXPECT_TRUE(powerState(dev).ok);
+    EXPECT_TRUE(runAction(dev, {{"op", "power.chargeLimit"}, {"on", true}}).startsWith(QStringLiteral("dev guard")));
+    for (const Call &call : f.bus.calls)
+        EXPECT_NE(call.member, QStringLiteral("EnableChargeThreshold"));
+}

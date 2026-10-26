@@ -86,6 +86,13 @@ StateResult bluetoothState(BusCaller &bus);
 // read from systemd (Properties only: a dev session reads it too).
 StateResult networkState(BusCaller &bus);
 
+// Battery, UPower read in one go:
+//   powerState: {"present" (a laptop battery), "onBattery", "percent", "state" (UPower's: 1 charging, 2 discharging, 4 full, ...),
+//                "timeToEmpty", "timeToFull" (s), "capacity" (% of the design capacity), "cycles" (-1 unknown), "limitSupported",
+//                "limitEnabled", "limitEnd" (%), "history24" / "history10" ([[time, percent, state]], the last 24 hours in 96
+//                points, the last 10 days in 240; only when UPower keeps a history)}
+StateResult powerState(BusCaller &bus);
+
 // The General pane's system services (PR #4, ADR-0026), on the system bus:
 //   hostState: hostname1  {"pretty", "static", "hostname", "chassis", "vendor", "model"}       (About)
 //   timeState: timedate1 and timesync1  {"zone", "ntp", "canNtp", "synced", "usec" (microseconds since the epoch, as a string),
@@ -110,6 +117,7 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //   bt.discover {on}            Adapter1 StartDiscovery / StopDiscovery (already running or stopped is fine)
 //   bt.pair {mac}               Device1 Pair (no agent: Just Works; it may wait for the device, kPrivilegedMs), Trusted, Connect
 //   bt.forget {mac}             Adapter1 RemoveDevice
+//   power.chargeLimit {on}      UPower EnableChargeThreshold on the battery (its polkit action, kPrivilegedMs)
 //   wifi.forget {uuid}          the saved Wi-Fi profile's Delete (NetworkManager may ask polkit: kPrivilegedMs, ADR-0026)
 //   vpn.connect {uuid, on}      a VPN or WireGuard profile: ActivateConnection on no device, or its DeactivateConnection
 // and the General pane's (ADR-0026): the system service asks the session's polkit agent itself (interactive), so these calls wait

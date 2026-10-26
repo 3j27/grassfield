@@ -1414,6 +1414,48 @@ QtObject {
     readonly property int settingsInfoInset: 10
     // the (i) box's top 12 below the row top (its ring 14, beside the name) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoTop: 12
+    // the charts' first row: the segmented control 10 from the edges and the top, the status under it (baseline 55), 68 tall [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartHeaderHeight: 68
+    // the charts' status line (13 pt): baseline 55 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartStatusBaseline: 55
+    // a chart's title (13 pt bold): baseline 22.5 below its row top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartTitleBaseline: 22.5
+    // a chart's top line: 29.5 below its row top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartTop: 29.5
+    // a chart's four bands: 22.5 apart (the plot 90 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartBand: 22.5
+    // a chart's plot: its left line 9.5 from the group edge, 400 wide [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartInset: 9.5
+    // a chart's plot: 400 wide (96 bars of 3 with 1-pt gaps over the last 24 hours) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartWidth: 400
+    // a chart's value labels (100 %, 50 %, 0 %) at 415 from the group edge, centred on their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelInset: 415
+    // a chart's labels: 12 pt, secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelSize: 12
+    // a chart's time labels: baseline 37.5 below the plot, 3 after their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartAxisBaseline: 37.5
+    // a time label 3 after its vertical line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelGap: 3
+    // the charging strip: 10.5 below the plot, 3 tall, under the bars of the charging times [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartChargeTop: 10.5
+    // the charging strip's height [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartChargeHeight: 3
+    // between two bars [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartBarGap: 1
+    // the dashed time lines: 2 on, 2 off [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartDash: 2
+    // the plot's lines: the text colour at 0.14 (#D7D7D7 on the group) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartGridOpacity: 0.14
+    // the date under the last chart's time labels, a line lower [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartDateGap: 22
+    // the charts' group: 20 under the date's baseline [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartBottom: 20
+    // a pane title with a status under it (macOS 27 Battery): the title's baseline 26 below the toolbar top, the status's 40 [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsToolbarSubtitleTitleBaseline: 26
+    // the pane title's status (13 pt, secondary colour): baseline 40 below the toolbar top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsToolbarSubtitleBaseline: 40
+    // the status's glyph (the battery), 7.5 before its text [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsToolbarSubtitleGlyphGap: 7.5
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

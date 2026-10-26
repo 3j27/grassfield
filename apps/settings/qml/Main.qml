@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import "NavHistory.js" as NavHistory
+import "Power.js" as Power
 
 // Grassfield Settings: sidebar with search and sections on the left, detail pane on the right (macOS 27 layout, ADR-0024).
 // App windows are opaque (master-prompt 5.5): the sidebar is a flat, slightly darker surface edge to edge, not the shell material.
@@ -22,7 +23,7 @@ Window {
     property bool canMinimize: true
     // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
     readonly property var tileColors: ({
-            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
+            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
             mouse: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             datetime: "blue", language: "blue", login: "graphite"
@@ -47,6 +48,7 @@ Window {
         {id: "bluetooth", group: 1, title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
         {id: "network", group: 1, title: qsTr("Network"), icon: "globe", keywords: qsTr("ethernet wired ip address router dns firewall")},
         {id: "vpn", group: 1, title: qsTr("VPN"), icon: "vpn", keywords: qsTr("vpn wireguard openvpn tunnel")},
+        {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit")},
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
@@ -67,11 +69,16 @@ Window {
     ]
     property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
     property string query: ""
+    // The state a pane shows under its title in the toolbar (Battery), "" for none.
+    readonly property string pageSubtitle: (page.item as BatteryPage)?.subtitle ?? ""
+    // Battery is there only on a computer with a laptop battery (macOS shows it on a laptop only).
+    property bool hasBattery: false
+    readonly property var available: root.sections.filter(s => s.id !== "battery" || root.hasBattery)
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
         if (q === "")
-            return root.sections.filter(s => s.parent === undefined);
-        return root.sections.filter(s => s.title.toLowerCase().indexOf(q) >= 0 || s.keywords.toLowerCase().indexOf(q) >= 0);
+            return root.available.filter(s => s.parent === undefined);
+        return root.available.filter(s => s.title.toLowerCase().indexOf(q) >= 0 || s.keywords.toLowerCase().indexOf(q) >= 0);
     }
 
     // The hub a sub-pane belongs to ("" for a sidebar section): the sidebar keeps the hub selected while one of its sub-panes is open.
@@ -109,6 +116,7 @@ Window {
         root.navState = NavHistory.start(root.selectedId);
         root.backend.watch(root.backend.capabilitiesFile);
         root.readCapabilities();
+        root.backend.busQuery("power.state", "main.power");
     }
 
     Connections {
@@ -116,6 +124,12 @@ Window {
         function onFileChanged(path: string): void {
             if (path === root.backend.capabilitiesFile)
                 root.readCapabilities();
+        }
+        function onFinished(tag: string, ok: bool, output: string): void {
+            if (tag === "main.power") {
+                const power = ok ? Power.parseState(output) : null;
+                root.hasBattery = power !== null && power.present;
+            }
         }
     }
 
@@ -552,6 +566,52 @@ Window {
                     }
                 }
             }
+
+            // A pane with a state to show under its title (macOS 27 Battery: "Fully Charged" with the battery glyph): the title
+            // moves up and the state goes under it.
+            showTitle: root.pageSubtitle === ""
+
+            Item {
+                visible: root.pageSubtitle !== ""
+                x: detailToolbar.titleStart
+                width: detailToolbar.titleEnd - x
+                height: detailToolbar.height
+                Accessible.role: Accessible.Heading
+                Accessible.name: root.sectionTitle + ", " + root.pageSubtitle
+
+                Text {
+                    textFormat: Text.PlainText
+                    y: Tokens.settingsToolbarSubtitleTitleBaseline - baselineOffset
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.sectionTitle
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.windowTitleSize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                }
+
+                Icon {
+                    id: subtitleGlyph
+                    anchors.verticalCenter: subtitleText.verticalCenter
+                    name: "battery"
+                    size: Tokens.settingsWifiGlyphSize
+                    color: Appearance.windowSecondary
+                }
+
+                Text {
+                    id: subtitleText
+                    textFormat: Text.PlainText
+                    x: subtitleGlyph.width + Tokens.settingsToolbarSubtitleGlyphGap
+                    y: Tokens.settingsToolbarSubtitleBaseline - baselineOffset
+                    width: parent.width - x
+                    elide: Text.ElideRight
+                    text: root.pageSubtitle
+                    color: Appearance.windowSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                }
+            }
         }
 
         Rectangle {
@@ -605,6 +665,8 @@ Window {
                     return networkPage;
                 case "vpn":
                     return vpnPage;
+                case "battery":
+                    return batteryPage;
                 case "sound":
                     return soundPage;
                 case "displays":
@@ -669,6 +731,24 @@ Window {
         VpnPage {
             backend: root.backend
             system: sys
+        }
+    }
+
+    Component {
+        id: batteryPage
+        BatteryPage {
+            backend: root.backend
+            system: sys
+            onInfoRequested: (topic, power) => batteryInfo.openFor(topic, power)
+        }
+    }
+
+    // Battery > (i): Battery Health, Charging (the charge limit goes back to the page).
+    BatteryInfoSheet {
+        id: batteryInfo
+        onLimitRequested: on => {
+            (page.item as BatteryPage)?.setLimit(on);
+            batteryInfo.close();
         }
     }
 

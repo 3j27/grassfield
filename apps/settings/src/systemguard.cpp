@@ -46,6 +46,9 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Language & Region: Omarchy's language (owner decision 2026-10-26), the current one and the list.
     if (program == QLatin1String("omarchy-language"))
         return args.isEmpty() || args == QStringList{QStringLiteral("list")};
+    // Battery: the power profiles this machine offers (Omarchy's list of power-profiles-daemon's).
+    if (program == QLatin1String("omarchy-powerprofiles-list"))
+        return args.isEmpty();
     return false;
 }
 
@@ -197,7 +200,8 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language");
+    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
+        || program == QLatin1String("omarchy-powerprofiles-set");
 }
 
 int actionTimeoutMs(const QStringList &argv, int requested)
@@ -213,6 +217,11 @@ bool isAllowedAction(const QStringList &argv)
     // Omarchy's own per-user language switch (it generates the locale through Omarchy's sudoers grant or pkexec): one code.
     if (argv.first() == QLatin1String("omarchy-language"))
         return argv.size() == 2 && isLanguageCode(argv.at(1));
+    // Battery > Low Power Mode: Omarchy remembers a power profile for the power adapter and one for the battery, and applies it
+    // (power-profiles-daemon, whose own polkit action lets the active session switch).
+    if (argv.first() == QLatin1String("omarchy-powerprofiles-set"))
+        return argv.size() == 3 && (argv.at(1) == QLatin1String("ac") || argv.at(1) == QLatin1String("battery"))
+            && (argv.at(2) == QLatin1String("power-saver") || argv.at(2) == QLatin1String("balanced") || argv.at(2) == QLatin1String("performance"));
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

@@ -21,6 +21,8 @@
 #      and WireGuard profiles with their state); a join with a password (key-mgmt wpa-psk, the password, the access point) kept
 #      when it comes up, its new profile deleted when it goes down; Forget This Network deletes that profile and nothing else;
 #      a VPN switched off and on; the dev guard sends none of these
+#  13  Battery (UPower): the laptop battery, not the mouse's; the display device's level; the capacity, cycles, charge limit and
+#      the charge history; EnableChargeThreshold, which then reads enabled; no battery service: the reason; the dev guard
 #  12  Bluetooth discovery and pairing: the adapter's name, the nearby device (an RSSI) and a paired one's battery; discovery on and
 #      off; Pair, Trusted and Connect on the nearby device, which is then paired; Forget removes a device; the dev guard
 #
@@ -56,10 +58,10 @@ python3 -I -c 'import gi; gi.require_version("Gio", "2.0")' 2>/dev/null || { say
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/gf-settings-dbus.XXXXXX") || die "no temp dir"
 chmod 700 "$work"
-bus_pid="" nm_pid="" bz_pid="" gen_pid=""
+bus_pid="" nm_pid="" bz_pid="" gen_pid="" up_pid=""
 stop_all() {
   local p
-  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$bus_pid"; do
+  for p in "$nm_pid" "$bz_pid" "$gen_pid" "$up_pid" "$bus_pid"; do
     [[ -n $p ]] && kill "$p" 2>/dev/null
   done
   wait 2>/dev/null
@@ -117,18 +119,18 @@ penv=(env -i LC_ALL=C.UTF-8 PATH="$PATH" HOME="$work" XDG_RUNTIME_DIR="$work" DB
 # resolve its loopback TCP address (it asks getaddrinfo for AI_ADDRCONFIG), so such a run preloads a getaddrinfo that drops the flag.
 probe() { timeout 30 "${penv[@]}" ${GF_TEST_PRELOAD:+LD_PRELOAD=$GF_TEST_PRELOAD} "$work/probe" "$@" 2>&1; }
 
-start_service() { # nm|bluez|general [--fail ...]: sets nm_pid / bz_pid / gen_pid
+start_service() { # nm|bluez|general|upower [--fail ...]: sets nm_pid / bz_pid / gen_pid / up_pid
   local which=$1
   shift
   rm -f "$work/$which.ready"
   : >"$work/$which.log"
   setsid "${penv[@]}" python3 -I "$root/tests/fixtures/fake-system-service.py" "$which" --log "$work/$which.log" --ready "$work/$which.ready" "$@" >"$work/$which.err" 2>&1 </dev/null &
-  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; *) gen_pid=$! ;; esac
+  case $which in nm) nm_pid=$! ;; bluez) bz_pid=$! ;; upower) up_pid=$! ;; *) gen_pid=$! ;; esac
   wait_until 10 test -e "$work/$which.ready" || { cat "$work/$which.err"; die "the fake $which did not start"; }
 }
 stop_service() { # nm|bluez|general
   local pid
-  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
+  case $1 in nm) pid=$nm_pid nm_pid="" ;; bluez) pid=$bz_pid bz_pid="" ;; upower) pid=$up_pid up_pid="" ;; *) pid=$gen_pid gen_pid="" ;; esac
   [[ -n $pid ]] && { kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; }
   sleep 0.3
 }
@@ -446,6 +448,28 @@ done
 check "in a dev session discovery, pairing and Forget are refused by the guard" test "$fine" -eq 1
 check "... and none of them reached BlueZ" bash -c 'tail -n +$(($2 + 1)) "$1" | grep -qE "\"member\": \"(StartDiscovery|Pair|RemoveDevice|Set|Connect)\"" && exit 1 || exit 0' _ "$work/bluez.log" "$before"
 stop_service bluez
+
+say ""
+say "[13] Battery (UPower)"
+out=$(probe power-state)
+check "no UPower: the reason says the service is not running ($out)" test "$out" = "failed: the service is not running"
+start_service upower
+st=$(probe power-state)
+check "the laptop battery, on battery, the display device's level and time" py "$st" 'j["present"] is True and j["onBattery"] is True and j["percent"] == 71.0 and j["state"] == 2 and j["timeToEmpty"] == 7300'
+check "... its capacity, cycles and charge limit (supported, off, 80 %)" py "$st" '(j["capacity"], j["cycles"], j["limitSupported"], j["limitEnabled"], j["limitEnd"]) == (91.5, 212, True, False, 80)'
+check "... its charge history, of the laptop battery only (not the mouse's)" py "$st" 'j["history24"] == [[1792800000, 80.0, 2], [1792803600, 75.5, 2]] and len(j["history10"]) == 2'
+check "... GetHistory('charge', 86400, 96) reached the battery" logged upower GetHistory battery_BAT0 "'charge', uint32 86400, uint32 96"
+check "... and never the mouse" bash -c '! grep GetHistory "$1" | grep -q mouse' _ "$work/upower.log"
+out=$(probe act '{"op":"power.chargeLimit","on":true}')
+check "limit charging: ok ($out)" test "$out" = ok
+check "... EnableChargeThreshold(true) on the battery" logged upower EnableChargeThreshold battery_BAT0 "true"
+check "... and it reads enabled" py "$(probe power-state)" 'j["limitEnabled"] is True'
+before=$(calls upower)
+out=$(probe --dev act '{"op":"power.chargeLimit","on":false}')
+check "in a dev session the charge limit is refused by the guard ($out)" bash -c '[[ $1 == "failed: dev guard"* ]]' _ "$out"
+check "... a dev session still reads the battery" py "$(probe --dev power-state)" 'j["present"] is True'
+check "... and no EnableChargeThreshold reached UPower" bash -c 'tail -n +$(($2 + 1)) "$1" | grep -q EnableChargeThreshold && exit 1 || exit 0' _ "$work/upower.log" "$before"
+stop_service upower
 
 say ""
 if ((fail)); then say "FAIL"; else say "PASS"; fi

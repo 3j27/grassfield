@@ -235,6 +235,25 @@ TEST(ActionGuard, OmarchyLanguageTakesOneCodeOnly)
     EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-language"), QStringLiteral("fr")}));
 }
 
+TEST(ActionGuard, PowerProfilesTakeASourceAndAProfileOnly)
+{
+    const QString set = QStringLiteral("omarchy-powerprofiles-set");
+    for (const char *source : {"ac", "battery"}) {
+        for (const char *profile : {"power-saver", "balanced", "performance"})
+            EXPECT_TRUE(isAllowedAction({set, QString::fromLatin1(source), QString::fromLatin1(profile)})) << source << profile;
+    }
+    for (const QStringList &no : {QStringList{set}, QStringList{set, QStringLiteral("autodetect")}, QStringList{set, QStringLiteral("ac")},
+                                  QStringList{set, QStringLiteral("usb"), QStringLiteral("balanced")}, QStringList{set, QStringLiteral("ac"), QStringLiteral("turbo")},
+                                  QStringList{set, QStringLiteral("ac"), QStringLiteral("balanced"), QStringLiteral("x")},
+                                  QStringList{set, QStringLiteral("ac"), QStringLiteral("balanced\n")},
+                                  QStringList{QStringLiteral("/usr/bin/omarchy-powerprofiles-set"), QStringLiteral("ac"), QStringLiteral("balanced")}})
+        EXPECT_FALSE(isAllowedAction(no)) << qPrintable(no.join(QLatin1Char(' ')));
+    // The list is a query, with no argument; setting is never a query.
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-powerprofiles-list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-powerprofiles-list"), QStringLiteral("--active-state")}));
+    EXPECT_FALSE(isReadOnlyQuery({set, QStringLiteral("ac"), QStringLiteral("balanced")}));
+}
+
 TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
 {
     EXPECT_EQ(actionTimeoutMs({QStringLiteral("omarchy-language"), QStringLiteral("fr")}, 15000), 130000);
@@ -246,7 +265,7 @@ TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
     // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell); omarchy-language is
     // Language & Region's (one code, ActionGuard.OmarchyLanguageTakesOneCodeOnly).
-    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language"})
+    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language", "omarchy-powerprofiles-set"})
         EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
     // nmcli and bluetoothctl are gone: Wi-Fi and Bluetooth are D-Bus calls (systembus.h), never commands.
     for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env", "nmcli", "bluetoothctl"})

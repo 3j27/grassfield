@@ -2,7 +2,7 @@
 """A fake NetworkManager, BlueZ or the General pane's services for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
 GF-049, ADR-0026).
 
-    fake-system-service.py nm|bluez|general --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
+    fake-system-service.py nm|bluez|general|upower --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
 It owns org.freedesktop.NetworkManager (or org.bluez; or hostname1, timedate1, timesync1, locale1 and a systemd user manager) on
 the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
@@ -23,6 +23,8 @@ The General world (one process, five names): hostname1 (the reference machine, a
 time; ListTimezones), timesync1 (a server and the fallback list), locale1 (LANG=en_US.UTF-8), systemd1 (the user manager: one of
 the user's own services under GF_TEST_BUS_DIR/units, one a package ships; Enable/DisableUnitFiles, Reload). The Set* methods of
 hostname1 and timedate1 keep what they were given, so a read afterwards shows it.
+The UPower world: on battery; a laptop battery (70 %, discharging, 91.5 % of its design capacity, 212 cycles, a charge limit
+at 80 % that EnableChargeThreshold switches, a charge history), a mouse's battery (not the computer's) and the display device.
 """
 import argparse
 import json
@@ -315,6 +317,47 @@ def bluez_world(svc):
     return "org.bluez"
 
 
+def upower_world(svc):
+    root = "/org/freedesktop/UPower"
+    battery = root + "/devices/battery_BAT0"
+    mouse = root + "/devices/mouse_hidpp_battery_0"
+    display = root + "/devices/DisplayDevice"
+    device_xml = ('<interface name="org.freedesktop.UPower.Device"><property name="Type" type="u" access="read"/>'
+                  '<property name="PowerSupply" type="b" access="read"/><property name="IsPresent" type="b" access="read"/>'
+                  '<property name="Percentage" type="d" access="read"/><property name="State" type="u" access="read"/>'
+                  '<property name="TimeToEmpty" type="x" access="read"/><property name="TimeToFull" type="x" access="read"/>'
+                  '<property name="Capacity" type="d" access="read"/><property name="ChargeCycles" type="i" access="read"/>'
+                  '<property name="ChargeThresholdSupported" type="b" access="read"/><property name="ChargeThresholdEnabled" type="b" access="read"/>'
+                  '<property name="ChargeEndThreshold" type="u" access="read"/><property name="HasHistory" type="b" access="read"/>'
+                  '<method name="GetHistory"><arg direction="in" type="s"/><arg direction="in" type="u"/><arg direction="in" type="u"/>'
+                  '<arg direction="out" type="a(udu)"/></method>'
+                  '<method name="EnableChargeThreshold"><arg direction="in" type="b"/></method></interface>')
+
+    def enable(p):
+        svc.props[(battery, "org.freedesktop.UPower.Device")]["ChargeThresholdEnabled"] = V("b", p.unpack()[0])
+
+    def history(p):
+        kind, span, points = p.unpack()
+        return V("(a(udu))", ([(1792800000, 80.0, 2), (1792803600, 75.5, 2)] if kind == "charge" else [],))
+
+    common = {"TimeToEmpty": V("x", 0), "TimeToFull": V("x", 0), "Capacity": V("d", 0.0), "ChargeCycles": V("i", -1),
+              "ChargeThresholdSupported": V("b", False), "ChargeThresholdEnabled": V("b", False), "ChargeEndThreshold": V("u", 0),
+              "HasHistory": V("b", False)}
+    svc.register(battery, device_xml, methods={"GetHistory": history, "EnableChargeThreshold": enable},
+                 props=dict(common, Type=V("u", 2), PowerSupply=V("b", True), IsPresent=V("b", True), Percentage=V("d", 70.0), State=V("u", 2),
+                            TimeToEmpty=V("x", 7200), Capacity=V("d", 91.5), ChargeCycles=V("i", 212), ChargeThresholdSupported=V("b", True),
+                            ChargeEndThreshold=V("u", 80), HasHistory=V("b", True)))
+    svc.register(mouse, device_xml, methods={"GetHistory": history},
+                 props=dict(common, Type=V("u", 2), PowerSupply=V("b", False), IsPresent=V("b", True), Percentage=V("d", 40.0), State=V("u", 2)))
+    svc.register(display, device_xml, methods={"GetHistory": history},
+                 props=dict(common, Type=V("u", 2), PowerSupply=V("b", True), IsPresent=V("b", True), Percentage=V("d", 71.0), State=V("u", 2),
+                            TimeToEmpty=V("x", 7300)))
+    svc.register(root, '<interface name="org.freedesktop.UPower"><property name="OnBattery" type="b" access="read"/>'
+                       '<method name="EnumerateDevices"><arg direction="out" type="ao"/></method></interface>',
+                 methods={"EnumerateDevices": lambda p: V("(ao)", ([mouse, battery],))}, props={"OnBattery": V("b", True)})
+    return "org.freedesktop.UPower"
+
+
 def general_world(svc):
     directory = os.environ["GF_TEST_BUS_DIR"]
     host, time_, sync, locale, systemd = ("/org/freedesktop/hostname1", "/org/freedesktop/timedate1", "/org/freedesktop/timesync1",
@@ -381,7 +424,7 @@ def general_world(svc):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("service", choices=["nm", "bluez", "general"])
+    ap.add_argument("service", choices=["nm", "bluez", "general", "upower"])
     ap.add_argument("--log", required=True)
     ap.add_argument("--ready", required=True)
     ap.add_argument("--fail", action="append", default=[])
@@ -397,7 +440,7 @@ def main():
         fail[member] = (name, message)
     slow = {spec.partition("=")[0]: float(spec.partition("=")[2]) for spec in args.slow}
     svc = Service(conn, args.log, fail, slow)
-    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world}
+    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world, "upower": upower_world}
     names = worlds[args.service](svc)
     names = names if isinstance(names, list) else [names]
     owned = set()

@@ -12,6 +12,10 @@ T.Control {
     property var model: []
     property string value: ""
     property string accessibleName: ""
+    // The segments share the control's width equally (macOS 27 Battery's Last 24 Hours / Last 10 Days).
+    property bool fill: false
+    // The selected segment in the selection colour with its text colour, instead of the raised pill (macOS 27 Battery).
+    property bool prominent: false
 
     signal picked(string id)
 
@@ -77,7 +81,7 @@ T.Control {
                 required property int index
                 readonly property bool selected: segment.index === root.currentIndex
 
-                width: Math.ceil(label.implicitWidth + 2 * Tokens.spacingLg)
+                width: root.fill && root.model.length > 0 ? root.width / root.model.length : Math.ceil(label.implicitWidth + 2 * Tokens.spacingLg)
                 height: root.height
                 text: segment.modelData.text
                 hoverEnabled: true
@@ -103,9 +107,10 @@ T.Control {
                         radius: Tokens.radiusControl - root.pillInset
                         // Selected: a raised pill (white in the light appearance, a lighter grey in the dark one) with a fine
                         // edge; otherwise the hover and press shades.
-                        color: segment.selected ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2) : Appearance.colors.windowBackground)
+                        color: segment.selected && root.prominent ? Appearance.colors.selection
+                            : segment.selected ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2) : Appearance.colors.windowBackground)
                             : Appearance.withAlpha(Appearance.colors.hover, segment.down ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
-                        border.width: segment.selected ? Tokens.controlBorderWidth : 0
+                        border.width: segment.selected && !root.prominent ? Tokens.controlBorderWidth : 0
                         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Appearance.separatorOpacity)
                         visible: segment.selected || (root.enabled && (segment.hovered || segment.down))
                     }
@@ -118,7 +123,7 @@ T.Control {
                     verticalAlignment: Text.AlignVCenter
                     text: segment.text
                     opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
-                    color: Appearance.colors.text
+                    color: segment.selected && root.prominent ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyMenuSize
                     font.weight: Tokens.typographyMenuWeight

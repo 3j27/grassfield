@@ -87,6 +87,19 @@ service ask the session's agent itself.
   All are validated twice (a uuid, an SSID, a password, a boolean) and are refused by `GuardedCaller` in a dev session
   (`tests/unit/settings/tst_systembus.cpp`, `tests/integration/settings_dbus.sh` section 11).
 
+- Hardware group, Battery:
+  - Low Power Mode sets Omarchy's two remembered power profiles with Omarchy's own command, `omarchy-powerprofiles-set
+    ac|battery <profile>` (an action: one source and one of the three profiles, nothing else; the source in use last, as the
+    command applies what it remembers at once). The command switches the profile with `powerprofilesctl`, through
+    power-profiles-daemon and its own polkit action for switching profiles (not read here: owner check); it writes
+    the choice under `$XDG_STATE_HOME/omarchy/powerprofiles/`. The shell runs `omarchy-powerprofiles-set autodetect` when the
+    power source changes. Neither runs in a dev session.
+  - Charging > Limit charging calls UPower's `EnableChargeThreshold(b)` on the battery (`power.chargeLimit`), whose polkit
+    action `org.freedesktop.UPower.enable-charging-limit` defaults to `yes` for the active session (read in UPower's sources,
+    commit 68438ca); it may wait for the agent like the calls above (120 s). Shown only when UPower says the battery has a
+    limit (`ChargeThresholdSupported`).
+  - Reads only: `power.state` (UPower's properties, `EnumerateDevices`, `GetHistory`), allowed in a dev session.
+
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
 (the lock, or a sheet) and remember it for a while. Nothing else in the window changes while the system asks.
