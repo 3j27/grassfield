@@ -7,10 +7,11 @@ application's command. Grassfield keeps its own application menu (About, Hide, Q
 Window menu around the application's menus.
 
 ## Purpose and non-goals
-Serve DBusMenu menus (`com.canonical.dbusmenu`) of Qt/KDE and Chromium windows to the menu bar (master-prompt §1.1
-D4, §5.7 T1/T2, ADR-0008). `grassfield-menu-bridge` (C++/Qt 6: QtCore, QtDBus, QtNetwork) is the only Grassfield
-daemon (§5.8). Non-goals now: X11/XWayland windows (`RegisterWindow`), Firefox (its Wayland global menu pref is off
-by default, owner approval needed), Electron (exports menus only on X11), GTK4 (no menu bar to export), menu icons
+Serve DBusMenu menus (`com.canonical.dbusmenu`) of Qt/KDE, Chromium and Electron windows to the menu bar (master-prompt
+§1.1 D4, §5.7 T1/T2, ADR-0008; Electron since the ADR-0008 amendment of 2026-10-25, MB17). `grassfield-menu-bridge`
+(C++/Qt 6: QtCore, QtDBus, QtNetwork) is the only Grassfield daemon (§5.8). Non-goals now: X11/XWayland windows (a
+`RegisterWindow` from one is kept, never served), Firefox (its Wayland global menu pref is off by default, owner
+approval needed), GTK4 (no menu bar to export), menu icons
 (`icon-name` is relayed but not drawn: Grassfield's menus carry no application icons), keyboard navigation between
 top-level menus (Left/Right).
 
@@ -19,9 +20,17 @@ top-level menus (Left/Right).
   `hello` says `"appmenu": true` (the plugin advertises the `appmenu` feature; the menu bar renders bridge menus). It
   releases the name on `hello` with `false` and when the shell disconnects; it starts in standby. If another process
   owns the name the bridge reports `registrar-busy` and stays in standby (state `busy`).
-- **MB2 Registrar methods** (Wayland clients never call them, spike S5): `RegisterWindow`, `UnregisterWindow` →
-  `com.canonical.AppMenu.Registrar.Error.NotSupported`; `GetMenuForWindow` → `…Error.NotFound`; `GetMenus` →
-  `org.freedesktop.DBus.Error.NotSupported`. Each sender/method pair is logged once.
+- **MB2 Registrar methods** (`src/Registrations.h`; ADR-0008 amendment 2026-10-25: Qt and Chromium on Wayland never
+  call them, spike S5; Electron does, MB17): `RegisterWindow(u windowId, o path)` from a unique bus name is kept per
+  (sender, windowId) (registering the pair again replaces it and makes it the newest); at most 16 per sender and 128 in
+  all, `org.freedesktop.DBus.Error.LimitsExceeded` past it, nothing evicted; a well-known sender, another signature or an
+  invalid path → `InvalidArgs`. `UnregisterWindow(u)` forgets it. A new sender is watched (`QDBusServiceWatcher`), then
+  its process asked (`GetConnectionUnixProcessID`; an error answer drops it); every registration of a sender goes when it
+  leaves the bus, and all of them when the registrar name is released. A registration is served only once settled, 300 ms
+  after it arrived (`kSettleMs`, estimate: Electron registers before its menu object answers; read at once, Obsidian's
+  second window answered `UnknownMethod`). `GetMenuForWindow` → `…Error.NotFound`; `GetMenus` →
+  `org.freedesktop.DBus.Error.NotSupported`; other members are dropped without a reply. Each sender/method pair is
+  logged once.
 - **MB3 Socket.** `$XDG_RUNTIME_DIR/grassfield/menu-bridge.sock`, or `--socket PATH` (an argument, never inherited), or
   `GRASSFIELD_MENU_BRIDGE_SOCKET` in a development run only (ADR-0019 dev plumbing: in a session the variable is ignored
   and the start log says so; a leaked value would move the bridge off the socket the shell connects to);
@@ -36,6 +45,7 @@ top-level menus (Left/Right).
   `set_address` (gfc/1 `appmenu` field `pid`, `wl_client_get_credentials`). The bridge resolves a well-known name to
   its unique owner (`GetNameOwner`) and accepts the pair only if `GetConnectionUnixProcessID(owner)` equals that pid;
   otherwise `pid-mismatch` (`no-owner` when the name or its process is gone). Afterwards it talks to the unique name only.
+  A registrar menu (MB17) goes through the same check with its sender and the window's pid, at every open.
 - **MB6 DBusMenu client.** Explicit signatures (Chromium has no introspection data): `GetLayout(int32 0, int32 -1,
   as [])`, `AboutToShow(int32)`, `Event(int32 id, "clicked", variant<int32 0>, uint32 0)`. `LayoutUpdated` and
   `ItemsPropertiesUpdated` trigger one coalesced `GetLayout` (40 ms); `AboutToShow` returning `needUpdate` too. The
@@ -61,10 +71,12 @@ top-level menus (Left/Right).
   `autolaunch:`) before connecting, refuses a bus where `org.freedesktop.systemd1` is present, and requires an explicit
   socket path.
 - **MB11 Shell side** (`shell/platform/MenuBridge.{qml,js}`, `shell/menubar/`): keeps `window → {service, path, pid}`
-  from gfc/1 `appmenu` events (validated: bus name, object path, pid); after the capabilities handshake it calls
+  from gfc/1 `appmenu` events (validated: bus name, object path, pid; an event with an empty service and path and a pid
+  is kept as `{service: "", path: "", pid}`, MB17); after the capabilities handshake it calls
   `hl.plugin.grassfield.appmenu(address)` for every window (FR22) so a restarted shell learns existing registrations.
   It connects to the socket (retry every 2 s), sends `hello` with `Capabilities.has("appmenu")` (again whenever it
-  changes), `open` for the focused window (`close` for the previous one) and validates every bridge line again
+  changes), `open` for the focused window (`open-registered` for a pid-only entry, MB17; `close` for the previous
+  one) and validates every bridge line again
   (depth, count, string caps). The shown window is Hyprland's active window, or (right after a start) the
   foreign-toplevel focus mapped to Hyprland's window list; it is kept while a shell popup holds the keyboard.
 - **MB12 Menu bar.** For the shown app with a T1/T2 menu: Grassfield menu, the app name (T0 app menu), the app's
@@ -73,9 +85,17 @@ top-level menus (Left/Right).
   kind `appbridge` and sends `about-to-show`; opening a first-level submenu sends `about-to-show` once per open menu; a
   new revision that changes the open submenu reopens it. Items: plain-text labels, the app's shortcut text
   (`Control` → `Ctrl`, first shortcut), check mark for checkmark/radio items that are on, disabled items dimmed,
-  hidden items left out, separators collapsed, a submenu the app has not filled shown disabled. Choosing an item sends
-  `activate` and closes the menu. Without a T1/T2 menu (GTK4, Electron, no plugin, no bridge, refused or failed menu)
-  the T0 menus stay: nothing is hidden.
+  hidden items left out, separators collapsed, a submenu the app has not filled shown disabled. Choosing an item closes
+  the menu, then sends `activate` once the item's window has the keyboard back (macOS runs a menu's action after the menu
+  closed): an Electron click handler runs only for its focused window, and no window is focused while the popup holds the
+  keyboard (measured with Obsidian: sent with the popup open, File > New Window did nothing; a fixed 120 ms wait after
+  the choice failed 1 run in 3 in a loaded nested session, review of 9ba1d40). When the popup held the keyboard (a press,
+  drag and release on the bar leaves it with the window: the action goes at once), the shell waits for the plugin's
+  `keyboard-focus` event naming that window (compositor FR20), sends `Tokens.focusReturnMenuActionSettleMs` (30 ms, for
+  the application to read its keyboard enter first) after it, and sends anyway `Tokens.focusReturnMenuActionWaitMs`
+  (300 ms) after the close when no such event comes (a plugin without the feature, the keyboard went to another window).
+  Without a T1/T2 menu (GTK4, no plugin, no
+  bridge, refused or failed menu) the T0 menus stay: nothing is hidden.
 - **MB14 Hostile applications, crash attribution and graceful degradation.** Perfect attribution is impossible at the
   D-Bus layer: libdbus buffers every incoming message (a 100 MB message peaks at ~225 MB RSS; a 30 MB reply at 115 MB)
   before any slot of the bridge runs, whoever sent it, and the bridge cannot see the sender of a message it died
@@ -204,6 +224,23 @@ top-level menus (Left/Right).
       and is false while no bridge is connected; `shell.qml` feeds `Idle.busInhibited`, which disarms only the idle dim
       and idle lock (`IdleModel.idleArmed`). A manual lock, the lid, the lock before sleep and the display power-off on the
       lock screen ignore it.
+- **MB17 Electron: menus registered with the registrar** (ADR-0008 amendment 2026-10-25). Electron (verified: Obsidian
+  1.13.7 on Electron 43.6.0) exports its menus (libdbusmenu-glib) once the compositor advertises
+  `org_kde_kwin_appmenu_manager`, but never calls `set_address`: it calls `RegisterWindow(windowId,
+  "/com/canonical/menu/<windowId hex>")` on window Show and `UnregisterWindow` on Hide, `windowId` being a per-process
+  counter on Wayland that nothing outside the process can map to a window. So:
+    - the plugin's `appmenu` event for a Wayland window without a `set_address` registration carries the window's client
+      pid (compositor FR20; 0 for X11/XWayland windows and for a window that is gone);
+    - the shell sends `{"type":"open-registered","window":"<hex>","pid":N}` when such a window is shown;
+    - the bridge answers `no-owner` for a process that is gone (a window address Hyprland reused, a late line), refuses a
+      pid outside its own pid namespace (`/proc/<pid>/ns/pid` names another inode than `/proc/self/ns/pid`, or cannot be
+      read: Flatpak, any sandbox with its own pid namespace) with `foreign-namespace`, answers `backoff` while degraded
+      (MB14), else opens the newest settled registration (MB2) of a sender whose process is that pid, through `open`
+      (MB5's check again: a pid reused after the registering process exited gets nothing). Without one the window waits:
+      a registration that settles later opens it, and an open window follows a newer settled registration of its
+      process; `close`, another `open` or the registrar's release ends the wait;
+    - every Wayland window of the process shows the process's newest menu; a registration from an X11 client is kept and
+      never served (its windows carry no pid).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 | Req | Test | Level | Status |
@@ -217,6 +254,9 @@ top-level menus (Left/Right).
 | MB15 (D-Bus) | `tests/integration/launcher_entry.sh` (bare; private bus, bridge, socket tap as the shell, `tests/fixtures/launcher-entry.py` as applications): count and clamp, count-visible, progress and clamp, progress-visible, urgent, flood (21 lines for 300 updates, last state arrives), sender disconnect, replay to a new shell, invalid uri and wrong signature (penalty logged, sender refused then served again). Fails on the bridge before ADR-0018 | L1 | 2026-10-22: PASS (and every behaviour check FAILs against the previous bridge) |
 | MB16 (logic) | `tests/unit/menu-bridge/tst_screensaver.cpp` (cookies distinct and non-zero, owner-only release, sender gone, limits, clean names, only two methods served, `SetActive` refused, wrong signatures, the line and its clamp, introspection); shell: `tests/unit/tst_menubridge.qml` `test_screensaverLines`, `tests/security/tst_idlemodel.qml` `test_idleArmed` | L0 | 2026-10-24: see the security report |
 | MB16 (D-Bus) | `tests/integration/screensaver_inhibit.sh` (bare; private bus, bridge, socket tap, `tests/fixtures/screensaver-client.py`): name owned, first state, Inhibit on both paths, other/unknown cookies, owner release, sender leaving, NotSupported members, 16-cookie limit, replay to a new shell, bridge exit | L1 | NOT VERIFIED (needs Unix sockets: bare, outside the sandbox) |
+| MB2, MB17 (logic) | `tests/unit/menu-bridge/tst_menubridge.cpp` `Registrar.*` (7: register and unregister, malformed calls and other members, the caps without eviction, the newest registration of the window's process, settling, a reused pid, the pid namespace identity) and `ShellMessages.OpenRegisteredParses` | L0 | 2026-10-26: 88/88 PASS outside the sandbox (84 + 4 skipped inside it); after the review of 9ba1d40 (namespace identity) 84 PASS + 4 skipped in the sandbox |
+| MB11, MB12, MB17 (shell) | `tests/unit/tst_menubridge.qml` (pid-only appmenu events, the open-registered line, `foreign-namespace` as a lost menu, the keyboard-focus event) | L0 | 2026-10-26: 17/17 PASS |
+| MB12, MB17 (nested) | `tests/integration/electron_menus.sh [ROUNDS]` (bare; Obsidian offline on the private bus: RegisterWindow kept, its menus in the bar, File > New Window, Close Window and Quit clicked with the pointer, no layout failure; ROUNDS fresh Obsidians in one session) | L1 | After the review of 9ba1d40 (the action waits for the keyboard-focus event): `electron_menus.sh 10` PASS, 10/10 rounds, twice in a row (runs `.dev/electron-menus/run-20261026-052820` and, after merging main, `run-20261026-054024`; Hyprland 0.56.2 efb50993); in 5 of the 20 rounds File first showed Obsidian's short startup menu and showed New Window at the second opening (logged); `global_menus.sh` PASS on the same build (Qt menu-demo, Chromium, Qt Linguist, Preview, T0, phase B). An earlier 10-round run failed 1 round on that short menu (the test then opened File once only). Before: 2026-10-26 PASS, 17/17 checks (Hyprland 0.56.2 efb50993, Obsidian 1.13.7 / Electron 43.6.0, run `.dev/electron-menus/run-20261026-012602`: menus File, Edit, View, Window, Help; New Window opened a second window through the popup, which showed its own menu (File: Open Vault..., Close, Quit) with no layout failure; Close Window and Quit worked; no process left). Earlier manual nested probe 2026-10-25 (before the settle delay): RegisterWindow kept, the bar showed File, Edit, View, Window, Help (vault window: File, Edit, Insert, Format, View, Window, Help); File > Quit closed the app; with the popup open a DBusMenu Event for File > New Window did nothing and after Escape the same Event opened a window; with the action sent after the close, File > New Window (2 -> 3 windows) and File > Close (3 -> 2) worked through the popup; a new window's GetLayout right after RegisterWindow answered UnknownMethod (what the settle delay addresses) |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
 | MB10 run mode (M7) | the rule against the shared vectors (`tests/unit/menu-bridge`, `Safety.RunMode*`); the built bridge on a private bus (`tests/shell/menu_bridge_run_mode.sh`): `GRASSFIELD_DEV=1` with `GRASSFIELD_SESSION=1` starts as a session bridge on the session socket; a development run without its socket is refused; with it, starts as one; neither, refused; a `GRASSFIELD_MENU_BRIDGE_SOCKET` leaked into a session is ignored (logged) and the session socket used (case E, review of e0a3734) | L0 | 2026-10-25 verified (A-E PASS) |
@@ -225,21 +265,25 @@ top-level menus (Left/Right).
 ## Interfaces / contracts (versions)
 - **menu/1** (socket, JSON lines; ADR-0008). shell → bridge: `{"type":"hello","v":"menu/1","appmenu":bool}`,
   `{"type":"open","window":"<hex>","service":"…","path":"…","pid":N}`, `{"type":"about-to-show","window":…,"id":N}`,
-  `{"type":"activate","window":…,"id":N}`, `{"type":"close","window":…}`. bridge → shell:
+  `{"type":"activate","window":…,"id":N}`, `{"type":"close","window":…}`, and (additive, MB17)
+  `{"type":"open-registered","window":"<hex>","pid":N}`. bridge → shell:
   `{"type":"status","v":"menu/1","state":…,"registrar":bool}` (after connect and each hello),
   `{"type":"menu","window":…,"revision":N,"items":[…]}`, `{"type":"error","window":…|"","code":…,"message":…}` with
   codes `bad-request`, `busy`, `registrar-busy`, `no-owner`, `pid-mismatch`, `layout-failed`, `gone`,
-  `unknown-item`, `oversized` (the application's layout exceeds the caps, also when found on a re-read) and `backoff`
-  (the application is refused for now, see MB14). After `pid-mismatch`, `no-owner`, `gone`, `layout-failed`, `oversized`
-  and `backoff` the window has no bridge menu: the shell clears its T1/T2 menus and shows T0 (log line only). Item: `{"id","type":"standard"|"separator","label","enabled","visible",
+  `unknown-item`, `oversized` (the application's layout exceeds the caps, also when found on a re-read), `backoff`
+  (the application is refused for now, see MB14) and `foreign-namespace` (MB17). After `pid-mismatch`, `no-owner`,
+  `gone`, `layout-failed`, `oversized`, `backoff` and `foreign-namespace` the window has no bridge menu: the shell clears its T1/T2 menus and shows T0 (log line only). Item: `{"id","type":"standard"|"separator","label","enabled","visible",
   "toggle-type":""|"checkmark"|"radio","toggle-state":-1|0|1,"shortcut":[[keys…]…],"icon-name","submenu",
   "children":[…]}`.
 - **menu/1 `launcher`** (bridge → shell, additive, MB15): `{"type":"launcher","app":"<desktop id>","count":N|null,
   "progress":P|null,"urgent":bool|null}`; `count` 0 hides the badge, `progress` -1 hides the bar, all three `null`
   forgets the app. Input: the `com.canonical.Unity.LauncherEntry` `Update(s, a{sv})` signal on the bridge's bus.
 - **menu/1 `screensaver`** (bridge → shell, additive, MB16): `{"type":"screensaver","inhibited":bool,"count":N}`.
-- **gfc/1 `appmenu`** gains the additive field `"pid":N` (0 for clears; consumers that ignore it are unaffected).
-- **D-Bus**: `org.grassfield.MenuBridge1` (MB9; `Status` also reports `screensaver` (name owned) and `inhibitors`),
+- **gfc/1 `appmenu`** gains the additive field `"pid":N` (consumers that ignore it are unaffected): the client of a
+  `set_address` registration; with an empty service and path, the window's Wayland client (MB17), 0 for X11/XWayland
+  windows and for a window that is gone.
+- **D-Bus**: `org.grassfield.MenuBridge1` (MB9; `Status` also reports `screensaver` (name owned), `inhibitors` and
+  `registrations` (MB2)),
   `com.canonical.AppMenu.Registrar` (MB1, MB2), `org.freedesktop.ScreenSaver` (MB16).
 - **Test hook**: `qs ipc call menubar bridgeState <output>` → JSON (shown window, bridge state, left titles and the
   open bridge menu's rows in output coordinates).
@@ -248,7 +292,7 @@ top-level menus (Left/Right).
 Qt 6.11.2 (QtCore, QtDBus, QtNetwork), gtest 1.18.0, CMake/Ninja or `bridges/menu-bridge/build-direct.sh`
 (g++ + pkg-config + moc). Quickshell 0.3.1 `Quickshell.Io.Socket` + `SplitParser`. Hyprland 0.56.2 with
 grassfield-compositor (feature `appmenu`). Verified clients: Qt 6.11.2 (`tests/fixtures/menu-demo`), Chromium
-152.0.7977.82 (`--ozone-platform=wayland`); GTK4: Nautilus.
+152.0.7977.82 (`--ozone-platform=wayland`), Obsidian 1.13.7 on Electron 43.6.0 (Wayland, MB17); GTK4: Nautilus.
 
 ## Degraded behavior (plugin missing, service missing)
 - Plugin absent or without `appmenu`: the shell says `hello` with `false`; the bridge stays in standby, no registrar
@@ -281,9 +325,15 @@ Event-driven: no timer runs while idle (one coalescing timer per menu signal bur
 application localized them; Grassfield strings use `qsTr()`.
 
 ## Known limitations (honest, user-visible gaps vs macOS)
-- X11/XWayland apps that call `RegisterWindow` (Qt or Electron under XWayland) are answered NotSupported but, with
-  the registrar present at their start, Qt hides its in-window menu bar anyway: their menus are then shown nowhere.
+- X11/XWayland apps that call `RegisterWindow` (Qt or Electron under XWayland) are kept but never served (MB17) and,
+  with the registrar present at their start, Qt hides its in-window menu bar anyway: their menus are then shown nowhere.
   Grassfield's Qt apps run on Wayland; mapping X11 window ids to windows is future work.
+- Electron (MB17): every window of an app shows the menu of its newest registered window (Electron's window id cannot be
+  mapped to a Wayland window), so with two Obsidian windows the second one's menu shows over the first as well, until
+  one of them registers again. A new window shows T0 for the 300 ms a registration takes to settle; a menu object slower
+  than that fails its first read (`layout-failed`: T0, the app refused 2 s, its menus back at the window's next focus).
+- An item's action reaches the application once its window has the keyboard back after the menu closed, about 30 ms
+  later, 300 ms at most (MB12; macOS blinks the chosen item, then runs the action); the item does not blink.
 - Sandboxed apps behind a D-Bus proxy (Flatpak) fail the pid check (`pid-mismatch`) and keep T0: a later rule is
   needed.
 - Only first-level submenus get `AboutToShow` from the shell (deeper ones are shown as the layout has them).

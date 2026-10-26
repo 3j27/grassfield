@@ -43,14 +43,21 @@ namespace gf::topclamp {
         }
         if (on)
             return on;
-        // Out of reach (above the outputs, in a gap): the nearest output below it.
+        // Out of reach (above the outputs, in a gap): the nearest output below it; of outputs whose tops are level, the one
+        // sharing most of its width (review of 9ba1d40: a tie went to the lowest index).
         std::optional<size_t> below;
+        double                belowWidth = 0;
         for (size_t i = 0; i < outputs.size(); ++i) {
-            const Rect& box = outputs[i].box;
-            if (!usable(box) || box.y <= top || sharedWidth(left, right, box) <= 0)
+            const Rect&  box = outputs[i].box;
+            const double w   = sharedWidth(left, right, box);
+            if (!usable(box) || box.y <= top || w <= 0)
                 continue;
-            if (!below || box.y < outputs[*below].box.y)
-                below = i;
+            const bool nearer = !below || box.y < outputs[*below].box.y - 0.5;
+            const bool level  = below && std::abs(box.y - outputs[*below].box.y) <= 0.5; // level within half a pixel
+            if (nearer || (level && w > belowWidth)) {
+                below      = i;
+                belowWidth = w;
+            }
         }
         if (below)
             return below;

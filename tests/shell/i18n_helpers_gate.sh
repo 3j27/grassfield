@@ -258,7 +258,8 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. Each variant of visible English text must fail on its own line (and only that line); the good file
+# Part (f): the Settings C++. 30 variants of visible English text in the table below plus one literal on the line after its call: each
+# must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
 cppcase() { # NAME LINE-OF-CODE...: the file holds those lines (line 1 is the first); the gate must report exactly line 1
@@ -285,6 +286,19 @@ declare -A variants=(
   [fromlatin1]='QString a() { return QString::fromLatin1("failed"); }'
   [fromutf8var]='void a() { QString shown = QString::fromUtf8("failed"); use(shown); }'
   [nestedsink]='void a() { reportError(QString(QStringLiteral("failed"))); }'
+  [braceinit]='void a() { QString reason{QStringLiteral("failed")}; use(reason); }'
+  [pluseq]='void a(QString &out) { out += QStringLiteral("failed"); }'
+  [argcall]='QString a() { return base().arg(QStringLiteral("failed")); }'
+  [insertvalue]='void a(QJsonObject &o) { o.insert(QStringLiteral("reason"), QStringLiteral("failed")); }'
+  [returnbrace]='Result a() { return {false, {}, QStringLiteral("failed")}; }'
+  [donecall]='void a(Done done) { done(QStringLiteral("failed"), QString()); }'
+  [settlecall]='void a() { settle(QStringLiteral("failed"), {}); }'
+  [finishedcall]='void a() { emit finished(tag, false, QStringLiteral("failed")); }'
+  [bracespace]='void a() { QString reason {QStringLiteral("failed")}; use(reason); }'
+  [assignbrace]='void a() { QString shown = {QStringLiteral("failed")}; use(shown); }'
+  [declparen]='void a() { const QString shown(QStringLiteral("failed")); use(shown); }'
+  [declbrace]='void a() { QString shown{QStringLiteral("failed")}; use(shown); }'
+  [insertmessage]='void a(QJsonObject &o) { o.insert(QStringLiteral("message"), QStringLiteral("failed")); }'
 )
 for name in "${!variants[@]}"; do
   cppcase "$name" "${variants[$name]}"
@@ -306,6 +320,11 @@ QString e() { return QStringLiteral("org.example.Name"); }
 bool f(const QString &m) { return m == QLatin1String("Get") || m == QStringLiteral("GetAll"); }
 void g() { qWarning().noquote() << "dev guard: refused a command" << argv.first(); qInfo() << "dev guard:"; }
 void k(const QString &t) { emit failed(t, QCoreApplication::translate("X", "failed")); QString mode = tr("failed"); }
+void m(QJsonObject &o, Result &r) { o.insert(QStringLiteral("reason"), x); r.insert(QStringLiteral("radio"), true); }
+QJsonObject n() { return QJsonObject{{QStringLiteral("name"), v}, {QStringLiteral("connected"), w}}; }
+Result o() { return {false, {}, tr("failed")}; }
+void p(QStringList &args, QJsonObject &o) { args.append(QStringLiteral("status")); o.insert(k, QStringLiteral("owe")); abandoned(QStringLiteral("failed")); }
+void q(Result &r) { r.insert(QStringLiteral("name"), QStringLiteral("owe")); QString mode = tr("failed"); const auto x = f(QStringLiteral("a")); }
 void l(Bus &bus) { bus.call(a, QStringLiteral("Connect"), QStringLiteral("on")); const bool x = flag == QLatin1String("on"); }
 void h(Bus &bus) { bus.call(a, QStringLiteral("GetDevices"), QStringLiteral("on"), QStringLiteral("ready to go")); } // i18n-ignore: x
 /* a comment: that network is gone */ // and another one: no word is read here

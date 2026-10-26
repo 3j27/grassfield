@@ -187,7 +187,8 @@ namespace gf::ipc {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered,
-                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr);
+                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr,
+                                                appmenuAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace

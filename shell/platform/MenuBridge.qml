@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Grassfield.Ui
 import qs.services // layering-exception: GF-087
 import qs.lib
 import "MenuBridge.js" as Logic
@@ -12,7 +13,9 @@ import "Minimized.js" as Minimized
 // Global menus of applications (T1/T2, master-prompt §5.7, ADR-0008, docs/specs/menu-bridge.md).
 //
 // The plugin announces, per window, the DBusMenu (service, path) its client registered through
-// org_kde_kwin_appmenu, with the client's pid (gfc/1 `appmenu` events). This service keeps that map, connects to
+// org_kde_kwin_appmenu, with the client's pid (gfc/1 `appmenu` events); a Wayland window without one comes with its
+// client's pid only, and the bridge serves it a menu that process registered with com.canonical.AppMenu.Registrar
+// (Electron, ADR-0008 amendment 2026-10-25). This service keeps that map, connects to
 // grassfield-menu-bridge (menu/1 socket), tells it whether the plugin serves appmenu (only then does the bridge own
 // com.canonical.AppMenu.Registrar), asks it to open the focused window's menu and exposes the result to the menu
 // bar. Without a bridge, a plugin or a menu for the window, `menus` stays empty and the bar keeps its T0 menus.
@@ -38,7 +41,8 @@ Singleton {
     property bool registrar: false
     property bool helloSent: false
 
-    // Hyprland window address (lowercase hex) -> {service, path, pid}, from the plugin's appmenu events.
+    // Hyprland window address (lowercase hex) -> {service, path, pid}, from the plugin's appmenu events. An entry with an
+    // empty service is a Wayland window without a set_address menu: {service: "", path: "", pid} (open-registered).
     property var registrations: ({})
     // Windows whose appmenu event was re-requested from the plugin (once each).
     property var queried: ({})
@@ -103,8 +107,58 @@ Singleton {
         send(Logic.itemLine("about-to-show", root.openedWindow, dbusId));
     }
 
-    function activate(dbusId: int): void {
-        send(Logic.itemLine("activate", root.openedWindow, dbusId));
+    // Choosing an item (the caller closed the menu first): its action reaches the application once the item's window has
+    // the keyboard back (macOS sends a menu's action after the menu closed). An Electron click handler runs for its focused
+    // window only (Electron passes BaseWindow.getFocusedWindow() to it), and no window is focused while the popup holds the
+    // keyboard (measured with Obsidian, Electron 43: sent with the popup open, File > New Window did nothing; a fixed
+    // 120 ms wait failed 1 run in 3 in a loaded session). So, when the popup held the keyboard (`keyboardHeld`; a press,
+    // drag and release leaves it with the window), the line waits for the plugin's keyboard-focus event naming that window
+    // (Tokens.focusReturnMenuActionSettleMs more after it, for the application to read its keyboard enter first), and goes
+    // anyway Tokens.focusReturnMenuActionWaitMs after this call when no such event comes (a plugin without the
+    // keyboard-focus feature, or the keyboard went to another window).
+    function activate(dbusId: int, keyboardHeld: bool): void {
+        const line = Logic.itemLine("activate", root.openedWindow, dbusId);
+        if (line === "")
+            return;
+        flushActivation(); // a choice still waiting goes first (one choice closes the menu: not expected)
+        if (!keyboardHeld) {
+            send(line);
+            return;
+        }
+        root.pendingActivation = line;
+        root.pendingActivationWindow = root.openedWindow;
+        activationFallback.restart();
+    }
+
+    // An item's action waiting for its window to get the keyboard back ("" when none), and that window.
+    property string pendingActivation: ""
+    property string pendingActivationWindow: ""
+
+    function flushActivation(): void {
+        activationSettle.stop();
+        activationFallback.stop();
+        const line = root.pendingActivation;
+        root.pendingActivation = "";
+        root.pendingActivationWindow = "";
+        send(line);
+    }
+
+    // The plugin says the keyboard entered `address`: the waiting action of that window goes after the settle time.
+    function keyboardEntered(address: string): void {
+        if (root.pendingActivation !== "" && address === root.pendingActivationWindow && !activationSettle.running)
+            activationSettle.start();
+    }
+
+    Timer {
+        id: activationSettle
+        interval: Tokens.focusReturnMenuActionSettleMs
+        onTriggered: root.flushActivation()
+    }
+
+    Timer {
+        id: activationFallback
+        interval: Tokens.focusReturnMenuActionWaitMs
+        onTriggered: root.flushActivation()
     }
 
     function send(line: string): void {
@@ -131,7 +185,7 @@ Singleton {
         }
         if (wanted === "" || root.openedWindow !== "" || !socket.connected || !root.helloSent)
             return;
-        const line = Logic.openLine(wanted, reg);
+        const line = reg.service === "" ? Logic.openRegisteredLine(wanted, reg.pid) : Logic.openLine(wanted, reg);
         if (line === "")
             return; // e.g. a plugin without the pid field: no T1/T2 menu
         send(line);
@@ -179,11 +233,16 @@ Singleton {
     }
 
     function handlePluginEvent(data: string): void {
+        const entered = Logic.parseKeyboardFocusEvent(data);
+        if (entered !== null) {
+            keyboardEntered(entered);
+            return;
+        }
         const ev = Logic.parseAppmenuEvent(data);
         if (!ev)
             return;
         const next = Object.assign({}, root.registrations);
-        if (ev.service === "")
+        if (ev.service === "" && ev.pid === 0)
             delete next[ev.address];
         else
             next[ev.address] = {service: ev.service, path: ev.path, pid: ev.pid};

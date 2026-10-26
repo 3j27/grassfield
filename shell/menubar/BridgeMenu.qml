@@ -37,9 +37,13 @@ PopupMenu {
 
     onCloseRequested: Popups.close()
     onMenuStepRequested: direction => Popups.stepMenu(direction)
+    // The menu closes first, then the action goes (MenuBridge.activate: once the window has the keyboard back when this
+    // popup held it; a press, drag and release on the bar leaves the keyboard with the window, Popups.pointerHeld).
     onActivated: item => {
-        MenuBridge.activate(item.dbusId);
+        const dbusId = item.dbusId;
+        const keyboardHeld = !Popups.pointerHeld;
         Popups.close();
+        MenuBridge.activate(dbusId, keyboardHeld);
     }
 
     // A first-level submenu opens: tell the application, which may fill or update it (AboutToShow).

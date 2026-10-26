@@ -21,6 +21,16 @@ namespace gf::menubridge {
     // A Grassfield session: GRASSFIELD_SESSION == "1".
     bool sessionRun(const QByteArray& sessionValue);
 
+    // The identity of a pid namespace from the target of a /proc/<pid>/ns/pid link ("pid:[4026531836]"): its inode; 0
+    // when the text is not of that form.
+    quint64 pidNamespaceInode(const QByteArray& linkTarget);
+
+    // A process the bridge may serve a registrar menu for (ADR-0008 amendment 2026-10-25): it is in the bridge's own pid
+    // namespace, the same namespace and not merely one as deep (/proc/<pid>/ns/pid and /proc/self/ns/pid name the same
+    // inode; review of 9ba1d40). A Flatpak app or any other sandbox with its own pid namespace is refused, and so is a
+    // process whose link cannot be read (gone, or not the user's).
+    bool inBridgePidNamespace(qint64 pid);
+
     // True when DBUS_SESSION_BUS_ADDRESS `address` is (or falls back to) the user's default session bus: empty
     // (libdbus then uses $XDG_RUNTIME_DIR/bus), any "unix:" entry with path=/run/user/<uid>/bus or runtime=yes,
     // or an "autolaunch:" entry. A private bus (dbus-run-session, dbus-daemon --address=unix:tmpdir=...) is false.

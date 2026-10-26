@@ -32,6 +32,7 @@ namespace gf::events {
         Overview,        // id 0 (one overview state)
         Stages,          // id 0 (one Stages state)
         OverviewFocus,   // id 0 (the state of the latest overview focus request)
+        KeyboardFocus,   // id 0 (only the window that has the keyboard now matters)
     };
 
     struct Key {

@@ -1,11 +1,14 @@
 #include "Safety.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStringList>
 
+#include <array>
 #include <cerrno>
 #include <cstring>
+#include <limits>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -18,6 +21,34 @@ namespace gf::menubridge {
 
     bool sessionRun(const QByteArray& sessionValue) {
         return sessionValue == "1";
+    }
+
+    quint64 pidNamespaceInode(const QByteArray& linkTarget) {
+        if (!linkTarget.startsWith("pid:[") || !linkTarget.endsWith(']'))
+            return 0;
+        const QByteArray digits = linkTarget.mid(5, linkTarget.size() - 6);
+        if (digits.isEmpty() || digits.size() > 20)
+            return 0;
+        for (const char c : digits) {
+            if (c < '0' || c > '9')
+                return 0;
+        }
+        bool          ok    = false;
+        const quint64 inode = digits.toULongLong(&ok);
+        return ok ? inode : 0;
+    }
+
+    bool inBridgePidNamespace(qint64 pid) {
+        if (pid <= 0 || pid > std::numeric_limits<pid_t>::max())
+            return false;
+        auto inode = [](const QByteArray& path) -> quint64 {
+            std::array<char, 64> buf{};
+            const ssize_t        n = ::readlink(path.constData(), buf.data(), buf.size() - 1);
+            return n > 0 ? pidNamespaceInode(QByteArray(buf.data(), static_cast<qsizetype>(n))) : 0;
+        };
+        const quint64 theirs = inode(QByteArray("/proc/") + QByteArray::number(pid) + "/ns/pid");
+        const quint64 mine   = inode(QByteArrayLiteral("/proc/self/ns/pid"));
+        return theirs != 0 && theirs == mine;
     }
 
     bool isDefaultSessionBus(const QString& address, uint uid) {
