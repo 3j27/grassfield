@@ -12,7 +12,7 @@ vs_sleep 2
 vs_pointer abs 690 634 sleep 300 click
 vs_sleep 1
 vs_capture audit-lock-page
-vs_pointer abs 1230 300 sleep 300 click
+vs_pointer abs 1225 283 sleep 300 click
 vs_sleep 1
 VS_NOPARK=1 vs_capture audit-menu-settings
 vs_reset

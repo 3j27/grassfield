@@ -232,16 +232,6 @@ Window {
             root.select(root.filtered[next].id);
     }
 
-    // When a pointer button last went down anywhere in the window (see the sidebar list's focus ring).
-    property real lastPressMs: 0
-
-    PointHandler {
-        acceptedButtons: Qt.AllButtons
-        grabPermissions: PointerHandler.ApprovesTakeOverByAnything
-        onActiveChanged: if (active)
-            root.lastPressMs = Date.now()
-    }
-
     Item {
         id: sidebar
         width: Tokens.settingsSidebarWidth
@@ -356,9 +346,10 @@ Window {
             Accessible.role: Accessible.List
             Accessible.name: qsTr("Sections")
 
-            // The focus ring is for the keyboard (macOS): a list that took the focus a moment after a pointer press shows none.
+            // The focus ring is for the keyboard (macOS): a click on a row takes the focus without it.
             property bool keyboardRing: false
-            onActiveFocusChanged: keyboardRing = activeFocus && Date.now() - root.lastPressMs > Tokens.settingsFocusPressMs
+            property bool pointerFocus: false
+            onActiveFocusChanged: keyboardRing = activeFocus && !pointerFocus
 
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Up) {
@@ -447,7 +438,10 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
+                        list.pointerFocus = true;
                         list.forceActiveFocus();
+                        list.pointerFocus = false;
+                        list.keyboardRing = false;
                         root.select(entry.modelData.id);
                     }
                 }
