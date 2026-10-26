@@ -193,10 +193,52 @@ TEST(QueryGuard, NoNetworkOrBluetoothCommandIsAQuery)
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("bluetoothctl"), QStringLiteral("devices"), QStringLiteral("Paired")}));
 }
 
+TEST(QueryGuard, TheGeneralPanesReadsAreExact)
+{
+    const QString home = QDir::cleanPath(QDir::homePath());
+    auto du = [](const QStringList &paths) {
+        return QStringList{QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--")} + paths;
+    };
+    // Storage: the installed packages' sizes and the sizes of folders of the home, nothing else.
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Qi")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Qi"), QStringLiteral("hyprland")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Syu")}));
+    EXPECT_TRUE(isReadOnlyQuery(du({home + QStringLiteral("/Documents"), home + QStringLiteral("/.local/share/Trash")})));
+    EXPECT_TRUE(isReadOnlyQuery(du({home})));
+    for (const QString &bad : {QStringLiteral("/etc"), QStringLiteral("/"), home + QStringLiteral("/../root"), home + QStringLiteral("/./x"),
+                               home + QStringLiteral("/a/"), QStringLiteral("Documents"), home + QStringLiteral("/a\nb"), home + QStringLiteral("x")})
+        EXPECT_FALSE(isReadOnlyQuery(du({bad}))) << bad.toStdString();
+    EXPECT_FALSE(isReadOnlyQuery(du({})));
+    QStringList many;
+    for (int i = 0; i < 17; ++i)
+        many << home + QStringLiteral("/f%1").arg(i);
+    EXPECT_FALSE(isReadOnlyQuery(du(many)));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("--"), home}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--exclude=x"), home}));
+    // Language & Region: Omarchy's current language and its list; never a change.
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-language")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("locale")}));
+}
+
+TEST(ActionGuard, OmarchyLanguageTakesOneCodeOnly)
+{
+    const QString lang = QStringLiteral("omarchy-language");
+    for (const char *ok : {"fr", "en", "pt-BR", "zh-CN", "fil"})
+        EXPECT_TRUE(isAllowedAction({lang, QString::fromLatin1(ok)})) << ok;
+    for (const char *no : {"", "FR", "fr\n", "fr; rm -rf ~", "--help", "list", "seed", "locale", "fr-", "f", "francais-de-france"})
+        EXPECT_FALSE(isAllowedAction({lang, QString::fromLatin1(no)})) << no;
+    EXPECT_FALSE(isAllowedAction({lang}));
+    EXPECT_FALSE(isAllowedAction({lang, QStringLiteral("seed"), QStringLiteral("fr")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-language"), QStringLiteral("fr")}));
+}
+
 TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
-    // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell).
-    for (const char *ok : {"wpctl", "xdg-open"})
+    // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell); omarchy-language is
+    // Language & Region's (one code, ActionGuard.OmarchyLanguageTakesOneCodeOnly).
+    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language"})
         EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
     // nmcli and bluetoothctl are gone: Wi-Fi and Bluetooth are D-Bus calls (systembus.h), never commands.
     for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env", "nmcli", "bluetoothctl"})

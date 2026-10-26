@@ -13,6 +13,9 @@ Item {
     width: parent ? parent.width : implicitWidth
     // A hidden Text keeps its implicit height, so only visible captions and footnotes count.
     implicitHeight: column.y + column.height + (footnoteText.visible ? footnoteText.height : 0)
+    // The caption's baseline (macOS 27): 13 below the pane's content top for the first group, 43 below the previous group's end
+    // otherwise (the page's column already puts settingsGroupGap between them); its group starts 13 below it.
+    readonly property real captionBaseline: root.Positioner.index > 0 ? Tokens.settingsCaptionGap - Tokens.settingsGroupGap : Tokens.settingsCaptionFirstBaseline
     implicitWidth: Tokens.settingsContentMaxWidth
     Accessible.role: Accessible.Grouping
     Accessible.name: root.caption
@@ -22,10 +25,8 @@ Item {
         textFormat: Text.PlainText
         visible: root.caption !== ""
         width: parent.width
+        y: root.captionBaseline - baselineOffset
         leftPadding: Tokens.settingsRowInset
-        // The gap below is padding, not a height bound to implicitHeight: that self-reference looped on rewraps
-        // (real session 2026-10-22, "Binding loop detected for property height").
-        bottomPadding: Tokens.spacingSm
         text: root.caption
         color: Appearance.colors.text
         font.family: Appearance.fontFamily
@@ -45,7 +46,8 @@ Item {
 
     Column {
         id: column
-        y: captionText.visible ? captionText.height : 0
+        // settingsCaptionToGroup below the baseline of the caption's last line (a long caption wraps).
+        y: captionText.visible ? Math.round(root.captionBaseline + (captionText.lineCount - 1) * captionText.contentHeight / Math.max(1, captionText.lineCount) + Tokens.settingsCaptionToGroup) : 0
         width: parent.width
     }
 

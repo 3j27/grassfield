@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDir>
 #include <QFileSystemWatcher>
 
 #include <functional>
@@ -35,6 +36,11 @@ class Backend : public QObject
     Q_PROPERTY(QString devRoot READ devRoot CONSTANT)
     Q_PROPERTY(QString wallpaperStatusFile READ wallpaperStatusFile CONSTANT)
     Q_PROPERTY(QString wallpaperRecentFile READ wallpaperRecentFile CONSTANT)
+    // Login Items: the user's autostart folder and the system's (read-only).
+    Q_PROPERTY(QString autostartDir READ autostartDir CONSTANT)
+    Q_PROPERTY(QStringList systemAutostartDirs READ systemAutostartDirs CONSTANT)
+    // Storage: the folders whose size the pane shows lie in the home.
+    Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -52,6 +58,9 @@ public:
     QString devRoot() const { return m_devRoot; }
     QString wallpaperStatusFile() const;
     QString wallpaperRecentFile() const;
+    QString autostartDir() const;
+    QStringList systemAutostartDirs() const;
+    QString homeDir() const { return QDir::cleanPath(QDir::homePath()); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
     Q_INVOKABLE QVariantMap readText(const QString &path) const;
@@ -70,14 +79,25 @@ public:
     Q_INVOKABLE bool act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs = 15000);
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
-    // (read-only, also in a dev session). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
+    // (read-only, also in a dev session); for General "host.state", "time.state", "time.zones", "locale.state" (system bus) and
+    // "user.units" (the session bus: the user's own services). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
     // and the like (systembus.h runAction); in a dev session nothing is sent (one "dev guard: <what> suppressed" line,
     // suppressed(what), false returned); an op that is not well formed is refused (false).
     Q_INVOKABLE void busQuery(const QString &what, const QString &tag);
     Q_INVOKABLE bool busAct(const QString &what, const QVariantMap &op, const QString &tag);
     // The outputs the compositor reports to this client (Qt screens): [{name, model, manufacturer, x, y, width,
-    // height, scale, pixelWidth, pixelHeight, refreshRate, primary}]. Read-only; never talks to Hyprland.
+    // height, scale, pixelWidth, pixelHeight, refreshRate, physicalWidth, physicalHeight (mm), primary}]. Read-only; never
+    // talks to Hyprland.
     Q_INVOKABLE QVariantList screens() const;
+    // Mounted volumes with a real file system (Storage, About): [{root, name, device, type, total, available, free, readOnly,
+    // isRoot, holdsHome}], the start-up volume first. Read-only (QStorageInfo).
+    Q_INVOKABLE QVariantList volumes() const;
+    // Login Items (XDG autostart): the .desktop file names of a folder; the user's folder ($XDG_CONFIG_HOME/autostart) and the
+    // system's ($XDG_CONFIG_DIRS/autostart). Writes go only to the user's folder, one plain <name>.desktop at a time, and in a dev
+    // session only when that folder lies under the worktree's .dev (writeAutostart, removeAutostart: "" or a reason).
+    Q_INVOKABLE QStringList desktopEntries(const QString &dir) const;
+    Q_INVOKABLE QString writeAutostart(const QString &path, const QString &text) const;
+    Q_INVOKABLE QString removeAutostart(const QString &path) const;
     // Emit fileChanged(path) whenever the file is created, replaced, changed or removed.
     Q_INVOKABLE bool watch(const QString &path);
 
@@ -93,7 +113,9 @@ private:
     bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
     void start(const QStringList &argv, const QString &tag, int timeoutMs);
-    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs);
+    void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false);
+    QStringList userUnitDirs() const;
+    bool autostartWriteAllowed(const QString &path) const;
 
     QString m_configFile;
     QString m_bindingsFile;

@@ -17,7 +17,7 @@ bool devSession()
 
 bool isUuid(const QString &s)
 {
-    static const QRegularExpression re(QStringLiteral("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"));
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")));
     return re.match(s).hasMatch();
 }
 
@@ -31,13 +31,45 @@ bool isReadOnlyQuery(const QStringList &argv)
     // session). nmcli and bluetoothctl are therefore neither queries nor actions here.
     if (program == QLatin1String("wpctl"))
         return args == QStringList{"status"};
-    // About pane (Backend::run): package versions and graphics adapters.
+    // About pane (Backend::run): package versions and graphics adapters. Storage pane: the installed packages' sizes (pacman -Qi).
     if (program == QLatin1String("pacman"))
-        return args.size() == 2 && args.at(0) == QLatin1String("-Q")
+        return args == QStringList{QStringLiteral("-Qi")} || args.size() == 2 && args.at(0) == QLatin1String("-Q")
             && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git"));
     if (program == QLatin1String("lspci"))
         return args.isEmpty();
+    // Storage pane: the size of the user's folders.
+    if (program == QLatin1String("du"))
+        return isFolderSizeQuery(args);
+    // Language & Region: Omarchy's language (owner decision 2026-10-26), the current one and the list.
+    if (program == QLatin1String("omarchy-language"))
+        return args.isEmpty() || args == QStringList{QStringLiteral("list")};
     return false;
+}
+
+bool isFolderSizeQuery(const QStringList &args)
+{
+    // du -s -x --block-size=1 -- <1 to 16 folders of the user's home>: sizes only, never across file systems.
+    const QStringList head{QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--")};
+    if (args.size() < head.size() + 1 || args.size() > head.size() + 16 || args.mid(0, head.size()) != head)
+        return false;
+    const QString home = QDir::cleanPath(QDir::homePath());
+    for (const QString &path : args.mid(head.size())) {
+        if (!path.startsWith(QLatin1Char('/')) || path.contains(QLatin1String("/..")) || path.contains(QLatin1String("/./")) || path.size() > 4096)
+            return false;
+        for (const QChar c : path) {
+            if (c.unicode() <= 0x1f || c.unicode() == 0x7f)
+                return false;
+        }
+        if (QDir::cleanPath(path) != path || !(path == home || path.startsWith(home + QLatin1Char('/'))))
+            return false;
+    }
+    return true;
+}
+
+bool isLanguageCode(const QString &code)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[a-z]{2,3}(-[A-Za-z]{2,4})?")));
+    return re.match(code).hasMatch();
 }
 
 namespace {
@@ -132,13 +164,16 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open");
+    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language");
 }
 
 bool isAllowedAction(const QStringList &argv)
 {
     if (argv.isEmpty() || !isActionProgram(argv.first()))
         return false;
+    // Omarchy's own per-user language switch (it generates the locale through Omarchy's sudoers grant or pkexec): one code.
+    if (argv.first() == QLatin1String("omarchy-language"))
+        return argv.size() == 2 && isLanguageCode(argv.at(1));
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

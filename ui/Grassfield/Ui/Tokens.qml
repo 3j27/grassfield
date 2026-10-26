@@ -1190,6 +1190,30 @@ QtObject {
     readonly property real settingsToolbarDividerOpacity: 0.2
     // the hairline between back and forward is 19.5 tall, centred [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
     readonly property int settingsToolbarDividerHeight: 20
+    // About's header (the device picture and its name) above the first group: the macOS 15 capture's 52 to 233 below the toolbar, less the group gap [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutHeaderHeight: 169
+    // the device picture 40 below the header's top (macOS 15 capture: 104 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutPictureTop: 40
+    // the device picture 101 x 61.5 (macOS 15 capture) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutPictureWidth: 101
+    // the device picture 101 x 61.5 (macOS 15 capture) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutPictureHeight: 62
+    // the model name below the picture, bold: its ascenders 20 tall (macOS 15 capture; SF about 27) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutNameSize: 26
+    // the model name's baseline below the header's top (macOS 15 capture: 217.5 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property real settingsAboutNameBaseline: 153.5
+    // estimate: the screen bezel of About's device picture (Grassfield's own drawing; the macOS picture is Apple artwork) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property string settingsDeviceBezel: "#1D1D1F"
+    // estimate: the aluminium of About's device picture (Grassfield's own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property string settingsDeviceBody: "#C9C9CE"
+    // estimate: the shaded edge of the base and the stand of About's device picture [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property string settingsDeviceBodyShade: "#9D9DA3"
+    // a section title at the top of a pane: its baseline 13 below the content top (Desktop & Dock, Sound: 77 for a 64 top) [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsCaptionFirstBaseline: 13
+    // a section title after a group: its baseline 43 below that group's end (Lock Screen, Keyboard, Sound) [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsCaptionGap: 43
+    // a section title's baseline 13 above its group [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsCaptionToGroup: 13
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

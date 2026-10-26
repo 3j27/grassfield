@@ -16,8 +16,40 @@
         <translation>%1 (%2 processeurs logiques)</translation>
     </message>
     <message>
+        <source>%1 GB</source>
+        <translation>%1 Go</translation>
+    </message>
+    <message>
+        <source>%1 × %2</source>
+        <translation>%1 × %2</translation>
+    </message>
+    <message>
+        <source>%1-inch (%2)</source>
+        <translation>%1 pouces (%2)</translation>
+    </message>
+    <message>
         <source>Unknown</source>
         <translation>Inconnu</translation>
+    </message>
+    <message>
+        <source>Computer</source>
+        <translation>Ordinateur</translation>
+    </message>
+    <message>
+        <source>The name could not be changed: %1.</source>
+        <translation>Le nom n’a pas pu être modifié : %1.</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Computer name</source>
+        <translation>Nom de l’ordinateur</translation>
     </message>
     <message>
         <source>Software</source>
@@ -26,6 +58,10 @@
     <message>
         <source>Grassfield</source>
         <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>Version %1</translation>
     </message>
     <message>
         <source>Omarchy</source>
@@ -44,8 +80,20 @@
         <translation>Qt</translation>
     </message>
     <message>
-        <source>Hardware</source>
-        <translation>Matériel</translation>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>Startup Disk</source>
+        <translation>Disque de démarrage</translation>
+    </message>
+    <message>
+        <source>%1 available of %2</source>
+        <translation>%1 disponibles sur %2</translation>
     </message>
     <message>
         <source>Processor</source>
@@ -5594,6 +5642,10 @@
     <message>
         <source>invalid request</source>
         <translation>Demande non valide</translation>
+    </message>
+    <message>
+        <source>that item is not one of your own</source>
+        <translation>cet élément n’est pas l’un des vôtres</translation>
     </message>
     <message>
         <source>no Wi-Fi adapter</source>

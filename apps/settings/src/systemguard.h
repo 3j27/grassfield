@@ -15,8 +15,16 @@ bool devSession();
 // checks that every System.QUERY entry is accepted here). Anything else, also a variation of these, is not a query:
 //   wpctl      1 fixed (status), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
+//   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
+//   omarchy-language and omarchy-language list                       Language & Region (Omarchy's per-user language)
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
+
+// The du arguments of the Storage pane: exactly -s -x --block-size=1 --, then 1 to 16 clean absolute paths inside the home.
+bool isFolderSizeQuery(const QStringList &args);
+
+// A language code of Omarchy's list ("fr", "pt-BR", "zh-CN").
+bool isLanguageCode(const QString &code);
 
 // The wallpaper helper (ADR-0016) as the Settings > Wallpaper page runs it. Only the helper at its exact path (installed
 // /usr/lib/grassfield/grassfield-wallpaper, or the dev build next to the dev binary), only these argument vectors:
@@ -35,12 +43,12 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 // A program that names the helper (its file name), whatever its directory: such a command is judged by isWallpaperQuery only.
 bool namesWallpaperTool(const QString &program);
 
-// Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links). Anything else is refused:
-// Wi-Fi and Bluetooth actions are D-Bus calls (Backend::busAct), never commands.
+// Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
+// & Region). Anything else is refused: Wi-Fi, Bluetooth and the General pane's system changes are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
-// A whole action command line: an allowed program, and for xdg-open exactly one clean https link (xdg-open hands
-// anything else, a local file or a .desktop entry, to whatever handler claims it).
+// A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
+// local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code.
 bool isAllowedAction(const QStringList &argv);
 
 // A NetworkManager connection UUID.

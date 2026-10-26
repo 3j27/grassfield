@@ -20,6 +20,7 @@ using ManagedObjects = QMap<QDBusObjectPath, ConnectionSettings>;
 
 constexpr int kReadMs = 3000;
 constexpr int kActMs = 30000; // a Bluetooth connect or a Wi-Fi association can take a while
+constexpr int kPrivilegedMs = 120000; // the service asks the polkit agent first: the user reads the dialog and types a password
 constexpr int kMaxReason = 160;
 
 const QString kProps = QStringLiteral("org.freedesktop.DBus.Properties");
@@ -36,6 +37,19 @@ const QString kBluez = QStringLiteral("org.bluez");
 const QString kObjectManager = QStringLiteral("org.freedesktop.DBus.ObjectManager");
 const QString kAdapter = QStringLiteral("org.bluez.Adapter1");
 const QString kDevice1 = QStringLiteral("org.bluez.Device1");
+// The General pane's services (ADR-0025).
+const QString kHostService = QStringLiteral("org.freedesktop.hostname1");
+const QString kHostPath = QStringLiteral("/org/freedesktop/hostname1");
+const QString kTimeService = QStringLiteral("org.freedesktop.timedate1");
+const QString kTimePath = QStringLiteral("/org/freedesktop/timedate1");
+const QString kSyncService = QStringLiteral("org.freedesktop.timesync1");
+const QString kSyncPath = QStringLiteral("/org/freedesktop/timesync1");
+const QString kSyncManager = QStringLiteral("org.freedesktop.timesync1.Manager");
+const QString kLocaleService = QStringLiteral("org.freedesktop.locale1");
+const QString kLocalePath = QStringLiteral("/org/freedesktop/locale1");
+const QString kSystemd = QStringLiteral("org.freedesktop.systemd1");
+const QString kSystemdPath = QStringLiteral("/org/freedesktop/systemd1");
+const QString kSystemdManager = QStringLiteral("org.freedesktop.systemd1.Manager");
 
 constexpr uint kDeviceTypeWifi = 2;
 constexpr uint kDeviceStateActivated = 100;
@@ -213,13 +227,13 @@ QString firstAdapterPath(const ManagedObjects &objects)
 
 bool isMac(const QString &s)
 {
-    static const QRegularExpression re(QStringLiteral("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$"));
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}")));
     return re.match(s).hasMatch();
 }
 
 bool isSsidHex(const QString &s)
 {
-    static const QRegularExpression re(QStringLiteral("^([0-9A-Fa-f]{2}){1,32}$"));
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("([0-9A-Fa-f]{2}){1,32}")));
     return re.match(s).hasMatch();
 }
 
@@ -239,6 +253,99 @@ QString setProperty(BusCaller &bus, const QString &service, const QString &path,
     const BusReply r = bus.call(service, path, kProps, QStringLiteral("Set"), {iface, name, QVariant::fromValue(QDBusVariant(value))}, kActMs);
     return r.ok ? QString() : fail(r.error);
 }
+
+// A string a service gave, for showing: control characters dropped, at most 256 characters.
+QString clean(const QVariant &v)
+{
+    QString t = unwrap(v).toString();
+    t.remove(QRegularExpression(QStringLiteral("[\\x00-\\x1f\\x7f]")));
+    return t.left(256);
+}
+
+QStringList strings(const QVariant &v)
+{
+    const QVariant u = unwrap(v);
+    QStringList out;
+    for (const QString &t : cast<QStringList>(u))
+        out << clean(t);
+    return out;
+}
+
+QJsonArray jsonStrings(const QStringList &list)
+{
+    QJsonArray a;
+    for (const QString &t : list)
+        a.append(t);
+    return a;
+}
+
+// systemd's a(ss) of ListUnitFilesByPatterns: (path, state), from the bus (a QDBusArgument) or canned ([[path, state], ...]).
+QList<QPair<QString, QString>> unitFiles(const QVariant &v)
+{
+    QList<QPair<QString, QString>> out;
+    if (v.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        const QDBusArgument arg = qvariant_cast<QDBusArgument>(v);
+        arg.beginArray();
+        while (!arg.atEnd()) {
+            QString path, state;
+            arg.beginStructure();
+            arg >> path >> state;
+            arg.endStructure();
+            out.append({path, state});
+        }
+        arg.endArray();
+        return out;
+    }
+    for (const QVariant &e : v.toList()) {
+        const QVariantList pair = e.toList();
+        if (pair.size() == 2)
+            out.append({pair.at(0).toString(), pair.at(1).toString()});
+    }
+    return out;
+}
+
+// A time zone name as timedate1 takes it: Area/Location (letters, digits, '_', '-', '+'), at most 64 characters.
+bool isZone(const QString &s)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,3}"))); // anchored: "$" alone would let a final newline through
+    return s.size() <= 64 && re.match(s).hasMatch();
+}
+
+// A computer name: 1 to 64 characters, none of them a control character.
+bool isComputerName(const QString &s)
+{
+    static const QRegularExpression control(QStringLiteral("[\\x00-\\x1f\\x7f]"));
+    return !s.trimmed().isEmpty() && s.size() <= 64 && !control.match(s).hasMatch();
+}
+
+// Microseconds since the epoch, as a decimal string, between 2000-01-01 and 2200-01-01.
+bool isUsec(const QVariant &v, qint64 *out)
+{
+    const QString t = v.toString();
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[0-9]{15,17}")));
+    if (v.metaType() != QMetaType::fromType<QString>() || !re.match(t).hasMatch())
+        return false;
+    bool ok = false;
+    const qint64 value = t.toLongLong(&ok);
+    if (!ok || value < 946684800000000LL || value > 7258118400000000LL)
+        return false;
+    if (out)
+        *out = value;
+    return true;
+}
+
+// A user service's unit name: letters, digits, ':', '_', '.', '@', '-', ending in ".service"; at most 200 characters.
+bool isUserUnit(const QString &s)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9:_.@-]+\\.service")));
+    return s.size() <= 200 && re.match(s).hasMatch();
+}
+
+QString privileged(BusCaller &bus, const QString &service, const QString &path, const QString &member, const QVariantList &args)
+{
+    const BusReply r = bus.call(service, path, service, member, args, kPrivilegedMs);
+    return r.ok ? QString() : fail(r.error);
+}
 } // namespace
 
 void registerBusTypes()
@@ -254,6 +361,15 @@ void registerBusTypes()
 bool isReadOnlyCall(const QString &service, const QString &iface, const QString &member, const QVariantList &args)
 {
     Q_UNUSED(args)
+    // The General pane's services: their properties, the list of time zones and the user's unit files.
+    if (service == kHostService || service == kTimeService || service == kSyncService || service == kLocaleService) {
+        if (iface == kProps)
+            return member == QLatin1String("Get") || member == QLatin1String("GetAll");
+        return service == kTimeService && iface == kTimeService && member == QLatin1String("ListTimezones");
+    }
+    if (service == kSystemd)
+        return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
+            || (iface == kSystemdManager && member == QLatin1String("ListUnitFilesByPatterns"));
     if (service != kNmService && service != kBluez)
         return false;
     if (iface == kProps)
@@ -369,9 +485,151 @@ StateResult bluetoothState(BusCaller &bus)
     return r;
 }
 
+StateResult hostState(BusCaller &bus)
+{
+    StateResult r;
+    const Props p = allProperties(bus, kHostService, kHostPath, kHostService);
+    if (!p.ok) {
+        r.error = reasonOf(p.error);
+        return r;
+    }
+    r.json = QJsonObject{{QStringLiteral("pretty"), clean(p.map.value(QStringLiteral("PrettyHostname")))},
+                         {QStringLiteral("static"), clean(p.map.value(QStringLiteral("StaticHostname")))},
+                         {QStringLiteral("hostname"), clean(p.map.value(QStringLiteral("Hostname")))},
+                         {QStringLiteral("chassis"), clean(p.map.value(QStringLiteral("Chassis")))},
+                         {QStringLiteral("vendor"), clean(p.map.value(QStringLiteral("HardwareVendor")))},
+                         {QStringLiteral("model"), clean(p.map.value(QStringLiteral("HardwareModel")))}};
+    r.ok = true;
+    return r;
+}
+
+StateResult timeState(BusCaller &bus)
+{
+    StateResult r;
+    const Props p = allProperties(bus, kTimeService, kTimePath, kTimeService);
+    if (!p.ok) {
+        r.error = reasonOf(p.error);
+        return r;
+    }
+    QJsonObject out{{QStringLiteral("zone"), clean(p.map.value(QStringLiteral("Timezone")))},
+                    {QStringLiteral("ntp"), unwrap(p.map.value(QStringLiteral("NTP"))).toBool()},
+                    {QStringLiteral("canNtp"), unwrap(p.map.value(QStringLiteral("CanNTP"))).toBool()},
+                    {QStringLiteral("synced"), unwrap(p.map.value(QStringLiteral("NTPSynchronized"))).toBool()},
+                    {QStringLiteral("localRtc"), unwrap(p.map.value(QStringLiteral("LocalRTC"))).toBool()},
+                    {QStringLiteral("usec"), QString::number(unwrap(p.map.value(QStringLiteral("TimeUSec"))).toULongLong())}};
+    // The time servers, when timesyncd runs (its absence is no error: the source then reads as unknown).
+    const Props sync = allProperties(bus, kSyncService, kSyncPath, kSyncManager);
+    QStringList servers;
+    if (sync.ok) {
+        for (const char *key : {"LinkNTPServers", "SystemNTPServers", "FallbackNTPServers"}) {
+            for (const QString &server : strings(sync.map.value(QLatin1String(key)))) {
+                if (!server.isEmpty() && !servers.contains(server))
+                    servers << server;
+            }
+        }
+    }
+    out.insert(QStringLiteral("server"), sync.ok ? clean(sync.map.value(QStringLiteral("ServerName"))) : QString());
+    out.insert(QStringLiteral("servers"), jsonStrings(servers));
+    r.json = out;
+    r.ok = true;
+    return r;
+}
+
+StateResult timeZones(BusCaller &bus)
+{
+    StateResult r;
+    const BusReply reply = bus.call(kTimeService, kTimePath, kTimeService, QStringLiteral("ListTimezones"), {}, kReadMs);
+    if (!reply.ok || reply.args.isEmpty()) {
+        r.error = reasonOf(reply.ok ? QCoreApplication::translate("SystemBus", "empty reply") : reply.error);
+        return r;
+    }
+    QStringList zones;
+    for (const QString &z : strings(reply.args.first())) {
+        if (isZone(z))
+            zones << z;
+    }
+    r.json = QJsonObject{{QStringLiteral("zones"), jsonStrings(zones)}};
+    r.ok = true;
+    return r;
+}
+
+StateResult localeState(BusCaller &bus)
+{
+    StateResult r;
+    const Result locale = property(bus, kLocaleService, kLocalePath, kLocaleService, QStringLiteral("Locale"));
+    if (!locale.ok) {
+        r.error = reasonOf(locale.error);
+        return r;
+    }
+    r.json = QJsonObject{{QStringLiteral("locale"), jsonStrings(strings(locale.value))}};
+    r.ok = true;
+    return r;
+}
+
+StateResult userUnits(BusCaller &bus, const QStringList &ownDirs)
+{
+    StateResult r;
+    const BusReply reply = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("ListUnitFilesByPatterns"),
+                                    {QStringList{QStringLiteral("enabled"), QStringLiteral("disabled")}, QStringList{QStringLiteral("*.service")}}, kReadMs);
+    if (!reply.ok || reply.args.isEmpty()) {
+        r.error = reasonOf(reply.ok ? QCoreApplication::translate("SystemBus", "empty reply") : reply.error);
+        return r;
+    }
+    QJsonArray units;
+    for (const auto &[path, state] : unitFiles(reply.args.first())) {
+        bool own = false;
+        for (const QString &dir : ownDirs)
+            own = own || (!dir.isEmpty() && path.startsWith(dir + QLatin1Char('/')) && !path.mid(dir.size() + 1).contains(QLatin1Char('/')));
+        const QString unit = path.section(QLatin1Char('/'), -1);
+        if (own && isUserUnit(unit))
+            units.append(QJsonObject{{QStringLiteral("unit"), unit}, {QStringLiteral("path"), path}, {QStringLiteral("state"), state}});
+    }
+    r.json = QJsonObject{{QStringLiteral("units"), units}};
+    r.ok = true;
+    return r;
+}
+
+QString hostNameFor(const QString &name)
+{
+    QString out;
+    for (const QChar c : name.toLower()) {
+        if ((c >= QLatin1Char('a') && c <= QLatin1Char('z')) || (c >= QLatin1Char('0') && c <= QLatin1Char('9')))
+            out += c;
+        else if (!out.isEmpty() && !out.endsWith(QLatin1Char('-')))
+            out += QLatin1Char('-');
+    }
+    while (out.endsWith(QLatin1Char('-')))
+        out.chop(1);
+    out = out.left(63);
+    while (out.endsWith(QLatin1Char('-')))
+        out.chop(1);
+    return out;
+}
+
+bool sessionAction(const QVariantMap &op)
+{
+    return op.value(QStringLiteral("op")).toString().startsWith(QLatin1String("user."));
+}
+
+bool privilegedAction(const QVariantMap &op)
+{
+    const QString name = op.value(QStringLiteral("op")).toString();
+    return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time."));
+}
+
 bool validAction(const QVariantMap &op)
 {
     const QString name = op.value(QStringLiteral("op")).toString();
+    if (name == QLatin1String("host.setName"))
+        return op.value(QStringLiteral("name")).metaType() == QMetaType::fromType<QString>() && isComputerName(op.value(QStringLiteral("name")).toString());
+    if (name == QLatin1String("time.ntp"))
+        return isBool(op.value(QStringLiteral("on")));
+    if (name == QLatin1String("time.zone"))
+        return op.value(QStringLiteral("zone")).metaType() == QMetaType::fromType<QString>() && isZone(op.value(QStringLiteral("zone")).toString());
+    if (name == QLatin1String("time.set"))
+        return isUsec(op.value(QStringLiteral("usec")), nullptr);
+    if (name == QLatin1String("user.enable"))
+        return isUserUnit(op.value(QStringLiteral("unit")).toString()) && isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("wifi.radio") || name == QLatin1String("bt.power"))
         return isBool(op.value(QStringLiteral("on")));
     if (name == QLatin1String("wifi.connectKnown"))
@@ -385,11 +643,49 @@ bool validAction(const QVariantMap &op)
     return false;
 }
 
-QString runAction(BusCaller &bus, const QVariantMap &op)
+QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs)
 {
     if (!validAction(op))
         return QCoreApplication::translate("SystemBus", "invalid request");
     const QString name = op.value(QStringLiteral("op")).toString();
+
+    // General (ADR-0025): the service asks the polkit agent (interactive = true) and answers once the user did.
+    if (name == QLatin1String("host.setName")) {
+        const QString pretty = op.value(QStringLiteral("name")).toString().trimmed();
+        const QString error = privileged(bus, kHostService, kHostPath, QStringLiteral("SetPrettyHostname"), {pretty, true});
+        if (!error.isEmpty())
+            return error;
+        const QString host = hostNameFor(pretty);
+        return host.isEmpty() ? QString() : privileged(bus, kHostService, kHostPath, QStringLiteral("SetStaticHostname"), {host, true}); // i18n-ignore: a D-Bus method name
+    }
+    if (name == QLatin1String("time.ntp"))
+        return privileged(bus, kTimeService, kTimePath, QStringLiteral("SetNTP"), {op.value(QStringLiteral("on")).toBool(), true});
+    if (name == QLatin1String("time.zone"))
+        return privileged(bus, kTimeService, kTimePath, QStringLiteral("SetTimezone"), {op.value(QStringLiteral("zone")).toString(), true});
+    if (name == QLatin1String("time.set")) {
+        qint64 usec = 0;
+        isUsec(op.value(QStringLiteral("usec")), &usec);
+        return privileged(bus, kTimeService, kTimePath, QStringLiteral("SetTime"), {QVariant::fromValue(usec), false, true});
+    }
+    if (name == QLatin1String("user.enable")) {
+        // Only one of the user's own services (userUnits): never a unit a package or the system ships.
+        const QString unit = op.value(QStringLiteral("unit")).toString();
+        const StateResult own = userUnits(bus, ownDirs);
+        if (!own.ok)
+            return own.error;
+        bool listed = false;
+        for (const QJsonValue &u : own.json.value(QStringLiteral("units")).toArray())
+            listed = listed || u.toObject().value(QStringLiteral("unit")).toString() == unit;
+        if (!listed)
+            return QCoreApplication::translate("SystemBus", "that item is not one of your own");
+        const bool on = op.value(QStringLiteral("on")).toBool();
+        const BusReply r = on ? bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("EnableUnitFiles"), {QStringList{unit}, false, false}, kActMs)
+                              : bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("DisableUnitFiles"), {QStringList{unit}, false}, kActMs);
+        if (!r.ok)
+            return fail(r.error);
+        const BusReply reload = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("Reload"), {}, kActMs);
+        return reload.ok ? QString() : fail(reload.error);
+    }
     if (name == QLatin1String("wifi.radio"))
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());
 

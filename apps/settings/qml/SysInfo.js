@@ -43,7 +43,7 @@ function gpus(text) {
     for (const line of String(text).split("\n")) {
         const m = /^\S+\s+(?:VGA compatible controller|3D controller|Display controller)[^:]*:\s*(.+)$/.exec(line);
         if (m)
-            out.push(m[1].replace(/\s*\(rev [0-9a-f]+\)\s*$/, "").trim());
+            out.push(gpuName(m[1].replace(/\s*\(rev [0-9a-f]+\)\s*$/, "").trim()));
     }
     return out.join("; ");
 }
@@ -52,4 +52,44 @@ function gpus(text) {
 function pacmanVersion(text) {
     const parts = String(text).trim().split(/\s+/);
     return parts.length === 2 ? parts[1] : "";
+}
+
+// A graphics adapter's marketing name from an lspci description: the vendor's short name, then the name in the last brackets
+// when there is one ("Intel Corporation Raptor Lake-P [Iris Xe Graphics]" -> "Intel Iris Xe Graphics", "NVIDIA Corporation AD107M
+// [GeForce RTX 4060 Max-Q / Mobile]" -> "NVIDIA GeForce RTX 4060 Max-Q / Mobile"); the description itself otherwise.
+var GPU_VENDORS = [
+    ["Advanced Micro Devices, Inc. [AMD/ATI]", "AMD"], ["Advanced Micro Devices, Inc.", "AMD"], ["Intel Corporation", "Intel"],
+    ["NVIDIA Corporation", "NVIDIA"], ["Red Hat, Inc.", "Red Hat"], ["VMware", "VMware"]
+];
+
+function gpuName(description) {
+    let rest = String(description).trim();
+    let vendor = "";
+    for (const pair of GPU_VENDORS) {
+        if (rest.indexOf(pair[0]) === 0) {
+            vendor = pair[1];
+            rest = rest.slice(pair[0].length).trim();
+            break;
+        }
+    }
+    const m = /\[([^\]]+)\]\s*$/.exec(rest);
+    const model = m ? m[1].trim() : rest;
+    if (vendor === "")
+        return model;
+    return model.indexOf(vendor) === 0 ? model : vendor + " " + model;
+}
+
+// The installed memory as a computer is sold with it, from MemTotal (which leaves out what the firmware keeps): the nearest
+// usual size at or above it, in GiB (31.0 -> 32, 15.4 -> 16, 7.6 -> 8, 11.6 -> 12).
+var MEMORY_SIZES = [1, 2, 3, 4, 6, 8, 12, 16, 18, 24, 32, 36, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048];
+
+function installedGiB(bytes) {
+    const gib = Number(bytes) / 1073741824;
+    if (!(gib > 0))
+        return 0;
+    for (const size of MEMORY_SIZES) {
+        if (gib <= size)
+            return size;
+    }
+    return Math.ceil(gib);
 }

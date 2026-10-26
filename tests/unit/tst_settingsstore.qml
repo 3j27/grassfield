@@ -414,8 +414,20 @@ TestCase {
         compare(Qt.locale("fr_FR").formattedDataSize(SysInfo.memoryBytes("MemTotal: 32555000 kB\n"), 1, Locale.DataSizeIecFormat), "31,0 Gio");
         compare(Qt.locale("en_US").formattedDataSize(SysInfo.memoryBytes("MemTotal: 32555000 kB\n"), 1, Locale.DataSizeIecFormat), "31.0 GiB");
         const pci = "00:02.0 VGA compatible controller: Intel Corporation Iris Xe (rev 0c)\n00:1f.3 Audio device: Intel Audio\n01:00.0 3D controller: NVIDIA Corp GA107\n";
-        compare(SysInfo.gpus(pci), "Intel Corporation Iris Xe; NVIDIA Corp GA107");
+        compare(SysInfo.gpus(pci), "Intel Iris Xe; NVIDIA Corp GA107");
         compare(SysInfo.gpus(""), "");
+        // The marketing name: the vendor's short name, then the last brackets.
+        compare(SysInfo.gpuName("Intel Corporation Raptor Lake-P [Iris Xe Graphics]"), "Intel Iris Xe Graphics");
+        compare(SysInfo.gpuName("NVIDIA Corporation AD107M [GeForce RTX 4060 Max-Q / Mobile]"), "NVIDIA GeForce RTX 4060 Max-Q / Mobile");
+        compare(SysInfo.gpuName("Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1"), "AMD Phoenix1");
+        compare(SysInfo.gpuName("Advanced Micro Devices, Inc. [AMD/ATI] Navi 33 [Radeon RX 7600]"), "AMD Radeon RX 7600");
+        compare(SysInfo.gpuName("Some Vendor Chip"), "Some Vendor Chip");
+        // The installed memory, as sold, from MemTotal.
+        compare(SysInfo.installedGiB(SysInfo.memoryBytes("MemTotal: 32555000 kB\n")), 32);
+        compare(SysInfo.installedGiB(15.4 * 1073741824), 16);
+        compare(SysInfo.installedGiB(11.6 * 1073741824), 12);
+        compare(SysInfo.installedGiB(7.6 * 1073741824), 8);
+        compare(SysInfo.installedGiB(0), 0);
         compare(SysInfo.pacmanVersion("hyprland 0.56.2-1\n"), "0.56.2-1");
         compare(SysInfo.pacmanVersion(""), "");
     }

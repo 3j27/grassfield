@@ -734,6 +734,7 @@ Window {
         id: aboutPage
         AboutPage {
             backend: root.backend
+            system: sys
         }
     }
 

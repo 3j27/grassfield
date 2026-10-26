@@ -1,5 +1,7 @@
 #include "backend.h"
 
+#include <algorithm>
+
 #include "runmode.h"
 
 #include <QCoreApplication>
@@ -14,6 +16,7 @@
 #include <QSaveFile>
 #include <QScreen>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QTimer>
 
 #include "busjobs.h"
@@ -31,6 +34,7 @@ constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
+constexpr int kPrivilegedJobMs = 250000; // two calls that each wait for the polkit dialog (kPrivilegedMs, 120 s), ADR-0025
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -119,6 +123,9 @@ QString Backend::wallpaperRecentFile() const
 struct Backend::Bus {
     grassfield::settings::SystemBusConnection connection;
     grassfield::settings::BusJobs jobs{[this] { return connection.caller(); }};
+    // The session bus: the user's own service manager (Login Items).
+    grassfield::settings::SystemBusConnection sessionConnection{QDBusConnection::SessionBus, QStringLiteral("gf-settings-session-bus")}; // i18n-ignore: a connection name
+    grassfield::settings::BusJobs sessionJobs{[this] { return sessionConnection.caller(); }};
 };
 
 Backend::~Backend()
@@ -202,10 +209,10 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
 // One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
 // nothing a job holds outlives the Backend: busjobs.h). `job` returns "" on success, else the reason; its second argument
 // receives the output (JSON) of a query.
-void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs)
+void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session)
 {
     const bool dev = m_dev;
-    m_bus->jobs.start(
+    (session ? m_bus->sessionJobs : m_bus->jobs).start(
         [dev, job = std::move(job)](grassfield::settings::BusCaller &real, QString *output) {
             grassfield::settings::GuardedCaller guarded(real, dev);
             return job(guarded, output);
@@ -224,19 +231,35 @@ void Backend::runBus(const QString &tag, std::function<QString(grassfield::setti
 void Backend::busQuery(const QString &what, const QString &tag)
 {
     using namespace grassfield::settings;
-    if (what != QLatin1String("wifi.state") && what != QLatin1String("bt.state")) {
+    static const QStringList known{QStringLiteral("wifi.state"), QStringLiteral("bt.state"), QStringLiteral("host.state"), QStringLiteral("time.state"),
+                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units")};
+    if (!known.contains(what)) {
         qWarning().noquote() << "refused a bus query that is not known:" << what;
         emit finished(tag, false, QString());
         return;
     }
-    const bool wifi = what == QLatin1String("wifi.state");
-    runBus(tag, [wifi](BusCaller &bus, QString *output) {
-        const StateResult r = wifi ? wifiState(bus) : bluetoothState(bus);
+    const QStringList own = userUnitDirs();
+    runBus(tag, [what, own](BusCaller &bus, QString *output) {
+        const StateResult r = what == QLatin1String("wifi.state") ? wifiState(bus)
+            : what == QLatin1String("bt.state")                  ? bluetoothState(bus)
+            : what == QLatin1String("host.state")                ? hostState(bus)
+            : what == QLatin1String("time.state")                ? timeState(bus)
+            : what == QLatin1String("time.zones")                ? timeZones(bus)
+            : what == QLatin1String("locale.state")              ? localeState(bus)
+                                                                 : userUnits(bus, own);
         if (!r.ok)
             return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
         *output = QString::fromUtf8(QJsonDocument(r.json).toJson(QJsonDocument::Compact));
         return QString();
-    }, kQueryJobMs);
+    }, kQueryJobMs, what == QLatin1String("user.units"));
+}
+
+QStringList Backend::userUnitDirs() const
+{
+    // The user's own unit directories (systemd.unit(5), the user manager's search path): config, then data.
+    const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");
+    const QString data = qEnvironmentVariableIsSet("XDG_DATA_HOME") ? qEnvironmentVariable("XDG_DATA_HOME") : QDir::homePath() + QStringLiteral("/.local/share");
+    return {QDir::cleanPath(config + QStringLiteral("/systemd/user")), QDir::cleanPath(data + QStringLiteral("/systemd/user"))};
 }
 
 bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &tag)
@@ -251,7 +274,8 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
         qWarning().noquote() << "refused a bus action that is not well formed:" << what;
         return false;
     }
-    runBus(tag, [op](BusCaller &bus, QString *) { return runAction(bus, op); }, kActionJobMs);
+    const QStringList own = userUnitDirs();
+    runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, privilegedAction(op) ? kPrivilegedJobMs : kActionJobMs, sessionAction(op));
     return true;
 }
 
@@ -274,9 +298,113 @@ QVariantList Backend::screens() const
                                {"pixelWidth", qRound(g.width() * dpr)},
                                {"pixelHeight", qRound(g.height() * dpr)},
                                {"refreshRate", s->refreshRate()},
+                               // The panel's size in millimetres as the output reports it (About: the diagonal in inches).
+                               {"physicalWidth", s->physicalSize().width()},
+                               {"physicalHeight", s->physicalSize().height()},
                                {"primary", s == primary}});
     }
     return out;
+}
+
+QVariantList Backend::volumes() const
+{
+    // Real file systems only (no tmpfs, proc, overlay or the like): the start-up volume first, then the others by mount point.
+    static const QStringList virtualTypes{QStringLiteral("tmpfs"), QStringLiteral("devtmpfs"), QStringLiteral("proc"), QStringLiteral("sysfs"),
+                                          QStringLiteral("overlay"), QStringLiteral("squashfs"), QStringLiteral("efivarfs"), QStringLiteral("ramfs"),
+                                          QStringLiteral("autofs"), QStringLiteral("fuse.portal"), QStringLiteral("cgroup2"), QStringLiteral("debugfs")};
+    QVariantList out;
+    QStringList seen;
+    const QString home = QDir::homePath();
+    auto entry = [&home](const QStorageInfo &v) {
+        return QVariantMap{{"root", v.rootPath()},
+                           {"name", v.name()},
+                           {"device", QString::fromUtf8(v.device())},
+                           {"type", QString::fromUtf8(v.fileSystemType())},
+                           {"total", double(v.bytesTotal())},
+                           {"available", double(v.bytesAvailable())},
+                           {"free", double(v.bytesFree())},
+                           {"readOnly", v.isReadOnly()},
+                           {"isRoot", v.isRoot()},
+                           {"holdsHome", QStorageInfo(home).rootPath() == v.rootPath()}};
+    };
+    const QStorageInfo root = QStorageInfo::root();
+    if (root.isValid() && root.isReady()) {
+        out.append(entry(root));
+        seen << QString::fromUtf8(root.device());
+    }
+    QList<QStorageInfo> others = QStorageInfo::mountedVolumes();
+    std::sort(others.begin(), others.end(), [](const QStorageInfo &a, const QStorageInfo &b) { return a.rootPath() < b.rootPath(); });
+    for (const QStorageInfo &v : others) {
+        const QString device = QString::fromUtf8(v.device());
+        if (!v.isValid() || !v.isReady() || v.bytesTotal() <= 0 || virtualTypes.contains(QString::fromUtf8(v.fileSystemType())) || seen.contains(device)
+            || v.rootPath().startsWith(QLatin1String("/boot")))
+            continue;
+        seen << device; // a btrfs subvolume mounted twice is one volume
+        out.append(entry(v));
+    }
+    return out;
+}
+
+QString Backend::autostartDir() const
+{
+    const QString config = qEnvironmentVariableIsSet("XDG_CONFIG_HOME") ? qEnvironmentVariable("XDG_CONFIG_HOME") : QDir::homePath() + QStringLiteral("/.config");
+    return QDir::cleanPath(config + QStringLiteral("/autostart"));
+}
+
+QStringList Backend::systemAutostartDirs() const
+{
+    // $XDG_CONFIG_DIRS (default /etc/xdg), each with autostart/ (the XDG Autostart specification).
+    const QString dirs = qEnvironmentVariableIsSet("XDG_CONFIG_DIRS") ? qEnvironmentVariable("XDG_CONFIG_DIRS") : QStringLiteral("/etc/xdg");
+    QStringList out;
+    for (const QString &d : dirs.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+        if (d.startsWith(QLatin1Char('/')))
+            out << QDir::cleanPath(d + QStringLiteral("/autostart"));
+    }
+    return out;
+}
+
+QStringList Backend::desktopEntries(const QString &dir) const
+{
+    // The .desktop files of one folder (no recursion, regular files only), sorted.
+    QDir d(dir);
+    if (!dir.startsWith(QLatin1Char('/')) || !d.exists())
+        return {};
+    return d.entryList({QStringLiteral("*.desktop")}, QDir::Files | QDir::Readable, QDir::Name);
+}
+
+bool Backend::autostartWriteAllowed(const QString &path) const
+{
+    // Only <autostartDir>/<name>.desktop, a plain name; in a dev session the folder must lie under <worktree>/.dev (the
+    // isolated XDG_CONFIG_HOME of isolated.sh), never the owner's ~/.config/autostart.
+    static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9._+-]{1,200}\\.desktop")));
+    const QString dir = autostartDir();
+    if (QFileInfo(path).path() != dir || !name.match(QFileInfo(path).fileName()).hasMatch())
+        return false;
+    if (!m_dev)
+        return true;
+    const QString dev = QFileInfo(m_devRoot + QStringLiteral("/.dev")).canonicalFilePath();
+    QString probe = dir;
+    while (!QFileInfo::exists(probe) && probe.contains(QLatin1Char('/')))
+        probe = probe.left(probe.lastIndexOf(QLatin1Char('/')));
+    const QString real = QFileInfo(probe).canonicalFilePath();
+    return !m_devRoot.isEmpty() && !dev.isEmpty() && !real.isEmpty() && (real == dev || real.startsWith(dev + QLatin1Char('/')));
+}
+
+QString Backend::writeAutostart(const QString &path, const QString &text) const
+{
+    if (!autostartWriteAllowed(path))
+        return QStringLiteral("refused"); // i18n-ignore: a reason the page maps to its own sentence
+    return writeText(path, text);
+}
+
+QString Backend::removeAutostart(const QString &path) const
+{
+    if (!autostartWriteAllowed(path))
+        return QStringLiteral("refused"); // i18n-ignore: a reason the page maps to its own sentence
+    QFile f(path);
+    if (!f.exists())
+        return QString();
+    return f.remove() ? QString() : f.errorString();
 }
 
 QString Backend::qtVersion() const
