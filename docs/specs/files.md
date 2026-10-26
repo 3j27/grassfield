@@ -20,7 +20,8 @@
 - Colour tags: the item menu ends with a row of seven colour dots; clicking one tags the selection (or removes the tag
   when every item has it). Tagged items show small coloured dots next to their names in every view; the sidebar's
   Tags section lists the tags in use, and clicking one shows the tagged items.
-- Tabs appear only from the second tab (Cmd+T). Get Info opens a small separate window per item. Space opens
+- Tabs appear from the second tab (Cmd+T), or always with View > Show Tab Bar (Shift+Cmd+T); a tab drags to reorder,
+  onto another window or out to become a window (section "Tabs and windows"). Get Info opens a small separate window per item. Space opens
   Glance. Type-to-select jumps to the first matching name. Drag and drop moves on the same volume and copies
   across volumes.
 
@@ -44,9 +45,12 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 3. F3 Selection: click, Shift (range), Ctrl (toggle), Ctrl+A, rubber band (icon view), keyboard arrows, Home/End,
    PageUp/PageDown, type-to-select (1 s reset). The selection is keyed by URL and survives re-sorting.
 4. F4 Views: Icon (thumbnails), List (sortable headers), Columns (miller columns + preview column), Gallery (F15);
-   Ctrl+1/2/3/4, View As (item and background menus), the global View menu and the toolbar switcher; the view, sort,
-   hidden-files and gallery info panel choices persist (QSettings `Grassfield/Files`; view settings are global, there
-   is no per-folder view memory). Tag search results (F16) in the column mode show as a list.
+   Ctrl+1/2/3/4, View As (item and background menus), the global View menu and the toolbar switcher. The view and the
+   sort chosen in a folder are that folder's (decision F-3, `files-views.json`): a folder opens in its own view, a folder
+   without one in the view the tab already shows (a new tab: the default `view/mode`), and column view sticks while
+   browsing; its own sort key and order, else the default `view/sortKey`/`view/sortDescending`. Keep Folders on Top,
+   Show Hidden Files and the gallery info panel stay global (QSettings `Grassfield/Files`). Tag search results (F16) in
+   the column mode show as a list.
 5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists; Tags
    (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
@@ -71,7 +75,8 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    Sort By) open to the left of the menu, or move up, when they would leave the window (`PopupMenu.bounds`).
 9. F9 Get Info window: icon/thumbnail, name, kind, size (folders: `KIO::directorySize`), where, created, modified,
    opened, link target, owner, group, permissions, access (read only).
-10. F10 Window: tabs (Ctrl+T, Ctrl+W, Ctrl+Tab, middle click), new window (Ctrl+N), back/forward (Ctrl+[ / ],
+10. F10 Window: tabs (section "Tabs and windows": Ctrl+T, Ctrl+W, Ctrl+Shift+W, Ctrl+Alt+W, Ctrl+Tab, Ctrl+Shift+[ ],
+    Ctrl+Shift+T, Ctrl+Alt+Shift+T, middle click, drag), new window (Ctrl+N), back/forward (Ctrl+[ / ],
     Alt+Left/Right), enclosing folder (Ctrl+Up), open (Return, Ctrl+Down), Go to Folder (Ctrl+Shift+G / Ctrl+L:
     `~`, paths, `trash:/`), Home (Ctrl+Shift+H), reload (Ctrl+R/F5), hidden files (Ctrl+H), search (Ctrl+F),
     context menu (Menu, Shift+F10). Path bar (clickable, drop targets) and status bar ("N items, X available",
@@ -186,7 +191,12 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 ## Interfaces / contracts
 - `grassfield.json` version 1 (read only): `appearance`, `accessibility.reduceMotion`; location like the shell
   (`GRASSFIELD_CONFIG_HOME` → `$XDG_CONFIG_HOME/grassfield` → `~/.config/grassfield`).
-- QSettings `~/.config/Grassfield/Files.conf`: `view/mode` (icons|list|columns|gallery, anything else reads as icons),
+- `files-views.json` in the Grassfield state directory (`GRASSFIELD_STATE_HOME`, else `$XDG_STATE_HOME/grassfield`), 0600,
+  written atomically: `{"version":1,"folders":[{"url":…,"mode":…,"sortKey":0-3,"descending":bool}, …]}`, the folders in the
+  order they were last set (at most 2000; the first goes when full); a missing version reads as 1; an unreadable file, a
+  file over 2 MiB or a newer version is left as it is and nothing is remembered for the session (`folderviews.h`).
+- QSettings `~/.config/Grassfield/Files.conf`: `view/tabBar` (Show Tab Bar), `window/width` and `window/height` (the
+  last browser window's normal size, 200-16384, ADR-0025 part 1), `view/mode` (the default view: icons|list|columns|gallery, anything else reads as icons),
   `view/sortKey` (0 name, 1 kind, 2 date, 3 size), `view/sortDescending`, `view/foldersFirst`, `view/showHidden`,
   `view/galleryInfo` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64),
   `tags/hidden` (tags removed from the sidebar, at most 256).
@@ -285,8 +295,14 @@ installed (not built here).
 - The global menu has no Help menu (there is no help content) and no Window menu of its own: tab switching is under
   View, the window actions are the shell's T0 Window menu. Info windows export no menu (the bar shows T0 there).
 - Return opens (as specified), unlike macOS where Return renames; F2 renames.
-- View settings are global, not per folder; window size/position are not remembered; a new window opens exactly over
-  the previous one (the compositor centres floating windows).
+- Window position: a Wayland client cannot place its window, so a new window (New Window, a dragged-out tab) opens
+  where the compositor puts it, today exactly over the previous one (centred); the size is remembered. Position memory and
+  cascading belong to the compositor's placement rules (ADR-0025 part 2, not done: it needs the nested session).
+- View Options (Cmd+J) do not exist yet: the default view and sort of folders without their own are the last values of
+  `view/mode`, `view/sortKey`, `view/sortDescending` (PR 2 adds "Use as Defaults").
+- A tab dragged out and dropped while the pointer is outside every Files window becomes a window, also when the drag was
+  cancelled there with Esc (the platform reports a cancel and a drop nobody took the same way).
+- Reopen Closed Tab remembers the tabs closed in this session only (not across launches), at most 10.
 - Rubber band selection only in the icon view; no spring-loaded folders; no link-on-drop.
 - The path bar shows home-relative paths inside home, otherwise from `/` ("Computer"); long paths are clipped on the left.
 - The sidebar shows "Trash full" only if the icon theme has `user-trash-full-symbolic`.
@@ -325,21 +341,21 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 ### Windows and tabs
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
-| FP-1 | New Finder Window ⌘N | done | Finder-Home | — | a new window opens over the previous one: placement is the compositor's (ADR-0025) | 1 |
-| FP-2 | New Tab ⌘T; the tab bar appears with the second tab | partial: opens the current folder | none | — | — | 1 |
-| FP-3 | View > Show/Hide Tab Bar ⇧⌘T (bar shown with one tab) | missing (bar only from two tabs) | none | — | — | 1 |
-| FP-4 | Tab bar look (equal-width tabs, close × on hover, + at the end, selected tab) | partial: flat rectangles, × and + exist | none (visual NOT verified until a capture is supplied) | — | — | 1 |
-| FP-5 | Close Tab ⌘W, Close Window ⇧⌘W, Close All ⌥⌘W | partial: ⌘W only | Finder-Menu (File) | — | — | 1 |
+| FP-1 | New Finder Window ⌘N | done (PR 1: opens at the home folder, at the kept size) | Finder-Home | — | a new window opens over the previous one: placement is the compositor's (ADR-0025) | 1 |
+| FP-2 | New Tab ⌘T; the tab bar appears with the second tab | done (PR 1: at the new-window location, last) | none | — | — | 1 |
+| FP-3 | View > Show/Hide Tab Bar ⇧⌘T (bar shown with one tab) | done (PR 1) | none | — | — | 1 |
+| FP-4 | Tab bar look (equal-width tabs, close × on hover, + at the end, selected tab) | done (PR 1, measured on the AppKit tab bar of a macOS 26 capture; hover not measured) | none (visual NOT verified until a capture is supplied) | — | — | 1 |
+| FP-5 | Close Tab ⌘W, Close Window ⇧⌘W, Close All ⌥⌘W | done (PR 1) | Finder-Menu (File) | — | — | 1 |
 | FP-6 | Show Previous/Next Tab ⇧⌘[ ⇧⌘], ⌃⇥ ⌃⇧⇥ | done | none | — | — | 1 |
-| FP-7 | Window > Move Tab to New Window | missing | none | — | — | 1 |
-| FP-8 | Window > Merge All Windows | missing | none | — | — | 1 |
-| FP-9 | Drag a tab out of the window → new window; drag tabs to reorder; drop a tab on another window's tab bar | missing | none | Qt drag with an app-internal MIME type | the new window's position is the compositor's (ADR-0025) | 1 |
-| FP-10 | Drop files on a tab: copy or move into its folder; hovering a tab during a drag switches to it (spring-loaded) | missing | none | KIO copy/move (`FilesApp.drop`) | — | 1 |
-| FP-11 | Reopen the last closed tab | missing | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
-| FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | partial: menu item only | none | — | — | 1 |
-| FP-13 | The window remembers its size and position; new windows cascade | missing | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0025) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
-| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | missing: one global setting | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (View Options) |
-| FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
+| FP-7 | Window > Move Tab to New Window | done (PR 1, in View: F-10) | none | — | — | 1 |
+| FP-8 | Window > Merge All Windows | done (PR 1, in View: F-10) | none | — | — | 1 |
+| FP-9 | Drag a tab out of the window → new window; drag tabs to reorder; drop a tab on another window's tab bar | done (PR 1) | none | Qt drag with an app-internal MIME type | the new window's position is the compositor's (ADR-0025) | 1 |
+| FP-10 | Drop files on a tab: copy or move into its folder; hovering a tab during a drag switches to it (spring-loaded) | done (PR 1) | none | KIO copy/move (`FilesApp.drop`) | — | 1 |
+| FP-11 | Reopen the last closed tab | done (PR 1, this session's tabs) | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
+| FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | done (PR 1) | none | — | — | 1 |
+| FP-13 | The window remembers its size and position; new windows cascade | partial (PR 1: the size; position and cascade wait for ADR-0025 part 2) | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0025) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
+| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | partial (PR 1: view and sort per folder; View Options in PR 2) | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (View Options) |
+| FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md); the tab items in View (PR 1) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
 | FP-16 | Windows and tabs restored at the next launch | missing | none | QSettings | — | later |
 
 ### Toolbar, sidebar and chrome
@@ -353,7 +369,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-22 | Search field expands to the full width while searching | partial: expands to 200 | Finder-Gallery, Finder-Search | — | — | 3 |
 | FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | missing: the path and status bars are always shown, the sidebar always | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
 | FP-24 | View > Customize Toolbar… | missing | none | — | — | later |
-| FP-25 | Title menu: ⌘-click or right-click on the title lists the enclosing folders | missing | none | `pathSegments` | — | 1 |
+| FP-25 | Title menu: ⌘-click or right-click on the title lists the enclosing folders | done (PR 1) | none | `pathSegments` | — | 1 |
 | FP-26 | Sidebar macOS 27: Recents at the top without a header; Favorites (Applications, Desktop, Documents, Downloads); Locations (the home folder by user name, the system disk, volumes, Network, Trash); Tags | partial: Favorites lists Home, Desktop, Documents, Downloads, Pictures, Music, Videos; Locations has Computer, volumes, Network, Trash; no Recents; Applications is on the files-applications branch (in review) | Finder-Home, Finder-Gallery | KIO places, Solid | iCloud Drive, Shared and AirDrop: no equivalent (never) | 2 |
 | FP-27 | Sidebar editing: drag a folder in to add it, Remove from Sidebar, reorder, Add to Sidebar ⌃⌘T; collapse a section on hover; Settings > Sidebar choices | partial: tags only (Remove from Sidebar, Show Hidden Tag) | none | KFilePlacesModel bookmarks (`user-places.xbel`) | — | later |
 | FP-28 | Sidebar icons in the accent colour, neutral selection with a bold label | done (lot 2) | Finder-Home | — | — | — |
@@ -481,6 +497,53 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 ### Not decided here
 - Toolbar customization (FP-24), sidebar editing (FP-27), Finder Settings (FP-31), the Inspector (FP-62) and window
   restoration (FP-16) are outside the five PRs; they stay listed so the matrix is complete.
+
+## Tabs and windows (Finder model)
+PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0025).
+- **Reference.** The library has no Finder tab capture. The Finder draws the AppKit tab bar, measured on a macOS 26 (Tahoe
+  beta 3) Terminal capture published by 9to5Mac (2 px per pt: the 28-px lights are 14 pt; kept in the git-ignored
+  `design/reference/web/`): a capsule track 27.5 tall right under the title row, 8 from the left edge, black at 0.13 on
+  the white window (222/255); the selected tab a pill 2 inside the track, white at 0.76 over it (247; the 253 edge beside it
+  reads as JPEG ringing, so no rim is drawn); equal-width tabs; titles about 11 pt, secondary colour for the others; a round 28-pt + button 4.5 after the
+  track and 8 from the right edge; a hairline 8 under the track. No dark capture: the dark track and pill use the
+  material fill (white at 0.14). Tokens `files.tab*`, `files.springDelay`.
+- **Tab bar** (`qml/TabBar.qml`, pure logic `qml/TabsLogic.js`): shown from the second tab, or with one tab while View >
+  Show Tab Bar is on (Ctrl+Shift+T, `view/tabBar`; disabled with more than one tab, as in the Finder). Equal-width tabs,
+  the current one the pill, titles in the caption size (current: text colour, others: secondary text, kept at A2's 4.5:1
+  where the capture's lighter grey is about 3.1:1), a close button on the hovered tab (middle click closes too), a right
+  click offers Close Tab, Close Other Tabs and Move Tab to New Window, and the round + opens a tab at the new-window
+  location. The hairline under the toolbar shows whenever the bar does.
+- **New windows and tabs** open at `FilesApp.newWindowUrl`, the home folder (Finder's "New Finder windows show"; its
+  default, Recents, arrives with PR 2). Open in New Tab and Cmd-double-click on a folder open that folder in a new tab.
+  New tabs go last.
+- **Closing**: Ctrl+W closes the tab (the window with its last tab), Ctrl+Shift+W the window with all its tabs (File >
+  Close Window, shown while there are tabs), Ctrl+Alt+W every window (File > Close All, shown with more than one window).
+  Closed tabs (also those of a closed window) go on a stack of 10 for File > Reopen Closed Tab (Ctrl+Alt+Shift+T, decision
+  F-2): it brings back the location, the history (Back/Forward) and the view.
+- **Moving tabs** (Main.qml): View > Move Tab to New Window (and the tab menu) gives the current tab a window of its own;
+  View > Merge All Windows brings every other window's tabs into this one, window by window, and closes the emptied
+  windows (both are in View because the Window menu is the shell's, decision F-10). A tab keeps its state when it moves
+  (location, history, view, selection, scroll position): the tab object itself changes window (`FilesApp.reparent` makes
+  the new window its owner, and tabs are created from the application's context, not their window's).
+- **Dragging a tab** (a platform drag of `application/x-grassfield-files-tab`, "<pid>:<tab id>"; a tab of another Files
+  process is refused): along its own bar the other tabs slide to open the slot under the pointer (motion token
+  `motionFast`) and the drop reorders; over another window's tab bar a slot opens there and the drop moves the tab there
+  (an emptied window closes); anywhere else over another window it joins that window last; over its own window outside the
+  bar nothing happens; dropped outside every Files window it becomes a window (a window's only tab stays). The drag image
+  is the tab itself.
+- **Files dropped on a tab** are moved or copied into its folder like a drop on a folder (FilesApp.drop: same file system
+  moves, else copies); a tab hovered for `files.springDelay` (500 ms) during a file drag comes to the front, so the drop can
+  also land in its view. Search results take no drop.
+- **Title menu**: a right click or Cmd-click on the window title lists the enclosing folders, the shown one first; a plain
+  press still moves the window.
+- **Window size** (ADR-0025 part 1): the size of the last browser window resized (in its normal state, not zoomed or full
+  screen) or closed is kept (`window/width`, `window/height`) and every new window opens at it.
+- Tests: `tests/unit/tst_filestabs.qml` (bar visibility, close index, slots while reordering, for an incoming and an
+  outgoing tab, moves, the closed-tab stack, the drag payload), `tst_filesnav.qml` (view and sort of a folder),
+  `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar, Merge All Windows, Close Window, Sort By from the tab),
+  `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields, merge, round trip and order, the oldest goes when full, an
+  unreadable or newer file is never overwritten, a missing version, another process's entries kept). Headless run of the
+  real app (sway, virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1.
 
 ## Folder colours and Customize Folder (owner request 2026-10-19; macOS 26 model)
 macOS 26 colours folders (System Settings > Appearance > Folder Color: the accent or a colour) and "Customize Folder…" gives one folder its own colour and an optional symbol or emoji drawn on it; a folder follows the global colour until it has its own. Grassfield copies that model.

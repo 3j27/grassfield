@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TabsLogic.js" as TabsLogic
 
 // Grassfield Files: owns the browser windows (Ctrl+N opens another) and feeds the shared appearance.
 // The app quits when its last window closes.
@@ -19,6 +20,13 @@ QtObject {
     property int infoShown: 0
     // The browser window that was active last (operation errors show there).
     property var lastActiveWindow: null
+    // Open browser windows, oldest first (Merge All Windows takes their tabs in this order).
+    property var windows: []
+    // Tabs closed in this session, newest first: snapshots for File > Reopen Closed Tab (TabsLogic.pushClosed).
+    property var closedTabs: []
+    // A dragged tab is over one of the windows (a drop outside all of them makes it a window: TabBar).
+    property bool tabDragInside: false
+    property int lastTabId: 0
 
     property list<QtObject> resources: [
         Binding {
@@ -77,10 +85,110 @@ QtObject {
         BrowserWindow {}
     }
 
-    function newWindow(url: url): void {
-        const w = root.windowComponent.createObject(root, {app: root.app, manager: root, startUrl: url});
+    // Tabs are made here, not in their window: a tab outlives the window it was opened in when it moves to another one
+    // (a QML object's functions belong to the context it was created in, which dies with that window).
+    property Component tabComponent: Component {
+        BrowserTab {}
+    }
+
+    // A browser window at `url`, or holding `tab` (a tab of another window) when given. It opens at the size of the
+    // last window resized or closed (ADR-0025 part 1).
+    function newWindow(url: url, tab: var): var {
+        const props = {app: root.app, manager: root, startUrl: url, adoptTab: tab ? tab : null};
+        if (root.app.windowWidth > 0 && root.app.windowHeight > 0) {
+            props.width = Math.max(root.app.windowWidth, Tokens.filesWindowMinWidth);
+            props.height = Math.max(root.app.windowHeight, Tokens.filesWindowMinHeight);
+        }
+        const w = root.windowComponent.createObject(root, props);
         if (!w)
             console.warn("grassfield-files: cannot create a window:", root.windowComponent.errorString());
+        return w;
+    }
+
+    function nextTabId(): int {
+        root.lastTabId += 1;
+        return root.lastTabId;
+    }
+
+    function registerWindow(win: var): void {
+        if (root.windows.indexOf(win) < 0)
+            root.windows = root.windows.concat([win]);
+    }
+
+    function forgetWindow(win: var): void {
+        root.windows = root.windows.filter(w => w !== win);
+        if (root.lastActiveWindow === win)
+            root.lastActiveWindow = null;
+    }
+
+    function rememberClosedTab(tab: var): void {
+        root.closedTabs = TabsLogic.pushClosed(root.closedTabs, tab.snapshot());
+    }
+
+    // File > Reopen Closed Tab: the newest closed tab comes back in `win` (or a new window when none is open).
+    function reopenClosedTab(win: var): void {
+        if (root.closedTabs.length === 0)
+            return;
+        const snapshot = root.closedTabs[0];
+        root.closedTabs = root.closedTabs.slice(1);
+        if (win)
+            win.newTab(snapshot.url, snapshot);
+        else
+            root.newWindow(snapshot.url, null);
+    }
+
+    function tabById(id: int): var {
+        for (let i = 0; i < root.windows.length; i++) {
+            const tabs = root.windows[i].tabs;
+            for (let j = 0; j < tabs.length; j++) {
+                if (tabs[j].tabId === id)
+                    return tabs[j];
+            }
+        }
+        return null;
+    }
+
+    // Window > Move Tab to New Window, or a tab dragged out of every window: the tab keeps its state (location,
+    // history, view, selection) in a window of its own. A window's only tab stays where it is.
+    function moveTabToNewWindow(tab: var): void {
+        if (!tab || !tab.win || tab.win.tabs.length <= 1)
+            return;
+        tab.win.detach(tab);
+        root.newWindow(tab.url, tab);
+    }
+
+    // A dragged tab dropped on `target` at `slot` (-1: anywhere but its tab bar, or past the last tab).
+    function dropTab(id: int, target: var, slot: int): void {
+        const tab = root.tabById(id);
+        if (!tab || !target)
+            return;
+        if (tab.win === target) {
+            if (slot >= 0)
+                target.moveTab(target.tabs.indexOf(tab), Math.min(slot, target.tabs.length - 1));
+            return;
+        }
+        tab.win.detach(tab);
+        target.adopt(tab, slot);
+        target.requestActivate();
+    }
+
+    // Window > Merge All Windows: every other window's tabs join `target`'s, window by window, and those windows close.
+    function mergeAllWindows(target: var): void {
+        const others = root.windows.filter(w => w !== target);
+        for (let i = 0; i < others.length; i++) {
+            const tabs = others[i].tabs.slice();
+            for (let j = 0; j < tabs.length; j++) {
+                others[i].detach(tabs[j]);
+                target.adopt(tabs[j], -1);
+            }
+        }
+    }
+
+    // File > Close All (Option-Cmd-W).
+    function closeAllWindows(): void {
+        const all = root.windows.slice();
+        for (let i = 0; i < all.length; i++)
+            all[i].close();
     }
 
     property Component infoComponent: Component {
@@ -165,8 +273,8 @@ QtObject {
             return;
         }
         if (urls.length === 0)
-            root.newWindow(Qt.url("file://" + root.app.homePath));
+            root.newWindow(root.app.newWindowUrl, null);
         for (let i = 0; i < urls.length; i++)
-            root.newWindow(urls[i]);
+            root.newWindow(urls[i], null);
     }
 }

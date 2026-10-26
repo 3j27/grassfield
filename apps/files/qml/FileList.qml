@@ -218,7 +218,7 @@ FocusScope {
             Accessible.description: [row.modifiedText, row.sizeText, row.kind].join(", ")
             Accessible.selectable: true
             Accessible.selected: row.selected
-            Accessible.onPressAction: root.tab.activate(row.index, root.model)
+            Accessible.onPressAction: root.tab.activate(row.index, root.model, Qt.NoModifier)
 
             Rectangle {
                 anchors.fill: parent
@@ -362,7 +362,7 @@ FocusScope {
                 }
                 onDoubleClicked: event => {
                     if (event.button === Qt.LeftButton)
-                        root.tab.activate(row.index, root.model);
+                        root.tab.activate(row.index, root.model, event.modifiers);
                 }
                 drag.onActiveChanged: {
                     if (drag.active) {

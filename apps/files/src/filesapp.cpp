@@ -141,6 +141,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     , m_initialUrls(initialUrls)
     , m_places(new PlacesModel(this))
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
+    , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
 {
     auto *undo = KIO::FileUndoManager::self();
     connect(undo, &KIO::FileUndoManager::undoAvailable, this, &FilesApp::undoChanged);
@@ -381,6 +382,101 @@ void FilesApp::setGalleryInfo(bool on)
         return;
     m_settings.setValue(QStringLiteral("view/galleryInfo"), on);
     emit prefsChanged();
+}
+
+bool FilesApp::tabBarShown() const
+{
+    return m_settings.value(QStringLiteral("view/tabBar"), false).toBool();
+}
+
+void FilesApp::setTabBarShown(bool on)
+{
+    if (on == tabBarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/tabBar"), on);
+    emit prefsChanged();
+}
+
+namespace
+{
+// A kept window size outside these bounds is ignored (a corrupt value never opens a giant or invisible window).
+constexpr int kMinKeptSide = 200;
+constexpr int kMaxKeptSide = 16384;
+
+int keptSide(const QVariant &value)
+{
+    bool ok = false;
+    const int side = value.toInt(&ok);
+    return ok && side >= kMinKeptSide && side <= kMaxKeptSide ? side : 0;
+}
+} // namespace
+
+int FilesApp::windowWidth() const
+{
+    return keptSide(m_settings.value(QStringLiteral("window/width")));
+}
+
+int FilesApp::windowHeight() const
+{
+    return keptSide(m_settings.value(QStringLiteral("window/height")));
+}
+
+void FilesApp::rememberWindowSize(int width, int height)
+{
+    if (width < kMinKeptSide || height < kMinKeptSide || width > kMaxKeptSide || height > kMaxKeptSide)
+        return;
+    if (width == windowWidth() && height == windowHeight())
+        return;
+    m_settings.setValue(QStringLiteral("window/width"), width);
+    m_settings.setValue(QStringLiteral("window/height"), height);
+    emit windowSizeChanged();
+}
+
+QUrl FilesApp::newWindowUrl() const
+{
+    return QUrl::fromLocalFile(homePath());
+}
+
+QVariantMap FilesApp::folderView(const QUrl &url) const
+{
+    if (!m_folderViewsLoaded) {
+        m_folderViews.load();
+        m_folderViewsLoaded = true;
+    }
+    const FolderViews::Entry e = m_folderViews.entry(FolderViews::keyFor(url));
+    QVariantMap out;
+    if (!e.mode.isEmpty())
+        out.insert(QStringLiteral("mode"), e.mode);
+    if (e.sortKey >= 0)
+        out.insert(QStringLiteral("sortKey"), e.sortKey);
+    if (e.descending >= 0)
+        out.insert(QStringLiteral("sortDescending"), e.descending == 1);
+    return out;
+}
+
+void FilesApp::setFolderView(const QUrl &url, const QVariantMap &fields)
+{
+    if (!m_folderViewsLoaded) {
+        m_folderViews.load();
+        m_folderViewsLoaded = true;
+    }
+    FolderViews::Entry e;
+    if (fields.contains(QStringLiteral("mode")))
+        e.mode = fields.value(QStringLiteral("mode")).toString();
+    if (fields.contains(QStringLiteral("sortKey")))
+        e.sortKey = fields.value(QStringLiteral("sortKey")).toInt();
+    if (fields.contains(QStringLiteral("sortDescending")))
+        e.descending = fields.value(QStringLiteral("sortDescending")).toBool() ? 1 : 0;
+    QString error;
+    // A failure only loses the memory of this choice; the view itself already changed. It is logged, not shown.
+    if (!m_folderViews.set(FolderViews::keyFor(url), e, &error) && !error.isEmpty())
+        qWarning("grassfield-files: view settings not kept: %s", qUtf8Printable(error));
+}
+
+void FilesApp::reparent(QObject *object, QObject *parent)
+{
+    if (object && parent && object != parent)
+        object->setParent(parent);
 }
 
 QObject *FilesApp::createFolderModel(QObject *parent)

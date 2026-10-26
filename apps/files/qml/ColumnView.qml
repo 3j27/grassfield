@@ -448,7 +448,7 @@ FocusScope {
                     }
                     onDoubleClicked: event => {
                         if (event.button === Qt.LeftButton && !entry.isDir)
-                            root.tab.activate(entry.index, col.model);
+                            root.tab.activate(entry.index, col.model, event.modifiers);
                     }
                 }
             }

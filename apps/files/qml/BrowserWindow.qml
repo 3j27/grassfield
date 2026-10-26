@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TabsLogic.js" as TabsLogic
 
 // A Files window: sidebar, toolbar (back/forward, title, view switcher, Action menu, search), tab bar
 // (from two tabs), the current tab's view, path bar and status bar. Keyboard shortcuts follow the
@@ -9,15 +10,22 @@ Window {
     id: win
 
     required property var app
-    // Main.qml: newWindow(url).
+    // Main.qml: the windows, closed tabs and moves of tabs between windows.
     required property var manager
     required property url startUrl
+    // A tab of another window that this window takes as its first tab (Move Tab to New Window, a tab dragged out).
+    property var adoptTab: null
+    // Every tab left for another window: closing then remembers no tab (Reopen Closed Tab).
+    property bool emptied: false
 
     property var tabs: []
     property int currentIndex: 0
     readonly property var tab: win.tabs.length > 0 ? win.tabs[Math.min(win.currentIndex, win.tabs.length - 1)] : null
     readonly property var folder: win.tab ? win.tab.activeFolder : null
     readonly property alias menuLayer: menuLayer
+    // Where this window's tabs live (Main.qml moves a tab into another window's host).
+    readonly property alias tabHost: tabHost
+    readonly property bool tabBarVisible: TabsLogic.barVisible(win.app.tabBarShown, win.tabs.length)
     property string notice: ""
     // ADR-0015: the window draws its own chrome; the apps' tagger (apps/windowchrome.h) names its role for the
     // compositor, whose plugin then draws no titlebar on it.
@@ -34,25 +42,55 @@ Window {
     color: Appearance.colors.windowBackground
     visible: true
 
-    onClosing: Qt.callLater(win.destroy)
+    onClosing: {
+        if (!win.emptied) {
+            for (let i = 0; i < win.tabs.length; i++)
+                win.manager.rememberClosedTab(win.tabs[i]);
+        }
+        win.keepSize();
+        win.manager.forgetWindow(win);
+        Qt.callLater(win.destroy);
+    }
 
-    Component.onCompleted: win.newTab(win.startUrl)
+    Component.onCompleted: {
+        win.manager.registerWindow(win);
+        if (win.adoptTab)
+            win.adopt(win.adoptTab, 0);
+        else
+            win.newTab(win.startUrl, null);
+    }
+
+    // The size of a window in its normal state is kept for the next window (ADR-0025 part 1); a zoomed or full-screen
+    // size never is.
+    function keepSize(): void {
+        if (win.visibility === Window.Windowed)
+            win.app.rememberWindowSize(win.width, win.height);
+    }
+
+    onWidthChanged: sizeTimer.restart()
+    onHeightChanged: sizeTimer.restart()
+
+    Timer {
+        id: sizeTimer
+        interval: Tokens.motionNormal
+        onTriggered: win.keepSize()
+    }
 
     // Tabs -----------------------------------------------------------------------------------
 
-    Component {
-        id: tabComponent
-        BrowserTab {}
-    }
-
-    function newTab(url: url): void {
-        const t = tabComponent.createObject(tabHost, {app: win.app, win: win, startUrl: url});
+    // A new tab at the end of the bar (Finder); `restore`: a closed tab's snapshot (Reopen Closed Tab).
+    function newTab(url: url, restore: var): void {
+        const t = win.manager.tabComponent.createObject(tabHost, {app: win.app, win: win, startUrl: url, tabId: win.manager.nextTabId(), restore: restore ? restore : null});
         if (!t)
             return;
         const list = win.tabs.slice();
         list.push(t);
         win.tabs = list;
         win.currentIndex = list.length - 1;
+        win.focusTabLater();
+    }
+
+    function focusTabLater(): void {
         Qt.callLater(() => {
             if (win.tab)
                 win.tab.focusView();
@@ -60,19 +98,65 @@ Window {
     }
 
     function closeTab(index: int): void {
+        if (index < 0 || index >= win.tabs.length)
+            return;
         if (win.tabs.length <= 1) {
             win.close();
             return;
         }
         const list = win.tabs.slice();
         const t = list.splice(index, 1)[0];
+        win.manager.rememberClosedTab(t);
+        win.currentIndex = TabsLogic.indexAfterClose(win.currentIndex, index, win.tabs.length);
         win.tabs = list;
-        win.currentIndex = Math.min(win.currentIndex >= index && win.currentIndex > 0 ? win.currentIndex - 1 : win.currentIndex, list.length - 1);
         t.destroy();
-        Qt.callLater(() => {
-            if (win.tab)
-                win.tab.focusView();
-        });
+        win.focusTabLater();
+    }
+
+    function closeOtherTabs(keep: var): void {
+        const others = win.tabs.filter(t => t !== keep);
+        for (let i = 0; i < others.length; i++)
+            win.closeTab(win.tabs.indexOf(others[i]));
+    }
+
+    // A tab of another window (or of this one) placed at `index` (-1: the end) and shown.
+    function adopt(tab: var, index: int): void {
+        const list = win.tabs.filter(t => t !== tab);
+        const at = index < 0 || index > list.length ? list.length : index;
+        list.splice(at, 0, tab);
+        win.app.reparent(tab, tabHost);
+        tab.parent = tabHost;
+        tab.win = win;
+        win.tabs = list;
+        win.currentIndex = at;
+        win.focusTabLater();
+    }
+
+    // Takes `tab` out of this window without closing it (it moves to another window); the window closes when it was
+    // the last one.
+    function detach(tab: var): void {
+        const index = win.tabs.indexOf(tab);
+        if (index < 0)
+            return;
+        const list = win.tabs.slice();
+        list.splice(index, 1);
+        if (list.length === 0) {
+            win.emptied = true;
+            win.tabs = list;
+            Qt.callLater(win.close);
+            return;
+        }
+        win.currentIndex = TabsLogic.indexAfterClose(win.currentIndex, index, win.tabs.length);
+        win.tabs = list;
+    }
+
+    // A tab dragged along this window's own bar.
+    function moveTab(from: int, to: int): void {
+        if (from < 0 || from >= win.tabs.length || from === to)
+            return;
+        const current = win.tab;
+        win.tabs = TabsLogic.moved(win.tabs, from, to);
+        win.currentIndex = Math.max(0, win.tabs.indexOf(current));
     }
 
     function selectTab(index: int): void {
@@ -187,7 +271,7 @@ Window {
 
     Shortcut {
         sequence: "Ctrl+T"
-        onActivated: win.newTab(win.tab ? win.tab.url : win.startUrl)
+        onActivated: win.newTab(win.app.newWindowUrl, null)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -196,8 +280,30 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        sequence: "Ctrl+Shift+W"
+        onActivated: win.close()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+W"
+        onActivated: win.manager.closeAllWindows()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
         sequence: "Ctrl+N"
-        onActivated: win.manager.newWindow(win.tab ? win.tab.url : win.startUrl)
+        onActivated: win.manager.newWindow(win.app.newWindowUrl, null)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+T"
+        enabled: win.tabs.length <= 1
+        onActivated: win.app.tabBarShown = !win.app.tabBarShown
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+Shift+T"
+        enabled: win.manager.closedTabs.length > 0
+        onActivated: win.manager.reopenClosedTab(win)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -361,6 +467,31 @@ Window {
         onActivatedAmbiguously: activated()
     }
 
+    // A dragged tab anywhere over the window (under every other drop target): over its own window nothing happens (the
+    // drag is not a tear-off); over another window the tab moves there, last (Main.qml dropTab).
+    DropArea {
+        anchors.fill: parent
+        keys: [TabsLogic.tabMimeType]
+        onEntered: win.manager.tabDragInside = true
+        onExited: win.manager.tabDragInside = false
+        onDropped: drop => {
+            const id = TabsLogic.tabIdFrom(drop.getDataAsString(TabsLogic.tabMimeType), win.app.processId);
+            if (id >= 0)
+                win.manager.dropTab(id, win, -1);
+            drop.accept(Qt.MoveAction);
+        }
+    }
+
+    // Right-click or Cmd-click on the title: the enclosing folders, the shown one first (Finder's title menu).
+    function titleMenu(x: real, y: real): void {
+        const segments = win.tab ? win.tab.segments : [];
+        const items = [];
+        for (let i = segments.length - 1; i >= 0; i--)
+            items.push({id: String(i), text: DisplayName.text(segments[i].label), iconName: "folder"});
+        if (items.length > 0)
+            win.menuLayer.open(items, x, y, id => win.tab.navigate(segments[parseInt(id)].url, true), win.tab.view, false);
+    }
+
     Sidebar {
         id: sidebar
         width: Tokens.filesSidebarWidth
@@ -396,6 +527,30 @@ Window {
             title: win.title
             doubleClickAction: win.app.titlebarDoubleClick
             canMinimize: win.app.canMinimize
+
+            TextMetrics {
+                id: titleMetrics
+                text: win.title
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.windowTitleSize
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            // Over the title only: a plain press still moves the window (the toolbar's drag area below).
+            MouseArea {
+                x: toolbar.titleStart
+                width: Math.max(0, Math.min(titleMetrics.advanceWidth, toolbar.titleEnd - toolbar.titleStart))
+                height: parent.height
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onPressed: mouse => {
+                    if (mouse.button === Qt.RightButton || (mouse.modifiers & Qt.ControlModifier)) {
+                        const p = mapToItem(null, 0, height - Tokens.spacingSm);
+                        win.titleMenu(p.x, p.y);
+                        return;
+                    }
+                    mouse.accepted = false;
+                }
+            }
 
             // Back and forward: one 72 x 36 capsule (macOS).
             leading: Rectangle {
@@ -579,95 +734,14 @@ Window {
             }
         }
 
-        // Tab bar (from two tabs on)
-        Row {
+        // Tab bar (from two tabs on, or always with View > Show Tab Bar)
+        TabBar {
             id: tabBar
             anchors.top: toolbar.bottom
             width: parent.width
-            height: win.tabs.length > 1 ? Tokens.filesTabHeight : 0
-            visible: win.tabs.length > 1
-            Accessible.role: Accessible.PageTabList
-            Accessible.name: qsTr("Tabs")
-
-            Repeater {
-                model: win.tabs
-
-                delegate: Item {
-                    id: tabItem
-                    required property var modelData
-                    required property int index
-                    readonly property bool current: tabItem.index === win.currentIndex
-
-                    width: (tabBar.width - newTabButton.width) / Math.max(1, win.tabs.length)
-                    height: tabBar.height
-                    Accessible.role: Accessible.PageTab
-                    Accessible.name: tabItem.modelData.title
-                    Accessible.selected: tabItem.current
-                    Accessible.onPressAction: win.selectTab(tabItem.index)
-
-                    Rectangle {
-                        anchors.fill: parent
-                        color: tabItem.current ? "transparent" : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                        border.width: Tokens.appsBorderWidth
-                        border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        anchors.centerIn: parent
-                        width: parent.width - 2 * Tokens.filesTabHeight
-                        horizontalAlignment: Text.AlignHCenter
-                        text: tabItem.modelData.title
-                        elide: Text.ElideMiddle
-                        color: tabItem.current ? Appearance.colors.text : Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                        font.weight: tabItem.current ? Tokens.typographyMenuWeight : Tokens.typographySmallWeight
-                    }
-
-                    MouseArea {
-                        id: tabMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        onClicked: mouse => {
-                            if (mouse.button === Qt.MiddleButton)
-                                win.closeTab(tabItem.index);
-                            else
-                                win.selectTab(tabItem.index);
-                        }
-                    }
-
-                    HoverHandler {
-                        id: tabHover
-                    }
-
-                    ToolButton {
-                        visible: tabHover.hovered
-                        anchors.left: parent.left
-                        anchors.leftMargin: Tokens.spacingXs
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Tokens.filesTabHeight - Tokens.spacingSm
-                        height: width
-                        iconName: "close-glyph"
-                        accessibleName: qsTr("Close Tab")
-                        onClicked: win.closeTab(tabItem.index)
-                    }
-                }
-            }
-
-            ToolButton {
-                id: newTabButton
-                width: Tokens.filesTabHeight
-                height: Tokens.filesTabHeight
-                accessibleName: qsTr("New Tab")
-                onClicked: win.newTab(win.tab.url)
-
-                ViewGlyph {
-                    anchors.centerIn: parent
-                    kind: "plus"
-                }
-            }
+            height: win.tabBarVisible ? implicitHeight : 0
+            visible: win.tabBarVisible
+            win: win
         }
 
         Rectangle {
@@ -675,7 +749,7 @@ Window {
             anchors.top: tabBar.bottom
             width: parent.width
             height: Tokens.appsBorderWidth
-            opacity: win.tabs.length > 1 || (win.tab !== null && win.tab.scrolled) ? 1 : 0
+            opacity: win.tabBarVisible || (win.tab !== null && win.tab.scrolled) ? 1 : 0
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 

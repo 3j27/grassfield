@@ -3,6 +3,7 @@
 #include "runmode.h"
 #include "shortcutstyle.h"
 
+#include <QCoreApplication>
 #include <QFileSystemWatcher>
 #include <QJSValue>
 #include <QList>
@@ -14,6 +15,7 @@
 #include <QVariantList>
 
 #include "folderstylestore.h"
+#include "folderviews.h"
 #include "tagstore.h"
 
 #include <functional>
@@ -63,6 +65,16 @@ class FilesApp : public QObject
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY prefsChanged)
     // The gallery view shows its info panel (name, kind, dates, tags of the shown item).
     Q_PROPERTY(bool galleryInfo READ galleryInfo WRITE setGalleryInfo NOTIFY prefsChanged)
+    // View > Show Tab Bar (Finder, Shift+Cmd+T): the tab bar stays visible with one tab (view/tabBar, every window).
+    Q_PROPERTY(bool tabBarShown READ tabBarShown WRITE setTabBarShown NOTIFY prefsChanged)
+    // The size of the last browser window resized or closed (ADR-0025 part 1), 0 when none was kept yet. Read when a
+    // window opens only: a window never follows another one's size.
+    Q_PROPERTY(int windowWidth READ windowWidth NOTIFY windowSizeChanged)
+    Q_PROPERTY(int windowHeight READ windowHeight NOTIFY windowSizeChanged)
+    // Where new windows and tabs open (Finder's "New Finder windows show"): the home folder.
+    Q_PROPERTY(QUrl newWindowUrl READ newWindowUrl CONSTANT)
+    // This process (a dragged tab names it: a tab dropped into another Files process is refused).
+    Q_PROPERTY(qint64 processId READ processId CONSTANT)
     // Translated names of the seven colour tags, in palette order (tokens files.tagRed ... files.tagGray).
     Q_PROPERTY(QStringList colorTagNames READ colorTagNames CONSTANT)
     // Changes whenever Files writes tags (bindings that show tag states re-read them).
@@ -109,9 +121,27 @@ public:
     void setShowHidden(bool on);
     bool galleryInfo() const;
     void setGalleryInfo(bool on);
+    bool tabBarShown() const;
+    void setTabBarShown(bool on);
+    int windowWidth() const;
+    int windowHeight() const;
+    QUrl newWindowUrl() const;
+    qint64 processId() const { return QCoreApplication::applicationPid(); }
     QStringList colorTagNames() const;
     int tagRevision() const { return m_tagRevision; }
     QStringList hiddenTags() const { return m_hiddenTags; }
+
+    // Keeps the size of a browser window for the next one (bounded; nothing is written for an unchanged size).
+    Q_INVOKABLE void rememberWindowSize(int width, int height);
+    // Per-folder view settings (FolderViews, docs/specs/files.md F-3): {mode, sortKey, sortDescending} with only the
+    // fields set for `url`; an empty map when the folder uses the defaults.
+    Q_INVOKABLE QVariantMap folderView(const QUrl &url) const;
+    // Sets the given fields (mode, sortKey, sortDescending) for `url`; other fields stay as stored.
+    Q_INVOKABLE void setFolderView(const QUrl &url, const QVariantMap &fields);
+
+    // Makes `parent` the owner of `object` (QObject parent). A tab moved to another window must belong to it: setting an
+    // item's visual parent in QML keeps its first owner, whose destruction would take the tab along.
+    Q_INVOKABLE void reparent(QObject *object, QObject *parent);
 
     // A new folder listing owned by `parent` (a QML item: the listing dies with its view).
     Q_INVOKABLE QObject *createFolderModel(QObject *parent);
@@ -206,6 +236,7 @@ signals:
     void undoChanged();
     void clipboardChanged();
     void prefsChanged();
+    void windowSizeChanged();
     void activityChanged();
     void operationFailed(const QString &message);
     // Files wrote the tags of `urls` (every listing reads them again).
@@ -266,4 +297,7 @@ private:
     int m_tagRevision = 0;
     FolderStyleStore m_folderStyles;
     int m_folderStyleRevision = 0;
+    // Read on first use (the state directory may not exist before a view is chosen).
+    mutable FolderViews m_folderViews;
+    mutable bool m_folderViewsLoaded = false;
 };
