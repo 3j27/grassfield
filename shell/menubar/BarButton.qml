@@ -18,6 +18,10 @@ Item {
     property string menuKind: ""
     // Padding on each side of the content (titles: menubar.itemPadding, status glyphs: menubar.statusItemPadding).
     property real padding: Tokens.menubarItemPadding
+    // Padding on the left when it differs (the clock sits a status glyph's padding from the last glyph).
+    property real leftPadding: root.padding
+    // How far the capsule reaches past the item on each side (titles: menubar.highlightOutset, 14 around the text).
+    property real highlightOutset: 0
     // Highlight colour (the bar passes the dark palette's while it has no background of its own).
     property color tint: Appearance.colors.hover
     // Soft shadow under the content (gate A2) while the bar is drawn straight on the wallpaper, in this colour.
@@ -33,7 +37,7 @@ Item {
     // A press with the right or middle button ("right" | "middle"); the left one is `activated`.
     signal auxPressed(string button)
 
-    implicitWidth: row.implicitWidth + 2 * root.padding
+    implicitWidth: row.implicitWidth + root.leftPadding + root.padding
     implicitHeight: Tokens.menubarHeight
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
@@ -53,6 +57,8 @@ Item {
             fill: parent
             topMargin: Tokens.menubarHoverInsetTop
             bottomMargin: Tokens.menubarHoverInsetBottom
+            leftMargin: -root.highlightOutset
+            rightMargin: -root.highlightOutset
         }
         radius: height / 2
         color: Appearance.withAlpha(root.tint, root.active ? Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor : Tokens.materialHoverOpacity)
@@ -76,6 +82,8 @@ Item {
             fill: parent
             topMargin: Tokens.menubarHoverInsetTop
             bottomMargin: Tokens.menubarHoverInsetBottom
+            leftMargin: -root.highlightOutset
+            rightMargin: -root.highlightOutset
         }
         radius: height / 2
         color: "transparent"
@@ -88,6 +96,7 @@ Item {
     // under dark text (the bar picks the colour from its adaptive tone). Off while a material is behind the bar.
     Item {
         anchors.centerIn: parent
+        anchors.horizontalCenterOffset: (root.leftPadding - root.padding) / 2
         width: row.implicitWidth
         height: row.implicitHeight
 

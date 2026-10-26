@@ -58,8 +58,20 @@ TestCase {
         compare(Clock.dateKind(false, false), "none");
     }
 
+    function test_dateOrderFollowsTheRegion() {
+        verify(Clock.monthFirst("M/d/yy"), "US");
+        verify(!Clock.monthFirst("dd/MM/yyyy"), "UK, France");
+        verify(Clock.monthFirst("yyyy-MM-dd"), "ISO");
+        verify(!Clock.monthFirst("d 'de' MMMM"), "quoted text is not the month");
+        verify(!Clock.monthFirst(""), "unknown");
+        compare(Clock.orderDate("ddd d MMM", true), "ddd MMM d");
+        compare(Clock.orderDate("d MMM", true), "MMM d");
+        compare(Clock.orderDate("ddd d MMM", false), "ddd d MMM");
+        compare(Clock.orderDate("ddd", true), "ddd");
+    }
+
     function test_join() {
-        compare(Clock.join("Sun 25 Oct", "13:46"), "Sun 25 Oct 13:46");
+        compare(Clock.join("Sun 25 Oct", "13:46"), "Sun 25 Oct  13:46");
         compare(Clock.join("", "13:46"), "13:46");
     }
 }

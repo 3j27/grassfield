@@ -243,18 +243,20 @@ QtObject {
 
     // task spec / macOS convention, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarHeight: 24
-    // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property int menubarItemPadding: 11
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
-    readonly property int menubarIconSize: 14
-    // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property int menubarHoverInsetTop: 0
+    // titles 22.5 apart ink to ink (2 x 10 plus the side bearings; was 11, 25 apart), system mark to app name the same [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    readonly property int menubarItemPadding: 10
+    // status glyphs 12-13.5 tall (Wi-Fi 17 wide) and a system mark about 15 tall: 16-pt glyphs (were 14: 8-11 tall) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    readonly property int menubarIconSize: 16
+    // the open-title capsule floats, 1 from the top and the bottom of the 24-pt bar (it hung from the screen edge at 0) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    readonly property int menubarHoverInsetTop: 1
     // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHoverInsetBottom: 1
-    // F1 gap 3: status glyphs 19 apart (18.5-20) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property real menubarStatusItemPadding: 9.5
-    // F1 gap 3: screen edge to the system mark [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
-    readonly property real menubarInsetLeft: 20.5
+    // status glyphs 18.5-20 apart ink to ink with 16-pt glyphs (were 21-23 at 9.5); also the clock's left padding (last glyph to the clock 17.5) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    readonly property real menubarStatusItemPadding: 8.5
+    // the open-title capsule reaches 13.7-15 beyond the text, past the 10-pt padding (only one capsule shows at a time) [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    readonly property int menubarHighlightOutset: 4
+    // screen edge to the system mark's 16-pt box: the mark centred at 26.5 (reference 27) and the app name at 55 [ref: docs/audits/visual-tahoe-2026-10-25.md § Menu bar at rest — close, 7/10]
+    readonly property real menubarInsetLeft: 18.5
     // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetRight: 18.5
     // estimate: longest wait of a minute clock between two checks (WallClock); a Timer stops counting while the machine sleeps, so this bounds how long the time can be stale after a wake, at 6 wakeups a minute per clock [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]

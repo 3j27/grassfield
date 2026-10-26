@@ -49,9 +49,26 @@ function dateKind(showDate, showDay) {
     return showDate ? "date" : "none";
 }
 
-// Date part and time part joined by a space; an empty date part leaves the time alone.
+// Whether the region writes the month before the day: the first unquoted d or M of its short date format ("M/d/yy" in
+// the US, "dd/MM/yyyy" in the UK and France).
+function monthFirst(localeShortDate) {
+    const bare = String(localeShortDate || "").replace(/'[^']*'/g, "");
+    const m = bare.indexOf("M");
+    const d = bare.indexOf("d");
+    return m >= 0 && (d < 0 || m < d);
+}
+
+// A day-month pattern ("ddd d MMM", "d MMM") in the region's order: the day number moves after the month name when the
+// region writes the month first ("ddd MMM d"); the day of the week stays first.
+function orderDate(pattern, monthFirstOrder) {
+    const p = String(pattern);
+    return monthFirstOrder ? p.replace(/(^|[^d])(d{1,2}) (M{3,4})/, "$1$3 $2") : p;
+}
+
+// Date part and time part joined by two spaces (macOS sets them 9.5 apart, wider than a word gap of 6); an empty date part
+// leaves the time alone.
 function join(dateText, timeText) {
-    return dateText !== "" ? dateText + " " + timeText : timeText;
+    return dateText !== "" ? dateText + "  " + timeText : timeText;
 }
 
 // "When Space Allows": the date is shown when the whole status area fits with it. `fullHidden` = the optional items

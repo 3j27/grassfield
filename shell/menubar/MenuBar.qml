@@ -297,12 +297,14 @@ Scope {
                 const kind = ClockFormat.dateKind(withDate, Settings.menubarClockShowDayOfWeek);
                 const d = FixedTime.date(clock.date);
                 let dateText = "";
+                // Day and month in the region's order (macOS: "Mon Oct 26" in the US, "Mon 26 Oct" in the UK).
+                const monthFirst = ClockFormat.monthFirst(Qt.locale().dateFormat(Locale.ShortFormat));
                 if (kind === "both")
-                    dateText = Qt.locale().toString(d, qsTr("ddd d MMM"));
+                    dateText = Qt.locale().toString(d, ClockFormat.orderDate(qsTr("ddd d MMM"), monthFirst));
                 else if (kind === "day")
                     dateText = Qt.locale().toString(d, qsTr("ddd"));
                 else if (kind === "date")
-                    dateText = Qt.locale().toString(d, qsTr("d MMM"));
+                    dateText = Qt.locale().toString(d, ClockFormat.orderDate(qsTr("d MMM"), monthFirst));
                 const t = Qt.formatTime(d, ClockFormat.timePattern(Qt.locale().timeFormat(Locale.ShortFormat), Settings.menubarClockHours, Settings.menubarClockShowSeconds, Settings.menubarClockShowAmPm));
                 return ClockFormat.join(dateText, ClockFormat.flash(t, off));
             }
@@ -839,6 +841,7 @@ Scope {
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
+                            highlightOutset: Tokens.menubarHighlightOutset
                             accessibleName: qsTr("Grassfield menu")
                             active: win.isOpen("system")
                             onActivated: win.popup("system")
@@ -857,6 +860,7 @@ Scope {
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
+                            highlightOutset: Tokens.menubarHighlightOutset
                             objectName: "menubar-app"
                             accessibleName: qsTr("Application menu: %1").arg(win.appName)
                             active: win.isOpen("app")
@@ -886,6 +890,7 @@ Scope {
                                 tint: win.barTint
                                 shadowed: !win.showBackground
                             shadowColor: win.barShadow
+                            highlightOutset: Tokens.menubarHighlightOutset
 
                                 required property var modelData
 
@@ -912,6 +917,7 @@ Scope {
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
+                            highlightOutset: Tokens.menubarHighlightOutset
                             objectName: "menubar-file"
                             visible: win.hasFileMenu
                             accessibleName: qsTr("File menu")
@@ -935,6 +941,7 @@ Scope {
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
+                            highlightOutset: Tokens.menubarHighlightOutset
                             objectName: "menubar-window"
                             visible: win.hasApp
                             accessibleName: qsTr("Window menu")
@@ -1140,6 +1147,8 @@ Scope {
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
+                            highlightOutset: Tokens.menubarHighlightOutset
+                            leftPadding: Tokens.menubarStatusItemPadding
                             accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
                             active: Notifications.centerOpen && Notifications.centerScreen === (win.screen ? win.screen.name : "")
                             onActivated: Notifications.toggleCenter(win.screen.name)
