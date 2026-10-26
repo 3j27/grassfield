@@ -75,6 +75,7 @@ ShellRoot {
             "hotCorners.bottomLeft": "hotCornerBottomLeft",
             "hotCorners.bottomRight": "hotCornerBottomRight",
             "accent.color": "accentColor",
+            "keyboard.shortcutStyle": "keyboardShortcutStyle",
             "icons.mode": "iconMode",
             "icons.tint": "iconTint",
             "icons.folderColor": "folderColor",

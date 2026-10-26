@@ -66,6 +66,7 @@ Variants {
             }
 
             Material {
+                glassClass: "controls"
                 anchors.fill: parent
                 radius: pill.height / 2
             }

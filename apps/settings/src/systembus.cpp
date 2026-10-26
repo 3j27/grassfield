@@ -143,6 +143,30 @@ QList<AccessPoint> accessPoints(BusCaller &bus, const QString &devicePath)
     return out;
 }
 
+// NM_802_11_AP_SEC_KEY_MGMT_*: PSK 0x100, 802.1X 0x200, SAE 0x400, OWE 0x800, OWE transition 0x1000, Suite-B 0x2000.
+constexpr uint kKeyMgmtNeedsCredentials = 0x100 | 0x200 | 0x400 | 0x2000;
+constexpr uint kKeyMgmtOwe = 0x800;
+
+// Enhanced Open (OWE): encrypted without a password, like an open network for the person joining it (Apple's platform security
+// guide calls it improved security "on open networks", "unauthenticated networks"). The access point offers OWE and nothing
+// that asks for a key or an account.
+bool isOwe(const AccessPoint &ap)
+{
+    return ap.wpa == 0 && (ap.rsn & kKeyMgmtOwe) != 0 && (ap.rsn & kKeyMgmtNeedsCredentials) == 0;
+}
+
+constexpr uint kKeyMgmtOweTransition = 0x1000;
+
+// Whether joining needs a password or an account: WPA/WPA2/WPA3/802.1X (or any other key management), or WEP (privacy flag with
+// no WPA/RSN information at all). Enhanced Open does not, and neither does the open side of OWE transition mode (RsnFlags 0x1000
+// only). This is the rule of System.wifiSecurity: the label ("" or "OWE" = no lock, joins with a click) and the join agree.
+bool needsCredentials(const AccessPoint &ap)
+{
+    if (isOwe(ap))
+        return false;
+    return ap.wpa != 0 || (ap.rsn & ~kKeyMgmtOweTransition) != 0 || ((ap.flags & 1) != 0 && ap.rsn == 0);
+}
+
 struct Profile {
     QString path;
     QString uuid;
@@ -396,8 +420,9 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
             return QCoreApplication::translate("SystemBus", "that network is no longer saved");
         }
         // wifi.connectOpen: only an access point that needs no password; anything else is joined from Quick Settings.
-        // The page asks for the row it shows, an open one: an access point with the same SSID that is secured is another row.
-        // So the choice is made on the security of the access point: the strongest open one; only secured ones: refused.
+        // The page asks for the row it shows, a network without a password: an access point with the same SSID that is secured is
+        // another row. So the choice is made on the security of the access point: the strongest one that needs no password (open
+        // or Enhanced Open); only secured ones: refused.
         const QByteArray ssid = QByteArray::fromHex(op.value(QStringLiteral("hex")).toString().toLatin1());
         bool seen = false;
         AccessPoint ap;
@@ -406,8 +431,7 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
             if (candidate.ssid != ssid)
                 continue;
             seen = true;
-            const bool secured = candidate.wpa != 0 || candidate.rsn != 0 || (candidate.flags & 1) != 0;
-            if (!secured && (!haveOpen || candidate.strength > ap.strength)) {
+            if (!needsCredentials(candidate) && (!haveOpen || candidate.strength > ap.strength)) {
                 ap = candidate;
                 haveOpen = true;
             }
@@ -418,6 +442,8 @@ QString runAction(BusCaller &bus, const QVariantMap &op)
             ConnectionSettings settings;
             settings.insert(QStringLiteral("connection"), QVariantMap{{QStringLiteral("id"), QString::fromUtf8(ssid)}, {QStringLiteral("type"), QStringLiteral("802-11-wireless")}});
             settings.insert(QStringLiteral("802-11-wireless"), QVariantMap{{QStringLiteral("ssid"), ssid}, {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
+            if (isOwe(ap)) // NetworkManager joins an OWE access point only with key-mgmt owe (no secret: there is none)
+                settings.insert(QStringLiteral("802-11-wireless-security"), QVariantMap{{QStringLiteral("key-mgmt"), QStringLiteral("owe")}});
             const BusReply r = bus.call(kNmService, kNmPath, kNmIface, QStringLiteral("AddAndActivateConnection"),
                                         {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(dev.path)), QVariant::fromValue(QDBusObjectPath(ap.path))}, kActMs);
             return r.ok ? QString() : fail(r.error);

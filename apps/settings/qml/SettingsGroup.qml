@@ -60,7 +60,7 @@ Item {
         leftPadding: Tokens.settingsRowInset
         rightPadding: Tokens.settingsRowInset
         text: root.footnote
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyCaptionSize
         wrapMode: Text.Wrap

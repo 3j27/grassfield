@@ -4,7 +4,12 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QPair>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QThread>
+
+#include <unistd.h>
 
 #include <atomic>
 #include <memory>
@@ -203,4 +208,61 @@ TEST_F(BusJobsTest, StuckJobsAreCappedNotPiledUp)
     EXPECT_EQ(seen->reason, QStringLiteral("timed out"));
     *release = true;
     spinUntil([] { return false; }, 100);
+}
+
+// The default abandon path (every test above passes its own): the process leaves at once, with the application's own exit code
+// (BusJobs::setExitCode, the result of exec()), not a 0 that hides a failure. gtest death tests are not used (they capture the
+// child's stderr in /tmp, which a sandbox may not allow): this binary starts itself as the child, in the mode named by
+// GF_BUSJOBS_CHILD ("<mode>@<parent pid>": a leaked value is ignored), and the scenario runs from a static initializer, before gtest's main. 99 is what the child would leave with
+// if the abandon path did not take it out: it is never reached.
+namespace {
+struct ChildMode {
+    ChildMode()
+    {
+        // "<mode>@<pid of the parent test>": a value that leaked into the environment of a shell does not name the parent of this
+        // process, and must not make the test binary leave without running its tests.
+        const QByteArray value = qgetenv("GF_BUSJOBS_CHILD");
+        const int at = value.indexOf('@');
+        if (at < 0 || value.mid(at + 1).toLongLong() != static_cast<qint64>(getppid()))
+            return;
+        const QByteArray mode = value.left(at);
+        app();
+        if (mode == "code7")
+            BusJobs::setExitCode(7);
+        auto release = std::make_shared<std::atomic<bool>>(false);
+        {
+            BusJobs jobs(callers(), 50); // the default abandon: flush and _Exit(exit code)
+            jobs.start(blockedJob(release), [](const QString &, const QString &) {}, 5000);
+            QThread::msleep(20);
+        }
+        std::_Exit(99);
+    }
+} childMode;
+
+// {exit code, seconds}
+QPair<int, qint64> runChild(const char *mode)
+{
+    QProcess child;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("GF_BUSJOBS_CHILD"), QString::fromLatin1(mode) + QLatin1Char('@') + QString::number(getpid()));
+    child.setProcessEnvironment(env);
+    QElapsedTimer t;
+    t.start();
+    child.start(QCoreApplication::applicationFilePath(), {});
+    EXPECT_TRUE(child.waitForFinished(15000));
+    EXPECT_EQ(child.exitStatus(), QProcess::NormalExit);
+    return {child.exitCode(), t.elapsed()};
+}
+} // namespace
+
+TEST_F(BusJobsTest, TheDefaultAbandonExitsWithTheApplicationsCode)
+{
+    const auto r = runChild("code7");
+    EXPECT_EQ(r.first, 7) << "the abandon path must keep the exit code of the application";
+    EXPECT_LT(r.second, 4000) << "the child waited for its stuck job";
+}
+
+TEST_F(BusJobsTest, TheDefaultAbandonExitsWithZeroWhenTheAppSucceeded)
+{
+    EXPECT_EQ(runChild("code0").first, 0);
 }

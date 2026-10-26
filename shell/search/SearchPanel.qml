@@ -8,7 +8,8 @@ import qs.platform
 import qs.services
 
 // Search window, one per screen, mapped only on the controller's screen while open. Full-screen
-// transparent layer-shell overlay (a click outside closes), keyboard exclusive while open.
+// transparent layer-shell overlay (a click outside closes), keyboard exclusive while open. macOS 27: the query sits in a
+// glass capsule; the chips and results come in a panel of the same width under it, shown once there is something to show.
 Variants {
     id: root
 
@@ -25,7 +26,7 @@ Variants {
         required property ShellScreen modelData
 
         readonly property bool shown: root.controller.open && root.controller.screenName === (modelData ? modelData.name : "")
-        readonly property real maxResults: height * Tokens.searchMaxHeightFraction - Tokens.searchFieldHeight
+        readonly property real maxResults: height * Tokens.searchMaxHeightFraction - Tokens.searchCapsuleHeight - Tokens.searchCapsuleGap
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard (the fade-out): a layer destroyed while Exclusive leaves the
@@ -53,6 +54,11 @@ Variants {
             id: blur
             item: panel
             radius: Tokens.radiusSearch
+
+            Region {
+                item: capsule
+                radius: Tokens.searchCapsuleHeight / 2
+            }
         }
 
         Region {
@@ -115,21 +121,14 @@ Variants {
             onPressed: root.controller.hide()
         }
 
+        // The query capsule (macOS 27): its own glass, above the results panel.
         Item {
-            id: panel
-
-            readonly property bool hasResults: root.controller.rows.length > 0
-            // Chips need something to choose between; a lone category is the list itself.
-            readonly property bool chipsShown: root.controller.chipsShown
-            readonly property real chipBlock: chipsShown ? Tokens.searchChipTop + Tokens.launcherChipHeight + Tokens.searchChipBottom : 0
-            // A query nothing answers (file search settled): a centred notice instead of a bare field.
-            readonly property bool noResults: !hasResults && root.controller.query.trim() !== "" && !root.controller.filesPending
-            readonly property real listTop: Tokens.searchFieldHeight + chipBlock + Tokens.spacingSm
+            id: capsule
 
             x: (win.width - width) / 2
-            y: win.height * Tokens.searchTopFraction
-            width: Math.min(Tokens.searchWidth, win.width - 2 * Tokens.searchEdgeMargin)
-            height: Tokens.searchFieldHeight + chipBlock + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults - chipBlock) : 0) + (noResults ? Tokens.searchEmptyHeight : 0)
+            y: win.height * Tokens.searchCapsuleTopFraction
+            width: Math.min(Tokens.searchCapsuleWidth, win.width - 2 * Tokens.searchEdgeMargin)
+            height: Tokens.searchCapsuleHeight
             opacity: win.shown ? 1 : 0
             Accessible.role: Accessible.Pane
             Accessible.name: qsTr("Search")
@@ -140,29 +139,23 @@ Variants {
                 }
             }
 
-            Behavior on height {
-                NumberAnimation {
-                    duration: Appearance.duration(Tokens.motionFast)
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            // Swallows clicks on the panel itself.
+            // Swallows clicks on the capsule itself.
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
             }
 
             Material {
+                glassClass: "menu"
                 anchors.fill: parent
-                radius: Tokens.radiusSearch
+                radius: height / 2
             }
 
             Icon {
                 id: glass
-                x: Tokens.searchFieldInset
-                y: (Tokens.searchFieldHeight - height) / 2
-                size: Tokens.searchFieldIconSize
+                x: Tokens.searchCapsuleGlyphInset
+                y: (parent.height - height) / 2
+                size: Tokens.searchCapsuleGlyph
                 name: "search"
                 color: Appearance.colors.textSecondary
             }
@@ -170,16 +163,16 @@ Variants {
             TextInput {
                 id: field
                 TextCursor {}
-                x: Tokens.searchQueryInset
+                x: Tokens.searchCapsuleTextInset
                 y: 0
-                width: panel.width - x - Tokens.searchFieldInset
-                height: Tokens.searchFieldHeight
+                width: capsule.width - x - Tokens.searchCapsuleGlyphInset
+                height: capsule.height
                 verticalAlignment: TextInput.AlignVCenter
                 color: Appearance.colors.text
                 selectionColor: Appearance.highlight
                 selectedTextColor: Appearance.highlightText
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.searchFieldSize
+                font.family: Appearance.fontFamilyFor(Tokens.searchCapsuleTextSize)
+                font.pixelSize: Tokens.searchCapsuleTextSize
                 clip: true
                 focus: true
                 // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
@@ -258,13 +251,53 @@ Variants {
                 }
             }
 
-            Rectangle {
-                visible: panel.hasResults || panel.noResults
-                x: Tokens.searchFieldInset
-                y: Tokens.searchFieldHeight - 1
-                width: panel.width - 2 * Tokens.searchFieldInset
-                height: 1
-                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        }
+
+        Item {
+            id: panel
+
+            readonly property bool hasResults: root.controller.rows.length > 0
+            // Chips need something to choose between; a lone category is the list itself.
+            readonly property bool chipsShown: root.controller.chipsShown
+            readonly property real chipBlock: chipsShown ? Tokens.searchPanelTop + Tokens.launcherChipHeight + Tokens.searchChipBottom : 0
+            // A query nothing answers (file search settled): a centred notice instead of a bare field.
+            readonly property bool noResults: !hasResults && root.controller.query.trim() !== "" && !root.controller.filesPending
+            readonly property real listTop: chipBlock + Tokens.spacingSm
+            // Nothing to show under the capsule: no panel at all (an empty query without chips or recents).
+            readonly property bool used: chipsShown || hasResults || noResults
+
+            x: (win.width - width) / 2
+            y: capsule.y + capsule.height + Tokens.searchCapsuleGap
+            width: Math.min(Tokens.searchWidth, win.width - 2 * Tokens.searchEdgeMargin)
+            height: chipBlock + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults - chipBlock) : 0) + (noResults ? Tokens.searchEmptyHeight : 0)
+            visible: used
+            opacity: win.shown ? 1 : 0
+            Accessible.role: Accessible.Pane
+            Accessible.name: qsTr("Search")
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                }
+            }
+
+            Behavior on height {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            // Swallows clicks on the panel itself.
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+            }
+
+            Material {
+                glassClass: "menu"
+                anchors.fill: parent
+                radius: Tokens.radiusSearch
             }
 
             // Filter chips. The field keeps the text focus; Tab past the last result group (Shift+Tab before the first) moves
@@ -273,7 +306,7 @@ Variants {
                 id: chipFlick
                 visible: panel.chipsShown
                 x: Tokens.searchFieldInset - Tokens.controlFocusOutline
-                y: Tokens.searchFieldHeight + Tokens.searchChipTop - Tokens.controlFocusOutline
+                y: Tokens.searchPanelTop - Tokens.controlFocusOutline
                 width: panel.width - 2 * Tokens.searchFieldInset + 2 * Tokens.controlFocusOutline
                 // Room around the chips for the focus ring outside them (the row clips).
                 height: Tokens.launcherChipHeight + 2 * Tokens.controlFocusOutline
@@ -319,7 +352,7 @@ Variants {
                 id: emptyNotice
                 visible: panel.noResults
                 x: Tokens.searchFieldInset
-                y: Tokens.searchFieldHeight
+                y: panel.chipBlock
                 width: panel.width - 2 * Tokens.searchFieldInset
                 height: Tokens.searchEmptyHeight
                 horizontalAlignment: Text.AlignHCenter
@@ -380,7 +413,7 @@ Variants {
 
                     Item {
                         id: iconBox
-                        x: Tokens.searchFieldInset - Tokens.searchRowInset
+                        x: Tokens.searchRowIconInset - Tokens.searchRowInset
                         anchors.verticalCenter: parent.verticalCenter
                         width: Tokens.searchRowIconSize
                         height: Tokens.searchRowIconSize

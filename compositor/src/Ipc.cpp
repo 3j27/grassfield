@@ -18,6 +18,7 @@
 #include "core/Overview.hpp"
 #include "core/OverviewFocus.hpp"
 #include "core/Protocol.hpp"
+#include "core/RunMode.hpp"
 #include "core/FrameLog.hpp"
 #include "core/Stages.hpp"
 
@@ -146,14 +147,14 @@ namespace gf::ipc {
     }
 
     namespace {
-        // A dev session (scripts/dev/nested-up.sh exports GRASSFIELD_DEV=1 to the nested Hyprland); the installed
-        // session never sets it. Read once: the environment does not change under a running compositor.
+        // A dev session by the run-mode rule (ADR-0019, core/RunMode.hpp): scripts/dev/nested-up.sh exports
+        // GRASSFIELD_DEV=1 to the nested Hyprland, whose config never sets GRASSFIELD_SESSION; the installed session
+        // sets GRASSFIELD_SESSION=1 (session.lua, hl.env: Hyprland's own environment), so a GRASSFIELD_DEV=1 that
+        // leaked into it opens no dev hook. Read at each call (only the rare testFault request asks): hl.env can change
+        // Hyprland's environment on a config reload.
         bool devSession() {
-            static const bool dev = [] {
-                const char* v = std::getenv("GRASSFIELD_DEV"); // NOLINT(concurrency-mt-unsafe): compositor thread only
-                return v != nullptr && std::string_view{v} == "1";
-            }();
-            return dev;
+            // NOLINTNEXTLINE(concurrency-mt-unsafe): compositor thread only, as hl.env's setenv
+            return runmode::dev(std::getenv("GRASSFIELD_DEV"), std::getenv("GRASSFIELD_SESSION"));
         }
     } // namespace
 
@@ -186,7 +187,8 @@ namespace gf::ipc {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered,
-                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr);
+                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr,
+                                                appmenuAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace

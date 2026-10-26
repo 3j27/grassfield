@@ -318,6 +318,9 @@ Scope {
 
     function activateItem(item: var): void {
         keyboardMode = false;
+        // Fixtures only (dock noactivate): a click is logged ("dock-launch: tapped") but nothing starts, opens or comes forward.
+        if (VisualFixtures.active && root.testNoActivate)
+            return;
         if (item.kind === "apps") {
             root.appsRequested();
             return;
@@ -412,6 +415,8 @@ Scope {
     // Fixtures only (IPC dock forceinterrupt): every press on an app tile is interrupted (one interruption event, no popup, no menu) the
     // moment it goes down, so a test reaches "interrupted before the drag starts" without racing a real surface against the drag.
     property bool forceInterrupt: false
+    // Fixtures only: activateItem does nothing (the nested click test must not start apps or open stacks).
+    property bool testNoActivate: false
 
     function cancelClicks(): void {
         clickCancels++;
@@ -570,6 +575,11 @@ Scope {
             return JSON.stringify(Settings.dockPinned);
         }
 
+        function noactivate(on: bool): void {
+            if (VisualFixtures.active)
+                root.testNoActivate = on;
+        }
+
         function forceinterrupt(on: bool): void {
             if (VisualFixtures.active)
                 root.forceInterrupt = on;
@@ -716,6 +726,19 @@ Scope {
             return win ? win.tileCentre(index) : "";
         }
 
+        // "x y w h" of the drawn icon of tile `index` on `screen`, output coordinates (fixtures only).
+        function iconrect(index: int, screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            let win = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    win = all[i];
+            }
+            return win ? win.tileIconRect(index) : "";
+        }
+
         function keyboard(): void {
             root.enterKeyboardMode();
         }
@@ -800,7 +823,7 @@ Scope {
             })
             // The separator is being dragged (resize).
             property bool resizing: false
-            readonly property int separatorWidth: Tokens.dockSpacing * 2 + Tokens.dockSeparatorWidth
+            readonly property int separatorWidth: Tokens.dockSeparatorSpace
             readonly property real maxScale: Settings.dockMagnificationEnabled ? Settings.dockMagnification : 1
             readonly property real pitch: iconSize + Tokens.dockSpacing
             readonly property var dockMetrics: Geometry.metrics(iconSize, {
@@ -813,7 +836,7 @@ Scope {
                 badgeSize: Tokens.dockBadgeSize,
                 radiusIcon: Tokens.radiusDockIcon
             })
-            readonly property int indicatorArea: Tokens.dockIndicatorSize + Tokens.dockSpacing
+            readonly property int indicatorArea: Tokens.dockIndicatorArea
             readonly property int shelfHeight: DockModel.shelfHeight(dockMetrics)
             readonly property real overhang: Math.ceil((maxScale - 1) * iconSize)
             readonly property int tooltipArea: Tokens.dockTooltipArea
@@ -1095,6 +1118,23 @@ Scope {
                 console.info("dock-launch: menu-by-hold (forced)", Date.now());
             }
 
+            // The tile that owns a press at `scenePos`: of the tiles whose hit box holds it, the one drawn on top (Geometry.hitOwner:
+            // z, then the later one). -1 when none does. Tiles overlap only while one is dragged or making room.
+            function tileOwningPress(scenePos: point): int {
+                const boxes = [];
+                for (let i = 0; i < tileRepeater.count; i++) {
+                    const t = tileRepeater.itemAt(i) as Item;
+                    const h = t && !t.isSeparator && t.visible ? t.pressBox : null;
+                    if (!h) {
+                        boxes.push(null);
+                        continue;
+                    }
+                    const o = h.mapToItem(null, 0, 0);
+                    boxes.push({x: o.x, y: o.y, w: h.width, h: h.height, z: t.z});
+                }
+                return Geometry.hitOwner(boxes, scenePos.x, scenePos.y);
+            }
+
             // "x y" of the icon centre of tile `index`, in output coordinates (test hook).
             function tileCentre(index: int): string {
                 const t = tileRepeater.itemAt(index);
@@ -1104,6 +1144,15 @@ Scope {
                 const along = t.isSeparator;
                 const p = t.mapToItem(null, along && !win.vertical ? t.width / 2 : t.iconPos.x + t.iconPx / 2, along && win.vertical ? t.height / 2 : t.iconPos.y + t.iconPx / 2);
                 return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y);
+            }
+
+            // "x y w h" of the icon of tile `index` as drawn (magnification, hover rise and drag included), in output coordinates (test hook).
+            function tileIconRect(index: int): string {
+                const t = tileRepeater.itemAt(index);
+                if (!t || t.isSeparator)
+                    return "";
+                const p = t.mapToItem(null, t.iconPos.x, t.iconPos.y);
+                return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y) + " " + Math.round(t.iconPx) + " " + Math.round(t.iconPx);
             }
 
             // Where a popup of tile `index` opens (the Dock menu's anchor).
@@ -1452,8 +1501,9 @@ Scope {
                                 // The icon's place in the tile (it grows away from the screen edge) and the way out (bounce, hover rise).
                                 readonly property var iconPos: Geometry.iconOrigin(win.edge, win.iconSize, iconPx, win.indicatorArea)
                                 readonly property bool dragging: win.dragFrom === index
+                                readonly property Item pressBox: hit
                                 // The button is held on an app tile: the icon darkens slightly (macOS).
-                                readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
+                                readonly property bool pressedDown: isApp && leftTap.pressed && ownsPress && !dragging
                                 property bool tipSuppressed: false
                                 // The hovered state outlives the pointer by Tokens.dockHoverHold, so the label does not flicker
                                 // when the pointer crosses the gap between two icons.
@@ -1466,6 +1516,8 @@ Scope {
                                 property int pressMark: 0
                                 property bool pressCancelled: false
                                 property real pressTime: 0
+                                // This tile owns the press that is down (win.tileOwningPress): where two hit boxes share a point only the tile drawn on top acts.
+                                property bool ownsPress: true
                                 // root.dragInterruptions when the button went down (a drag of this press is refused when it changed).
                                 property int dragMark: 0
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion && Settings.dockAnimateOpening
@@ -1577,6 +1629,21 @@ Scope {
                                 Keys.onDownPressed: (tile.nextItemInFocusChain(true) as Item).forceActiveFocus()
                                 Keys.onMenuPressed: win.openMenu(index)
 
+                                // What a pointer can press, hover, drag, drop on and open the menu from: the drawn icon, not only the tile's own box. The icon
+                                // grows outside the tile (the tile keeps iconSize + indicator across so the Grid does not move) and a handler is
+                                // scoped to its parent: left on the tile, the part of a magnified icon beyond it was dead (owner report
+                                // 2026-10-25, "I click an open app in the Dock and nothing happens"). Along the Dock the box is the tile's own
+                                // extent, so neighbours share no point at rest; the tile drawn on top (win.tileOwningPress) owns one they share.
+                                Item {
+                                    id: hit
+                                    readonly property var box: Geometry.hitBox(win.edge, win.iconSize, tile.iconPx, win.indicatorArea, tile.width, tile.height)
+                                    visible: !tile.isSeparator
+                                    x: box.x
+                                    y: box.y
+                                    width: box.w
+                                    height: box.h
+                                }
+
                                 // Separator hairline.
                                 Rectangle {
                                     visible: tile.isSeparator
@@ -1585,7 +1652,7 @@ Scope {
                                     height: win.vertical ? Tokens.dockSeparatorWidth : win.dockMetrics.separatorHeight
                                     x: win.vertical ? (win.edge === "left" ? win.indicatorArea : 0) + (win.iconSize - width) / 2 : (tile.width - width) / 2
                                     y: win.vertical ? (tile.height - height) / 2 : (win.iconSize - height) / 2
-                                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                                    color: Appearance.withAlpha(Appearance.colors.separator, Tokens.dockSeparatorOpacity)
                                 }
 
                                 // Resize (macOS): the separator is a handle. The pointer shows the resize cursor over it (across the Dock, along
@@ -1947,16 +2014,25 @@ Scope {
                                     border.color: Appearance.focusRingColor
                                 }
 
-                                // Running indicator.
+                                // Running indicator, ringed by a halo of the opposite colour: it reads over any backdrop on the clear
+                                // shelf (ADR-0024 G-7: black under a white dot in dark, white under a black dot in light).
                                 Rectangle {
                                     visible: tile.running && Settings.dockShowIndicators
-                                    width: Tokens.dockIndicatorSize
-                                    height: Tokens.dockIndicatorSize
+                                    width: Tokens.dockIndicatorSize + 2 * Tokens.dockDotHalo
+                                    height: width
                                     radius: width / 2
-                                    color: Appearance.colors.indicator
-                                    readonly property var dot: Geometry.dotOrigin(win.edge, tile.width, tile.height, win.iconSize, Tokens.dockSpacing, Tokens.dockIndicatorSize, tile.hoverLift)
-                                    x: dot.x
-                                    y: dot.y
+                                    color: Appearance.withAlpha(Appearance.dark ? Appearance.colors.shadow : Appearance.colors.knob, Tokens.dockDotHaloOpacity)
+                                    readonly property var dot: Geometry.dotOrigin(win.edge, tile.width, tile.height, win.iconSize, Tokens.dockIndicatorGap, Tokens.dockIndicatorSize, tile.hoverLift)
+                                    x: dot.x - Tokens.dockDotHalo
+                                    y: dot.y - Tokens.dockDotHalo
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: Tokens.dockIndicatorSize
+                                        height: width
+                                        radius: width / 2
+                                        color: Appearance.colors.indicator
+                                    }
                                 }
 
                                 Tooltip {
@@ -1977,13 +2053,14 @@ Scope {
                                         }
                                     })
                                     shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tile.hoverHeld || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
-                                    readonly property var at: Geometry.tooltipOrigin(win.edge, tile.width, tile.height, win.iconSize, tile.iconPx, win.indicatorArea, Tokens.dockTooltipGap, width, height)
+                                    readonly property var at: Geometry.tooltipOrigin(win.edge, tile.width, tile.height, win.iconSize, tile.iconPx, win.indicatorArea, Tokens.dockTooltipGap, width, height, Tokens.dockPadding)
                                     x: at.x
                                     y: at.y
                                 }
 
                                 HoverHandler {
                                     id: tileHover
+                                    parent: hit
                                     onHoveredChanged: {
                                         if (VisualFixtures.active && leftTap.pressed)
                                             console.info("dock-launch: hover-while-pressed", hovered, Date.now());
@@ -2009,7 +2086,10 @@ Scope {
                                 // application offering text/uri-list) are moved to the trash.
                                 DropArea {
                                     id: trashDrop
-                                    anchors.fill: parent
+                                    x: hit.x
+                                    y: hit.y
+                                    width: hit.width
+                                    height: hit.height
                                     enabled: tile.isTrash
                                     keys: ["text/uri-list"]
                                     onDropped: drop => {
@@ -2034,7 +2114,10 @@ Scope {
                                 // Files dropped on an app tile are opened with that app.
                                 DropArea {
                                     id: appDrop
-                                    anchors.fill: parent
+                                    x: hit.x
+                                    y: hit.y
+                                    width: hit.width
+                                    height: hit.height
                                     enabled: tile.isApp && !!tile.modelData.entry
                                     keys: ["text/uri-list"]
                                     // The tile highlights and accepts only a document its app can open (file field code
@@ -2090,6 +2173,7 @@ Scope {
                                 // Drag to reorder; dragged far above the shelf it leaves the Dock (poof).
                                 DragHandler {
                                     id: dragHandler
+                                    parent: hit
                                     enabled: tile.isApp && !tile.isFiles
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
@@ -2113,6 +2197,11 @@ Scope {
                                             // (tile.menuByHold, root.dragInterruptions against the mark taken at the press), not from an enabled
                                             // flag or from leftTap.pressed: the tap handler cancels at the drag threshold, which would
                                             // re-enable a handler guarded by it within the same event. win.dragFrom stays -1.
+                                            if (!tile.ownsPress) {
+                                                if (VisualFixtures.active)
+                                                    console.info("dock-launch: drag-refused", "not-owner", Date.now());
+                                                return;
+                                            }
                                             if (tile.menuByHold || root.dragInterruptions !== tile.dragMark) {
                                                 if (VisualFixtures.active)
                                                     console.info("dock-launch: drag-refused", tile.menuByHold ? "hold-menu" : "interrupted", Date.now());
@@ -2138,7 +2227,7 @@ Scope {
                                     onTranslationChanged: {
                                         if (active && win.dragFrom === tile.index) {
                                             // Never beyond the point where the "Remove" label would leave the window (away from the screen edge).
-                                            const room = Geometry.crossSize(win.edge, win.width, win.height) - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - (win.vertical ? tooltip.width : tooltip.height);
+                                            const room = Geometry.crossSize(win.edge, win.width, win.height) - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - Math.max(tile.iconPx, win.iconSize + Tokens.dockPadding) - Tokens.dockTooltipGap - (win.vertical ? tooltip.width : tooltip.height);
                                             const drag = Geometry.dragVector(win.edge, Geometry.dragMain(win.edge, translation.x, translation.y), Math.min(Geometry.dragOutward(win.edge, translation.x, translation.y), room));
                                             win.dragDx = drag.x;
                                             win.dragDy = drag.y;
@@ -2148,6 +2237,7 @@ Scope {
 
                                 TapHandler {
                                     id: leftTap
+                                    parent: hit
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
                                     // macOS: a press held past Tokens.dockMenuHold opens the Dock menu and its release launches nothing; a
@@ -2162,6 +2252,7 @@ Scope {
                                         // Auto-hide inhibitor: a press (and hold) in progress on this tile.
                                         win.pressedTile = pressed ? tile.index : (win.pressedTile === tile.index ? -1 : win.pressedTile);
                                         if (pressed) {
+                                            tile.ownsPress = win.tileOwningPress(leftTap.point.scenePosition) === tile.index;
                                             tile.tipSuppressed = true;
                                             tile.menuByHold = false;
                                             tile.pressMark = root.clickCancels;
@@ -2185,15 +2276,17 @@ Scope {
                                         if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.CancelGrabPassive)
                                             tile.pressCancelled = true;
                                     }
-                                    onLongPressed: if (tile.isApp) {
+                                    onLongPressed: if (tile.isApp && tile.ownsPress) {
                                         tile.menuByHold = true;
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: menu-by-hold", Date.now());
                                         win.openMenu(tile.index);
                                     }
                                     onTapped: {
-                                        if (tile.menuByHold)
+                                        if (tile.menuByHold || !tile.ownsPress)
                                             return;
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: tapped", tile.modelData.key !== undefined ? tile.modelData.key : tile.modelData.kind, Date.now());
                                         // Press taken away from the Dock (a shell surface or popup opened, the lock, or Qt cancelled it; see root.clickCancels): nothing happens.
                                         if (root.clickCancels !== tile.pressMark || tile.pressCancelled) {
                                             if (VisualFixtures.active)
@@ -2207,16 +2300,17 @@ Scope {
                                             return;
                                         }
                                         if (VisualFixtures.active)
-                                            console.info("dock-launch: tap", Date.now());
+                                            console.info("dock-launch: tap", Date.now(), "tile", tile.tileId);
                                         root.activateItem(tile.modelData);
                                     }
                                 }
 
                                 TapHandler {
+                                    parent: hit
                                     enabled: tile.isApp || tile.isTrash || tile.isFolder
                                     acceptedButtons: Qt.RightButton
                                     // macOS: a secondary click opens the Dock menu on the press, however long the button is held.
-                                    onPressedChanged: if (pressed) {
+                                    onPressedChanged: if (pressed && win.tileOwningPress(point.scenePosition) === tile.index) {
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: menu-by-right-press", Date.now());
                                         win.openMenu(tile.index);

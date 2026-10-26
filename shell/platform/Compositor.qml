@@ -11,6 +11,7 @@ import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
 import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice
+import "SpaceGeometry.js" as SpaceGeometry
 import "showdesktop"
 import "StagesFront.js" as StagesFront
 
@@ -44,6 +45,9 @@ Singleton {
     }
 
     readonly property var focusedWorkspace: Hyprland.focusedWorkspace
+    // Outputs whose active workspace holds no window: glass over them sees only the wallpaper (services/Backdrop.qml, ADR-0024
+    // G-3). Empty without Hyprland, and then every glass takes the worst case.
+    readonly property var bareOutputs: Hyprland.monitors.values.filter(m => m.activeWorkspace && m.activeWorkspace.toplevels.values.length === 0).map(m => m.name)
     // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
     readonly property string focusedScreenName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
     // Where a surface opens when nobody named an output (SUPER+N, IPC, keyboard): the active display, the first output only as
@@ -907,21 +911,26 @@ Singleton {
     }
 
     // Regular workspaces (id > 0) of an output, ordered by id:
-    // [{id, name, active, windowCount, appIds}].
+    // [{id, name, active, windowCount, appIds, windows, screenW, screenH}]. `windows` (bottom to top as Hyprland lists them) are the
+    // windowsAcross entries of the Space, `screenW` x `screenH` the output size in logical pixels (SpaceGeometry.js): what a desktop miniature needs.
     function spacesOn(screenName: string, revision: int): var {
         const out = [];
         const mon = monitorByName(screenName);
         const all = Hyprland.workspaces ? Hyprland.workspaces.values : [];
         const wins = windowsAcross(screenName);
+        // Window geometry is logical, so is the size it is scaled against (an output at scale 1.5 or 2 reports device pixels).
+        const size = SpaceGeometry.logicalSize(Quickshell.screens, screenName, mon);
         for (let i = 0; i < all.length; i++) {
             const ws = all[i];
             if (ws.id <= 0 || !ws.monitor || ws.monitor.name !== screenName)
                 continue;
             const appIds = [];
+            const inSpace = [];
             let count = 0;
             for (let j = 0; j < wins.length; j++) {
                 if (wins[j].workspaceId !== ws.id)
                     continue;
+                inSpace.push(wins[j]);
                 count++;
                 if (appIds.indexOf(wins[j].appId) === -1)
                     appIds.push(wins[j].appId);
@@ -931,7 +940,10 @@ Singleton {
                 name: ws.name,
                 active: mon && mon.activeWorkspace ? mon.activeWorkspace.id === ws.id : false,
                 windowCount: count,
-                appIds: appIds
+                appIds: appIds,
+                windows: inSpace,
+                screenW: size.w,
+                screenH: size.h
             });
         }
         out.sort((a, b) => a.id - b.id);

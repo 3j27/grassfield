@@ -11,6 +11,8 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cerrno>
+#include <csignal>
 #include <sys/stat.h>
 #include <time.h>
 
@@ -38,7 +40,7 @@ namespace gf::menubridge {
     } // namespace
 
     Bridge::Bridge(const QDBusConnection& bus, QString socketPath, QObject* parent)
-        : QObject(parent), m_bus(bus), m_socketPath(std::move(socketPath)),
+        : QObject(parent), m_bus(bus), m_socketPath(std::move(socketPath)), m_registrarObject([this] { onRegistrations(); }),
           m_launcher(bus,
                      LauncherWatcher::Hooks{
                          .refused = [this](const QString& identity) {
@@ -62,6 +64,7 @@ namespace gf::menubridge {
               send(screensaverMessage(active, count));
           }) {
         connect(&m_launcher, &LauncherWatcher::line, this, [this](const QByteArray& line) { send(line); });
+        m_registrarObject.setConnection(m_bus);
         m_screensaver.setConnection(m_bus);
         m_screensaverHeartbeat.setInterval(screensaver::kHeartbeatMs);
         connect(&m_screensaverHeartbeat, &QTimer::timeout, this,
@@ -142,6 +145,7 @@ namespace gf::menubridge {
             {QStringLiteral("degraded"), m_degraded},
             {QStringLiteral("shell"), !m_client.isNull()},
             {QStringLiteral("menus"), static_cast<uint>(m_menus.size())},
+            {QStringLiteral("registrations"), static_cast<uint>(m_registrarObject.book().count())},
             {QStringLiteral("screensaver"), m_screensaverOwned},
             {QStringLiteral("inhibitors"), static_cast<uint>(m_screensaver.book().count())},
         };
@@ -227,8 +231,17 @@ namespace gf::menubridge {
     void Bridge::handle(const ShellMessage& msg) {
         switch (msg.type) {
             case ShellMessage::Type::Hello: hello(msg.appmenu); return;
-            case ShellMessage::Type::Open: open(msg); return;
-            case ShellMessage::Type::Close: close(msg.window); return;
+            case ShellMessage::Type::Open:
+                m_waiting.remove(msg.window);
+                m_viaRegistrar.remove(msg.window);
+                open(msg);
+                return;
+            case ShellMessage::Type::OpenRegistered: openRegistered(msg); return;
+            case ShellMessage::Type::Close:
+                m_waiting.remove(msg.window);
+                m_viaRegistrar.remove(msg.window);
+                close(msg.window);
+                return;
             case ShellMessage::Type::AboutToShow: {
                 MenuClient* c = m_menus.value(msg.window);
                 if (!c || !c->aboutToShow(msg.id))
@@ -317,6 +330,76 @@ namespace gf::menubridge {
             }
             checkPid(owner);
         });
+    }
+
+    void Bridge::openRegistered(const ShellMessage& msg) {
+        if (m_degraded) {
+            sendError(msg.window, QStringLiteral("backoff"), QStringLiteral("the menu bridge gave up after repeated unexplained crashes; menus are not served until it is restarted later"));
+            return;
+        }
+        // A process that is gone (a window address Hyprland reused, a late line): nothing to serve, said as such.
+        if (::kill(static_cast<pid_t>(msg.pid), 0) != 0 && errno == ESRCH) {
+            m_waiting.remove(msg.window);
+            m_viaRegistrar.remove(msg.window);
+            close(msg.window);
+            log(QStringLiteral("window %1: pid %2 is gone: no registrar menu").arg(msg.window).arg(msg.pid));
+            sendError(msg.window, QStringLiteral("no-owner"), QStringLiteral("the window's process is gone"));
+            return;
+        }
+        // A sandbox (a Flatpak app, any other pid namespace) is never served a registrar menu.
+        if (!inBridgePidNamespace(msg.pid)) {
+            m_waiting.remove(msg.window);
+            m_viaRegistrar.remove(msg.window);
+            close(msg.window);
+            log(QStringLiteral("window %1: pid %2 is not in the bridge's pid namespace: no registrar menu").arg(msg.window).arg(msg.pid));
+            sendError(msg.window, QStringLiteral("foreign-namespace"), QStringLiteral("the window's process is in another pid namespace"));
+            return;
+        }
+        const auto registration = m_registrarObject.book().latestFor(msg.pid);
+        if (!registration) {
+            // The process has not registered (yet, or not at all): its registration, when it comes, opens the window.
+            if (m_viaRegistrar.value(msg.window) != msg.pid) {
+                m_viaRegistrar.remove(msg.window);
+                close(msg.window);
+            }
+            m_waiting.insert(msg.window, msg.pid);
+            return;
+        }
+        m_waiting.remove(msg.window);
+        openFromRegistration(msg.window, msg.pid, *registration);
+    }
+
+    void Bridge::openFromRegistration(const QString& window, qint64 pid, const registrar::Registration& registration) {
+        ShellMessage msg;
+        msg.type    = ShellMessage::Type::Open;
+        msg.window  = window;
+        msg.service = registration.sender;
+        msg.path    = registration.path;
+        msg.pid     = pid;
+        m_viaRegistrar.insert(window, pid);
+        open(msg); // the sender's process is checked again (GetConnectionUnixProcessID): a reused pid gets nothing
+    }
+
+    void Bridge::onRegistrations() {
+        const auto& book = m_registrarObject.book();
+        for (auto it = m_waiting.begin(); it != m_waiting.end();) {
+            if (const auto registration = book.latestFor(it.value())) {
+                const QString window = it.key();
+                const qint64  pid    = it.value();
+                it                   = m_waiting.erase(it);
+                log(QStringLiteral("window %1: pid %2 registered %3 %4 with the registrar").arg(window).arg(pid).arg(registration->sender, registration->path));
+                openFromRegistration(window, pid, *registration);
+            } else
+                ++it;
+        }
+        const QStringList opened = m_viaRegistrar.keys();
+        for (const QString& window : opened) {
+            const qint64 pid          = m_viaRegistrar.value(window);
+            const auto   registration = book.latestFor(pid);
+            const auto   current      = m_opened.constFind(window);
+            if (registration && current != m_opened.constEnd() && (current->service != registration->sender || current->path != registration->path))
+                openFromRegistration(window, pid, *registration);
+        }
     }
 
     void Bridge::verified(const ShellMessage& msg, quint64 token, const QString& owner) {
@@ -465,6 +548,8 @@ namespace gf::menubridge {
         for (const QString& w : windows)
             close(w);
         m_pending.clear();
+        m_waiting.clear();
+        m_viaRegistrar.clear();
     }
 
     void Bridge::setRegistrar(bool wanted) {
@@ -483,6 +568,9 @@ namespace gf::menubridge {
             m_bus.unregisterObject(path);
             m_registrar     = false;
             m_registrarBusy = false;
+            // Applications register again when the name comes back (Electron watches its owner).
+            m_registrarObject.clear();
+            m_waiting.clear();
             log(QStringLiteral("released %1").arg(service));
             return;
         }

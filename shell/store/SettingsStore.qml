@@ -183,6 +183,8 @@ Scope {
     readonly property string menubarClockHours: read("menubar.clockHours")
     readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
+    // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
+    readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
     readonly property string iconMode: read("icons.mode")
     readonly property string iconTint: read("icons.tint")
     readonly property string folderColor: read("icons.folderColor")

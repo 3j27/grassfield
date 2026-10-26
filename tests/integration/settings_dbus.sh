@@ -167,8 +167,11 @@ check "both refuse a socket next to the scratch directory (${work}x/bus)" refuse
 check "both refuse an abstract socket, runtime=, systemd: and an unknown transport" bash -c '
   for a in "unix:abstract=/tmp/x" "unix:runtime=yes" "systemd:" "launchd:env=X" "nonce-tcp:host=127.0.0.1,port=1" "tcp:host=192.0.2.1,port=1" "tcp:port=1"; do
     env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$1" DBUS_SYSTEM_BUS_ADDRESS="$a" timeout 10 "$1/probe" wifi-state >/dev/null 2>&1
-    [[ $? -eq 2 ]] || { echo "not refused: $a"; exit 1; }
-  done' _ "$work"
+    [[ $? -eq 2 ]] || { echo "the probe did not refuse: $a"; exit 1; }
+    rm -f "$1/x.ready"
+    env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$1" DBUS_SYSTEM_BUS_ADDRESS="$a" timeout 10 python3 -I "$2/tests/fixtures/fake-system-service.py" nm --log "$1/x.log" --ready "$1/x.ready" >/dev/null 2>&1
+    { [[ $? -ne 0 ]] && [[ ! -e "$1/x.ready" ]]; } || { echo "the fake service did not refuse: $a"; exit 1; }
+  done' _ "$work" "$root"
 check "both refuse a list that hides the real bus after a private entry" refused "unix:path=$work/bus.sock;unix:path=/run/dbus/system_bus_socket"
 env -i PATH="$PATH" HOME="$work" GF_TEST_BUS_DIR="$work" DBUS_SYSTEM_BUS_ADDRESS="$bus" timeout 10 "$work/probe" wifi-state >/dev/null 2>&1
 check "the probe refuses a run without GF_TEST_BUS=1" test "$?" -eq 2

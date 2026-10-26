@@ -28,7 +28,7 @@ SettingsRow {
     Icon {
         name: System.volumeGlyph(root.volume, root.muted)
         size: Tokens.settingsListIconSize
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         anchors.verticalCenter: parent.verticalCenter
     }
 
@@ -55,7 +55,7 @@ SettingsRow {
         width: Tokens.settingsVolumeValueWidth
         horizontalAlignment: Text.AlignRight
         text: qsTr("%1%").arg(System.percent(root.volume))
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
     }

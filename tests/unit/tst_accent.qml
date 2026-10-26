@@ -78,22 +78,27 @@ TestCase {
     }
 
     // macOS keeps white text on its accent fill in both appearances (ADR-0024): a selected row, a default button or a checked
-    // box uses the light appearance's accent and text colour, also in the dark appearance; 4.5:1 for every accent.
-    function test_selectionIsTheLightAccentInBothAppearances() {
+    // box uses the light appearance's accent and text colour in the light appearance and the dark selection shade
+    // (color.selectionDark, never darker than the light accent) in the dark one; 4.5:1 for every accent.
+    function test_selectionPairPerAppearance() {
         for (const n of ["multicolor"].concat(testCase.named)) {
             Appearance.accentSetting = n;
-            const fill = n === "multicolor" ? Tokens.colorLight.accent : Tokens.colorAccentLight[n];
-            const text = n === "multicolor" ? Tokens.colorLight.accentText : Tokens.colorAccentLight[n + "Text"];
+            const lightFill = n === "multicolor" ? Tokens.colorLight.accent : Tokens.colorAccentLight[n];
+            const lightText = n === "multicolor" ? Tokens.colorLight.accentText : Tokens.colorAccentLight[n + "Text"];
             for (const dark of [true, false]) {
                 Appearance.dark = dark;
+                const fill = dark ? Tokens.colorSelectionDark[n] : lightFill;
+                const text = dark ? Tokens.colorSelectionDark[n + "Text"] : lightText;
                 compare(Qt.color(Appearance.colors.selection), Qt.color(fill), n + (dark ? " dark" : " light"));
                 compare(Qt.color(Appearance.colors.selectionText), Qt.color(text), n + (dark ? " dark" : " light"));
                 verify(ratio(Appearance.colors.selectionText, Appearance.colors.selection) >= 4.5, n + " " + ratio(Appearance.colors.selectionText, Appearance.colors.selection));
+                verify(Qt.color(Appearance.colors.selection).hslLightness >= Qt.color(lightFill).hslLightness - 0.005, n + " dark selection darker than the light accent");
             }
         }
-        // The multicolor green in the dark appearance: white text, not the dark text of the bright accent.
+        // The multicolor green in the dark appearance: the owner's #2E8049 with white text, not the dark text of the bright accent.
         Appearance.accentSetting = "multicolor";
         Appearance.dark = true;
+        compare(Qt.color(Appearance.colors.selection), Qt.color("#2e8049"));
         compare(Qt.color(Appearance.colors.selectionText), Qt.color("#ffffff"));
         Appearance.devGlyphMode = "white";
         compare(Qt.color(Appearance.colors.selectionText), Qt.color("#fffffe"));

@@ -257,7 +257,8 @@ TEST(SystemBusWifi, ActionsMakeExactlyTheirCalls)
         NmFixture f;
         EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectOpen"}, {"hex", "43616665"}}), QString());
         const Call c = f.bus.calls.last();
-        EXPECT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+        ASSERT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+        ASSERT_GE(c.args.size(), 3);
         const ConnectionSettings s = qvariant_cast<ConnectionSettings>(c.args[0]);
         EXPECT_EQ(s["connection"]["id"].toString(), QStringLiteral("Cafe"));
         EXPECT_EQ(s["connection"]["type"].toString(), QStringLiteral("802-11-wireless"));
@@ -286,12 +287,54 @@ TEST(SystemBusWifi, AnOpenAndASecuredNetworkOfTheSameNameAreToldApartBySecurity)
     f.apProps[QStringLiteral("/ap/2")] = {{"Ssid", QByteArray("Home")}, {"Strength", u8(60)}, {"Flags", u32(0)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0)}};
     EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectOpen"}, {"hex", "486F6D65"}}), QString());
     const Call c = f.bus.calls.last();
-    EXPECT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+    ASSERT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+    ASSERT_GE(c.args.size(), 3);
     EXPECT_EQ(qvariant_cast<QDBusObjectPath>(c.args[2]).path(), QStringLiteral("/ap/2"));
     EXPECT_FALSE(qvariant_cast<ConnectionSettings>(c.args[0]).contains(QStringLiteral("802-11-wireless-security")));
     // Only the secured ones left: refused with the password reason, never joined.
     NmFixture g;
     EXPECT_EQ(runAction(g.bus, {{"op", "wifi.connectOpen"}, {"hex", "486F6D65"}}), QStringLiteral("that network needs a password"));
+}
+
+TEST(SystemBusWifi, EnhancedOpenIsJoinedWithoutAPasswordAndWithKeyMgmtOwe)
+{
+    // OWE (rsn 0x888: OWE key management, CCMP; the privacy flag is set) needs no password: joined like an open network, but
+    // NetworkManager needs key-mgmt owe in the profile. One that also offers SAE or PSK needs a password.
+    NmFixture f;
+    f.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Owe")}, {"Strength", u8(50)}, {"Flags", u32(1)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0x888)}};
+    EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectOpen"}, {"hex", "4F7765"}}), QString());
+    const Call c = f.bus.calls.last();
+    ASSERT_EQ(c.member, QStringLiteral("AddAndActivateConnection"));
+    ASSERT_GE(c.args.size(), 3);
+    const ConnectionSettings settings = qvariant_cast<ConnectionSettings>(c.args[0]);
+    EXPECT_EQ(settings["802-11-wireless-security"]["key-mgmt"].toString(), QStringLiteral("owe"));
+    EXPECT_EQ(settings["802-11-wireless-security"].size(), 1) << "no secret in the profile";
+    EXPECT_EQ(qvariant_cast<QDBusObjectPath>(c.args[2]).path(), QStringLiteral("/ap/gone"));
+    // Not OWE alone: needs a password, never joined.
+    for (uint rsn : {0x888u | 0x400u, 0x888u | 0x100u, 0x888u | 0x200u}) {
+        NmFixture g;
+        g.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Owe")}, {"Strength", u8(50)}, {"Flags", u32(1)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(rsn)}};
+        EXPECT_EQ(runAction(g.bus, {{"op", "wifi.connectOpen"}, {"hex", "4F7765"}}), QStringLiteral("that network needs a password")) << rsn;
+    }
+    // OWE transition (rsn 0x1000 only, with or without the privacy flag): the open side is joined as open, no security section.
+    for (uint flags : {0u, 1u}) {
+        NmFixture t;
+        t.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Owe")}, {"Strength", u8(50)}, {"Flags", u32(flags)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0x1000)}};
+        EXPECT_EQ(runAction(t.bus, {{"op", "wifi.connectOpen"}, {"hex", "4F7765"}}), QString()) << flags;
+        const Call tc = t.bus.calls.last();
+        ASSERT_EQ(tc.member, QStringLiteral("AddAndActivateConnection"));
+        ASSERT_GE(tc.args.size(), 3);
+        EXPECT_FALSE(qvariant_cast<ConnectionSettings>(tc.args[0]).contains(QStringLiteral("802-11-wireless-security")));
+        EXPECT_EQ(qvariant_cast<QDBusObjectPath>(tc.args[2]).path(), QStringLiteral("/ap/gone"));
+    }
+    // A cipher-only RSN element (no key management we know) is still a secured network, as the label says ("WPA").
+    NmFixture u;
+    u.apProps[QStringLiteral("/ap/gone")] = {{"Ssid", QByteArray("Owe")}, {"Strength", u8(50)}, {"Flags", u32(1)}, {"WpaFlags", u32(0)}, {"RsnFlags", u32(0x8)}};
+    EXPECT_EQ(runAction(u.bus, {{"op", "wifi.connectOpen"}, {"hex", "4F7765"}}), QStringLiteral("that network needs a password"));
+    // A plain open network has no security section.
+    NmFixture h;
+    EXPECT_EQ(runAction(h.bus, {{"op", "wifi.connectOpen"}, {"hex", "43616665"}}), QString());
+    EXPECT_FALSE(qvariant_cast<ConnectionSettings>(h.bus.calls.last().args[0]).contains(QStringLiteral("802-11-wireless-security")));
 }
 
 TEST(SystemBusWifi, AFailedCallGivesTheServicesOwnShortReason)

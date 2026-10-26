@@ -50,6 +50,11 @@ QtObject {
     property int okCount: 0
     property int refusedCount: 0
     property var reasons: []
+    // The real-session D-Bus actions go out three at a time: BusJobs lets 4 jobs run at once and answers any other "timed out" at
+    // once (busjobs.h), which is its job but not what this test is about. A job counts until its worker is done, so 3 in flight
+    // plus the one being started stays under the cap whatever the machine's load.
+    property var pendingOps: []
+    property var busReturns: [] // what busAct returned for the real-session ops, kept in order, listed before the other returns
 
     readonly property string uuid: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
     // Wi-Fi and Bluetooth actions are D-Bus maps (busAct), Sound's are wpctl argument vectors (act).
@@ -62,6 +67,8 @@ QtObject {
     readonly property Connections conn: Connections {
         target: root.backend
         function onFinished(tag: string, ok: bool, output: string): void {
+            if (tag === "b.act" && root.pendingOps.length > 0)
+                root.busReturns.push(root.backend.busAct("test", root.pendingOps.shift(), "b.act"));
             root.seen++;
             if (ok)
                 root.okCount++;
@@ -89,7 +96,7 @@ QtObject {
     }
 
     function finish(): void {
-        console.log("RESULT dev=" + root.backend.devSession + " ok=" + root.okCount + " refused=" + root.refusedCount + " actReturns=" + root.actReturns.join(",") + " runs=" + root.runs.join("|") + " reasons=" + root.reasons.join("|"));
+        console.log("RESULT dev=" + root.backend.devSession + " ok=" + root.okCount + " refused=" + root.refusedCount + " actReturns=" + root.busReturns.concat(root.actReturns).join(",") + " runs=" + root.runs.join("|") + " reasons=" + root.reasons.join("|"));
         Qt.quit();
     }
 
@@ -128,8 +135,9 @@ QtObject {
             // Real session: every wpctl action runs; a D-Bus action is attempted and, with no bus, fails with a reason; a program
             // outside wpctl and xdg-open (nmcli and bluetoothctl are not programs of the pages any more) is refused.
             root.expected = root.busOps.length + root.commands.length + 1;
-            for (const o of root.busOps)
-                root.actReturns.push(root.backend.busAct("test", o, "b.act"));
+            root.pendingOps = root.busOps.slice(3);
+            for (const o of root.busOps.slice(0, 3))
+                root.busReturns.push(root.backend.busAct("test", o, "b.act"));
             for (const a of root.commands)
                 root.actReturns.push(root.backend.act("test", a, "a"));
             // A failing tool reports its reason (stderr) before finished(false).
@@ -175,7 +183,22 @@ res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
 check "real: the 3 wpctl actions run, the failing one and the 8 D-Bus actions (no bus here) report" "$(has 'dev=false ok=3 refused=9' "$res")"
 check "real: failure reason is the tool's stderr line" "$(has 'failing=Error: simulated failure' "$res")"
-check "real: a D-Bus action with no bus fails with a reason, not silently" "$(grep -o 'b.act=no connection to the system bus' <<<"$res" | wc -l | grep -qx 8 && echo 0 || echo 1)"
+# The run is started in a French locale and, outside a dev session, the app loads the INSTALLED catalog (/usr/share/grassfield/
+# translations) if there is one: the reason may come back in English or in French depending on the machine. The test accepts the
+# source string or its French text from the repository's own catalog (translations/grassfield_fr.ts), never what is installed.
+reason_count=$(RES="$res" python3 -I - "$root/translations/grassfield_fr.ts" <<'PY'
+import os, sys
+import xml.etree.ElementTree as ET
+source = "no connection to the system bus"
+french = None
+for m in ET.parse(sys.argv[1]).getroot().iter("message"):
+    if m.findtext("source") == source:
+        french = m.findtext("translation")
+text = os.environ["RES"]
+print(sum(text.count("b.act=" + t) for t in {source, french} if t))
+PY
+)
+check "real: a D-Bus action with no bus fails with a reason (the source string or its French text), not silently" "$([[ $reason_count == 8 ]] && echo 0 || echo 1)"
 check "real: run() takes the same allow-list" "$(has 'runs=empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty|empty' "$res")"
 check "real: no stray run() command reached a tool" "$(grep -qE 'get-volume|^touch|pacman -S|pacman -Q bash|lspci -vv|not-a-uuid|bluetoothctl' "$tmp/marker" && echo 1 || echo 0)"
 check "real: tools always see the C locale" "$([[ $(sort -u "$tmp/locale") == 'LC_ALL=C LANG=C LANGUAGE=unset' ]] && echo 0 || echo 1)"

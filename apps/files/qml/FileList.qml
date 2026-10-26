@@ -12,6 +12,8 @@ FocusScope {
 
     readonly property real nameWidth: Math.max(Tokens.filesListNameMinWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.filesListRowHeight))
+    // The rows have moved up under the toolbar (the window draws the toolbar's hairline then, macOS).
+    readonly property bool scrolled: list.contentY > list.originY
 
     Accessible.role: Accessible.Table
     Accessible.name: qsTr("Files")
@@ -264,7 +266,7 @@ FocusScope {
                 colors: row.tagColors
                 x: nameText.x + nameText.paintedWidth + Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter
-                ringColor: row.emphasized ? Appearance.colors.selection : Appearance.colors.materialTint
+                ringColor: row.emphasized ? Appearance.colors.selection : Appearance.windowFill
             }
 
             Loader {

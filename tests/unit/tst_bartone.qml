@@ -129,33 +129,32 @@ TestCase {
         return {r: parseInt(hex.substr(1, 2), 16) / 255, g: parseInt(hex.substr(3, 2), 16) / 255, b: parseInt(hex.substr(5, 2), 16) / 255};
     }
 
-    // The dot follows the appearance (white in dark, black in light) and the shelf tint alpha is chosen per appearance so
-    // that it reads over ANY backdrop (wallpaper or a window: black, white, greys, noise averages by the blur), whether the
-    // Dock is autohidden or not (the backdrop is then a window, not the wallpaper). The worst cases are the extremes.
+    // The dot follows the appearance (white in dark, black in light) and reads by its own halo, the opposite colour at
+    // dock.dotHaloOpacity (ADR-0024 G-7), whatever lies behind the clear shelf (wallpaper or a window: black, white, greys,
+    // noise averaged by the blur; the shelf's own faint tint only moves the backdrop within that range). The worst cases are
+    // the extremes; the halo is composited over the backdrop in sRGB, as the renderer does.
     function test_dockDotKeepsContrastOverAnyBackdrop() {
-        const tints = {dark: rgb(Tokens.colorDark.materialTint), light: rgb(Tokens.colorLight.materialTint)};
-        const alphas = {dark: Tokens.dockTintAlphaDark, light: Tokens.dockTintAlphaLight};
         const dots = {dark: rgb(Tokens.colorDark.indicator), light: rgb(Tokens.colorLight.indicator)};
+        const halos = {dark: rgb(Tokens.colorDark.shadow), light: rgb(Tokens.colorLight.knob)};
+        const a = Tokens.dockDotHaloOpacity;
         for (const appearance of ["dark", "light"]) {
-            const dotLum = Logic.luminance(dots[appearance].r, dots[appearance].g, dots[appearance].b);
+            const d = dots[appearance];
+            const h = halos[appearance];
+            const dotLum = Logic.luminance(d.r, d.g, d.b);
             let worst = 99;
             for (let i = 0; i <= 100; i++) {
-                const wall = i < 101 ? i / 100 : 1;  // relative luminance 0..1 in 0.01 steps
-                for (const alpha of [alphas[appearance], 1]) {
-                    const shelf = Logic.shelfLuminance(wall, tints[appearance], alpha);
-                    const r = ratio(dotLum, shelf);
-                    if (alpha < 1)
-                        worst = Math.min(worst, r);
-                    verify(r >= 3, appearance + " backdrop " + wall + " alpha " + alpha + " shelf " + shelf + " ratio " + r);
-                }
+                const g = i / 100;  // backdrop grey, sRGB 0..1
+                const ring = Logic.luminance(h.r * a + g * (1 - a), h.g * a + g * (1 - a), h.b * a + g * (1 - a));
+                worst = Math.min(worst, ratio(dotLum, ring));
             }
-            verify(worst >= 3.3, appearance + " worst case " + worst);
+            verify(worst >= 3, appearance + " worst case " + worst);
         }
     }
 
-    function test_dockTintAlphaStaysFrosted() {
-        verify(Tokens.dockTintAlphaLight <= 0.55 && Tokens.dockTintAlphaDark <= 0.55);
-        verify(Tokens.dockTintAlphaLight >= 0.4 && Tokens.dockTintAlphaDark >= 0.4);
+    function test_dockShelfIsClearGlass() {
+        // ADR-0024 section 2 point 1: the shelf holds no text; its tint is the class value.
+        verify(Tokens.dockTintAlphaLight <= 0.1 && Tokens.dockTintAlphaDark <= 0.1);
+        verify(Tokens.dockDotHalo > 0 && Tokens.dockDotHaloOpacity > 0);
     }
 
     // ---- percentile decision and the automatic band (ADR-0016 W6) ----

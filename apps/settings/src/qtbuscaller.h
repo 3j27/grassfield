@@ -71,7 +71,7 @@ public:
 
 private:
     std::mutex m_mutex;
-    const QString m_name = QStringLiteral("gf-settings-system-bus");
+    const QString m_name = QStringLiteral("gf-settings-system-bus"); // i18n-ignore: a connection name
     bool m_made = false;
 };
 

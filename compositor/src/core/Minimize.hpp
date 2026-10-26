@@ -81,8 +81,9 @@ namespace gf::minimize {
     std::optional<Effect> parseEffect(std::string_view key, std::string_view value);
 
     // Dev fault injection (tests/compositor/genie.sh fault): hl.plugin.grassfield.config("testFault", "funnel-shader") makes
-    // the next funnel draw compile a broken shader. Honoured only in a dev session (GRASSFIELD_DEV=1 in Hyprland's
-    // environment, set by scripts/dev/nested-up.sh); never advertised, rejected like any unknown key otherwise.
+    // the next funnel draw compile a broken shader. Honoured only in a dev session by the run-mode rule (core/RunMode.hpp:
+    // GRASSFIELD_DEV=1 and GRASSFIELD_SESSION not "1" in Hyprland's environment; scripts/dev/nested-up.sh sets the first,
+    // the installed session the second); never advertised, rejected like any unknown key otherwise.
     inline constexpr std::string_view kConfigTestFault       = "testFault";
     inline constexpr std::string_view kTestFaultFunnelShader = "funnel-shader";
     bool                              isFunnelShaderFault(std::string_view key, std::string_view value, bool devSession);

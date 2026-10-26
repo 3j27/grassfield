@@ -3,7 +3,7 @@ import QtTest
 import "../../shell/overlay/controlcenter" as CC
 
 // GF-097: the fixed labels of a 2x1 Quick Settings capsule never end in an ellipsis. A long title wraps to two lines
-// (a single wide word shrinks first); a fixed state wraps too.
+// at its own size (macOS never shrinks a title); a fixed state wraps too.
 TestCase {
     name: "CcLabels"
     when: windowShown

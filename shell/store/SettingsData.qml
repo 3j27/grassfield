@@ -16,6 +16,7 @@ JsonAdapter {
     property DesktopConfig desktop: DesktopConfig {}
     property MenubarConfig menubar: MenubarConfig {}
     property AccentConfig accent: AccentConfig {}
+    property KeyboardConfig keyboard: KeyboardConfig {}
     property IconsConfig icons: IconsConfig {}
     property PointerConfig pointer: PointerConfig {}
     property WallpaperConfig wallpaper: WallpaperConfig {}
@@ -105,6 +106,10 @@ JsonAdapter {
 
     component AccentConfig: JsonObject {
         property var color: "multicolor"
+    }
+
+    component KeyboardConfig: JsonObject {
+        property var shortcutStyle: "automatic"
     }
 
     component IconsConfig: JsonObject {

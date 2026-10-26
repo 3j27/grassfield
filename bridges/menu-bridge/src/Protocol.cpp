@@ -135,6 +135,8 @@ namespace gf::menubridge {
 
         if (type == QLatin1String("open"))
             msg.type = ShellMessage::Type::Open;
+        else if (type == QLatin1String("open-registered"))
+            msg.type = ShellMessage::Type::OpenRegistered;
         else if (type == QLatin1String("about-to-show"))
             msg.type = ShellMessage::Type::AboutToShow;
         else if (type == QLatin1String("activate"))
@@ -163,6 +165,13 @@ namespace gf::menubridge {
                 msg.service = service.toString();
                 msg.path    = path.toString();
                 msg.pid     = *pid;
+                break;
+            }
+            case ShellMessage::Type::OpenRegistered: {
+                const auto pid = integerIn(o.value(QLatin1String("pid")), 1, std::numeric_limits<qint32>::max());
+                if (!pid)
+                    return fail(QStringLiteral("field:pid"));
+                msg.pid = *pid;
                 break;
             }
             case ShellMessage::Type::AboutToShow:

@@ -124,9 +124,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
   registered; `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
-  registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered; `stages`
-  only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times"]`
+  registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered;
+  `keyboard-focus` (FR20) with `appmenu`; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times","keyboard-focus"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the capabilities JSON plus one field, `"version"` (the product version of the plugin, from the VERSION file; GF-013), as its last member. The `capabilities` event is unchanged (no `version`): its wire format is fixed by the unit tests.
 - **FR54** Presented-frame times (ADR-0006 gate P3): every output's presented frames (Hyprland's
@@ -216,7 +216,16 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   dereferenced). It posts `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"…",
   "path":"…"}`: when a mapped window's registration changes (an unchanged one is not re-posted), when a window
   is mapped with one, and for every focused window (with empty service and path when it has none), coalesced
-  per window (FR24). A registration made before the window is mapped is posted at map.
+  per window (FR24). A registration made before the window is mapped is posted at map. `pid` (additive, ADR-0008) is
+  the registering client's pid; for a mapped Wayland window without a registration it is that window's client pid
+  (`wl_client_get_credentials`), so that the shell can ask the menu bridge for the menu that process registered with
+  `com.canonical.AppMenu.Registrar` (Electron, ADR-0008 amendment 2026-10-25); 0 for an X11/XWayland window (its
+  Wayland client is Xwayland) and for a clear. With the appmenu server (feature `keyboard-focus`) the plugin also posts
+  `grassfield>>{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` each time the seat's keyboard focus enters a
+  mapped window (Hyprland's `input.keyboard.focus`; once per entry: the window that has it is announced again only after
+  the keyboard went elsewhere, a layer surface or nothing). The menu bar sends a chosen item's action when the item's
+  window has the keyboard back after the menu closed (docs/specs/menu-bridge.md MB12: an Electron click handler runs for
+  its focused window only).
 - **FR21** When an announced registration goes away — the window is unmapped (`window.close`) or destroyed,
   the appmenu object is released or destroyed (client exit), or the surface is destroyed — the plugin posts
   the same event with `"service":"","path":""`. A window mapped again on the same surface is announced again.
@@ -540,9 +549,12 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   (`Tokens.motionReducedMax`), linearly. Default before any push: `funnel`. A change applies to the next animation (a
   running one keeps its effect). Shift held on any keyboard (`getModsFromAllKBs() & HL_MODIFIER_SHIFT`) when an
   animation starts plays it 10 times slower (as macOS Shift-click slow motion), for every effect. Dev fault injection:
-  `hl.plugin.grassfield.config("testFault", "funnel-shader")` is honoured only when Hyprland's environment has
-  `GRASSFIELD_DEV=1` (the nested dev session; the installed session never sets it), never advertised; the next funnel
-  draw compiles a broken shader so that FR46's failure path runs (`tests/compositor/genie.sh` step 6).
+  `hl.plugin.grassfield.config("testFault", "funnel-shader")` is honoured only in a dev session by the run-mode rule
+  (ADR-0019, `core/RunMode.hpp`): Hyprland's environment has `GRASSFIELD_DEV=1` and not `GRASSFIELD_SESSION=1` (the
+  nested dev session; the installed session sets `GRASSFIELD_SESSION=1` with `hl.env`, which calls `setenv` in
+  Hyprland's own process, so a leaked `GRASSFIELD_DEV=1` opens nothing there; `tests/RunModeTest.cpp` over the shared
+  vectors), never advertised; the next funnel draw compiles a broken shader so that FR46's failure path runs
+  (`tests/compositor/genie.sh` step 6).
 - **FR46** Funnel drawing safety: the element (type `EK_CUSTOM`, pass name `CGrassfieldGenieElement`, `draw()` called by
   Hyprland while it renders the pass, after the windows and before the top layers) scissors every draw to the frame's
   damage (nothing is drawn outside it), saves and restores the GL program, vertex array, array buffer, active texture and
@@ -587,6 +599,27 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   windows have margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingMargins",
   "true" | "false")` once the plugin advertises `window-tiling`. Without the plugin (C2) the shell shows no tiling items
   and the keys do nothing; drags move windows as Hyprland does.
+- **FR56** A window's titlebar never goes under the menu bar (macOS; owner report from the 1.0.0-rc1 real session:
+  Chromium dragged up until its tab strip was under the menu bar could not be grabbed again). For floating windows (not
+  full screen or zoomed), on every output, with the plugin's titlebar (a 32 px band above the surface) or the app's own
+  (client chrome, ADR-0015: no band, the surface top): the frame's top is held at the bottom of the menu bar strip (the
+  output's top reserved area) of the output the frame's top edge is on (the one sharing most of its width when the edge
+  crosses several; when the edge is on no output, above the outputs or in a gap between them, the nearest output below it
+  that shares some of its width; the output under the pointer only when neither exists), so a window can always be
+  grabbed again. The top edge decides, not the pointer: a SUPER+drag (`config/hypr/grassfield/bindings.lua`) or a resize
+  grips the window anywhere (review of e0a3734: with the output under the pointer, a window sitting correctly on an upper
+  output was moved onto the lower one, or cut, at the release). Only the top is held: a window may hang off the sides or
+  the bottom. A titlebar drag by the plugin holds it at every step (the window stops at the menu bar while the pointer
+  goes on, and follows it again on the way down); a pointer on the menu bar still tiles to fill (FR47). Hyprland's own
+  interactive move and resize (an app's `xdg_toplevel.move`/`resize`, a mouse binding) have no hook during the drag: the
+  release of the button that ends one (seen before Hyprland handles it) schedules one callback after Hyprland ended the
+  drag, which moves the window down (a move) or stops its top edge at the menu bar, the bottom edge kept (a resize that
+  moved the top edge: the window's box at the drag's first motion, recorded by the plugin's motion listener, is compared
+  with the box at the end; a resize from the bottom or a side edge, or one never seen moving, is left alone). Hyprland's
+  drag itself is left alone. Not covered: windows placed by keyboard moves or resizes (they never reach the clamp), by
+  the app or at map. Pure:
+  `core/TopClamp.*` (`tests/TopClampTest.cpp`); glue `TopClamp.*`; nested `tests/compositor/top_clamp.sh`. Without the
+  plugin (C2) nothing holds the top: Hyprland's behaviour.
 - **FR51** Pointer focus on the shell's layers (feature `layer-pointer`, plugin 0.12.0-pointer; integrator finding 2026-10-22,
   `docs/specs/menubar.md` "Known limitations": a click with no pointer motion since a bar menu opened reached no surface).
   Cause (Hyprland 0.56.2, measured, and read from the binary): when a layer surface takes the keyboard (`CLayerSurface::onMap`
@@ -686,6 +719,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR47-FR50 | unit `TilingDrag.*`, `TilingPlace.*`, `TilingNames.*` (7); QML `tst_appmenumodel` `test_windowMenuTilingItems`, `settings_apply` (tiling keys); nested `tests/compositor/tiling.sh` | L0 / L1 | 2026-10-22, plugin 0.11.0-tiling (integrator): unit 280/280; `tiling.sh` **10/10 PASS** on GF-REF (left edge shared with WAYLAND-1, right edge free): right edge -> 948x926 at 2404,64, drag-out -> 800x500 back, top of the right edge -> 948x443 quarter, shared left edge -> no tiling, menu bar -> 1904x926 at 1448,64, IPC `left` then `previous`, `tilingEdges false` -> no tiling; preview captures viewed (right half, fill); Window > Move & Resize capture viewed. Not run: C2 without the plugin, soak, R13 |
 | FR51-FR52 | unit `LayerPointer.*` (9; also under `-fsanitize=address,undefined`); nested `tests/compositor/layer_pointer.sh` (`check`, `--output WAYLAND-1`, `--expect plugin` against an older build and with the plugin unloaded, C2) | L0 / L1 | Final, after the merge with window tiling (plugin 0.12.0-pointer, Hyprland v0.56.2 efb50993, host load 0.8-4.6): unit 290/290 and the ASan/UBSan build 290/290 (0 reports); `layer_pointer.sh check` **PASS** on a fresh instance (`.dev/layer-pointer/run-20261022-231314-check`) and after the soak (`run-20261022-232723-check`); C2 `nested-up.sh --no-plugin`: `hyprctl grassfield` "unknown request", shell "ready degraded", 0 QML errors, `layer_pointer.sh check` PASS with the 3 map cases KNOWN (`run-20261022-232743-check`); regressions PASS: `menubar-macos.sh` 10/10, `click_focus.sh` 43/43, `chrome.sh`, `window_reachable.sh` 12/12, `tiling.sh` 10/10, `soak.sh 600` (C1 below). Before the merge, plugin 0.11.0-pointer (the same code), GF-REF at x = 1440 next to WAYLAND-1 at 0,0, host load ~3: unit 283/283 (ASan/UBSan build 283/283, 0 sanitizer reports); `layer_pointer.sh check` **PASS** on GF-REF (`.dev/layer-pointer/run-20261022-223323-check`): a second click without motion closes the menu opened by a press (same pointer, and a new pointer device sending no motion), and the menu opened by IPC under the still pointer; 1-px control and the click after a menu closed over foot PASS; `--output WAYLAND-1` PASS. Defect shown: the 0.10.0-chrome build (loaded from another path with `scripts/nestctl plugin load`) with `--expect plugin` **FAIL** 3/3 map cases (`run-20261022-223421-check`), the plugin unloaded likewise (`run-20261022-223339-check`); without the plugin the map cases pass on WAYLAND-1 (at the origin) and fail on GF-REF (baseline probes `run-20261022-221741-probe`, `run-20261022-221846-probe`). First fix (map only) left the menu opened by a press failing: diagnostic lines showed the overlay maps while the button is still down with keyboard None and takes the keyboard after the release (`CLayerSurface::onCommit`, same miscomputed position): hence the keyboard trigger and the wait for the release. Runtime unload / load: rc 0 both, Hyprland alive, `layer-pointer` withdrawn and advertised again, check PASS after the reload (`run-20261022-223449-check`) |
 | FR53 | unit `Protocol.AppearanceConfigAndFeature`, `Theme.PaletteComesFromTheTokensForBothAppearances`; `gen-tokens.py --check`; QML `tst_minimized` `configCallAppearance`; nested `tests/compositor/chrome.sh` step 3b (light bar, lights, grey inactive, back to dark) | L0 / L1 | unit PASS (2026-10-23, this branch); nested chrome.sh 3b NOT RUN yet (no nested session in the agent sandbox) |
+| FR56 | unit `TopClamp.*` (11: the move and resize rules, the output under the frame's top edge (level outputs above the edge: the one sharing most of its width, review of 9ba1d40), the review cases of e0a3734 on stacked and bottom-aligned outputs: SUPER+drag ending on the lower output, bottom-edge and right-edge resizes, a top-edge resize and a move into the lower output's menu bar); nested `tests/compositor/top_clamp.sh` (P foot titlebar drag, C Chromium tab strip, R bottom-edge resize with the titlebar under the menu bar) | L0 / L1 | unit 393/393 PASS (2026-10-25, branch m7-clamp-fix; clang-tidy clean on the changed files); nested top_clamp.sh after the fix 2026-10-26 PASS, 8/8 (Hyprland 0.56.2 efb50993; P1-P3, R0 height 400 -> 500 with R1 top 24 -> 24 (titlebar at -8, under the 24 px bar, left alone), C0-C2); C1 soak shortened to 300 s PASS (103 rounds, every action effective but restore 7/9, no coredump, no plugin exception; RSS slopes not judged at that length); C2: plugin unloaded, a window still maps, plugin loaded again. These nested runs used the build of the Electron branch, which merges this one. 2026-10-26 after the review of 9ba1d40 (tie rule, keyboard-focus events): unit 394/394, top_clamp.sh 8/8 PASS again |
 
 ## Interfaces / contracts (versions)
 
@@ -700,7 +734,8 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` (Dock tile, layout px, integers) | FR14 / FR15 |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
 | shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "funnel"\|"shrink"\|"fade")` (only with feature `minimize-effect`) | FR45 |
-| plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}`; `"service":"","path":""` = no menu (FR20–FR22) |
+| plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>","pid":N}`; `"service":"","path":""` = no `set_address` menu, with the window's Wayland client pid (0: X11/XWayland or a clear) (FR20–FR22) |
+| plugin → shell | socket2 event `grassfield` (the seat's keyboard focus entered a mapped window; feature `keyboard-focus`) | `{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` (FR20) |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
 | shell → plugin | `hl.plugin.grassfield.overview("<json>")` | `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address":"0x<hex>","x","y","w","h"}…]}` (FR25-FR27) |
@@ -1405,6 +1440,10 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
   activation that follows user input take the focus. Not doable with Hyprland 0.56.2's plugin surface.
 
 - Titlebar join (FR3): a thin 1-px arc remains on XWayland windows and translucent windows show lighter corner squares.
+- Titlebar below the menu bar (FR56): during one of Hyprland's own moves (an app's move request, as Chromium's tab strip
+  asks, or SUPER+drag) the window passes under the menu bar and is moved down at the release (about 23 px for Chromium's
+  strip); macOS holds the title bar below the menu bar for the whole drag. Hyprland 0.56.2 offers no hook during its drag.
+  Keyboard moves and resizes are not held.
 - Layer pointer focus (FR51): only the shell's own `grassfield-*` layers are corrected; another client's layer surface that
   takes the keyboard on an output away from the layout origin (a third-party launcher) keeps Hyprland's wrong position until
   the pointer moves. The cause is in Hyprland 0.56.2 (`CLayerSurface::onMap` / `onCommit` add the monitor position to a

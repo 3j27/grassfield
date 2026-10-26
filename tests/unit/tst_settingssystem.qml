@@ -170,6 +170,10 @@ TestCase {
         compare(System.wifiSecurity(1, 0, 0x300), "WPA2 802.1X");
         compare(System.wifiSecurity(0, 0, 0x800), "OWE");
         compare(System.wifiSecurity(1, 0, 0x1), "WPA");            // encrypted, key management unknown: still secured
+        compare(System.wifiSecurity(0, 0, 0x1000), "");            // OWE transition: the open side, no credentials
+        compare(System.wifiSecurity(1, 0, 0x1000), "");            // ... also with the privacy flag set
+        compare(System.wifiSecurity(1, 0, 0x1008), "WPA");         // a cipher next to it: secured, as the join rule says
+        compare(System.wifiSecurity(1, 0, 0), "WEP");              // privacy flag and nothing else
     }
 
     function test_wifiState() {
@@ -188,6 +192,27 @@ TestCase {
         verify(list[0].valid);
         // The first saved profile of an SSID is the one a click on the network uses.
         compare(st.known["486F6D653A203547"], uuidA);
+    }
+
+    function test_wifiEnhancedOpenNeedsNoPassword() {
+        // OWE (Enhanced Open) joins without a password, like an open network: no lock, click kind "open"; OWE with SAE or PSK is secured.
+        const list = System.parseWifiState(wifiJson([ap("4F7765", 50, 1, 0, 0x888), ap("4F7765", 20, 1, 0, 0xC88), ap("4D6978", 40, 1, 0, 0xD88)])).networks;
+        const owe = list.find(n => n.ssid === "Owe" && n.security === "OWE");
+        verify(owe !== undefined);
+        compare(owe.secured, false);
+        compare(owe.enterprise, false);
+        compare(System.wifiClickKind({hex: owe.hex, active: false, secured: owe.secured}, {}), "open");
+        compare(list.find(n => n.ssid === "Owe" && n.security !== "OWE").secured, true);
+        compare(list.find(n => n.ssid === "Mix").secured, true);
+    }
+
+    function test_wifiOweTransitionIsOpen() {
+        const list = System.parseWifiState(wifiJson([ap("4F7765", 50, 0, 0, 0x1000), ap("4F776D", 40, 1, 0, 0x1000)])).networks;
+        compare(list.length, 2);
+        for (const n of list) {
+            compare(n.secured, false);
+            compare(System.wifiClickKind({hex: n.hex, active: false, secured: n.secured}, {}), "open");
+        }
     }
 
     function test_wifiDuplicateKeepsStrongest() {

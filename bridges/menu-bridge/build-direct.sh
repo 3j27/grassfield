@@ -12,7 +12,7 @@ mkdir -p "$out/menu-bridge-moc"
 
 # GCC 16 warns inside Qt headers (-Wsfinae-incomplete); keep our own warnings visible.
 cxxflags=(-std=c++20 -O2 -g -Wall -Wextra -Wno-sfinae-incomplete -fPIC "-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"") # VERSION: the one version source
-logic=("$here/src/Protocol.cpp" "$here/src/Layout.cpp" "$here/src/Safety.cpp" "$here/src/Penalties.cpp" "$here/src/DBusObjects.cpp" "$here/src/Launcher.cpp" "$here/src/ScreenSaver.cpp")
+logic=("$here/src/Protocol.cpp" "$here/src/Layout.cpp" "$here/src/Safety.cpp" "$here/src/Penalties.cpp" "$here/src/DBusObjects.cpp" "$here/src/Launcher.cpp" "$here/src/ScreenSaver.cpp" "$here/src/Registrations.cpp")
 
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
@@ -28,6 +28,7 @@ if [[ ${1:-} == "--tests" ]]; then
   fi
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${extra[@]}" -I"$here/src" -DGRASSFIELD_MENU_BRIDGE_DBUS_XML="\"$here/dbus/org.grassfield.MenuBridge1.xml\"" \
+    -DGRASSFIELD_RUN_MODE_VECTORS="\"$root/tests/fixtures/run-mode-vectors.json\"" \
     $(pkg-config --cflags Qt6Core Qt6DBus) \
     "$root/tests/unit/menu-bridge/tst_menubridge.cpp" "$root/tests/unit/menu-bridge/tst_screensaver.cpp" "$here/src/MenuClient.cpp" "$out/menu-bridge-moc/moc_MenuClient.cpp" "${logic[@]}" \
     $(pkg-config --libs Qt6Core Qt6DBus) -lgtest -pthread \

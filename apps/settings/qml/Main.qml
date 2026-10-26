@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "NavHistory.js" as NavHistory
 
 // Grassfield Settings: sidebar with search and sections on the left, detail pane on the right (macOS 27 layout, ADR-0024).
 // App windows are opaque (master-prompt 5.5): the sidebar is a flat, slightly darker surface edge to edge, not the shell material.
@@ -82,6 +83,7 @@ Window {
     }
 
     Component.onCompleted: {
+        root.navState = NavHistory.start(root.selectedId);
         root.backend.watch(root.backend.capabilitiesFile);
         root.readCapabilities();
     }
@@ -102,6 +104,13 @@ Window {
     SystemService {
         id: sys
         backend: root.backend
+    }
+
+    // The window's own surface and its secondary text grey (Appearance.windowSurface, Appearance.windowSecondary).
+    Binding {
+        target: Appearance
+        property: "windowSurface"
+        value: true
     }
 
     Binding {
@@ -150,6 +159,15 @@ Window {
         value: cfg.value("accent.color")
     }
 
+    // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26); the device facts are read once.
+    readonly property bool macDevice: MenuShortcut.macDevice(root.backend.readText("/sys/class/dmi/id/sys_vendor").text, root.backend.readText("/proc/bus/input/devices").text)
+
+    Binding {
+        target: Appearance
+        property: "shortcutStyle"
+        value: MenuShortcut.style(cfg.value("keyboard.shortcutStyle"), root.macDevice)
+    }
+
     // Icon appearance (ADR-0014): the previews and any app icon follow the file live.
     Binding {
         target: Appearance
@@ -169,8 +187,22 @@ Window {
         value: cfg.value("icons.folderColor")
     }
 
+    // Back and forward through the panes (the toolbar's capsule): NavHistory.js.
+    property var navState: ({back: [], forward: [], current: ""})
+
     function select(id: string): void {
+        root.navState = NavHistory.visit(root.navState, id);
         root.selectedId = id;
+    }
+
+    function navBack(): void {
+        root.navState = NavHistory.back(root.navState);
+        root.selectedId = root.navState.current;
+    }
+
+    function navForward(): void {
+        root.navState = NavHistory.forward(root.navState);
+        root.selectedId = root.navState.current;
     }
 
     function focusSearch(): void {
@@ -276,6 +308,9 @@ Window {
                 Accessible.searchEdit: true
 
                 Keys.onPressed: event => {
+                    // Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
+                    if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                        list.keyboardRing = true;
                     if (event.key === Qt.Key_Down) {
                         list.forceActiveFocus();
                         event.accepted = true;
@@ -323,7 +358,15 @@ Window {
             Accessible.role: Accessible.List
             Accessible.name: qsTr("Sections")
 
+            // The focus ring is for the keyboard (macOS): it appears with the first key that moves the focus or the selection
+            // (Tab, Down, Return in the search field; the arrows here) and goes with the focus, so a click on a row or the focus
+            // coming back when the window is activated again shows none.
+            property bool keyboardRing: false
+            onActiveFocusChanged: if (!activeFocus)
+                keyboardRing = false
+
             Keys.onPressed: event => {
+                keyboardRing = true;
                 if (event.key === Qt.Key_Up) {
                     root.stepSection(-1);
                     event.accepted = true;
@@ -364,7 +407,7 @@ Window {
                     anchors.fill: parent
                     anchors.margins: -Tokens.controlFocusOutline
                     radius: Tokens.settingsSidebarItemRadius + Tokens.controlFocusOutline
-                    visible: entry.selected && list.activeFocus
+                    visible: entry.selected && list.activeFocus && list.keyboardRing
                     color: "transparent"
                     border.width: Tokens.controlFocusOutline
                     border.color: Appearance.focusRingColor
@@ -410,6 +453,7 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
+                        list.keyboardRing = false;
                         list.forceActiveFocus();
                         root.select(entry.modelData.id);
                     }
@@ -432,6 +476,40 @@ Window {
             title: root.sectionTitle
             canMinimize: root.canMinimize
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
+
+            // Back and forward: one 72 x 36 capsule (macOS).
+            leading: Rectangle {
+                width: navRow.width + Tokens.spacingXs
+                height: Tokens.filesToolbarCapsule
+                radius: height / 2
+                color: Appearance.buttonFill
+                Accessible.role: Accessible.Grouping
+                Accessible.name: qsTr("Navigation")
+
+                Row {
+                    id: navRow
+                    anchors.centerIn: parent
+
+                    ToolButton {
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "chevron-right"
+                        iconRotation: 180
+                        enabled: NavHistory.canBack(root.navState)
+                        accessibleName: qsTr("Back")
+                        onClicked: root.navBack()
+                    }
+
+                    ToolButton {
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "chevron-right"
+                        enabled: NavHistory.canForward(root.navState)
+                        accessibleName: qsTr("Forward")
+                        onClicked: root.navForward()
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -603,6 +681,7 @@ Window {
         id: keyboardPage
         KeyboardPage {
             backend: root.backend
+            store: cfg
         }
     }
 

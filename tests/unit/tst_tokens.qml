@@ -126,10 +126,10 @@ TestCase {
         compare(Tokens.controlToggleKnobWidth, 21);
         compare(Tokens.controlToggleKnobHeight, 12);
         compare(Tokens.controlSliderTrack, 6);
-        compare(Tokens.menubarItemPadding, 11);
+        compare(Tokens.menubarItemPadding, 10);
         compare(Tokens.panelAlertWidth, 260);
-        compare(Tokens.searchWidth, 640);
-        compare(Tokens.searchRowHeight, 56);
+        compare(Tokens.searchWidth, 520);
+        compare(Tokens.searchRowHeight, 63);
         compare(Tokens.widgetRadius, 26);
         compare(Tokens.widgetDesktopMargin, 16);
         compare(Tokens.overviewTileWidth, 138);

@@ -24,13 +24,45 @@ Item {
     // Surfaces without text (the Dock shelf) may be more translucent than the A2 clamp allows: an explicit tint alpha
     // (0..1, -1 = from `transparency`) that applies only while the surface is not opaque (Reduce Transparency wins).
     property real tintAlphaOverride: -1
+    // Glass class (ADR-0024 section 2): "menu", "notification", "controls" or "apps" take the class tint, raised to keep
+    // the text legible over the backdrop the shell knows for this output (Appearance.glassAlpha); "" keeps the one material
+    // tint (Appearance.tintAlpha).
+    property string glassClass: ""
+    // The output this surface is shown on (the Screen attached property of its window).
+    readonly property string screenName: Screen.name
+    // Where the surface lies on that output (output px), for the backdrop under it (G-3 per surface, Appearance.glassAlpha):
+    // a host whose window does not cover the output, or whose surface moves without moving itself (a card in a list), sets
+    // the area to judge; empty: measured here when the window covers the output (its coordinates are the output's), unknown
+    // otherwise (the whole output's range).
+    property rect backdropRect: Qt.rect(0, 0, 0, 0)
+    property rect measuredRect: Qt.rect(0, 0, 0, 0)
+    readonly property rect glassRect: backdropRect.width > 0 ? backdropRect : measuredRect
+
+    function measureRect(): void {
+        const w = root.Window.window;
+        if (!w || !root.visible || w.width < Screen.width || w.height < Screen.height || root.width <= 0) {
+            root.measuredRect = Qt.rect(0, 0, 0, 0);
+            return;
+        }
+        const p = root.mapToItem(null, 0, 0);
+        root.measuredRect = Qt.rect(p.x, p.y, root.width, root.height);
+    }
+
+    onVisibleChanged: Qt.callLater(root.measureRect)
+    onXChanged: Qt.callLater(root.measureRect)
+    onYChanged: Qt.callLater(root.measureRect)
+    onWidthChanged: Qt.callLater(root.measureRect)
+    onHeightChanged: Qt.callLater(root.measureRect)
+    Component.onCompleted: Qt.callLater(root.measureRect)
     // Rims (default: the material tokens): the inner specular rim (highlight) and the outer edge (border), each one device
     // pixel wide at every scale. The outer edge is dark in both appearances, the inner rim light.
     property real highlightOpacity: Appearance.dark ? Tokens.materialHighlightOpacity : Tokens.materialHighlightOpacityLight
     property real borderOpacity: Appearance.dark ? Math.max(Tokens.materialEdgeOpacityDark, Tokens.materialBorderOpacity) : Tokens.materialBorderOpacity
     property color borderColor: Appearance.dark ? Appearance.colors.shadow : Appearance.colors.materialBorder
     readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
-    readonly property real tintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : Appearance.tintAlpha(transparency)
+    readonly property real baseTintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : (glassClass !== "" ? Appearance.glassAlpha(glassClass, transparency, screenName, glassRect) : Appearance.tintAlpha(transparency))
+    // Increase Contrast frosts every glass surface (ADR-0024 G-8); Reduce Transparency has already made it opaque.
+    readonly property real tintAlpha: Appearance.increaseContrast ? Math.max(Tokens.glassContrastFrost, baseTintAlpha) : baseTintAlpha
     // The host window needs this much room around the shape for the shadow.
     readonly property int shadowMargin: Tokens.shadowBlur + Tokens.shadowOffsetY
 

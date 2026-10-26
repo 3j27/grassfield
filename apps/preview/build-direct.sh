@@ -15,8 +15,9 @@ cxxflags=(-std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "-DGRASSFIEL
 
 if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
-  g++ "${cxxflags[@]}" -I"$here/src" -I"$here/../files/src" $(pkg-config --cflags Qt6Core Qt6Gui) \
-    "$root/tests/unit/preview/tst_previewlogic.cpp" "$here/src/previewlogic.cpp" "$here/../files/src/filelogic.cpp" \
+  g++ "${cxxflags[@]}" -I"$here/src" -I"$here/../files/src" -I"$here/.." $(pkg-config --cflags Qt6Core Qt6Gui) \
+    "$root/tests/unit/preview/tst_previewlogic.cpp" "$root/tests/unit/preview/tst_shortcutstyle.cpp" "$here/src/previewlogic.cpp" \
+    "$here/../files/src/filelogic.cpp" \
     $(pkg-config --libs Qt6Core Qt6Gui) -lgtest -lgtest_main -pthread \
     -o "$out/preview-unit-tests"
   echo "built $out/preview-unit-tests"

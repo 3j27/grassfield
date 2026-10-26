@@ -30,7 +30,7 @@ constexpr qint64 kMaxRead = 4 * 1024 * 1024;
 constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
-constexpr int kActionJobMs = 30000; // a D-Bus action (up to three calls of 15 s)
+constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -123,8 +123,8 @@ struct Backend::Bus {
 
 Backend::~Backend()
 {
-    m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
-    // Never destroy a running QProcess.
+    // Never destroy a running QProcess. This comes first: the D-Bus jobs below may abandon the process (_Exit), which skips every
+    // destructor, and a wpctl or the wallpaper helper still running would be left behind.
     const auto procs = findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly);
     for (QProcess *p : procs) {
         p->disconnect(this);
@@ -133,6 +133,7 @@ Backend::~Backend()
             p->waitForFinished(1000);
         }
     }
+    m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
 }
 
 void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)

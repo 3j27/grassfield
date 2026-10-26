@@ -140,8 +140,9 @@ function unpinKey(pinned, key, lookup) {
 
 // Dock geometry, the single formula shared by the Dock and by whoever reserves its area (Overview).
 // `t` = {iconSize, padding, indicatorSize, spacing, bottomMargin} (the dock tokens).
+// macOS: no band under the icons; the running dot sits in the bottom padding (Geometry.dotOrigin).
 function shelfHeight(t) {
-    return t.iconSize + 2 * t.padding + t.indicatorSize + t.spacing;
+    return t.iconSize + 2 * t.padding;
 }
 
 // Height the Dock takes from the bottom of the output when it is not auto-hidden (its exclusive zone).

@@ -112,6 +112,13 @@ TestCase {
         verify(p.y + p.h <= 1080 - opts.bottomClearance);
     }
 
+    // macOS 27: the search capsule and its gap sit above the panel, which starts that much lower.
+    function test_panelUnderTheCapsule() {
+        const p = Model.panelRect(1920, 1080, Object.assign({}, opts, {topOffset: 96}));
+        compare(p.y, 194 + 96);
+        verify(p.y + p.h <= 1080 - opts.bottomClearance);
+    }
+
     function test_panelOnSmallOutputs() {
         // 1366x768 and 1024x600: the share of the height fits; 800x480: the Dock clearance wins over the minimum.
         const a = Model.panelRect(1366, 768, opts);

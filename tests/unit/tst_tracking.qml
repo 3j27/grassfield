@@ -24,4 +24,16 @@ TestCase {
         verify(Appearance.tracking(28) < Appearance.tracking(20), "larger text is tighter");
         compare(Appearance.tracking(0), 0);
     }
+
+    // T-1 (ADR-0003 O1): Inter Display from 20 px, with its own spacing; Inter below (and when the display cut is missing).
+    function test_displayCutFrom20() {
+        compare(Appearance.fontFamilyFor(19), Appearance.fontFamily);
+        compare(Appearance.fontFamilyFor(Tokens.typographyDisplayFrom), Appearance.displayFamily);
+        compare(Appearance.fontFamilyFor(44), Appearance.displayFamily);
+        fuzzyCompare(Appearance.trackingFor(13), Appearance.tracking(13), 1e-9);
+        if (Appearance.displayFamily === Tokens.typographyDisplayFamily)
+            compare(Appearance.trackingFor(24), 0);
+        else
+            fuzzyCompare(Appearance.trackingFor(24), Appearance.tracking(24), 1e-9);
+    }
 }

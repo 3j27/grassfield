@@ -158,6 +158,10 @@ Item {
             readonly property Repeater repeater: rep
             readonly property Item moreButton: more
 
+            // macOS: equal-width capsules spanning the card, 22 tall.
+            readonly property int shownCount: rep.count + (more.visible ? 1 : 0)
+            readonly property real equalWidth: shownCount > 0 ? (width - (shownCount - 1) * spacing) / shownCount : width
+
             Repeater {
                 id: rep
                 onItemAdded: root.controlsChanged()
@@ -166,7 +170,9 @@ Item {
 
                 delegate: Button {
                     required property var modelData
-                    width: Math.min(implicitWidth, actions.width)
+                    width: actions.equalWidth
+                    height: Tokens.notificationActionHeight
+                    capsule: true
                     text: modelData.text
                     onClicked: root.actionTriggered(modelData.id)
                 }
@@ -176,6 +182,9 @@ Item {
                 id: more
                 visible: !root.moreOpen && root.buttons.length > Tokens.notificationMaxActions
                 onVisibleChanged: root.controlsChanged()
+                width: actions.equalWidth
+                height: Tokens.notificationActionHeight
+                capsule: true
                 text: qsTr("More")
                 onClicked: root.moreOpen = true
             }

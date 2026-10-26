@@ -94,6 +94,12 @@ Shell side only, no plugin change: the plugin does not transform windows parked 
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
 - Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
+  macOS details (ADR-0024 lot 5, C-19; docs/audits/visual-tahoe-2026-10-25.md § Overview): N is the tile's position
+  (Desktop 1, 2, ... from the left), never the Hyprland workspace id (the Window menu's Move to Desktop numbers them the
+  same way); the selection ring is drawn outside the 138 x 90 thumbnail, 1 clear of it (`overview.selectionWidth` 3,
+  `ringGap` 1), whose top is `overview.barTopMargin` 21 below the bar; the name is `overview.tileLabelGap` 6 below; the "+"
+  button is a bare 30-pt `plus` glyph at rest (macOS 27), a light glass circle under the pointer or the keyboard focus
+  (white at `overview.addFillOpacity` 0.5 light / `addFillOpacityDark` 0.18 dark).
 - Click a window: focus it and close. The keyboard grab is released before the focus lands (the plugin waits for the last
   Exclusive layer; without it the shell focuses after the release and checks), otherwise Hyprland refocuses the previous
   window (and workspace) when the exclusive layer goes away and undoes the switch.
@@ -104,7 +110,8 @@ Shell side only, no plugin change: the plugin does not transform windows parked 
   snapshot per window when opening.
 - v2 branch point: `Overview.thumbnailMode` (`!Capabilities.has("overview")`, always true in v1).
 - Backdrop: the wallpaper is a separate layer surface, so the overlay dims and blurs everything below it (real
-  windows included, blurred) instead of showing a wallpaper-only backdrop; with Reduce Transparency the dim is
+  windows included, blurred) instead of showing a wallpaper-only backdrop; there is no dim (`overview.backdropOpacity`
+  0: macOS 27 does not dim the wallpaper behind the windows; it was 0.45); with Reduce Transparency the dim is
   near-opaque. A wallpaper-only backdrop needs the wallpaper art shared with the overlay (follow-up).
 - Blur timing: the compositor re-blurs the full-screen region every frame while the surface animates (nested
   swap up to 1 s). `BackgroundEffect.blurRegion` is set only once the zoom-in has finished and dropped when the
@@ -546,3 +553,6 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   hover or keys' selection, else the remembered window); Return with nothing chosen activates it.
 - Side-by-side sheets against gs-066-145 (local only): geometry of band, thumbnails, names and add button matches within 2 pt.
   Desktop thumbnails still show the app icon, not a capture of the Desktop (needs plugin support, not done).
+
+## Desktop miniatures and backdrop (visual audit 2026-10-25, priority 12)
+macOS model: the desktop thumbnails of the band are miniatures of the desktop, not grey tiles with icons, and the wallpaper is not dimmed. Shell side, with the existing capture API: `Compositor.spacesOn` also returns the windows of each Space and the output size; `MiniDesktop.qml` draws up to `overview.miniMaxWindows` of them at their place, scaled (`ScreencopyView` of the window's foreign-toplevel handle, one frame, for the windows of the OTHER desktops), each a plain card with the app icon until its frame is there. The windows of the ACTIVE desktop stay cards with their icons (`MiniDesktop.capture` false): while the Overview is open the compositor plugin lays those windows out, and a frame taken of one came back as plain wallpaper in the nested session (at open and 700 ms later, checked with `tests/visual/scenarios/overview-desktops.sh`); a window of a hidden Space does answer a capture. `overview.backdropOpacity` is 0.1 (was 0.45); Reduce Transparency keeps its opaque dim. Missing: the wallpaper behind the miniature windows. The shell has no still image of the wallpaper (it is procedural, an image or a video), and the capture protocol offers windows and outputs, not the wallpaper layer; the thumbnail therefore shows the tile fill under the windows. A wallpaper still (a frame the wallpaper module writes for the lock screen already exists for images) would need a small service in `shell/desktop`. A window without a frame stays a card with its icon.

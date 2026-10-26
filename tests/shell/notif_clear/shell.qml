@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
-import Grassfield.Ui
 import qs.notifications
 import "notifications/CenterLogic.js" as CenterLogic
 
@@ -94,6 +93,9 @@ ShellRoot {
     }
 
     function run(): void {
+        // The scenes below were written for collapsed groups of three (the product shows one, a stack); the clear model does
+        // not depend on the count.
+        Notifications.groupCollapsed = 3;
         // 1. Immediate clear: no event-loop turn between the clear and the model.
         const a = add("alpha");
         const b = add("alpha");
@@ -186,7 +188,7 @@ ShellRoot {
         check("expanded flag dropped with the group", Notifications.expandedApps.news === undefined);
         for (let i = 0; i < 6; i++)
             add("news");
-        check("new cards of that app arrive collapsed", Notifications.centerModel.count === Tokens.notificationCenterGroupCollapsed);
+        check("new cards of that app arrive collapsed", Notifications.centerModel.count === Notifications.groupCollapsed);
         // Clearing single cards down to one keeps the group (and its expansion) until it is empty.
         Notifications.setExpanded("news", true);
         const ks = Notifications.keysOf("news");
@@ -207,7 +209,7 @@ ShellRoot {
         for (let i = 0; i < 6; i++)
             add("news");
         check("collapsed again (other app present)", Notifications.keysOf("news").length === 6
-            && Notifications.centerModel.count === Tokens.notificationCenterGroupCollapsed + 1);
+            && Notifications.centerModel.count === Notifications.groupCollapsed + 1);
         Notifications.clearApp("news");
         Notifications.clearApp("other");
 

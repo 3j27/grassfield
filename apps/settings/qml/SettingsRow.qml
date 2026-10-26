@@ -56,7 +56,7 @@ Item {
             visible: root.subtitle !== ""
             width: parent.width
             text: root.subtitle
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             wrapMode: Text.Wrap
@@ -82,7 +82,7 @@ Item {
             text: root.valueText
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignRight
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
         }

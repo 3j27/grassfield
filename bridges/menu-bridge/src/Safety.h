@@ -4,11 +4,32 @@
 //
 // Owning com.canonical.AppMenu.Registrar makes Qt and Chromium hide their in-window menu bars. On the owner's
 // real session bus during development that would strip the menus of every Qt/Chromium app of the owner's
-// session, so with GRASSFIELD_DEV=1 the bridge refuses the default session bus (/run/user/<uid>/bus).
+// session, so in a development run (devRun below) the bridge refuses the default session bus (/run/user/<uid>/bus).
 
+#include <QByteArray>
 #include <QString>
 
 namespace gf::menubridge {
+
+    // The run mode (ADR-0019), the rule every Grassfield component uses, read by the bridge itself (a process boundary):
+    // a development run is GRASSFIELD_DEV == "1" while GRASSFIELD_SESSION != "1"; only the exact string "1" counts.
+    // A GRASSFIELD_DEV=1 that leaked into a Grassfield session changes nothing: the bridge runs as in any session
+    // (before, it took the development branch, refused the session's default bus and global menus stopped). The values
+    // are the raw environment strings (unset reads as empty). Shared vectors: tests/fixtures/run-mode-vectors.json.
+    bool devRun(const QByteArray& devValue, const QByteArray& sessionValue);
+
+    // A Grassfield session: GRASSFIELD_SESSION == "1".
+    bool sessionRun(const QByteArray& sessionValue);
+
+    // The identity of a pid namespace from the target of a /proc/<pid>/ns/pid link ("pid:[4026531836]"): its inode; 0
+    // when the text is not of that form.
+    quint64 pidNamespaceInode(const QByteArray& linkTarget);
+
+    // A process the bridge may serve a registrar menu for (ADR-0008 amendment 2026-10-25): it is in the bridge's own pid
+    // namespace, the same namespace and not merely one as deep (/proc/<pid>/ns/pid and /proc/self/ns/pid name the same
+    // inode; review of 9ba1d40). A Flatpak app or any other sandbox with its own pid namespace is refused, and so is a
+    // process whose link cannot be read (gone, or not the user's).
+    bool inBridgePidNamespace(qint64 pid);
 
     // True when DBUS_SESSION_BUS_ADDRESS `address` is (or falls back to) the user's default session bus: empty
     // (libdbus then uses $XDG_RUNTIME_DIR/bus), any "unix:" entry with path=/run/user/<uid>/bus or runtime=yes,

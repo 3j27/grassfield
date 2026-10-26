@@ -128,7 +128,7 @@ function printable(text) {
 }
 
 // NetworkManager's access point flags as the label nmcli printed (the old SECURITY column): "" for an open network, else
-// "WPA3", "WPA2", "WPA1", "802.1X", "OWE", "WEP", joined by spaces. `flags` is the AP's Flags (bit 0: privacy), `wpa` and
+// "WPA3", "WPA2", "WPA1", "802.1X", "OWE" (Enhanced Open: no password), "WEP", joined by spaces. `flags` is the AP's Flags (bit 0: privacy), `wpa` and
 // `rsn` its WpaFlags and RsnFlags (key management bits 0x100 PSK, 0x200 802.1X, 0x400 SAE, 0x800 OWE).
 function wifiSecurity(flags, wpa, rsn) {
     const out = [];
@@ -142,9 +142,10 @@ function wifiSecurity(flags, wpa, rsn) {
         out.push("802.1X");
     if (rsn & 0x800)
         out.push("OWE");
-    if (out.length === 0 && (rsn !== 0 || wpa !== 0))
+    // 0x1000: OWE transition, an open network that also has an Enhanced Open twin: no credentials, still open (as systembus.cpp).
+    if (out.length === 0 && (wpa !== 0 || (rsn & ~0x1000) !== 0))
         out.push("WPA");
-    if (out.length === 0 && (flags & 1))
+    if (out.length === 0 && (flags & 1) && rsn === 0 && wpa === 0)
         out.push("WEP");
     return out.join(" ");
 }
@@ -179,7 +180,7 @@ function parseWifiState(text) {
             label: printable(name.text),
             strength: Math.max(0, Math.min(100, ap.strength | 0)),
             security: security,
-            secured: security !== "",
+            secured: security !== "" && security !== "OWE", // Enhanced Open joins without a password, like an open network
             enterprise: security.indexOf("802.1X") >= 0,
             active: ap.active === true,
             valid: name.valid && plainName(name.text)
