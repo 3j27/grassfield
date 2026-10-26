@@ -107,6 +107,14 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
 - Supersedes: `visual-tahoe-2026-10-25.md` priority 10 (floating sidebars) and its open material decision
   (per-surface tints: yes, at the values above); `ui-finesse-2026-10-25.md` F7's 26 / 12 targets.
 
+## Owner decisions (2026-10-26)
+Asked as questions with options after lot 2; the details are in the action plan, "Owner decisions".
+- Gate F1: no difference even on a careful inspection, outside the hard limits accepted by name.
+- Dark selection fill: #2E8049 for the Grassfield green (white 4.88:1), a derived shade per accent that keeps 4.5:1.
+- Glass (§2): the adaptive tint (point 3) comes before any surface with text gets clearer; then the per-class tints.
+- Symbols: heavier everywhere (an ADR-0003 amendment).
+- Menu shortcuts: macOS symbols on a Mac, the text form on a PC (automatic, with a setting).
+
 ## Plan (phases; each is a reviewed slice with `just check`, tests and `just shot`)
 Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/action-plan.md`.
 
