@@ -40,7 +40,8 @@ if(GRASSFIELD_BUILD_TESTS AND GTest_FOUND)
     add_executable(menu-bridge-unit-tests ../../tests/unit/menu-bridge/tst_menubridge.cpp ../../tests/unit/menu-bridge/tst_screensaver.cpp src/MenuClient.cpp src/MenuClient.h ${MENU_BRIDGE_LOGIC})
     target_include_directories(menu-bridge-unit-tests PRIVATE src)
     target_compile_definitions(menu-bridge-unit-tests PRIVATE
-        GRASSFIELD_MENU_BRIDGE_DBUS_XML="${CMAKE_CURRENT_SOURCE_DIR}/dbus/org.grassfield.MenuBridge1.xml")
+        GRASSFIELD_MENU_BRIDGE_DBUS_XML="${CMAKE_CURRENT_SOURCE_DIR}/dbus/org.grassfield.MenuBridge1.xml"
+        GRASSFIELD_RUN_MODE_VECTORS="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/run-mode-vectors.json")
     target_link_libraries(menu-bridge-unit-tests PRIVATE Qt6::Core Qt6::DBus GTest::gtest)
     add_test(NAME menu-bridge-unit-tests COMMAND menu-bridge-unit-tests)
 endif()

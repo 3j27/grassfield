@@ -36,6 +36,10 @@ Item {
         }
     }
 
+    // Secondary text and glyphs: the window grey, one step darker (textSecondary) while the hover fill is under them, where the window grey
+    // falls to 3.6:1 (tests/visual/test_contrast_tokens.py WindowSurfacePairs.test_row_secondary_on_the_hover_fill).
+    readonly property color secondaryColor: mouse.containsMouse ? Appearance.colors.textSecondary : Appearance.windowSecondary
+
     Rectangle {
         visible: root.Positioner.index > 0
         x: Tokens.spacingMd
@@ -89,7 +93,7 @@ Item {
             width: parent.width
             text: root.subtitle
             elide: Text.ElideRight
-            color: Appearance.colors.textSecondary
+            color: root.secondaryColor
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
@@ -109,7 +113,7 @@ Item {
             visible: root.actionText !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: root.actionText
-            color: Appearance.colors.textSecondary
+            color: root.secondaryColor
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
@@ -126,7 +130,7 @@ Item {
             visible: root.trailing !== ""
             name: root.trailing
             size: Tokens.settingsListIconSize
-            color: Appearance.colors.textSecondary
+            color: root.secondaryColor
             anchors.verticalCenter: parent.verticalCenter
         }
     }

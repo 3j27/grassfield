@@ -13,7 +13,10 @@ A deliberate exception (brand name, protocol token, data key) carries `// i18n-i
 Part (e) reads the helpers as text (ast for Python, patterns for sh/bash): it never imports, sources or runs them. It also
 flags English text held in a variable (title = "..."), in a module-level constant that is not in the catalog, and the label of
 a notify-send action (-A id=Label); option values such as icon names (-i dialog-information) are not text.
-Usage: python3 -I scripts/dev/check-i18n.py [--no-lupdate] | --helpers-only DIR
+(f) the Settings app's C++ (apps/settings/src), every string literal in any spelling: English text (a phrase, or a word in a return,
+    a ?: branch or an assignment to error/reason/text/...) must go through tr()/QCoreApplication::translate (lupdate then lists it);
+    log calls (qWarning, qDebug...) are skipped; a token carries `// i18n-ignore` on its line or the line before.
+Usage: python3 -I scripts/dev/check-i18n.py [--no-lupdate] | --helpers-only DIR | --cpp-only DIR
 """
 import ast
 import re
@@ -332,7 +335,149 @@ def scan_helpers(directory=None):
     return violations
 
 
+# (f) C++ of the Settings app: every string literal is read (any spelling: "..", QStringLiteral, QString(".."), u".."_s, views,
+# a bare return "..", a literal on the next line), with the calls it sits in. It must be translated text (tr(), translate()) or
+# a token. English text outside translate() fails when it is a phrase (two words), or a word or phrase in a return statement, a
+# ?: branch, an assignment or initialization (member, local), or an argument of a call that shows or reports (fail, error, reason,
+# text, message, title, label, status, note...): that is how a reason reaches QML. Not text: literals inside log calls (qWarning...), asserts, regular expressions and character literals.
+CPP_TRANSLATING = {"tr", "translate", "QT_TR_NOOP", "QT_TRANSLATE_NOOP", "QT_TR_N_NOOP", "qsTr", "trUtf8"}
+CPP_NOT_TEXT = {"qDebug", "qInfo", "qWarning", "qCritical", "qFatal", "qCDebug", "qCInfo", "qCWarning", "qCCritical", "Q_ASSERT", "Q_ASSERT_X",
+                "static_assert", "QRegularExpression", "QRegExp", "Q_UNUSED", "QT_MESSAGE_PATTERN", "setObjectName", "setProperty", "property",
+                "qputenv", "qgetenv", "qEnvironmentVariable", "qEnvironmentVariableIsSet", "qEnvironmentVariableIsEmpty", "Q_LOGGING_CATEGORY"}
+CPP_WRAPPER_OPEN = re.compile(r"(?:\b(?:Q\w+::)?(?:QStringLiteral|QLatin1String|QLatin1StringView|QStringView|QUtf8StringView|QAnyStringView|QString|QByteArray|fromUtf8|fromLatin1|fromLocal8Bit|fromStdString)\s*)\($")
+CPP_WRAPPERS = {"QStringLiteral", "QLatin1String", "QLatin1StringView", "QStringView", "QUtf8StringView", "QAnyStringView", "QString", "QByteArray",
+                "fromUtf8", "fromLatin1", "fromLocal8Bit", "fromStdString", "QString::fromUtf8", "QString::fromLatin1", "QString::fromLocal8Bit"}
+CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|hint|notif|show|caption|tooltip", re.I)
+CPP_LOG_STREAM = re.compile(r"\bq(?:C)?(?:Debug|Info|Warning|Critical|Fatal)\b")
+CPP_VALUE_POSITION = re.compile(r"(?:\breturn|\?|(?<!:):(?!:))$")
+CPP_ASSIGN = re.compile(r"(?<![=!<>+\-*/|&^%])=$")
+CPP_WORDLIKE = re.compile(r"^[A-Za-z][A-Za-z' ,:;!?()\-]*[.!?]?$")
+
+
+def _cpp_literals(text):
+    """[(line, literal text, enclosing call names, statement text before the literal, statement text overall)] of a C++ source."""
+    found = []
+    i, n, line = 0, len(text), 1
+    calls = []  # one entry per open "(": the identifier before it ("" for none)
+    statement = ""  # code since the last ; { }  (literals shown as "")
+    last_word = ""
+    pending = []  # (line, literal, calls snapshot, statement before it)
+    while i < n:
+        c = text[i]
+        if c == "\n":
+            line += 1
+            i += 1
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+        elif text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            line += text.count("\n", i, end)
+            i = end
+        elif c == '"' or (text.startswith('R"', i) and not (i and (text[i - 1].isalnum() or text[i - 1] == "_"))):
+            if c == "R":  # raw string R"delim( ... )delim"
+                m = re.compile(r'R"([^(\s]{0,16})\(').match(text, i)
+                if not m:
+                    i += 1
+                    continue
+                end = text.find(")" + m.group(1) + '"', m.end())
+                end = n if end < 0 else end + len(m.group(1)) + 2
+                literal = text[m.end():max(m.end(), end - len(m.group(1)) - 2)]
+                start_line = line
+                line += text.count("\n", i, end)
+                i = end
+            else:
+                j = i + 1
+                while j < n and text[j] != '"' and text[j] != "\n":
+                    j += 2 if text[j] == "\\" else 1
+                literal = text[i + 1:j]
+                start_line = line
+                i = j + 1
+            pending.append((start_line, literal, list(calls), statement))
+            statement += '""'
+            last_word = ""
+        elif c == "'":  # a character literal
+            j = i + 1
+            while j < n and text[j] != "'" and text[j] != "\n":
+                j += 2 if text[j] == "\\" else 1
+            i = j + 1
+            statement += "''"
+        elif c.isalpha() or c == "_":
+            m = re.compile(r"[A-Za-z_][A-Za-z_0-9:]*").match(text, i)
+            last_word = m.group(0)
+            statement += last_word
+            i = m.end()
+        elif c == "(":
+            calls.append(last_word)
+            statement += c
+            last_word = ""
+            i += 1
+        elif c == ")":
+            if calls:
+                calls.pop()
+            statement += c
+            last_word = ""
+            i += 1
+        elif c in ";{}":
+            if not calls or c != ";":
+                statement = ""
+            else:
+                statement += c
+            last_word = ""
+            i += 1
+        else:
+            if not c.isspace():
+                last_word = ""
+            statement += c
+            i += 1
+    for start_line, literal, call_stack, before in pending:
+        found.append((start_line, literal, call_stack, before))
+    return found
+
+
+def scan_cpp_text(rel, text):
+    lines = text.splitlines()
+    violations = []
+    for line, literal, calls, before in _cpp_literals(text):
+        if any(c.split("::")[-1] in CPP_TRANSLATING | CPP_NOT_TEXT for c in calls):
+            continue
+        marked = any("i18n-ignore" in lines[k] for k in (line - 1, line - 2) if 0 <= k < len(lines))
+        if marked or not HAS_WORD.search(literal):
+            continue
+        if CPP_LOG_STREAM.search(before):  # qWarning().noquote() << "..."
+            continue
+        phrase = bool(re.search(r"[^\W\d_]{2,}\s+[^\W\d_]{2,}", literal))
+        # Where the literal stands: a return value, a branch of ?:, or the right side of an assignment to a text-like name
+        # (not an operand of ==, not an argument of another call).
+        tail = before.rstrip()
+        while CPP_WRAPPER_OPEN.search(tail):
+            tail = CPP_WRAPPER_OPEN.sub("", tail).rstrip()
+        argument_of = next((c for c in reversed(calls) if c not in CPP_WRAPPERS), "")
+        visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
+                   or bool(argument_of and CPP_SINK.search(argument_of.split("::")[-1])))
+        wordlike = bool(CPP_WORDLIKE.match(literal))
+        if phrase or (visible and wordlike):
+            violations.append(f"{rel}:{line}: English text {literal[:40]!r} is not wrapped in tr()/QCoreApplication::translate")
+    return violations
+
+
+def scan_cpp(directory=None):
+    """(f) bare English text in the Settings app's C++, read as text (a tokenizer): never compiled."""
+    violations = []
+    base = directory or ROOT / "apps" / "settings" / "src"
+    for path in sorted(list(base.glob("*.cpp")) + list(base.glob("*.h"))):
+        rel = path.name if directory else path.relative_to(ROOT)
+        violations += scan_cpp_text(rel, path.read_text(encoding="utf-8"))
+    return violations
+
+
 def main():
+    if "--cpp-only" in sys.argv:  # part (f) alone on a directory (selftest, tests/shell/i18n_helpers_gate.sh)
+        found = scan_cpp(Path(sys.argv[sys.argv.index("--cpp-only") + 1]))
+        for v in found:
+            print(f"i18n: {v}")
+        return 1 if found else 0
     if "--helpers-only" in sys.argv:  # part (e) alone on a directory (the gate's selftest, tests/shell/i18n_helpers_gate.sh)
         found = scan_helpers(Path(sys.argv[sys.argv.index("--helpers-only") + 1]))
         for v in found:
@@ -362,7 +507,7 @@ def main():
     if unfinished:
         failed = True
 
-    violations = scan_qml() + scan_desktop_entries() + scan_helpers()
+    violations = scan_qml() + scan_desktop_entries() + scan_helpers() + scan_cpp()
     for v in violations:
         print(f"i18n: {v}")
     if violations:

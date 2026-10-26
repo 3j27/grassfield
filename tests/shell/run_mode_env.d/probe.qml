@@ -28,6 +28,8 @@ ShellRoot {
             updateNotices: Mode.updateNotices,
             refused: Mode.refused,
             configDir: Mode.configDir,
+            stateHome: Mode.stateHome,
+            appsTrace: Mode.appsTrace,
             stateDir: Mode.stateDir,
             shellDirIsTheShellDir: Mode.shellDir === Quickshell.shellDir && Mode.shellDir !== "",
             devValues: devValues

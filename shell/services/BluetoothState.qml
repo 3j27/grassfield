@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Bluetooth
 import "../overlay/controlcenter/Model.js" as Model // layering-exception: GF-087
 
@@ -17,7 +18,7 @@ Singleton {
     // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): adapter on, no devices.
     readonly property bool available: VisualFixtures.active || adapter !== null
     readonly property bool enabled: VisualFixtures.active || (available && adapter.enabled)
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
     signal devSuppressed(string what)
 
     // Paired devices as rows {name, paired, connected, battery, dev}.

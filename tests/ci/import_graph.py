@@ -26,7 +26,8 @@ unicode escapes). A comment or a string is therefore never a use. Both tools are
 - A quoted import must be a plain relative path that resolves (percent escapes decoded) to an existing file or directory inside
   shell/; `root:/...`, `file:///...`, absolute and missing paths are refused. The qmldir files are read too: only `module` lines
   and type entries naming an existing plain file of the same directory pass (no import, depends, plugin or outside path).
-  `.mjs`, `Qt.include` and a bare `import qs` are refused (none is used). A raw event name counts as an identifier, a destructured
+  `.mjs`, `Qt.include` and a bare `import qs` are refused (none is used), and so is any hidden path under shell/ (a name
+  that starts with a dot, qmlls's `.qmlls.ini` excepted): QML loads one by name and a glob skips it (re-review of e45bdf3). A raw event name counts as an identifier, a destructured
   property name or a string literal in QML, and anywhere in the text of a .js file (qmldom gives .js no tree). Names built at run
   time are out of reach.
 - A canary runs first: both tools must exist and read a tiny file as relied on, so a missing tool or a changed dump fails loudly.
@@ -263,10 +264,15 @@ def qmldir_failures(shell):
 
 def shape_failures(shell):
     """What the reader cannot follow and the tree does not use is refused: `.mjs` modules and `Qt.include` (a script pulled in
-    by name at run time), anywhere in shell/ (the text is searched whole, a comment included: a false positive, never a miss)."""
+    by name at run time), anywhere in shell/ (the text is searched whole, a comment included: a false positive, never a miss);
+    and any hidden path (a file or directory whose name starts with a dot, qmlls's own `.qmlls.ini` excepted): QML loads one by
+    name (`Loader { source: ".Evil.qml" }`), a glob skips it, and none is part of the tree (re-review of e45bdf3)."""
     out = []
     for p in listing(shell.parent, shell.name):
-        if p.suffix == ".mjs":
+        rel = p.relative_to(shell.parent)
+        if any(part.startswith(".") for part in rel.parts[:-1]) or (rel.name.startswith(".") and rel.name != ".qmlls.ini"):
+            out.append((p, f"{rel}: a hidden path under shell/ is refused (QML loads it by name; none is part of the tree)"))
+        elif p.suffix == ".mjs":
             out.append((p, f"{p.name}: .mjs modules are not read by this check and are not used; refused"))
         elif p.suffix in (".qml", ".js") and QT_INCLUDE.search(p.read_text(encoding="utf-8", errors="replace")):
             out.append((p, f"{p.name}: Qt.include pulls in a script this check cannot follow; refused"))
@@ -602,6 +608,8 @@ def selftest():
     run("lib imports no module", {**clean, "lib/Mode.qml": "import qs.platform\nItem {}\n"}, "imports go to a lower layer only")
     run("platform imports lib only", {**clean, "platform/Compositor.qml": "import Quickshell.Hyprland\nimport qs.store\nItem {}\n"}, "imports go to a lower layer only")
     run("a commented import is not an import", {**clean, "services/Apps.qml": "// import qs.dock\nItem {}\n"}, None)
+    run("a hidden file is refused", {**clean, "dock/.Evil.qml": "Item {}\n"}, "a hidden path under shell/")
+    run("a file in a hidden directory is refused", {**clean, "dock/.x/Evil.qml": "Item {}\n"}, "a hidden path under shell/")
     run("a tag naming nothing known fails", {**clean, "services/Apps.qml": "import qs.dock // layering-exception: because\nItem {}\n"}, "unknown layering-exception tag")
     run("a stale marker fails", {**clean, "services/Apps.qml": "import qs.platform // layering-exception: GF-087\nItem {}\n"}, "stale marker")
     run("an unknown module fails", {**clean, "services/Apps.qml": "import qs.nothing\nItem {}\n"}, "is not a module")

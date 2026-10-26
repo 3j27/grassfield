@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.lib
 import Quickshell.Services.SystemTray
 import "StatusLogic.js" as Logic
 
@@ -14,7 +15,7 @@ import "StatusLogic.js" as Logic
 Singleton {
     id: root
 
-    readonly property bool enabled: Quickshell.env("GRASSFIELD_DEV") !== "1" || Quickshell.env("GRASSFIELD_PRIVATE_BUS") === "1"
+    readonly property bool enabled: Mode.ownBus
     readonly property var items: root.enabled ? SystemTray.items.values.filter(Logic.trayShown) : []
 
     function alive(item: var): bool {

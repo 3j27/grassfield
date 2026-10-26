@@ -330,7 +330,8 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
   `CursorRefresh.*` (re-applies Hyprland's last named cursor shape with force, trailing-refresh timer),
   `DeferredFocus.*` (Hyprland's refusal checks, keyboard holder, press context, reason mapping, coalesced event-loop
   attempt; shared by Stages and the overview focus), `OverviewFocus.*` (the overview focus request, layer commit watches,
-  bound timer, focus through Hyprland's path).
+  bound timer, focus through Hyprland's path), `TopClamp.*` (a window's titlebar never under the menu bar, FR56: the
+  plugin's own titlebar drags at every step, the end of Hyprland's drags after the release).
 - `protocols/appmenu.xml` — KDE's appmenu protocol, version 2 (LGPL-2.1-or-later, upstream notice kept).
 - `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
   `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`,

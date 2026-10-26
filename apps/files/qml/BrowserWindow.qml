@@ -402,23 +402,38 @@ Window {
             doubleClickAction: win.app.titlebarDoubleClick
             canMinimize: win.app.canMinimize
 
-            leading: Row {
+            // Back and forward: one 72 x 36 capsule (macOS).
+            leading: Rectangle {
                 id: navButtons
-                spacing: Tokens.spacingXs / 2
+                width: navRow.width + Tokens.spacingXs
+                height: Tokens.filesToolbarCapsule
+                radius: height / 2
+                color: Appearance.buttonFill
+                Accessible.role: Accessible.Grouping
+                Accessible.name: qsTr("Navigation")
 
-                ToolButton {
-                    iconName: "chevron-right"
-                    iconRotation: 180
-                    enabled: win.tab !== null && win.tab.canBack
-                    accessibleName: qsTr("Back")
-                    onClicked: win.tab.back()
-                }
+                Row {
+                    id: navRow
+                    anchors.centerIn: parent
 
-                ToolButton {
-                    iconName: "chevron-right"
-                    enabled: win.tab !== null && win.tab.canForward
-                    accessibleName: qsTr("Forward")
-                    onClicked: win.tab.forward()
+                    ToolButton {
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "chevron-right"
+                        iconRotation: 180
+                        enabled: win.tab !== null && win.tab.canBack
+                        accessibleName: qsTr("Back")
+                        onClicked: win.tab.back()
+                    }
+
+                    ToolButton {
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "chevron-right"
+                        enabled: win.tab !== null && win.tab.canForward
+                        accessibleName: qsTr("Forward")
+                        onClicked: win.tab.forward()
+                    }
                 }
             }
 
@@ -426,12 +441,12 @@ Window {
                 id: tools
                 spacing: Tokens.spacingSm
 
-                // View switcher (segmented)
+                // View switcher: a 36-pt capsule, the selected view a lighter pill (macOS)
                 Rectangle {
                     width: viewRow.width + Tokens.spacingXs
-                    height: Tokens.filesToolbarButtonSize + Tokens.spacingXs
-                    radius: Tokens.radiusControl + Tokens.spacingXs / 2
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesStripeOpacity * 2)
+                    height: Tokens.filesToolbarCapsule
+                    radius: height / 2
+                    color: Appearance.buttonFill
                     anchors.verticalCenter: parent.verticalCenter
                     Accessible.role: Accessible.Grouping
                     Accessible.name: qsTr("View")
@@ -450,6 +465,9 @@ Window {
                             delegate: ToolButton {
                                 id: viewButton
                                 required property var modelData
+                                capsule: true
+                                buttonSize: Tokens.filesToolbarGroupButton
+                                checkedColor: Appearance.chipFill
                                 checkable: true
                                 radio: true
                                 checked: win.tab !== null && win.tab.viewMode === modelData.mode
@@ -481,21 +499,40 @@ Window {
                 }
 
                 // Search field (filters the current folder)
+                // A 36-pt circle that expands to a capsule while it has the focus or text (macOS).
                 Rectangle {
-                    width: Tokens.filesSearchWidth
-                    height: Tokens.filesToolbarButtonSize
+                    id: searchCapsule
+                    readonly property bool expanded: search.activeFocus || search.text !== ""
+                    width: expanded ? Tokens.filesSearchWidth : Tokens.filesToolbarCapsule
+                    height: Tokens.filesToolbarCapsule
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                    radius: height / 2
+                    color: Appearance.buttonFill
                     border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
                     border.color: Appearance.focusRingColor
+                    clip: true
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Appearance.duration(Tokens.motionNormal)
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+
+                    // A click on the collapsed circle opens it.
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: !searchCapsule.expanded
+                        cursorShape: Qt.ArrowCursor
+                        onClicked: search.forceActiveFocus()
+                    }
 
                     Icon {
                         id: searchIcon
                         name: "search"
                         size: Tokens.menuIconSize
                         color: Appearance.colors.textSecondary
-                        x: Tokens.spacingSm
+                        x: searchCapsule.expanded ? Tokens.spacingMd : (searchCapsule.width - width) / 2
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
@@ -508,6 +545,7 @@ Window {
                         anchors.rightMargin: Tokens.spacingSm
                         anchors.verticalCenter: parent.verticalCenter
                         clip: true
+                        opacity: searchCapsule.expanded ? 1 : 0
                         activeFocusOnTab: true
                         color: Appearance.colors.text
                         selectionColor: Appearance.highlight

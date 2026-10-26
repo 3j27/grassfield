@@ -23,6 +23,21 @@ Type=simple
 Slice=session.slice
 # Quickshell's own reload is off: package upgrades must not hot-reload a half-written tree.
 Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
+# Leaked developer search paths and accidental overrides must not replace or disable the shell's QML (review of 360d6fa,
+# the GF-115 class): a `qs/security/lock` directory on QML_IMPORT_PATH replaced the whole lock screen, and a stray
+# QS_MANIFEST (or QS_CONFIG_NAME) made `qs -n -p` refuse to start at all (no lock, no polkit agent). So the unit clears
+# the QML and Qt plugin search paths, every variable `qs --help` maps to an option (the packaged command line needs
+# none), the GTK module variables the gtk3 platform theme would load modules from, GIO_EXTRA_MODULES (GSettings loads
+# GIO modules from it), and the Vulkan loader override with the variable that selects the Vulkan backend
+# (QSG_RHI_BACKEND; the shell runs on Qt's default backend). Not a native-loader boundary: EGL, GBM, Mesa and Vulkan
+# driver variables and LD_LIBRARY_PATH still reach qs (some GPU setups need them).
+# systemd applies UnsetEnvironment= last, over Environment= and the manager's environment. Grassfield's QML modules and Qt
+# plugins then come from Qt's built-in locations (/usr/lib/qt6/qml, /usr/lib/qt6/plugins), the shell from -p below, and
+# nothing is set in their place. This is not a defence against code that already runs as the user (it can set the
+# environment, LD_PRELOAD, a user drop-in for this unit, a compiled-QML cache under XDG_CACHE_HOME: out of scope, as for
+# Omarchy; docs/specs/security.md). tests/security/shell_unit_env.sh holds the list (and derives the qs options from
+# `qs --help`); scripts/dev/shell-run.sh --unit-env applies it.
+UnsetEnvironment=QML_IMPORT_PATH QML2_IMPORT_PATH QML_PLUGIN_PATH QML_DISK_CACHE_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GTK_MODULES GTK3_MODULES GTK_PATH GIO_EXTRA_MODULES QT_VULKAN_LIB QSG_RHI_BACKEND
 # While this shell runs it locks before sleep itself (shell/security/idle/SleepInhibitor.qml). An Omarchy sleep-lock unit
 # that happens to run as well is never stopped from here: it may be in the middle of a sleep it is delaying, and with the
 # stand-in it only ever asks this shell to lock (a second, harmless path).

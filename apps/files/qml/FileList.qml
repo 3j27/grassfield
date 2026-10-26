@@ -265,7 +265,7 @@ FocusScope {
                 colors: row.tagColors
                 x: nameText.x + nameText.paintedWidth + Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter
-                ringColor: row.emphasized ? Appearance.colors.selection : Appearance.colors.materialTint
+                ringColor: row.emphasized ? Appearance.colors.selection : Appearance.windowFill
             }
 
             Loader {

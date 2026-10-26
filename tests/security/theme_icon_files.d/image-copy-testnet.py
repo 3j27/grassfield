@@ -25,4 +25,27 @@ if "=" in pin:
 real_allowed = helper.address_allowed
 helper.resolve_host = lambda host, port: list(NAMES.get(host, []))
 helper.address_allowed = lambda host, ip: (host, ip) in ALLOWED or real_allowed(host, ip)
+# GF_ART_TRACE: one line per curl call and per fetch with its outcome, so that a run in which the shell's fetches never
+# reach the server says where they stopped (diagnostics only; the decisions are the real helper's).
+trace = os.environ.get("GF_ART_TRACE", "")
+if trace:
+    def note(line):
+        try:
+            with open(trace, "a") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass
+    real_curl, real_fetch = helper.curl_once, helper.fetch
+
+    def traced_curl(url, host, port, addresses, seconds):
+        answer = real_curl(url, host, port, addresses, seconds)
+        note("curl %s at %s within %.1fs -> %s" % (url, ",".join(addresses), seconds, "none" if answer is None else answer[0]))
+        return answer
+
+    def traced_fetch(url):
+        data = real_fetch(url)
+        note("fetch %s -> %s" % (url, "none" if data is None else "%d bytes" % len(data)))
+        return data
+    helper.curl_once, helper.fetch = traced_curl, traced_fetch
+    note("start python %s pid %d" % (sys.version.split()[0], os.getpid()))
 sys.exit(helper.main(sys.argv))

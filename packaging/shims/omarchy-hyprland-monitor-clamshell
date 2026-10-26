@@ -7,6 +7,11 @@
 # switch the laptop panel for clamshell mode with Omarchy's own state files and monitors.lua edits. In the Grassfield
 # session the lid and clamshell belong to /usr/lib/grassfield/grassfield-lid; running both would make them fight over
 # the laptop panel. This stand-in hands the call to grassfield-lid's reconcile (same decision, Grassfield's state).
-lid=${GRASSFIELD_LID_TOOL:-/usr/lib/grassfield/grassfield-lid}
+# GRASSFIELD_LID_TOOL (a test hook, dev plumbing of ADR-0019) is honoured only in a dev session (GRASSFIELD_DEV exactly
+# "1", GRASSFIELD_SESSION not "1"): in a real session a stray value cannot replace the lid tool.
+lid=/usr/lib/grassfield/grassfield-lid
+if [ "${GRASSFIELD_DEV:-}" = 1 ] && [ "${GRASSFIELD_SESSION:-}" != 1 ]; then
+  lid=${GRASSFIELD_LID_TOOL:-$lid}
+fi
 [ -x "$lid" ] || exit 0
 exec "$lid" reconcile

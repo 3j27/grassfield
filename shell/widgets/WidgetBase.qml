@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.lib
 import Grassfield.Ui
 
 // widgets/1 host API, as seen by a widget (docs/specs/widgets.md). Every widget's root is a
@@ -15,7 +16,7 @@ Item {
     property bool dark: Appearance.dark
     property bool reduceMotion: Appearance.reduceMotion
     // True in the nested development session (GRASSFIELD_DEV=1): actions that reach the owner's real apps are suppressed.
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property bool devSession: Mode.dev
 
     // Inner padding of the tile (a token).
     readonly property real padding: Tokens.spacingLg

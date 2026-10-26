@@ -16,6 +16,8 @@ T.ToolButton {
     property bool radio: false
     // Fully rounded shape (a capsule group) instead of the control radius.
     property bool capsule: false
+    // Fill of a checked button (a capsule group draws its selected pill lighter than the group).
+    property color checkedColor: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity * Tokens.materialHoverActiveFactor)
     // Icon and caption colour (a button on the destructive banner uses destructiveText).
     property color tint: Appearance.colors.text
     property real buttonSize: Tokens.controlToolButtonSize
@@ -66,7 +68,7 @@ T.ToolButton {
 
     background: Rectangle {
         radius: root.capsule ? height / 2 : Tokens.radiusControl
-        color: root.checked ? Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity * Tokens.materialHoverActiveFactor)
+        color: root.checked ? root.checkedColor
              : (root.enabled && root.down ? Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
              : (root.enabled && root.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"))
         border.width: Appearance.increaseContrast && root.checked ? Tokens.controlBorderWidth : 0

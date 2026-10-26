@@ -16,7 +16,7 @@ Rectangle {
 
     implicitHeight: input.implicitHeight + 2 * Tokens.spacingXs / 2
     radius: Tokens.radiusControl / 2
-    color: Appearance.colors.materialTint
+    color: Appearance.windowFill
     border.width: Tokens.controlFocusOutline
     border.color: Appearance.focusRingColor
 

@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
+import qs.lib
 
 // Regenerates the cursor theme for the pointer colours (Settings > Accessibility > Pointer, ADR-0014): runs
 // branding/cursors/build.sh (installed as /usr/share/grassfield/cursors/build.sh; python3, rsvg-convert and
@@ -30,8 +31,8 @@ Scope {
 
     property string outline: PointerColors.DEFAULT_OUTLINE
     property string fill: PointerColors.DEFAULT_FILL
-    property string script: Quickshell.env("GRASSFIELD_CURSORS_BUILD") || "/usr/share/grassfield/cursors/build.sh"
-    property string iconsDir: PointerColors.iconsDir(Quickshell.env("GRASSFIELD_CURSORS_ICONS"), Quickshell.env("XDG_DATA_HOME"), Quickshell.env("HOME"), Quickshell.env("GRASSFIELD_DEV") === "1")
+    property string script: Mode.devValue("CURSORS_BUILD") || "/usr/share/grassfield/cursors/build.sh"
+    property string iconsDir: PointerColors.iconsDir(Mode.devValue("CURSORS_ICONS"), Quickshell.env("XDG_DATA_HOME"), Quickshell.env("HOME"), Mode.dev)
     // File the state is written to ("" = not written).
     property string statusPath: ""
     property int debounceMs: Tokens.settingsPointerColorDebounceMs

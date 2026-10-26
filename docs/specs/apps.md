@@ -51,3 +51,6 @@ a recents row, the header more-menu and the grid/list switch of the reference (n
 - A filter returns the grid to the top; an app-list change keeps the scroll position and the selected app (dropped when the app is gone).
 - Multi-screen: the panel shows on the focused screen only.
 - Performance with 200 entries is measured offscreen with software rendering (not the nested compositor, which has about 60 desktop entries on the reference machine); see the numbers in the commit history and the task report.
+
+## Header row (visual audit 2026-10-25, priority 9)
+macOS model, measured: no capsule field and no ring. A borderless 56-pt row (`launcher.headerHeight`) holds the 24-pt glass glyph and the title "Apps" in grey at 24 regular (`launcher.queryFontSize`, follows Text Size); the query replaces the title while it is typed, and the caret is the only focus mark. A hairline closes the row and another closes the chip row (`launcher.chipHairlineGap`); the first icon row is about 30 under the chips (`launcher.chipToGrid` plus the grid's own margin; was 7.5). The grid takes the rest of the panel, so the number of rows follows. Tests: `tst_visualaudit.qml`, `tst_appspanel.qml`.
