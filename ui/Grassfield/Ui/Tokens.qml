@@ -1382,10 +1382,10 @@ QtObject {
     readonly property int launcherPanelRadius: 28
     // estimate: smallest gap between the panel and the screen sides on narrow outputs [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherEdgeMargin: 24
-    // F1 reference: top about 190 pt on a 956-pt screen (0.2); 0.18 keeps the panel clear of the menu bar on short outputs [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
-    readonly property real launcherTopFraction: 0.18
-    // low confidence (not measured): panel height as a share of the output height; 670 px at 1080, about 5.5 rows so the scroll is visible [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
-    readonly property real launcherHeightFraction: 0.62
+    // panel top at 0.199 of the output (was 0.18: 0.179) [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property real launcherTopFraction: 0.2
+    // panel height 0.60 of the output (was 0.62) [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property real launcherHeightFraction: 0.6
     // estimate: smallest panel height (search field, chips and two rows) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherMinHeight: 320
     // estimate: space kept free at the bottom of the output for the Dock [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
@@ -1410,10 +1410,16 @@ QtObject {
     readonly property real launcherLabelLineHeight: 1.2
     // estimate: icon to label [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherLabelGap: 6
-    // estimate: pill search field (Search uses a 48-pt field; F1 low confidence) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
-    readonly property int launcherSearchHeight: 36
-    // A2: dark appearance only. The search field keeps the light translucent fill (macOS model, docs/specs/apps.md) but at 0.10 instead of material.fillOpacity 0.14: the lighter backdrop under the light placeholder (textSecondary) gave 4.30:1 on a white wallpaper at transparency 0.6; the light appearance keeps material.fillOpacity
-    readonly property real launcherSearchFillOpacityDark: 0.1
+    // borderless header row 56 tall (glyph, the query or its grey placeholder), a hairline under it; it replaced the 36-pt capsule field [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property int launcherHeaderHeight: 56
+    // header title or query about 24-25, regular; the placeholder in the secondary colour [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property int launcherHeaderTextSize: Math.round(24 * Appearance.textScale)
+    // search glyph of the header row, 24 [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property int launcherHeaderGlyph: 24
+    // header hairline to the category chips, so the first icon row starts 120.5 below the panel top [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property int launcherChipsTop: 10
+    // chips to the first icon 30 with a hairline between (was 7.5 with a 4-pt gap) [ref: docs/audits/visual-tahoe-2026-10-25.md § Apps launcher — partly close, 5.5/10]
+    readonly property int launcherGridGap: 26
     // F1 reference: category chips about 23-24 tall [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipHeight: 24
     // F1 reference: chip gap about 7.6 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]

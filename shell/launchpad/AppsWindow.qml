@@ -340,27 +340,27 @@ Variants {
                         radius: Tokens.launcherPanelRadius
                     }
 
-                    // Search field.
+                    // Search: a borderless header row (macOS): the glyph and the query, or its grey placeholder, at title size; no
+                    // fill and no ring at rest (the caret shows where typing goes); the ring only in keyboard navigation.
                     Rectangle {
                         id: searchBox
 
-                        x: Tokens.launcherPadding
-                        y: Tokens.launcherPadding
-                        width: panel.width - 2 * Tokens.launcherPadding
-                        height: Tokens.launcherSearchHeight
-                        radius: height / 2
-                        // The translucent fill of the material; in dark a little less of it, so the light placeholder keeps 4.5:1.
-                        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.launcherSearchFillOpacityDark : Tokens.materialFillOpacity)
-                        border.width: field.activeFocus ? Tokens.controlFocusOutline : 0
+                        x: 0
+                        y: 0
+                        width: panel.width
+                        height: Tokens.launcherHeaderHeight
+                        radius: Tokens.launcherPanelRadius
+                        color: "transparent"
+                        border.width: field.activeFocus && root.controller.keyNav ? Tokens.controlFocusOutline : 0
                         border.color: Appearance.focusRingColor
                         Accessible.role: Accessible.Pane
                         Accessible.name: qsTr("Search")
 
                         Icon {
                             id: glass
-                            x: Tokens.spacingMd
+                            x: Tokens.launcherPadding
                             y: (parent.height - height) / 2
-                            size: Tokens.menuIconSize
+                            size: Tokens.launcherHeaderGlyph
                             name: "search"
                             color: Appearance.colors.textSecondary
                         }
@@ -368,14 +368,14 @@ Variants {
                         TextInput {
                             id: field
                             x: glass.x + glass.width + Tokens.spacingSm
-                            width: parent.width - x - Tokens.spacingMd
+                            width: parent.width - x - Tokens.launcherPadding
                             height: parent.height
                             verticalAlignment: TextInput.AlignVCenter
                             color: Appearance.colors.text
                             selectionColor: Appearance.highlight
                             selectedTextColor: Appearance.highlightText
                             font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyBodySize
+                            font.pixelSize: Tokens.launcherHeaderTextSize
                             clip: true
                             focus: true
                             // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
@@ -404,12 +404,27 @@ Variants {
                         }
                     }
 
+                    // Hairlines under the header and under the chips (macOS).
+                    Repeater {
+                        model: [searchBox.y + searchBox.height, chipFlick.y + chipFlick.height + Tokens.launcherGridGap / 2]
+
+                        Rectangle {
+                            required property real modelData
+
+                            x: 0
+                            y: modelData
+                            width: panel.width
+                            height: 1
+                            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                        }
+                    }
+
                     // Category chips (scroll sideways when the panel is narrower than the row).
                     Flickable {
                         id: chipFlick
 
                         x: Tokens.launcherPadding
-                        y: searchBox.y + searchBox.height + Tokens.spacingMd
+                        y: searchBox.y + searchBox.height + Tokens.launcherChipsTop
                         width: panel.width - 2 * Tokens.launcherPadding
                         height: Tokens.launcherChipHeight
                         contentWidth: chipRow.width
@@ -452,12 +467,13 @@ Variants {
                         id: grid
 
                         x: Tokens.launcherPadding
-                        y: chipFlick.y + chipFlick.height + Tokens.spacingXs
+                        y: chipFlick.y + chipFlick.height + Tokens.launcherGridGap / 2 + 1
                         width: panel.width - 2 * Tokens.launcherPadding
                         // Down to the panel's edge (inside its border): rows scroll out under it, the last one clears it.
                         height: panel.height - y - Tokens.appsBorderWidth
-                        // Room for the focus ring above the first row and below the last one.
-                        topMargin: Tokens.spacingSm
+                        // Room for the focus ring above the first row and below the last one; the first row starts launcherGridGap
+                        // below the chips, the grid itself right under the hairline (rows scroll up to it).
+                        topMargin: Tokens.spacingSm + Tokens.launcherGridGap / 2 - 1
                         bottomMargin: Tokens.spacingMd
                         cellWidth: root.controller.grid.cellW
                         cellHeight: root.controller.grid.cellH
