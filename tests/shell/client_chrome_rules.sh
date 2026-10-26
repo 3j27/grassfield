@@ -38,8 +38,8 @@ if grep -v "^ *--" "$rules" | grep 'suppress_event = "maximize"' | grep -v 'gf-n
 else
   check "S2: no other rule touches the maximize suppression" 0
 fi
-grep -q 'name = "gf-client-chrome-info-rounding".*xdg_tag = "^info\$".*rounding = 12' "$rules"
-check "windows of role info get radius 12 (S3)" $?
+grep -q 'name = "gf-client-chrome-info-rounding".*xdg_tag = "^info\$".*rounding = 20' "$rules"
+check "windows of role info get the one window radius 20 (S3, ADR-0024)" $?
 if grep -v "^ *--" "$rules" | grep "decorate *= *false" | grep -v "gf-glance" | grep -q .; then
   check "no rule but Glance's uses decorate = false (it drops the border and the shadow)" 1
 else

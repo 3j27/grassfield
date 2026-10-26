@@ -74,7 +74,7 @@ Column {
                 Rectangle {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
-                    color: choice.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                    color: choice.selected ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                     border.width: choice.activeFocus ? Tokens.controlFocusOutline : 0
                     border.color: Appearance.focusRingColor
                 }
@@ -94,7 +94,7 @@ Column {
                                 required property string modelData
                                 size: Tokens.menuIconSize + 4
                                 name: modelData
-                                color: choice.selected ? Appearance.colors.accentText : Appearance.colors.text
+                                color: choice.selected ? Appearance.colors.selectionText : Appearance.colors.text
                             }
                         }
                     }
@@ -102,7 +102,7 @@ Column {
                     Label {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: choice.modelData.text
-                        color: choice.selected ? Appearance.colors.accentText : Appearance.colors.text
+                        color: choice.selected ? Appearance.colors.selectionText : Appearance.colors.text
                     }
                 }
 

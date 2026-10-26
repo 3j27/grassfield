@@ -60,9 +60,12 @@ Item {
         border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
         border.color: Appearance.focusRingColor
 
+        // The highlight appears at once with its menu and fades only when it goes (macOS, audit F6, C-23).
         Behavior on opacity {
+            id: highlightFade
+
             NumberAnimation {
-                duration: Appearance.duration(Tokens.motionFast)
+                duration: highlightFade.targetValue > 0 ? 0 : Appearance.duration(Tokens.motionFast)
             }
         }
     }

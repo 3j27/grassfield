@@ -1,13 +1,18 @@
 import QtQuick
 import QtQuick.Templates as T
 
-// Single-line text field (QtQuick.Templates TextField): a translucent 22 px rounded field, the I-beam pointer, the
+// Single-line text field (QtQuick.Templates TextField): a rounded field (white with a fine border in the light appearance, as
+// macOS; a translucent fill in the dark one), the I-beam pointer, the
 // accent selection, the placeholder in the secondary colour, and the keyboard focus ring while it has the focus.
 // Input method, selection, clipboard and accessibility (EditableText) are the template's.
 T.TextField {
     id: root
 
     property string accessibleName: ""
+    // The field's shape and fill; SearchField makes it a capsule with a light fill and no border.
+    property real fieldRadius: Tokens.radiusControl
+    property color fieldColor: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity) : Appearance.colors.windowBackground
+    property bool fieldBorder: !Appearance.dark
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset, contentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(Tokens.controlFieldHeight, implicitBackgroundHeight + topPadding + bottomPadding)
@@ -48,12 +53,13 @@ T.TextField {
     FocusGuard {}
 
     background: Rectangle {
-        radius: Tokens.radiusControl
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+        radius: root.fieldRadius
+        color: root.fieldColor
+        border.width: Appearance.increaseContrast || root.fieldBorder ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         FocusRing {
+            shapeRadius: root.fieldRadius
             visible: root.activeFocus
         }
     }

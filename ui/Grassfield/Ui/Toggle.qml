@@ -41,7 +41,7 @@ T.Control {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
 
         Behavior on color {
             ColorAnimation {

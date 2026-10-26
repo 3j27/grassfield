@@ -118,7 +118,7 @@ WidgetBase {
                         height: width
                         radius: width / 2
                         visible: day.today
-                        color: Appearance.colors.accent
+                        color: Appearance.colors.selection
                     }
 
                     WidgetLabel {
@@ -128,7 +128,7 @@ WidgetBase {
                         text: String(day.modelData.day)
                         font.pixelSize: Tokens.typographyCaptionSize
                         font.weight: day.today ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
-                        color: day.today ? Appearance.colors.accentText : (day.modelData.inMonth ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.textSecondary, Tokens.materialDisabledOpacity))
+                        color: day.today ? Appearance.colors.selectionText : (day.modelData.inMonth ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.textSecondary, Tokens.materialDisabledOpacity))
                     }
                 }
             }

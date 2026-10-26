@@ -31,7 +31,7 @@ Window {
     height: Tokens.filesWindowHeight
     minimumWidth: Tokens.filesWindowMinWidth
     minimumHeight: Tokens.filesWindowMinHeight
-    color: Appearance.colors.materialTint
+    color: Appearance.colors.windowBackground
     visible: true
 
     onClosing: Qt.callLater(win.destroy)
@@ -510,8 +510,8 @@ Window {
                         clip: true
                         activeFocusOnTab: true
                         color: Appearance.colors.text
-                        selectionColor: Appearance.colors.accent
-                        selectedTextColor: Appearance.colors.accentText
+                        selectionColor: Appearance.highlight
+                        selectedTextColor: Appearance.highlightText
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                         text: win.tab ? win.tab.searchText : ""

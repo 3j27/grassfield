@@ -35,15 +35,13 @@
    {"name": "Sound title", "box": [1629, 351, 40, 13], "kind": "text"}
   ],
   "search": [
-   {"name": "query", "box": [686, 252, 58, 26], "kind": "text"},
-   {"name": "Top Hit header", "box": [657, 311, 46, 16], "kind": "text"},
-   {"name": "Files row title (selected)", "box": [702, 342, 34, 17], "kind": "text"},
-   {"name": "Files row subtitle (selected)", "box": [702, 358, 74, 16], "kind": "text"},
-   {"name": "Applications header", "box": [657, 396, 72, 15], "kind": "text"},
-   {"name": "Files app title", "box": [702, 427, 34, 14], "kind": "text"},
-   {"name": "Files app subtitle", "box": [702, 443, 62, 14], "kind": "text"},
-   {"name": "Neovim title", "box": [702, 483, 52, 14], "kind": "text"},
-   {"name": "Neovim subtitle", "box": [702, 499, 62, 12], "kind": "text"}
+   {"name": "query", "box": [699, 230, 58, 26], "kind": "text"},
+   {"name": "Files row title (selected, neutral fill)", "box": [710, 288, 46, 21], "kind": "text"},
+   {"name": "Files row subtitle (selected, neutral fill)", "box": [710, 310, 104, 19], "kind": "text"},
+   {"name": "Files app title", "box": [710, 345, 46, 20], "kind": "text"},
+   {"name": "Files app subtitle", "box": [710, 365, 88, 19], "kind": "text"},
+   {"name": "Neovim title", "box": [710, 401, 72, 20], "kind": "text"},
+   {"name": "Neovim subtitle", "box": [710, 421, 88, 19], "kind": "text"}
   ],
   "banners": [
    {"name": "banner 1 title", "box": [1617, 44, 92, 13], "kind": "text"},
@@ -70,7 +68,7 @@
   ],
   "apps": [
    {"name": "search placeholder", "box": [591, 226, 46, 13], "kind": "text"},
-   {"name": "chip All (accent text on accent)", "box": [569, 267, 18, 14], "kind": "text"},
+   {"name": "chip All (selection text on selection)", "box": [569, 267, 18, 14], "kind": "text"},
    {"name": "chip Productivity", "box": [617, 267, 76, 14], "kind": "text"},
    {"name": "label Aether", "box": [594, 360, 43, 16], "kind": "text"},
    {"name": "label Chromium", "box": [1273, 360, 63, 16], "kind": "text"},

@@ -2,7 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
 
-// Segmented choice of 2-4 options (QtQuick.Templates Control + one AbstractButton per segment). model: [{id, text}];
+// Segmented choice of 2-4 options (QtQuick.Templates Control + one AbstractButton per segment): a light track with the
+// selected segment as a raised pill and ordinary text (macOS 27; the accent marks selection in lists and menus only). model: [{id, text}];
 // value is the selected id (the host owns it: the control only reports `picked(id)`); Left/Right/Up/Down step through the
 // segments. Each segment is a RadioButton for assistive technology.
 T.Control {
@@ -53,9 +54,12 @@ T.Control {
         }
     }
 
+    // The selected pill sits this far inside the track, on whole pixels, with a concentric radius.
+    readonly property int pillInset: 2
+
     background: Rectangle {
         radius: Tokens.radiusControl
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
     }
@@ -73,7 +77,7 @@ T.Control {
                 required property int index
                 readonly property bool selected: segment.index === root.currentIndex
 
-                width: label.implicitWidth + 2 * Tokens.spacingLg
+                width: Math.ceil(label.implicitWidth + 2 * Tokens.spacingLg)
                 height: root.height
                 text: segment.modelData.text
                 hoverEnabled: true
@@ -95,9 +99,14 @@ T.Control {
                 background: Item {
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: Tokens.controlFocusOutline / 2
-                        radius: Tokens.radiusControl
-                        color: segment.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.hover, segment.down ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
+                        anchors.margins: root.pillInset
+                        radius: Tokens.radiusControl - root.pillInset
+                        // Selected: a raised pill (white in the light appearance, a lighter grey in the dark one) with a fine
+                        // edge; otherwise the hover and press shades.
+                        color: segment.selected ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2) : Appearance.colors.windowBackground)
+                            : Appearance.withAlpha(Appearance.colors.hover, segment.down ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
+                        border.width: segment.selected ? Tokens.controlBorderWidth : 0
+                        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Appearance.separatorOpacity)
                         visible: segment.selected || (root.enabled && (segment.hovered || segment.down))
                     }
                 }
@@ -109,7 +118,7 @@ T.Control {
                     verticalAlignment: Text.AlignVCenter
                     text: segment.text
                     opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
-                    color: segment.selected ? Appearance.colors.accentText : Appearance.colors.text
+                    color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyMenuSize
                     font.weight: Tokens.typographyMenuWeight

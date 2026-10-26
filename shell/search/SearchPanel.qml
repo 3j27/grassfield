@@ -160,7 +160,7 @@ Variants {
 
             Icon {
                 id: glass
-                x: Tokens.spacingLg
+                x: Tokens.searchFieldInset
                 y: (Tokens.searchFieldHeight - height) / 2
                 size: Tokens.searchFieldIconSize
                 name: "search"
@@ -170,14 +170,14 @@ Variants {
             TextInput {
                 id: field
                 TextCursor {}
-                x: glass.x + glass.width + Tokens.spacingMd
+                x: Tokens.searchQueryInset
                 y: 0
-                width: panel.width - x - Tokens.spacingLg
+                width: panel.width - x - Tokens.searchFieldInset
                 height: Tokens.searchFieldHeight
                 verticalAlignment: TextInput.AlignVCenter
                 color: Appearance.colors.text
-                selectionColor: Appearance.colors.accent
-                selectedTextColor: Appearance.colors.accentText
+                selectionColor: Appearance.highlight
+                selectedTextColor: Appearance.highlightText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.searchFieldSize
                 clip: true
@@ -260,9 +260,9 @@ Variants {
 
             Rectangle {
                 visible: panel.hasResults || panel.noResults
-                x: Tokens.spacingLg
+                x: Tokens.searchFieldInset
                 y: Tokens.searchFieldHeight - 1
-                width: panel.width - 2 * Tokens.spacingLg
+                width: panel.width - 2 * Tokens.searchFieldInset
                 height: 1
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
@@ -272,9 +272,9 @@ Variants {
             Flickable {
                 id: chipFlick
                 visible: panel.chipsShown
-                x: Tokens.spacingLg - Tokens.controlFocusOutline
+                x: Tokens.searchFieldInset - Tokens.controlFocusOutline
                 y: Tokens.searchFieldHeight + Tokens.searchChipTop - Tokens.controlFocusOutline
-                width: panel.width - 2 * Tokens.spacingLg + 2 * Tokens.controlFocusOutline
+                width: panel.width - 2 * Tokens.searchFieldInset + 2 * Tokens.controlFocusOutline
                 // Room around the chips for the focus ring outside them (the row clips).
                 height: Tokens.launcherChipHeight + 2 * Tokens.controlFocusOutline
                 contentWidth: chipRow.width + 2 * Tokens.controlFocusOutline
@@ -318,9 +318,9 @@ Variants {
             Text {
                 id: emptyNotice
                 visible: panel.noResults
-                x: Tokens.spacingLg
+                x: Tokens.searchFieldInset
                 y: Tokens.searchFieldHeight
-                width: panel.width - 2 * Tokens.spacingLg
+                width: panel.width - 2 * Tokens.searchFieldInset
                 height: Tokens.searchEmptyHeight
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
@@ -338,74 +338,49 @@ Variants {
 
             ListView {
                 id: list
-                x: Tokens.spacingSm
+                x: Tokens.searchRowInset
                 y: panel.listTop
-                width: panel.width - 2 * Tokens.spacingSm
+                width: panel.width - 2 * Tokens.searchRowInset
                 height: panel.height - y - Tokens.spacingSm
                 clip: true
                 interactive: contentHeight > height
                 boundsBehavior: Flickable.StopAtBounds
                 model: root.controller.rows
-                currentIndex: {
-                    const sel = root.controller.selected;
-                    const r = root.controller.rows;
-                    for (let i = 0; i < r.length; i++) {
-                        if (!r[i].header && r[i].itemIndex === sel)
-                            return i;
-                    }
-                    return -1;
-                }
+                // One row per result (no group headers): the row index is the result index.
+                currentIndex: root.controller.selected
                 onCurrentIndexChanged: {
-                    if (currentIndex < 0)
-                        return;
-                    // Show the group header above the first item of a group.
-                    const r = root.controller.rows;
-                    const header = currentIndex > 0 && r[currentIndex - 1].header ? currentIndex - 1 : currentIndex;
-                    positionViewAtIndex(header, ListView.Contain);
-                    positionViewAtIndex(currentIndex, ListView.Contain);
+                    if (currentIndex >= 0)
+                        positionViewAtIndex(currentIndex, ListView.Contain);
                 }
 
+                // macOS 27: no group headers, 17 / 15 type, text 72 from the panel edge, and a neutral selected row (a light
+                // fill, not the accent) concentric with the panel.
                 delegate: Item {
                     id: row
 
                     required property var modelData
                     required property int index
 
-                    readonly property bool isHeader: modelData.header
-                    readonly property bool selected: !isHeader && modelData.itemIndex === root.controller.selected
-                    readonly property var info: isHeader ? ({}) : modelData.item
+                    readonly property bool selected: modelData.itemIndex === root.controller.selected
+                    readonly property var info: modelData.item
 
                     width: list.width
-                    height: isHeader ? Tokens.searchHeaderHeight : Tokens.searchRowHeight
-                    Accessible.role: isHeader ? Accessible.StaticText : Accessible.ListItem
-                    Accessible.name: isHeader ? modelData.title : info.title + ", " + info.subtitle
+                    height: Tokens.searchRowHeight
+                    Accessible.role: Accessible.ListItem
+                    Accessible.name: info.title + ", " + info.subtitle
                     Accessible.selected: selected
                     Accessible.onPressAction: root.controller.activate(info, false)
-
-                    Text {
-                        visible: row.isHeader
-                        x: Tokens.spacingMd
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: Tokens.spacingXs
-                        text: row.isHeader ? row.modelData.title : ""
-                        textFormat: Text.PlainText
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                        font.weight: Tokens.typographyMenuBoldWeight
-                    }
 
                     Rectangle {
                         visible: row.selected
                         anchors.fill: parent
-                        radius: Tokens.radiusMenu
-                        color: Appearance.colors.accent
+                        radius: Tokens.searchRowRadius
+                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.searchSelectionFillOpacity)
                     }
 
                     Item {
                         id: iconBox
-                        visible: !row.isHeader
-                        x: Tokens.spacingMd
+                        x: Tokens.searchFieldInset - Tokens.searchRowInset
                         anchors.verticalCenter: parent.verticalCenter
                         width: Tokens.searchRowIconSize
                         height: Tokens.searchRowIconSize
@@ -414,31 +389,30 @@ Variants {
                             anchors.fill: parent
                             size: Tokens.searchRowIconSize
                             oversample: Tokens.searchIconOversample
-                            overAccent: row.selected
-                            visible: !row.isHeader && row.info.iconSource !== undefined
-                            source: row.isHeader || row.info.iconSource === undefined ? "" : (row.info.appIcon !== undefined ? ThemeIcons.appIcon(row.info.appIcon, "application-x-executable") : row.info.iconSource)
+                            visible: row.info.iconSource !== undefined
+                            source: row.info.iconSource === undefined ? "" : (row.info.appIcon !== undefined ? ThemeIcons.appIcon(row.info.appIcon, "application-x-executable") : row.info.iconSource)
                             asynchronous: true
                         }
 
                         Icon {
                             anchors.centerIn: parent
-                            visible: !row.isHeader && row.info.glyph !== undefined
+                            visible: row.info.glyph !== undefined
                             size: Tokens.searchRowIconSize * Tokens.searchGlyphScale
-                            name: !row.isHeader && row.info.glyph !== undefined ? row.info.glyph : ""
-                            color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                            name: row.info.glyph !== undefined ? row.info.glyph : ""
+                            color: Appearance.colors.text
                         }
 
                         Rectangle {
                             anchors.fill: parent
-                            visible: !row.isHeader && row.info.badge !== undefined
+                            visible: row.info.badge !== undefined
                             radius: Tokens.radiusControl
                             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
                             Text {
                                 anchors.centerIn: parent
-                                text: !row.isHeader && row.info.badge !== undefined ? row.info.badge : ""
+                                text: row.info.badge !== undefined ? row.info.badge : ""
                                 textFormat: Text.PlainText
-                                color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                                color: Appearance.colors.text
                                 font.family: Appearance.fontFamily
                                 font.pixelSize: Tokens.typographyTitleSize
                             }
@@ -446,10 +420,9 @@ Variants {
                     }
 
                     Column {
-                        visible: !row.isHeader
                         anchors {
-                            left: iconBox.right
-                            leftMargin: Tokens.spacingMd
+                            left: parent.left
+                            leftMargin: Tokens.searchRowTextInset - Tokens.searchRowInset
                             right: parent.right
                             rightMargin: Tokens.spacingMd
                             verticalCenter: parent.verticalCenter
@@ -457,29 +430,30 @@ Variants {
 
                         Text {
                             width: parent.width
-                            text: row.isHeader ? "" : row.info.title
+                            text: row.info.title
                             textFormat: Text.PlainText
                             elide: Text.ElideRight
-                            color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                            color: Appearance.colors.text
                             font.family: Appearance.fontFamily
-                            font.pixelSize: row.info.kind === "calc" ? Tokens.typographyTitleSize : Tokens.typographyBodySize
+                            font.pixelSize: Tokens.searchTitleSize
+                            font.letterSpacing: Appearance.tracking(Tokens.searchTitleSize)
                             font.weight: Tokens.typographyMenuWeight
                         }
 
                         Text {
                             width: parent.width
-                            text: row.isHeader ? "" : row.info.subtitle
+                            text: row.info.subtitle
                             textFormat: Text.PlainText
                             elide: Text.ElideMiddle
-                            color: row.selected ? Appearance.withAlpha(Appearance.colors.accentText, Tokens.searchSelectedSubtitleOpacity) : Appearance.colors.textSecondary
+                            color: Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
+                            font.pixelSize: Tokens.searchSubtitleSize
+                            font.letterSpacing: Appearance.tracking(Tokens.searchSubtitleSize)
                         }
                     }
 
                     MouseArea {
                         anchors.fill: parent
-                        enabled: !row.isHeader
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton
                         onPositionChanged: root.controller.selected = row.modelData.itemIndex

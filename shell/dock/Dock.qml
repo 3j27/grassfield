@@ -1923,13 +1923,13 @@ Scope {
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     x: tile.iconPos.x
                                     y: tile.iconPos.y
-                                    color: Appearance.colors.accent
+                                    color: Appearance.colors.selection
 
                                     Icon {
                                         anchors.centerIn: parent
                                         size: Math.round(tile.iconPx * Tokens.dockTrashIconScale)
                                         name: "apps"
-                                        color: Appearance.colors.accentText
+                                        color: Appearance.colors.selectionText
                                     }
                                 }
 
