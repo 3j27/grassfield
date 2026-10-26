@@ -85,7 +85,8 @@ TestCase {
         compare(Tokens.windowUnifiedHeight, 52);
         compare(Tokens.windowLightDiameter, 14);
         compare(Tokens.windowLightGap, 9);
-        fuzzyCompare(Tokens.windowUnifiedLightCentre, 25.75, 0.01);
+        // macOS 27 measures (26.0, 25.5-25.75); 26 keeps the discs on whole pixels (ADR-0024).
+        fuzzyCompare(Tokens.windowUnifiedLightCentre, 26, 0.01);
         compare(Tokens.windowTitlebarHeight, Tokens.overviewWindowTitlebarHeight);
         fuzzyCompare(Tokens.windowLightHitSlop, Tokens.windowLightDiameter / 6, 0.01);
     }
@@ -96,8 +97,8 @@ TestCase {
         const c = make(controlsComponent, {style: "unified"});
         compare(c.height, Tokens.windowUnifiedHeight);
         const close = c.closeLight, minimize = c.minimizeLight, zoom = c.zoomLight;
-        fuzzyCompare(close.x + close.width / 2, 25.75, 0.01);
-        fuzzyCompare(close.y + close.height / 2, 25.75, 0.01);
+        fuzzyCompare(close.x + close.width / 2, 26, 0.01);
+        fuzzyCompare(close.y + close.height / 2, 26, 0.01);
         fuzzyCompare(minimize.x - close.x, 23, 0.01);
         fuzzyCompare(zoom.x - minimize.x, 23, 0.01);
         compare(close.width, 14);

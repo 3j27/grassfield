@@ -3,10 +3,16 @@
 UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section "Hot Corners" is "Screen Corners" (fr « Coins de l’écran »); the corner action "Notification Center" is "Notifications"; the app menu entry "System Settings…" is "Settings…" (fr « Réglages… »). Bindings descriptions "Next Space", "Previous Space", "Notification Center" of the bindings file are shown as "Next Desktop", "Previous Desktop", "Notifications" (`Bindings.uiName`).
 
 ## macOS reference behavior (described in words)
-- Settings is one opaque window (about 715 x 640): a sidebar on the left with a search field on top and
-  one row per section (small icon, name), a detail pane on the right with a large title and grouped, rounded
-  "inset" lists. Rows hold a label (optionally a grey caption) and a control on the right: switch, slider,
-  pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
+- Settings is one opaque window (about 740 x 640 in macOS 27): a sidebar on the left with a search field on top and
+  one row per section (a 20-pt coloured icon tile with a white glyph, the name), a detail pane on the right with the
+  title in the toolbar and grouped, rounded "inset" lists. Rows hold a label (optionally a grey caption) and a control on
+  the right: switch, slider, pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
+- macOS 27 layout (ADR-0024, measured on release captures, `docs/audits/ui-finesse-2026-10-25.md` section 7): the sidebar
+  runs edge to edge, 232 wide, a step darker than the white detail pane (light #ECECEC on #FFFFFF; dark tokens
+  `color.dark.sidebarFill` / `windowBackground`), with no dividing line; selection 212 x 32, radius 8, 10 from both
+  sidebar edges, in the selection colour with white text; a 28-pt capsule search field; groups #F7F7F7 without a border,
+  radius 12, 468 wide with 20-pt margins, 10 apart, the first 12 below the toolbar; rows 38, labels and separators 10
+  inside the group; section headers 13 bold in the text colour.
 - Typing in the search field filters the sidebar. Up/Down in the sidebar switch the pane.
 
 ## Purpose and non-goals

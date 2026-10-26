@@ -196,13 +196,13 @@ Column {
                 width: Tokens.panelCcJoinButton
                 height: width
                 radius: width / 2
-                color: password.text !== "" ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                color: password.text !== "" ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
                 Icon {
                     anchors.centerIn: parent
                     size: Tokens.menuIconSize
                     name: "checkmark"
-                    color: password.text !== "" ? Appearance.colors.accentText : Appearance.colors.text
+                    color: password.text !== "" ? Appearance.colors.selectionText : Appearance.colors.text
                 }
             }
 

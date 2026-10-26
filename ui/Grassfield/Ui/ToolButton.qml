@@ -66,7 +66,7 @@ T.ToolButton {
 
     background: Rectangle {
         radius: root.capsule ? height / 2 : Tokens.radiusControl
-        color: root.checked ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * Tokens.materialHoverActiveFactor)
+        color: root.checked ? Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity * Tokens.materialHoverActiveFactor)
              : (root.enabled && root.down ? Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
              : (root.enabled && root.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"))
         border.width: Appearance.increaseContrast && root.checked ? Tokens.controlBorderWidth : 0

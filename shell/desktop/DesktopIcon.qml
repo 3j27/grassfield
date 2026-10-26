@@ -149,7 +149,7 @@ Item {
         width: root.renaming ? root.width - Tokens.spacingXs : Math.min(root.width - Tokens.spacingXs, labelText.implicitWidth + 2 * Tokens.spacingXs)
         height: (field.visible ? field.height : labelText.implicitHeight) + Tokens.spacingXs
         radius: Tokens.desktopIconSelectionRadius
-        color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
+        color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.selection : "transparent")
         border.width: root.renaming ? Tokens.controlFocusOutline : 0
         border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
         // Second pass of the drop shadow: the shadow of the text and its own shadow, a denser soft halo (gate A2: white text
@@ -192,8 +192,8 @@ Item {
                 text: DisplayName.text(root.label)
                 textFormat: Text.PlainText
                 // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
-                // on material); the selected label is drawn on the accent highlight with the accent text colour (gate A2).
-                color: root.selected ? Appearance.colors.accentText : Appearance.darkColors.text
+                // on material); the selected label is drawn on the selection fill with its text colour (gate A2).
+                color: root.selected ? Appearance.colors.selectionText : Appearance.darkColors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.desktopIconLabelSize
                 font.weight: Tokens.typographyMenuWeight
@@ -225,8 +225,8 @@ Item {
             wrapMode: TextInput.WrapAnywhere
             selectByMouse: true
             color: Appearance.colors.fieldText
-            selectionColor: Appearance.colors.accent
-            selectedTextColor: Appearance.colors.accentText
+            selectionColor: Appearance.highlight
+            selectedTextColor: Appearance.highlightText
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.desktopIconLabelSize
             font.weight: Tokens.typographyMenuWeight

@@ -40,8 +40,8 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowLightGap = 9;
     // ADR-0015 / f1-reference-gaps.md:107: unified toolbar row, 52 pt, holds the lights and the toolbar items
     inline constexpr int kWindowUnifiedHeight = 52;
-    // ADR-0015 / f1-reference-gaps.md:106: centre of the first light in a unified toolbar window, from the window's top-left corner (x and y)
-    inline constexpr double kWindowUnifiedLightCentre = 25.75;
+    // centre of the first light in a unified toolbar window, from the window's top-left corner (x and y): macOS 27 measures (26.0, 25.5-25.75), macOS 26 25.75 (f1-reference-gaps.md:106); 26 puts the 14-pt discs on whole pixels at every scale; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0015
+    inline constexpr int kWindowUnifiedLightCentre = 26;
     // ADR-0015: titlebar-only style, the plugin's kTitlebarHeight (32); also overview.windowTitlebarHeight
     inline constexpr int kWindowTitlebarHeight = 32;
     // ADR-0015: titlebar style, left edge to the first light's edge (plugin kButtonInsetLeft); the centre is then at (16, 16)

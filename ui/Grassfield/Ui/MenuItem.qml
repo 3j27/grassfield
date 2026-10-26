@@ -11,18 +11,25 @@ Item {
     property bool checked: false
     property bool hasSubmenu: false
     property bool destructive: false
+    // The row's section holds a checkable row (set by the menu): the label starts after the check column, the check is drawn
+    // in it. An icon shifts only its own row (macOS 27 keeps icons on the rows that have one).
+    property bool checkColumn: false
 
     signal clicked
     signal hovered
 
     readonly property color foreground: !enabled ? Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
-        : highlighted ? Appearance.colors.accentText
+        : highlighted ? Appearance.colors.selectionText
         : destructive ? Appearance.colors.danger
         : Appearance.colors.text
 
+    // Where the icon (if any) and the label start: the check column or the plain inset, then the icon and its gap.
+    readonly property real iconX: root.checkColumn || root.checked ? Tokens.menuCheckInset : Tokens.menuItemPadding
+    readonly property real labelX: root.iconX + (root.iconName !== "" ? Tokens.menuIconSize + Tokens.spacingSm : 0)
+
     // The shortcut and the chevron sit in their own right-aligned column (macOS model, docs/specs/ui.md); the
-    // minimum gap to the label is unchanged, so menus keep their widths.
-    implicitWidth: lead.implicitWidth + (trail.implicitWidth > 0 ? Tokens.menuShortcutGap + 2 * Tokens.spacingSm + trail.implicitWidth : 0) + 2 * Tokens.menuItemPadding
+    // minimum gap to the label is unchanged. Whole pixels, so that the menu's edges and right-aligned shortcuts are sharp.
+    implicitWidth: Math.ceil(root.labelX + label.implicitWidth + (trail.implicitWidth > 0 ? Tokens.menuShortcutGap + 2 * Tokens.spacingSm + trail.implicitWidth : 0) + Tokens.menuItemPadding)
     implicitHeight: Tokens.menuItemHeight
     Accessible.role: Accessible.MenuItem
     Accessible.name: root.text
@@ -34,46 +41,44 @@ Item {
     Accessible.onPressAction: if (root.visible && root.enabled)
         root.clicked()
 
+    // The highlight is concentric with the menu: its radius is the menu's less the menu padding around the rows.
     Rectangle {
         anchors.fill: parent
-        radius: Tokens.radiusControl
-        color: Appearance.colors.accent
+        radius: Tokens.radiusMenu - Tokens.menuPadding
+        color: Appearance.colors.selection
         visible: root.highlighted && root.enabled
     }
 
-    Row {
-        id: lead
-        anchors {
-            left: parent.left
-            leftMargin: Tokens.menuItemPadding
-            verticalCenter: parent.verticalCenter
-        }
-        spacing: Tokens.spacingSm
+    // The check, centred in the check column.
+    Icon {
+        visible: root.checked
+        x: Math.round((Tokens.menuCheckInset - Tokens.menuIconSize) / 2)
+        y: Math.round((root.height - height) / 2)
+        size: Tokens.menuIconSize
+        name: "checkmark"
+        color: root.foreground
+    }
 
-        Item {
-            width: Tokens.menuIconSize
-            height: Tokens.menuIconSize
-            anchors.verticalCenter: parent.verticalCenter
+    Icon {
+        visible: root.iconName !== ""
+        x: root.iconX
+        y: Math.round((root.height - height) / 2)
+        size: Tokens.menuIconSize
+        name: root.iconName
+        color: root.foreground
+    }
 
-            Icon {
-                anchors.fill: parent
-                size: Tokens.menuIconSize
-                name: root.checked ? "checkmark" : root.iconName
-                color: root.foreground
-            }
-        }
-
-        Text {
-            textFormat: Text.PlainText
-            id: label
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.text
-            color: root.foreground
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyMenuSize
-            font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
-            font.weight: Tokens.typographySmallWeight
-        }
+    Text {
+        textFormat: Text.PlainText
+        id: label
+        x: root.labelX
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.text
+        color: root.foreground
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.typographyMenuSize
+        font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
+        font.weight: Tokens.typographySmallWeight
     }
 
     Row {

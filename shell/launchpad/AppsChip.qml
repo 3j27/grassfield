@@ -25,7 +25,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        color: root.active ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
     }
 
     Rectangle {
@@ -51,7 +51,7 @@ Item {
         anchors.centerIn: parent
         text: root.label
         textFormat: Text.PlainText
-        color: root.active ? Appearance.colors.accentText : Appearance.colors.text
+        color: root.active ? Appearance.colors.selectionText : Appearance.colors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize
         font.weight: Tokens.typographyMenuWeight
