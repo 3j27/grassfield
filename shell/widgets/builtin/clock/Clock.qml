@@ -135,7 +135,7 @@ WidgetBase {
         WidgetLabel {
             width: parent.width
             text: root.timeText
-            font.pixelSize: root.isSmall ? Tokens.widgetBigSize : Tokens.widgetGlyphSize
+            size: root.isSmall ? Tokens.widgetBigSize : Tokens.widgetGlyphSize
             font.weight: Tokens.typographyMenuBoldWeight
             horizontalAlignment: root.isLarge ? Text.AlignHCenter : Text.AlignLeft
             fontSizeMode: Text.Fit

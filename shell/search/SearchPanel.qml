@@ -179,7 +179,7 @@ Variants {
                 color: Appearance.colors.text
                 selectionColor: Appearance.highlight
                 selectedTextColor: Appearance.highlightText
-                font.family: Appearance.fontFamily
+                font.family: Appearance.fontFamilyFor(Tokens.searchFieldSize)
                 font.pixelSize: Tokens.searchFieldSize
                 clip: true
                 focus: true

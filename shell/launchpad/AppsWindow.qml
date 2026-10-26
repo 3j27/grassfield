@@ -374,7 +374,7 @@ Variants {
                             color: Appearance.colors.text
                             selectionColor: Appearance.highlight
                             selectedTextColor: Appearance.highlightText
-                            font.family: Appearance.fontFamily
+                            font.family: Appearance.fontFamilyFor(Tokens.launcherHeaderTextSize)
                             font.pixelSize: Tokens.launcherHeaderTextSize
                             clip: true
                             focus: true

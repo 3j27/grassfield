@@ -94,12 +94,24 @@ QtObject {
 
     // First installed family of the token list (Qt has no per-font fallback list in QML).
     readonly property string fontFamily: Qt.fontFamilies().indexOf(Tokens.typographyFamily) !== -1 ? Tokens.typographyFamily : Tokens.typographyFallbackFamily
+    // Inter Display from typography.displayFrom (20) px (ADR-0003 O1, T-1: where the reference's typeface switches to its
+    // display cut); the text family below, and when the display cut is not installed.
+    readonly property string displayFamily: Qt.fontFamilies().indexOf(Tokens.typographyDisplayFamily) !== -1 ? Tokens.typographyDisplayFamily : fontFamily
+
+    function fontFamilyFor(pixelSize: real): string {
+        return pixelSize >= Tokens.typographyDisplayFrom ? displayFamily : fontFamily;
+    }
     readonly property var curve: Tokens.motionCurveStandard
 
     // Size-dependent tracking of Inter's "dynamic metrics" (the reference's optical tracking): em = a + b * e^(c * px),
     // returned in pixels for Text.font.letterSpacing. Larger text is set tighter, small text slightly looser.
     function tracking(pixelSize: real): real {
         return (Tokens.typographyTrackingA + Tokens.typographyTrackingB * Math.exp(Tokens.typographyTrackingC * pixelSize)) * pixelSize;
+    }
+
+    // Tracking for the family fontFamilyFor picks: Inter Display carries its own display spacing (none added).
+    function trackingFor(pixelSize: real): real {
+        return pixelSize >= Tokens.typographyDisplayFrom && displayFamily === Tokens.typographyDisplayFamily ? 0 : tracking(pixelSize);
     }
 
     function clamp01(v: real): real {

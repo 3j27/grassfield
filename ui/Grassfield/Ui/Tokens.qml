@@ -123,6 +123,10 @@ QtObject {
     readonly property string typographyMonoFamily: "monospace"
     // ADR-0003 candidate (OFL); owner installs it
     readonly property string typographyFamily: "Inter"
+    // ADR-0003 O1: Inter Display at 20 px and above (T-1, the size where the reference typeface switches to its display cut) [ref: ADR-0003]
+    readonly property string typographyDisplayFamily: "Inter Display"
+    // ADR-0003 O1: the display cut from 20 px [ref: ADR-0003]
+    readonly property int typographyDisplayFrom: 20
     // installed fallback [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property string typographyFallbackFamily: "Noto Sans"
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
