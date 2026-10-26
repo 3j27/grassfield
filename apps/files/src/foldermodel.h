@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include "filelogic.h"
 #include "folderstylelogic.h"
 #include "previewqueue.h"
 
@@ -45,6 +46,10 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(int sortKey READ sortKey WRITE setSortKey NOTIFY sortChanged)
     Q_PROPERTY(bool sortDescending READ sortDescending WRITE setSortDescending NOTIFY sortChanged)
     Q_PROPERTY(bool foldersFirst READ foldersFirst WRITE setFoldersFirst NOTIFY sortChanged)
+    // View > Group By (FileLogic::GroupBy; 0: no groups). The rows are sorted group by group, then by sortKey.
+    Q_PROPERTY(int groupBy READ groupBy WRITE setGroupBy NOTIFY sortChanged)
+    // The groups in row order: [{title, first, count}] (empty without groups), for the grouped icon view.
+    Q_PROPERTY(QVariantList groups READ groups NOTIFY groupsChanged)
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY showHiddenChanged)
     Q_PROPERTY(QString filterText READ filterText WRITE setFilterText NOTIFY filterTextChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
@@ -86,6 +91,8 @@ public:
         // A folder's own look (FolderStyleStore): its colour setting ("" = follows icons.folderColor) and its symbol.
         FolderColorRole,
         FolderGlyphRole,
+        // The title of the item's group (Group By; "" without groups): the list view's sections.
+        GroupRole,
     };
     Q_ENUM(Roles)
 
@@ -100,6 +107,9 @@ public:
     void setSortDescending(bool descending);
     bool foldersFirst() const { return m_foldersFirst; }
     void setFoldersFirst(bool on);
+    int groupBy() const { return m_groupBy; }
+    void setGroupBy(int by);
+    QVariantList groups() const;
     bool showHidden() const;
     void setShowHidden(bool on);
     QString filterText() const { return m_filterText; }
@@ -178,6 +188,7 @@ signals:
     void errorChanged();
     void rootChanged();
     void previewSizeChanged();
+    void groupsChanged();
     // The view should scroll to `row`, and start inline renaming when `rename` is true.
     void revealRequested(int row, bool rename);
     // The listed folder was deleted or the listing redirected elsewhere.
@@ -229,6 +240,12 @@ private:
     QModelIndex sourceIndexForUrl(const QUrl &url) const;
     // Tags of an item (cached per url; read from user.xdg.tags of its local path).
     QStringList tagsOf(const KFileItem &item) const;
+    // What sorting by `key` and grouping by m_groupBy read of an item (only those fields are filled).
+    FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key) const;
+    // An item's group (cached per url until the rows or the grouping change).
+    FileLogic::Group groupFor(const KFileItem &item) const;
+    // The rows, their groups or the grouping changed: the cache goes and groupsChanged follows (once per event loop turn).
+    void groupsDirty();
     void dropTags(const QUrl &url);
     // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
@@ -246,6 +263,14 @@ private:
     KDirModel *m_dirModel = nullptr;
     QUrl m_url;
     int m_sortKey = 0;
+    int m_groupBy = 0;
+    mutable QHash<QUrl, FileLogic::Group> m_groupCache;
+    mutable QVariantList m_groups;
+    mutable bool m_groupsValid = false;
+    bool m_groupsNotifyQueued = false;
+    // "Now" of the date groups, read again once a minute (a sort compares many times).
+    mutable QDateTime m_groupNow;
+    mutable QElapsedTimer m_groupClock;
     bool m_descending = false;
     bool m_foldersFirst = true;
     QString m_filterText;

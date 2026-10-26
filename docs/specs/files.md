@@ -569,6 +569,46 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
   broken files, a JPEG without EXIF keeps its tags and mode and leaves no temporary file, an in-place change keeps the
   inode, a PNG turned pixel by pixel, links and other kinds refused).
 
+## Views and selection
+PR 2 of the Finder parity brief (matrix rows FP-19, FP-23, FP-39 to FP-43). References: Finder-Home (toolbar), the macOS
+27 Finder's behaviour where the library has no capture (grouped layouts: visual NOT verified).
+- **Sort By** (View, the background menu, the Group By button; per folder, F-3): Name, Kind, Application, Date Last
+  Opened, Date Modified, Date Created, Size, Tags. Date Added has no source on Linux files and is not offered. Date Last
+  Opened is the file system's access time (coarse under `relatime`, absent under `noatime`); Date Created is the birth
+  time where the file system keeps one (statx), else unknown. Items without the key's value (no tag, no default
+  application, an unknown date) come last in both directions; ties go by name. `FileLogic::SortKey`, `compareEntries`.
+- **Group By** (View > Use Groups, Ctrl+Cmd+0, and Group By; the toolbar's Group By button; per folder): None, Name,
+  Kind, Application, Date Last Opened, Date Modified, Date Created, Size, Tags. The rows are sorted group by group (the
+  groups in their own order whatever the direction), then by Sort By. Groups (`FileLogic::groupOf`): Name by first letter
+  (accents folded, "#" for digits and symbols, first); Kind by category from the MIME type and its ancestors (Applications,
+  Archives, Documents, Folders, Images, Movies, Music, PDF Documents, Presentations, Spreadsheets, then Other); Application
+  by the default application's name (folders first, Other last); dates newest first (Today, Yesterday, Previous 7 Days,
+  Previous 30 Days, the months of this year, the years before; Unknown last); Size largest first (More than 1 GB, 100 MB
+  to 1 GB, 1 MB to 100 MB, 100 KB to 1 MB, Less than 100 KB, Zero bytes; folders last); Tags by the first tag (colours in
+  palette order, then the others; No Tags last). Shown in the icon and list views; the column view and the gallery do
+  not group. The list view puts a header row above each group (`files.listGroupHeight`, estimate). The icon view shows
+  each group as one row under its header, scrolled sideways by a horizontal wheel or swipe; Show All lays the group out in
+  full, Show Less returns it to one row (`files.iconGroupHeight`, estimate). Keyboard: Left/Right walk the items across
+  groups, Up/Down move a line or to the nearest item of the next group (`Nav.groupedIconMove`).
+- **Group By button** (FP-19, measured on Finder-Home at 2 px/pt): a 46.5 x 36 capsule after the view switcher, the
+  groups glyph (two rules over three 5-pt squares, 18 x 17.5, rules 1.5, outlines 1) 8 from its left end and a chevron;
+  its menu lists Group By, then Sort By. Disabled in the column view and the gallery. Tokens `files.group*`.
+- **Rubber band** (FP-41): icon view (also grouped), list view (from the empty space or a row outside its icon and name;
+  a click there selects the row), column view (from a column's empty space; the columns after it follow the new
+  selection). Shift or Cmd add to the selection. The gallery has none (as in the Finder).
+- **Spring-loaded folders** (FP-42): a drag resting on a folder of the icon, list or column view, or on a sidebar place,
+  opens it in the tab after `files.springDelay`. When a drag Files started ends without a drop (released outside the
+  windows, cancelled), the tab goes back to where it was; a drop or the user's own navigation keeps it. Space does not
+  open at once: Qt's platform drag takes every key press. A drag from another application springs too, but nothing tells
+  Files when it is cancelled, so the tab stays.
+- **Bars** (FP-23, decision F-11): View > Show Path Bar (Alt+Cmd+P), Show Status Bar (Cmd+/), Hide Sidebar (Ctrl+Cmd+S, the
+  lights move into the toolbar); `view/pathBar`, `view/statusBar` (off), `view/sidebar` (on). Until Files has a progress
+  window (FP-68) the status bar also shows while a job runs or a notice is up. Hide Toolbar is not offered: the toolbar
+  holds the window controls when the sidebar is hidden.
+- **Return and Cmd+O** (FP-43, decision F-4): Return renames the selected item, Cmd+O and Cmd+Down open.
+- The list view keeps its column widths and scrolls sideways (the header with it) when it is narrower than its columns
+  (a narrow window, the preview pane).
+
 ## Folder colours and Customize Folder (owner request 2026-10-19; macOS 26 model)
 macOS 26 colours folders (System Settings > Appearance > Folder Color: the accent or a colour) and "Customize Folder…" gives one folder its own colour and an optional symbol or emoji drawn on it; a folder follows the global colour until it has its own. Grassfield copies that model.
 - **Global**: `icons.folderColor` (`theme` = the icon theme's own folder colour, the default; `accent`; `#rrggbb`), Settings > Appearance > Folder colour (Theme, Accent, eight swatches). Applies live to every folder icon Grassfield draws: Files (icon, list, column and gallery views, the column preview, Get Info) and the desktop. Dock stacks and Search folder results do not exist today (the Dock has apps, minimized windows and the Trash; Search file rows use one generic document icon), so there is nothing to colour there; when they appear they use `FolderIcon`.

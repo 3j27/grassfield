@@ -87,7 +87,7 @@ TestCase {
         property var app: fakeApp
         property var manager: fakeManager
         property bool tabBarVisible: false
-        property var tab: ({canBack: false, canForward: false, segments: [], sortKey: 2, sortDescending: true})
+        property var tab: ({canBack: false, canForward: false, segments: [], sortKey: 2, sortDescending: true, groupBy: 8})
         property var folder: folder
         property var tabs: []
         property int currentIndex: 0
@@ -225,6 +225,31 @@ TestCase {
         status.triggered();
         compare(fakeApp.statusBarShown, true);
         fakeApp.statusBarShown = false;
+    }
+
+    // Use Groups and Group By check the tab's grouping (the shown folder's own); Sort By lists the Finder's keys.
+    function test_groupByFollowsTheTab() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        const view = bar.menus[2];
+        const use = test.item(view, "Use Groups");
+        verify(use !== null);
+        compare(use.shortcut.toString(), "Ctrl+Super+0");
+        compare(use.checked, true, "the tab groups");
+        const group = bar.groupMenu;
+        const titles = [];
+        let checked = "";
+        for (let i = 0; i < group.items.length; i++) {
+            titles.push(group.items[i].text);
+            if (group.items[i].checked)
+                checked = group.items[i].text;
+        }
+        compare(titles, ["None", "Name", "Kind", "Application", "Date Last Opened", "Date Modified", "Date Created", "Size", "Tags"]);
+        compare(checked, "Tags");
+        const sorts = [];
+        for (let i = 0; i < bar.sortMenu.items.length; i++)
+            sorts.push(bar.sortMenu.items[i].text);
+        compare(sorts.slice(0, 8), ["Name", "Kind", "Application", "Date Last Opened", "Date Modified", "Date Created", "Size", "Tags"]);
     }
 
     // Sort By checks the tab's arrangement (the shown folder's own), not a global setting.

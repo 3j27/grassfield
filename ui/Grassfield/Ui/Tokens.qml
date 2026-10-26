@@ -1427,10 +1427,32 @@ QtObject {
     readonly property int filesColumnRowHeight: 22
     // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
+    // estimate: the header row above each group of the list view (no capture of the Finder's grouped list) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesListGroupHeight: 28
+    // estimate: the header above each group of the icon view, its title and Show All (no capture of the Finder's grouped icon view) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesIconGroupHeight: 32
     // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesToolbarCapsule: 36
     // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesToolbarGroupButton: 34
+    // macOS 27 Finder: the Group By capsule 46.5 wide, 36 high (Finder-Home at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupButtonWidth: 46.5
+    // macOS 27 Finder: the groups glyph 8 from the capsule's left end [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupButtonInset: 8
+    // macOS 27 Finder: the groups glyph 18 wide, 17.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupGlyphWidth: 18
+    // macOS 27 Finder: the glyph's rules 1.5 thick [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupGlyphRule: 1.5
+    // macOS 27 Finder: the glyph's squares 5, three to a row [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupGlyphSquare: 5
+    // macOS 27 Finder: the squares' outline 1 [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupGlyphStroke: 1
+    // macOS 27 Finder: 1.5 between a rule and its squares, and between the two groups [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupGlyphGap: 1.5
+    // macOS 27 Finder: the chevron box 6 after the glyph (its 7-wide mark 7.5 from the right end) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupChevronGap: 6
+    // macOS 27 Finder: the chevron 7 x 4 (own chevron-down symbol in a 9 box) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupChevronSize: 9
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

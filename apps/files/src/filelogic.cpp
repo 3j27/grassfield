@@ -43,8 +43,31 @@ QString trimmedNumber(double value, int decimals, const QLocale &locale)
 
 bool defaultDescending(SortKey key)
 {
-    return key == SortKey::Date || key == SortKey::Size;
+    return key == SortKey::Date || key == SortKey::Size || key == SortKey::Created || key == SortKey::Opened;
 }
+
+namespace
+{
+// Items without a value come after those with one, in both directions: 0 when both or neither have one.
+int missingLast(bool aMissing, bool bMissing)
+{
+    return aMissing == bMissing ? 0 : (aMissing ? 1 : -1);
+}
+
+int compareDates(const QDateTime &a, const QDateTime &b)
+{
+    return three(a, b);
+}
+
+// The first tag's place: colour tags by palette index, then the other tags (equal here, then by name).
+int tagRank(const QString &tag)
+{
+    static const QStringList colors = {QStringLiteral("Red"), QStringLiteral("Orange"), QStringLiteral("Yellow"), QStringLiteral("Green"),
+                                       QStringLiteral("Blue"), QStringLiteral("Purple"), QStringLiteral("Gray")};
+    const int i = colors.indexOf(tag);
+    return i >= 0 ? i : int(colors.size());
+}
+} // namespace
 
 int compareEntries(const SortEntry &a, const SortEntry &b, SortKey key, bool descending, bool foldersFirst, const QCollator &collator)
 {
@@ -56,10 +79,33 @@ int compareEntries(const SortEntry &a, const SortEntry &b, SortKey key, bool des
         primary = collator.compare(a.kind, b.kind);
         break;
     case SortKey::Date:
-        primary = three(a.modified, b.modified);
+        primary = compareDates(a.modified, b.modified);
         break;
     case SortKey::Size:
         primary = three(a.size, b.size);
+        break;
+    case SortKey::Created:
+    case SortKey::Opened: {
+        const QDateTime &da = key == SortKey::Created ? a.created : a.opened;
+        const QDateTime &db = key == SortKey::Created ? b.created : b.opened;
+        if (const int m = missingLast(!da.isValid(), !db.isValid()))
+            return m;
+        primary = compareDates(da, db);
+        break;
+    }
+    case SortKey::Tags:
+        if (const int m = missingLast(a.tags.isEmpty(), b.tags.isEmpty()))
+            return m;
+        if (!a.tags.isEmpty()) {
+            primary = three(tagRank(a.tags.first()), tagRank(b.tags.first()));
+            if (primary == 0)
+                primary = collator.compare(a.tags.first(), b.tags.first());
+        }
+        break;
+    case SortKey::Application:
+        if (const int m = missingLast(a.application.isEmpty(), b.application.isEmpty()))
+            return m;
+        primary = collator.compare(a.application, b.application);
         break;
     case SortKey::Name:
         primary = collator.compare(a.name, b.name);
@@ -71,6 +117,139 @@ int compareEntries(const SortEntry &a, const SortEntry &b, SortKey key, bool des
         return descending ? -primary : primary;
     const int byName = collator.compare(a.name, b.name);
     return byName != 0 ? byName : QString::compare(a.name, b.name);
+}
+
+namespace
+{
+// Kind categories (the Finder's Group By Kind), matched against the MIME type and its ancestors in order.
+QString kindCategory(const SortEntry &e)
+{
+    if (e.isDir)
+        return tr("Folders");
+    struct Rule {
+        const char *title;
+        QStringList exact;
+        QStringList prefixes;
+    };
+    static const QList<Rule> rules = {
+        {QT_TRANSLATE_NOOP("FileLogic", "PDF Documents"), {QStringLiteral("application/pdf")}, {}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Presentations"),
+         {QStringLiteral("application/vnd.oasis.opendocument.presentation"), QStringLiteral("application/vnd.ms-powerpoint"),
+          QStringLiteral("application/x-iwork-keynote-sffkey")},
+         {QStringLiteral("application/vnd.openxmlformats-officedocument.presentationml.")}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Spreadsheets"),
+         {QStringLiteral("application/vnd.oasis.opendocument.spreadsheet"), QStringLiteral("application/vnd.ms-excel"),
+          QStringLiteral("text/csv"), QStringLiteral("text/tab-separated-values")},
+         {QStringLiteral("application/vnd.openxmlformats-officedocument.spreadsheetml.")}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Images"), {}, {QStringLiteral("image/")}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Movies"), {}, {QStringLiteral("video/")}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Music"), {}, {QStringLiteral("audio/")}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Applications"),
+         {QStringLiteral("application/x-desktop"), QStringLiteral("application/x-executable"), QStringLiteral("application/vnd.appimage"),
+          QStringLiteral("application/x-pie-executable")},
+         {}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Archives"),
+         {QStringLiteral("application/zip"), QStringLiteral("application/x-tar"), QStringLiteral("application/gzip"),
+          QStringLiteral("application/x-7z-compressed"), QStringLiteral("application/x-xz"), QStringLiteral("application/x-bzip2"),
+          QStringLiteral("application/zstd"), QStringLiteral("application/vnd.rar"), QStringLiteral("application/x-rar"),
+          QStringLiteral("application/x-compressed-tar"), QStringLiteral("application/x-cd-image")},
+         {}},
+        {QT_TRANSLATE_NOOP("FileLogic", "Documents"),
+         {QStringLiteral("application/rtf"), QStringLiteral("application/msword"), QStringLiteral("application/vnd.oasis.opendocument.text"),
+          QStringLiteral("application/epub+zip"), QStringLiteral("text/plain")},
+         {QStringLiteral("application/vnd.openxmlformats-officedocument.wordprocessingml."), QStringLiteral("text/")}},
+    };
+    for (const QString &type : e.mimeTypes) {
+        for (const Rule &rule : rules) {
+            if (rule.exact.contains(type))
+                return tr(rule.title);
+            for (const QString &prefix : rule.prefixes) {
+                if (type.startsWith(prefix))
+                    return tr(rule.title);
+            }
+        }
+    }
+    return QString();
+}
+
+Group dateGroup(const QDateTime &when, const QDateTime &now, const QLocale &locale)
+{
+    if (!when.isValid())
+        return {100000, tr("Unknown")};
+    const QDate day = when.toLocalTime().date();
+    const QDate today = now.toLocalTime().date();
+    const qint64 ago = day.daysTo(today);
+    if (ago <= 0)
+        return {0, tr("Today")};
+    if (ago == 1)
+        return {1, tr("Yesterday")};
+    if (ago <= 7)
+        return {2, tr("Previous 7 Days")};
+    if (ago <= 30)
+        return {3, tr("Previous 30 Days")};
+    if (day.year() == today.year())
+        return {4 + (12 - day.month()), locale.standaloneMonthName(day.month())};
+    return {100 + (today.year() - day.year()), QString::number(day.year())};
+}
+
+Group sizeGroup(const SortEntry &e)
+{
+    if (e.isDir || e.size < 0)
+        return {10, tr("Folders")};
+    if (e.size >= 1000LL * 1000 * 1000)
+        return {0, tr("More than 1 GB")};
+    if (e.size >= 100LL * 1000 * 1000)
+        return {1, tr("100 MB to 1 GB")};
+    if (e.size >= 1000LL * 1000)
+        return {2, tr("1 MB to 100 MB")};
+    if (e.size >= 100LL * 1000)
+        return {3, tr("100 KB to 1 MB")};
+    if (e.size > 0)
+        return {4, tr("Less than 100 KB")};
+    return {5, tr("Zero bytes")};
+}
+} // namespace
+
+Group groupOf(const SortEntry &e, GroupBy by, const QDateTime &now, const QLocale &locale)
+{
+    switch (by) {
+    case GroupBy::None:
+        return {};
+    case GroupBy::Name: {
+        const QString folded = foldForMatch(e.name.trimmed().left(2)).left(1).toUpper();
+        if (folded.isEmpty() || !folded.at(0).isLetter())
+            return {0, QStringLiteral("#")};
+        return {1, folded};
+    }
+    case GroupBy::Kind: {
+        const QString category = kindCategory(e);
+        return category.isEmpty() ? Group{1, tr("Other")} : Group{0, category};
+    }
+    case GroupBy::Application:
+        if (e.isDir)
+            return {0, tr("Folders")};
+        return e.application.isEmpty() ? Group{2, tr("Other")} : Group{1, e.application};
+    case GroupBy::Opened:
+        return dateGroup(e.opened, now, locale);
+    case GroupBy::Modified:
+        return dateGroup(e.modified, now, locale);
+    case GroupBy::Created:
+        return dateGroup(e.created, now, locale);
+    case GroupBy::Size:
+        return sizeGroup(e);
+    case GroupBy::Tags:
+        if (e.tags.isEmpty())
+            return {20, tr("No Tags")};
+        return {tagRank(e.tags.first()), QCoreApplication::translate("Tags", e.tags.first().toUtf8().constData())};
+    }
+    return {};
+}
+
+int compareGroups(const Group &a, const Group &b, const QCollator &collator)
+{
+    if (a.rank != b.rank)
+        return a.rank < b.rank ? -1 : 1;
+    return collator.compare(a.title, b.title);
 }
 
 QString formatSize(qint64 bytes, const QLocale &locale)

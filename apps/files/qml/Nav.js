@@ -165,6 +165,76 @@ function cellsInRect(x1, y1, x2, y2, cellWidth, cellHeight, columns, count) {
     return out;
 }
 
+// Keyboard move in the grouped icon view. `groups`: [{first, count, columns}] in row order, `columns` the items per line
+// of the group (its count when the group is one row). Left/Right walk the rows across groups; Up/Down move a line, from a
+// group's first or last line to the next group's nearest line at the same place; PageUp/PageDown move a group.
+function groupedIconMove(current, key, groups) {
+    if (groups.length === 0)
+        return -1;
+    const last = groups[groups.length - 1];
+    const count = last.first + last.count;
+    if (current < 0 || current >= count)
+        return key === "end" ? count - 1 : 0;
+    let g = 0;
+    while (g < groups.length - 1 && current >= groups[g].first + groups[g].count)
+        g++;
+    const group = groups[g];
+    const cols = Math.max(1, group.columns);
+    const i = current - group.first;
+    const col = i % cols;
+    // Row `line` of group `h` at column `c`, clamped to that line's last item.
+    function at(h, line, c) {
+        const target = groups[h];
+        const tc = Math.max(1, target.columns);
+        return target.first + Math.min(target.count - 1, line * tc + Math.min(c, tc - 1));
+    }
+    switch (key) {
+    case "left":
+        return Math.max(0, current - 1);
+    case "right":
+        return Math.min(count - 1, current + 1);
+    case "up":
+        if (i - cols >= 0)
+            return current - cols;
+        return g > 0 ? at(g - 1, Math.floor((groups[g - 1].count - 1) / Math.max(1, groups[g - 1].columns)), col) : current;
+    case "down":
+        if (i + cols < group.count)
+            return current + cols;
+        if (Math.floor(i / cols) < Math.floor((group.count - 1) / cols))
+            return group.first + group.count - 1;
+        return g < groups.length - 1 ? at(g + 1, 0, col) : current;
+    case "home":
+        return 0;
+    case "end":
+        return count - 1;
+    case "pageup":
+        return g > 0 ? at(g - 1, 0, col) : group.first;
+    case "pagedown":
+        return g < groups.length - 1 ? at(g + 1, 0, col) : group.first + group.count - 1;
+    }
+    return current;
+}
+
+// Rows of a grouped list (FolderModel.groups: [{first, count}] in row order, each group under a header `headerHeight` high)
+// that the vertical span [y1, y2] of the list's content covers.
+function groupedRowsInSpan(y1, y2, rowHeight, headerHeight, groups) {
+    const out = [];
+    const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+    let y = 0;
+    for (let g = 0; g < groups.length; g++) {
+        y += headerHeight;
+        const first = groups[g].first, count = groups[g].count;
+        const r0 = Math.max(0, Math.floor((top - y) / rowHeight));
+        const r1 = Math.min(count - 1, Math.floor((bottom - y) / rowHeight));
+        for (let r = r0; r <= r1; r++)
+            out.push(first + r);
+        y += count * rowHeight;
+        if (y > bottom)
+            break;
+    }
+    return out;
+}
+
 // Column view: index of the segment list where `target` (a folder url string) branches off `segments`
 // (array of url strings), i.e. how many leading columns can be kept.
 function commonPrefix(segments, target) {

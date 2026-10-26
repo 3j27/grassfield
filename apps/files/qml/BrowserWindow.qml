@@ -459,6 +459,11 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        sequence: "Ctrl+Meta+0"
+        onActivated: win.tab.toggleGroups()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
         sequence: "Ctrl+Meta+S"
         onActivated: win.app.sidebarShown = !win.app.sidebarShown
         onActivatedAmbiguously: activated()
@@ -651,6 +656,49 @@ Window {
                                     anchors.centerIn: parent
                                     kind: viewButton.modelData.mode
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Group By (Finder): a capsule with the groups glyph and a chevron; its menu groups and sorts the folder.
+                Rectangle {
+                    width: Tokens.filesGroupButtonWidth
+                    height: Tokens.filesToolbarCapsule
+                    radius: height / 2
+                    color: Appearance.buttonFill
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    ToolButton {
+                        id: groupButton
+                        anchors.fill: parent
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarCapsule
+                        enabled: win.tab !== null && win.tab.groupsShown
+                        accessibleName: qsTr("Group By")
+                        onClicked: {
+                            const p = groupButton.mapToItem(null, 0, groupButton.height + Tokens.spacingXs);
+                            const items = win.tab.groupSubmenu().submenu.concat([{separator: true}, win.tab.sortSubmenu()]);
+                            win.menuLayer.open(items, p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                        }
+
+                        Item {
+                            width: groupButton.width
+                            height: groupButton.height
+
+                            ViewGlyph {
+                                x: Tokens.filesGroupButtonInset
+                                anchors.verticalCenter: parent.verticalCenter
+                                kind: "group"
+                                color: groupButton.foreground
+                            }
+
+                            Icon {
+                                x: Tokens.filesGroupButtonInset + Tokens.filesGroupGlyphWidth + Tokens.filesGroupChevronGap
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: "chevron-down"
+                                size: Tokens.filesGroupChevronSize
+                                color: groupButton.foreground
                             }
                         }
                     }

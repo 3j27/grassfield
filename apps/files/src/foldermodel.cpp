@@ -20,6 +20,7 @@
 #include <QMimeType>
 #include <QScopedValueRollback>
 
+#include <KApplicationTrader>
 #include <KDirLister>
 #include <KDirModel>
 #include <KDirNotify>
@@ -140,35 +141,48 @@ QString resolvedIconName(const KFileItem &item)
 
 // Only the fields the active key compares: lessThan runs O(n log n) times while a folder is listed,
 // and the MIME comment is a database lookup.
-FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key)
+// An item's MIME type name without sniffing its content on the GUI thread: the lister resolves types lazily
+// (setDelayedMimeTypes); until an item's type is known, the extension/name guess (memoized per file name: the glob lookup
+// is ~100 us and sorting asks O(n log n) times).
+QString mimeNameOf(const KFileItem &item)
 {
-    FileLogic::SortEntry e;
-    e.name = item.text();
-    e.isDir = item.isDir();
-    if (key == FileLogic::SortKey::Kind) {
-        // The lister resolves MIME types lazily (setDelayedMimeTypes): never sniff file content on the
-        // GUI thread while sorting. Until an item's type is known, use the extension/name guess.
-        if (item.isMimeTypeKnown()) {
-            e.kind = item.mimeComment();
-        } else {
-            // Memoized per file name: the glob lookup is ~100 us and lessThan asks O(n log n) times.
-            static QHash<QString, QString> guesses;
-            static const QMimeDatabase db;
-            const QString name = item.name();
-            auto it = guesses.constFind(name);
-            if (it == guesses.cend()) {
-                if (guesses.size() > 50000)
-                    guesses.clear();
-                it = guesses.insert(name, db.mimeTypeForFile(name, QMimeDatabase::MatchExtension).comment());
-            }
-            e.kind = *it;
-        }
+    if (item.isMimeTypeKnown())
+        return item.mimetype();
+    static QHash<QString, QString> guesses;
+    static const QMimeDatabase db;
+    const QString name = item.name();
+    auto it = guesses.constFind(name);
+    if (it == guesses.cend()) {
+        if (guesses.size() > 50000)
+            guesses.clear();
+        it = guesses.insert(name, db.mimeTypeForFile(name, QMimeDatabase::MatchExtension).name());
     }
-    else if (key == FileLogic::SortKey::Date)
-        e.modified = item.time(KFileItem::ModificationTime);
-    else if (key == FileLogic::SortKey::Size)
-        e.size = e.isDir ? -1 : qint64(item.size());
-    return e;
+    return *it;
+}
+
+// A MIME type's comment, its name followed by its ancestors, and the name of the application that opens it by
+// default: memoized per type (KApplicationTrader reads the service database).
+struct MimeFacts {
+    QString comment;
+    QStringList lineage;
+    QString application;
+};
+
+const MimeFacts &mimeFacts(const QString &name)
+{
+    static QHash<QString, MimeFacts> facts;
+    auto it = facts.constFind(name);
+    if (it == facts.cend()) {
+        static const QMimeDatabase db;
+        const QMimeType type = db.mimeTypeForName(name);
+        MimeFacts f;
+        f.comment = type.comment();
+        f.lineage = QStringList{type.name()} + type.allAncestors();
+        const KService::Ptr service = KApplicationTrader::preferredService(type.name());
+        f.application = service ? service->name() : QString();
+        it = facts.insert(name, f);
+    }
+    return *it;
 }
 
 struct PreviewMimes {
@@ -208,6 +222,9 @@ FolderModel::FolderModel(QObject *parent)
     m_lister->setAutoErrorHandlingEnabled(false);
     m_lister->setDelayedMimeTypes(true);
     m_results = new ItemListModel(this);
+    // Before the proxy's own connections (setSourceModel): an item that changed is grouped afresh when it is sorted again.
+    for (QAbstractItemModel *source : {static_cast<QAbstractItemModel *>(m_dirModel), static_cast<QAbstractItemModel *>(m_results)})
+        connect(source, &QAbstractItemModel::dataChanged, this, [this] { m_groupCache.clear(); });
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -219,6 +236,16 @@ FolderModel::FolderModel(QObject *parent)
     m_collator.setNumericMode(true);
     m_collator.setCaseSensitivity(Qt::CaseInsensitive);
     sort(0, Qt::AscendingOrder);
+    // Rows that come, go or change may change the groups (the list view's sections follow GroupRole by themselves).
+    connect(this, &QAbstractItemModel::rowsInserted, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::modelReset, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::layoutChanged, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &, const QModelIndex &, const QList<int> &roles) {
+        // Selection, thumbnails and folder looks do not move an item to another group.
+        if (m_groupBy != 0 && !roles.contains(SelectedRole) && !roles.contains(ThumbnailRole) && !roles.contains(LargeThumbnailRole))
+            groupsDirty();
+    });
 
     connect(m_lister, &KCoreDirLister::started, this, [this] {
         m_loading = true;
@@ -376,7 +403,7 @@ bool FolderModel::isSearch() const
 
 void FolderModel::setSortKey(int key)
 {
-    key = qBound(0, key, 3);
+    key = qBound(0, key, FileLogic::kSortKeyCount - 1);
     if (key == m_sortKey)
         return;
     m_sortKey = key;
@@ -498,6 +525,7 @@ QHash<int, QByteArray> FolderModel::roleNames() const
         {TagColorsRole, "tagColors"},
         {FolderColorRole, "folderColor"},
         {FolderGlyphRole, "folderGlyph"},
+        {GroupRole, "group"},
     };
 }
 
@@ -549,6 +577,8 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
         return styleOf(item).color;
     case FolderGlyphRole:
         return styleOf(item).glyph;
+    case GroupRole:
+        return groupFor(item).title;
     case TagColorsRole: {
         QVariantList colors;
         const QList<int> indices = TagLogic::colorIndices(tagsOf(item));
@@ -696,12 +726,121 @@ void FolderModel::tagsChanged(const QList<QUrl> &urls)
         removeResults(gone);
     if (!joined.isEmpty())
         addResults(joined);
+    // Tags are read by the proxy, not its source: a sort or grouping by tags is redone here.
+    if (m_sortKey == int(FileLogic::SortKey::Tags) || m_groupBy == int(FileLogic::GroupBy::Tags)) {
+        for (const QUrl &url : urls)
+            m_groupCache.remove(url);
+        invalidate();
+    }
+}
+
+FileLogic::SortEntry FolderModel::sortEntry(const KFileItem &item, FileLogic::SortKey key) const
+{
+    using FileLogic::GroupBy;
+    using FileLogic::SortKey;
+    const auto by = GroupBy(m_groupBy);
+    FileLogic::SortEntry e;
+    e.name = item.text();
+    e.isDir = item.isDir();
+    const bool typed = key == SortKey::Kind || key == SortKey::Application || by == GroupBy::Kind || by == GroupBy::Application;
+    if (typed && !e.isDir) {
+        const MimeFacts &facts = mimeFacts(mimeNameOf(item));
+        e.kind = facts.comment;
+        e.mimeTypes = facts.lineage;
+        e.application = facts.application;
+    } else if (key == SortKey::Kind) {
+        e.kind = item.mimeComment();
+    }
+    if (key == SortKey::Date || by == GroupBy::Modified)
+        e.modified = item.time(KFileItem::ModificationTime);
+    if (key == SortKey::Created || by == GroupBy::Created)
+        e.created = item.time(KFileItem::CreationTime);
+    if (key == SortKey::Opened || by == GroupBy::Opened)
+        e.opened = item.time(KFileItem::AccessTime);
+    if (key == SortKey::Size || by == GroupBy::Size)
+        e.size = e.isDir ? -1 : qint64(item.size());
+    if (key == SortKey::Tags || by == GroupBy::Tags)
+        e.tags = TagLogic::displayOrder(tagsOf(item));
+    return e;
+}
+
+FileLogic::Group FolderModel::groupFor(const KFileItem &item) const
+{
+    if (m_groupBy == 0)
+        return {};
+    const QUrl url = item.url();
+    const auto it = m_groupCache.constFind(url);
+    if (it != m_groupCache.cend())
+        return *it;
+    if (!m_groupClock.isValid() || m_groupClock.elapsed() > 60000) {
+        m_groupNow = QDateTime::currentDateTime();
+        m_groupClock.restart();
+    }
+    const FileLogic::Group g = FileLogic::groupOf(sortEntry(item, FileLogic::SortKey::Name), FileLogic::GroupBy(m_groupBy), m_groupNow);
+    m_groupCache.insert(url, g);
+    return g;
+}
+
+void FolderModel::groupsDirty()
+{
+    m_groupCache.clear();
+    m_groupsValid = false;
+    if (m_groupsNotifyQueued || m_groupBy == 0)
+        return;
+    m_groupsNotifyQueued = true;
+    QTimer::singleShot(0, this, [this] {
+        m_groupsNotifyQueued = false;
+        emit groupsChanged();
+    });
+}
+
+QVariantList FolderModel::groups() const
+{
+    if (m_groupsValid)
+        return m_groups;
+    m_groups.clear();
+    m_groupsValid = true;
+    if (m_groupBy == 0)
+        return m_groups;
+    const int n = rowCount();
+    QString title;
+    int first = 0;
+    for (int row = 0; row < n; row++) {
+        const QString t = groupFor(sourceItem(mapToSource(index(row, 0)))).title;
+        if (row > 0 && t != title) {
+            m_groups.append(QVariantMap{{QStringLiteral("title"), title}, {QStringLiteral("first"), first}, {QStringLiteral("count"), row - first}});
+            first = row;
+        }
+        title = t;
+    }
+    if (n > 0)
+        m_groups.append(QVariantMap{{QStringLiteral("title"), title}, {QStringLiteral("first"), first}, {QStringLiteral("count"), n - first}});
+    return m_groups;
+}
+
+void FolderModel::setGroupBy(int by)
+{
+    by = qBound(0, by, FileLogic::kGroupByCount - 1);
+    if (by == m_groupBy)
+        return;
+    m_groupBy = by;
+    m_groupCache.clear();
+    m_groupsValid = false;
+    invalidate();
+    emit sortChanged();
+    emit groupsChanged();
 }
 
 bool FolderModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
 {
     const KFileItem a = sourceItem(left);
     const KFileItem b = sourceItem(right);
+    if (m_groupBy != 0) {
+        // Groups first, in their own order whatever the sort direction (Finder).
+        const int g = FileLogic::compareGroups(groupFor(a), groupFor(b), m_collator);
+        if (g != 0)
+            return g < 0;
+    }
     const auto key = FileLogic::SortKey(m_sortKey);
     return FileLogic::compareEntries(sortEntry(a, key), sortEntry(b, key), key, m_descending, m_foldersFirst, m_collator) < 0;
 }

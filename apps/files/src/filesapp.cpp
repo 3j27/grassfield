@@ -323,7 +323,7 @@ void FilesApp::setViewMode(const QString &mode)
 
 int FilesApp::sortKey() const
 {
-    return qBound(0, m_settings.value(QStringLiteral("view/sortKey"), 0).toInt(), 3);
+    return qBound(0, m_settings.value(QStringLiteral("view/sortKey"), 0).toInt(), FileLogic::kSortKeyCount - 1);
 }
 
 void FilesApp::setSortKey(int key)
@@ -550,6 +550,8 @@ QVariantMap FilesApp::folderView(const QUrl &url) const
         out.insert(QStringLiteral("sortKey"), e.sortKey);
     if (e.descending >= 0)
         out.insert(QStringLiteral("sortDescending"), e.descending == 1);
+    if (e.groupBy >= 0)
+        out.insert(QStringLiteral("groupBy"), e.groupBy);
     return out;
 }
 
@@ -562,6 +564,8 @@ void FilesApp::setFolderView(const QUrl &url, const QVariantMap &fields)
         e.sortKey = fields.value(QStringLiteral("sortKey")).toInt();
     if (fields.contains(QStringLiteral("sortDescending")))
         e.descending = fields.value(QStringLiteral("sortDescending")).toBool() ? 1 : 0;
+    if (fields.contains(QStringLiteral("groupBy")))
+        e.groupBy = fields.value(QStringLiteral("groupBy")).toInt();
     QString error;
     // A failure only loses the memory of this choice; the view itself already changed. It is logged, not shown.
     if (!m_folderViews.set(FolderViews::keyFor(url), e, &error) && !error.isEmpty())
@@ -616,7 +620,7 @@ int FilesApp::baseNameLength(const QString &name, bool isDir) const
 
 bool FilesApp::defaultDescending(int sortKey) const
 {
-    return FileLogic::defaultDescending(FileLogic::SortKey(qBound(0, sortKey, 3)));
+    return FileLogic::defaultDescending(FileLogic::SortKey(qBound(0, sortKey, FileLogic::kSortKeyCount - 1)));
 }
 
 QString FilesApp::uriList(const QList<QUrl> &urls) const

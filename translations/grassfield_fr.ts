@@ -1578,6 +1578,14 @@
         <translation>Ctrl+V</translation>
     </message>
     <message>
+        <source>Use Groups</source>
+        <translation>Utiliser les groupes</translation>
+    </message>
+    <message>
+        <source>Ctrl+Super+0</source>
+        <translation>Ctrl+Super+0</translation>
+    </message>
+    <message>
         <source>Show Hidden Files</source>
         <translation>Afficher les fichiers cachés</translation>
     </message>
@@ -1632,6 +1640,26 @@
     <message>
         <source>Gallery</source>
         <translation>Galerie</translation>
+    </message>
+    <message>
+        <source>Group By</source>
+        <translation>Grouper par</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucun</translation>
+    </message>
+    <message>
+        <source>Application</source>
+        <translation>Application</translation>
+    </message>
+    <message>
+        <source>Date Last Opened</source>
+        <translation>Date de dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
     </message>
     <message>
         <source>Sort By</source>
@@ -1699,6 +1727,10 @@
     <message>
         <source>as Gallery</source>
         <translation>en galerie</translation>
+    </message>
+    <message>
+        <source>Group By</source>
+        <translation>Grouper par</translation>
     </message>
     <message>
         <source>Action</source>
@@ -2740,8 +2772,96 @@
 <context>
     <name>FileLogic</name>
     <message>
+        <source>Folders</source>
+        <translation>Dossiers</translation>
+    </message>
+    <message>
+        <source>PDF Documents</source>
+        <translation>Documents PDF</translation>
+    </message>
+    <message>
+        <source>Presentations</source>
+        <translation>Présentations</translation>
+    </message>
+    <message>
+        <source>Spreadsheets</source>
+        <translation>Feuilles de calcul</translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Movies</source>
+        <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>Archives</source>
+        <translation>Archives</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnu</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Aujourd’hui</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Hier</translation>
+    </message>
+    <message>
+        <source>Previous 7 Days</source>
+        <translation>7 jours précédents</translation>
+    </message>
+    <message>
+        <source>Previous 30 Days</source>
+        <translation>30 jours précédents</translation>
+    </message>
+    <message>
+        <source>More than 1 GB</source>
+        <translation>Plus de 1 Go</translation>
+    </message>
+    <message>
+        <source>100 MB to 1 GB</source>
+        <translation>100 Mo à 1 Go</translation>
+    </message>
+    <message>
+        <source>1 MB to 100 MB</source>
+        <translation>1 Mo à 100 Mo</translation>
+    </message>
+    <message>
+        <source>100 KB to 1 MB</source>
+        <translation>100 Ko à 1 Mo</translation>
+    </message>
+    <message>
+        <source>Less than 100 KB</source>
+        <translation>Moins de 100 Ko</translation>
+    </message>
+    <message>
         <source>Zero bytes</source>
         <translation>Zéro octet</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>No Tags</source>
+        <translation>Sans tag</translation>
     </message>
     <message>
         <source>1 byte</source>
@@ -3264,12 +3384,36 @@
         <translation>Type</translation>
     </message>
     <message>
+        <source>Application</source>
+        <translation>Application</translation>
+    </message>
+    <message>
         <source>Date Modified</source>
         <translation>Date de modification</translation>
     </message>
     <message>
+        <source>Date Last Opened</source>
+        <translation>Date de dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
         <source>Size</source>
         <translation>Taille</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucun</translation>
+    </message>
+    <message>
+        <source>Use Groups</source>
+        <translation>Utiliser les groupes</translation>
+    </message>
+    <message>
+        <source>Group By</source>
+        <translation>Grouper par</translation>
     </message>
     <message>
         <source>Descending</source>
@@ -3580,6 +3724,14 @@
     <message>
         <source>Files</source>
         <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>Show Less</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show All</source>
+        <translation>Tout afficher</translation>
     </message>
     <message>
         <source>No Results</source>

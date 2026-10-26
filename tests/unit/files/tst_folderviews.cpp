@@ -60,7 +60,7 @@ TEST(FolderViews, KeysIgnoreATrailingSlashAndDotSegments)
 
 TEST(FolderViews, InvalidFieldsReadAsUnset)
 {
-    const auto e = FolderViews::parse(QJsonDocument::fromJson(R"({"url":"file:///a","mode":"cover","sortKey":7,"descending":"yes"})").object());
+    const auto e = FolderViews::parse(QJsonDocument::fromJson(R"({"url":"file:///a","mode":"cover","sortKey":8,"descending":"yes"})").object());
     EXPECT_TRUE(e.isEmpty());
     const auto f = FolderViews::parse(QJsonDocument::fromJson(R"({"mode":"list","sortKey":2.5,"descending":false})").object());
     EXPECT_EQ(f.mode, QStringLiteral("list"));
@@ -248,4 +248,29 @@ TEST(FolderViews, ReadsFollowAnotherProcess)
     ASSERT_TRUE(writer.set(QStringLiteral("file:///a"), entry(QStringLiteral("columns"))));
     reader.refresh();
     EXPECT_EQ(reader.entry(QStringLiteral("file:///a")).mode, QStringLiteral("columns"));
+}
+
+TEST(FolderViews, GroupingAndTheNewSortKeysRoundTrip)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString file = dir->filePath(QStringLiteral("files-views.json"));
+    FolderViews views(file);
+    FolderViews::Entry e = entry(QStringLiteral("icons"), 6);
+    e.groupBy = 2;
+    ASSERT_TRUE(views.set(QStringLiteral("file:///a"), e));
+    FolderViews::Entry none;
+    none.groupBy = 0;
+    ASSERT_TRUE(views.set(QStringLiteral("file:///b"), none)) << "no groups is a choice of its own";
+    FolderViews again(file);
+    again.load();
+    EXPECT_EQ(again.entry(QStringLiteral("file:///a")).sortKey, 6);
+    EXPECT_EQ(again.entry(QStringLiteral("file:///a")).groupBy, 2);
+    EXPECT_EQ(again.entry(QStringLiteral("file:///b")).groupBy, 0);
+    EXPECT_EQ(again.entry(QStringLiteral("file:///b")).sortKey, -1);
+    // Out of range: unset.
+    EXPECT_EQ(FolderViews::parse(QJsonObject{{QStringLiteral("groupBy"), 9}, {QStringLiteral("sortKey"), 8}}).groupBy, -1);
+    EXPECT_EQ(FolderViews::parse(QJsonObject{{QStringLiteral("sortKey"), 8}}).sortKey, -1);
+    EXPECT_EQ(FolderViews::parse(QJsonObject{{QStringLiteral("groupBy"), 1.5}}).groupBy, -1);
 }

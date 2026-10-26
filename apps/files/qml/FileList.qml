@@ -38,7 +38,9 @@ FocusScope {
             return;
         root.banding = true;
         root.bandEnd = p;
-        const rows = Nav.cellsInRect(0, root.bandOrigin.y, 0, p.y, 1, Tokens.filesListRowHeight, 1, list.count);
+        const groups = root.model.groupBy > 0 ? root.model.groups : [];
+        const rows = groups.length > 0 ? Nav.groupedRowsInSpan(root.bandOrigin.y, p.y, Tokens.filesListRowHeight, Tokens.filesListGroupHeight, groups)
+                                       : Nav.cellsInRect(0, root.bandOrigin.y, 0, p.y, 1, Tokens.filesListRowHeight, 1, list.count);
         const urls = root.bandBase.slice();
         for (let i = 0; i < rows.length; i++)
             urls.push(root.model.urlAt(rows[i]));
@@ -236,6 +238,42 @@ FocusScope {
         Accessible.name: qsTr("Files")
 
         Keys.onPressed: event => root.tab.handleViewKey(event, root.model, key => Nav.listMove(root.model.currentRow, key, list.count, root.pageRows))
+
+        // View > Group By: a header above each group (no capture of the Finder's grouped list: visual NOT verified).
+        section.property: root.model && root.model.groupBy > 0 ? "group" : ""
+        section.criteria: ViewSection.FullString
+        section.delegate: Item {
+            id: groupHeader
+
+            required property string section
+
+            width: list.contentWidth
+            height: Tokens.filesListGroupHeight
+            Accessible.role: Accessible.Heading
+            Accessible.name: groupHeader.section
+
+            Text {
+                textFormat: Text.PlainText
+                x: Tokens.spacingSm + Tokens.spacingXs
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Tokens.spacingXs
+                width: parent.width - 2 * x
+                text: groupHeader.section
+                elide: Text.ElideRight
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                x: Tokens.spacingXs
+                width: parent.width - 2 * x
+                height: Tokens.appsBorderWidth
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            }
+        }
 
         delegate: FocusScope {
             id: row

@@ -3,7 +3,8 @@ import QtQuick
 import Grassfield.Ui
 
 // Small glyphs drawn from rectangles (Grassfield's own, no icon assets): "icons" (2x2 grid),
-// "list" (rows), "columns" (three panes), "gallery" (a large pane over a strip), "more" (three dots), "plus".
+// "list" (rows), "columns" (three panes), "gallery" (a large pane over a strip), "more" (three dots), "plus",
+// "group" (two groups: a rule over three small squares each; the Group By button, measured on Finder-Home).
 Item {
     id: root
 
@@ -115,6 +116,45 @@ Item {
                     height: root.size * 0.25
                     radius: root.stroke / 2
                     color: root.color
+                }
+            }
+        }
+    }
+
+    // group: rule, three squares, rule, three squares
+    Column {
+        visible: root.kind === "group"
+        anchors.centerIn: parent
+        spacing: Tokens.filesGroupGlyphGap
+
+        Repeater {
+            model: 2
+
+            Column {
+                spacing: Tokens.filesGroupGlyphGap
+
+                Rectangle {
+                    width: Tokens.filesGroupGlyphWidth
+                    height: Tokens.filesGroupGlyphRule
+                    radius: height / 2
+                    color: root.color
+                }
+
+                Row {
+                    spacing: (Tokens.filesGroupGlyphWidth - 3 * Tokens.filesGroupGlyphSquare) / 2
+
+                    Repeater {
+                        model: 3
+
+                        Rectangle {
+                            width: Tokens.filesGroupGlyphSquare
+                            height: width
+                            radius: Tokens.filesGroupGlyphStroke
+                            color: "transparent"
+                            border.width: Tokens.filesGroupGlyphStroke
+                            border.color: root.color
+                        }
+                    }
                 }
             }
         }

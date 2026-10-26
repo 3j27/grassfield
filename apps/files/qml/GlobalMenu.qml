@@ -60,8 +60,19 @@ Platform.MenuBar {
         return f.selectedRows().every(r => f.isDirAt(r)) && bar.app.folderStyleUnavailable(f.selectedUrls()) === "";
     }
 
-    // View > Sort By (its check marks follow the shown folder's arrangement; tst_filesglobalmenu reads it).
+    // View > Sort By and Group By (their check marks follow the shown folder's arrangement; tst_filesglobalmenu reads them).
     readonly property var sortMenu: sortByMenu
+    readonly property var groupMenu: groupByMenu
+    readonly property var sortKeys: [
+        {key: 0, text: qsTr("Name")}, {key: 1, text: qsTr("Kind")}, {key: 7, text: qsTr("Application")},
+        {key: 5, text: qsTr("Date Last Opened")}, {key: 2, text: qsTr("Date Modified")}, {key: 4, text: qsTr("Date Created")},
+        {key: 3, text: qsTr("Size")}, {key: 6, text: qsTr("Tags")}
+    ]
+    readonly property var groupKeys: [
+        {key: 0, text: qsTr("None")}, {key: 1, text: qsTr("Name")}, {key: 2, text: qsTr("Kind")}, {key: 3, text: qsTr("Application")},
+        {key: 4, text: qsTr("Date Last Opened")}, {key: 5, text: qsTr("Date Modified")}, {key: 6, text: qsTr("Date Created")},
+        {key: 7, text: qsTr("Size")}, {key: 8, text: qsTr("Tags")}
+    ]
 
     // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
     // mnemonic in Qt menus).
@@ -305,29 +316,44 @@ Platform.MenuBar {
             onTriggered: bar.tab.togglePreview()
         }
         Platform.MenuSeparator {}
+        MenuCheckItem {
+            text: qsTr("Use Groups")
+            shortcut: "Ctrl+Super+0"
+            enabled: bar.tab !== null
+            on: bar.tab !== null && bar.tab.groupBy > 0
+            onChosen: bar.tab.toggleGroups()
+        }
+        // View > Group By and Sort By in the Finder's order (Date Added has no source on Linux files).
+        Platform.Menu {
+            id: groupByMenu
+            title: qsTr("Group By")
+
+            Instantiator {
+                model: bar.groupKeys
+                delegate: MenuCheckItem {
+                    required property var modelData
+                    text: modelData.text
+                    on: bar.tab !== null && bar.tab.groupBy === modelData.key
+                    onChosen: bar.tab.setGroupBy(modelData.key)
+                }
+                onObjectAdded: (index, object) => groupByMenu.insertItem(index, object)
+                onObjectRemoved: (index, object) => groupByMenu.removeItem(object)
+            }
+        }
         Platform.Menu {
             id: sortByMenu
             title: qsTr("Sort By")
 
-            MenuCheckItem {
-                text: qsTr("Name")
-                on: bar.tab !== null && bar.tab.sortKey === 0
-                onChosen: bar.tab.sortBy(0, false)
-            }
-            MenuCheckItem {
-                text: qsTr("Kind")
-                on: bar.tab !== null && bar.tab.sortKey === 1
-                onChosen: bar.tab.sortBy(1, false)
-            }
-            MenuCheckItem {
-                text: qsTr("Date Modified")
-                on: bar.tab !== null && bar.tab.sortKey === 2
-                onChosen: bar.tab.sortBy(2, false)
-            }
-            MenuCheckItem {
-                text: qsTr("Size")
-                on: bar.tab !== null && bar.tab.sortKey === 3
-                onChosen: bar.tab.sortBy(3, false)
+            Instantiator {
+                model: bar.sortKeys
+                delegate: MenuCheckItem {
+                    required property var modelData
+                    text: modelData.text
+                    on: bar.tab !== null && bar.tab.sortKey === modelData.key
+                    onChosen: bar.tab.sortBy(modelData.key, false)
+                }
+                onObjectAdded: (index, object) => sortByMenu.insertItem(index, object)
+                onObjectRemoved: (index, object) => sortByMenu.removeItem(object)
             }
             Platform.MenuSeparator {}
             MenuCheckItem {

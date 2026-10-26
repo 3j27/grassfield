@@ -19,11 +19,15 @@ public:
     // A field that was never set for the folder reads as unset: the folder then uses the defaults.
     struct Entry {
         QString mode;        // icons | list | columns | gallery; empty: unset
-        int sortKey = -1;    // 0 name, 1 kind, 2 date modified, 3 size; -1: unset
+        int sortKey = -1;    // FileLogic::SortKey (0 name, 1 kind, 2 date modified, 3 size, 4 created, 5 opened, 6 tags, 7 application); -1: unset
         int descending = -1; // 0 or 1; -1: unset
+        int groupBy = -1;    // FileLogic::GroupBy (0: no groups); -1: unset
 
-        bool isEmpty() const { return mode.isEmpty() && sortKey < 0 && descending < 0; }
-        bool operator==(const Entry &o) const { return mode == o.mode && sortKey == o.sortKey && descending == o.descending; }
+        bool isEmpty() const { return mode.isEmpty() && sortKey < 0 && descending < 0 && groupBy < 0; }
+        bool operator==(const Entry &o) const
+        {
+            return mode == o.mode && sortKey == o.sortKey && descending == o.descending && groupBy == o.groupBy;
+        }
     };
 
     static constexpr int kVersion = 1;

@@ -154,6 +154,39 @@ TestCase {
         compare(Nav.viewFor("gallery", "columns", "icons"), "columns", "a folder kept in columns opens in columns");
     }
 
+    function test_groupedIconMove() {
+        // Three groups: rows 0-4 in one row, 5-6 in one row, 7-12 shown in full four to a line.
+        const groups = [{first: 0, count: 5, columns: 5}, {first: 5, count: 2, columns: 2}, {first: 7, count: 6, columns: 4}];
+        compare(Nav.groupedIconMove(4, "right", groups), 5, "Right walks into the next group");
+        compare(Nav.groupedIconMove(5, "left", groups), 4);
+        compare(Nav.groupedIconMove(3, "down", groups), 6, "down to the next group, its last item for a far column");
+        compare(Nav.groupedIconMove(1, "down", groups), 6);
+        compare(Nav.groupedIconMove(0, "down", groups), 5);
+        compare(Nav.groupedIconMove(6, "down", groups), 8, "column 1 of the full group's first line");
+        compare(Nav.groupedIconMove(8, "down", groups), 12, "the item below in the full group");
+        compare(Nav.groupedIconMove(9, "down", groups), 12, "into the shorter last line: its last item");
+        compare(Nav.groupedIconMove(11, "up", groups), 7);
+        compare(Nav.groupedIconMove(7, "up", groups), 5, "from the full group's first line to the group above");
+        compare(Nav.groupedIconMove(12, "up", groups), 8);
+        compare(Nav.groupedIconMove(2, "up", groups), 2, "the first group's line stays");
+        compare(Nav.groupedIconMove(2, "pagedown", groups), 6);
+        compare(Nav.groupedIconMove(10, "pageup", groups), 6);
+        compare(Nav.groupedIconMove(6, "end", groups), 12);
+        compare(Nav.groupedIconMove(-1, "down", groups), 0);
+        compare(Nav.groupedIconMove(0, "down", []), -1);
+    }
+
+    function test_groupedRowsInSpan() {
+        // Two groups: rows 0-2 under a 28-high header, rows 3-4 under the next; rows 20 high.
+        const groups = [{first: 0, count: 3}, {first: 3, count: 2}];
+        // Layout: header 0-28, rows 28-88, header 88-116, rows 116-156.
+        compare(Nav.groupedRowsInSpan(0, 10, 20, 28, groups), [], "a header alone selects nothing");
+        compare(Nav.groupedRowsInSpan(30, 50, 20, 28, groups), [0, 1]);
+        compare(Nav.groupedRowsInSpan(80, 120, 20, 28, groups), [2, 3], "across a header");
+        compare(Nav.groupedRowsInSpan(150, 30, 20, 28, groups), [0, 1, 2, 3, 4], "upwards too");
+        compare(Nav.groupedRowsInSpan(200, 300, 20, 28, groups), [], "below the last row");
+    }
+
     function test_sortForAFolder() {
         const descendingOf = key => key === 2 || key === 3;
         compare(Nav.sortFor({}, 0, false, descendingOf), {key: 0, descending: false}, "no entry: the defaults");

@@ -26,6 +26,12 @@ FocusScope {
     property string viewMode: root.restore ? Nav.normalizeViewMode(root.restore.viewMode) : Nav.viewFor("", root.app.folderView(root.startUrl).mode, root.app.viewMode)
     property int sortKey: root.app.sortKey
     property bool sortDescending: root.app.sortDescending
+    // View > Group By of the shown folder (FileLogic::GroupBy, 0: no groups; its own when chosen for it). Groups show in
+    // the icon and list views; Use Groups (Ctrl+Cmd+0) brings back the last grouping (Kind at first).
+    property int groupBy: 0
+    property int lastGroupBy: 2
+    readonly property bool groupsShown: viewLoader.kind === "icons" || viewLoader.kind === "list"
+    onGroupsShownChanged: root.applyGroups()
     // FolderModel listing `url` (icon and list views; the column view keeps one per column).
     property var folder: null
     property string searchText: ""
@@ -86,8 +92,10 @@ FocusScope {
         if (root.restore) {
             root.sortKey = root.restore.sortKey;
             root.sortDescending = root.restore.sortDescending;
+            root.groupBy = root.restore.groupBy !== undefined ? root.restore.groupBy : 0;
         }
         root.folder = root.createModel(root);
+        root.applyGroups();
         if (root.restore && root.restore.history.length > 0) {
             root.history = root.restore.history;
             root.historyIndex = Math.max(0, Math.min(root.restore.historyIndex, root.history.length - 1));
@@ -100,7 +108,7 @@ FocusScope {
     // What File > Reopen Closed Tab needs to bring this tab back.
     function snapshot(): var {
         return {url: root.url, history: root.history.slice(), historyIndex: root.historyIndex, viewMode: root.viewMode, sortKey: root.sortKey,
-                sortDescending: root.sortDescending};
+                sortDescending: root.sortDescending, groupBy: root.groupBy};
     }
 
     function focusView(): void {
@@ -138,6 +146,27 @@ FocusScope {
         root.viewMode = Nav.viewFor(String(root.url) === "" && !root.restore ? "" : root.viewMode, stored.mode, root.app.viewMode);
         const sort = Nav.sortFor(stored, root.app.sortKey, root.app.sortDescending, key => root.app.defaultDescending(key));
         root.setArrangement(sort.key, sort.descending);
+        root.groupBy = stored.groupBy !== undefined ? stored.groupBy : 0;
+        root.applyGroups();
+    }
+
+    // The listing groups as the tab says, in the views that show groups (never the column view's own listings).
+    function applyGroups(): void {
+        if (root.folder)
+            root.folder.groupBy = root.groupsShown ? root.groupBy : 0;
+    }
+
+    // View > Group By: kept for the shown folder (F-3).
+    function setGroupBy(by: int): void {
+        root.groupBy = by;
+        if (by > 0)
+            root.lastGroupBy = by;
+        root.applyGroups();
+        root.app.setFolderView(root.url, {groupBy: by});
+    }
+
+    function toggleGroups(): void {
+        root.setGroupBy(root.groupBy > 0 ? 0 : root.lastGroupBy);
     }
 
     function setArrangement(key: int, descending: bool): void {
@@ -669,6 +698,8 @@ FocusScope {
         items.push({id: "paste", text: n > 1 ? qsTr("Paste %1 Items").arg(n) : qsTr("Paste"), shortcut: qsTr("Ctrl+V"), enabled: root.app.canPaste && model.writable});
         items.push({separator: true});
         items.push(root.viewSubmenu());
+        items.push({id: "useGroups", text: qsTr("Use Groups"), shortcut: qsTr("Ctrl+Super+0"), checked: root.groupBy > 0});
+        items.push(root.groupSubmenu());
         items.push(root.sortSubmenu());
         items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
         items.push({id: "preview", text: root.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview"), shortcut: qsTr("Ctrl+Shift+P")});
@@ -684,13 +715,34 @@ FocusScope {
         ]};
     }
 
+    // Group By and Sort By in the Finder's order (FileLogic::GroupBy, FileLogic::SortKey; Date Added has no source here).
+    function groupSubmenu(): var {
+        const g = root.groupBy;
+        return {id: "groupBy", text: qsTr("Group By"), submenu: [
+            {id: "group:0", text: qsTr("None"), checked: g === 0},
+            {separator: true},
+            {id: "group:1", text: qsTr("Name"), checked: g === 1},
+            {id: "group:2", text: qsTr("Kind"), checked: g === 2},
+            {id: "group:3", text: qsTr("Application"), checked: g === 3},
+            {id: "group:4", text: qsTr("Date Last Opened"), checked: g === 4},
+            {id: "group:5", text: qsTr("Date Modified"), checked: g === 5},
+            {id: "group:6", text: qsTr("Date Created"), checked: g === 6},
+            {id: "group:7", text: qsTr("Size"), checked: g === 7},
+            {id: "group:8", text: qsTr("Tags"), checked: g === 8}
+        ]};
+    }
+
     function sortSubmenu(): var {
         const k = root.sortKey;
         return {id: "sortBy", text: qsTr("Sort By"), submenu: [
             {id: "sort:0", text: qsTr("Name"), checked: k === 0},
             {id: "sort:1", text: qsTr("Kind"), checked: k === 1},
+            {id: "sort:7", text: qsTr("Application"), checked: k === 7},
+            {id: "sort:5", text: qsTr("Date Last Opened"), checked: k === 5},
             {id: "sort:2", text: qsTr("Date Modified"), checked: k === 2},
+            {id: "sort:4", text: qsTr("Date Created"), checked: k === 4},
             {id: "sort:3", text: qsTr("Size"), checked: k === 3},
+            {id: "sort:6", text: qsTr("Tags"), checked: k === 6},
             {separator: true},
             {id: "sortDescending", text: qsTr("Descending"), checked: root.sortDescending},
             {id: "foldersFirst", text: qsTr("Keep Folders on Top"), checked: root.app.foldersFirst}
@@ -720,6 +772,10 @@ FocusScope {
         }
         if (id.startsWith("sort:")) {
             root.sortBy(parseInt(id.substring(5)), false);
+            return;
+        }
+        if (id.startsWith("group:")) {
+            root.setGroupBy(parseInt(id.substring(6)));
             return;
         }
         switch (id) {
@@ -779,6 +835,9 @@ FocusScope {
             break;
         case "sortDescending":
             root.setSortDescending(!root.sortDescending);
+            break;
+        case "useGroups":
+            root.toggleGroups();
             break;
         case "foldersFirst":
             root.app.foldersFirst = !root.app.foldersFirst;
