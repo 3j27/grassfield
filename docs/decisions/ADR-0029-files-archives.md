@@ -19,12 +19,13 @@ Status: Proposed (integrator, under owner delegation D-5); applied with Files PR
 
 ## Decision (proposed)
 Option 1.
-- Compress: `bsdtar --format zip -s ',^\./,,' -cf <tmp> -C <folder> -- ./<name>…` into a hidden temporary name in the
+- Compress: `bsdtar --format zip -s ',^\./,,S' -cf <tmp> -C <folder> -- ./<name>…` into a hidden temporary name in the
   destination, then renamed to Finder's name (`name.zip`, `Archive.zip`, " 2"…); symbolic links are stored as links
   (zip's way), never followed. Each name is passed as `./<name>`: bsdtar reads an operand starting with `@` as an
   archive to copy from, even after `--` (verified 2026-10-26 with bsdtar 3.8.10: `-- @notes` failed with "Failed to
-  open 'notes'", `-- ./@notes` stored the file); `-s ',^\./,,'` stores the names without the `./` (verified: the
-  archive lists `@notes`).
+  open 'notes'", `-- ./@notes` stored the file); `-s ',^\./,,S'` stores the names without the `./` (verified: the
+  archive lists `@notes`); the `S` flag leaves symbolic link targets as they are (without it a link to `./@notes` was
+  stored pointing to `@notes`, and a link to `./` with an empty target; verified 2026-10-27 with bsdtar 3.8.9).
 - Expand: `bsdtar -xf <archive> -C <tmp dir>` with `--no-same-owner --no-same-permissions --no-acls --no-fflags
   --no-xattrs` (`-P` never), into a new hidden folder next to the archive, then moved into place with Finder's naming.
   bsdtar refuses absolute paths and `..` components without `-P`; Files also refuses an archive whose listing (`bsdtar
