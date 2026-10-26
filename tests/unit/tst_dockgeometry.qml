@@ -38,8 +38,9 @@ TestCase {
         compare(m.separatorHeight, 49);
         compare(m.badgeSize, 20);
         fuzzyCompare(m.iconRadius, 11, 1e-9);
-        compare(DockModel.shelfHeight(m), 48 + 20 + 4 + 4);
-        compare(DockModel.reservedHeight(m, false), 76 + 6);
+        // No band under the icons (audit 2026-10-25: 76 -> 68): the running dot sits in the bottom padding.
+        compare(DockModel.shelfHeight(m), 48 + 20);
+        compare(DockModel.reservedHeight(m, false), 68 + 6);
     }
 
     function test_proportionalPartsFollowTheSize() {
@@ -121,7 +122,7 @@ TestCase {
     }
 
     function test_hitRectIsTheStripWhileAwayAndTheShelfOtherwise() {
-        const base = {revealed: false, dragging: false, pointerActive: false, shelfMain0: 300, shelfLength: 400, thickness: 76, margin: 6, overhang: 29, room: 36, zone: 2};
+        const base = {revealed: false, dragging: false, pointerActive: false, shelfMain0: 300, shelfLength: 400, thickness: 68, margin: 6, overhang: 29, room: 44, zone: 2};
         const strip = Geometry.hitRect("bottom", 1000, 200, base);
         compare(strip.w, 1000);
         compare(strip.h, 2);
@@ -136,9 +137,9 @@ TestCase {
         const shelf = Geometry.hitRect("right", 200, 1000, idle);
         compare(shelf.y, 300);
         compare(shelf.h, 400);
-        compare(shelf.w, 76 + 6);
+        compare(shelf.w, 68 + 6);
         const hover = Geometry.hitRect("left", 200, 1000, Object.assign({}, idle, {pointerActive: true}));
-        compare(hover.w, 76 + 6 + 29 + 36);
+        compare(hover.w, 68 + 6 + 29 + 44);
         const drag = Geometry.hitRect("left", 200, 1000, Object.assign({}, idle, {dragging: true}));
         compare(drag.w, 200);
     }
@@ -205,7 +206,7 @@ TestCase {
     }
 
     function test_iconAndDotSitOnOppositeSidesOfTheTile() {
-        const area = base.indicatorSize + base.spacing;
+        const area = 0;
         // Unmagnified: the icon is at the tile's origin on the outward side of the dot.
         compare(Geometry.iconOrigin("bottom", 48, 48, area).y, 0);
         compare(Geometry.iconOrigin("left", 48, 48, area).x, area);
@@ -218,22 +219,28 @@ TestCase {
         const left = Geometry.iconOrigin("left", 48, 72, area);
         compare(left.x, area);
         // The dot is on the screen-edge side, spacing away from the icon, and the hover lift is cancelled.
-        const dotB = Geometry.dotOrigin("bottom", 48, 56, 48, 4, 4, 0);
-        compare(dotB.y, 52);
+        // It sits in the padding, dock.indicatorGap (3) from the icon: with a 10-pt padding and a 4-pt dot its centre is 5 from the shelf edge.
+        const dotB = Geometry.dotOrigin("bottom", 48, 48, 48, 3, 4, 0);
+        compare(dotB.y, 51);
         compare(dotB.x, 22);
-        compare(Geometry.dotOrigin("right", 56, 48, 48, 4, 4, 0).x, 52);
-        compare(Geometry.dotOrigin("left", 56, 48, 48, 4, 4, 0).x, 0);
-        compare(Geometry.dotOrigin("left", 56, 48, 48, 4, 4, 5).x, -5);
-        compare(Geometry.dotOrigin("right", 56, 48, 48, 4, 4, 5).x, 57);
-        compare(Geometry.dotOrigin("bottom", 48, 56, 48, 4, 4, 5).y, 57);
+        compare(dotB.y + 2 - (48 + 10), -5);
+        compare(Geometry.dotOrigin("right", 48, 48, 48, 3, 4, 0).x, 51);
+        compare(Geometry.dotOrigin("left", 48, 48, 48, 3, 4, 0).x, -7);
+        compare(Geometry.dotOrigin("left", 48, 48, 48, 3, 4, 5).x, -12);
+        compare(Geometry.dotOrigin("right", 48, 48, 48, 3, 4, 5).x, 56);
+        compare(Geometry.dotOrigin("bottom", 48, 48, 48, 3, 4, 5).y, 56);
     }
 
     function test_tooltipIsOnTheOutwardSideOfTheIcon() {
-        const area = base.indicatorSize + base.spacing;
+        const area = 0;
         // Bottom: above the icon, centred (the formula the Dock always used).
         const b = Geometry.tooltipOrigin("bottom", 48, 56, 48, 48, area, 8, 100, 30);
         compare(b.x, -26);
         compare(b.y, 56 - area - 48 - 8 - 30);
+        // With the shelf padding the tail tip is `gap` beyond the shelf edge, not beside the icon (audit 2026-10-25: it sat
+        // 1.5 inside the shelf): shelf edge = icon top - padding.
+        const shelfTop = 56 - 48 - 10;
+        compare(Geometry.tooltipOrigin("bottom", 48, 56, 48, 48, area, 8, 100, 30, 10).y + 30, shelfTop - 8);
         // Left: right of the icon, vertically centred on the tile; right: left of it.
         const l = Geometry.tooltipOrigin("left", 56, 48, 48, 48, area, 8, 100, 30);
         compare(l.x, area + 48 + 8);
@@ -254,7 +261,7 @@ TestCase {
         // The icon of tile n, placed the way the Dock places it (shelf, padding, tile box, icon origin), is the rectangle the
         // compositor animates to.
         const thick = DockModel.shelfHeight(m48);
-        const area = base.indicatorSize + base.spacing;
+        const area = 0;
         for (const edge of Geometry.EDGES) {
             const w = Geometry.isVertical(edge) ? 300 : 1000;
             const h = Geometry.isVertical(edge) ? 1000 : 300;

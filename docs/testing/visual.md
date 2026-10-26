@@ -217,7 +217,7 @@ Tokens changed in the A2 pass, and why:
 | `material.tintAlphaMin` | 0.4 | 0.4 (kept) | the frosted look: tint 0.85 at the default t = 0.25 |
 | `material.tintAlphaClamp` / `tintClampUntil` | new | 0.82 / 0.6 | the tint never drops below 0.82 for t <= 0.6 (at t = 0.6 it was 0.64 and the wallpaper decided the contrast); text colours carry the rest |
 | `material.bodyOpacity` | 0.85 | removed | notification body drawn at opacity 0.85 measured 4.2-4.4; the rename field backing uses `desktopIcon.renameFillOpacity` |
-| `search.selectedSubtitleOpacity` | 0.8 | 0.9 | subtitle on the accent 4.2-4.4 |
+| `search.selectedSubtitleOpacity` | 0.8 | removed | the selected Search row is a neutral fill (`search.selectionFillOpacity` 0.06, ADR-0024 lot 2), text keeps `text` / `textSecondary` |
 | `apps.backdropOpacity` | 0.5 | 0.6 | white labels 2.8:1 on a white wallpaper |
 | `launcher.searchFillOpacityDark` | new, 0.10 | | the Apps search field keeps the light translucent fill (docs/specs/apps.md, the macOS model) but in the dark appearance at 0.10 instead of `material.fillOpacity` 0.14: placeholder 4.30:1 on a white wallpaper at transparency 0.6 before; an earlier attempt, a darker inset, was rejected as unlike macOS |
 | `desktopIcon.labelShadowOpacity/Blur/OffsetY` | new, 1.0 / 0.22 / 0 | | desktop labels: white text, three stacked soft shadow passes; 4.8:1 measured on a white wallpaper |

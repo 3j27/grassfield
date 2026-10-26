@@ -585,7 +585,6 @@ Variants {
                         readonly property bool isPlus: modelData.plus === true
                         readonly property bool dropTarget: win.dragKey !== "" && win.dropIndex === index && !isPlus && !modelData.active
                         readonly property bool focused: win.spaceFocus === index
-                        readonly property int shownIcons: isPlus ? 0 : Math.min(modelData.appIds.length, Tokens.overviewTileMaxIcons)
                         readonly property int count: win.tiles.length - 1
                         readonly property real rowWidth: count * Tokens.overviewTileWidth + Math.max(0, count - 1) * Tokens.overviewTileGap
 
@@ -603,26 +602,20 @@ Variants {
                             height: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
                             width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
-                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            color: tile.isPlus && !Appearance.dark ? Appearance.withAlpha(Appearance.colors.chipFill, tileMouse.containsMouse ? Tokens.materialChipFillOpacityLight : Tokens.materialWellFillOpacityLight)
+                                : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
                             border.width: tile.modelData.active || tile.focused || tile.dropTarget ? Tokens.overviewSelectionWidth : 1
                             border.color: tile.modelData.active || tile.focused || tile.dropTarget ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
-                            Row {
+                            // A real miniature of the desktop: its windows at their place, captured (macOS), not a grey tile with icons.
+                            MiniDesktop {
                                 visible: !tile.isPlus
-                                anchors.centerIn: parent
-                                spacing: Tokens.spacingXs
-
-                                Repeater {
-                                    model: tile.shownIcons
-
-                                    delegate: TintedIcon {
-                                        id: tileIcon
-                                        required property int index
-                                        size: Tokens.overviewTileIconSize
-                                        source: ThemeIcons.appIcon(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
-                                        asynchronous: true
-                                    }
-                                }
+                                anchors.fill: parent
+                                anchors.margins: face.border.width
+                                windows: tile.isPlus ? [] : tile.modelData.windows
+                                screenW: tile.isPlus ? 0 : tile.modelData.screenW
+                                screenH: tile.isPlus ? 0 : tile.modelData.screenH
+                                capture: !tile.modelData.active
                             }
 
                             Text {

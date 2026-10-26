@@ -2,3 +2,4 @@ module qs.overview
 Overview 1.0 Overview.qml
 OverviewWindow 1.0 OverviewWindow.qml
 OverviewBackdrop 1.0 OverviewBackdrop.qml
+MiniDesktop 1.0 MiniDesktop.qml

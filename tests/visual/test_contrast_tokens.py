@@ -140,7 +140,14 @@ def backdrops(tok, role, appearance, t, wallpaper):
         base = over(tok.color(pal, appearance, "materialTint"), tok.tint_alpha(t), wallpaper)
         fill = tok.color(pal, appearance, "fill")
         # Without a fill, and with the fill overlay of a tile or field (materialFillOpacity), worst case of the two.
-        return [base, over(fill, tok.path("material.fillOpacity"), base)]
+        out = [base, over(fill, tok.path("material.fillOpacity"), base)]
+        if pal == "colors" and appearance == "light":
+            # The light control fills (Appearance.chipFill, buttonFill, lightWellFill): white chips and wells, a 6 % grey button.
+            chip = tok.color(pal, appearance, "chipFill")
+            out += [over(chip, tok.path("material.chipFillOpacityLight"), base),
+                    over(fill, tok.path("material.fillOpacityLight"), base),
+                    over(chip, tok.path("material.wellFillOpacityLight"), base)]
+        return out
     if kind == "accent":
         return [tok.color(pal, appearance, "accent")]
     if kind == "selection":
@@ -570,6 +577,100 @@ class ContrastTokens(unittest.TestCase):
         mark = hex_rgb(self.tok.path("menu.swatchMark"))
         for name in ("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"):
             self.assertGreaterEqual(wcag(mark, hex_rgb(self.tok.path("files.tag" + name))), 3.0, name)
+
+
+class WindowSurfacePairs(unittest.TestCase):
+    """Visual audit 2026-10-25 (review of visual-audit-1): every foreground/background pair the opaque-window and Quick Settings
+    changes introduced, in both appearances. `Appearance.windowSecondary` (windowTextSecondary) is for text drawn directly on the
+    window surface or on a Settings group; fields, tabs and chips keep textSecondary on their own fills."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tok = Tokens(load_tokens())
+
+    def window(self, ap):
+        return self.tok.color("colors", ap, "windowBackground")
+
+    def test_window_secondary_text_on_the_window_and_on_a_settings_group(self):
+        for ap in APPEARANCES:
+            fg = self.tok.color("colors", ap, "windowTextSecondary")
+            win = self.window(ap)
+            on_group = self.tok.color("colors", ap, "groupFill")
+            for bg, what in ((win, "the window"), (on_group, "a Settings group")):
+                self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
+                self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
+
+    def test_row_secondary_on_the_hover_fill(self):
+        # Settings device rows (Wi-Fi, Bluetooth, Sound): while hovered, the hover fill sits on the window or on a Settings group.
+        # The window grey is under 4.5:1 there (3.62:1 in light), so DeviceRow switches to textSecondary on hover.
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            on_group = self.tok.color("colors", ap, "groupFill")
+            for base, what in ((win, "the window"), (on_group, "a Settings group")):
+                hov = over(self.tok.color("colors", ap, "hover"), self.tok.path("material.hoverOpacity"), base)
+                r = wcag(self.tok.color("colors", ap, "textSecondary"), hov)
+                self.assertGreaterEqual(r, 4.5, "textSecondary on the hover fill over %s, %s: %.2f:1" % (what, ap, r))
+
+    def test_text_secondary_on_the_fields_and_tabs_of_a_window(self):
+        # The sidebar and toolbar search placeholders, the inactive Files tab titles, a rename field: the translucent fill over the window.
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            fill = over(self.tok.color("colors", ap, "fill"), self.tok.path("material.fillOpacity"), win)
+            fg = self.tok.color("colors", ap, "textSecondary")
+            for bg, what in ((win, "the window"), (fill, "a 0.14 fill")):
+                self.assertGreaterEqual(wcag(fg, bg), 4.5, "textSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
+
+    def test_dark_settings_groups_stay_visible_against_the_window(self):
+        win = self.window("dark")
+        group = self.tok.color("colors", "dark", "groupFill")
+        # ADR-0024 lot 1: macOS 27 groups are #313131 on a #292929 window, a step the eye reads as a surface (1.1:1).
+        self.assertGreaterEqual(wcag(group, win), 1.1, "dark group against the window: %.2f:1" % wcag(group, win))
+
+    def test_toolbar_capsules_and_their_selected_pill(self):
+        # Priority 11: back/forward, the view group and the search capsule are a 6 % grey (light) or 14 % (dark) fill over the window;
+        # the selected view is a lighter pill (white 0.85 in light, the dark fill again in dark). Text and icons on all of them.
+        for ap in APPEARANCES:
+            win = self.window(ap)
+            fillc = self.tok.color("colors", ap, "fill")
+            if ap == "light":
+                group = over(fillc, self.tok.path("material.fillOpacityLight"), win)
+                pill = over(self.tok.color("colors", ap, "chipFill"), self.tok.path("material.chipFillOpacityLight"), group)
+            else:
+                group = over(fillc, self.tok.path("material.fillOpacity"), win)
+                pill = over(fillc, self.tok.path("material.fillOpacity"), group)
+            for bg, what in ((group, "the capsule"), (pill, "the selected pill")):
+                for name in ("text", "textSecondary"):
+                    r = wcag(self.tok.color("colors", ap, name), bg)
+                    self.assertGreaterEqual(r, 4.5, "%s on %s, %s: %.2f:1" % (name, what, ap, r))
+
+    def test_settings_sidebar_surfaces(self):
+        # ADR-0024 lot 1: the flush sidebar (sidebarFill) carries the text, the secondary text and the search placeholder.
+        for ap in APPEARANCES:
+            side = self.tok.color("colors", ap, "sidebarFill")
+            for name in ("text", "textSecondary"):
+                r = wcag(self.tok.color("colors", ap, name), side)
+                self.assertGreaterEqual(r, 4.5, "%s on the sidebar, %s: %.2f:1" % (name, ap, r))
+
+    def test_quick_settings_slider_fill_against_its_track(self):
+        # WCAG 1.4.11: the white fill against the track, and the empty track against the module (1.5:1), every wallpaper colour and
+        # transparency. Light: the shadow colour darkens the module; dark: the fill colour lightens it (a shadow on a dark module is invisible).
+        for ap in APPEARANCES:
+            fill = self.tok.color("colors", ap, "knob")
+            if ap == "light":
+                tc, op = self.tok.color("colors", ap, "shadow"), self.tok.path("quicksettings.sliderTrackOpacity")
+            else:
+                tc, op = self.tok.color("colors", ap, "fill"), self.tok.path("quicksettings.sliderTrackOpacityDark")
+            worst = groove = None
+            for t in TRANSPARENCIES:
+                for wp in WALLPAPER_COLORS:
+                    module = over(self.tok.color("colors", ap, "materialTint"), self.tok.tint_alpha(t), wp)
+                    track = over(tc, op, module)
+                    r = wcag(fill, track)
+                    worst = r if worst is None else min(worst, r)
+                    g = wcag(track, module)
+                    groove = g if groove is None else min(groove, g)
+            self.assertGreaterEqual(worst, 3.0, "slider fill against the track, %s appearance: %.2f:1" % (ap, worst))
+            self.assertGreaterEqual(groove, 1.5, "slider track against the module, %s appearance: %.2f:1" % (ap, groove))
 
 
 if __name__ == "__main__":
