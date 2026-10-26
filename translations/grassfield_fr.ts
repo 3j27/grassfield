@@ -2629,26 +2629,6 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>None</source>
-        <translation>Aucune</translation>
-    </message>
-    <message>
-        <source>Overview</source>
-        <translation>Vue d’ensemble</translation>
-    </message>
-    <message>
-        <source>Notifications</source>
-        <translation>Notifications</translation>
-    </message>
-    <message>
-        <source>Apps</source>
-        <translation>Apps</translation>
-    </message>
-    <message>
-        <source>Lock Screen</source>
-        <translation>Verrouiller l’écran</translation>
-    </message>
-    <message>
         <source>Dock</source>
         <translation>Dock</translation>
     </message>
@@ -2657,32 +2637,8 @@
         <translation>Agrandissement</translation>
     </message>
     <message>
-        <source>Icons grow under the pointer.</source>
-        <translation>Les icônes grossissent sous le pointeur.</translation>
-    </message>
-    <message>
-        <source>Magnification size</source>
-        <translation>Taille de l’agrandissement</translation>
-    </message>
-    <message>
-        <source>%1x</source>
-        <translation>%1x</translation>
-    </message>
-    <message>
-        <source>With Reduce Motion on, windows fade instead.</source>
-        <translation>Avec «&#xa0;Réduire les animations&#xa0;», les fenêtres s’estompent à la place.</translation>
-    </message>
-    <message>
-        <source>Minimize animation</source>
-        <translation>Animation de réduction</translation>
-    </message>
-    <message>
         <source>Size</source>
         <translation>Taille</translation>
-    </message>
-    <message>
-        <source>The size of the icons in the Dock. You can also drag the divider in the Dock.</source>
-        <translation>La taille des icônes du Dock. Vous pouvez aussi faire glisser la séparation dans le Dock.</translation>
     </message>
     <message>
         <source>Small</source>
@@ -2691,14 +2647,6 @@
     <message>
         <source>Large</source>
         <translation>Grand</translation>
-    </message>
-    <message>
-        <source>Position on screen</source>
-        <translation>Position à l’écran</translation>
-    </message>
-    <message>
-        <source>The Dock goes to the edge you choose. With several displays it is on the one where the pointer last reached that edge.</source>
-        <translation>Le Dock se place au bord choisi. Avec plusieurs écrans, il est sur celui où le pointeur a touché ce bord en dernier.</translation>
     </message>
     <message>
         <source>Left</source>
@@ -2713,6 +2661,10 @@
         <translation>Droite</translation>
     </message>
     <message>
+        <source>Minimized window animation</source>
+        <translation>Animation de réduction des fenêtres</translation>
+    </message>
+    <message>
         <source>Funnel</source>
         <translation>Entonnoir</translation>
     </message>
@@ -2721,40 +2673,16 @@
         <translation>Rétrécissement</translation>
     </message>
     <message>
-        <source>Automatically hide the Dock</source>
-        <translation>Masquer automatiquement le Dock</translation>
-    </message>
-    <message>
-        <source>Show recent applications in the Dock</source>
-        <translation>Afficher les applications récentes dans le Dock</translation>
-    </message>
-    <message>
-        <source>Apps you used recently that are not kept in the Dock appear in their own section before the Trash.</source>
-        <translation>Les apps utilisées récemment et non conservées dans le Dock apparaissent dans leur propre section avant la Corbeille.</translation>
-    </message>
-    <message>
         <source>Minimize windows into application icon</source>
         <translation>Réduire les fenêtres dans l’icône de l’application</translation>
-    </message>
-    <message>
-        <source>Off: each minimized window gets its own tile next to the Trash.</source>
-        <translation>Désactivé : chaque fenêtre réduite a sa propre icône près de la Corbeille.</translation>
     </message>
     <message>
         <source>Animate opening applications</source>
         <translation>Animer l’ouverture des applications</translation>
     </message>
     <message>
-        <source>The icon bounces while an application opens.</source>
-        <translation>L’icône rebondit pendant l’ouverture d’une application.</translation>
-    </message>
-    <message>
         <source>Show indicators for open applications</source>
         <translation>Afficher les indicateurs des applications ouvertes</translation>
-    </message>
-    <message>
-        <source>A small dot under the icon of each open application.</source>
-        <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
     </message>
     <message>
         <source>Choose a folder for the Dock</source>
@@ -2785,24 +2713,12 @@
         <translation>Ajouter un dossier…</translation>
     </message>
     <message>
-        <source>Desktop</source>
-        <translation>Bureau</translation>
-    </message>
-    <message>
         <source>Show items on the desktop</source>
         <translation>Afficher les éléments sur le bureau</translation>
     </message>
     <message>
-        <source>Files and folders of the Desktop folder appear on the wallpaper.</source>
-        <translation>Les fichiers et dossiers du dossier Bureau apparaissent sur le fond d’écran.</translation>
-    </message>
-    <message>
         <source>Windows</source>
         <translation>Fenêtres</translation>
-    </message>
-    <message>
-        <source>Double-click a window&apos;s title bar to</source>
-        <translation>Un double-clic sur la barre de titre d’une fenêtre permet de</translation>
     </message>
     <message>
         <source>Zoom</source>
@@ -2819,10 +2735,6 @@
     <message>
         <source>Drag windows to screen edges to tile</source>
         <translation>Faire glisser les fenêtres vers les bords de l’écran pour les disposer en mosaïque</translation>
-    </message>
-    <message>
-        <source>A window dragged to the left or right edge fills that half, to a corner that quarter.</source>
-        <translation>Une fenêtre glissée vers le bord gauche ou droit occupe cette moitié de l’écran, vers un coin ce quart.</translation>
     </message>
     <message>
         <source>Drag windows to menu bar to fill screen</source>
@@ -2845,6 +2757,38 @@
         <translation>Stages</translation>
     </message>
     <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Dock position on screen</source>
+        <translation>Position du Dock à l’écran</translation>
+    </message>
+    <message>
+        <source>Window title bar double-click action</source>
+        <translation>Action du double-clic sur la barre de titre</translation>
+    </message>
+    <message>
+        <source>Automatically hide and show the Dock</source>
+        <translation>Masquer et afficher automatiquement le Dock</translation>
+    </message>
+    <message>
+        <source>Show recent apps in Dock</source>
+        <translation>Afficher les apps récentes dans le Dock</translation>
+    </message>
+    <message>
+        <source>Desktop &amp; Stages</source>
+        <translation>Bureau et Stages</translation>
+    </message>
+    <message>
+        <source>Show items</source>
+        <translation>Afficher les éléments</translation>
+    </message>
+    <message>
+        <source>On Desktop</source>
+        <translation>Sur le bureau</translation>
+    </message>
+    <message>
         <source>Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.</source>
         <translation>Nécessite l’extension de compositeur Grassfield. L’interrupteur Stages est aussi dans les Réglages rapides.</translation>
     </message>
@@ -2853,44 +2797,8 @@
         <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
     </message>
     <message>
-        <source>Screen Corners</source>
-        <translation>Coins de l’écran</translation>
-    </message>
-    <message>
-        <source>Move the pointer into a screen corner to run the action.</source>
-        <translation>Placez le pointeur dans un coin de l’écran pour lancer l’action.</translation>
-    </message>
-    <message>
-        <source>Top left</source>
-        <translation>En haut à gauche</translation>
-    </message>
-    <message>
-        <source>Top left corner</source>
-        <translation>Coin supérieur gauche</translation>
-    </message>
-    <message>
-        <source>Top right</source>
-        <translation>En haut à droite</translation>
-    </message>
-    <message>
-        <source>Top right corner</source>
-        <translation>Coin supérieur droit</translation>
-    </message>
-    <message>
-        <source>Bottom left</source>
-        <translation>En bas à gauche</translation>
-    </message>
-    <message>
-        <source>Bottom left corner</source>
-        <translation>Coin inférieur gauche</translation>
-    </message>
-    <message>
-        <source>Bottom right</source>
-        <translation>En bas à droite</translation>
-    </message>
-    <message>
-        <source>Bottom right corner</source>
-        <translation>Coin inférieur droit</translation>
+        <source>Screen Corners…</source>
+        <translation>Coins de l’écran…</translation>
     </message>
 </context>
 <context>
@@ -6015,6 +5923,53 @@
     <message>
         <source>rfkill is not writable by this session</source>
         <translation>rfkill n’est pas accessible en écriture pour cette session</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenCornersSheet</name>
+    <message>
+        <source>Screen Corners</source>
+        <translation>Coins de l’écran</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Overview</source>
+        <translation>Vue d’ensemble</translation>
+    </message>
+    <message>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
+    </message>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
+        <source>Lock Screen</source>
+        <translation>Verrouiller l’écran</translation>
+    </message>
+    <message>
+        <source>Top left corner</source>
+        <translation>Coin supérieur gauche</translation>
+    </message>
+    <message>
+        <source>Top right corner</source>
+        <translation>Coin supérieur droit</translation>
+    </message>
+    <message>
+        <source>Bottom left corner</source>
+        <translation>Coin inférieur gauche</translation>
+    </message>
+    <message>
+        <source>Bottom right corner</source>
+        <translation>Coin inférieur droit</translation>
     </message>
 </context>
 <context>

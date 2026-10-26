@@ -26,6 +26,8 @@ T.Control {
     property int stops: 0
     // Dots under the track at this many even places without stepping (macOS 27 Appearance's glass slider: one at each end).
     property int ticks: 0
+    // Dots under the track at these values instead (macOS 27 Dock Magnification: Small near the start, Large at the end).
+    property var tickValues: []
 
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
@@ -37,6 +39,13 @@ T.Control {
     onValueChanged: local = NaN
 
     readonly property real position: to > from ? Math.max(0, Math.min(1, (shown - from) / (to - from))) : 0
+    // Where the dots are, 0 to 1 along the knob's travel: the stops, the even ticks or the tick values.
+    readonly property var dots: {
+        const n = root.stops > 1 ? root.stops : root.ticks;
+        if (n > 1)
+            return Array.from({length: n}, (_, i) => i / (n - 1));
+        return to > from ? root.tickValues.map(v => Math.max(0, Math.min(1, (v - from) / (to - from)))) : [];
+    }
     readonly property real knobWidth: knobless ? 0 : Tokens.controlSliderKnobWidth
     readonly property real travel: Math.max(0, width - knobWidth)
 
@@ -108,6 +117,8 @@ T.Control {
         color: root.knobless ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.quicksettingsSliderTrackOpacityDark) : Appearance.withAlpha(Appearance.colors.shadow, Tokens.quicksettingsSliderTrackOpacity)) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Rectangle {
+            // At the start the knob covers the fill; its round end would show a sliver of it (macOS 27 Magnification Off: none).
+            visible: root.knobless || root.position > 0
             width: root.knobless ? Math.max(parent.height, root.position * root.travel) : root.knobWidth / 2 + root.position * root.travel
             height: parent.height
             radius: height / 2
@@ -121,12 +132,12 @@ T.Control {
     }
 
     Repeater {
-        model: root.stops > 1 ? root.stops : (root.ticks > 1 ? root.ticks : 0)
+        model: root.dots
 
         delegate: Rectangle {
             id: dot
-            required property int index
-            x: root.knobWidth / 2 + dot.index / ((root.stops > 1 ? root.stops : root.ticks) - 1) * root.travel - dot.width / 2
+            required property real modelData
+            x: root.knobWidth / 2 + dot.modelData * root.travel - dot.width / 2
             y: root.height / 2 + Tokens.controlSliderStopOffset - dot.height / 2
             width: Tokens.controlSliderStopSize
             height: dot.width

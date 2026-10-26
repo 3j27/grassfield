@@ -607,6 +607,12 @@ QtObject {
     readonly property int controlCheckSize: 14
     // GF-085: check box corner radius [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckRadius: 4
+    // macOS 27 Settings check box (Desktop & Dock, Show items): 16 x 16 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int controlCheckBoxSize: 16
+    // macOS 27: a check box's name 5.5 after its box [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real controlCheckBoxGap: 5.5
+    // macOS 27: the end of one check box's name to the next box in a row [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real controlCheckBoxSpacing: 16.5
     // GF-085: text field and search field height, 22 as the AppKit control [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlFieldHeight: 22
     // GF-085: stepper arrows column width [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
@@ -1178,6 +1184,28 @@ QtObject {
     readonly property real settingsWallpaperAddIconTop: 7.5
     // macOS 27: the tile's name, its baseline below the tile's top [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
     readonly property real settingsWallpaperAddLabelBaseline: 58.5
+    // macOS 27: the group of the Size and Magnification sliders [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockSlidersHeight: 69
+    // macOS 27: a slider's title, its baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockSliderTitleBaseline: 22.5
+    // macOS 27: the sliders' tracks centred this far under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockSliderCenter: 36
+    // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockSliderLabelBaseline: 56.5
+    // macOS 27: the Size slider (262-462) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockSizeSliderWidth: 200
+    // macOS 27: the Magnification slider from the group's left edge (490); it runs to 10 from the right edge [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockMagnificationX: 238
+    // macOS 27: the Magnification slider's Small tick, this fraction of the knob's travel (525 on 500-700) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockMagnificationSmallAt: 0.125
+    // Grassfield: the magnification at the Small tick (macOS gives no number; the schema's 1.0 does not grow); Large is the schema's 2.5 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockMagnificationSmall: 1.2
+    // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): the screen's picture, 16:10 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsScreenCornersPictureWidth: 200
+    // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): the screen's picture, 16:10 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsScreenCornersPictureHeight: 125
+    // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): as the Wallpaper preview [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsScreenCornersPictureRadius: 6
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]

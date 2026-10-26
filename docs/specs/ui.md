@@ -145,7 +145,7 @@ Every Grassfield control is built on `QtQuick.Templates` (keyboard, focus, hover
 |---|---|---|
 | `Button` | Button | primary / destructive / capsule / push; `activate()` guard (hidden or disabled never acts; Return, Enter, Space; AT press) |
 | `ToolButton` | ToolButton | `iconName`, any child glyph (centred), `text`; `radio` = one choice of a group (autoExclusive, role RadioButton) else a toggle (CheckBox); `capsule`; `accessibleName`; never takes the focus (not by a click, not by Tab: macOS toolbar buttons are outside the Tab chain without Full Keyboard Access), so Space still goes to the view |
-| `CheckBox`, `RadioButton`, `Switch` | same | 14 px box / disc; the control toggles itself; Return does not toggle |
+| `CheckBox`, `RadioButton`, `Switch` | same | 16-pt check box (macOS 27 Settings, its name 5.5 after it), 14 px radio disc; the control toggles itself; Return does not toggle |
 | `Toggle`, `Slider` | Control | host-driven values (`checked` / `value` are inputs, `toggled(bool)` / `moved(real)` report): the 29 / 12 existing call sites and Quick Settings rely on it, so they keep their API on a Control base |
 | `TextField`, `SearchField` | TextField | 22 px, I-beam, accent selection; white with a fine border in the light appearance, a translucent fill in the dark one (`fieldRadius`, `fieldColor`, `fieldBorder`); SearchField: a capsule with a light fill, search glyph, clear button, Escape clears first |
 | `SpinBox` | SpinBox | field plus up/down stepper, Page keys step by ten |

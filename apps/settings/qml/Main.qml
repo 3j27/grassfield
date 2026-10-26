@@ -889,6 +889,7 @@ Window {
         id: desktopPage
         DesktopPage {
             store: cfg
+            onScreenCornersRequested: screenCornersSheet.open()
         }
     }
 
@@ -1065,6 +1066,12 @@ Window {
     // Menu Bar > Clock Options…: a sheet over the whole window.
     ClockOptionsSheet {
         id: clockSheet
+        store: cfg
+    }
+
+    // Desktop & Dock > Screen Corners…
+    ScreenCornersSheet {
+        id: screenCornersSheet
         store: cfg
     }
 }
