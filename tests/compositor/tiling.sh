@@ -70,6 +70,23 @@ check() {
 
 nestctl -j grassfield 2>/dev/null | jq -e '.features | index("window-tiling")' >/dev/null 2>&1 || { say "SKIP: the plugin does not advertise window-tiling (load this tree's plugin)"; exit 2; }
 
+# A settled session before the first case (at most 20 s): the shell's menu bar mapped on GF-REF, and GF-REF's reserved
+# area and active Desktop unchanged for 1 s. Started right after nested-up, the run read the free area before the shell
+# reserved its zones and found GF-REF on another Desktop than the window (integrator nested pass of 426a676). The Dock is
+# not waited for: with two outputs it lives on the one whose edge the pointer last reached.
+settle_state() { nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | "reserved \(.reserved) desktop \(.activeWorkspace.id)"'; }
+menubar_on_out() { nestctl layers -j 2>/dev/null | jq -e --arg o "$out" '[.[$o] | .. | objects | select(.namespace? == "grassfield-menubar")] | length > 0' >/dev/null 2>&1; }
+prev="" same=0 bar=0
+for _ in $(seq 1 80); do
+  menubar_on_out && bar=1
+  cur=$(settle_state)
+  if [[ $cur == "$prev" ]]; then same=$((same + 1)); else same=0; prev=$cur; fi
+  ((bar && same >= 4)) && break
+  sleep 0.25
+done
+((bar)) && say "settled: the menu bar is mapped on $out, its reserved area and Desktop stable (${prev:-?})" ||
+  say "note: no menu bar on $out after 20 s (no shell?): running without it"
+
 read -r mx my mw mh rtop rbottom < <(nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height) \(.reserved[1]) \(.reserved[3])"')
 # Free area of any output: "x y w h" (reserved = [left, top, right, bottom]).
 area_of() { nestctl monitors -j | jq -r --arg o "$1" '.[] | select(.name == $o) | "\(.x + .reserved[0]) \(.y + .reserved[1]) \(.width - .reserved[0] - .reserved[2]) \(.height - .reserved[1] - .reserved[3])"'; }
@@ -122,14 +139,6 @@ area_now() {
     left) tx=$((ax + m)) ;;
   esac
 }
-# Wait until the reserved area has not changed for 1 s (at most 10 s): the shell's menu bar and Dock claim their zones.
-prev="" same=0
-for _ in $(seq 1 40); do
-  cur=$(area_of "$out")
-  if [[ $cur == "$prev" ]]; then same=$((same + 1)); else same=0; prev=$cur; fi
-  ((same >= 4)) && break
-  sleep 0.25
-done
 area_now
 say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 

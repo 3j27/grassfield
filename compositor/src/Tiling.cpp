@@ -847,8 +847,13 @@ namespace gf::tiler {
         const auto first     = windows.front();
         const auto workspace = first->m_workspace;
         const auto m         = request->output.empty() ? monitorOf(first) : monitorByName(request->output);
-        if (!m || m->m_activeWorkspace != workspace) {
-            refuse("the output is unknown or does not show the first window's Desktop");
+        if (!m) {
+            refuse("the output is unknown");
+            return;
+        }
+        if (m->m_activeWorkspace != workspace) {
+            refuse(std::format("{} shows Desktop {}, the first window is on Desktop {}", m->m_name, m->m_activeWorkspace ? m->m_activeWorkspace->m_name : "none",
+                               workspace ? workspace->m_name : "none"));
             return;
         }
         for (const auto& w : windows) {
