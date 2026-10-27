@@ -288,6 +288,9 @@ package_grassfield-desktop() {
     "$pkgdir/usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf"
   install -Dm644 "$root/packaging/xdg/xdg-desktop-portal/portals/grassfield-settings.portal" \
     "$pkgdir/usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield-settings.portal"
+  # The portal frontend starts after the Settings backend in the Grassfield session (its proxy is made once, at its start).
+  install -Dm644 "$root/packaging/systemd/xdg-desktop-portal.service.d/10-grassfield.conf" \
+    "$pkgdir/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf"
   install -Dm644 "$root/packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield_settings.service" \
     "$pkgdir/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.grassfield_settings.service"
   # The GTK themes: /usr/share/themes/Grassfield-<accent>[-hc][-dark] (named by the portal backend for GTK 3 and GTK 4).

@@ -19,6 +19,8 @@
 #    new process signals the next change; killed again, a change made while it is down reaches the client as soon as it is
 #    started again without any read (as systemd's Restart=on-failure starts it)
 #  4 without the backend, the frontend answers from gtk alone, at once
+#  4b a backend whose activation fails when the frontend starts is left out for the frontend's whole life, even once it
+#    runs (xdg-desktop-portal 1.22.1 makes its proxies once): why the frontend's unit starts after it (decision 2b-14)
 #  5 the backend starts, owning its name, with GTK_USE_PORTAL=1, QT_QPA_PLATFORMTHEME=gtk3 and a frontend that never answers
 #  6 refused outside a Grassfield session, and as a dev run on a bus that is not a private test bus
 #  7 on a headless Wayland compositor (Weston), with the variables env-grassfield sets: a GTK 3 app, a GTK 4 app and a
@@ -93,13 +95,14 @@ check test "$(envof "" twice "events" | cut -d'|' -f3)" = "events,portals"
 desc="env-grassfield records GRASSFIELD_APPS_GTK_USE_PORTAL=1 for the shell, and the shell gives GTK_USE_PORTAL back to every app it starts (Settings and Glance included)"
 check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; echo \"\${GRASSFIELD_APPS_GTK_USE_PORTAL-unset}\"" _ "$1") == 1 ]] &&
   ! grep -q GRASSFIELD_APPS_GTK_USE_PORTAL "$2" &&
-  grep -qF "AppLaunch.portalEnvironment(Quickshell.env(\"GRASSFIELD_APPS_GTK_USE_PORTAL\"))" "$3" &&
+  grep -qF "AppLaunch.portalEnvironment(Mode.appsGtkPortal)" "$3" &&
+  grep -qF "readonly property bool appsGtkPortal: RunMode.appsGtkPortal(Quickshell.env(\"GRASSFIELD_APPS_GTK_USE_PORTAL\"))" "$5" &&
   grep -qF "AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), portalEnvironment)" "$3" &&
   grep -qF "AppLaunch.mergeEnvironment(portalEnvironment, Pointer.launchEnvironment())" "$3" &&
   grep -qF "launcher.environment = Apps.ownAppEnvironment();" "$4/SettingsApp.qml" &&
   grep -qF "launcher.environment = Apps.ownAppEnvironment();" "$4/GlanceApp.qml" &&
   ! grep -rn "environment = Pointer.launchEnvironment()" "$4/.."' _ \
-  "$tmp/env" "$pk/systemd/grassfield-shell.service" "$root/shell/services/Apps.qml" "$root/shell/services"
+  "$tmp/env" "$pk/systemd/grassfield-shell.service" "$root/shell/services/Apps.qml" "$root/shell/services" "$root/shell/lib/Mode.qml"
 
 # --- runtime -----------------------------------------------------------------------------------------------------------
 frontend=/usr/lib/xdg-desktop-portal
@@ -159,7 +162,7 @@ settings() { # settings <dir> <json>: grassfield.json, replaced atomically as th
 }
 # One scenario: a fresh bus whose service directory starts the Grassfield backend (when GRASSFIELD is yes) and the gtk
 # stand-in on demand, then the real frontend. Sets d.
-scenario() { # scenario <name> <yes|no>
+scenario() { # scenario <name> <yes|no|broken>: broken = the backend's activation fails when the frontend starts
   d=$tmp/$1
   mkdir -p "$d/services" "$d/config" "$d/home" "$d/run" "$d/cfg" "$d/xdg"
   chmod 700 "$d/run"
@@ -167,10 +170,11 @@ scenario() { # scenario <name> <yes|no>
   printf '#!/bin/sh\necho $$ >%s/gtk.pid\nexport GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)"\nexec python3 -I %s gtk --log %s/gtk.log\n' \
     "$d" "$d" "$d" "$fakes" "$d" >"$d/gtk.sh"
   printf '[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.gtk\nExec=%s/gtk.sh\n' "$d" >"$d/services/gtk.service"
-  if [[ $2 == yes ]]; then
+  if [[ $2 != no ]]; then
     printf '#!/bin/sh\necho started >>%s/backend.starts\necho $$ >%s/backend.pid\nexec env -i PATH="$PATH" HOME=%s/home DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)" GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s GRASSFIELD_DEV=1 GRASSFIELD_CONFIG_HOME=%s/config GRASSFIELD_PORTAL_SETTINGS_CLOCK=12:00 %s\n' \
       "$d" "$d" "$d" "$d" "$d" "$d" "$backend" >"$d/backend.sh"
     printf '[D-BUS Service]\nName=%s\nExec=%s/backend.sh\n' "$name" "$d" >"$d/services/grassfield.service"
+    [[ $2 == broken ]] && printf '[D-BUS Service]\nName=%s\nExec=/bin/false\n' "$name" >"$d/services/grassfield.service"
   fi
   chmod 755 "$d"/*.sh
   settings "$d" '{"appearance": "dark"}'
@@ -288,6 +292,28 @@ ms=$((($(date +%s%N) - start) / 1000000))
 desc="4 without the backend the frontend answers from gtk alone, at once [$theme, $ms ms]"
 check bash -c '[[ $1 == "\"Adwaita-dark\"" && $2 -lt 3000 ]]' _ "$theme" "$ms"
 stop_bus
+
+# 4b -------------------------------------------------------------------------------------------------------------------
+scenario late broken || exit 1
+first=$(call read-one org.gnome.desktop.interface gtk-theme)
+# The backend can start now (its service file fixed, the bus told), and does.
+printf '[D-BUS Service]\nName=%s\nExec=%s/backend.sh\n' "$name" "$d" >"$d/services/grassfield.service"
+DBUS_SESSION_BUS_ADDRESS=$bus python3 -I -c '
+from gi.repository import Gio
+Gio.bus_get_sync(Gio.BusType.SESSION).call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+    "ReloadConfig", None, None, Gio.DBusCallFlags.NONE, 5000, None)'
+start_service "$name"
+wait_until 5 owned "$name"
+later=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4b a backend not there when the frontend starts is left out for good, even once it runs [$first, then $later, owned $(has "$name"); $(grep -c 'Failed to create settings proxy' "$d/frontend.log") proxy failure]"
+check bash -c '[[ $1 == "\"Adwaita-dark\"" && $2 == "\"Adwaita-dark\"" && $3 == True && $4 -ge 1 ]]' _ "$first" "$later" "$(has "$name")" \
+  "$(grep -c 'Failed to create settings proxy' "$d/frontend.log")"
+kill_backend
+stop_bus
+desc="4b ... so the frontend's unit wants the backend and starts after it (packaged drop-in), and the backend has no Requisite= that could fail first"
+check bash -c 'grep -qx "Wants=grassfield-portal-settings.service" "$1" && grep -qx "After=grassfield-portal-settings.service" "$1" &&
+  ! grep -q "^Requisite=" "$2" && grep -q "usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf" "$3"' _ \
+  "$pk/systemd/xdg-desktop-portal.service.d/10-grassfield.conf" "$unit" "$pk/arch/PKGBUILD"
 
 # 5 --------------------------------------------------------------------------------------------------------------------
 d=$tmp/silent

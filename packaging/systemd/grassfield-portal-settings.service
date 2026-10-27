@@ -7,11 +7,11 @@ Description=Grassfield: the appearance for other toolkits (Settings portal backe
 Documentation=file:///usr/share/doc/grassfield/README.md
 PartOf=graphical-session.target
 After=graphical-session.target
-# Never outside the running graphical session: a D-Bus activation during or after a logout starts nothing.
-Requisite=graphical-session.target
 ConditionEnvironment=GRASSFIELD_SESSION=1
 # A backend that keeps failing stops after 5 starts in a minute; the frontend then answers from x-d-p-gtk alone, and a read
-# after that minute (D-Bus activation) or the next login starts it again.
+# after that minute starts it again through the frontend's proxy (D-Bus activation), or the next login does. The frontend
+# itself wants this unit and starts after it (xdg-desktop-portal.service.d/10-grassfield.conf): it creates its proxy for
+# each backend only when it starts, and leaves out one that is not there then.
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
