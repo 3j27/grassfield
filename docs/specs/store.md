@@ -1,8 +1,8 @@
 # Store spec · apps-engineer (app), platform-engineer (sources, install path) · owner brief 2026-10-27
 Status: step 0 (this spec, ADR-0037 and the parity matrix). Nothing is built. The owner answered ADR-0037 ST1 (§4 amended),
 ST2 (AUR opt-in, Flathub optional), ST3 (the sheet alone for per-user installs) and ST8 (the only Dock badge stays on
-Settings) on 2026-10-27; the choices still open (ST5, ST6, ST7, ST9) are marked **open**; the install path waits for
-ADR-0033's PASS (ST4).
+Settings) on 2026-10-27; the choices still open (ST5, ST6, ST7, ST9) are marked **open**. The install path is P1, Omarchy's
+commands in its floating terminal (ST4: the path ADR-0033 keeps, ADR-0033 having passed and been merged).
 Decisions and evidence: `docs/decisions/ADR-0037-store.md` (probes S0 to S11). Parity and measures:
 `docs/audits/store-2026-10-27/parity.md`. App id `org.grassfield.Store`, binary `grassfield-store`, package `grassfield-store`.
 Name: "Grassfield Store" in both languages (a product name, like other stores in French). Never "App Store" or "Arcade" (§14).
@@ -104,7 +104,7 @@ Get, Open, Uninstall (step 3; the path is ADR-0037 ST4)
   « Les paquets de l'AUR sont faits par des utilisateurs et ne sont vérifiés par personne, ni Arch Linux ni Grassfield. Leur
   script de construction s'exécute sur cet ordinateur, puis le paquet est installé avec les droits d'administrateur.
   N'installez que ce en quoi vous avez confiance. »
-- SR17. The authentication is the path's: sudo's prompt in Omarchy's terminal (P1) or the polkit dialog (P2). Per-user installs
+- SR17. The authentication is sudo's prompt in Omarchy's terminal (P1, ST4). Per-user installs
   (web apps, Flatpaks): the sheet alone, its default button being the consent; no password (owner, ST3, 2026-10-27).
 - SR18. One operation at a time; later ones wait in the queue (shown on their buttons and in a queue popover in the toolbar,
   where a waiting one can be removed). The running one shows progress: indeterminate while downloading, then "n of N" from
@@ -235,7 +235,7 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
 | A10 | F1 geometry and tints against the parity matrix | measurement script on the captures | L1 |
 | A11 | keyboard paths and accessible names | QML tests + checklist | L0/L1 |
-| A12 | the real sudo prompt or polkit dialog, the terminal, an interrupted install, the badge | owner, real session | L2 |
+| A12 | the real sudo prompt in Omarchy's terminal, an interrupted install, the absence of a Store badge | owner, real session | L2 |
 
 ## Interfaces / contracts (versions)
 - Catalog `grassfield-catalog.v1.json` + `.sig` + `catalog/<sha256>.png` (ADR-0037 g; the contract with grassfield-packages).
