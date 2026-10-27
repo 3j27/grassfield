@@ -19,6 +19,15 @@ TestCase {
         compare(DisplaysFile.statePath(false, "", ""), "");
     }
 
+    function test_same() {
+        const a = DisplaysFile.payload([{name: "eDP-1"}], null, null);
+        verify(!DisplaysFile.same("", a), "nothing written yet: write");
+        verify(!DisplaysFile.same(undefined, a));
+        verify(DisplaysFile.same(a, DisplaysFile.payload([{name: "eDP-1"}], null, null)), "the same description is not written again");
+        verify(!DisplaysFile.same(a, DisplaysFile.payload([{name: "eDP-1"}, {name: "DP-2"}], null, null)), "a new monitor is");
+        verify(!DisplaysFile.same(a, DisplaysFile.payload([{name: "eDP-1"}], null, {id: "a1", state: "applying"})), "a trial state is");
+    }
+
     function test_payload() {
         const ipc = {name: "eDP-1", description: "BOE 0x0BCA", make: "BOE", model: "0x0BCA", serial: "", width: 2880, height: 1800,
             physicalWidth: 300, physicalHeight: 190, refreshRate: 120.0, x: 0, y: 0, scale: 1.6, transform: 0, disabled: false, focused: true,
