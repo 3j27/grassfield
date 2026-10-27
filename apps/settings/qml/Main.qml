@@ -1237,4 +1237,26 @@ Window {
         id: screenCornersSheet
         store: cfg
     }
+
+    // Every sheet of the window. Each gives the keyboard focus back, when it closes, to what had it as the sheet appeared (the
+    // page's button that opened it; Sheet.open shows the sheet before it moves the focus into its panel): focusBack.
+    readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
+        displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
+        volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, screenSaverSheet, lockMessageSheet,
+        batteryOptionsSheet, screenCornersSheet]
+
+    Instantiator {
+        model: root.sheets
+
+        delegate: Connections {
+            id: opener
+            required property Sheet modelData
+            target: opener.modelData
+
+            function onShownChanged(): void {
+                if (opener.modelData.shown)
+                    opener.modelData.focusBack = root.activeFocusItem;
+            }
+        }
+    }
 }
