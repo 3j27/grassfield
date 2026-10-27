@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../apps/settings/qml/Displays.js" as Displays
 import "../../apps/settings/qml/System.js" as System
 import "../../apps/settings/qml" as SettingsQml
@@ -256,6 +257,84 @@ TestCase {
         verify(dev.service.dev);
         compare(dev.service.act("brightness", System.setBrightness("intel_backlight", 0.3), "display.brightness"), false);
         compare(dev.backend.actions.length, 0);
+    }
+
+    function find(item, pred) {
+        if (!item)
+            return null;
+        if (pred(item))
+            return item;
+        const kids = item.children || [];
+        for (let i = 0; i < kids.length; i++) {
+            const hit = find(kids[i], pred);
+            if (hit)
+                return hit;
+        }
+        if (item.contentItem && item.contentItem !== item) {
+            const hit = find(item.contentItem, pred);
+            if (hit)
+                return hit;
+        }
+        return null;
+    }
+
+    // A drag keeps its own value (as Sound's volume does): a reading taken meanwhile does not move the knob back; the next does.
+    function test_page_brightnessHoldsWhileDragging() {
+        const t = makePage(false, [panelIpc]);
+        compare(t.page.backlight.level, 0.5);
+        const row = find(t.page, i => i.title === "Brightness" && i.busy !== undefined);
+        verify(row);
+        const slider = find(row, i => i.moved !== undefined && i.local !== undefined);
+        verify(slider);
+        slider.local = 0.8;
+        slider.moved(0.8);
+        compare(t.backend.actions, [["brightnessctl", "-q", "-d", "intel_backlight", "set", "80%"]]);
+        verify(row.busy);
+        // The shell's state still says the old level while the drag goes on.
+        const j = JSON.parse(t.backend.stateText);
+        j.backlight.level = 0.45;
+        t.backend.stateText = JSON.stringify(j);
+        t.page.refresh();
+        compare(t.page.backlight.level, 0.5, "the drag's reading is kept");
+        compare(slider.shown, 0.8, "the knob stays under the pointer");
+        // Once the drag is applied, the next reading follows.
+        tryVerify(() => !row.busy);
+        j.backlight.level = 0.8;
+        t.backend.stateText = JSON.stringify(j);
+        t.page.refresh();
+        compare(t.page.backlight.level, 0.8);
+        compare(slider.shown, 0.8);
+    }
+
+    // The choice in use keeps its accent ring; the keyboard's focus is a ring of its own outside it.
+    function test_resolutionChoiceFocusRing() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/ResolutionChoices.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const choices = createTemporaryObject(comp, testCase, {width: 468, current: 1,
+            choices: [{scale: 2.5, width: 1152, height: 720, isDefault: false}, {scale: 2, width: 1440, height: 900, isDefault: true},
+                {scale: 1.6, width: 1800, height: 1125, isDefault: false}]});
+        const cells = choices.children.filter(c => c.inUse !== undefined);
+        compare(cells.length, 3);
+        const rings = cell => cell.children.filter(r => r.border !== undefined && r.color.a === 0 && r.border.width > 1);
+        const inUse = cells[1];
+        compare(rings(inUse).length, 2);
+        const focus = rings(inUse).find(r => r.border.width === Tokens.controlFocusOutline);
+        const accent = rings(inUse).find(r => r.border.width === Tokens.settingsDisplayChoiceRing);
+        verify(focus && accent);
+        verify(accent.visible && !focus.visible);
+        verify(Qt.colorEqual(accent.border.color, Appearance.colors.accent));
+        inUse.forceActiveFocus(Qt.TabFocusReason);
+        verify(accent.visible && focus.visible, "both: in use and focused");
+        verify(Qt.colorEqual(focus.border.color, Appearance.focusRingColor));
+        // Outside the accent ring, set off from it.
+        compare(accent.x - focus.x, Tokens.iconModePreviewFocusGap + Tokens.controlFocusOutline);
+        compare(focus.width - accent.width, 2 * (Tokens.iconModePreviewFocusGap + Tokens.controlFocusOutline));
+        // Another choice with the focus: its focus ring only.
+        cells[2].forceActiveFocus(Qt.TabFocusReason);
+        verify(!focus.visible && accent.visible);
+        const other = rings(cells[2]);
+        verify(other.find(r => r.border.width === Tokens.controlFocusOutline).visible);
+        verify(!other.find(r => r.border.width === Tokens.settingsDisplayChoiceRing).visible);
     }
 
     readonly property var panel: ({name: "eDP-1", description: "BOE 0x0BCA", make: "BOE", model: "0x0BCA", width: 2880, height: 1800,

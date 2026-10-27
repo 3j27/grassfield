@@ -79,9 +79,26 @@ Item {
                 }
             }
 
+            // The keyboard focus: outside the in-use ring, set off from it, in the focus colour (as ChoicePicker draws it), so
+            // the choice in use shows both rings when it has the focus.
             Rectangle {
-                visible: cellItem.inUse || cellItem.activeFocus
-                // 1 outside the picture, the rest over its edge.
+                id: focusRing
+                readonly property real out: 1 + Tokens.iconModePreviewFocusGap + Tokens.controlFocusOutline
+                visible: cellItem.activeFocus
+                x: picture.x - focusRing.out
+                y: picture.y - focusRing.out
+                width: picture.width + 2 * focusRing.out
+                height: width
+                radius: Tokens.settingsDisplayChoiceRadius + focusRing.out
+                color: "transparent"
+                border.width: Tokens.controlFocusOutline
+                border.color: Appearance.focusRingColor
+            }
+
+            // The choice in use: ringed in the accent, 1 outside the picture, the rest over its edge.
+            Rectangle {
+                id: inUseRing
+                visible: cellItem.inUse
                 x: picture.x - 1
                 y: picture.y - 1
                 width: picture.width + 2
@@ -89,7 +106,7 @@ Item {
                 radius: Tokens.settingsDisplayChoiceRadius + 1
                 color: "transparent"
                 border.width: Tokens.settingsDisplayChoiceRing
-                border.color: cellItem.inUse ? Appearance.colors.accent : Appearance.focusRingColor
+                border.color: Appearance.colors.accent
             }
 
             // A window: its controls and lines of text, larger for larger text.
