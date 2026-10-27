@@ -6,6 +6,7 @@
 #include <QRandomGenerator>
 #include <QSaveFile>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <ctime>
@@ -22,7 +23,8 @@ namespace
 constexpr int kReadDeadlineMs = 2000;
 constexpr int kExpiryMs = 60 * 1000;
 constexpr int kMaxWriters = 16;
-constexpr int kWriterDeadlineMs = 2000;
+// A reader that takes nothing for this long loses its answer; one that keeps reading, however slowly, gets all of it.
+constexpr int kWriterIdleMs = 2000;
 constexpr int kPreviewTextChars = 64 * 1024;
 // New copies' images waiting for the worker (each up to 16 MiB in memory): past this, a new image is not recorded.
 constexpr int kMaxWaitingImages = 4;
@@ -62,7 +64,8 @@ struct Helper::Pending {
     qint64 cap = 0;
 };
 
-// One answer to a `send` of our source: the bytes go out as the reader takes them, never blocking the helper, within 2 s.
+// One answer to a `send` of our source: the bytes go out as the reader takes them, never blocking the helper; closed when the
+// reader takes nothing for 2 s.
 struct Helper::Writer {
     int fd = -1;
     QByteArray bytes;
@@ -476,7 +479,9 @@ void Helper::queueNewImage(const Item &item)
         log("not recorded: too many images waiting for the image worker");
         return;
     }
-    m_imageQueue << ImageJob{item.id, true, item};
+    // A new copy goes before every stored thumbnail (up to 150 of them at start), after the new copies already waiting.
+    const auto firstStored = std::find_if(m_imageQueue.begin(), m_imageQueue.end(), [](const ImageJob &job) { return !job.fresh; });
+    m_imageQueue.insert(firstStored, ImageJob{item.id, true, item});
     nextThumbnail();
 }
 
@@ -775,24 +780,29 @@ void Helper::send(const QByteArray &mime, int fd)
     w->deadline = new QTimer(this);
     w->deadline->setSingleShot(true);
     m_writers << w;
-    // A reader that stops reading never holds a writer (one of kMaxWriters) longer than this.
+    // A reader that stops reading never holds a writer (one of kMaxWriters): 2 s without progress closes it.
     connect(w->deadline, &QTimer::timeout, this, [this, w] { closeWriter(w); });
     connect(w->notifier, &QSocketNotifier::activated, this, [this, w] {
+        bool progressed = false;
         while (w->written < w->bytes.size()) {
             const ssize_t n = ::write(w->fd, w->bytes.constData() + w->written, size_t(w->bytes.size() - w->written));
             if (n > 0) {
                 w->written += n;
+                progressed = true;
                 continue;
             }
             if (n < 0 && errno == EINTR)
                 continue;
-            if (n < 0 && errno == EAGAIN)
+            if (n < 0 && errno == EAGAIN) {
+                if (progressed)
+                    w->deadline->start(kWriterIdleMs);
                 return;
+            }
             break; // the reader went away
         }
         closeWriter(w);
     });
-    w->deadline->start(kWriterDeadlineMs);
+    w->deadline->start(kWriterIdleMs);
 }
 
 void Helper::closeWriter(Writer *w)

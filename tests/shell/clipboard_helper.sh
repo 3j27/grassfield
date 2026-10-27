@@ -314,6 +314,14 @@ if [[ $closed == STALL_CLOSED* ]] && ((ms >= 1500 && ms <= 4000)); then
 else
   bad "stalled writer: [$closed]"
 fi
+# A reader that keeps reading, however slowly, gets the whole answer: the 2 s limit counts time without progress, not the total.
+# 8 KiB every 250 ms: the helper is still writing about 4 s after the request (the pipe holds 64 KiB of the 200,000 bytes).
+start_ms=$(date +%s%3N)
+srv main "PASTE text/plain;charset=utf-8 $tmp/slow.txt 8192 250"
+waitline "$tmp/main.out" '^PASTED text/plain;charset=utf-8 200000$' 15 >/dev/null
+took=$(($(date +%s%3N) - start_ms))
+check "a slow reader that keeps reading gets all 200,000 bytes" 200000 "$(stat -c %s "$tmp/slow.txt" 2>/dev/null)"
+if ((took > 4000)); then pass "...with the helper writing well past 2 s ($took ms in all)"; else bad "the slow paste took $took ms: the case needs the writes to last past 2 s"; fi
 
 # --- 10. Search, pins, stores, clearing ------------------------------------------------------------------------------------
 hlp a Q 7 "hello"
@@ -409,6 +417,49 @@ waitline "$tmp/d.out" "^X\\|$text_id" 3 >/dev/null && pass "clearing the pins re
 sleep 0.2
 [[ ! -e $tmp/state/pinned ]] && pass "the pinned store is deleted with them" || bad "pinned store left"
 stop_helper d
+
+# --- 10b. A new copy's image goes before the stored thumbnails -----------------------------------------------------------------
+# 16 pinned images of 3,000 x 3,000 px wait for their thumbnails at start; an image copied once the helper runs is recorded
+# before they are all done (it used to wait behind all of them).
+python3 -I - "$tmp/state5/pinned" <<'PY'
+import json, os, struct, sys, zlib
+d = sys.argv[1]
+os.makedirs(d, mode=0o700)
+def chunk(t, data):
+    return struct.pack(">I", len(data)) + t + data + struct.pack(">I", zlib.crc32(t + data) & 0xffffffff)
+w = h = 3000
+head = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+head += chunk(b"IDAT", zlib.compress((b"\x00" + bytes([30, 120, 200]) * w) * h, 1))
+items = []
+for n in range(16):
+    iid = "%016x" % (0xa000 + n)
+    png = head + chunk(b"tEXt", b"n\x00" + str(n).encode()) + chunk(b"IEND", b"")
+    fd = os.open(os.path.join(d, iid + ".item"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.write(fd, b"GFCLIP1\n1\nimage/png\n" + str(len(png)).encode() + b"\n" + png)
+    os.close(fd)
+    items.append({"id": iid, "kind": "image", "mimes": ["image/png"], "size": len(png), "copiedAt": 1, "bootId": "", "bootAt": 0,
+                  "pinnedAt": 100 + n, "title": "", "app": ""})
+fd = os.open(os.path.join(d, "index.json"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+os.write(fd, json.dumps({"version": 1, "items": items}).encode())
+os.close(fd)
+PY
+devices=$(count "$tmp/main.out" '^DEVICE$')
+start_helper g "$tmp/main.sock" --state "$tmp/state5"
+waitline "$tmp/g.out" '^S\|ok' 5 >/dev/null || bad "helper g did not start"
+hlp g R
+waitline_nth "$tmp/main.out" '^DEVICE$' $((devices + 1)) 3 >/dev/null || bad "helper g has no device"
+sleep 0.2
+offers=$(count "$tmp/g.out" '^O\|')
+srv main "SELECT image/png|file:$tmp/red.png"
+approve g "$offers" org.example.New >/dev/null
+waitline "$tmp/g.out" '^I\|[0-9a-f]+\|image\|.*\|org\.example\.New$' 15 >/dev/null || bad "the new image was not recorded"
+before_new=$(tr "$US" '|' <"$tmp/g.out" | awk -F'|' '$1 == "I" && $3 == "image" { if ($13 == "org.example.New") { print n + 0; exit } n++ }')
+if [[ -n $before_new ]] && ((before_new < 16)); then
+  pass "a new image is recorded before the 16 stored thumbnails are all done ($before_new before it)"
+else
+  bad "the new image waited behind the stored thumbnails ([$before_new] before it)"
+fi
+stop_helper g
 
 # --- 11. No content in the logs, unsupported compositors -----------------------------------------------------------------
 if grep -a -q -- "$canary" "$tmp"/*.err; then bad "a copied text reached a log"; else pass "no copied text in any log"; fi

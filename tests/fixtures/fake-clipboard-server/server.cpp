@@ -10,7 +10,9 @@
 //                              | hang (the pipe is never written nor closed) | slow:<ms>:<data> (all of <data>, <ms> after the request)
 //   CLEAR                      no selection
 //   LOCK | UNLOCK              the session lock (sent to every lock notification)
-//   PASTE <mime> <out path>    asks the client that owns the selection for <mime>, writes what it sends to <out path>
+//   PASTE <mime> <out path> [<bytes> <ms>]
+//                              asks the client that owns the selection for <mime>, writes what it sends to <out path>; with
+//                              <bytes> <ms>, reads at most <bytes> at a time and waits <ms> between reads (a slow reader)
 //   STALL <mime>               asks the client that owns the selection for <mime> and never reads it; reports when the client
 //                              closes its end
 //   QUIT
@@ -391,7 +393,7 @@ bool parseData(const std::string &spec, Part *part)
     return false;
 }
 
-void paste(const std::string &mime, const std::string &out)
+void paste(const std::string &mime, const std::string &out, size_t chunk, int delayMs)
 {
     if (!g.clientSource) {
         say("PASTED - 0");
@@ -405,17 +407,20 @@ void paste(const std::string &mime, const std::string &out)
     ::close(fds[1]);
     // Read in a thread, report from the main loop: the client answers while this loop runs.
     const int rfd = fds[0];
-    std::thread([rfd, mime, out] {
+    std::thread([rfd, mime, out, chunk, delayMs] {
         std::string data;
         char buf[65536];
+        const size_t step = chunk > 0 && chunk < sizeof buf ? chunk : sizeof buf;
         for (;;) {
             pollfd p{rfd, POLLIN, 0};
             if (::poll(&p, 1, 5000) <= 0)
                 break;
-            const ssize_t n = ::read(rfd, buf, sizeof buf);
+            const ssize_t n = ::read(rfd, buf, step);
             if (n <= 0)
                 break;
             data.append(buf, size_t(n));
+            if (delayMs > 0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
         }
         ::close(rfd);
         std::ofstream(out, std::ios::binary) << data;
@@ -488,8 +493,14 @@ void command(const std::string &line)
         say(lock ? "LOCKED" : "UNLOCKED");
     } else if (verb == "PASTE") {
         std::string mime, out;
+        size_t chunk = 0;
+        int delayMs = 0;
         in >> mime >> out;
-        paste(mime, out);
+        if (!(in >> chunk >> delayMs)) {
+            chunk = 0;
+            delayMs = 0;
+        }
+        paste(mime, out, chunk, delayMs);
     } else if (verb == "STALL") {
         std::string mime;
         in >> mime;
