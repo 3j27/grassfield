@@ -9,6 +9,8 @@ TestCase {
     id: test
     name: "FilesGallery"
     when: windowShown
+    // Shown: pointer events and drags reach only visible items.
+    visible: true
     width: 900
     height: 520
 
@@ -115,6 +117,9 @@ TestCase {
             function uriList(urls: var): string {
                 return "";
             }
+            function isRecents(url: url): bool {
+                return String(url).startsWith("grassfield-recents:");
+            }
         }
 
         function focusView(): void {
@@ -162,6 +167,18 @@ TestCase {
         anchors.fill: parent
         tab: tab
         model: listing
+    }
+
+    // A drag from elsewhere (Drag.Internal: delivered within this window, like the system drag reaches the DropAreas).
+    Item {
+        id: incoming
+        width: 4
+        height: 4
+        Drag.keys: ["text/uri-list"]
+        Drag.dragType: Drag.Internal
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
+        Drag.hotSpot.x: 2
+        Drag.hotSpot.y: 2
     }
 
     function init(): void {
@@ -239,6 +256,29 @@ TestCase {
         compare(tab.app.typedTags.length, 1, "an empty field adds nothing");
         keyClick(Qt.Key_Escape);
         verify(!input.activeFocus, "Escape returns to the view");
+    }
+
+    // Recents is a list, not a place (Finder): a drag over it is refused (no target, the drop does nothing), a folder takes it.
+    function test_recentsRefusesDrops() {
+        const over = gallery.mapToItem(test, 100, 100);
+        for (const where of [{url: "grassfield-recents:/", accepted: false}, {url: "file:///sandbox", accepted: true}]) {
+            listing.url = where.url;
+            incoming.x = over.x;
+            incoming.y = over.y;
+            incoming.Drag.active = true;
+            // Moves of an internal drag are delivered from the event loop.
+            incoming.x += 1;
+            wait(20);
+            if (where.accepted)
+                verify(incoming.Drag.target !== null, "a folder's background takes the drag");
+            else
+                compare(incoming.Drag.target, null, "Recents takes no drag");
+            const action = incoming.Drag.drop();
+            if (!where.accepted)
+                compare(action, Qt.IgnoreAction, "the drop on Recents is refused");
+            incoming.Drag.active = false;
+        }
+        listing.url = "file:///sandbox";
     }
 
     function test_infoPanelFollowsItsPreference() {

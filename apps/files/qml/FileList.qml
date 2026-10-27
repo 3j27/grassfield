@@ -187,6 +187,8 @@ FocusScope {
     DropArea {
         anchors.fill: list
         keys: ["text/uri-list"]
+        // Recents is a list, not a place (Finder): the drag is refused there and shows it.
+        onEntered: event => event.accepted = !root.tab.app.isRecents(root.model.url)
         onDropped: drop => {
             if (drop.hasUrls) {
                 root.tab.dropUrls(drop.urls, root.model.url, root.model);

@@ -298,7 +298,8 @@ FocusScope {
         DropArea {
             id: drop
             anchors.fill: parent
-            enabled: entry.mounted && entry.kind !== "network"
+            // Network and Recents take no drop (Recents is a list, not a place: Finder; it does not spring open either).
+            enabled: entry.mounted && entry.kind !== "network" && entry.kind !== "recents"
             keys: ["text/uri-list"]
             // A place rested on during a drag opens in the tab (spring-loaded); a tag does not.
             onEntered: {
