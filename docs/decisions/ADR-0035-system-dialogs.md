@@ -611,8 +611,45 @@ with the session's `XDG_CONFIG_DIRS` owns `org.kde.secretservicecompat` and not 
 a nested session shares the owner's session bus, whose activation environment is not the Grassfield one.
 Delivered in step 2a: `packaging/xdg-config/kwalletrc`, the `env-grassfield` block (added once, `/etc/xdg` kept) and the
 PKGBUILD line; `tests/security/kwallet_secret_service.sh` (headless) runs the checks above and a control: on a private bus
-the real ksecretd 6.31.0 started without the session's directory owns `org.freedesktop.secrets`, which confirms the takeover
-of inventory S12 at runtime, and with it does not.
+the real ksecretd started without the session's directory owns `org.freedesktop.secrets`, which confirms the takeover of
+inventory S12 at runtime, and with it does not. Checked with KWallet 6.31.0 (the container) and with the owner's 6.29.0
+(the integrator, on the reference machine: the user's own `kwalletrc` still wins, uwsm exports `XDG_CONFIG_DIRS` with
+`/etc/xdg` kept, dbus-broker 37 passes it to the activated ksecretd). gnome-keyring is now the session's only Secret
+Service, so `grassfield-desktop` declares it (`packaging/arch/PKGBUILD`; until now only the `omarchy` package pulled it):
+libsecret clients such as Chromium always find a keychain and never fall back to plain-text storage (integrator review of
+PR #20).
+
+**Q17-b follow-up: the handover** (integrator review of PR #20; decision delegated by the owner on 2026-10-27: macOS first,
+no technical intervention for the user). Step 2a stops new takeovers; two cases remain, and the spec lists both as known
+limitations until step 2c ships:
+- **Secrets saved while KWallet held the name stay in KWallet.** What the user sees: apps that saved through libsecret in a
+  session where ksecretd held the name find nothing in the keychain. Chromium is the visible case: its "Chrome Safe Storage"
+  key is in KWallet, so at its next start it creates a new key in the keychain, its saved passwords no longer appear and
+  sites sign the user out (cookies encrypted with the old key cannot be read). Nothing is deleted: KWallet keeps the items.
+- **A ksecretd left over from an earlier session keeps the name.** The user manager, and the session bus with it, can
+  outlive a logout (a session switch, a quick log-in again, lingering); a ksecretd started there before step 2a, or in the
+  Omarchy session, still owns `org.freedesktop.secrets`, and the Grassfield session behaves as before step 2a until it ends.
+- Options: (a) a one-time handover by Grassfield at the session's start; (b) document a manual move (a terminal and a tool
+  for the user, against the rule); (c) keep KWallet as the Secret Service for users who already have items there (KDE
+  dialogs, against Q17-b). **Choice: (a).** Design, for **step 2c**, delivered right after 2a and before 2b to keep short
+  the time in which Chromium can create a new key:
+  - `grassfield-secrets-handover`, a one-shot user unit of the Grassfield session (`ConditionEnvironment=GRASSFIELD_SESSION=1`),
+    ordered before the session's autostarted applications, so before Chromium can start;
+  - leftover: when the owner of `org.freedesktop.secrets` is ksecretd (identified from the bus's `ProcessFD` and its
+    root-owned executable `/usr/bin/ksecretd`, as D-9 identifies callers), it asks ksecretd to quit; KWallet's own clients
+    start it again through `org.kde.secretservicecompat`, now with the session's setting, and the next libsecret call
+    activates gnome-keyring. Nothing is shown;
+  - move, once per user (a marker under `$XDG_STATE_HOME/grassfield/`): it lists the items of KWallet's Secret Service
+    collections through `org.kde.secretservicecompat` and copies into the login keychain each item the keychain does not
+    already hold (same attributes), keeping KWallet's copy. It never overwrites an item the keychain holds: a Chromium that
+    already created a new key keeps it, and the passwords saved under the old one stay unreadable (a known limitation).
+    When it moved something it posts one Grassfield notice, "Saved passwords were moved to your keychain."; when KWallet's
+    wallet is locked, KWallet asks for its own password once (its dialog; K2), and a refusal leaves everything as it was and
+    asks again at the next session;
+  - security: it reads secrets, so it runs only as the user, logs no item and no value, holds secrets only for the copy, and
+    needs an opus PASS; tests on a private bus with a fake KWallet compatibility service and a fake keychain (never the
+    owner's buses or secrets): a leftover ksecretd made to quit, items copied once, an existing item never overwritten, a
+    locked wallet left untouched.
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
@@ -642,6 +679,8 @@ requests #8, #9 and #10 are merged (owner).
      `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS` and `GTK_USE_PORTAL=1` in `env-grassfield`, `UnsetEnvironment` in the
      backend's and the shell's units (D-4's start-up loop), the 18 generated GTK themes (Q7). Packaging, a new service and
      one line of `grassfield-shell.service`; no shell code. After #8–#10.
+   - **2c**: the Secret Service handover of Q17-b (D-12: a leftover ksecretd made to quit, KWallet's libsecret items moved to
+     the keychain once), right after 2a; a secret path, so an opus PASS. No Settings or shell file.
 
    **Split of step 2** (decision delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
    Question: deliver step 2 as one pull request after the Settings stack (#8–#10), or Q17-b first? Options: (a) one pull
@@ -733,8 +772,9 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
 - The Secret Service stays gnome-keyring's in the Grassfield session: KWallet's takeover is turned off by a session-only
   `kwalletrc` (Q17-b, step 2).
 - New services: `grassfield-portal-settings` (always on, no window) and `grassfield-portal` (panels, D-Bus activated) from
-  steps 2 and 4; `grassfield-prompter` from step 9 (gcr prompts, KIO network passwords, NetworkManager secrets, and in step 10
+  steps 2b and 4; `grassfield-secrets-handover` (one-shot at the session's start) from step 2c; `grassfield-prompter` from step 9 (gcr prompts, KIO network passwords, NetworkManager secrets, and in step 10
   the BlueZ agent). All gated by `GRASSFIELD_SESSION=1`, hardened, with budgets; §5.8 is answered per service in its step.
+- `grassfield-desktop` declares `gnome-keyring` (step 2a): it is the session's only Secret Service.
 - New library dependencies of Grassfield binaries: libcups (step 6, already installed with qt6-base and gtk3), libgcr-4 (step
   9, already installed with gnome-keyring) and libsecret (step 9, already installed with pinentry; counter-review of PR #13,
   minor); no libnm.
