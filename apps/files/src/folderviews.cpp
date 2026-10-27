@@ -147,11 +147,13 @@ FolderViews::ReadStatus FolderViews::readFile(const QString &path, QByteArray *b
         return ReadStatus::NotRegular;
     if (opened.st_size > kMaxFileSize)
         return ReadStatus::TooLarge;
-    // At most kMaxFileSize + 1 bytes: one more than allowed shows a file that grew past the limit while it was read.
-    QByteArray buffer(int(kMaxFileSize + 1), Qt::Uninitialized);
+    // One byte more than the size the file has (so at most kMaxFileSize + 1): a file that grew while it was read, or a
+    // regular file whose size says nothing of its contents (/proc), returns more than its size.
+    const qint64 limit = qint64(opened.st_size) + 1;
+    QByteArray buffer(int(limit), Qt::Uninitialized);
     qint64 total = 0;
-    while (total <= kMaxFileSize) {
-        const ssize_t n = ::read(fd, buffer.data() + total, size_t(kMaxFileSize + 1 - total));
+    while (total < limit) {
+        const ssize_t n = ::read(fd, buffer.data() + total, size_t(limit - total));
         if (n < 0) {
             if (errno == EINTR)
                 continue;

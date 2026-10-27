@@ -345,6 +345,16 @@ TEST(FolderViews, ASymlinkToADeviceIsRefused)
     EXPECT_EQ(other.readStatus(), FolderViews::ReadStatus::NotRegular);
     EXPECT_EQ(other.set(QStringLiteral("file:///a"), entry(QStringLiteral("list"))), FolderViews::WriteResult::Refused);
     EXPECT_TRUE(QFileInfo(other.file()).isDir());
+    // A regular file whose size says nothing of its contents (/proc: size 0, text inside): the read returns more than
+    // the size, so it is not used.
+    if (QFileInfo::exists(QStringLiteral("/proc/self/status"))) {
+        const QString proc = dir->filePath(QStringLiteral("proc-views.json"));
+        ASSERT_TRUE(QFile::link(QStringLiteral("/proc/self/status"), proc));
+        FolderViews procViews(proc);
+        procViews.load();
+        EXPECT_EQ(procViews.readStatus(), FolderViews::ReadStatus::Incomplete);
+        EXPECT_TRUE(procViews.readOnly());
+    }
 }
 
 // One byte over the limit: never parsed, never overwritten (also when the write is attempted again).
