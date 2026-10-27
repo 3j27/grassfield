@@ -229,26 +229,31 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 
 ### Functional requirements
 - NR1 the `hyprland-dialog` stand-in (`packaging/session-bin/hyprland-dialog`) takes only Hyprland's exact ANR call in en_US
-  or fr_FR (`--title T --text X --buttons B`), finds the client pids of the windows with that class and title in Hyprland's
-  client list, and with exactly one pid above 1 reports (its own pid, that pid, "c:" class, "t:" title, "i:" Hyprland
-  instance) to `anr report` and waits silently with the same pid; every other call, and every case below, `exec`s the stock
-  dialog with the same arguments.
+  or fr_FR (`--title T --text X --buttons B`), tries every " - " split of "{title} - {class}" against Hyprland's client
+  list, and with exactly one (split, client pid above 1) match reports (its own pid, that pid, "c:" class, "t:" title, "i:"
+  Hyprland instance) to `anr report` and waits silently with the same pid, Hyprland's pipe held by no child, until Hyprland
+  kills it or its parent is gone; every other call, and every case below, `exec`s the stock dialog with the same arguments.
 - NR1b the shell accepts a report only for a pid above 1, a class, its own Hyprland instance, and a window that no other pid
-  it knows shares class and title with (ADR-0035 decision 3-1); otherwise it answers `refused: <reason>` and the stand-in
-  runs the stock dialog. An untitled window ("(unknown)" / "(inconnu)" in Hyprland's text) is matched by its empty title.
-- NR2 the shell marks that pid as not responding while the stand-in lives: Force Quit lists the app with "(Not Responding)"
-  (destructive colour, the first such row selected when the panel opens); the app's Dock menu starts with a disabled
-  "Application Not Responding" item and offers "Force Quit" in place of "Quit", for the marked processes only (Option + Force
-  Quit: all of the app's); the app menu keeps "Quit" (owner decision Q16). At the confirmation each pid must still own a
-  window of the chosen class (pid reuse), else nothing is killed and a notice says "The application had already quit."
+  it knows shares class and live title with (ADR-0035 decision 3-1); otherwise it answers `refused` (the reason goes to the
+  journal) and the stand-in runs the stock dialog. An untitled window ("(unknown)" / "(inconnu)" in Hyprland's text) is
+  matched by its empty title and reported with it.
+- NR2 the shell marks that pid as not responding while one of its stand-ins lives: Force Quit lists the app with "(Not
+  Responding)" (destructive colour); the panel selects the first such row and moves the selection only onto such a row,
+  until the user moves it; the app's Dock menu starts with a disabled "Application Not Responding" item and offers "Force
+  Quit" in place of "Quit", for the marked processes only (Option + Force Quit: all of the app's); the app menu keeps "Quit"
+  (owner decision Q16). At the confirmation a pid that no longer owns a window of the chosen class (pid reuse) is not
+  killed, and a notice says "The application had already quit."; the others are.
 - NR3 the mark clears within 1 s of the stand-in's end (the app answered, closed, or was killed): the shell checks the
   stand-ins every 250 ms while there is a mark.
 - NR4 no alert, no sound, no focus change. `misc.anr_missed_pings = 3` (about 4.5 s).
 
 ### Acceptance criteria
 - A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
-  parsed, titles with " - ", a leading "-" or a newline; ambiguous, other-locale, malformed, refused, unanswered (1-s
-  deadline) calls exec the stock dialog with the same pid and arguments; the texts match the installed Hyprland.
+  parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
+  match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
+  same pid and arguments; Hyprland's pipe ends when the waiting stand-in is killed; the stand-in ends when its parent is
+  gone; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
+  the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals.
 - A-NR3 (L0, `tests/unit/tst_notresponding.qml`) two processes of one app with the same class and title: refused; a pid
   reused between mark and confirmation: Force Quit refuses.
 - A-NR2 (L1, `tests/shell/anr_nested.sh`) a foot window stopped with SIGSTOP in a nested session is marked within 12 s and no
@@ -257,7 +262,8 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 ### Known limitations
 No wait cursor (Hyprland only tints the window); the ANR state is known only through Hyprland's dialog call. A shell restarted
 while an app hangs loses the mark until the app answers or closes (Hyprland runs its dialog once per hang); Force Quit still
-lists the app. A Hyprland release that changes the texts makes the stand-in fall back to the stock dialog.
+lists the app. A Hyprland release that changes the texts makes the stand-in fall back to the stock dialog, and so does an app
+without an app id (class "(unknown)") or a window that cannot be told apart.
 
 ## 4b. Hyprland's config errors (H8, H9; ADR-0035 D-2; built in step 3)
 
@@ -274,8 +280,9 @@ never as a red bar over the screen.
   journal (decision 3-6); the shell logs the count, never the lines.
 
 ### Acceptance criteria
-- A-CE1 (L0, `tests/unit/tst_configerrors.qml`) Hyprland's reply parsed (none: `[""]`), anything else ignored; one notice
-  per new set, withdrawn when empty, three lines shown.
+- A-CE1 (L0, `tests/unit/tst_configerrors.qml`, `tests/shell/config_errors.sh`) Hyprland's reply parsed (none: `[""]`),
+  anything else ignored; one notice per new set, withdrawn when empty, three lines shown as text ("<eof>" kept); a reload
+  during a read is read once more.
 - A-CE2 (L0, `tests/shell/session_input.sh`) `suppress_errors` set with the bindings in, not set when `bindings.lua` fails
   under Hyprland's own `require`.
 
