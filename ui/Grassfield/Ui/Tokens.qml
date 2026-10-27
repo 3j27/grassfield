@@ -2927,11 +2927,11 @@ QtObject {
     // the title's first cap top 80 pt under the hero's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeHeroTitleBaseline: 98
     // the title's lines 30 pt apart (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
-    readonly property int storeHeroTitleLineHeight: 30
+    readonly property int storeHeroTitleLineHeight: Math.round(30 * Appearance.textScale)
     // estimate: the hero title's medium weight [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeHeroTitleWeight: 500
     // the text's baseline 35 pt under the title's last (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
-    readonly property int storeHeroTextGap: 35
+    readonly property int storeHeroTextGap: Math.round(35 * Appearance.textScale)
     // the text's cap height 10 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeHeroBodySize: Math.round(14 * Appearance.textScale)
     // white text on the hero's tint, which StoreView::heroTint darkens until it holds 6:1 (A2 for the secondary lines too) [ref: docs/audits/store-2026-10-27/parity.md]
@@ -2971,11 +2971,11 @@ QtObject {
     // the title's first cap top 45.5 pt under the card's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property real storeCardTitleBaseline: 63.5
     // the title's lines 28 pt apart (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
-    readonly property int storeCardTitleLineHeight: 28
+    readonly property int storeCardTitleLineHeight: Math.round(28 * Appearance.textScale)
     // the card title in the regular weight (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeCardTitleWeight: 400
     // the grey line's baseline 29 pt under the title's last (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
-    readonly property int storeCardTextGapBelowTitle: 29
+    readonly property int storeCardTextGapBelowTitle: Math.round(29 * Appearance.textScale)
     // the grey line's cap height 9.5 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeCardBodySize: Math.round(13 * Appearance.textScale)
     // the round artwork 170 pt across, its right edge 15 pt from the card's (505 to 675) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
@@ -3036,6 +3036,8 @@ QtObject {
     readonly property int storePageBottom: 40
     // estimate: the arrows' scroll step [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeKeyScrollStep: 40
+    // estimate: the room kept above or below an item the keyboard brings into view [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeFocusScrollMargin: 20
     // estimate: an app's Get or Open capsule [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeButtonHeight: 28
     // estimate: the narrowest Get capsule [ref: docs/audits/store-2026-10-27/parity.md]
@@ -3106,12 +3108,18 @@ QtObject {
     readonly property int storeNoticePadding: 10
     // estimate: the offline notice's corner [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeNoticeRadius: 10
+    // estimate: the notice's hairline rim, so that it stands out from cards and tiles [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeRimWidth: 1
+    // estimate: the rim at twice a separator's opacity (Appearance.separatorOpacity) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeRimContrast: 2
     // estimate: the offline notice's glyph [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeNoticeIconSize: 16
     // estimate: the offline notice above the window's bottom [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeNoticeBottom: 16
     // estimate: the generic icon's tile corner for its size (the app icon shape) [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property real storeIconRadiusRatio: 0.225
+    // estimate: the generic icon's glyph for the tile's size, while an app's icon is missing or loading [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeIconPlaceholderGlyphRatio: 0.45
     // estimate: the search field's longest query [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSearchMaxLength: 200
     // estimate: the Store's settings window [ref: docs/audits/store-2026-10-27/parity.md]

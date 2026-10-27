@@ -14,8 +14,8 @@ Rectangle {
     radius: Tokens.storeNoticeRadius
     // Over the page: the window's colour with a hairline rim, so that it stands out from cards and tiles alike.
     color: Appearance.colors.windowBackground
-    border.width: 1
-    border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity * 2)
+    border.width: Tokens.storeNoticeRimWidth
+    border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity * Tokens.storeNoticeRimContrast)
     Accessible.role: Accessible.AlertMessage
     Accessible.name: root.text
 

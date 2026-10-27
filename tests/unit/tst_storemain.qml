@@ -303,4 +303,54 @@ TestCase {
         const row = find(t.win.contentItem, i => i.Accessible.name === "Ada Lovelace: Installed apps");
         verify(row);
     }
+
+    // Larger text (Settings > Accessibility > Display, 1.3): the hero's and the cards' titles keep a line height for their
+    // size and their room under the eyebrow.
+    function test_largeText() {
+        const t = make();
+        t.backend.textScale = 1.3;
+        const titles = findAll(t.win.page, i => i.lineHeightMode === Text.FixedHeight && i.visible && i.text !== "");
+        verify(titles.length > 1);
+        for (const title of titles) {
+            verify(title.lineHeight >= title.font.pixelSize * 1.05, "line height " + title.lineHeight + " for " + title.font.pixelSize);
+            const eyebrow = title.parent.children.find(i => i.font && i.font.capitalization === Font.AllUppercase);
+            verify(eyebrow);
+            const capTop = title.y + title.baselineOffset - title.font.pixelSize * 0.7;
+            verify(capTop - (eyebrow.y + eyebrow.height) > 4, "room under the eyebrow: " + (capTop - eyebrow.y - eyebrow.height));
+        }
+        t.backend.textScale = 1;
+    }
+
+    // The keyboard brings what it focuses into view, below the toolbar (as macOS): Tab to an item below the fold scrolls
+    // down to it, and an item above the view scrolls back up.
+    function test_focusScrollsIntoView() {
+        const t = make({height: 400});
+        const page = t.win.page;
+        tryVerify(() => page.flickable.contentHeight > page.flickable.height);
+        const focusable = findAll(page, i => i.activeFocusOnTab === true && i.visible && i.width > 0);
+        verify(focusable.length > 2);
+        const shown = item => {
+            const r = item.mapToItem(page, 0, 0, item.width, item.height);
+            return r.y >= Tokens.windowUnifiedHeight && r.y + r.height <= page.height;
+        };
+        const below = focusable.filter(i => !shown(i));
+        verify(below.length > 0, "some items start below the fold");
+        // Tab through the page: each item it focuses is in view; some of them were below the fold.
+        focusable[0].forceActiveFocus(Qt.TabFocusReason);
+        let reached = 0;
+        for (let k = 0; k < focusable.length; k++) {
+            keyClick(Qt.Key_Tab);
+            const f = focusable.find(i => i.activeFocus);
+            if (!f)
+                break; // left the page (the toolbar or the sidebar)
+            tryVerify(() => shown(f), 2000, "a focused item is in view");
+            if (below.includes(f))
+                reached++;
+        }
+        verify(reached > 0, "Tab reached an item that was below the fold");
+        verify(page.scroll > 0);
+        // Back up: the first item comes back into view.
+        focusable[0].forceActiveFocus(Qt.BacktabFocusReason);
+        tryVerify(() => shown(focusable[0]), 2000, "the first item is back in view");
+    }
 }

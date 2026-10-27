@@ -3,7 +3,8 @@ import Grassfield.Ui
 
 // A page of the Store: its large title where macOS 27 puts Discover's (cap top 67 pt from the window's top), then its
 // content 40 pt in from both edges, scrolled under the toolbar (a fade of the window's colour there once it moves). The
-// keys scroll it: Page Up and Down, Home and End, and the arrows when nothing inside takes them.
+// keys scroll it: Page Up and Down, Home and End, and the arrows when nothing inside takes them; an item the keyboard
+// focuses (Tab, Shift+Tab) is scrolled into view, as macOS does.
 FocusScope {
     id: root
 
@@ -25,6 +26,30 @@ FocusScope {
         if (max >= root.pendingScroll)
             root.pendingScroll = -1;
     }
+    // The item with the keyboard focus, when it is in this page's content: shown whole, below the toolbar.
+    function reveal(item: Item): void {
+        let p = item;
+        while (p && p !== column)
+            p = p.parent;
+        if (!p)
+            return;
+        const r = item.mapToItem(flick.contentItem, 0, 0, item.width, item.height);
+        // What shows of the page: below the toolbar, with a margin on both sides.
+        const viewTop = Tokens.windowUnifiedHeight + Tokens.storeFocusScrollMargin;
+        const viewBottom = flick.height - Tokens.storeFocusScrollMargin;
+        let y = flick.contentY;
+        if (r.y + r.height > y + viewBottom)
+            y = r.y + r.height - viewBottom;
+        if (r.y < y + viewTop)
+            y = r.y - viewTop; // an item taller than the view shows its top
+        root.pendingScroll = -1;
+        flick.contentY = Math.max(0, Math.min(Math.max(0, flick.contentHeight - flick.height), y));
+    }
+
+    readonly property Item focusedItem: root.Window.activeFocusItem
+    onFocusedItemChanged: if (root.focusedItem)
+        root.reveal(root.focusedItem)
+
     property alias flickable: flick
     default property alias content: column.data
     readonly property real contentWidth: Math.max(0, root.width - 2 * Tokens.storeContentMargin)

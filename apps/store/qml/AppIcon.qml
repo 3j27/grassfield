@@ -22,7 +22,7 @@ Item {
         Icon {
             anchors.centerIn: parent
             name: "apps"
-            size: Math.round(root.size * 0.45)
+            size: Math.round(root.size * Tokens.storeIconPlaceholderGlyphRatio)
             color: Appearance.windowSecondary
         }
     }

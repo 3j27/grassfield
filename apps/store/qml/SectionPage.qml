@@ -58,7 +58,7 @@ ScrollPage {
                     LinkText {
                         visible: (block.modelData.category || "") !== ""
                         anchors.right: parent.right
-                        y: Math.round((Tokens.storeShelfTitleSize * 1.2 - height) / 2)
+                        y: Math.round((shelf.titleHeight - height) / 2)
                         text: qsTr("See All")
                         target: block.modelData.title
                         onActivated: root.categoryRequested(block.modelData.category)

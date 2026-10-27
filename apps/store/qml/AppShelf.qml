@@ -10,9 +10,13 @@ Column {
 
     signal opened(string id)
 
+    // The title line's height (0 without a title): a link beside it is centred on it.
+    readonly property real titleHeight: heading.visible ? heading.height : 0
+
     spacing: Tokens.storeShelfTitleGap
 
     Text {
+        id: heading
         width: root.width
         visible: root.title !== ""
         textFormat: Text.PlainText

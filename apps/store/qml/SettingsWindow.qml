@@ -107,7 +107,7 @@ Window {
 
                 SettingsSwitch {
                     title: qsTr("Show screenshots")
-                    detail: qsTr("Fetched from each app's own website when its page opens.")
+                    detail: qsTr("Fetched when an app's page opens, from the addresses its description gives, often another site.")
                     checked: root.sources.screenshots
                 }
             }

@@ -43,7 +43,8 @@ FocusScope {
     Text {
         id: title
         x: Tokens.storeCardTextInset
-        y: Tokens.storeCardTitleBaseline - baselineOffset
+        // Under the eyebrow; with a larger text size (Appearance.textScale) the gap grows with the fonts.
+        y: Tokens.storeCardEyebrowBaseline + (Tokens.storeCardTitleBaseline - Tokens.storeCardEyebrowBaseline) * Appearance.textScale - baselineOffset
         width: art.x - x - Tokens.storeCardTextGap
         textFormat: Text.PlainText
         text: root.item.title

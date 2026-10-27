@@ -7751,8 +7751,8 @@
         <translation>Afficher les captures d’écran</translation>
     </message>
     <message>
-        <source>Fetched from each app&apos;s own website when its page opens.</source>
-        <translation>Récupérées sur le site de chaque app quand sa page s’ouvre.</translation>
+        <source>Fetched when an app&apos;s page opens, from the addresses its description gives, often another site.</source>
+        <translation>Récupérées à l’ouverture de la page d’une app, aux adresses que donne sa description, souvent sur un autre site.</translation>
     </message>
     <message>
         <source>Catalog</source>
