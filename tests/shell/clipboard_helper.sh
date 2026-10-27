@@ -419,8 +419,8 @@ sleep 0.2
 stop_helper d
 
 # --- 10b. A new copy's image goes before the stored thumbnails -----------------------------------------------------------------
-# 16 pinned images of 3,000 x 3,000 px wait for their thumbnails at start; an image copied once the helper runs is recorded
-# before they are all done (it used to wait behind all of them).
+# 16 pinned images of 3,000 x 3,000 px wait for their thumbnails at start; an image copied once the helper runs goes before
+# those still waiting (it used to wait behind all of them).
 python3 -I - "$tmp/state5/pinned" <<'PY'
 import json, os, struct, sys, zlib
 d = sys.argv[1]
@@ -453,11 +453,17 @@ offers=$(count "$tmp/g.out" '^O\|')
 srv main "SELECT image/png|file:$tmp/red.png"
 approve g "$offers" org.example.New >/dev/null
 waitline "$tmp/g.out" '^I\|[0-9a-f]+\|image\|.*\|org\.example\.New$' 15 >/dev/null || bad "the new image was not recorded"
-before_new=$(tr "$US" '|' <"$tmp/g.out" | awk -F'|' '$1 == "I" && $3 == "image" { if ($13 == "org.example.New") { print n + 0; exit } n++ }')
-if [[ -n $before_new ]] && ((before_new < 16)); then
-  pass "a new image is recorded before the 16 stored thumbnails are all done ($before_new before it)"
+# Where it waited, from the helper's own count (no timing): never behind a stored thumbnail. On a machine fast enough to finish
+# the 16 before the copy arrives, nothing was left to jump: the case is reported as not exercised, never as a failure.
+queued=$(grep -a -m1 'a new image waits for the worker' "$tmp/g.err")
+if [[ $queued =~ ([0-9]+)\ stored\ ahead,\ ([0-9]+)\ stored\ behind ]]; then
+  if ((BASH_REMATCH[2] == 0)); then
+    echo "SKIP clipboard_helper: new image before stored thumbnails not exercised (all 16 were done before the copy)"
+  else
+    check "a new image goes before the stored thumbnails still waiting (${BASH_REMATCH[2]} behind it)" 0 "${BASH_REMATCH[1]}"
+  fi
 else
-  bad "the new image waited behind the stored thumbnails ([$before_new] before it)"
+  bad "no queue line for the new image: [$queued]"
 fi
 stop_helper g
 

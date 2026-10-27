@@ -550,6 +550,11 @@ qint64 clampRetention(qint64 ms)
     return std::clamp(ms, kMinRetentionMs, kMaxRetentionMs);
 }
 
+qint64 writerWaitMs(qint64 elapsedMs)
+{
+    return std::clamp(kWriterMaxMs - std::max<qint64>(elapsedMs, 0), qint64(0), kWriterIdleMs);
+}
+
 // --- Store ----------------------------------------------------------------------------------------------------------------
 
 void indexItem(Item &item)

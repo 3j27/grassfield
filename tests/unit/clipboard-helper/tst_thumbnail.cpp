@@ -4,6 +4,7 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
@@ -14,6 +15,10 @@
 #include <QTimer>
 
 #include <gtest/gtest.h>
+
+#include <cerrno>
+
+#include <signal.h>
 
 namespace
 {
@@ -120,11 +125,21 @@ TEST(ThumbnailJob, AWorkerStillRunningAfterTwoSecondsIsKilled)
     QTemporaryDir dir;
     const QString sleep = QStandardPaths::findExecutable(QStringLiteral("sleep"));
     ASSERT_FALSE(sleep.isEmpty());
-    const JobResult r = runJob(script(dir, "slow-worker", "exec " + QFile::encodeName(sleep) + " 30\n"), "x");
+    // The worker leaves its pid as a directory name (RLIMIT_FSIZE 0 forbids writing a file, not making a directory), then
+    // becomes `sleep 30` under the same pid.
+    const QByteArray body = "mkdir " + QFile::encodeName(dir.path()) + "/alive.$$ || exit 9\nexec " + QFile::encodeName(sleep) + " 30\n";
+    const JobResult r = runJob(script(dir, "slow-worker", body), "x");
     ASSERT_TRUE(r.called);
     EXPECT_TRUE(r.png.isEmpty()) << "a late worker gives nothing";
     EXPECT_GE(r.ms, Thumbnail::kDeadlineMs - 100);
     EXPECT_LT(r.ms, Thumbnail::kDeadlineMs + 3000);
+    const QStringList marks = QDir(dir.path()).entryList({QStringLiteral("alive.*")}, QDir::Dirs);
+    ASSERT_EQ(marks.size(), 1) << "the worker ran";
+    const pid_t pid = pid_t(marks.first().section(QLatin1Char('.'), 1).toInt());
+    ASSERT_GT(pid, 0);
+    errno = 0;
+    EXPECT_EQ(::kill(pid, 0), -1) << "the worker process is gone (killed and reaped), not left running";
+    EXPECT_EQ(errno, ESRCH);
 }
 
 TEST(ThumbnailJob, TheWorkerGetsItsLimitsTheImageAndOnlyLcAll)
