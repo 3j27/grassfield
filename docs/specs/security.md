@@ -607,6 +607,15 @@ VERIFIED until run).
   call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
+Grassfield Store's action (ADR-0037 b.1, SD2, SD17): for `org.grassfield.store.manage-packages` only, the sheet reads polkit's
+message, which polkitd expands with the helper's argument vector as pkexec reports it (`$(command_line)`), by one strict
+pattern (`AuthDialogModel.storeRequestOf`: the policy's English or French message, `/usr/lib/grassfield/grassfield-store-helper`,
+`install` or `remove`, a 32-digit operation id, 1 to 64 package names of ADR-0037 e.5, nothing else). It then says
+"Install xterm, gimp" (or "Remove …") in place of the message, and adds "Program: <the helper's path>" under "Action: <id>";
+a message that does not match, or the same message for another action, is shown as polkit gives it, one capped line. The
+names come from polkit, never from the program that asked. Unit-tested (`tst_authdialogmodel` test_storeRequestInPlainWords:
+15 messages that must not be read, the other action; `tst_authdialog` test_12_storeRequestNamesPackagesAndProgram).
+
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,
 `responseVisible`, `supplementaryMessage`, `supplementaryIsError`, `isCompleted`, `isSuccessful`, `isCancelled`,

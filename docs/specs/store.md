@@ -95,7 +95,9 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   « Mettre à jour » for a Flatpak with an update; never for a repository or AUR app); a progress
   ring while its operation runs or waits in the queue ("Waiting" « En attente »); "Installed" (« Installée ») when installed
   without a launcher. Disabled with a tooltip when offline, while an update or another package manager runs, or when the source
-  is turned off.
+  is turned off; until step 3b and 3c, a setup's, an AUR app's and a Flatpak's Get stays disabled with SD8's tooltip (ADR-0037
+  SD11). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
+  a square in it while the operation waits in the queue, which takes it out.
 - SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »), "Install from the AUR"
   (« Installer depuis l'AUR ») for the AUR. It lists: source, licence, sizes, every package the plan adds (from `pacman -S
   --print` as the user), for a setup what it changes, for the AUR the warning (SR16), for a Flatpak what it can reach and the
@@ -116,13 +118,17 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   script de construction s'exécute sur cet ordinateur, puis le paquet est installé avec les droits d'administrateur.
   N'installez que ce en quoi vous avez confiance. »
 - SR17. The authentication (owner, ST4 and ST3): repository packages, the polkit dialog of `grassfield-store-helper`
-  (Grassfield's polkit sheet; "Waiting for permission…" « En attente de l'autorisation… » meanwhile, 120 s at most), at every
-  operation, never kept (`auth_admin`: a queue of three operations asks three times), the sheet saying "Install" or "Remove"
-  and the package names polkit reports (ADR-0037 b.1, SD2; the line as polkit gives it when it does not match); the AUR and
+  (Grassfield's polkit sheet; "Waiting for permission…" « En attente de l'autorisation… » meanwhile, 120 s at most, then the
+  Store ends pkexec and says the request timed out, SD16), at every
+  operation, never kept (`auth_admin`: a queue of three operations asks three times), the sheet saying "Install xterm, gimp"
+  or "Remove …" with the package names polkit reports, then "Action: org.grassfield.store.manage-packages" and "Program:
+  /usr/lib/grassfield/grassfield-store-helper" (ADR-0037 b.1, SD2, SD17; the line as polkit gives it when it does not
+  match); the AUR and
   Omarchy setups, sudo's prompt in Omarchy's terminal; web apps and Flatpaks, the sheet alone, its default button being the
   consent.
 - SR18. One operation at a time, whatever its path; later ones wait in the queue (shown on their buttons and in a queue
-  popover in the toolbar, where a waiting one can be removed). The next one starts only when the previous one has its exit
+  popover in the toolbar: a button while the queue holds anything, whose menu lists each operation with what it does, and
+  "Don't Install “…”" for a waiting one). The next one starts only when the previous one has its exit
   code, Omarchy's update lock is free and `db.lck` is absent. The running one shows progress: indeterminate while
   downloading, then "n of N" from pacman's log; in Omarchy's terminal it also says so ("Installing in Terminal…"
   « Installation dans le Terminal… »). While an operation runs, the Store holds Omarchy's update lock: `omarchy update` cannot
@@ -132,18 +138,25 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   `grassfield-store-run` (b.2), the child's (b.3). Success is that code being 0 **and** the system's state matching the plan
   (the packages present at the planned versions, the web app's entry present, the Flatpak listed). Then the button becomes
   "Open". Otherwise one line under the button and a "Details" popover (pacman's message from the helper's log or the
-  terminal, and what to do); "Try Again" re-runs the same plan. Time limits: the polkit dialog 120 s; Omarchy's terminal must
+  terminal, and what to do); "Try Again" re-runs the same plan. The helper's exit code says which line (ADR-0037 b.1): 3
+  another installation or an update is running, 4 finish the system update first, 5 update your system first, 6 the app
+  can't be uninstalled from the Store, 7 the package isn't an app, 1 the installation failed; pkexec's 126 is a dismissed
+  request (nothing said) and 127 a refused one. The same line shows at the bottom of every other page while the result
+  stands, with Try Again, Details… and Close (the app's own page has it under its button only). Time limits: the polkit dialog 120 s; Omarchy's terminal must
   start the script within 60 s ("The terminal did not open" « Le terminal ne s'est pas ouvert »); a running operation is
   followed up to 2 h (helper) or 3 h (terminal), then the Store says it lost track and reads the state; it never stops one.
 - SR20. Recovery at start (ADR-0037 f): an operation recorded in `store.json` is compared with its `exit` file, its running
   helper or script, and the system, and reported as done (silently), still running (followed again), interrupted ("15 of 110
   packages were installed", with "Try Again"), or not finished; a stale `db.lck` is explained with Arch's recovery as text to
-  copy, never removed by the Store.
+  copy, never removed by the Store (a notice at the bottom of the page, its Details… showing `sudo rm
+  /var/lib/pacman/db.lck` to copy, only when no pacman runs). Closing the window while an operation runs leaves the Store
+  without a window until it ends (SD13).
 - SR21. "Open" starts the app through ADR-0011 (`uwsm-app -- <desktop-id>` in a real session, `apps/appscope.h`); a web app
   with `omarchy-launch-webapp <url>` (its entry's file name has spaces, which uwsm refuses, S14); the Store stays open. In a
   dev session only fixture apps open (ADR-0011 dev open policy).
 - SR22. "Uninstall…" (« Désinstaller… »): in the product page's "…" menu, in Installed, and in the context menu of an installed
-  app's item. Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
+  app's item (Open, Show in Store, Uninstall…). Installed's web apps that our catalog does not list (Omarchy's own, the
+  user's) open and uninstall too (SD15). Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
   S10), or the setup's removal recipe and the user data it deletes (our catalog's `removes`), or the web app's launcher and
   icon, or the Flatpak (its data in `~/.var/app/<app-id>` stays, and the sheet says so). A package other installed packages
   need is not removable (S10: "removing glib2 breaks dependency … required by
@@ -280,10 +293,10 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A2 | entry rules: each broken rule drops only its entry | unit with vectors shared with grassfield-packages' validator | L0 |
 | A3 | merge: catalog over AppStream over pacman; source precedence; licence fallback | unit with fake AppStream and pacman roots | L0 |
 | A4 | search ranking and the AUR section (fake RPC answers) | unit | L0 |
-| A5 | plan check: `pacman -Qu` non-empty (and "[ignored]" lines allowed), a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman | L0 |
-| A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs | L0 |
-| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`), the `remove` rule with S16's cases (system packages, a tool without an entry, a dependency, an Omarchy app, a plan taking a boot tool, Omarchy's lists missing, a plan that does not resolve), the policy's `auth_admin` and message, descriptors not on the caller's pipe, status files; `grassfield-store-run`: deadline, `flock -o` on Omarchy's lock file, re-check, exit file | container tests, fake pacman and the real one (step 3) | L1 (container) |
-| A7 | recovery: each start case of SR20 | unit with recorded `store.json` | L0 |
+| A5 | plan check: `pacman -Qu` non-empty (and "[ignored]" lines allowed), a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman (`tests/unit/store/tst_plancheck.cpp`; the sheet's words: `tests/unit/tst_storeoperations.qml`) | L0 |
+| A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs (`tst_operations.cpp`; b.2's files with step 3b) | L0 |
+| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`), the `remove` rule with S16's cases (system packages, a tool without an entry, a dependency, an Omarchy app, a plan taking a boot tool, Omarchy's lists missing, a plan that does not resolve), the policy's `auth_admin` and message, descriptors not on the caller's pipe, status files; `grassfield-store-run`: deadline, `flock -o` on Omarchy's lock file, re-check, exit file | container tests, fake pacman and the real one (step 3: `tests/integration/store_helper.sh`, the deny list on `tests/fixtures/store/removal-vectors.json` for the helper and `tst_removal.cpp`; `grassfield-store-run` with 3b) | L1 (container) |
+| A7 | recovery: each start case of SR20 | unit with recorded `store.json` (`tst_operations.cpp` RecoveryAtStart; the real helper's files: `store_helper.sh`) | L0 |
 | A8 | real install, open (`uwsm-app` argv; a web app by `omarchy-launch-webapp`), uninstall of a repository package (helper), a web app, a setup and an AUR package (terminal script), a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
 | A10 | F1 geometry and tints against the parity matrix | measurement script on the captures | L1 |
@@ -311,6 +324,10 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
   `GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`, `GRASSFIELD_STORE_OFFLINE` (`1`:
   offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession). Command line:
   `--page` (`discover`, `section:<id>`, `categories`, `category:<id>`, `app:<id>`, `search:<words>`, `installed`, `updates`).
+  Step 3a adds `GRASSFIELD_STORE_PKEXEC` (the program run in pkexec's place for the helper's operations) and
+  `GRASSFIELD_STORE_INSTALLER` (the program run in place of Omarchy's commands and of Open's launchers: it gets the command's
+  name, then its arguments); without them a dev session runs no operation ("dev: not applied"). With a fixture, the helper's
+  files, pacman's lock and log, Omarchy's package lists and `pacman-conf` are the fixture's too.
 
 ## Dependencies (versions seen in S3, S8 and S14; checked again at step 1)
 `grassfield-desktop` (same version), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`; AppStream is read by the Store's own reader, ADR-0037 SD5), polkit (`pkexec`,
