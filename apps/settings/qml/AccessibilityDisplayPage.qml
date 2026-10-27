@@ -76,7 +76,7 @@ SettingsPage {
 
     SettingsGroup {
         caption: qsTr("Text")
-        footnote: qsTr("Text size scales the text of the shell's panels and of Settings; the menu bar and menus keep their size, as on a Mac.")
+        footnote: qsTr("Text size scales the text of the shell's panels and of Settings; the menu bar and menus keep their size.")
 
         SettingsRow {
             title: qsTr("Text size")

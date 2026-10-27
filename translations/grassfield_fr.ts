@@ -238,8 +238,8 @@
         <translation>Texte</translation>
     </message>
     <message>
-        <source>Text size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size, as on a Mac.</source>
-        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages ; la barre des menus et les menus gardent leur taille, comme sur un Mac.</translation>
+        <source>Text size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size.</source>
+        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages&#xa0;; la barre des menus et les menus gardent leur taille.</translation>
     </message>
     <message>
         <source>Text size</source>
@@ -4353,20 +4353,20 @@
         <translation>Raccourcis dans les menus</translation>
     </message>
     <message>
-        <source>Automatic shows the Mac symbols (⌘ for Super) on a Mac or with an Apple keyboard, and the key names on other computers.</source>
-        <translation>Automatique affiche les symboles Mac (⌘ pour Super) sur un Mac ou avec un clavier Apple, et le nom des touches sur les autres ordinateurs.</translation>
+        <source>Automatic shows the symbols (⌘ for Super) when the computer or its keyboard has them on its keys, and the key names otherwise.</source>
+        <translation>Automatique affiche les symboles (⌘ pour Super) quand l’ordinateur ou son clavier les porte sur ses touches, et sinon le nom des touches.</translation>
     </message>
     <message>
         <source>Automatic</source>
         <translation>Automatique</translation>
     </message>
     <message>
-        <source>Mac Symbols</source>
-        <translation>Symboles Mac</translation>
-    </message>
-    <message>
         <source>Key Names</source>
         <translation>Noms des touches</translation>
+    </message>
+    <message>
+        <source>Symbols</source>
+        <translation>Symboles</translation>
     </message>
     <message>
         <source>Keyboard Shortcuts…</source>
@@ -4592,6 +4592,18 @@
     <message>
         <source>After %1 minutes</source>
         <translation>Après %1 minutes</translation>
+    </message>
+    <message>
+        <source>The session does not lock by itself: a display that turned off comes back on with any input, without the password.</source>
+        <translation>La session ne se verrouille pas d’elle-même&#xa0;: un écran éteint se rallume à la moindre saisie, sans le mot de passe.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input. A display that turns off earlier is not locked: until the session locks, any input turns it back on without the password.</source>
+        <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur. Un écran qui s’éteint avant n’est pas verrouillé&#xa0;: tant que la session ne l’est pas, la moindre saisie le rallume sans le mot de passe.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, whether the displays are on or off.</source>
+        <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur, que les écrans soient allumés ou éteints.</translation>
     </message>
     <message>
         <source>Turn display off on battery when inactive</source>

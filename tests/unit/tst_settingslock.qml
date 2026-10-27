@@ -119,6 +119,28 @@ TestCase {
         compare(delay.model.find(m => m.id === "7").text, "After 7 minutes");
     }
 
+    // A dark display is not a locked one: the note under the delays says so when a display turns off before the session locks.
+    function test_lockNote() {
+        const t = make(true);
+        const note = () => find(t.page.contentItem, i => i.footnote !== undefined && i.footnote !== "" && i.visible).footnote;
+        // The defaults: off at 2 minutes on battery, locked at 5.
+        verify(t.page.offFirst);
+        verify(note().indexOf("A display that turns off earlier is not locked") >= 0, note());
+        t.store.set("lock.displayOffBattery", 10);
+        verify(!t.page.offFirst, "power 10, battery 10, lock 5");
+        compare(note(), "The session locks after this much time without keyboard or pointer input, whether the displays are on or off.");
+        t.store.set("lock.displayOffPower", 3);
+        verify(t.page.offFirst, "on the power adapter too");
+        t.store.set("lock.displayOffPower", 0);
+        verify(!t.page.offFirst, "a display that never turns off");
+        t.store.set("lock.idleMinutes", 0);
+        verify(note().indexOf("does not lock by itself") >= 0, note());
+        // Without a battery, the battery's delay does not count.
+        const desk = make(false);
+        desk.store.set("lock.displayOffPower", 10);
+        verify(!desk.page.offFirst, "battery 2 does not apply");
+    }
+
     function test_whatTheLockScreenShows() {
         const t = make();
         const user = named(t.page.contentItem, "Show user name and photo");
