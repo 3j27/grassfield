@@ -1,0 +1,87 @@
+// grassfield-secrets-handover (ADR-0035 D-12, step 2c): run once per Grassfield session by
+// grassfield-secrets-handover.service, which config/hypr/grassfield/autostart.lua starts before the shell. The unit is
+// Type=notify: it reports ready after phase 1, so the shell, and any app the user opens from it, starts after a leftover
+// ksecretd has let go of the Secret Service; phase 2 goes on while the session starts.
+#include "handover.h"
+#include "translationloader.h"
+
+#include <QCoreApplication>
+#include <QDir>
+
+#include <cstdio>
+#include <cstring>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+
+namespace {
+
+// systemd's readiness message, without libsystemd: one datagram to $NOTIFY_SOCKET ('@' marks an abstract address).
+void notifyReady()
+{
+    const QByteArray socketPath = qgetenv("NOTIFY_SOCKET");
+    if (socketPath.isEmpty() || socketPath.size() >= int(sizeof(sockaddr_un::sun_path)))
+        return;
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    std::memcpy(address.sun_path, socketPath.constData(), size_t(socketPath.size()));
+    if (address.sun_path[0] == '@')
+        address.sun_path[0] = '\0';
+    const int fd = ::socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (fd < 0)
+        return;
+    static const char message[] = "READY=1";
+    ::sendto(fd, message, sizeof message - 1, MSG_NOSIGNAL, reinterpret_cast<const sockaddr *>(&address),
+             socklen_t(offsetof(sockaddr_un, sun_path) + size_t(socketPath.size())));
+    ::close(fd);
+}
+
+QString home(const char *variable, const QString &fallback)
+{
+    const QString value = qEnvironmentVariable(variable);
+    return value.startsWith(QLatin1Char('/')) ? value : QDir::homePath() + fallback;
+}
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("grassfield-secrets-handover"));
+    const bool dev = grassfield::i18n::devSession();
+    if (qgetenv("GRASSFIELD_SESSION") != "1" && !dev) {
+        std::fputs("grassfield-secrets-handover: refused: not a Grassfield session\n", stderr);
+        notifyReady();
+        return 2;
+    }
+    grassfield::i18n::install(grassfield::i18n::systemLanguage());
+
+    grassfield::handover::Config config;
+    config.dataHome = home("XDG_DATA_HOME", QStringLiteral("/.local/share"));
+    config.stateHome = home("XDG_STATE_HOME", QStringLiteral("/.local/state"));
+    if (dev) {
+        // Dev plumbing (ADR-0019), honoured only in a dev session: the tests' fake services run another executable.
+        if (const QString path = qEnvironmentVariable("GRASSFIELD_HANDOVER_KSECRETD"); !path.isEmpty())
+            config.ksecretd = path;
+        if (const QString path = qEnvironmentVariable("GRASSFIELD_HANDOVER_KEYRING"); !path.isEmpty())
+            config.keyring = path;
+        if (const int ms = qEnvironmentVariableIntValue("GRASSFIELD_HANDOVER_PROMPT_MS"); ms > 0)
+            config.promptTimeoutMs = ms;
+        if (const int ms = qEnvironmentVariableIntValue("GRASSFIELD_HANDOVER_NOTIFY_MS"); ms > 0)
+            config.notifyWaitMs = ms;
+    }
+
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        std::fputs("grassfield-secrets-handover: no session bus\n", stderr);
+        notifyReady();
+        return 1;
+    }
+    grassfield::handover::Handover handover(bus, config);
+    handover.releaseLeftover();
+    notifyReady();
+    const auto outcome = handover.move();
+    std::printf("grassfield-secrets-handover: %s moved=%d kept=%d\n",
+                outcome == grassfield::handover::Outcome::Done ? "done" : "deferred", handover.moved(), handover.kept());
+    return 0;
+}
