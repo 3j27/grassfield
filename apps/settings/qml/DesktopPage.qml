@@ -3,94 +3,126 @@ import QtQuick
 import QtQuick.Dialogs
 import Grassfield.Ui
 
+// Settings > Desktop & Dock as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Desktop & Dock): Dock (Size
+// and Magnification side by side; the Dock's position, the minimize animation, the title bar's double click and minimizing
+// into the app's icon; then how the Dock behaves), the folders kept in the Dock (Grassfield's own), Desktop & Stages,
+// Windows, and the Screen Corners… sheet (macOS: Hot Corners…; screenCornersRequested, Main opens it).
 SettingsPage {
     id: root
 
     required property var store
 
+    signal screenCornersRequested
+
     title: qsTr("Desktop & Dock")
 
-    readonly property var cornerActions: [
-        {id: "none", text: qsTr("None")},
-        {id: "overview", text: qsTr("Overview")},
-        {id: "notifications", text: qsTr("Notifications")},
-        {id: "apps", text: qsTr("Apps")},
-        {id: "lock", text: qsTr("Lock Screen")}
-    ]
+    // Magnification as one slider (macOS 27): Off at its start, then Small (dockMagnificationSmallAt of the knob's travel) to
+    // Large, the largest magnification the schema allows. A position between Off and Small goes to the nearer of the two.
+    readonly property real magnificationLarge: SettingsContract.RULES["dock.magnification"].max
+    readonly property real magnificationPosition: {
+        if (!root.store.value("dock.magnificationEnabled"))
+            return 0;
+        const m = Math.max(Tokens.settingsDockMagnificationSmall, root.store.value("dock.magnification"));
+        return Tokens.settingsDockMagnificationSmallAt + (1 - Tokens.settingsDockMagnificationSmallAt) * (m - Tokens.settingsDockMagnificationSmall) / (root.magnificationLarge - Tokens.settingsDockMagnificationSmall);
+    }
+
+    function setMagnification(position: real): void {
+        const small = Tokens.settingsDockMagnificationSmallAt;
+        if (position < small / 2) {
+            root.store.set("dock.magnificationEnabled", false);
+            return;
+        }
+        const t = Math.max(0, (position - small) / (1 - small));
+        const m = Math.round((Tokens.settingsDockMagnificationSmall + t * (root.magnificationLarge - Tokens.settingsDockMagnificationSmall)) * 100) / 100;
+        root.store.setMany({"dock.magnificationEnabled": true, "dock.magnification": m});
+    }
+
+    // A slider with its title above it and its end labels under it (macOS 27 Size and Magnification).
+    component DockSlider: Item {
+        id: dockSlider
+
+        property string title: ""
+        property alias slider: control
+        // The end labels: [{text, at}] with `at` 0 to 1 along the knob's travel; 0 starts at the track's start, 1 ends at its
+        // end, any other is centred on its place.
+        property var labels: []
+
+        height: parent ? parent.height : 0
+
+        Text {
+            y: Tokens.settingsDockSliderTitleBaseline - baselineOffset
+            textFormat: Text.PlainText
+            text: dockSlider.title
+            color: Appearance.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
+        }
+
+        Slider {
+            id: control
+            y: Tokens.settingsDockSliderCenter - height / 2
+            width: parent.width
+            accessibleName: dockSlider.title
+        }
+
+        Repeater {
+            model: dockSlider.labels
+
+            delegate: Text {
+                required property var modelData
+                readonly property real centre: control.knobWidth / 2 + modelData.at * control.travel
+                x: modelData.at === 0 ? 0 : modelData.at === 1 ? dockSlider.width - width : Math.round((centre - width / 2) * 2) / 2
+                y: Tokens.settingsDockSliderLabelBaseline - baselineOffset
+                textFormat: Text.PlainText
+                text: modelData.text
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+            }
+        }
+    }
 
     SettingsGroup {
         caption: qsTr("Dock")
 
-        SettingsRow {
-            title: qsTr("Size")
-            subtitle: qsTr("The size of the icons in the Dock. You can also drag the divider in the Dock.")
-            Text {
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Small")
-                color: Appearance.windowSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
+        Item {
+            width: parent.width
+            height: Tokens.settingsDockSlidersHeight
+
+            DockSlider {
+                x: Tokens.settingsRowInset
+                width: Tokens.settingsDockSizeSliderWidth
+                title: qsTr("Size")
+                labels: [{text: qsTr("Small"), at: 0}, {text: qsTr("Large"), at: 1}]
+                slider.from: Tokens.dockSizeMin
+                slider.to: Tokens.dockSizeMax
+                slider.stepSize: 1 / (Tokens.dockSizeMax - Tokens.dockSizeMin)
+                slider.ticks: 2
+                slider.value: root.store.value("dock.size")
+                slider.onMoved: v => root.store.set("dock.size", Math.round(v))
             }
-            Slider {
-                width: Tokens.controlSliderDefaultWidth
-                accessibleName: qsTr("Size")
-                from: Tokens.dockSizeMin
-                to: Tokens.dockSizeMax
-                stepSize: 1
-                value: root.store.value("dock.size")
-                onMoved: v => root.store.set("dock.size", Math.round(v))
-            }
-            Text {
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Large")
-                color: Appearance.windowSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
+
+            DockSlider {
+                x: Tokens.settingsDockMagnificationX
+                width: parent.width - x - Tokens.settingsRowInset
+                title: qsTr("Magnification")
+                labels: [{text: qsTr("Off"), at: 0}, {text: qsTr("Small"), at: Tokens.settingsDockMagnificationSmallAt}, {text: qsTr("Large"), at: 1}]
+                slider.from: 0
+                slider.to: 1
+                slider.stepSize: 0.05
+                slider.tickValues: [Tokens.settingsDockMagnificationSmallAt, 1]
+                slider.value: root.magnificationPosition
+                slider.onMoved: v => root.setMagnification(v)
             }
         }
+    }
 
+    SettingsGroup {
         SettingsRow {
-            title: qsTr("Magnification")
-            subtitle: qsTr("Icons grow under the pointer.")
-            Toggle {
-                accessibleName: qsTr("Magnification")
-                checked: root.store.value("dock.magnificationEnabled")
-                onToggled: c => root.store.set("dock.magnificationEnabled", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Magnification size")
-            Slider {
-                width: Tokens.controlSliderDefaultWidth
-                accessibleName: qsTr("Magnification size")
-                enabled: root.store.value("dock.magnificationEnabled")
-                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
-                from: 1
-                to: 2.5
-                stepSize: 0.05
-                value: root.store.value("dock.magnification")
-                onMoved: v => root.store.set("dock.magnification", Math.round(v * 100) / 100)
-            }
-            Text {
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                width: Tokens.settingsShortcutKeyMinWidth + Tokens.spacingSm
-                horizontalAlignment: Text.AlignRight
-                text: qsTr("%1x").arg(Qt.locale().toString(root.store.value("dock.magnification"), "f", 2))
-                color: Appearance.windowSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Position on screen")
-            subtitle: qsTr("The Dock goes to the edge you choose. With several displays it is on the one where the pointer last reached that edge.")
-            SegmentedControl {
-                accessibleName: qsTr("Position on screen")
+            title: qsTr("Dock position on screen")
+            ComboBox {
+                inline: true
+                accessibleName: qsTr("Dock position on screen")
                 model: [{id: "left", text: qsTr("Left")}, {id: "bottom", text: qsTr("Bottom")}, {id: "right", text: qsTr("Right")}]
                 value: root.store.value("dock.position")
                 onPicked: id => root.store.set("dock.position", id)
@@ -98,10 +130,10 @@ SettingsPage {
         }
 
         SettingsRow {
-            title: qsTr("Minimize animation")
-            subtitle: qsTr("With Reduce Motion on, windows fade instead.")
+            title: qsTr("Minimized window animation")
             ComboBox {
-                accessibleName: qsTr("Minimize animation")
+                inline: true
+                accessibleName: qsTr("Minimized window animation")
                 model: [{id: "funnel", text: qsTr("Funnel")}, {id: "shrink", text: qsTr("Shrink")}]
                 value: root.store.value("dock.minimizeEffect")
                 onPicked: id => root.store.set("dock.minimizeEffect", id)
@@ -109,37 +141,38 @@ SettingsPage {
         }
 
         SettingsRow {
-            title: qsTr("Automatically hide the Dock")
-            Toggle {
-                accessibleName: qsTr("Automatically hide the Dock")
-                checked: root.store.value("dock.autohide")
-                onToggled: c => root.store.set("dock.autohide", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Show recent applications in the Dock")
-            subtitle: qsTr("Apps you used recently that are not kept in the Dock appear in their own section before the Trash.")
-            Toggle {
-                accessibleName: qsTr("Show recent applications in the Dock")
-                checked: root.store.value("dock.showRecents")
-                onToggled: c => root.store.set("dock.showRecents", c)
+            title: qsTr("Window title bar double-click action")
+            ComboBox {
+                inline: true
+                accessibleName: qsTr("Window title bar double-click action")
+                model: [{id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("Do Nothing")}]
+                value: root.store.value("windows.titlebarDoubleClick")
+                onPicked: id => root.store.set("windows.titlebarDoubleClick", id)
             }
         }
 
         SettingsRow {
             title: qsTr("Minimize windows into application icon")
-            subtitle: qsTr("Off: each minimized window gets its own tile next to the Trash.")
             Toggle {
                 accessibleName: qsTr("Minimize windows into application icon")
                 checked: root.store.value("dock.minimizeIntoApp")
                 onToggled: c => root.store.set("dock.minimizeIntoApp", c)
             }
         }
+    }
+
+    SettingsGroup {
+        SettingsRow {
+            title: qsTr("Automatically hide and show the Dock")
+            Toggle {
+                accessibleName: qsTr("Automatically hide and show the Dock")
+                checked: root.store.value("dock.autohide")
+                onToggled: c => root.store.set("dock.autohide", c)
+            }
+        }
 
         SettingsRow {
             title: qsTr("Animate opening applications")
-            subtitle: qsTr("The icon bounces while an application opens.")
             Toggle {
                 accessibleName: qsTr("Animate opening applications")
                 checked: root.store.value("dock.animateOpening")
@@ -149,11 +182,19 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Show indicators for open applications")
-            subtitle: qsTr("A small dot under the icon of each open application.")
             Toggle {
                 accessibleName: qsTr("Show indicators for open applications")
                 checked: root.store.value("dock.showIndicators")
                 onToggled: c => root.store.set("dock.showIndicators", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Show recent apps in Dock")
+            Toggle {
+                accessibleName: qsTr("Show recent apps in Dock")
+                checked: root.store.value("dock.showRecents")
+                onToggled: c => root.store.set("dock.showRecents", c)
             }
         }
     }
@@ -198,6 +239,7 @@ SettingsPage {
                 required property string modelData
                 title: modelData
                 Button {
+                    push: true
                     text: qsTr("Remove")
                     Accessible.name: qsTr("Remove %1 from the Dock").arg(folderRow.modelData)
                     onClicked: root.removeDockFolder(folderRow.modelData)
@@ -208,6 +250,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Add a folder")
             Button {
+                push: true
                 text: qsTr("Add Folder…")
                 onClicked: root.openAddFolder()
             }
@@ -215,15 +258,29 @@ SettingsPage {
     }
 
     SettingsGroup {
-        caption: qsTr("Desktop")
+        caption: qsTr("Desktop & Stages")
 
         SettingsRow {
-            title: qsTr("Show items on the desktop")
-            subtitle: qsTr("Files and folders of the Desktop folder appear on the wallpaper.")
-            Toggle {
+            title: qsTr("Show items")
+            CheckBox {
+                text: qsTr("On Desktop")
                 accessibleName: qsTr("Show items on the desktop")
                 checked: root.store.value("desktop.showIcons")
-                onToggled: c => root.store.set("desktop.showIcons", c)
+                onToggled: root.store.set("desktop.showIcons", checked)
+            }
+        }
+    }
+
+    SettingsGroup {
+        footnote: qsTr("Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.")
+
+        SettingsRow {
+            title: qsTr("Stages")
+            subtitle: qsTr("Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.")
+            Toggle {
+                accessibleName: qsTr("Stages")
+                checked: root.store.value("windows.stages")
+                onToggled: c => root.store.set("windows.stages", c)
             }
         }
     }
@@ -232,18 +289,7 @@ SettingsPage {
         caption: qsTr("Windows")
 
         SettingsRow {
-            title: qsTr("Double-click a window's title bar to")
-            ComboBox {
-                accessibleName: qsTr("Double-click a window's title bar to")
-                model: [{id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("Do Nothing")}]
-                value: root.store.value("windows.titlebarDoubleClick")
-                onPicked: id => root.store.set("windows.titlebarDoubleClick", id)
-            }
-        }
-
-        SettingsRow {
             title: qsTr("Drag windows to screen edges to tile")
-            subtitle: qsTr("A window dragged to the left or right edge fills that half, to a corner that quarter.")
             Toggle {
                 accessibleName: qsTr("Drag windows to screen edges to tile")
                 checked: root.store.value("windows.tilingEdges")
@@ -282,63 +328,17 @@ SettingsPage {
         }
     }
 
-    SettingsGroup {
-        caption: qsTr("Stages")
-        footnote: qsTr("Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.")
+    // macOS 27: the push buttons under the last group, right-aligned (Screen Corners…, macOS's Hot Corners…, opens its sheet).
+    Item {
+        width: parent.width
+        height: screenCornersButton.height
 
-        SettingsRow {
-            title: qsTr("Stages")
-            subtitle: qsTr("Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.")
-            Toggle {
-                accessibleName: qsTr("Stages")
-                checked: root.store.value("windows.stages")
-                onToggled: c => root.store.set("windows.stages", c)
-            }
-        }
-    }
-
-    SettingsGroup {
-        caption: qsTr("Screen Corners")
-        footnote: qsTr("Move the pointer into a screen corner to run the action.")
-
-        SettingsRow {
-            title: qsTr("Top left")
-            ComboBox {
-                accessibleName: qsTr("Top left corner")
-                model: root.cornerActions
-                value: root.store.value("hotCorners.topLeft")
-                onPicked: id => root.store.set("hotCorners.topLeft", id)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Top right")
-            ComboBox {
-                accessibleName: qsTr("Top right corner")
-                model: root.cornerActions
-                value: root.store.value("hotCorners.topRight")
-                onPicked: id => root.store.set("hotCorners.topRight", id)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Bottom left")
-            ComboBox {
-                accessibleName: qsTr("Bottom left corner")
-                model: root.cornerActions
-                value: root.store.value("hotCorners.bottomLeft")
-                onPicked: id => root.store.set("hotCorners.bottomLeft", id)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Bottom right")
-            ComboBox {
-                accessibleName: qsTr("Bottom right corner")
-                model: root.cornerActions
-                value: root.store.value("hotCorners.bottomRight")
-                onPicked: id => root.store.set("hotCorners.bottomRight", id)
-            }
+        Button {
+            id: screenCornersButton
+            anchors.right: parent.right
+            push: true
+            text: qsTr("Screen Corners…")
+            onClicked: root.screenCornersRequested()
         }
     }
 }

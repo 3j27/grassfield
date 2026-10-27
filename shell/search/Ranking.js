@@ -181,6 +181,19 @@ function newUsage() {
     return Object.create(null);
 }
 
+// Delete Search History (Settings > Search, search.historyResetAt): the results picked before `at` (milliseconds since the
+// epoch) are forgotten, the ones picked later stay. A time that is not a positive number forgets nothing.
+function forgetUsageBefore(usage, at) {
+    if (typeof at !== "number" || !isFinite(at) || at <= 0)
+        return usage;
+    const kept = newUsage();
+    for (const id of Object.keys(usage)) {
+        if (usage[id].last >= at)
+            kept[id] = usage[id];
+    }
+    return kept;
+}
+
 function bumpUsage(usage, id, now) {
     if (typeof id !== "string" || id === "")
         return usage;

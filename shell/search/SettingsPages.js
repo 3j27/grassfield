@@ -16,9 +16,14 @@ const PAGES = [
     {id: "accessibility", icon: "person"},
     {id: "desktop", icon: "overview"},
     {id: "menubar", icon: "control-center"},
+    {id: "search", icon: "search"},
     {id: "notifications", icon: "bell"},
+    {id: "focus", icon: "moon"},
     {id: "lock", icon: "lock"},
+    {id: "privacy", icon: "hand"},
     {id: "mouse", icon: "mouse"},
+    {id: "trackpad", icon: "trackpad"},
+    {id: "printers", icon: "printer"},
     {id: "keyboard", icon: "keyboard"},
     {id: "about", icon: "grassfield-logo"}
 ];

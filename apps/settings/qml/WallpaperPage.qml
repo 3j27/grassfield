@@ -1,11 +1,13 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
+import QtQuick.Effects
 import Grassfield.Ui
 
-// Settings > Wallpaper (ADR-0016): a preview of the current wallpaper with its name and status, the options that apply to
-// it, then grids of thumbnails (the Grassfield artwork, colours, the pictures folder, folders and pictures added), and the
-// buttons that add a folder or a picture. Changes apply at once: the page writes the `wallpaper` keys of grassfield.json
+// Settings > Wallpaper (ADR-0016) as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Wallpaper): a preview
+// of the current wallpaper beside a group with its name, its status and the options that apply to it, then sections of
+// thumbnails (the Grassfield artwork, folders and pictures added and the tiles that add them, videos, online, the pictures
+// folder, colours). Changes apply at once: the page writes the `wallpaper` keys of grassfield.json
 // in one write and the shell follows the file; the shell reports what happened in wallpaper-state.json (read here).
 // Pictures are parsed by grassfield-wallpaper only (thumbnails, listing): this page never decodes a file of the user's.
 // Online (ADR-0016 step 2): one tile, the Wikimedia Commons Picture of the Day. Choosing it shows what is contacted and asks
@@ -16,6 +18,9 @@ SettingsPage {
 
     required property var store
     required property var backend
+
+    // Screen Saver… asks Main for its sheet (ScreenSaverSheet.qml, ADR-0032).
+    signal screenSaverRequested
 
     title: qsTr("Wallpaper")
 
@@ -67,14 +72,20 @@ SettingsPage {
     property var pictures: []
     property var thumbs: ({})
     property var recents: []
-    property bool showAllPictures: false
     property var suffixes: ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif"]
-    readonly property int shownPictures: 8
 
     // ---- names and captions ----
     function baseName(p: string): string {
         const i = p.lastIndexOf("/");
         return i >= 0 ? p.substring(i + 1) : p;
+    }
+
+    // A picture's or a video's name as a tile and the header show it: its file name without the extension (a name that starts
+    // with a dot keeps it).
+    function displayName(p: string): string {
+        const name = root.baseName(p);
+        const dot = name.lastIndexOf(".");
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     function intervalText(id: string): string {
@@ -176,15 +187,21 @@ SettingsPage {
         if (root.source === "builtin")
             return qsTr("Grassfield");
         if (root.source === "color")
-            return root.color;
+            return root.colorName(root.color);
         if (root.source === "online")
             return root.onlineEntry && root.onlineEntry.title ? root.onlineEntry.title : root.providerName(root.provider);
         if (root.source === "folder")
             return root.baseName(root.path);
-        return root.baseName(root.path);
+        return root.displayName(root.path);
     }
 
-    // The name of an online source as the tile and the disclosure call it.
+    // A palette colour's name, "Colour" for any other.
+    function colorName(c: string): string {
+        const i = Tokens.iconModeTintColors.findIndex(t => t.toLowerCase() === String(c).toLowerCase());
+        return i >= 0 ? root.colorNames[i] : qsTr("Colour");
+    }
+
+    // The name of an online source as the disclosure calls it.
     function providerName(id: string): string {
         return id === "apod" ? qsTr("Astronomy Picture of the Day (NASA)") : qsTr("Picture of the Day (Wikimedia Commons)");
     }
@@ -401,20 +418,29 @@ SettingsPage {
     // ---- the helper: listing and thumbnails, two at a time ----
     property var thumbQueue: []
     property var thumbFailed: ({})
-    property int thumbBusy: 0
+    // The pictures the helper is preparing now (asked once: Show All asks again for the tiles already drawn).
+    property var thumbRunning: ({})
+    readonly property int thumbBusy: Object.keys(root.thumbRunning).length
 
     function requestThumb(p: string): void {
-        if (p === "" || root.thumbs[p] !== undefined || root.thumbFailed[p] || root.thumbQueue.indexOf(p) >= 0)
+        if (p === "" || root.thumbs[p] !== undefined || root.thumbFailed[p] || root.thumbRunning[p] || root.thumbQueue.indexOf(p) >= 0)
             return;
         root.thumbQueue = root.thumbQueue.concat([p]);
         root.pump();
+    }
+
+    function requestThumbs(paths: var): void {
+        for (const p of paths)
+            root.requestThumb(p);
     }
 
     function pump(): void {
         while (root.thumbBusy < 2 && root.thumbQueue.length > 0) {
             const p = root.thumbQueue[0];
             root.thumbQueue = root.thumbQueue.slice(1);
-            root.thumbBusy++;
+            const running = Object.assign({}, root.thumbRunning);
+            running[p] = true;
+            root.thumbRunning = running;
             root.backend.query([root.backend.wallpaperTool, "thumb", "--width", String(Tokens.settingsWallpaperThumbWidth), "--out", root.backend.wallpaperCache + "/thumbs", "--", p], "wp.thumb:" + p, 20000);
         }
     }
@@ -454,7 +480,9 @@ SettingsPage {
                     root.refusal = root.reasonText("not-regular", root.baseName(p));
             } else if (tag.indexOf("wp.thumb:") === 0) {
                 const p = tag.substring(9);
-                root.thumbBusy = Math.max(0, root.thumbBusy - 1);
+                const running = Object.assign({}, root.thumbRunning);
+                delete running[p];
+                root.thumbRunning = running;
                 let file = "";
                 if (ok) {
                     try {
@@ -541,581 +569,485 @@ SettingsPage {
         root.backend.query([root.backend.wallpaperTool, "formats"], "wp.formats", 5000);
     }
 
-    // ---- the preview ----
-    Item {
-        id: header
+    // macOS 27 lays the pane out in one column of its own (docs/audits/settings-parity-2026-10-26.md § Wallpaper): the current
+    // wallpaper (its preview, a group of its options, push buttons, a line across the pane), then sections of tiles on the window's
+    // background, each title placed from the previous row (WallpaperSection), not with the page's group gap.
+    Column {
         width: parent.width
-        height: Tokens.settingsWallpaperPreviewHeight + captions.height + Tokens.spacingSm
 
-        // The display the options are for (its aspect ratio shapes the preview), else the primary one.
-        readonly property var screen: {
-            const list = root.backend.screens();
-            const chosen = root.currentDisplay ? list.find(s => s.name === root.currentDisplay.name) : null;
-            return chosen || (list.length > 0 ? (list.find(s => s.primary) || list[0]) : null);
-        }
-        readonly property real aspect: screen && screen.pixelHeight > 0 ? screen.pixelWidth / screen.pixelHeight : 16 / 9
+        // ---- the current wallpaper ----
+        Item {
+            id: header
+            width: parent.width
+            height: line.y + line.height
 
-        Rectangle {
-            id: preview
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: Tokens.settingsWallpaperPreviewHeight
-            width: Math.min(parent.width, height * header.aspect)
-            radius: Tokens.settingsDisplayRadius
-            clip: true
-            color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-            Accessible.role: Accessible.Graphic
-            Accessible.name: qsTr("Current wallpaper: %1").arg(root.headline)
+            // The block is wallpaperHeaderInset from the pane's edges, a little wider than the groups below.
+            readonly property real outset: Tokens.settingsContentMargin - Tokens.settingsWallpaperHeaderInset
 
-            // Dropping a file, a folder or a video on the preview sets it (ADR-0016 section 8).
-            DropArea {
-                anchors.fill: parent
-                keys: ["text/uri-list"]
-                onDropped: drop => {
-                    if (drop.urls.length > 0)
-                        root.dropped(root.urlToPath(drop.urls[0]));
+            Item {
+                id: preview
+                x: -header.outset
+                y: Tokens.settingsWallpaperHeaderTop
+                width: Tokens.settingsWallpaperPreviewWidth
+                height: Tokens.settingsWallpaperPreviewHeight
+                Accessible.role: Accessible.Graphic
+                Accessible.name: qsTr("Current wallpaper: %1").arg(root.headline)
+
+                // Dropping a file, a folder or a video on the preview sets it (ADR-0016 section 8).
+                DropArea {
+                    anchors.fill: parent
+                    keys: ["text/uri-list"]
+                    onDropped: drop => {
+                        if (drop.urls.length > 0)
+                            root.dropped(root.urlToPath(drop.urls[0]));
+                    }
+                }
+
+                Item {
+                    anchors.fill: parent
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: previewMask
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+                    }
+
+                    GrassfieldArtwork {
+                        anchors.fill: parent
+                        visible: root.source === "builtin" || (root.source !== "color" && preparedImage.status !== Image.Ready)
+                    }
+
+                    Image {
+                        id: preparedImage
+                        anchors.fill: parent
+                        // The prepared picture the shell drew (the tool's own output, never the user's file), cropped as the display shows it.
+                        source: root.source !== "builtin" && root.source !== "color" && root.status.file ? "file://" + root.status.file : ""
+                        asynchronous: true
+                        cache: false
+                        fillMode: Image.PreserveAspectCrop
+                        sourceSize: Qt.size(Tokens.settingsWallpaperThumbWidth * 2, Tokens.settingsWallpaperThumbWidth * 2)
+                    }
+                }
+
+                Rectangle {
+                    id: previewMask
+                    visible: false
+                    layer.enabled: true
+                    width: parent.width
+                    height: parent.height
+                    radius: Tokens.settingsWallpaperPreviewRadius
                 }
             }
 
-            GrassfieldArtwork {
-                anchors.fill: parent
-                visible: root.source === "builtin" || (root.source !== "color" && preparedImage.status !== Image.Ready)
+            SettingsGroup {
+                id: options
+                x: preview.x + Tokens.settingsWallpaperGroupX
+                y: Tokens.settingsWallpaperHeaderTop
+                width: header.width + header.outset - x
+
+                // Which display the options are for: All Displays, or one display with a wallpaper of its own (ADR-0016
+                // section 8; shown with more than one output).
+                SettingsRow {
+                    visible: root.displays.length > 1
+                    title: qsTr("Display")
+                    subtitle: root.currentDisplay === null ? "" : (root.overridden ? qsTr("This display has a wallpaper of its own.") : qsTr("This display follows All Displays."))
+
+                    ComboBox {
+                        inline: true
+                        accessibleName: qsTr("Display")
+                        model: [{id: "all", text: qsTr("All Displays")}].concat(root.displays.map(d => ({id: d.key, text: d.label})))
+                        value: root.displayId
+                        onPicked: id => root.displayId = id
+                    }
+                }
+
+                // The wallpaper's name (and what the shell says about it), with how it fills the screen, or its colour.
+                SettingsRow {
+                    title: root.headline
+                    subtitle: root.caption
+
+                    ComboBox {
+                        visible: root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video"
+                        inline: true
+                        accessibleName: qsTr("Fit")
+                        // A video is filled or fitted only; the other modes are for pictures.
+                        model: root.source === "video" ? root.fitModel.filter(m => m.id === "fill" || m.id === "fit") : root.fitModel
+                        value: root.fit
+                        onPicked: id => root.writeFields({"wallpaper.fit": id})
+                    }
+
+                    ColorWell {
+                        visible: root.source === "color"
+                        accessibleName: qsTr("Wallpaper colour")
+                        color: root.color
+                        presets: Tokens.iconModeTintColors.map((c, i) => ({color: c, name: root.colorNames[i]}))
+                        onEdited: c => root.writeFields({"wallpaper.color": c})
+                    }
+                }
+
+                SettingsRow {
+                    visible: (root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile")
+                    title: qsTr("Colour")
+                    subtitle: qsTr("Shown around a picture that does not fill the screen.")
+
+                    ColorWell {
+                        accessibleName: qsTr("Wallpaper colour")
+                        color: root.color
+                        presets: Tokens.iconModeTintColors.map((c, i) => ({color: c, name: root.colorNames[i]}))
+                        onEdited: c => root.writeFields({"wallpaper.color": c})
+                    }
+                }
+
+                SettingsRow {
+                    visible: root.source === "folder"
+                    title: qsTr("Change picture")
+
+                    ComboBox {
+                        inline: true
+                        accessibleName: qsTr("Change picture")
+                        model: root.intervalModel
+                        value: root.interval
+                        onPicked: id => root.writeFields({"wallpaper.interval": id})
+                    }
+                }
+
+                SettingsRow {
+                    visible: root.source === "folder"
+                    title: qsTr("Shuffle")
+                    subtitle: qsTr("Random order, every picture once before any is repeated.")
+
+                    Toggle {
+                        accessibleName: qsTr("Shuffle")
+                        checked: root.shuffle
+                        onToggled: c => root.writeFields({"wallpaper.shuffle": c})
+                    }
+                }
+
+                SettingsRow {
+                    visible: root.source === "video"
+                    title: qsTr("Play on battery power")
+                    subtitle: qsTr("A video wallpaper pauses on battery, when you are away, under a full-screen window, and with Reduce Motion.")
+
+                    Toggle {
+                        accessibleName: qsTr("Play on battery power")
+                        checked: root.videoOnBattery
+                        onToggled: c => root.store.set("wallpaper.videoOnBattery", c)
+                    }
+                }
+
+                // The shell transcodes the video once (H.264 with at most the pixels of 4K UHD, in the display's orientation); its
+                // progress is reported in wallpaper-state.json, and the name row above says it in words.
+                Item {
+                    visible: root.transcoding
+                    width: parent.width
+                    height: Tokens.settingsRowHeight
+
+                    Rectangle {
+                        x: Tokens.settingsRowInset
+                        width: parent.width - 2 * Tokens.settingsRowInset
+                        height: 1
+                        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                    }
+
+                    ProgressBar {
+                        x: Tokens.settingsRowInset
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: cancelVideoButton.x - x - Tokens.spacingLg
+                        accessibleName: qsTr("Preparing the video")
+                        from: 0
+                        to: 1
+                        value: root.transcoding ? Math.max(0, Math.min(1, root.status.progress)) : 0
+                    }
+
+                    // Cancel: the wallpaper that was there before (the shell stops the job).
+                    Button {
+                        id: cancelVideoButton
+                        anchors.right: parent.right
+                        anchors.rightMargin: Tokens.settingsRowInset
+                        anchors.verticalCenter: parent.verticalCenter
+                        push: true
+                        text: qsTr("Cancel")
+                        onClicked: root.cancelVideo()
+                    }
+                }
             }
 
-            Image {
-                id: preparedImage
-                anchors.fill: parent
-                // The prepared picture the shell drew (the tool's own output, never the user's file).
-                source: root.source !== "builtin" && root.source !== "color" && root.status.file ? "file://" + root.status.file : ""
-                asynchronous: true
-                cache: false
-                fillMode: Image.PreserveAspectCrop
-                sourceSize: Qt.size(Tokens.settingsWallpaperThumbWidth * 2, Tokens.settingsWallpaperThumbWidth * 2)
+            // Push buttons under the group, right-aligned (macOS 27: Screen Saver…, last on the right); a long pair wraps.
+            Flow {
+                id: buttons
+                x: options.x
+                y: options.y + options.height + Tokens.settingsWallpaperButtonsGap
+                width: options.width
+                layoutDirection: Qt.RightToLeft
+                spacing: Tokens.settingsWallpaperButtonSpacing
+
+                Button {
+                    push: true
+                    text: qsTr("Screen Saver…")
+                    onClicked: root.screenSaverRequested()
+                }
+
+                Button {
+                    visible: root.status.state === "error" && root.source !== "builtin"
+                    push: true
+                    text: qsTr("Use the Grassfield Wallpaper")
+                    onClicked: root.useArtwork()
+                }
+
+                Button {
+                    visible: root.overridden
+                    push: true
+                    text: qsTr("Use the All Displays Wallpaper")
+                    onClicked: root.useAllDisplays()
+                }
             }
 
+            // A line across the whole pane, under the preview or the buttons, whichever ends lower.
             Rectangle {
-                anchors.fill: parent
-                radius: preview.radius
-                color: "transparent"
-                border.width: 1
-                border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                id: line
+                x: -root.columnX
+                y: Math.max(preview.y + preview.height + Tokens.settingsWallpaperSeparatorPreviewGap, (buttons.height > 0 ? buttons.y + buttons.height : options.y + options.height) + Tokens.settingsWallpaperSeparatorGap)
+                width: root.width
+                height: 1
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
         }
 
-        Column {
-            id: captions
-            y: Tokens.settingsWallpaperPreviewHeight + Tokens.spacingSm
-            width: parent.width
-            spacing: Tokens.spacingXs
+        // ---- sections ----
+        WallpaperSection {
+            // The first title is placed from the line's top.
+            lead: Tokens.settingsWallpaperTitleBaseline - line.height
+            title: qsTr("Grassfield")
+            model: [{kind: "art", label: qsTr("Grassfield"), selected: root.source === "builtin"}]
+            onActivated: root.useArtwork()
+        }
 
-            Text {
-                width: parent.width
-                textFormat: Text.PlainText
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideMiddle
-                text: root.headline
-                color: Appearance.colors.text
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-                font.weight: Tokens.typographyMenuBoldWeight
-                Accessible.role: Accessible.StaticText
-                Accessible.name: text
+        // Pictures and folders added here, after the tiles that add them: a picture shows its thumbnail, a folder reads
+        // "Shuffle <name>" (macOS wording).
+        WallpaperSection {
+            id: addedSection
+            title: qsTr("Folders and Pictures")
+            readonly property var items: root.recents.filter(e => e.kind !== "video")
+            readonly property var adds: [{kind: "add", icon: "picture-add", label: qsTr("Add Picture…")}, {kind: "add", icon: "folder-add", label: qsTr("Add Folder…")}]
+            model: adds.concat(items.map(e => ({
+                            kind: e.kind === "file" ? "image" : "folder",
+                            label: e.kind === "folder" ? qsTr("Shuffle %1").arg(root.baseName(e.path)) : root.displayName(e.path),
+                            thumb: e.kind === "file" ? (root.thumbs[e.path] || "") : "",
+                            selected: root.source === e.kind && root.path === e.path
+                        })))
+            onActivated: index => {
+                if (index === 0)
+                    fileDialog.open();
+                else if (index === 1)
+                    folderDialog.open();
+                else if (addedSection.items[index - 2].kind === "file")
+                    root.usePicture(addedSection.items[index - 2].path);
+                else
+                    root.useFolder(addedSection.items[index - 2].path);
             }
+            onItemsChanged: root.requestThumbs(addedSection.items.filter(e => e.kind === "file").map(e => e.path))
+        }
+
+        // ---- videos (ADR-0016 W7): a video is prepared once by the shell, then plays under the pause policy ----
+        WallpaperSection {
+            id: videosSection
+            title: qsTr("Videos")
+            readonly property var items: root.recents.filter(e => e.kind === "video")
+            model: [{kind: "add", icon: "video-add", label: qsTr("Add Video…")}].concat(items.map(e => ({kind: "video", label: root.displayName(e.path), thumb: root.thumbs[e.path] || "", selected: root.source === "video" && root.path === e.path})))
+            onActivated: index => {
+                if (index === 0)
+                    videoDialog.open();
+                else
+                    root.useVideo(videosSection.items[index - 1].path);
+            }
+            onItemsChanged: root.requestThumbs(videosSection.items.map(e => e.path))
+        }
+
+        // ---- online (ADR-0016 step 2) ----
+        WallpaperSection {
+            title: qsTr("Online")
+            model: [{kind: "image", label: qsTr("Wikimedia"), fullName: root.providerName("commons"), thumb: root.source === "online" && root.provider === "commons" && root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online" && root.provider === "commons"},
+                {kind: "image", label: qsTr("NASA APOD"), fullName: root.providerName("apod"), thumb: root.source === "online" && root.provider === "apod" && root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online" && root.provider === "apod"}]
+            onActivated: index => root.askOnline(index === 1 ? "apod" : "commons")
 
             Text {
-                visible: root.caption !== ""
+                visible: !disclosure.visible
                 width: parent.width
+                topPadding: Tokens.settingsWallpaperTilesTop
                 textFormat: Text.PlainText
-                horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: root.caption
-                color: Appearance.colors.textSecondary
+                text: qsTr("Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.")
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
             }
 
+            // The opt-in: what is contacted, how often, who sees what. Esc or Cancel leaves everything as it was.
             Item {
-                visible: root.status.state === "error" && root.source !== "builtin"
+                id: disclosure
+                visible: root.disclosing && !(root.source === "online" && root.provider === root.disclosedProvider)
                 width: parent.width
-                height: visible ? useArtworkButton.height : 0
+                height: visible ? disclosureColumn.y + disclosureColumn.height : 0
+                Accessible.role: Accessible.Grouping
+                Accessible.name: root.providerName(root.disclosedProvider)
+                Keys.onEscapePressed: root.disclosing = false
 
-                Button {
-                    id: useArtworkButton
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: qsTr("Use the Grassfield Wallpaper")
-                    onClicked: root.useArtwork()
-                }
-            }
-        }
-    }
-
-    // ---- display: All Displays, or one display with a wallpaper of its own (shown with more than one output) ----
-    SettingsGroup {
-        visible: root.displays.length > 1
-
-        SettingsRow {
-            title: qsTr("Display")
-            subtitle: root.currentDisplay === null ? qsTr("The wallpaper of every display that has none of its own.") : (root.overridden ? qsTr("This display has a wallpaper of its own.") : qsTr("This display follows All Displays."))
-            Picker {
-                anchors.verticalCenter: parent.verticalCenter
-                implicitWidth: Tokens.settingsWallpaperPickerWidth
-                accessibleName: qsTr("Display")
-                model: [{id: "all", text: qsTr("All Displays")}].concat(root.displays.map(d => ({id: d.key, text: d.label})))
-                value: root.displayId
-                onPicked: id => root.displayId = id
-            }
-        }
-
-        SettingsRow {
-            visible: root.overridden
-            title: qsTr("Follow All Displays")
-            subtitle: qsTr("Removes the wallpaper of this display.")
-            Button {
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Use the All Displays Wallpaper")
-                onClicked: root.useAllDisplays()
-            }
-        }
-    }
-
-    // ---- options that apply to the current wallpaper ----
-    SettingsGroup {
-        visible: root.source !== "builtin"
-
-        SettingsRow {
-            visible: root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video"
-            title: qsTr("Fit")
-            Picker {
-                anchors.verticalCenter: parent.verticalCenter
-                implicitWidth: Tokens.settingsWallpaperPickerWidth
-                accessibleName: qsTr("Fit")
-                // A video is filled or fitted only; the other modes are for pictures.
-                model: root.source === "video" ? root.fitModel.filter(m => m.id === "fill" || m.id === "fit") : root.fitModel
-                value: root.fit
-                onPicked: id => root.writeFields({"wallpaper.fit": id})
-            }
-        }
-
-        SettingsRow {
-            visible: root.source === "color" || ((root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile"))
-            title: qsTr("Colour")
-            subtitle: root.source === "color" ? "" : qsTr("Shown around a picture that does not fill the screen.")
-            ColorWell {
-                anchors.verticalCenter: parent.verticalCenter
-                accessibleName: qsTr("Wallpaper colour")
-                color: root.color
-                presets: Tokens.iconModeTintColors.map((c, i) => ({color: c, name: root.colorNames[i]}))
-                onEdited: c => root.writeFields({"wallpaper.color": c})
-            }
-        }
-
-        SettingsRow {
-            visible: root.source === "folder"
-            title: qsTr("Change picture")
-            Picker {
-                anchors.verticalCenter: parent.verticalCenter
-                implicitWidth: Tokens.settingsWallpaperPickerWidth
-                accessibleName: qsTr("Change picture")
-                model: root.intervalModel
-                value: root.interval
-                onPicked: id => root.writeFields({"wallpaper.interval": id})
-            }
-        }
-
-        SettingsRow {
-            visible: root.source === "video"
-            title: qsTr("Play on battery power")
-            subtitle: qsTr("A video wallpaper pauses on battery, when you are away, under a full-screen window, and with Reduce Motion.")
-            Toggle {
-                accessibleName: qsTr("Play on battery power")
-                checked: root.videoOnBattery
-                onToggled: c => root.store.set("wallpaper.videoOnBattery", c)
-            }
-        }
-
-        // The shell transcodes the video once (H.264 with at most the pixels of 4K UHD, in the display's orientation); its progress is reported in wallpaper-state.json.
-        SettingsRow {
-            visible: root.transcoding
-            title: qsTr("Preparing the video")
-            subtitle: qsTr("%1%").arg(root.transcoding ? Math.round(root.status.progress * 100) : 0)
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Tokens.spacingMd
-
-                Rectangle {
-                    id: progressTrack
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Tokens.settingsWallpaperPickerWidth - Tokens.spacingMd * 4
-                    height: Tokens.spacingXs
-                    radius: height / 2
-                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-                    Accessible.role: Accessible.ProgressBar
-                    Accessible.name: qsTr("Preparing the video")
-                    Accessible.description: qsTr("%1%").arg(root.transcoding ? Math.round(root.status.progress * 100) : 0)
-
-                    Rectangle {
-                        width: parent.width * (root.transcoding ? Math.max(0, Math.min(1, root.status.progress)) : 0)
-                        height: parent.height
-                        radius: parent.radius
-                        color: Appearance.colors.accent
-                    }
-                }
-
-                // Cancel: the wallpaper that was there before (the shell stops the job).
-                Button {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Cancel")
-                    onClicked: root.cancelVideo()
-                }
-            }
-        }
-
-        SettingsRow {
-            visible: root.source === "folder"
-            title: qsTr("Shuffle")
-            subtitle: qsTr("Random order, every picture once before any is repeated.")
-            Toggle {
-                accessibleName: qsTr("Shuffle")
-                checked: root.shuffle
-                onToggled: c => root.writeFields({"wallpaper.shuffle": c})
-            }
-        }
-    }
-
-    // ---- sections ----
-    SettingsGroup {
-        caption: qsTr("Grassfield")
-
-        Item {
-            width: parent.width
-            height: artGrid.height + 2 * Tokens.spacingMd
-
-            WallpaperGrid {
-                id: artGrid
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                accessibleName: qsTr("Grassfield")
-                model: [{kind: "art", label: qsTr("Grassfield"), selected: root.source === "builtin"}]
-                onActivated: root.useArtwork()
-            }
-        }
-    }
-
-    // ---- online (ADR-0016 step 2) ----
-    SettingsGroup {
-        id: onlineGroup
-        caption: qsTr("Online")
-        footnote: root.disclosing ? "" : qsTr("Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.")
-
-        Item {
-            width: parent.width
-            height: onlineGrid.height + 2 * Tokens.spacingMd
-
-            WallpaperGrid {
-                id: onlineGrid
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                accessibleName: qsTr("Online")
-                model: [{kind: "image", wrap: true, label: root.providerName("commons"), thumb: root.source === "online" && root.provider === "commons" && root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online" && root.provider === "commons"},
-                    {kind: "image", wrap: true, label: root.providerName("apod"), thumb: root.source === "online" && root.provider === "apod" && root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online" && root.provider === "apod"}]
-                onActivated: index => root.askOnline(index === 1 ? "apod" : "commons")
-            }
-        }
-
-        // The opt-in: what is contacted, how often, who sees what. Esc or Cancel leaves everything as it was.
-        Item {
-            id: disclosure
-            visible: root.disclosing && !(root.source === "online" && root.provider === root.disclosedProvider)
-            width: parent.width
-            height: visible ? disclosureColumn.height + 2 * Tokens.spacingMd : 0
-            Accessible.role: Accessible.Grouping
-            Accessible.name: root.providerName(root.disclosedProvider)
-            Keys.onEscapePressed: root.disclosing = false
-
-            Column {
-                id: disclosureColumn
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                spacing: Tokens.spacingSm
-
-                Text {
+                Column {
+                    id: disclosureColumn
+                    y: Tokens.settingsWallpaperTilesTop
                     width: parent.width
-                    textFormat: Text.PlainText
-                    wrapMode: Text.Wrap
-                    text: root.disclosedProvider === "apod" ? qsTr("Grassfield will download NASA's Astronomy Picture of the Day once a day. It contacts api.nasa.gov and apod.nasa.gov, and only while you are online on a connection that is not metered. These services see your IP address and the day you ask for; the shared demonstration key is used, so no account is involved. A picture that has a copyright holder is shown with its credit. Nothing is contacted until you choose Use Picture of the Day.") : qsTr("Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.")
-                    color: Appearance.colors.text
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyBodySize
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text
-                }
-
-                Row {
-                    anchors.right: parent.right
                     spacing: Tokens.spacingSm
 
-                    Button {
-                        text: qsTr("Cancel")
-                        onClicked: root.disclosing = false
+                    Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        text: root.disclosedProvider === "apod" ? qsTr("Grassfield will download NASA's Astronomy Picture of the Day once a day. It contacts api.nasa.gov and apod.nasa.gov, and only while you are online on a connection that is not metered. These services see your IP address and the day you ask for; the shared demonstration key is used, so no account is involved. A picture that has a copyright holder is shown with its credit. Nothing is contacted until you choose Use Picture of the Day.") : qsTr("Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.")
+                        color: Appearance.colors.text
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyBodySize
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: text
                     }
 
-                    Button {
-                        id: useOnlineButton
-                        primary: true
-                        text: qsTr("Use Picture of the Day")
-                        onClicked: root.useOnline()
+                    Row {
+                        anchors.right: parent.right
+                        spacing: Tokens.settingsWallpaperButtonSpacing
+
+                        Button {
+                            push: true
+                            text: qsTr("Cancel")
+                            onClicked: root.disclosing = false
+                        }
+
+                        Button {
+                            id: useOnlineButton
+                            push: true
+                            primary: true
+                            text: qsTr("Use Picture of the Day")
+                            onClicked: root.useOnline()
+                        }
                     }
                 }
             }
         }
-    }
 
-    // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper").
-    SettingsGroup {
-        visible: root.source === "online" && root.onlineEntry !== null
-        caption: qsTr("About This Wallpaper")
-
-        SettingsRow {
-            visible: !!(root.onlineEntry && root.onlineEntry.title)
-            title: qsTr("Title")
-            valueText: root.onlineEntry ? root.onlineEntry.title : ""
-        }
-
-        SettingsRow {
-            visible: !!(root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit))
-            title: qsTr("Author")
-            valueText: root.onlineEntry ? (root.onlineEntry.author || root.onlineEntry.credit) : ""
-        }
-
-        SettingsRow {
-            id: sourceRow
-            readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.sourceUrl) : ""
-            title: qsTr("Source")
-            subtitle: sourceRow.link === "" && root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
-            valueText: sourceRow.link === "" ? (root.provider === "apod" ? qsTr("NASA APOD") : qsTr("Wikimedia Commons")) : ""
-
-            LinkText {
-                visible: sourceRow.link !== ""
-                width: Math.min(implicitWidth, sourceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
-                text: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
-                target: sourceRow.link
-                maximumLineCount: 3
-                onActivated: root.openLink(sourceRow.link)
-            }
-        }
-
-        SettingsRow {
-            id: licenceRow
-            readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.licenseUrl) : ""
-            visible: !!(root.onlineEntry && root.onlineEntry.licenseShort)
-            title: qsTr("Licence")
-            valueText: licenceRow.link === "" && root.onlineEntry ? root.onlineEntry.licenseShort : ""
-
-            LinkText {
-                visible: licenceRow.link !== ""
-                width: Math.min(implicitWidth, licenceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
-                text: root.onlineEntry ? root.onlineEntry.licenseShort : ""
-                target: licenceRow.link
-                onActivated: root.openLink(licenceRow.link)
-            }
-        }
-
-        SettingsRow {
-            visible: !!root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
-            title: qsTr("Last updated")
-            valueText: root.onlineEntry ? root.formatUpdated(root.onlineEntry.fetchedAt) : ""
-        }
-    }
-
-    SettingsGroup {
-        id: picturesGroup
-        caption: qsTr("Pictures")
-        footnote: root.pictures.length === 0 ? qsTr("No pictures were found in the Pictures folder.") : ""
-
-        readonly property var shown: root.showAllPictures ? root.pictures : root.pictures.slice(0, root.shownPictures)
-
-        onShownChanged: {
-            for (const p of shown)
-                root.requestThumb(p);
-        }
-
+        // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper"): a group, its
+        // title where the next section's would be.
         Item {
-            visible: root.pictures.length > 0
+            visible: root.source === "online" && root.onlineEntry !== null
             width: parent.width
-            height: visible ? pictureGrid.height + 2 * Tokens.spacingMd : 0
+            height: visible ? aboutGroup.y + aboutGroup.height : 0
 
-            WallpaperGrid {
-                id: pictureGrid
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                accessibleName: qsTr("Pictures")
-                model: picturesGroup.shown.map(p => ({kind: "image", label: root.baseName(p), thumb: root.thumbs[p] || "", selected: root.source === "file" && root.path === p}))
-                onActivated: index => root.usePicture(picturesGroup.shown[index])
-            }
-        }
+            SettingsGroup {
+                id: aboutGroup
+                // A group's caption sits settingsCaptionGap - settingsGroupGap under its top when it follows another.
+                y: Tokens.settingsWallpaperAddSectionGap - (Tokens.settingsCaptionGap - Tokens.settingsGroupGap)
+                caption: qsTr("About This Wallpaper")
 
-        Item {
-            visible: root.pictures.length > root.shownPictures
-            width: parent.width
-            height: visible ? showAllButton.height + Tokens.spacingMd : 0
+                SettingsRow {
+                    visible: !!(root.onlineEntry && root.onlineEntry.title)
+                    title: qsTr("Title")
+                    valueText: root.onlineEntry ? root.onlineEntry.title : ""
+                }
 
-            Button {
-                id: showAllButton
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.spacingMd
-                text: root.showAllPictures ? qsTr("Show Fewer") : qsTr("Show All (%1)").arg(root.pictures.length)
-                onClicked: root.showAllPictures = !root.showAllPictures
-            }
-        }
-    }
+                SettingsRow {
+                    visible: !!(root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit))
+                    title: qsTr("Author")
+                    valueText: root.onlineEntry ? (root.onlineEntry.author || root.onlineEntry.credit) : ""
+                }
 
-    SettingsGroup {
-        caption: qsTr("Colours")
+                SettingsRow {
+                    id: sourceRow
+                    readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.sourceUrl) : ""
+                    title: qsTr("Source")
+                    subtitle: sourceRow.link === "" && root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                    valueText: sourceRow.link === "" ? (root.provider === "apod" ? qsTr("NASA APOD") : qsTr("Wikimedia Commons")) : ""
 
-        Item {
-            width: parent.width
-            height: colorGrid.height + 2 * Tokens.spacingMd
+                    LinkText {
+                        visible: sourceRow.link !== ""
+                        width: Math.min(implicitWidth, sourceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
+                        text: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                        target: sourceRow.link
+                        maximumLineCount: 3
+                        onActivated: root.openLink(sourceRow.link)
+                    }
+                }
 
-            WallpaperGrid {
-                id: colorGrid
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                accessibleName: qsTr("Colours")
-                model: Tokens.iconModeTintColors.map((c, i) => ({kind: "color", color: c, label: root.colorNames[i], selected: root.source === "color" && root.color.toLowerCase() === c.toLowerCase()}))
-                onActivated: index => root.useColor(Tokens.iconModeTintColors[index])
-            }
-        }
-    }
+                SettingsRow {
+                    id: licenceRow
+                    readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.licenseUrl) : ""
+                    visible: !!(root.onlineEntry && root.onlineEntry.licenseShort)
+                    title: qsTr("Licence")
+                    valueText: licenceRow.link === "" && root.onlineEntry ? root.onlineEntry.licenseShort : ""
 
-    SettingsGroup {
-        id: addedGroup
-        caption: qsTr("Folders and Pictures")
-        footnote: addedGroup.items.length === 0 ? qsTr("Add a folder to change the picture at an interval, or a single picture.") : ""
+                    LinkText {
+                        visible: licenceRow.link !== ""
+                        width: Math.min(implicitWidth, licenceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
+                        text: root.onlineEntry ? root.onlineEntry.licenseShort : ""
+                        target: licenceRow.link
+                        onActivated: root.openLink(licenceRow.link)
+                    }
+                }
 
-        // One tile per recent source: a picture shows its thumbnail, a folder reads "Shuffle <name>" (macOS wording).
-        readonly property var items: root.recents.filter(e => e.kind !== "video")
-
-        onItemsChanged: {
-            for (const e of items) {
-                if (e.kind === "file" || e.kind === "video")
-                    root.requestThumb(e.path);
-            }
-        }
-
-        Item {
-            visible: addedGroup.items.length > 0
-            width: parent.width
-            height: visible ? addedGrid.height + 2 * Tokens.spacingMd : 0
-
-            WallpaperGrid {
-                id: addedGrid
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                accessibleName: qsTr("Folders and Pictures")
-                model: addedGroup.items.map(e => ({
-                            kind: e.kind === "file" ? "image" : "folder",
-                            label: e.kind === "folder" ? qsTr("Shuffle %1").arg(root.baseName(e.path)) : root.baseName(e.path),
-                            thumb: e.kind === "file" ? (root.thumbs[e.path] || "") : "",
-                            selected: root.source === e.kind && root.path === e.path
-                        }))
-                onActivated: index => {
-                    const e = addedGroup.items[index];
-                    if (e.kind === "file")
-                        root.usePicture(e.path);
-                    else
-                        root.useFolder(e.path);
+                SettingsRow {
+                    visible: !!root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
+                    title: qsTr("Last updated")
+                    valueText: root.onlineEntry ? root.formatUpdated(root.onlineEntry.fetchedAt) : ""
                 }
             }
         }
 
-        Item {
-            width: parent.width
-            height: addFolderButton.height + 2 * Tokens.spacingMd
+        // The pictures of the Pictures folder (macOS: Pictures, the last but one section).
+        WallpaperSection {
+            id: picturesSection
+            title: qsTr("Pictures")
+            model: root.pictures.map(p => ({kind: "image", label: root.displayName(p), thumb: root.thumbs[p] || "", selected: root.source === "file" && root.path === p}))
+            onActivated: index => root.usePicture(root.pictures[index])
 
-            Row {
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.spacingMd
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Tokens.spacingSm
+            // The thumbnails of the tiles drawn (the row, or all of them once shown).
+            readonly property var drawn: root.pictures.slice(0, picturesSection.grid.shown)
+            onDrawnChanged: root.requestThumbs(picturesSection.drawn)
 
-                Button {
-                    id: addFolderButton
-                    text: qsTr("Add Folder…")
-                    onClicked: folderDialog.open()
-                }
-
-                Button {
-                    text: qsTr("Add Picture…")
-                    onClicked: fileDialog.open()
-                }
-            }
-        }
-    }
-
-    // ---- videos (ADR-0016 W7): a video is prepared once by the shell, then plays under the pause policy ----
-    SettingsGroup {
-        id: videosGroup
-        caption: qsTr("Videos")
-        footnote: videosGroup.items.length === 0 ? qsTr("Add a video to play it as the wallpaper. It is prepared once, and pauses on battery, when you are away and under a full-screen window.") : ""
-
-        readonly property var items: root.recents.filter(e => e.kind === "video")
-
-        onItemsChanged: {
-            for (const e of items)
-                root.requestThumb(e.path);
-        }
-
-        Item {
-            visible: videosGroup.items.length > 0
-            width: parent.width
-            height: visible ? videoGrid.height + 2 * Tokens.spacingMd : 0
-
-            WallpaperGrid {
-                id: videoGrid
-                x: Tokens.spacingMd
-                y: Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingMd
-                accessibleName: qsTr("Videos")
-                model: videosGroup.items.map(e => ({kind: "video", label: root.baseName(e.path), thumb: root.thumbs[e.path] || "", selected: root.source === "video" && root.path === e.path}))
-                onActivated: index => root.useVideo(videosGroup.items[index].path)
+            Text {
+                visible: root.pictures.length === 0
+                width: parent.width
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                text: qsTr("No pictures were found in the Pictures folder.")
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
             }
         }
 
-        Item {
-            width: parent.width
-            height: addVideoButton.height + 2 * Tokens.spacingMd
-
-            Button {
-                id: addVideoButton
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.spacingMd
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Add Video…")
-                onClicked: videoDialog.open()
-            }
+        WallpaperSection {
+            title: qsTr("Colours")
+            model: Tokens.iconModeTintColors.map((c, i) => ({kind: "color", color: c, label: root.colorNames[i], selected: root.source === "color" && root.color.toLowerCase() === c.toLowerCase()}))
+            onActivated: index => root.useColor(Tokens.iconModeTintColors[index])
         }
-    }
 
-    Text {
-        visible: root.refusal !== ""
-        width: parent.width
-        leftPadding: Tokens.spacingMd
-        rightPadding: Tokens.spacingMd
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
-        text: root.refusal
-        color: Appearance.colors.textSecondary
-        font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyCaptionSize
-        Accessible.role: Accessible.StaticText
-        Accessible.name: text
+        Text {
+            visible: root.refusal !== ""
+            width: parent.width
+            topPadding: Tokens.settingsWallpaperTilesTop
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            text: root.refusal
+            color: Appearance.windowSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
     }
 
     // The pickers are Qt Quick Dialogs: with the session's GTK platform theme they are the native chooser (a documented

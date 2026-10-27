@@ -27,6 +27,9 @@ class Backend : public QObject
     Q_PROPERTY(QString bindingsFile READ bindingsFile CONSTANT)
     // The shell's capabilities file (apps/chromecaps.h, ADR-0015 Q4b), read from QML through readText() and watch().
     Q_PROPERTY(QString capabilitiesFile READ capabilitiesFile CONSTANT)
+    // Settings > Displays (ADR-0031): the state the shell publishes (shell/platform/DisplaysFile.js), read through readText();
+    // "" when its directory is not known.
+    Q_PROPERTY(QString displaysStateFile READ displaysStateFile CONSTANT)
     // GRASSFIELD_DEV=1: the system sections show state but never act on the owner's machine (systemguard.h).
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
     // Wallpaper (ADR-0016): the helper, its cache, the folder of the Pictures section and the files the shell and this app
@@ -45,6 +48,8 @@ class Backend : public QObject
     Q_PROPERTY(QStringList currentDesktops READ currentDesktops CONSTANT)
     // Storage: the folders whose size the pane shows lie in the home.
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
+    // XDG_STATE_HOME (else ~/.local/state): Battery reads Omarchy's remembered power profiles there (read-only).
+    Q_PROPERTY(QString stateDir READ stateDir CONSTANT)
     // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
     Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
     // The actions that may wait for a password and still run, tag -> what (polkit actions of busAct, omarchy-language of act:
@@ -61,6 +66,7 @@ public:
     QString appVersion() const;
     QString bindingsFile() const { return m_bindingsFile; }
     QString capabilitiesFile() const { return grassfield::apps::capabilitiesFile(); }
+    QString displaysStateFile() const;
     bool devSession() const { return m_dev; }
     QString wallpaperTool() const { return m_wallpaperTool; }
     QString wallpaperCache() const { return m_wallpaperCache; }
@@ -73,6 +79,11 @@ public:
     QStringList applicationDirs() const;
     QStringList currentDesktops() const;
     QString homeDir() const { return QDir::cleanPath(QDir::homePath()); }
+    QString stateDir() const
+    {
+        const QString xdg = qEnvironmentVariable("XDG_STATE_HOME");
+        return QDir::cleanPath(xdg.startsWith(QLatin1Char('/')) ? xdg : homeDir() + QStringLiteral("/.local/state"));
+    }
     bool omarchyLanguage() const;
     QVariantMap pendingActions() const { return m_actions.map(); }
 
@@ -98,7 +109,8 @@ public:
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
     // (read-only, also in a dev session); for General "host.state", "time.state", "time.zones", "locale.state" (system bus) and
-    // "user.units" (the session bus: the user's own services). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
+    // "user.units" (the session bus: the user's own services); for the network panes "net.state" (devices, addresses, VPNs);
+    // for Privacy & Security "privacy.state" (the session bus: the portal permission store). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
     // and the like (systembus.h runAction); in a dev session nothing is sent (one "dev guard: <what> suppressed" line,
     // suppressed(what), false returned); an op that is not well formed is refused (false).
     Q_INVOKABLE void busQuery(const QString &what, const QString &tag);
@@ -125,6 +137,16 @@ public:
     Q_INVOKABLE QString removeAutostart(const QString &path) const;
     // Emit fileChanged(path) whenever the file is created, replaced, changed or removed.
     Q_INVOKABLE bool watch(const QString &path);
+    // Settings > Displays (ADR-0031). displays.conf holds the kept choices (read at every parse by
+    // config/hypr/grassfield/displays.lua); the trial file a change on trial, which the shell applies and takes back. Only
+    // lines systemguard.h::isDisplayLine accepts are read or written, at most 16 and one per display; in a dev session only
+    // under GRASSFIELD_CONFIG_HOME and GRASSFIELD_STATE_HOME, never the owner's own files. The writes return "" or a reason.
+    Q_INVOKABLE QStringList displaysConf() const;
+    Q_INVOKABLE QString writeDisplaysConf(const QStringList &lines) const;
+    // `until`: the trial's deadline in Unix seconds, at most a minute ahead.
+    Q_INVOKABLE QString writeDisplayTrial(const QString &id, qint64 until, const QStringList &lines) const;
+    // `state`: "kept" (displays.conf written first) or "revert".
+    Q_INVOKABLE QString markDisplayTrial(const QString &state, const QString &id) const;
 
 signals:
     void fileChanged(const QString &path);
@@ -149,6 +171,10 @@ private:
     grassfield::settings::InFlight m_queries;
     QStringList userUnitDirs() const;
     bool autostartWriteAllowed(const QString &path) const;
+    // ADR-0031 paths: "" when the directory is not known (or, in a dev session, not one of the dev directories).
+    QString displaysConfFile() const;
+    QString displayTrialFile() const;
+    QString displayLinesProblem(const QStringList &lines) const;
 
     QString m_configFile;
     QString m_bindingsFile;

@@ -64,6 +64,12 @@ QtObject {
             property: "accentSetting"
             value: root.app.accentColor
         },
+        // Text highlight colour (accent.highlight).
+        Binding {
+            target: Appearance
+            property: "highlightSetting"
+            value: root.app.accentHighlight
+        },
         // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26).
         Binding {
             target: Appearance

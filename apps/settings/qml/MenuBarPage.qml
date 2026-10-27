@@ -2,24 +2,96 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// macOS Tahoe System Settings > Menu Bar: the bar's background and auto-hide, the clock options and the status items it
-// shows. Every control writes one key of the `menubar` group; the shell reads them live (shell/menubar/MenuBar.qml).
+// System Settings > Menu Bar as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Menu Bar): the bar's auto-hide,
+// background and recent items, then Menu Bar Controls: a list of the controls with a check box (shown in the menu bar), their
+// tile and name, and their options (Clock Options…, Battery Options…: sheets that Main opens), then the status items of
+// applications. Every control writes one key of the `menubar` group; the shell reads them live (shell/menubar/MenuBar.qml).
 SettingsPage {
     id: root
 
     required property var store
+    // Battery is listed on a computer with a battery only (Main reads it from the power state).
+    property bool hasBattery: false
 
     title: qsTr("Menu Bar")
 
     signal clockOptionsRequested
+    signal batteryOptionsRequested
+
+    // One control of the menu bar: its check box (`key`, a boolean of the menubar group; none for the clock, which is always
+    // there), its tile and its name, and its options on the right (declared inside).
+    component ControlRow: Item {
+        id: control
+
+        property string key: ""
+        property string title: ""
+        property string glyph: ""
+        property string tileColor: "graphite"
+        default property alias accessory: slot.data
+
+        width: parent ? parent.width : 0
+        height: Tokens.settingsMenuBarControlRowHeight
+        Accessible.role: Accessible.Grouping
+        Accessible.name: control.title
+
+        Rectangle {
+            visible: control.Positioner.index > 0
+            x: Tokens.settingsRowInset
+            width: parent.width - 2 * Tokens.settingsRowInset
+            height: 1
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        }
+
+        CheckBox {
+            visible: control.key !== ""
+            x: Tokens.settingsMenuBarCheckX
+            anchors.verticalCenter: parent.verticalCenter
+            accessibleName: qsTr("Show %1 in the menu bar").arg(control.title)
+            checked: control.key !== "" && root.store.value(control.key) === true
+            onToggled: root.store.set(control.key, checked)
+        }
+
+        Rectangle {
+            x: Tokens.settingsMenuBarTileX
+            anchors.verticalCenter: parent.verticalCenter
+            width: Tokens.settingsMenuBarTileSize
+            height: width
+            radius: Math.round(width * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
+            color: Tokens.colorAccentLight[control.tileColor] || Tokens.colorAccentLight.graphite
+
+            Icon {
+                anchors.centerIn: parent
+                name: control.glyph
+                size: Math.round(Tokens.settingsMenuBarTileSize * Tokens.settingsNavGlyphSize / Tokens.settingsNavTileSize)
+                color: Tokens.settingsSidebarTileGlyph
+            }
+        }
+
+        Text {
+            x: Tokens.settingsMenuBarTitleX
+            anchors.verticalCenter: parent.verticalCenter
+            width: slot.x - x - Tokens.spacingLg
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            text: control.title
+            color: Appearance.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
+        }
+
+        Row {
+            id: slot
+            anchors.right: parent.right
+            anchors.rightMargin: Tokens.settingsRowInset
+            anchors.verticalCenter: parent.verticalCenter
+        }
+    }
 
     SettingsGroup {
-        caption: qsTr("Menu Bar")
-
         SettingsRow {
             title: qsTr("Automatically hide and show the menu bar")
-            subtitle: qsTr("A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.")
             ComboBox {
+                inline: true
                 accessibleName: qsTr("Automatically hide and show the menu bar")
                 model: [{id: "always", text: qsTr("Always")}, {id: "desktop", text: qsTr("On Desktop Only")}, {id: "fullscreen", text: qsTr("In Full Screen Only")}, {id: "never", text: qsTr("Never")}]
                 value: root.store.value("menubar.autoHide")
@@ -29,7 +101,6 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Show menu bar background")
-            subtitle: qsTr("Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.")
             Toggle {
                 accessibleName: qsTr("Show menu bar background")
                 checked: root.store.value("menubar.showBackground")
@@ -39,8 +110,8 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Recent documents and applications")
-            subtitle: qsTr("The number of items the Recent Items menu lists. None hides the menu.")
             ComboBox {
+                inline: true
                 accessibleName: qsTr("Recent documents and applications")
                 // macOS offers None, 5, 10, 15, 20, 30, 50; a stored value outside them (hand-edited file) is shown as it is.
                 model: {
@@ -58,89 +129,66 @@ SettingsPage {
     }
 
     SettingsGroup {
-        caption: qsTr("Clock")
+        caption: qsTr("Menu Bar Controls")
 
-        SettingsRow {
-            subtitle: qsTr("Date, day of the week, 24-hour time, seconds.")
+        ControlRow {
+            title: qsTr("Clock")
+            glyph: "clock"
             Button {
+                push: true
                 text: qsTr("Clock Options…")
                 onClicked: root.clockOptionsRequested()
             }
         }
-    }
 
-    SettingsGroup {
-        caption: qsTr("Menu Bar Controls")
-
-        SettingsRow {
-            title: qsTr("Wi-Fi")
-            subtitle: qsTr("The network status and its menu.")
-            Toggle {
-                accessibleName: qsTr("Show Wi-Fi in the menu bar")
-                checked: root.store.value("menubar.showWifi")
-                onToggled: c => root.store.set("menubar.showWifi", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Sound")
-            subtitle: qsTr("The volume and the output devices.")
-            Toggle {
-                accessibleName: qsTr("Show Sound in the menu bar")
-                checked: root.store.value("menubar.showSound")
-                onToggled: c => root.store.set("menubar.showSound", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Battery")
-            subtitle: qsTr("Shown on a computer that has a battery.")
-            Toggle {
-                accessibleName: qsTr("Show Battery in the menu bar")
-                checked: root.store.value("menubar.showBattery")
-                onToggled: c => root.store.set("menubar.showBattery", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Show Percentage")
-            subtitle: qsTr("The charge level beside the battery.")
-            Toggle {
-                enabled: root.store.value("menubar.showBattery")
-                accessibleName: qsTr("Show the battery percentage in the menu bar")
-                checked: root.store.value("menubar.showBatteryPercentage")
-                onToggled: c => root.store.set("menubar.showBatteryPercentage", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Focus")
-            subtitle: qsTr("A moon in the menu bar while Do Not Disturb is on; a click turns it off.")
-            Toggle {
-                accessibleName: qsTr("Show Focus in the menu bar")
-                checked: root.store.value("menubar.showFocus")
-                onToggled: c => root.store.set("menubar.showFocus", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Now Playing")
-            subtitle: qsTr("While a media player has a track, a button in the menu bar opens its controls.")
-            Toggle {
-                accessibleName: qsTr("Show Now Playing in the menu bar")
-                checked: root.store.value("menubar.showNowPlaying")
-                onToggled: c => root.store.set("menubar.showNowPlaying", c)
-            }
-        }
-
-        SettingsRow {
+        ControlRow {
+            key: "menubar.showSearch"
             title: qsTr("Search")
-            subtitle: qsTr("A magnifier button in the menu bar opens Search.")
-            Toggle {
-                accessibleName: qsTr("Show Search in the menu bar")
-                checked: root.store.value("menubar.showSearch")
-                onToggled: c => root.store.set("menubar.showSearch", c)
+            glyph: "search"
+            tileColor: "blue"
+        }
+
+        ControlRow {
+            key: "menubar.showWifi"
+            title: qsTr("Wi-Fi")
+            glyph: "wifi-3"
+            tileColor: "blue"
+        }
+
+        ControlRow {
+            visible: root.hasBattery
+            key: "menubar.showBattery"
+            title: qsTr("Battery")
+            glyph: "battery"
+            tileColor: "green"
+            Button {
+                push: true
+                text: qsTr("Battery Options…")
+                onClicked: root.batteryOptionsRequested()
             }
+        }
+
+        // Focus shows while Do Not Disturb is on (macOS: Show When Active), and a click turns it off.
+        ControlRow {
+            key: "menubar.showFocus"
+            title: qsTr("Focus")
+            glyph: "moon"
+            tileColor: "purple"
+        }
+
+        ControlRow {
+            key: "menubar.showSound"
+            title: qsTr("Sound")
+            glyph: "volume-3"
+            tileColor: "pink"
+        }
+
+        // Shown while a media player has a track; a click opens its controls.
+        ControlRow {
+            key: "menubar.showNowPlaying"
+            title: qsTr("Now Playing")
+            glyph: "now-playing"
+            tileColor: "red"
         }
     }
 
@@ -150,7 +198,6 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Items from applications")
-            subtitle: qsTr("The status icons that applications such as chat and sync tools put in the menu bar.")
             Toggle {
                 accessibleName: qsTr("Show status items of applications in the menu bar")
                 checked: root.store.value("menubar.showTrayItems")

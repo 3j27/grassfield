@@ -10,7 +10,7 @@ that are not the user's to make alone:
 - Date & Time: automatic time, the time zone and the time itself (timedate1 `SetNTP`, `SetTimezone`, `SetTime`).
 
 Later groups add printers (CUPS through `cups-pk-helper`) and power profiles. They get their own entry in this ADR, or their own ADR,
-before they land.
+before they land (Hardware group: NetworkManager, Battery and Printers below).
 
 Grassfield already runs the session's polkit agent (`shell/security/`, Quickshell Polkit, SEC6). Omarchy changes the time zone
 with `sudo timedatectl set-timezone` from a terminal menu, and generates locales through its own sudoers rule or `pkexec`
@@ -30,10 +30,10 @@ service ask the session's agent itself.
   says yes.
 - No Grassfield code runs as root: no helper, no `pkexec`, no sudo, no setuid binary, no new polkit policy, no rule file. The
   defaults of each service's own policy apply: the administrator's password, kept for a few minutes (`auth_admin_keep`).
-- The call waits for the user's answer for up to 120 s (`kPrivilegedMs`). The job's deadline covers two such calls, 250 s
-  (`kPrivilegedJobMs`). The window never blocks. A refusal, a cancelled dialog or no agent at all comes back as the service's
-  error and is shown on one line under the group: "The name could not be changed: not allowed: the system refused the request".
-  The page then reads the state again. Nothing is retried on its own.
+- The call waits for the user's answer for up to 120 s (`kPrivilegedMs`). The job's deadline covers three such calls (Add
+  Printer's), 370 s (`kPrivilegedJobMs`). The window never blocks. A refusal, a cancelled dialog or no agent at all comes back
+  as the service's error and is shown on one line under the group: "The name could not be changed: not allowed: the system
+  refused the request". The page then reads the state again. Nothing is retried on its own.
 - One polkit action per tag at a time, held by the Backend and not by the page (integrator review of PR #6): a page is created
   anew on each visit, so a waiting state kept there let a second request go out while the first dialog was up, and four such
   blocked calls filled the jobs' `kMaxInFlight`, after which every read of the system bus answered "timed out". `busAct` now
@@ -81,6 +81,163 @@ service ask the session's agent itself.
   would go through the link, to a dotfile manager's file or out of `.dev`), and in a dev session only a folder whose real
   location lies under the worktree's `.dev` (`isAutostartWrite`, systemguard.h; review finding of 2026-10-26).
 
+- Hardware group (PR #8), NetworkManager. NetworkManager checks its own polkit actions for every client call and lets
+  polkit ask the session's agent; the method has no `interactive` argument. Grassfield sends these calls only:
+  - Wi-Fi > Forget This Network: `Settings.Connection.Delete` on the saved Wi-Fi profile with that uuid (`wifi.forget`).
+    A profile of the whole system needs `org.freedesktop.NetworkManager.settings.modify.system`, `auth_admin_keep` or `yes`
+    depending on how the distribution built NetworkManager, so the call may wait for the dialog: 120 s, as above. A profile
+    of any other type is refused (a VPN uuid is not a network to forget).
+  - Joining a new network (`wifi.connectOpen`, and `wifi.connectSecure` with a WPA/WPA3 personal password):
+    `AddAndActivateConnection` adds a profile of the whole system (the same action, `settings.modify.system`), so it waits 120 s
+    too. The password goes from the sheet's field to that one call: it is validated (8 to 63 printable ASCII characters or 64
+    hex digits) in QML and in C++, never logged (a dev session logs only "wifi join"), and the field is emptied on Join and on
+    Cancel; NetworkManager stores it in the profile, as nmcli does. A join that does not come up within 30 s deletes the
+    profile it added, so a wrong password leaves no saved network behind. A join cut short before NetworkManager answers (the
+    120 s run out while the dialog is open, or Settings closed during the join) cannot be followed: if NetworkManager then
+    adds the profile, it stays, with its password, until Forget This Network… (review of 2026-10-26, accepted).
+  - VPN switches: `ActivateConnection` of a `vpn` or `wireguard` profile on no device, `DeactivateConnection` of its active
+    connection (`vpn.connect`; `network-control`, `yes` for the active session by default). A VPN that needs a secret it does
+    not store needs NetworkManager's secret agent, which Grassfield does not provide: the activation fails with
+    NetworkManager's own reason, shown under the list.
+  All are validated twice (a uuid, an SSID, a password, a boolean) and are refused by `GuardedCaller` in a dev session
+  (`tests/unit/settings/tst_systembus.cpp`, `tests/integration/settings_dbus.sh` section 11).
+
+- Hardware group, Battery:
+  - Low Power Mode sets Omarchy's two remembered power profiles with Omarchy's own command, `omarchy-powerprofiles-set
+    ac|battery <profile>` (an action: one source and one of the three profiles, nothing else; the source in use last, as the
+    command applies what it remembers at once). The command switches the profile with `powerprofilesctl`, through
+    power-profiles-daemon and its own polkit action for switching profiles (not read here: owner check); it writes
+    the choice under `$XDG_STATE_HOME/omarchy/powerprofiles/`. The shell runs `omarchy-powerprofiles-set autodetect` when the
+    power source changes. Neither runs in a dev session.
+  - Charging > Limit charging calls UPower's `EnableChargeThreshold(b)` on the battery (`power.chargeLimit`), whose polkit
+    action `org.freedesktop.UPower.enable-charging-limit` defaults to `yes` for the active session (read in UPower's sources,
+    commit 68438ca); it may wait for the agent like the calls above (120 s). Shown only when UPower says the battery has a
+    limit (`ChargeThresholdSupported`).
+  - Reads only: `power.state` (UPower's properties, `EnumerateDevices`, `GetHistory`), allowed in a dev session.
+
+- Hardware group, Printers (macOS 27 Printers & Scanners, without scanners and fax). Omarchy installs `cups`, `cups-filters`,
+  `cups-pk-helper`, `system-config-printer`, `avahi` and `nss-mdns`, and enables `cups.service` (read in Omarchy's
+  `install/omarchy-base.packages` and `install/config/enable-services.sh`, branch quattro; owner check on the installed 4.x).
+  - Reads are commands, run in the C locale like every tool of the app (English output): `lpstat -l -p` (the queues, their
+    state, Description and Location), `lpstat -d` (the default: CUPS reads the user's `~/.cups/lpoptions` first), `lpstat -v`
+    (each queue's device URI: its kind), `lpstat -a` (whether each queue accepts jobs), `lpstat -l -e` (Add Printer: what the local cupsd and a second of DNS-SD browsing
+    find; a driverless printer not yet queued is a `network` line with its URI) and `lpoptions -p <queue> -l` (its PageSize
+    choices, the one in effect marked `*`). Exactly these argument lists are allowed (`isReadOnlyQuery`); a queue name is
+    validated first. They read, they change nothing, so a dev session runs them too.
+  - The default printer and the default paper size are the user's, as on macOS, and need no password: `lpoptions -d <queue>`
+    and `lpoptions -p <queue> -o PageSize=<size>` (for every queue that offers that size) write the user's `~/.cups/lpoptions`,
+    nothing else (CUPS writes `/etc/cups/lpoptions` only for root, which Settings never is). Actions (`isAllowedAction`: these
+    two forms, a valid queue name, a PPD size keyword), never in a dev session.
+  - Adding and removing a printer change the system. They go to `cups-pk-helper` (system bus,
+    `org.opensuse.CupsPkHelper.Mechanism`, object `/`, the same interface; read in Debian's 0.2.6 sources, Arch ships 0.2.7),
+    which asks polkit with user interaction and then asks cupsd as root:
+    - Add (`printer.add`): `PrinterAdd(name, uri, "everywhere", info, "")`, then `PrinterSetEnabled(name, true)` and
+      `PrinterSetAcceptJobs(name, true, "")` (a new queue starts stopped and refusing jobs, as `lpadmin` without `-E`); three
+      calls, so the job's deadline is 370 s. The
+      model "everywhere" makes cupsd build the queue's PPD itself from the printer's IPP attributes, in the background, for a
+      `dnssd:`, `ipp:`, `ipps:` or `ippusb:` URI (CUPS `scheduler/ipp.c`, `add_printer`); a printer that does not describe its
+      media is dropped again by cupsd. Only such driverless printers are offered (macOS adds AirPrint printers the same way);
+      a printer that needs a driver is out of scope (Omarchy's `system-config-printer` does that).
+    - Remove (`printer.delete`): `PrinterDelete(name)`, after a confirmation sheet ("Remove …?").
+    - Resume (`printer.resume`): `PrinterSetEnabled(name, true)` and `PrinterSetAcceptJobs(name, true, "")`, offered in a
+      printer's sheet while it is stopped or refuses jobs (`lpstat -p`, and `lpstat -a`, another read of the allow-list).
+    - Polkit: `org.opensuse.cupspkhelper.mechanism.all-edit`, `.printeraddremove`, then `.printer-local-edit` or
+      `.printer-remote-edit` (and `.printer-enable` for the two switches): all `auth_admin_keep` for the active session. The
+      helper asks interactively for the last one only. Polkit keeps an authorisation per action id, so the switches after an
+      add may ask a second time (whether the add's kept `printer-local-edit` or `printer-remote-edit` also covers them depends
+      on how the helper judges the new queue: not verified, owner check). A second dialog refused or cancelled leaves the queue
+      added, stopped and refusing jobs: the page shows it so ("Stopped", "Not Accepting Jobs") and its sheet offers Resume and
+      Remove Printer…; nothing is rolled back behind the user's back (a delete would ask again). 120 s for each call, as
+      above (`kPrivilegedMs`). The helper returns CUPS's own message on failure (shown under the list); a polkit refusal comes
+      back as its `NotPrivileged` error, "not allowed".
+    - Validated in QML (`Printers.js`) and again in C++ (`validAction`): a queue name of 1 to 127 characters
+      `[A-Za-z0-9_.+@-]` not starting with `-`; a URI of one of the four schemes, at most 1024 characters, without spaces or
+      control characters; the description (`info`, the name with `_` shown as spaces) printable, at most 127 characters.
+  - `PrinterSetDefault` is not used: the default printer is the user's (above). Note for a later use: in 0.2.6 it checks an
+    action id (`printer-default`) that its own policy does not define (`printer-set-default`).
+  - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets no `cups-pk-helper` method through
+    (none of them is a read); the `lpoptions` actions are refused there like every action. A nested session can therefore
+    never add, remove or change the owner's printers.
+- Desktop group, Privacy & Security (macOS 27 Privacy & Security, with the permissions the desktop portals keep; amendment of
+  2026-10-26). These are the user's own grants: no polkit action, the session bus, as the user's services above.
+  - The store: xdg-desktop-portal's permission store, `org.freedesktop.impl.portal.PermissionStore` (session bus, object
+    `/org/freedesktop/impl/portal/PermissionStore`, an interface of the same name; read in xdg-desktop-portal's sources at tag
+    1.22.1, the version Arch ships, and on main: `document-portal/xdg-permission-store.c`). It is D-Bus activated
+    (`xdg-permission-store`, in the `xdg-desktop-portal` package Omarchy installs). It checks no caller: any client of the
+    user's session bus may read and write it, so Settings asks for nothing more than any portal client has.
+  - Reads (`privacy.state`; `isReadOnlyCall` lets the store's `Lookup`, `List` and `GetPermission` through, so a dev session
+    reads it too): `Lookup` of `location`/`location`, `background`/`background` and `devices`/`camera`; `List` of the
+    `screencast` and `remote-desktop` tables, then one `Lookup` per saved selection (the malformed ones dropped first, then at
+    most 128 per table). A missing table or entry (`org.freedesktop.portal.Error.NotFound`) is "none", not an error.
+    Application ids and restore tokens are checked (`isPortalAppId`: no path, no `..`; `isPortalToken`: the portal's own rule,
+    `[A-Za-z0-9_]` or a legacy UUID, so the one token in 32 that begins with `_` is kept), anything else is dropped; the host
+    applications without an id (the `""` key) are not listed.
+  - Values, as the portals read them: location keeps `[accuracy, timestamp]` (fewer than two elements is no entry, and the
+    portal asks again), allowed is any accuracy but `NONE`; the camera and the background keep `["yes"]`, `["no"]` or
+    `["ask"]` (asked every time: shown as not allowed). A saved selection (screen sharing, remote desktop) is one entry per
+    restore token with the application's row and the compositor's data: the application may reuse that screen, window or
+    device choice without the picker.
+  - Writes: `privacy.allow {category, app, on}` is `SetPermission(table, true, id, app, value)` with `["EXACT", "0"]` or
+    `["NONE", "0"]` for location and `["yes"]` or `["no"]` otherwise; `privacy.forget {kind, token}` is `Delete(table, token)`,
+    one action per token (an entry already gone, `NotFound`, is not a failure). Validated in QML (`Privacy.js`) and again in
+    C++ (`validAction`): a known category or table, a valid id or token, a boolean switch.
+  - What it cannot do, said in the pane: only sandboxed applications (Flatpak) are limited by these grants. The portal allows
+    an application of the host its location and the background without reading the store (`location.c`, `background.c`; it
+    still writes a location row for it), so such a row has no switch there and says "Not sandboxed: not limited". An
+    application is taken for the host's (`Privacy.hostApp`) only when no Flatpak export holds its desktop entry, it is not
+    a Snap and a visible entry exists elsewhere; every applications folder is read, so a user's copy or hidden stub of a
+    Flatpak's entry does not hide its switch, and in doubt the switch stays (an id whose entry is not found, as one from a
+    subfolder, keeps a switch that may do nothing: accepted). The camera's grant is read for every application, so its
+    switch stays, and a host application's row says it may use the camera directly. A `no` for the background refuses the application's request; stopping a Flatpak that
+    already runs needs a portal backend that implements Background (the security review read xdg-desktop-portal-hyprland
+    1.4.1, which implements Screenshot, ScreenCast, GlobalShortcuts and InputCapture only, and xdg-desktop-portal-gtk, which
+    dropped Background and RemoteDesktop in 1.15.0: on Omarchy the Background and RemoteDesktop portals may not be exported
+    at all, owner check `busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop`). So
+    `privacy.state` also reads `Properties.Get(<portal>, "version")` on `org.freedesktop.portal.Desktop` for those two (the
+    only portal read `isReadOnlyCall` allows; a missing interface is false, no answer within 1 s is unknown and the second
+    is not asked). It asks only when the portal already runs (`NameHasOwner`, the one bus read allowed), and QtBusCaller
+    never auto-starts the portal: on a dev session's private bus that would start xdg-desktop-portal and with it the
+    document portal, which unmounts and remounts the owner's `$XDG_RUNTIME_DIR/doc` (re-check of 4ca0246, M1; a real
+    session runs it already). A category whose portal is missing stays, reading "Not used on this system", its footnote
+    saying no app can ask for it (owner decision 2026-10-26: keep the category, with a line). A saved
+    choice removed while the application is sharing is saved again when that session ends: the footnote says to stop
+    sharing first. `["ask"]` reads as not allowed (the portal asks every time).
+  - Dev guard: `Backend.busAct` sends nothing in a dev session and `GuardedCaller` lets only the reads through (the store's
+    `Lookup`, `List` and `GetPermission`, `NameHasOwner` for the portal, the two portals' `version`): a nested session never
+    changes the owner's grants.
+  - Tests: `tst_systembus.cpp` `SystemBusPrivacy.*` (the reads as the portals keep them, no store as a reason, the exact
+    `SetPermission` and `Delete`, bad values and the dev guard send nothing), `tst_systemguard.cpp` `PrivacyGuard.*`,
+    `settings_dbus.sh` section 15 (a fake store on the private bus: every call logged with its arguments; the Backend's
+    caller never starts the desktop portal, a service the bus can start being started; the bus has its own configuration
+    and starts only the test's own services, never the machine's store or portal),
+    `tests/unit/tst_settingsprivacy.qml` (the state checked again, the counts, a switch, the host's applications without one,
+    the saved selections forgotten one after the other, a failure's reason, the dev guard).
+  - Security review (opus), 2026-10-26: FAIL on 5223a69 + f8a6b65 (H1: the token rule rejected the portal's tokens that begin
+    with `_`, so those saved choices could neither be seen nor removed; M1 the cap counted malformed tokens; M2 a switch for
+    the host's applications that does nothing; M3 the background footnote claimed more than the portal does; L1 removal while
+    sharing; L4 the id beside a saved choice) → fixed in the commit after them, then M3's runtime check of the portals
+    (the owner's choice above); still open: L2 (`ask` shown as such), L3 (no row cap, names looked up on the GUI thread),
+    L5 (a removal's queue lives in the page). Counter-review of the three commits: PASS (no HIGH), with N1 (the host
+    check let a user's copy of a Flatpak's entry hide its switch), M3r (the portal check needed before merge), N2 (ids
+    named like Object.prototype's properties broke the page's maps), N3 (the footnote named Flatpak only and said host
+    applications are not limited while their camera switch stays), N5 (one error tag for every category): all fixed in
+    the commit after (every folder read, the portal check, maps without a prototype, "Flatpak, Snap", a tag per category);
+    L2, L3 and L5 accepted for merge by that review; N4 (a switch kept in doubt) accepted above. Re-check of that commit:
+    PASS, with M1 (the portal read could start the portal, above), L1 (a Linyaps app's entries folder now counts as a
+    sandbox's), L2 (an export entry that exists but cannot be read counts, in doubt), L3 (the Flatpak export folders are
+    read for the host check even when XDG_DATA_DIRS leaves them out), L4 (the portal read's timeout is 1 s), L5 (tests: a
+    failure stays in its category, every "missing" error name, the dev read of the portals): fixed in the commit after.
+    Re-check of that commit: PASS, with MEDIUM-2 (the D-Bus test's bus used the system's session.conf and the caller's
+    environment, so on Arch it started the real permission store with the owner's home and failed), LOW-1 (nothing tested
+    that the caller never auto-starts the portal) and LOW-2 (nothing tested the export folders outside XDG_DATA_DIRS):
+    fixed in the commit after (the test bus's own configuration and clean environment, an activation check with a control,
+    a QML case). MEDIUM-1, pre-existing and not Settings' read: the dev session's private bus (scripts/dev/shell-run.sh,
+    ADR-0011) used the standard service folders and the owner's XDG_RUNTIME_DIR, so Qt's gtk3 platform theme (ReadAll on
+    org.freedesktop.portal.Settings, auto-start on) started the desktop portal there and with it the document portal, which
+    unmounts the owner's `$XDG_RUNTIME_DIR/doc` (probably the dev shell too: a Quickshell build with gtk3 started it on a
+    test bus; not run nested). By the owner's decision (2026-10-26, "Bloquer les portails"; ADR-0011 amendment) that bus
+    now blocks both portals.
+
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
 (the lock, or a sheet) and remember it for a while. Nothing else in the window changes while the system asks.
@@ -100,10 +257,21 @@ System Settings > General > About > Name and Date & Time change machine-wide set
   - `tests/integration/settings_dbus.sh`: fake hostname1, timedate1 and systemd services on a private bus. Each method, a polkit
     refusal and the dev guard.
   - `tests/unit/tst_settingsgeneral.qml`: the QML-side builders.
+  - Printers: `tst_systembus.cpp` `SystemBusPrinters.*` (the three calls of an add, in order, the delete, CUPS's message and a
+    polkit refusal as the reason, bad values and the dev guard send nothing), `tst_systemguard.cpp` `PrinterGuard.*` (the exact
+    reads, the two lpoptions forms, names, URIs and paper keywords), `settings_dbus.sh` section 14 (a fake cups-pk-helper on the
+    private bus), `tests/unit/tst_settingsprinters.qml` (CUPS's output, the ops, the paper size written only to the queues that
+    have it, a dev session reads and changes nothing).
 - The real polkit dialog cannot be shown in a nested session (the agent cannot register there, `docs/specs/security.md` L5). The
   owner checks it in the real session (L2): change the name and the time zone, cancel once, enter a wrong password once, and
   leave the dialog open for 60 s before answering (the service's own polkit query must still apply the change); switch the
   language to one whose locale is not generated yet (Omarchy's prompt or grant, then log out and in) and back.
+  Printers (owner, real session with a network printer): Add Printer… (the dialog, then a test page), the default printer and
+  the paper size (check `~/.cups/lpoptions` and a print dialog), Remove Printer… (cancel once, then confirm); `pacman -Q
+  cups-pk-helper` shows it installed (Omarchy's base list).
+  Privacy & Security (owner, real session with a Flatpak that asks for the camera or the location, and one that shares a
+  screen): the pane lists them; switch one off and check the application is refused; remove a saved screen choice and check
+  the picker comes back; `flatpak permissions` shows the same grants.
 - A review by the security reviewer (opus) is required before merge. 2026-10-26: FAIL (an autostart write through a symlinked
   entry; no test of those writes; this ADR silent on what omarchy-language does; a region changing the words; the zone
   wording) → 55d87be → counter-review FAIL (a textual `link/..` path normalised past the folder check) → e0db168 →

@@ -1,6 +1,12 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
+// Settings > Appearance as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Appearance): Light / Dark / Auto
+// thumbnails and the glass (Transparency: a preview over the Grassfield artwork and a slider from clear to tinted); Theme:
+// the accent colours and the text highlight colour; the icon style (and its tint colour when Tinted) and the folder colour.
+// Last, Grassfield's own glass effects (material.profile). Reduce Transparency and Reduce Motion are in Accessibility >
+// Display, as on macOS.
 SettingsPage {
     id: root
 
@@ -8,212 +14,208 @@ SettingsPage {
 
     title: qsTr("Appearance")
 
+    readonly property var colorNames: ({
+            multicolor: qsTr("Multicolour"),
+            blue: qsTr("Blue"),
+            purple: qsTr("Purple"),
+            pink: qsTr("Pink"),
+            red: qsTr("Red"),
+            orange: qsTr("Orange"),
+            yellow: qsTr("Yellow"),
+            green: qsTr("Green"),
+            graphite: qsTr("Graphite")
+        })
+    // The palette of the icon tint and folder colours (Tokens.iconModeTintColors), in the same order as these names.
+    readonly property var paletteNames: [qsTr("Blue"), qsTr("Purple"), qsTr("Pink"), qsTr("Red"), qsTr("Orange"), qsTr("Yellow"), qsTr("Green"), qsTr("Graphite")]
+    readonly property string iconMode: root.store.value("icons.mode")
+
+    // An accent's colour in the current appearance (Multicolour: the Grassfield green).
+    function accentOf(name: string): color {
+        const r = Accent.resolve(name, Appearance.dark, Tokens);
+        return r ? r.accent : (Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent);
+    }
+
+    // The palette entry a stored "#rrggbb" is (its token spelling), or the setting itself.
+    function paletteId(setting: string): string {
+        const hit = Tokens.iconModeTintColors.find(c => c.toLowerCase() === String(setting).toLowerCase());
+        return hit ?? setting;
+    }
+
+    function paletteModel(): var {
+        return Tokens.iconModeTintColors.map((c, i) => ({id: c, text: root.paletteNames[i], color: c}));
+    }
+
+    // A row whose title sits at the top, above taller content placed by the caller from `contentY` (macOS 27: the thumbnails,
+    // the glass, the colours, the icon styles). After the first row, the row starts with its separator line.
+    component TallRow: Item {
+        id: tall
+
+        property string title: ""
+        property real rowHeight: 0
+        readonly property real contentY: tall.Positioner.index > 0 ? 1 : 0
+
+        width: parent ? parent.width : 0
+        height: tall.contentY + tall.rowHeight
+        Accessible.role: Accessible.Grouping
+        Accessible.name: tall.title
+
+        Rectangle {
+            visible: tall.Positioner.index > 0
+            x: Tokens.settingsRowInset
+            width: parent.width - 2 * Tokens.settingsRowInset
+            height: 1
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        }
+
+        Text {
+            textFormat: Text.PlainText
+            x: Tokens.settingsRowInset
+            y: tall.contentY + Tokens.settingsHeaderRowTitleBaseline - baselineOffset
+            text: tall.title
+            color: Appearance.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
+        }
+    }
+
     SettingsGroup {
-        SettingsRow {
+        TallRow {
             title: qsTr("Appearance")
-            subtitle: qsTr("Light or dark windows, menus and panels. Auto is light by day and dark at night.")
-            SegmentedControl {
+            rowHeight: Tokens.settingsAppearanceRowHeight
+
+            ChoicePicker {
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.settingsAppearanceThumbInset - ringPad
+                y: parent.contentY + Tokens.settingsAppearanceThumbTop - ringPad
                 accessibleName: qsTr("Appearance")
                 model: [{id: "light", text: qsTr("Light")}, {id: "dark", text: qsTr("Dark")}, {id: "auto", text: qsTr("Auto")}]
                 value: root.store.value("appearance")
+                pictureWidth: Tokens.settingsAppearanceThumbWidth
+                pictureHeight: Tokens.settingsAppearanceThumbHeight
+                pictureRadius: Tokens.settingsAppearanceThumbRadius
+                pitch: Tokens.settingsAppearanceThumbPitch
+                ringGap: Tokens.settingsAppearanceThumbRingGap
+                captionBaseline: Tokens.settingsAppearanceCaptionBaseline
+                picture: Component {
+                    AppearanceThumbnail {}
+                }
                 onPicked: id => root.store.set("appearance", id)
             }
         }
+
+        TallRow {
+            title: qsTr("Transparency")
+            rowHeight: Tokens.settingsGlassRowHeight
+
+            GlassPreview {
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.settingsRowInset
+                y: parent.contentY + Tokens.settingsGlassPreviewTop
+                transparency: root.store.value("material.transparency")
+                onMoved: t => root.store.set("material.transparency", t)
+            }
+        }
     }
 
     SettingsGroup {
-        id: accentGroup
-        caption: qsTr("Accent colour")
-        footnote: qsTr("Colour of buttons, selections, toggles and focus rings in the shell and in the apps. Multicolour is the Grassfield green. The highlight colour follows the accent.")
+        caption: qsTr("Theme")
 
-        readonly property string setting: root.store.value("accent.color")
-        readonly property var names: [qsTr("Multicolour"), qsTr("Blue"), qsTr("Purple"), qsTr("Pink"), qsTr("Red"), qsTr("Orange"), qsTr("Yellow"), qsTr("Green"), qsTr("Graphite")]
-        // One round swatch per accent, in the colour it has in the current appearance; the chosen one is marked.
-        readonly property var model: {
-            const out = [];
-            for (let i = 0; i < Accent.NAMES.length; i++) {
-                const n = Accent.NAMES[i];
-                const base = Appearance.dark ? Tokens.colorDark : Tokens.colorLight;
-                const r = Accent.resolve(n, Appearance.dark, Tokens);
-                out.push({color: r ? r.accent : base.accent, name: accentGroup.names[i], state: accentGroup.setting === n ? 2 : 0});
+        TallRow {
+            title: qsTr("Colour")
+            rowHeight: Tokens.settingsAccentRowHeight
+
+            AccentPicker {
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.settingsRowInset - ringPad
+                y: parent.contentY + Tokens.settingsAccentSwatchTop - ringPad
+                accessibleName: qsTr("Accent colour")
+                model: Accent.NAMES.map(n => ({color: root.accentOf(n), name: root.colorNames[n]}))
+                currentIndex: Accent.NAMES.indexOf(Accent.normalize(root.store.value("accent.color")))
+                onChosen: index => root.store.set("accent.color", Accent.NAMES[index])
             }
-            return out;
         }
 
         SettingsRow {
-            title: qsTr("Accent colour")
-            SwatchRow {
-                accessibleName: qsTr("Accent colour")
-                caption: accentGroup.model.filter(m => m.state === 2).map(m => m.name).join("")
-                model: accentGroup.model
-                activeFocusOnTab: true
-                onChosen: index => {
-                    currentIndex = index;
-                    root.store.set("accent.color", Accent.NAMES[index]);
-                }
+            title: qsTr("Text highlight colour")
+
+            ColorPopup {
+                accessibleName: qsTr("Text highlight colour")
+                model: [{id: "automatic", text: qsTr("Automatic"), color: Appearance.colors.accent}].concat(Accent.NAMES.slice(1).map(n => ({id: n, text: root.colorNames[n], color: root.accentOf(n)})))
+                value: Accent.normalizeHighlight(root.store.value("accent.highlight"))
+                onPicked: id => root.store.set("accent.highlight", id)
             }
         }
     }
 
     SettingsGroup {
-        id: iconGroup
-        caption: qsTr("Icon appearance")
-        footnote: qsTr("Applies to app and file icons in the Dock, Apps, Search, the desktop and Files. Tinted maps each icon to shades of one colour.")
+        TallRow {
+            title: qsTr("Icon style")
+            rowHeight: Tokens.settingsIconStyleRowHeight
 
-        readonly property string mode: root.store.value("icons.mode")
-        readonly property string tintSetting: root.store.value("icons.tint")
-        readonly property var tintNames: [qsTr("Blue"), qsTr("Purple"), qsTr("Pink"), qsTr("Red"), qsTr("Orange"), qsTr("Yellow"), qsTr("Green"), qsTr("Graphite")]
-        // Accent first (the default), then the palette; the chosen one is marked.
-        readonly property var tintModel: {
-            const out = [{color: Appearance.colors.accent, name: qsTr("Accent"), state: iconGroup.tintSetting === "accent" ? 2 : 0}];
-            for (let i = 0; i < Tokens.iconModeTintColors.length; i++) {
-                const c = Tokens.iconModeTintColors[i];
-                out.push({color: c, name: iconGroup.tintNames[i], state: iconGroup.tintSetting.toLowerCase() === c.toLowerCase() ? 2 : 0});
-            }
-            return out;
-        }
-
-        Item {
-            width: parent.width
-            height: picker.height + 2 * Tokens.spacingMd
-
-            IconModePicker {
-                id: picker
-                anchors.centerIn: parent
-                accessibleName: qsTr("Icon appearance")
+            ChoicePicker {
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.settingsIconStyleInset - Tokens.settingsIconStyleSize / 2 - ringPad
+                y: parent.contentY + Tokens.settingsIconStyleTop - ringPad
+                accessibleName: qsTr("Icon style")
                 model: [{id: "default", text: qsTr("Default")}, {id: "dark", text: qsTr("Dark")}, {id: "clear", text: qsTr("Clear")}, {id: "tinted", text: qsTr("Tinted")}]
-                value: iconGroup.mode
+                value: root.iconMode
+                pictureWidth: Tokens.settingsIconStyleSize
+                pictureHeight: Tokens.settingsIconStyleSize
+                pictureRadius: Tokens.settingsIconStyleSize * Tokens.iconModePreviewRadius / Tokens.iconModePreviewSize
+                pitch: Tokens.settingsIconStylePitch
+                ringGap: Tokens.settingsAccentRingGap
+                captionBaseline: Tokens.settingsIconStyleCaptionBaseline
+                // A real icon through the real pipeline (the same TintedIcon as every app and file icon), in each mode.
+                picture: Component {
+                    TintedIcon {
+                        property string choice: "default"
+                        size: Tokens.settingsIconStyleSize
+                        source: Appearance.iconSampleSource
+                        mode: choice
+                        tint: Appearance.iconTint
+                    }
+                }
                 onPicked: id => root.store.set("icons.mode", id)
             }
         }
 
         SettingsRow {
+            visible: root.iconMode === "tinted"
             title: qsTr("Tint colour")
-            SwatchRow {
-                id: tintRow
+
+            ColorPopup {
                 accessibleName: qsTr("Tint colour")
-                enabled: iconGroup.mode === "tinted"
-                // Disabled: why. Enabled: the name of the chosen colour (SwatchRow shows it when nothing is hovered).
-                caption: enabled ? iconGroup.tintModel.filter(m => m.state === 2).map(m => m.name).join("") : qsTr("Choose Tinted to use a tint colour.")
-                model: iconGroup.tintModel
-                activeFocusOnTab: true
-                onActiveFocusChanged: {
-                    if (activeFocus && currentIndex < 0) {
-                        for (let i = 0; i < model.length; i++) {
-                            if (model[i].state === 2)
-                                currentIndex = i;
-                        }
-                    }
-                }
-                onChosen: index => {
-                    currentIndex = index;
-                    root.store.set("icons.tint", index === 0 ? "accent" : Tokens.iconModeTintColors[index - 1]);
-                }
+                model: [{id: "accent", text: qsTr("Automatic"), color: Appearance.colors.accent}].concat(root.paletteModel())
+                value: root.paletteId(root.store.value("icons.tint"))
+                onPicked: id => root.store.set("icons.tint", id)
             }
-        }
-    }
-
-    SettingsGroup {
-        id: folderGroup
-        caption: qsTr("Folder colour")
-        footnote: qsTr("Applies to every folder icon in Files, the desktop and Get Info. A folder can have its own colour (Files, Customize Folder).")
-
-        readonly property string setting: root.store.value("icons.folderColor")
-        // Theme (the icon theme's own colour), Accent (follows the accent), then the palette; the chosen one is marked.
-        readonly property var model: {
-            const out = [
-                {color: Tokens.iconModeSampleTop, name: qsTr("Theme"), state: folderGroup.setting === "theme" ? 2 : 0},
-                {color: Appearance.colors.accent, name: qsTr("Accent"), state: folderGroup.setting === "accent" ? 2 : 0}
-            ];
-            for (let i = 0; i < Tokens.iconModeTintColors.length; i++) {
-                const c = Tokens.iconModeTintColors[i];
-                out.push({color: c, name: iconGroup.tintNames[i], state: folderGroup.setting.toLowerCase() === c.toLowerCase() ? 2 : 0});
-            }
-            return out;
         }
 
         SettingsRow {
             title: qsTr("Folder colour")
-            SwatchRow {
+            // Its separator line, then the row (macOS 27: 2 taller than a plain row).
+            height: 1 + Tokens.settingsFolderRowHeight
+
+            ColorPopup {
                 accessibleName: qsTr("Folder colour")
-                caption: folderGroup.model.filter(m => m.state === 2).map(m => m.name).join("")
-                model: folderGroup.model
-                activeFocusOnTab: true
-                onActiveFocusChanged: {
-                    if (activeFocus && currentIndex < 0) {
-                        for (let i = 0; i < model.length; i++) {
-                            if (model[i].state === 2)
-                                currentIndex = i;
-                        }
-                    }
-                }
-                onChosen: index => {
-                    currentIndex = index;
-                    root.store.set("icons.folderColor", index === 0 ? "theme" : (index === 1 ? "accent" : Tokens.iconModeTintColors[index - 2]));
-                }
+                model: [{id: "accent", text: qsTr("Automatic"), color: Appearance.colors.accent}, {id: "theme", text: qsTr("Icon theme"), color: Tokens.iconModeSampleTop}].concat(root.paletteModel())
+                value: root.paletteId(root.store.value("icons.folderColor"))
+                onPicked: id => root.store.set("icons.folderColor", id)
             }
         }
     }
 
     SettingsGroup {
-        caption: qsTr("Material")
-        footnote: qsTr("Transparency applies to the menu bar, Dock, menus and panels. Reduce Transparency makes them opaque.")
-
         SettingsRow {
-            title: qsTr("Transparency")
-            Slider {
-                width: Tokens.controlSliderDefaultWidth
-                accessibleName: qsTr("Transparency")
-                from: 0
-                to: 1
-                stepSize: 0.05
-                value: root.store.value("material.transparency")
-                onMoved: v => root.store.set("material.transparency", Math.round(v * 100) / 100)
-            }
-            Text {
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                width: Tokens.settingsShortcutKeyMinWidth + Tokens.spacingSm
-                horizontalAlignment: Text.AlignRight
-                text: qsTr("%1%").arg(Math.round(root.store.value("material.transparency") * 100))
-                color: Appearance.windowSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Reduce Transparency")
-            subtitle: qsTr("Opaque surfaces instead of translucent ones.")
-            Toggle {
-                accessibleName: qsTr("Reduce Transparency")
-                checked: root.store.value("accessibility.reduceTransparency")
-                onToggled: c => root.store.set("accessibility.reduceTransparency", c)
-            }
-        }
-
-        SettingsRow {
-            title: qsTr("Material profile")
+            title: qsTr("Glass effects")
             subtitle: qsTr("Full uses live previews, Balanced refreshes them less often, Reduced uses still images.")
-            SegmentedControl {
-                accessibleName: qsTr("Material profile")
+
+            ComboBox {
+                inline: true
+                accessibleName: qsTr("Glass effects")
                 model: [{id: "full", text: qsTr("Full")}, {id: "balanced", text: qsTr("Balanced")}, {id: "reduced", text: qsTr("Reduced")}]
                 value: root.store.value("material.profile")
                 onPicked: id => root.store.set("material.profile", id)
-            }
-        }
-    }
-
-    SettingsGroup {
-        caption: qsTr("Motion")
-
-        SettingsRow {
-            title: qsTr("Reduce Motion")
-            subtitle: qsTr("Animations are shortened to quick crossfades.")
-            Toggle {
-                accessibleName: qsTr("Reduce Motion")
-                checked: root.store.value("accessibility.reduceMotion")
-                onToggled: c => root.store.set("accessibility.reduceMotion", c)
             }
         }
     }

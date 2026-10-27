@@ -16,6 +16,9 @@ FocusScope {
     property url appIconSource: ""
     // Set by AuthAgent for a request that arrived while the session was locked (AuthDialogModel.heldNotice), else "".
     property string heldNotice: ""
+    // False while AuthAgent keeps the keys on its sink: the field and the identity rows take no focus and no key, whatever
+    // focuses them and whether or not the window has the keyboard yet (check of c1ca44f, M2). Cancel stays clickable.
+    property bool inputEnabled: true
 
     readonly property real cornerRadius: Tokens.radiusDialog
     readonly property Item surface: material
@@ -32,8 +35,10 @@ FocusScope {
 
     Keys.onEscapePressed: root.model.cancel()
 
+    // Not while the input is disabled: forcing the focus onto a disabled field would still move this scope's focus to it.
     function focusField(): void {
-        field.forceActiveFocus();
+        if (root.inputEnabled)
+            field.forceActiveFocus();
     }
 
     Component.onCompleted: focusField()
@@ -175,6 +180,7 @@ FocusScope {
         // identityRows are visible; more scroll.
         Flickable {
             id: identityList
+            enabled: root.inputEnabled
             width: parent.width
             height: Math.min(identityColumn.implicitHeight, root.identityRows * Tokens.menuItemHeight)
             visible: root.model.identities.length > 1
@@ -263,6 +269,7 @@ FocusScope {
 
             PasswordField {
                 id: field
+                enabled: root.inputEnabled
                 x: 0
                 width: parent.width
                 height: parent.height

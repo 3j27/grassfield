@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
 
@@ -20,6 +21,13 @@ T.Control {
     // macOS Control Center module slider: no knob, a white fill with a round cap on a darker translucent track (the fill
     // keeps a minimum of one cap so the slider never vanishes); the keyboard ring goes round the track.
     property bool knobless: false
+    // A stepped slider (macOS 27 Keyboard's key repeat): this many stops, drawn as dots under the track; a change snaps to the
+    // nearest and the keys move from one to the next. 0: continuous.
+    property int stops: 0
+    // Dots under the track at this many even places without stepping (macOS 27 Appearance's glass slider: one at each end).
+    property int ticks: 0
+    // Dots under the track at these values instead (macOS 27 Dock Magnification: Small near the start, Large at the end).
+    property var tickValues: []
 
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
@@ -31,6 +39,13 @@ T.Control {
     onValueChanged: local = NaN
 
     readonly property real position: to > from ? Math.max(0, Math.min(1, (shown - from) / (to - from))) : 0
+    // Where the dots are, 0 to 1 along the knob's travel: the stops, the even ticks or the tick values.
+    readonly property var dots: {
+        const n = root.stops > 1 ? root.stops : root.ticks;
+        if (n > 1)
+            return Array.from({length: n}, (_, i) => i / (n - 1));
+        return to > from ? root.tickValues.map(v => Math.max(0, Math.min(1, (v - from) / (to - from)))) : [];
+    }
     readonly property real knobWidth: knobless ? 0 : Tokens.controlSliderKnobWidth
     readonly property real travel: Math.max(0, width - knobWidth)
 
@@ -54,7 +69,8 @@ T.Control {
         // A hidden or disabled slider reports nothing, whoever asks.
         if (!root.visible || !root.enabled)
             return;
-        const next = clampValue(v);
+        const k = root.stops > 1 && to > from ? Math.round((clampValue(v) - from) / (to - from) * (root.stops - 1)) : -1;
+        const next = k >= 0 ? from + k * (to - from) / (root.stops - 1) : clampValue(v);
         if (next === shown)
             return;
         local = next;
@@ -67,7 +83,7 @@ T.Control {
     }
 
     function nudge(direction: int): void {
-        commit(shown + direction * stepSize * (to - from));
+        commit(shown + direction * (root.stops > 1 ? 1 / (root.stops - 1) : stepSize) * (to - from));
     }
 
     Keys.onPressed: event => {
@@ -101,6 +117,8 @@ T.Control {
         color: root.knobless ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.quicksettingsSliderTrackOpacityDark) : Appearance.withAlpha(Appearance.colors.shadow, Tokens.quicksettingsSliderTrackOpacity)) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Rectangle {
+            // At the start the knob covers the fill; its round end would show a sliver of it (macOS 27 Magnification Off: none).
+            visible: root.knobless || root.position > 0
             width: root.knobless ? Math.max(parent.height, root.position * root.travel) : root.knobWidth / 2 + root.position * root.travel
             height: parent.height
             radius: height / 2
@@ -110,6 +128,21 @@ T.Control {
         FocusRing {
             shapeRadius: parent.radius
             visible: root.knobless && root.visualFocus
+        }
+    }
+
+    Repeater {
+        model: root.dots
+
+        delegate: Rectangle {
+            id: dot
+            required property real modelData
+            x: root.knobWidth / 2 + dot.modelData * root.travel - dot.width / 2
+            y: root.height / 2 + Tokens.controlSliderStopOffset - dot.height / 2
+            width: Tokens.controlSliderStopSize
+            height: dot.width
+            radius: dot.width / 2
+            color: Appearance.withAlpha(Appearance.colors.text, Tokens.controlSliderStopOpacity)
         }
     }
 
