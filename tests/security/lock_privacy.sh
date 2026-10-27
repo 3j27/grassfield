@@ -11,7 +11,8 @@
 #                before the Bitwarden window opens: a capture must show the probe's magenta and the twin's green. The
 #                test's only capture path, grim over Hyprland's capture protocols, honours no_screen_share (that is
 #                what DT-05 checks), so the twin is how the test knows that green renders at all. Without that proof
-#                every "0 marker px" and "0 green px" check below FAILS instead of passing.
+#                every "0 marker px" and "0 green px" check below FAILS instead of passing. Then the banners must show
+#                the marker outside the probe window, or the lock screen's "0 marker px" FAILS as well.
 #   screenshare  DT-05 / SEC-01: in a capture of the unlocked desktop the probe is magenta and the twin green (controls),
 #                the Bitwarden window's region is black and its box holds no green pixel (Omarchy's no_screen_share
 #                rule, config/hypr/grassfield/privacy.lua)
@@ -199,6 +200,18 @@ settle() { # <name> <address> <#rrggbb> [<address> <#rrggbb>...]
   return 1
 }
 
+# Pixels of <colour> in a capture of $out outside a window's box (the box, grown by 8 px, is painted black first).
+# Alpha goes off after the paint: -draw turns an alpha channel back on, and the mean would then count it.
+count_outside() { # <png> <address> <#rrggbb>
+  local x y w h box
+  read -r x y w h _ < <(client_info "$2")
+  [[ ${h:-} =~ ^[0-9]+$ ]] || { echo error; return; }
+  box=$(awk -v x="$x" -v y="$y" -v w="$w" -v h="$h" -v mx="$mon_x" -v my="$mon_y" -v s="$mon_scale" \
+    'BEGIN { printf "rectangle %d,%d %d,%d", (x - mx - 8) * s, (y - my - 8) * s, (x - mx + w + 8) * s, (y - my + h + 8) * s }')
+  magick "$1" -fill black -draw "$box" -alpha off -fuzz 8% -fill black +opaque "$3" -fill white -opaque "$3" \
+    -format '%[fx:round(mean*w*h)]' info: 2>/dev/null || echo error
+}
+
 # True when the two windows' boxes, each with the 48 px band above it (titlebar, shadow), share no pixel.
 apart() { # <address> <address>
   local ax ay aw ah bx by bw bh
@@ -322,6 +335,26 @@ step_setup() {
   done
   sleep 1
   echo "notifications: $(ipc notifications status)"
+  # The notification image renders before the lock: magenta outside the probe window can only be the banners' marker,
+  # so "0 marker px" on the lock screen covers notification images too (each banner shows it at about 32x32 px).
+  local bm="" wm=""
+  for i in $(seq 1 6); do
+    bm=error
+    if grab "$out" "$work/banners-$out.png" && grab WAYLAND-1 "$work/banners-WAYLAND-1.png"; then
+      bm=$(count_outside "$work/banners-$out.png" "$probe" "#ff00ff")
+      wm=$(count_colour "$work/banners-WAYLAND-1.png" "#ff00ff")
+      [[ $bm =~ ^[0-9]+$ && $wm =~ ^[0-9]+$ ]] && bm=$((bm + wm)) || bm=error
+    fi
+    [[ $bm =~ ^[0-9]+$ ]] && ((bm >= 500)) && break
+    sleep 0.5
+  done
+  echo "banners capture: marker px outside the probe window: $bm ($work/banners-*.png)"
+  if [[ $bm =~ ^[0-9]+$ ]] && ((bm >= 500)); then
+    echo "banners=1" >>"$fixture"
+    pass "setup: the notification banners show the marker image before the lock ($bm px outside the probe window)"
+  else
+    fail "setup: the notification banners never showed the marker image ($bm px outside the probe window): 0 marker px on the lock screen would not cover notification images"
+  fi
 }
 
 step_screenshare() {
@@ -397,10 +430,12 @@ step_privacy() {
   [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "privacy: the capture failed (no fresh $work/privacy-*.png)"; return; }
   if ((m != 0)); then
     fail "privacy: $m marker pixels on the lock screen (notification or window content visible, L4)"
-  elif ((proven)); then
-    pass "privacy: no notification image, banner or window content on the lock screen (0 marker px)"
-  else
+  elif ((!proven)); then
     fail "privacy: 0 marker px proves nothing: $why"
+  elif [[ $(fixture_get banners) != 1 ]]; then
+    fail "privacy: 0 marker px does not cover notification images: the banners never showed the marker before the lock (setup step)"
+  else
+    pass "privacy: no notification image, banner or window content on the lock screen (0 marker px; the banners and the probe showed it before the lock)"
   fi
   if ((g != 0)); then
     fail "privacy: $g green px on the lock screen (the unprotected twin's content is visible, L4)"
