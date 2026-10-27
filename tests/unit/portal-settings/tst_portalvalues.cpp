@@ -13,7 +13,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <functional>
+#include <future>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -358,4 +361,95 @@ TEST(SettingsBackend, AnnouncesEveryValueOnce)
     EXPECT_EQ(announced.size(), 7);
     EXPECT_EQ(announced.value(QStringLiteral("org.gnome.desktop.interface gtk-theme")).toString(), QStringLiteral("Grassfield-red"));
     EXPECT_EQ(announced.value(QStringLiteral("org.freedesktop.appearance color-scheme")).toUInt(), 2u);
+}
+
+// ADR-0020 §2: a read that hangs (a home that stops answering) is not waited for. The start waits startWaitMs at most and
+// answers the defaults; the calls are answered at once all along; a late read is applied when it answers, and a change made
+// while a read hangs is read once more after it.
+TEST(SettingsBackend, AHungReadIsNotWaitedFor)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/grassfield.json");
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "pink"}})");
+    // Reads number `hang` (1-based) block until the test releases them.
+    auto release = std::make_shared<std::promise<void>>();
+    std::shared_future<void> released = release->get_future().share();
+    auto reads = std::make_shared<std::atomic<int>>(0);
+    const auto reader = [reads](int hang, const std::shared_future<void> &released) {
+        return [released, reads, hang](const QString &path) {
+            if (reads->fetch_add(1) + 1 == hang)
+                released.wait();
+            return readSettingsFile(path);
+        };
+    };
+    SettingsBackend::Options options;
+    options.configFile = file;
+    options.clock = [] { return kNoon; };
+    options.startWaitMs = 100;
+    options.readCutMs = 200;
+
+    // The first read hangs: the start does not wait for it, the defaults are answered at once, then the file's values.
+    options.reader = reader(1, released);
+    QElapsedTimer started;
+    started.start();
+    {
+        SettingsBackend backend(options);
+        EXPECT_LT(started.elapsed(), 1000);
+        EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
+                  QStringLiteral("Grassfield-multicolor-dark"));
+        release->set_value();
+        EXPECT_TRUE(spin([&] {
+            return backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString()
+                == QStringLiteral("Grassfield-pink");
+        }));
+    }
+
+    // A later read hangs: the last settings stay, no second read starts beside it, and the change made meanwhile is read
+    // once more when it answers.
+    release = std::make_shared<std::promise<void>>();
+    released = release->get_future().share();
+    reads->store(0);
+    options.reader = reader(2, released);
+    SettingsBackend backend(options);
+    const auto theme = [&] {
+        return backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString();
+    };
+    ASSERT_EQ(theme(), QStringLiteral("Grassfield-pink"));
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "orange"}})"); // read 2: hangs
+    ASSERT_TRUE(spin([&] { return reads->load() == 2; }));
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "red"}})");
+    spin([] { return false; }, 400); // past readCutMs
+    EXPECT_EQ(reads->load(), 2);
+    EXPECT_EQ(theme(), QStringLiteral("Grassfield-pink"));
+    release->set_value();
+    ASSERT_TRUE(spin([&] { return theme() == QStringLiteral("Grassfield-red"); })) << theme().toStdString();
+    EXPECT_TRUE(spin([&] { return reads->load() == 3; })) << reads->load(); // the read once more, on its own thread
+    spin([] { return false; }, 200);
+    EXPECT_EQ(reads->load(), 3);
+}
+
+// The minute timer of "auto" reads the clock, never the file, and does not run for any other appearance.
+TEST(SettingsBackend, TheMinuteTimerReadsNoFile)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/grassfield.json");
+    for (const char *text : {R"({"appearance": "dark"})", R"({"appearance": "auto"})"}) {
+        writeAtomically(file, text);
+        auto reads = std::make_shared<std::atomic<int>>(0);
+        SettingsBackend::Options options;
+        options.configFile = file;
+        options.clock = [] { return kNoon; };
+        options.recheckMs = 20;
+        options.reader = [reads](const QString &path) {
+            reads->fetch_add(1);
+            return readSettingsFile(path);
+        };
+        SettingsBackend backend(options);
+        spin([] { return false; }, 300);
+        EXPECT_EQ(reads->load(), 1) << text;
+    }
 }

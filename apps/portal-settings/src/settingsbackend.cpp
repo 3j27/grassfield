@@ -1,13 +1,15 @@
 #include "settingsbackend.h"
 
 #include <QDBusMetaType>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonParseError>
 
 #include <cerrno>
-#include <cstdint>
+#include <system_error>
+#include <thread>
 #include <utility>
 
 #include <fcntl.h>
@@ -40,30 +42,23 @@ const QString kInterface = QStringLiteral("org.gnome.desktop.interface");
 // A real grassfield.json is a few KiB (ADR-0020 §2).
 constexpr off_t kMaxFileBytes = off_t(1024) * 1024;
 
-enum class FileState : std::uint8_t { Read, Missing, Malformed };
-struct FileRead {
-    FileState state = FileState::Missing;
-    Input input;
-};
-
-// One read of the settings file, never without a bound (ADR-0020 §2): only a regular file is opened, without blocking, and
-// checked again on the descriptor, so a FIFO, a device (also through a symlink) or a directory is never read; at most 1 MiB,
-// read whole and exactly. A missing
-// file is a fresh start (the schema's defaults); anything else that is not a JSON object, or that cannot be opened (chmod
-// 000), is malformed.
-FileRead readFile(const QString &path)
+// What the file says, never read without a bound (ADR-0020 §2): only a regular file is opened, without blocking, and checked
+// again on the descriptor, so a FIFO, a device (also through a symlink) or a directory is never read; at most 1 MiB, read
+// whole and exactly. A missing file is a fresh start (the schema's defaults); anything else that is not a JSON object, or that
+// cannot be opened (chmod 000), is malformed.
+FileRead readContent(const QString &path)
 {
     const QByteArray native = QFile::encodeName(path);
     // Looked at before it is opened, so that a device is never opened at all; checked again on the descriptor (a swap in
     // between).
     struct stat before {};
     if (::stat(native.constData(), &before) != 0)
-        return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}};
+        return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}, {}, false};
     if (!S_ISREG(before.st_mode) || before.st_size > kMaxFileBytes)
-        return {FileState::Malformed, {}};
+        return {FileState::Malformed, {}, {}, false};
     const int fd = ::open(native.constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOCTTY);
     if (fd < 0)
-        return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}};
+        return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}, {}, false};
     struct stat st {};
     QByteArray text;
     bool whole = ::fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size <= kMaxFileBytes;
@@ -83,15 +78,28 @@ FileRead readFile(const QString &path)
     }
     ::close(fd);
     if (!whole)
-        return {FileState::Malformed, {}};
+        return {FileState::Malformed, {}, {}, false};
     QJsonParseError error {};
     const QJsonDocument document = QJsonDocument::fromJson(text, &error);
     if (error.error != QJsonParseError::NoError || !document.isObject())
-        return {FileState::Malformed, {}};
-    return {FileState::Read, readInput(document.object())};
+        return {FileState::Malformed, {}, {}, false};
+    return {FileState::Read, readInput(document.object()), {}, false};
 }
 
 } // namespace
+
+FileRead readSettingsFile(const QString &path)
+{
+    FileRead read = readContent(path);
+    // Where to watch, looked at here too, off the event loop (a home that stops answering blocks this thread only). Never
+    // created: until the directory exists, its nearest existing parent is watched.
+    QString dir = QFileInfo(path).absolutePath();
+    while (!QFileInfo(dir).isDir() && dir != QStringLiteral("/"))
+        dir = QFileInfo(dir).absolutePath();
+    read.watchDir = std::move(dir);
+    read.fileExists = QFileInfo::exists(path);
+    return read;
+}
 
 SettingsBackend::SettingsBackend(Options options, QObject *parent)
     : QObject(parent)
@@ -102,18 +110,41 @@ SettingsBackend::SettingsBackend(Options options, QObject *parent)
     // A write is often a rename over the file (QSaveFile): the directory changes, then the new file is watched again.
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(50);
-    connect(&m_debounce, &QTimer::timeout, this, &SettingsBackend::reread);
+    connect(&m_debounce, &QTimer::timeout, this, &SettingsBackend::startRead);
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_debounce, qOverload<>(&QTimer::start));
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_debounce, qOverload<>(&QTimer::start));
-    // The "auto" schedule: the clock is read again each recheck interval; nothing is signalled unless a value changed.
+    // The "auto" schedule: only the clock is read again each recheck interval, and only while the appearance is "auto";
+    // nothing is signalled unless a value changed.
     m_recheck.setInterval(m_options.recheckMs);
-    connect(&m_recheck, &QTimer::timeout, this, &SettingsBackend::reread);
-    m_recheck.start();
-    watch();
-    // At start a malformed file reads as the defaults, as the shell's own start does (ADR-0020 §2).
-    m_input = readFile(m_options.configFile).input;
+    connect(&m_recheck, &QTimer::timeout, this, &SettingsBackend::recompute);
+    // ADR-0020 §2: a read that hangs (a home on a network mount that stops answering) is not waited for: the calls keep
+    // being answered from memory with the last settings, and the read that answers late is applied then.
+    m_cut.setSingleShot(true);
+    m_cut.setInterval(m_options.readCutMs);
+    connect(&m_cut, &QTimer::timeout, this, [this] {
+        if (!m_reading || m_hung)
+            return;
+        m_hung = true;
+        qWarning("grassfield-portal-settings: reading grassfield.json takes more than %d ms; the last settings stay until it answers",
+                 m_options.readCutMs);
+    });
     m_values = values(m_input, m_options.clock());
     m_map = toMap(m_values);
+    // The first read, waited for at most startWaitMs: the frontend's first calls then get the file's values.
+    startRead();
+    if (m_reading) {
+        QEventLoop loop;
+        m_startLoop = &loop;
+        QTimer::singleShot(m_options.startWaitMs, &loop, &QEventLoop::quit);
+        loop.exec();
+        m_startLoop = nullptr;
+    }
+}
+
+SettingsBackend::~SettingsBackend()
+{
+    const QMutexLocker lock(&m_alive->mutex);
+    m_alive->alive = false;
 }
 
 SettingsMap SettingsBackend::toMap(const Values &v)
@@ -182,32 +213,70 @@ void SettingsBackend::otherBackendChanged(const QString &ns, const QString &key,
     Q_EMIT SettingChanged(ns, key, QDBusVariant(own));
 }
 
-void SettingsBackend::watch()
+void SettingsBackend::startRead()
 {
-    // Never create the directory: the backend only reads the file (defaults apply until it exists). Until the directory exists
-    // (a first login, before anything wrote the file), its nearest existing parent is watched instead, so the file is read as
-    // soon as it appears; then only the directory and the file.
-    QString dir = QFileInfo(m_options.configFile).absolutePath();
-    while (!QFileInfo(dir).isDir() && dir != QStringLiteral("/"))
-        dir = QFileInfo(dir).absolutePath();
+    if (m_reading) {
+        m_readAgain = true;
+        return;
+    }
+    m_reading = true;
+    m_cut.start();
+    try {
+        std::thread([alive = m_alive, reader = m_options.reader, path = m_options.configFile, self = this] {
+            const FileRead read = reader(path);
+            const QMutexLocker lock(&alive->mutex);
+            if (alive->alive)
+                QMetaObject::invokeMethod(self, [self, read] { self->readDone(read); }, Qt::QueuedConnection);
+        }).detach();
+    } catch (const std::system_error &) {
+        // No thread to read with (the unit's task limit): the last settings stay, the next change tries again.
+        m_reading = false;
+        m_cut.stop();
+        qWarning("grassfield-portal-settings: no thread to read grassfield.json with; the last settings stay");
+    }
+}
+
+void SettingsBackend::readDone(const FileRead &read)
+{
+    m_reading = false;
+    m_cut.stop();
+    if (m_hung) {
+        m_hung = false;
+        qInfo("grassfield-portal-settings: grassfield.json answered again");
+    }
+    watch(read);
+    // A malformed or unreadable file keeps the last good settings (a hand edit with a typo, a writer caught between truncate
+    // and write); a missing one is a fresh start (ADR-0020 §2).
+    if (read.state != FileState::Malformed)
+        m_input = read.input;
+    recompute();
+    if (m_startLoop)
+        m_startLoop->quit();
+    if (m_readAgain) {
+        m_readAgain = false;
+        startRead();
+    }
+}
+
+void SettingsBackend::watch(const FileRead &read)
+{
     for (const QString &stale : m_watcher.directories()) {
-        if (stale != dir)
+        if (stale != read.watchDir)
             m_watcher.removePath(stale);
     }
-    if (!m_watcher.directories().contains(dir))
-        m_watcher.addPath(dir);
-    if (QFileInfo::exists(m_options.configFile) && !m_watcher.files().contains(m_options.configFile))
+    if (!read.watchDir.isEmpty() && !m_watcher.directories().contains(read.watchDir))
+        m_watcher.addPath(read.watchDir);
+    if (read.fileExists && !m_watcher.files().contains(m_options.configFile))
         m_watcher.addPath(m_options.configFile);
 }
 
-void SettingsBackend::reread()
+void SettingsBackend::recompute()
 {
-    watch();
-    // A malformed or unreadable file keeps the last good settings (a hand edit with a typo, a writer caught between truncate
-    // and write); a missing one is a fresh start. The clock is read again either way ("auto").
-    const FileRead read = readFile(m_options.configFile);
-    if (read.state != FileState::Malformed)
-        m_input = read.input;
+    // Only "auto" depends on the clock; any other appearance needs no timer at all.
+    if (m_input.appearance != QLatin1String("auto"))
+        m_recheck.stop();
+    else if (!m_recheck.isActive())
+        m_recheck.start();
     const Values next = values(m_input, m_options.clock());
     if (next == m_values)
         return;
