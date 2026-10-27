@@ -325,8 +325,9 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   the session starts before the shell). Nothing for the user to do. At the session's start a ksecretd left over from an
   earlier session that still holds `org.freedesktop.secrets` is made to quit, so apps opened from the Dock find the keychain;
   the shell waits for that at most 10 s. Once per user, the passwords that libsecret clients (Chromium, git helpers) saved in
-  KWallet while it held that name are copied into the keychain, never over an item the keychain already holds; KWallet keeps
-  its copies and its own entries. KWallet asks for its password only when something must move and the wallet is locked (its
+  KWallet while it held that name are copied into the keychain, never over an item the keychain already holds (of two items
+  with the same attributes, the most recently changed); KWallet keeps its copies and its own entries. A user whose own
+  `kwalletrc` gives the Secret Service back to KWallet is left alone. KWallet asks for its password only when something must move and the wallet is locked (its
   own dialog, K2), the keychain only when it is locked or does not exist yet. When something moved, one notice: "Saved
   passwords moved" / "Passwords that apps had saved elsewhere on this computer are now kept with your other saved
   passwords." A refused question, or a peer that is not the expected program, leaves everything as it was, and the handover
@@ -358,7 +359,10 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   an item the keychain holds is kept; KWallet's own entries stay and KWallet is not unlocked when nothing must move; a
   refused question creates nothing and leaves no marker; a missing default keychain is created; a leftover ksecretd quits,
   or gets SIGTERM, before readiness; a holder that is another program is left alone and nothing is read; the notice in
-  English and French; no item, label or value in any output. Opus PASS (secret path).
+  English and French; of two items with the same attributes only the newest moves; the user's own `kwalletrc` keeps KWallet
+  and nothing is done; a dev run on any bus but a private test bus is refused; in a user namespace like `PrivateUsers=self`
+  no peer is identified and nothing is done (why the unit has no namespace option, checked statically); no item, label or
+  value in any output. Opus PASS (secret path).
 
 ### Known limitations
 Name ownership is the only authorization (upstream design): a same-user process can still show a fake stock prompt through
