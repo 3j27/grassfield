@@ -6030,16 +6030,16 @@
 <context>
     <name>PrivacyCategoryPage</name>
     <message>
-        <source>Apps you allow can find out where this computer is. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
-        <translation>Les apps que vous autorisez peuvent savoir où se trouve cet ordinateur. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée&#xa0;; une app absente de la liste demande la première fois.</translation>
+        <source>Apps you allow can find out where this computer is when they ask the desktop portal. When an app you do not allow asks, the portal refuses without a prompt; for an app not listed, you are asked the first time.</source>
+        <translation>Les apps que vous autorisez peuvent savoir où se trouve cet ordinateur quand elles le demandent au portail de bureau. Quand une app que vous n’autorisez pas le demande, le portail refuse sans rien vous demander&#xa0;; pour une app absente de la liste, la question vous est posée la première fois.</translation>
     </message>
     <message>
-        <source>Apps you allow may run in the background when they ask. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks.</source>
-        <translation>Les apps que vous autorisez peuvent s’exécuter en arrière-plan quand elles le demandent. Une app que vous n’autorisez pas est refusée quand elle le demande&#xa0;; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
+        <source>Apps you allow may run in the background when they ask the desktop portal. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks.</source>
+        <translation>Les apps que vous autorisez peuvent s’exécuter en arrière-plan quand elles le demandent au portail de bureau. Une app que vous n’autorisez pas est refusée quand elle le demande&#xa0;; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
     </message>
     <message>
-        <source>Apps you allow can use the camera. An app you do not allow is refused without being asked; an app not listed asks the first time.</source>
-        <translation>Les apps que vous autorisez peuvent utiliser l’appareil photo. Une app que vous n’autorisez pas est refusée sans que la question vous soit posée&#xa0;; une app absente de la liste demande la première fois.</translation>
+        <source>Apps you allow can use the camera when they ask the desktop portal. When an app you do not allow asks, the portal refuses without a prompt; for an app not listed, you are asked the first time. An app that can open the camera itself does not ask, and its switch does not limit it.</source>
+        <translation>Les apps que vous autorisez peuvent utiliser l’appareil photo quand elles le demandent au portail de bureau. Quand une app que vous n’autorisez pas le demande, le portail refuse sans rien vous demander&#xa0;; pour une app absente de la liste, la question vous est posée la première fois. Une app qui peut ouvrir l’appareil photo elle-même ne demande rien, et son interrupteur ne la limite pas.</translation>
     </message>
     <message>
         <source>These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time; if it is in a session now, end the session first.</source>
@@ -6068,6 +6068,10 @@
     <message>
         <source>Not sandboxed: may use the camera directly</source>
         <translation>Non isolée&#xa0;: peut utiliser l’appareil photo directement</translation>
+    </message>
+    <message>
+        <source>Has access to all devices: may use the camera directly</source>
+        <translation>Accès à tous les périphériques&#xa0;: peut utiliser l’appareil photo directement</translation>
     </message>
     <message>
         <source>No apps have asked</source>
@@ -6121,8 +6125,12 @@
         <translation>Confidentialité</translation>
     </message>
     <message>
-        <source>Control which apps can use your location and your camera, keep running in the background, and share a screen you chose before.</source>
-        <translation>Choisissez quelles apps peuvent utiliser votre position et votre appareil photo, continuer à s’exécuter en arrière-plan et partager un écran que vous avez déjà choisi.</translation>
+        <source>Choose what apps that ask the desktop portal may do: use your location and your camera, keep running in the background, and share a screen you chose before.</source>
+        <translation>Choisissez ce que peuvent faire les apps qui passent par le portail de bureau&#xa0;: utiliser votre position et votre appareil photo, continuer à s’exécuter en arrière-plan et partager un écran choisi auparavant.</translation>
+    </message>
+    <message>
+        <source>These permissions apply when an app asks the desktop portal, as sandboxed apps (Flatpak, Snap) do. They do not limit apps that are not sandboxed, nor sandboxed apps given direct access to devices.</source>
+        <translation>Ces autorisations s’appliquent quand une app passe par le portail de bureau, comme le font les apps isolées (Flatpak, Snap). Elles ne limitent ni les apps non isolées, ni les apps isolées qui ont un accès direct aux périphériques.</translation>
     </message>
     <message>
         <source>Location Services</source>
@@ -6131,10 +6139,6 @@
     <message>
         <source>The permissions cannot be read: %1.</source>
         <translation>Les autorisations ne peuvent pas être lues&#xa0;: %1.</translation>
-    </message>
-    <message>
-        <source>Only sandboxed apps (Flatpak, Snap) are limited by these permissions; other apps are not.</source>
-        <translation>Seules les apps isolées (Flatpak, Snap) sont limitées par ces autorisations&#xa0;; les autres apps ne le sont pas.</translation>
     </message>
     <message>
         <source>Background Apps</source>

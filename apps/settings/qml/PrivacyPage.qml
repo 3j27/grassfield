@@ -7,7 +7,8 @@ import "Privacy.js" as Privacy
 // Location Services with the number of applications allowed, then the categories, each with how many applications hold it.
 // A row opens the category's sub-pane (open, Main.qml: PrivacyCategoryPage). Grassfield's categories are those the
 // xdg-desktop-portal permission store keeps (ADR-0030): location, running in the background, the camera, and the screens chosen
-// once for remote desktop and screen sharing. Only sandboxed applications ask the portals; the footnote says so. Not built:
+// once for remote desktop and screen sharing. The store answers only the requests made to the portals: the footnote says whom
+// it does not limit (apps that are not sandboxed, sandboxed apps given direct access to devices). Not built:
 // macOS's Apple app categories, Full Disk Access, FileVault and the security section.
 SettingsPage {
     id: root
@@ -40,7 +41,7 @@ SettingsPage {
         icon: "hand"
         tileColor: "blue"
         title: qsTr("Privacy")
-        text: qsTr("Control which apps can use your location and your camera, keep running in the background, and share a screen you chose before.")
+        text: qsTr("Choose what apps that ask the desktop portal may do: use your location and your camera, keep running in the background, and share a screen you chose before.")
     }
 
     SettingsGroup {
@@ -55,7 +56,7 @@ SettingsPage {
     }
 
     SettingsGroup {
-        footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error) : qsTr("Only sandboxed apps (Flatpak, Snap) are limited by these permissions; other apps are not.")
+        footnote: grants.error !== "" ? qsTr("The permissions cannot be read: %1.").arg(grants.error) : qsTr("These permissions apply when an app asks the desktop portal, as sandboxed apps (Flatpak, Snap) do. They do not limit apps that are not sandboxed, nor sandboxed apps given direct access to devices.")
 
         Repeater {
             model: [{key: "background", section: "privacy-background", text: qsTr("Background Apps"), glyph: "background", tile: "graphite"},

@@ -209,6 +209,64 @@ TestCase {
         compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
     }
 
+    // A Flatpak given every device (--device=all) opens /dev/video* itself: the metadata says so, an override may take it back.
+    function test_flatpakDevices() {
+        const meta = "[Application]\nname=org.example.Call\n\n[Context]\nshared=network;ipc;\ndevices=dri;all;\n";
+        compare(Privacy.devicesAll(meta, false), true);
+        compare(Privacy.devicesAll("[Context]\ndevices=dri;\n", false), false);
+        compare(Privacy.devicesAll("[Context]\ndevices=!all;\n", true), false, "an override takes it back");
+        compare(Privacy.devicesAll("[Context]\nshared=ipc;\n", true), true, "silent: unchanged");
+        compare(Privacy.devicesAll("[Session Bus Policy]\ndevices=all\n", false), false, "only the Context group");
+        compare(Privacy.flatpakInstalls(["/home/u/.local/share/applications", "/usr/share/applications"]),
+            [{dir: "/home/u/.local/share/flatpak", user: true}, {dir: "/var/lib/flatpak", user: false}]);
+        compare(Privacy.flatpakInstalls(["/apps"]), [{dir: "/var/lib/flatpak", user: false}]);
+        const installs = Privacy.flatpakInstalls(["/home/u/.local/share/applications"]);
+        const files = {};
+        const read = p => files[p] ?? "";
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), false, "not installed");
+        files["/var/lib/flatpak/app/org.example.Call/current/active/metadata"] = meta;
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), true);
+        // The user's override, then the system's global one: flatpak run applies the system's first, the user's last.
+        files["/home/u/.local/share/flatpak/overrides/org.example.Call"] = "[Context]\ndevices=!all;\n";
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), false);
+        files["/var/lib/flatpak/overrides/global"] = "[Context]\ndevices=all;\n";
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), false, "the user's own override comes last");
+        // A user installation does not read the system's overrides.
+        files["/home/u/.local/share/flatpak/app/org.example.Mic/current/active/metadata"] = "[Context]\ndevices=dri;\n";
+        compare(Privacy.flatpakDevices("org.example.Mic", installs, read), false);
+        files["/home/u/.local/share/flatpak/overrides/global"] = "[Context]\ndevices=all;\n";
+        compare(Privacy.flatpakDevices("org.example.Mic", installs, read), true);
+        compare(Privacy.flatpakDevices("../x", installs, () => meta), false);
+        compare(Privacy.flatpakDevices("snap.zoom", installs, () => meta), false);
+
+        // The camera list says so under the app (its switch stays: the portal still reads it); the location list does not.
+        const c = make(categoryComp, {key: "camera"});
+        c.backend.files = Object.assign({}, c.backend.files, {"/var/lib/flatpak/app/org.example.Meet/current/active/metadata": meta});
+        answer(c);
+        const meet = find(c.page, i => i.title === "org.example.Meet" && i.showToggle !== undefined);
+        verify(meet.showToggle);
+        compare(meet.subtitle, "Has access to all devices: may use the camera directly");
+        verify(find(c.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("its switch does not limit it") >= 0));
+        const l = make(categoryComp, {key: "location"});
+        l.backend.files = Object.assign({}, l.backend.files, {"/var/lib/flatpak/app/org.example.Maps/current/active/metadata": meta});
+        answer(l);
+        compare(find(l.page, i => i.title === "org.example.Maps" && i.showToggle !== undefined).subtitle, "");
+    }
+
+    // No pane claims more than the portal enforces: the hub's footnote names who is not limited.
+    function test_noClaimBeyondThePortal() {
+        const t = make(hubComp);
+        answer(t);
+        const note = find(t.page, i => i.footnote !== undefined && i.visible && i.footnote !== "");
+        verify(note.footnote.indexOf("They do not limit apps that are not sandboxed, nor sandboxed apps given direct access to devices.") >= 0, note.footnote);
+        for (const key of ["location", "camera"]) {
+            const c = make(categoryComp, {key: key});
+            answer(c);
+            verify(c.page.explanation.indexOf("when they ask the desktop portal") >= 0, key);
+            verify(c.page.explanation.indexOf("without being asked") < 0, key);
+        }
+    }
+
     // An export entry that cannot be read still counts: the user's copy elsewhere does not make the app the host's.
     function test_unreadableExport() {
         const t = make(categoryComp, {key: "location"});

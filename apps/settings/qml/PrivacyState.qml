@@ -15,9 +15,9 @@ QtObject {
     property bool loaded: false
     // Why the store could not be read, "" when it was.
     property string error: ""
-    // app id -> {name, icon, host}: the name and icon of its first visible desktop entry (its id when none has one), host from
-    // every applications folder that has its entry (Privacy.hostApp). No prototype: an id such as "constructor" is a key like
-    // any other.
+    // app id -> {name, icon, host, devices}: the name and icon of its first visible desktop entry (its id when none has one),
+    // host from every applications folder that has its entry (Privacy.hostApp), devices from its Flatpak metadata
+    // (Privacy.flatpakDevices). No prototype: an id such as "constructor" is a key like any other.
     property var apps: Object.create(null)
     // An action is under way: the switches and − wait for it.
     property bool busy: false
@@ -52,12 +52,17 @@ QtObject {
             }
         }
         found.host = Privacy.hostApp(app, entries);
+        // A Flatpak that may open device nodes itself (Privacy.flatpakDevices): read only, from its installed metadata.
+        found.devices = !found.host && Privacy.flatpakDevices(app, Privacy.flatpakInstalls(root.backend.applicationDirs), path => {
+            const r = root.backend.readText(path);
+            return r.ok ? r.text : "";
+        });
         return found;
     }
 
-    // One category's applications by name: [{app, allowed} or {app, tokens}, with name, icon and host].
+    // One category's applications by name: [{app, allowed} or {app, tokens}, with name, icon, host and devices].
     function list(key: string): var {
-        return (root.state[key] || []).map(e => Object.assign({}, e, root.apps[e.app] ?? {name: e.app, icon: "", host: false}))
+        return (root.state[key] || []).map(e => Object.assign({}, e, root.apps[e.app] ?? {name: e.app, icon: "", host: false, devices: false}))
             .sort((a, b) => a.name.localeCompare(b.name));
     }
 
