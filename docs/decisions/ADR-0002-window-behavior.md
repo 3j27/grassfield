@@ -36,6 +36,11 @@ Option 1 for M1, revisit option 2 when Stages (M5) needs placement control.
 ## Evidence
 `config/hypr/grassfield/{windows,input,bindings,looknfeel}.lua` pass `Hyprland --verify-config` (2026-10-17).
 
+## Amendment proposed 2026-10-27 (ADR-0036, owner brief: window tiling)
+Windows stay floating-first and keep this placement, focus and zoom; Grassfield also arranges them in tiles, layouts and
+tile groups placed by the plugin (ADR-0036, Proposed; `docs/specs/tiling.md`). The green-light click stays Zoom until the
+owner decides otherwise (decision T5 in `docs/audits/tiling-2026-10-27/decisions.md`).
+
 ## Consequences
 - Some tiling users lose their habits in the Grassfield session (Omarchy session unchanged).
 - Cmd-style app shortcuts (Cmd+C) are not remapped; known limitation, possible post-1.0 ADR.
