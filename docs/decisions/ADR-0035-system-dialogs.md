@@ -606,8 +606,10 @@ clients (kiod6 until step 9, KF6 apps, K8) keep KWallet and its dialogs (K2). KC
 user's `~/.config`, so a user `kwalletrc` that sets the key wins (the owner's choice; nothing is written there). The Omarchy
 session is unchanged. Tests (step 2): a static test of the file and the environment line; `kreadconfig6 --file kwalletrc
 --group org.freedesktop.secrets --key apiEnabled` with the session's `XDG_CONFIG_DIRS` and an empty `XDG_CONFIG_HOME` prints
-`false`; on a private bus (`dbus-run-session`, a temporary `HOME`, `QT_QPA_PLATFORM=offscreen`), the real ksecretd started
-with the session's `XDG_CONFIG_DIRS` owns `org.kde.secretservicecompat` and not `org.freedesktop.secrets`. No nested check:
+`false`; on a private bus of the test's own (its own configuration with an empty service directory, `dbus-daemon` under
+`env -i`, a unix socket else loopback TCP, a SKIP when libdbus cannot reach it), with a temporary `HOME` and
+`QT_QPA_PLATFORM=offscreen`, the real ksecretd started with the session's `XDG_CONFIG_DIRS` owns
+`org.kde.secretservicecompat` and not `org.freedesktop.secrets`. No nested check:
 a nested session shares the owner's session bus, whose activation environment is not the Grassfield one.
 Delivered in step 2a: `packaging/xdg-config/kwalletrc`, the `env-grassfield` block (added once, `/etc/xdg` kept) and the
 PKGBUILD line; `tests/security/kwallet_secret_service.sh` (headless) runs the checks above and a control: on a private bus
