@@ -16,9 +16,6 @@
 # (1.0.0-rc1 -> 1.0.0rc1, which pacman orders before 1.0.0); pkgrel restarts at 1 with every new VERSION. A rebuild of the
 # same VERSION for the [grassfield] channels (a new Hyprland, ADR-0033 e, owner decision O7) sets GRASSFIELD_PKGREL, a
 # positive integer, instead of a commit; unset, the pkgrel below is used.
-#
-# grassfield-desktop depends on grassfield-keyring (ADR-0033 b.2, owner decision O12), built by grassfieldhq/grassfield-
-# packages and holding no key until the owner's signing key exists (O20): install that package once before `makepkg -si`.
 
 _here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _ver=$(tr -d '[:space:]' <"$_here/../../VERSION")
@@ -151,9 +148,11 @@ package_grassfield-desktop() {
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
   # with Omarchy.
-  # Software Update (ADR-0033): grassfield-keyring (the [grassfield] keys, none until the owner's key exists; O12, O20),
-  # pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync), declared as omarchy declares them.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot)
+  # Software Update (ADR-0033): pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync), declared
+  # as omarchy declares them. grassfield-keyring (O12) is held back until grassfieldhq/grassfield-packages builds it (owner
+  # decision O21, 2026-10-27): a follow-up adds it here, so that a local `makepkg -si` never asks for a package that does
+  # not exist yet.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
