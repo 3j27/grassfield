@@ -4,14 +4,32 @@ import Grassfield.Ui
 
 // Settings > Search as macOS 27 lays out its Spotlight pane (docs/audits/settings-parity-2026-10-26.md § Search): the header
 // card, Search History with Delete Search History… (historyDeleteRequested: Main asks first, then writes
-// search.historyResetAt), and Search Results: the kinds of results Search shows, each with its switch (search.show*). The shell
-// follows the keys live (shell/search/Search.qml).
+// search.historyResetAt), Search Results: the kinds of results Search shows, each with its switch (search.show*), and the
+// clipboard history (ADR-0034 step 3, docs/specs/clipboard.md CB-13): Results from Clipboard, how long the history is
+// available, Keep clipboard history after logging out, and Clear Clipboard History… (clipboardClearRequested: Main asks, then
+// writes search.clipboard.clearedAt, and pinnedClearedAt too when the pinned items go). The shell follows the keys live
+// (shell/search/Search.qml, shell/services/Clipboard.qml).
 SettingsPage {
     id: root
 
     required property var store
 
+    readonly property bool clipboardOn: root.store.value("search.clipboard.enabled") === true
+
     signal historyDeleteRequested
+    signal clipboardClearRequested
+
+    // Clear Clipboard History… once confirmed (Main's sheet): one write; the shell deletes the items not pinned, and with
+    // alsoPinned the pinned ones too.
+    function clearClipboard(alsoPinned: bool): void {
+        const now = Date.now();
+        const entries = {
+            "search.clipboard.clearedAt": now
+        };
+        if (alsoPinned)
+            entries["search.clipboard.pinnedClearedAt"] = now;
+        root.store.setMany(entries);
+    }
 
     title: qsTr("Search")
 
@@ -186,6 +204,56 @@ SettingsPage {
             title: qsTr("System Commands")
             glyph: "power"
             tileColor: "red"
+        }
+    }
+    // macOS 26.0 shows its clipboard group last (W-39); macOS 27 names the switch "Results from Clipboard" and offers 30 minutes,
+    // 8 hours or 7 days (M-9). The pinned items stay while the history is off, so Clear stays available.
+    SettingsGroup {
+        SettingsRow {
+            title: qsTr("Results from Clipboard")
+            subtitle: qsTr("Allows Search to find and show items you copied. Personal and sensitive information may appear in the results. Turning it off deletes the items you did not pin.")
+
+            Toggle {
+                accessibleName: qsTr("Results from Clipboard")
+                checked: root.clipboardOn
+                onToggled: c => root.store.set("search.clipboard.enabled", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Clipboard history is available in Search for")
+
+            ComboBox {
+                inline: true
+                enabled: root.clipboardOn
+                accessibleName: qsTr("Clipboard history is available in Search for")
+                model: [{id: "30m", text: qsTr("30 minutes")}, {id: "8h", text: qsTr("8 hours")}, {id: "7d", text: qsTr("7 days")}]
+                value: String(root.store.value("search.clipboard.retention"))
+                onPicked: id => root.store.set("search.clipboard.retention", id)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Keep clipboard history after logging out")
+            subtitle: qsTr("The items you did not pin are kept on this computer, readable only by you, until they are no longer available.")
+
+            Toggle {
+                enabled: root.clipboardOn
+                accessibleName: qsTr("Keep clipboard history after logging out")
+                checked: root.store.value("search.clipboard.keepOnDisk") === true
+                onToggled: c => root.store.set("search.clipboard.keepOnDisk", c)
+            }
+        }
+
+        SettingsRow {
+            implicitHeight: Tokens.settingsPushRowHeight
+            title: qsTr("Clipboard History")
+
+            Button {
+                push: true
+                text: qsTr("Clear Clipboard History…")
+                onClicked: root.clipboardClearRequested()
+            }
         }
     }
 }

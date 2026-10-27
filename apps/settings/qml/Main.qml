@@ -61,7 +61,7 @@ Window {
         {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
         {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "menubar", group: 2, title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
-        {id: "search", group: 2, title: qsTr("Search"), icon: "search", keywords: qsTr("search results history calculator conversions documents commands")},
+        {id: "search", group: 2, title: qsTr("Search"), icon: "search", keywords: qsTr("search results history calculator conversions documents commands clipboard copy paste")},
         {id: "wallpaper", group: 2, title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
         {id: "notifications", group: 3, title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
@@ -991,6 +991,10 @@ Window {
         SearchPage {
             store: cfg
             onHistoryDeleteRequested: deleteSearchHistory.open()
+            onClipboardClearRequested: {
+                alsoPinned.checked = false;
+                clearClipboardHistory.open();
+            }
         }
     }
 
@@ -1209,6 +1213,23 @@ Window {
         onAccepted: cfg.set("search.historyResetAt", Date.now())
     }
 
+    // Search > Clear Clipboard History…: asked first (macOS 27: Clear Clipboard History, then Clear). The shell's clipboard
+    // history deletes the items not pinned; with "Also delete pinned items" the pinned ones too, from memory and the disk
+    // (ADR-0034 §6). SearchPage.clearClipboard writes both keys at once.
+    Sheet {
+        id: clearClipboardHistory
+        title: qsTr("Clear your clipboard history?")
+        message: qsTr("The items you copied are deleted from Search. Pinned items stay unless you delete them too.")
+        confirmText: qsTr("Clear")
+        destructive: true
+        onAccepted: (page.item as SearchPage)?.clearClipboard(alsoPinned.checked)
+
+        CheckBox {
+            id: alsoPinned
+            text: qsTr("Also delete pinned items")
+        }
+    }
+
     // Wallpaper > Screen Saver… (ADR-0032); Lock Screen Settings… in its note opens the Lock Screen pane.
     ScreenSaverSheet {
         id: screenSaverSheet
@@ -1242,8 +1263,8 @@ Window {
     // page's button that opened it; Sheet.open shows the sheet before it moves the focus into its panel): focusBack.
     readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
         displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
-        volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, screenSaverSheet, lockMessageSheet,
-        batteryOptionsSheet, screenCornersSheet]
+        volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, clearClipboardHistory, screenSaverSheet,
+        lockMessageSheet, batteryOptionsSheet, screenCornersSheet]
 
     Instantiator {
         model: root.sheets
