@@ -292,6 +292,63 @@ TEST(ImageSize, AFolderSwappedForALinkAfterTheCheckIsNeverFollowed)
     EXPECT_EQ(ImageSize::read(png, mounts), QSize(7, 5));
 }
 
+namespace
+{
+// The errno the openat2 stand-in answers with (ENOSYS: a kernel without it; EPERM: a sandbox's seccomp filter).
+int openat2Errno = 0;
+int openat2Calls = 0;
+int refusingOpenat2(const char *, int, quint64)
+{
+    openat2Calls++;
+    errno = openat2Errno;
+    return -1;
+}
+} // namespace
+
+// Where openat2 answers ENOSYS or EPERM, the open falls back to open() with O_NOFOLLOW: the picture is read (no
+// Dimensions read would succeed otherwise), a link swapped in at the end of the path after the check is still refused,
+// and the inode check still holds. Any other answer of openat2 is a refusal, without a fallback.
+TEST(ImageSize, WithoutOpenat2TheOpenFallsBackToNoFollow)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    QImage image(9, 4, QImage::Format_RGB32);
+    image.fill(Qt::magenta);
+    const QString elsewhere = dir->path() + QStringLiteral("/elsewhere");
+    ASSERT_TRUE(QDir().mkpath(elsewhere));
+    ImageSize::setOpenat2ForTests(refusingOpenat2);
+    for (const int code : {ENOSYS, EPERM}) {
+        SCOPED_TRACE(code == ENOSYS ? "ENOSYS" : "EPERM");
+        openat2Errno = code;
+        const QString png = dir->path() + QStringLiteral("/fallback-%1.png").arg(code);
+        ASSERT_TRUE(write(png, encoded(image, "PNG")));
+        openat2Calls = 0;
+        EXPECT_EQ(ImageSize::read(png, mounts), QSize(9, 4)) << "the fallback opens the checked file";
+        EXPECT_EQ(openat2Calls, 1) << "openat2 was asked first";
+        struct stat checked {};
+        QString resolved;
+        ASSERT_EQ(ImageSize::check(png, mounts, &checked, &resolved), ImageSize::Refusal::None);
+        // A link to the same inode swapped in after the check: O_NOFOLLOW refuses it.
+        const QString same = elsewhere + QStringLiteral("/same-%1.png").arg(code);
+        ASSERT_EQ(::link(QFile::encodeName(png).constData(), QFile::encodeName(same).constData()), 0);
+        ASSERT_EQ(::unlink(QFile::encodeName(png).constData()), 0);
+        ASSERT_TRUE(QFile::link(same, png));
+        const int fd = ImageSize::openChecked(resolved, checked);
+        EXPECT_EQ(fd, -1) << "the fallback followed a link swapped in at the end of the path";
+        if (fd >= 0)
+            ::close(fd);
+    }
+    // Another answer (EACCES): no fallback, the file is not read.
+    openat2Errno = EACCES;
+    const QString png = dir->path() + QStringLiteral("/refused.png");
+    ASSERT_TRUE(write(png, encoded(image, "PNG")));
+    EXPECT_FALSE(ImageSize::read(png, mounts).isValid());
+    ImageSize::setOpenat2ForTests(nullptr);
+    EXPECT_EQ(ImageSize::read(png, mounts), QSize(9, 4)) << "the system call is back";
+}
+
 TEST(ImageSize, NetworkAndFuseMountsAreNeverLookedAt)
 {
     const auto dir = sandbox();

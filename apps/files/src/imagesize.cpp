@@ -7,6 +7,7 @@
 #include <QObject>
 
 #include <algorithm>
+#include <atomic>
 
 #include <chrono>
 #include <condition_variable>
@@ -121,20 +122,36 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
     return Refusal::NotRegular; // the root folder itself
 }
 
+namespace
+{
+int systemOpenat2(const char *path, int flags, quint64 resolve)
+{
+    struct open_how how {};
+    how.flags = static_cast<__u64>(flags);
+    how.resolve = static_cast<__u64>(resolve);
+    return static_cast<int>(::syscall(SYS_openat2, AT_FDCWD, path, &how, sizeof how));
+}
+
+std::atomic<Openat2> openat2Call{systemOpenat2};
+} // namespace
+
+void setOpenat2ForTests(Openat2 call)
+{
+    openat2Call.store(call ? call : systemOpenat2);
+}
+
 int openChecked(const QString &resolved, const struct stat &checked)
 {
     // No link is followed anywhere in the path (openat2 RESOLVE_NO_SYMLINKS, Linux 5.6): a link swapped in after the check,
     // for the file or for a folder above it, is refused (ELOOP) instead of followed, wherever it leads (a network share
-    // would block the open). A kernel without openat2 (ENOSYS) gets open() with O_NOFOLLOW, which refuses a link at the
-    // end of the path only. O_NONBLOCK: a FIFO swapped in opens at once (and is refused below) instead of waiting for a
-    // writer.
+    // would block the open). Without openat2 the open is open() with O_NOFOLLOW, which refuses a link at the end of the
+    // path only: on a kernel without it (ENOSYS), and under a seccomp filter that answers EPERM for a system call it does
+    // not know (Flatpak, bubblewrap and container sandboxes do), where every Dimensions read would fail otherwise.
+    // O_NONBLOCK: a FIFO swapped in opens at once (and is refused below) instead of waiting for a writer.
     const QByteArray path = QFile::encodeName(resolved);
     const int flags = O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC | O_NOFOLLOW;
-    struct open_how how {};
-    how.flags = static_cast<__u64>(flags);
-    how.resolve = RESOLVE_NO_SYMLINKS;
-    int fd = static_cast<int>(::syscall(SYS_openat2, AT_FDCWD, path.constData(), &how, sizeof how));
-    if (fd < 0 && errno == ENOSYS)
+    int fd = openat2Call.load()(path.constData(), flags, RESOLVE_NO_SYMLINKS);
+    if (fd < 0 && (errno == ENOSYS || errno == EPERM))
         fd = ::open(path.constData(), flags);
     if (fd < 0)
         return -1;

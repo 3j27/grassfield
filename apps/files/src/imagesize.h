@@ -39,10 +39,16 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
 
 // Opens the file check() approved by the path check() reached (`resolved`), read only, without blocking (O_NONBLOCK,
 // O_NOCTTY) and without following a link anywhere in that path (openat2 RESOLVE_NO_SYMLINKS: a link swapped in after the
-// check, for the file or a folder above it, is refused, wherever it leads; without openat2, ENOSYS, O_NOFOLLOW refuses one
-// at the end only); the descriptor is returned only when it is still the file checked (same device and inode, a regular
-// file), -1 otherwise. Never on the GUI thread.
+// check, for the file or a folder above it, is refused, wherever it leads; where openat2 answers ENOSYS or EPERM, a kernel
+// without it or a sandbox's seccomp filter, open() with O_NOFOLLOW refuses one at the end only); the descriptor is returned
+// only when it is still the file checked (same device and inode, a regular file), -1 otherwise. Never on the GUI thread.
 int openChecked(const QString &resolved, const struct stat &checked);
+
+// Tests: the openat2 call openChecked() makes (`path` from the working directory, open flags, RESOLVE_* bits; a
+// descriptor, or -1 with errno set). A stand-in answering ENOSYS or EPERM takes the fallback; null restores the system
+// call.
+using Openat2 = int (*)(const char *path, int flags, quint64 resolve);
+void setOpenat2ForTests(Openat2 call);
 
 // The size as shown (a picture turned by its EXIF orientation reports the turned size), invalid when unknown or refused.
 // check() first, then openChecked(); the format is the content's, and at most kReadBudget bytes are read.
