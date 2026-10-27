@@ -11,14 +11,16 @@
 # D-Bus activation as a dev session reading a scratch grassfield.json; a stand-in for x-d-p-gtk; never the owner's bus):
 #  1 ReadAll and ReadOne through the frontend: Grassfield's values win over gtk's (color-scheme, gtk-theme), gtk still
 #    answers the keys Grassfield does not own (font-name), the accent colour is the token's, the namespace filter holds; the
-#    backend stays within its memory budget (ADR-0035 decision 2b-11: 4 MB private, 20 MB resident with the shared libraries)
-#  2 a change of grassfield.json reaches a client as SettingChanged, only for the keys that changed
+#    frontend keeps the stock routing for every other interface; the backend stays within its memory budget (ADR-0035
+#    decision 2b-11: 4 MB private, 20 MB resident with the shared libraries)
+#  2 a change of grassfield.json reaches a client as SettingChanged, only for the keys that changed; when x-d-p-gtk signals
+#    a dconf change of keys Grassfield owns, the client still ends with Grassfield's values (and gets gtk's own keys)
 #  3 the backend killed: the frontend's next read starts it again by D-Bus activation and gets Grassfield's values, and the
 #    new process signals the next change; killed again, a change made while it is down reaches the client as soon as it is
 #    started again without any read (as systemd's Restart=on-failure starts it)
 #  4 without the backend, the frontend answers from gtk alone, at once
 #  5 the backend starts, owning its name, with GTK_USE_PORTAL=1, QT_QPA_PLATFORMTHEME=gtk3 and a frontend that never answers
-#  6 refused outside a Grassfield session
+#  6 refused outside a Grassfield session, and as a dev run on a bus that is not a private test bus
 #  7 on a headless Wayland compositor (Weston), with the variables env-grassfield sets: a GTK 3 app, a GTK 4 app and a
 #    libadwaita app take their theme, colour scheme, contrast and accent from the portal, and follow a change of
 #    grassfield.json (light, orange, Increase Contrast) within a second; a GTK 4 app without GDK_DEBUG=portals does not (why the session sets it). SKIP without weston or the GTK 3,
@@ -87,6 +89,13 @@ desc="env-grassfield: an existing XDG_DATA_DIRS is kept after it, and sourced tw
 check test "$(envof /usr/share:/opt/share twice)" = "$tmp/gf:/usr/share:/opt/share|1|portals"
 desc="env-grassfield: GDK_DEBUG keeps the flags it has, and gets portals once"
 check test "$(envof "" twice "events" | cut -d'|' -f3)" = "events,portals"
+# The shell's unit clears GTK_USE_PORTAL for the shell (gate P5); the apps it starts get it back (review of step 2b).
+desc="env-grassfield records GRASSFIELD_APPS_GTK_USE_PORTAL=1 for the shell, and the shell's launch environment gives GTK_USE_PORTAL back"
+check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; echo \"\${GRASSFIELD_APPS_GTK_USE_PORTAL-unset}\"" _ "$1") == 1 ]] &&
+  ! grep -q GRASSFIELD_APPS_GTK_USE_PORTAL "$2" &&
+  grep -qF "AppLaunch.portalEnvironment(Quickshell.env(\"GRASSFIELD_APPS_GTK_USE_PORTAL\"))" "$3" &&
+  grep -qF "AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), portalEnvironment)" "$3"' _ \
+  "$tmp/env" "$pk/systemd/grassfield-shell.service" "$root/shell/services/Apps.qml"
 
 # --- runtime -----------------------------------------------------------------------------------------------------------
 frontend=/usr/lib/xdg-desktop-portal
@@ -151,22 +160,24 @@ scenario() { # scenario <name> <yes|no>
   mkdir -p "$d/services" "$d/config" "$d/home" "$d/run" "$d/cfg" "$d/xdg"
   chmod 700 "$d/run"
   cp -r "$pk/xdg/." "$d/xdg/"
-  printf '#!/bin/sh\nexport GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)"\nexec python3 -I %s gtk --log %s/gtk.log\n' \
-    "$d" "$d" "$fakes" "$d" >"$d/gtk.sh"
+  printf '#!/bin/sh\necho $$ >%s/gtk.pid\nexport GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)"\nexec python3 -I %s gtk --log %s/gtk.log\n' \
+    "$d" "$d" "$d" "$fakes" "$d" >"$d/gtk.sh"
   printf '[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.gtk\nExec=%s/gtk.sh\n' "$d" >"$d/services/gtk.service"
   if [[ $2 == yes ]]; then
-    printf '#!/bin/sh\necho started >>%s/backend.starts\nexec env -i PATH="$PATH" HOME=%s/home DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)" GRASSFIELD_DEV=1 GRASSFIELD_CONFIG_HOME=%s/config GRASSFIELD_PORTAL_SETTINGS_CLOCK=12:00 %s\n' \
-      "$d" "$d" "$d" "$d" "$backend" >"$d/backend.sh"
+    printf '#!/bin/sh\necho started >>%s/backend.starts\necho $$ >%s/backend.pid\nexec env -i PATH="$PATH" HOME=%s/home DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)" GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s GRASSFIELD_DEV=1 GRASSFIELD_CONFIG_HOME=%s/config GRASSFIELD_PORTAL_SETTINGS_CLOCK=12:00 %s\n' \
+      "$d" "$d" "$d" "$d" "$d" "$d" "$backend" >"$d/backend.sh"
     printf '[D-BUS Service]\nName=%s\nExec=%s/backend.sh\n' "$name" "$d" >"$d/services/grassfield.service"
   fi
   chmod 755 "$d"/*.sh
   settings "$d" '{"appearance": "dark"}'
   start_bus "$d" || { echo "bus: $(head -n 1 "$d/bus.log")"; return 1; }
   env -i PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/cfg" XDG_DATA_HOME="$d/home/.local/share" XDG_RUNTIME_DIR="$d/run" \
-    XDG_DATA_DIRS="$d/xdg:/usr/share" XDG_CURRENT_DESKTOP=Hyprland DBUS_SESSION_BUS_ADDRESS="$bus" "$frontend" -r >"$d/frontend.log" 2>&1 &
+    XDG_DATA_DIRS="$d/xdg:/usr/share" XDG_CURRENT_DESKTOP=Hyprland DBUS_SESSION_BUS_ADDRESS="$bus" "$frontend" -v -r >"$d/frontend.log" 2>&1 &
   frontend_pid=$!
   wait_until 10 owned org.freedesktop.portal.Desktop
 }
+# The backend this scenario started (its PID from backend.sh), killed; never any other process of that name.
+kill_backend() { kill -KILL "$(cat "$d/backend.pid")" 2>/dev/null; wait_until 5 unowned "$name"; }
 value() { python3 -I -c 'import json,sys; d=json.loads(sys.stdin.read()); print(json.dumps(eval(sys.argv[1], {}, {"d": d})))' "$1"; }
 
 # Preflight: libdbus reaches a private bus.
@@ -191,8 +202,12 @@ check test "$(wc -l <"$d/backend.starts" 2>/dev/null)" = 1
 got="$(call read-one org.freedesktop.appearance color-scheme) $(call read-all 'org.gnome.*' | value 'sorted(d)')"
 desc="1 ReadOne and the namespace filter [$got]"
 check test "$got" = '1 ["org.gnome.desktop.interface"]'
-read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' \
-  "/proc/$(pgrep -f "^$backend\$" | head -n 1)/status" 2>/dev/null)
+got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \((default )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
+desc="1 the session's file routes Settings only: every other interface keeps the stock routing (FileChooser, Screenshot) [$got]"
+check bash -c '[[ $1 == *"Using grassfield-settings.portal for org.freedesktop.impl.portal.Settings (config)"* &&
+  $1 == *"org.freedesktop.impl.portal.FileChooser (default config)"* && $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
+  $(grep -o "[A-Za-z]* (config)" <<<"$1" | sort -u | tr "\n" " ") == "Settings (config) " ]]' _ "$got"
+read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' "/proc/$(cat "$d/backend.pid")/status" 2>/dev/null)
 desc="1 the backend's memory is within its budget (private <= 4 MB, resident <= 20 MB) [private ${anon:-?} kB, resident ${rss:-?} kB]"
 check bash -c '[[ -n $1 && -n $2 && $1 -le 4096 && $2 -le 20480 ]]' _ "$anon" "$rss"
 
@@ -209,10 +224,22 @@ desc="2 a change of grassfield.json reaches the client as SettingChanged, for th
 check test "$keys" = "appearance/accent-color appearance/color-scheme interface/color-scheme interface/gtk-theme"
 desc="2 the frontend then answers the new values [$(call read-one org.gnome.desktop.interface gtk-theme)]"
 check test "$(call read-one org.gnome.desktop.interface gtk-theme)" = '"Grassfield-orange"'
+# x-d-p-gtk signals a dconf change (a theme tool): the frontend passes it on, and the backend answers with its own values.
+: >"$d/signals"
+kill -USR1 "$(cat "$d/gtk.pid")"
+wait_until 5 grep -q '"font-name"' "$d/signals"
+sleep 0.5
+got=$(python3 -I -c '
+import json, sys
+last = {}
+for j in map(json.loads, open(sys.argv[1])):
+    last[j["key"] if j["ns"].endswith("interface") or j["key"] != "color-scheme" else "appearance-color-scheme"] = j["value"]
+print(json.dumps([last.get("gtk-theme"), last.get("appearance-color-scheme"), last.get("font-name")]))' "$d/signals")
+desc="2 after x-d-p-gtk signals gtk-theme, color-scheme and font-name, the client ends with Grassfield's two and gtk's font [$got]"
+check test "$got" = '["Grassfield-orange", 2, "Cantarell 11"]'
 
 # 3 --------------------------------------------------------------------------------------------------------------------
-pkill -KILL -f "^$backend\$" 2>/dev/null || pkill -KILL -x grassfield-portal-settings 2>/dev/null
-wait_until 5 unowned "$name"
+kill_backend
 got="$(call read-one org.gnome.desktop.interface gtk-theme) $(wc -l <"$d/backend.starts")"
 desc="3 the backend killed: the frontend's next read starts it again and answers Grassfield's values [$got]"
 check test "$got" = '"Grassfield-orange" 2'
@@ -220,8 +247,7 @@ check test "$got" = '"Grassfield-orange" 2'
 settings "$d" '{"appearance": "light", "accent": {"color": "purple"}}'
 desc="3 ... and the new process signals the next change to the client"
 check wait_until 5 grep -q '"gtk-theme", "value": "Grassfield-purple"' "$d/signals"
-pkill -KILL -f "^$backend\$" 2>/dev/null || pkill -KILL -x grassfield-portal-settings 2>/dev/null
-wait_until 5 unowned "$name"
+kill_backend
 : >"$d/signals"
 settings "$d" '{"appearance": "light", "accent": {"color": "red"}}'
 sleep 0.3
@@ -246,8 +272,8 @@ mkdir -p "$d/services" "$d/config" "$d/home"
 start_bus "$d" || exit 1
 setsid env -i PATH="$PATH" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$d" DBUS_SESSION_BUS_ADDRESS="$bus" python3 -I "$fakes" silent-frontend >"$d/fake.log" 2>&1 &
 wait_until 5 owned org.freedesktop.portal.Desktop
-env -i PATH="$PATH" HOME="$d/home" DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_DEV=1 GRASSFIELD_CONFIG_HOME="$d/config" \
-  GTK_USE_PORTAL=1 QT_QPA_PLATFORMTHEME=gtk3 timeout 20 "$backend" >"$d/backend.log" 2>&1 &
+env -i PATH="$PATH" HOME="$d/home" DBUS_SESSION_BUS_ADDRESS="$bus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$d" GRASSFIELD_DEV=1 \
+  GRASSFIELD_CONFIG_HOME="$d/config" GTK_USE_PORTAL=1 QT_QPA_PLATFORMTHEME=gtk3 timeout 20 "$backend" >"$d/backend.log" 2>&1 &
 direct=$!
 started=$(date +%s%N)
 wait_until 5 owned "$name"
@@ -261,6 +287,12 @@ stop_bus
 out=$(env -i PATH="$PATH" HOME="$tmp" "$backend" 2>&1); rc=$?
 desc="6 refused outside a Grassfield session (exit 2) [$rc: $out]"
 check bash -c '[[ $1 == 2 && $2 == *"refused: not a Grassfield session"* ]]' _ "$rc" "$out"
+for bad in "unix:path=/run/user/$(id -u)/bus" "unix:path=$tmp/x/../../run/user/$(id -u)/bus"; do
+  out=$(env -i PATH="$PATH" HOME="$tmp" GRASSFIELD_DEV=1 GF_TEST_BUS=1 GF_TEST_BUS_DIR="$tmp/x" DBUS_SESSION_BUS_ADDRESS="$bad" \
+    timeout 5 "$backend" 2>&1); rc=$?
+  desc="6 a dev run on $bad (not under the test's directory) is refused (exit 2) [$rc: $out]"
+  check bash -c '[[ $1 == 2 && $2 == *"refused: a dev session runs it only on a private test bus"* ]]' _ "$rc" "$out"
+done
 
 # 7 --------------------------------------------------------------------------------------------------------------------
 typelib() { python3 -I -c 'import gi, importlib, sys; gi.require_version(sys.argv[1], sys.argv[2]); importlib.import_module("gi.repository." + sys.argv[1])' "$@" 2>/dev/null; }
@@ -318,10 +350,12 @@ check bash -c '[[ $1 != *Grassfield-* ]]' _ "$got"
 # A restart of the backend (every value announced again, decision 2b-9) leaves each app as it was.
 before=$(for f in gtk3 gtk4 adw; do states "$d/$f" | awk '{ print $3 }'; done | tr '\n' ' ')
 lines=$(wc -l "$d/gtk3" "$d/gtk4" "$d/adw" | awk 'NR <= 3 { print $1 }' | tr '\n' ' ')
-pkill -KILL -f "^$backend\$" 2>/dev/null || pkill -KILL -x grassfield-portal-settings 2>/dev/null
-wait_until 5 unowned "$name"
+starts=$(wc -l <"$d/backend.starts")
+kill_backend
 start_service "$name"
 sleep 1
+desc="7 the backend was killed and started again [starts $starts -> $(wc -l <"$d/backend.starts"), owned $(has "$name")]"
+check bash -c '[[ $2 -eq $(($1 + 1)) && $3 == True ]]' _ "$starts" "$(wc -l <"$d/backend.starts")" "$(has "$name")"
 after=$(for f in gtk3 gtk4 adw; do states "$d/$f" | awk '{ print $3 }'; done | tr '\n' ' ')
 desc="7 a restart of the backend (every value announced again) leaves the apps as they were [$after; lines GTK 3, GTK 4, libadwaita: $lines-> $(wc -l "$d/gtk3" "$d/gtk4" "$d/adw" | awk 'NR <= 3 { print $1 }' | tr '\n' ' ')]"
 check test "$before" = "$after"

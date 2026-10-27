@@ -5,12 +5,20 @@
 #include "settingsbackend.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QSaveFile>
 #include <QTemporaryDir>
 
 #include <gtest/gtest.h>
+
+#include <functional>
+#include <string>
+#include <vector>
+
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace grassfield::portal;
 
@@ -185,17 +193,99 @@ TEST(SettingsBackend, AnswersFromTheFileAndSignalsOnlyWhatChanged)
                                     QStringLiteral("org.gnome.desktop.interface gtk-theme")}));
     EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
               QStringLiteral("Grassfield-orange-hc"));
-    // A file that is not JSON reads as the defaults (dark, multicolor): every key that differs from them changes.
+    // A file that is not JSON keeps the last good settings (ADR-0020 §2: a hand edit with a typo changes nothing).
     changed.clear();
     writeAtomically(file, "{not json");
+    spin([] { return false; }, 300);
+    EXPECT_TRUE(changed.isEmpty()) << changed.join(QLatin1Char(',')).toStdString();
+    EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
+              QStringLiteral("Grassfield-orange-hc"));
+    // An empty object reads as the defaults (dark, multicolor): every key that differs from them changes.
+    writeAtomically(file, "{}");
     ASSERT_TRUE(spin([&] { return changed.contains(QStringLiteral("org.freedesktop.appearance color-scheme")); }));
     EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
               QStringLiteral("Grassfield-multicolor-dark"));
     // Written again with the same values: no signal.
+    spin([] { return false; }, 200);
     changed.clear();
-    writeAtomically(file, "{}");
+    writeAtomically(file, R"({"version": 1})");
     spin([] { return false; }, 300);
     EXPECT_TRUE(changed.isEmpty()) << changed.join(QLatin1Char(',')).toStdString();
+}
+
+// ADR-0020 §2: the file is never read without a bound. A FIFO, a device behind a symlink, a directory, a file over 1 MiB and
+// an unreadable file are never read and keep the last good settings; a FIFO at start reads as the defaults, at once.
+TEST(SettingsBackend, NeverReadsWithoutABound)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/grassfield.json");
+    const QByteArray native = QFile::encodeName(file);
+    ASSERT_EQ(::mkfifo(native.constData(), 0600), 0);
+    SettingsBackend::Options options;
+    options.configFile = file;
+    options.clock = [] { return kNoon; };
+    QElapsedTimer started;
+    started.start();
+    SettingsBackend backend(options); // would block for ever on a FIFO opened for a plain read
+    EXPECT_LT(started.elapsed(), 1000);
+    const auto theme = [&] {
+        return backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString();
+    };
+    EXPECT_EQ(theme(), QStringLiteral("Grassfield-multicolor-dark"));
+
+    // Each case is made next to the file and renamed over it (QSaveFile does not replace a FIFO).
+    const auto replaceWith = [&](const std::function<bool(const QByteArray &)> &make) {
+        const QByteArray next = QFile::encodeName(dir.path() + QStringLiteral("/next"));
+        ::unlink(next.constData());
+        ASSERT_TRUE(make(next));
+        ASSERT_EQ(::rename(next.constData(), native.constData()), 0);
+    };
+    const auto regular = [](const QByteArray &text) {
+        return [text](const QByteArray &p) {
+            QFile f(QFile::decodeName(p));
+            return f.open(QIODevice::WriteOnly) && f.write(text) == text.size();
+        };
+    };
+    replaceWith(regular(R"({"appearance": "light", "accent": {"color": "green"}})"));
+    ASSERT_TRUE(spin([&] { return theme() == QStringLiteral("Grassfield-green"); })) << theme().toStdString();
+
+    QStringList changed;
+    QObject::connect(&backend, &SettingsBackend::SettingChanged, [&](const QString &ns, const QString &key, const QDBusVariant &) {
+        changed << ns + QLatin1Char(' ') + key;
+    });
+    struct Case {
+        const char *what;
+        std::function<bool(const QByteArray &)> make;
+    };
+    const QByteArray big = QByteArray("{\"appearance\": \"dark\"}") + QByteArray(qsizetype(1024) * 1024, ' ');
+    const std::vector<Case> cases = {
+        {"a FIFO", [](const QByteArray &p) { return ::mkfifo(p.constData(), 0600) == 0; }},
+        {"a symlink to /dev/zero", [](const QByteArray &p) { return ::symlink("/dev/zero", p.constData()) == 0; }},
+        {"a file over 1 MiB", regular(big)},
+        {"an unreadable file", [&](const QByteArray &p) {
+             return regular(R"({"appearance": "dark"})")(p) && QFile::setPermissions(QFile::decodeName(p), {});
+         }},
+    };
+    for (const Case &c : cases) {
+        if (std::string(c.what) == "an unreadable file" && ::geteuid() == 0)
+            continue; // root reads it anyway
+        changed.clear();
+        replaceWith(c.make);
+        spin([] { return false; }, 300);
+        EXPECT_TRUE(changed.isEmpty()) << c.what << ": " << changed.join(QLatin1Char(',')).toStdString();
+        EXPECT_EQ(theme(), QStringLiteral("Grassfield-green")) << c.what;
+        ::unlink(native.constData());
+    }
+    // A directory in its place: the same.
+    ASSERT_EQ(::mkdir(native.constData(), 0700), 0);
+    spin([] { return false; }, 300);
+    EXPECT_EQ(theme(), QStringLiteral("Grassfield-green"));
+    ASSERT_EQ(::rmdir(native.constData()), 0);
+    // A good file again: read at once.
+    replaceWith(regular(R"({"appearance": "light", "accent": {"color": "red"}})"));
+    ASSERT_TRUE(spin([&] { return theme() == QStringLiteral("Grassfield-red"); })) << theme().toStdString();
 }
 
 TEST(SettingsBackend, AutoFollowsTheClock)
@@ -233,6 +323,17 @@ TEST(SettingsBackend, NoFileMeansTheDefaults)
     SettingsBackend backend(options);
     EXPECT_EQ(backend.Read(QStringLiteral("org.freedesktop.appearance"), QStringLiteral("color-scheme")).variant().toUInt(), 1u);
     EXPECT_FALSE(QFileInfo::exists(dir.path() + QStringLiteral("/missing"))); // never created
+    // The directory and the file appear later (a first login): read at once, not at the next minute's recheck.
+    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("missing")));
+    writeAtomically(options.configFile, R"({"appearance": "light"})");
+    EXPECT_TRUE(spin([&] {
+        return backend.Read(QStringLiteral("org.freedesktop.appearance"), QStringLiteral("color-scheme")).variant().toUInt() == 2u;
+    }, 1000));
+    // Then the file itself is watched again.
+    writeAtomically(options.configFile, R"({"appearance": "dark"})");
+    EXPECT_TRUE(spin([&] {
+        return backend.Read(QStringLiteral("org.freedesktop.appearance"), QStringLiteral("color-scheme")).variant().toUInt() == 1u;
+    }, 1000));
 }
 
 TEST(SettingsBackend, AnnouncesEveryValueOnce)

@@ -4,6 +4,7 @@
 // hyprland-portals.conf (/usr/share/grassfield/xdg).
 #include "runmode.h"
 #include "settingsbackend.h"
+#include "testbus.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -18,6 +19,14 @@ int main(int argc, char **argv)
     namespace runmode = grassfield::apps::runmode;
     if (!runmode::session() && !runmode::dev()) {
         std::fputs("grassfield-portal-settings: refused: not a Grassfield session\n", stderr);
+        return 2;
+    }
+    // A dev run (the tests) serves a scratch settings file: never on the user's own bus, where it could take the name while
+    // the real backend is away (review of step 2b).
+    if (runmode::dev()
+        && (qgetenv("GF_TEST_BUS") != "1"
+            || !grassfield::apps::isPrivateTestBus(qEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS"), qEnvironmentVariable("GF_TEST_BUS_DIR")))) {
+        std::fputs("grassfield-portal-settings: refused: a dev session runs it only on a private test bus (GF_TEST_BUS=1, GF_TEST_BUS_DIR)\n", stderr);
         return 2;
     }
 
@@ -53,5 +62,6 @@ int main(int argc, char **argv)
     // After a restart (Restart=on-failure), the frontend's proxy follows the name to this process: every value once, so a
     // change made while no backend ran is not lost.
     backend.announceAll();
+    backend.answerOtherBackends(bus);
     return app.exec();
 }

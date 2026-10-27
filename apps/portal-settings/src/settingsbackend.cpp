@@ -4,8 +4,15 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonParseError>
 
+#include <cerrno>
+#include <cstdint>
 #include <utility>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 QDBusArgument &operator<<(QDBusArgument &argument, const AccentColor &color)
 {
@@ -30,14 +37,50 @@ namespace {
 const QString kAppearance = QStringLiteral("org.freedesktop.appearance");
 const QString kInterface = QStringLiteral("org.gnome.desktop.interface");
 
-// The file's settings; a missing or unreadable file, or one that is not a JSON object, reads as the defaults (the schema's).
-Input readFile(const QString &path)
+// A real grassfield.json is a few KiB (ADR-0020 §2).
+constexpr off_t kMaxFileBytes = off_t(1024) * 1024;
+
+enum class FileState : std::uint8_t { Read, Missing, Malformed };
+struct FileRead {
+    FileState state = FileState::Missing;
+    Input input;
+};
+
+// One read of the settings file, never without a bound (ADR-0020 §2): opened without blocking and checked on the descriptor,
+// so a FIFO, a device (also through a symlink) or a directory is never read; at most 1 MiB, read whole and exactly. A missing
+// file is a fresh start (the schema's defaults); anything else that is not a JSON object, or that cannot be opened (chmod
+// 000), is malformed.
+FileRead readFile(const QString &path)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
-    return document.isObject() ? readInput(document.object()) : Input();
+    const QByteArray native = QFile::encodeName(path);
+    const int fd = ::open(native.constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOCTTY);
+    if (fd < 0)
+        return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}};
+    struct stat st {};
+    QByteArray text;
+    bool whole = ::fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size <= kMaxFileBytes;
+    if (whole) {
+        text.resize(qsizetype(st.st_size));
+        qsizetype done = 0;
+        while (done < text.size()) {
+            const ssize_t n = ::read(fd, text.data() + done, size_t(text.size() - done));
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0)
+                break;
+            done += n;
+        }
+        char more = 0;
+        whole = done == text.size() && ::read(fd, &more, 1) == 0;
+    }
+    ::close(fd);
+    if (!whole)
+        return {FileState::Malformed, {}};
+    QJsonParseError error {};
+    const QJsonDocument document = QJsonDocument::fromJson(text, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+        return {FileState::Malformed, {}};
+    return {FileState::Read, readInput(document.object())};
 }
 
 } // namespace
@@ -59,7 +102,9 @@ SettingsBackend::SettingsBackend(Options options, QObject *parent)
     connect(&m_recheck, &QTimer::timeout, this, &SettingsBackend::reread);
     m_recheck.start();
     watch();
-    m_values = values(readFile(m_options.configFile), m_options.clock());
+    // At start a malformed file reads as the defaults, as the shell's own start does (ADR-0020 §2).
+    m_input = readFile(m_options.configFile).input;
+    m_values = values(m_input, m_options.clock());
     m_map = toMap(m_values);
 }
 
@@ -108,11 +153,36 @@ void SettingsBackend::announceAll()
     }
 }
 
+void SettingsBackend::answerOtherBackends(const QDBusConnection &bus)
+{
+    m_self = bus.baseService();
+    QDBusConnection(bus).connect(QString(), QStringLiteral("/org/freedesktop/portal/desktop"),
+                                 QStringLiteral("org.freedesktop.impl.portal.Settings"), QStringLiteral("SettingChanged"), this,
+                                 SLOT(otherBackendChanged(QString, QString, QDBusVariant, QDBusMessage)));
+}
+
+void SettingsBackend::otherBackendChanged(const QString &ns, const QString &key, const QDBusVariant &, const QDBusMessage &message)
+{
+    if (message.service() == m_self)
+        return;
+    const auto group = m_map.constFind(ns);
+    if (group != m_map.cend() && group->contains(key))
+        Q_EMIT SettingChanged(ns, key, QDBusVariant(group->value(key)));
+}
+
 void SettingsBackend::watch()
 {
-    // Never create the directory: the backend only reads the file (defaults apply until it exists).
-    const QString dir = QFileInfo(m_options.configFile).absolutePath();
-    if (QFileInfo(dir).isDir() && !m_watcher.directories().contains(dir))
+    // Never create the directory: the backend only reads the file (defaults apply until it exists). Until the directory exists
+    // (a first login, before anything wrote the file), its nearest existing parent is watched instead, so the file is read as
+    // soon as it appears; then only the directory and the file.
+    QString dir = QFileInfo(m_options.configFile).absolutePath();
+    while (!QFileInfo(dir).isDir() && dir != QStringLiteral("/"))
+        dir = QFileInfo(dir).absolutePath();
+    for (const QString &stale : m_watcher.directories()) {
+        if (stale != dir)
+            m_watcher.removePath(stale);
+    }
+    if (!m_watcher.directories().contains(dir))
         m_watcher.addPath(dir);
     if (QFileInfo::exists(m_options.configFile) && !m_watcher.files().contains(m_options.configFile))
         m_watcher.addPath(m_options.configFile);
@@ -121,7 +191,12 @@ void SettingsBackend::watch()
 void SettingsBackend::reread()
 {
     watch();
-    const Values next = values(readFile(m_options.configFile), m_options.clock());
+    // A malformed or unreadable file keeps the last good settings (a hand edit with a typo, a writer caught between truncate
+    // and write); a missing one is a fresh start. The clock is read again either way ("auto").
+    const FileRead read = readFile(m_options.configFile);
+    if (read.state != FileState::Malformed)
+        m_input = read.input;
+    const Values next = values(m_input, m_options.clock());
     if (next == m_values)
         return;
     const SettingsMap map = toMap(next);

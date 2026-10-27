@@ -4,13 +4,16 @@ tests/integration/portal_settings.sh (ADR-0035 D-8).
 
     fake-portal-backend.py gtk            owns org.freedesktop.impl.portal.desktop.gtk: Settings with x-d-p-gtk's kind of
                                           keys (color-scheme 2, contrast 0, gtk-theme Adwaita-dark, font-name) and its
-                                          namespace filter, each call logged to --log
+                                          namespace filter, each call logged to --log; on SIGUSR1 it signals a dconf
+                                          change as x-d-p-gtk does (SettingChanged: gtk-theme Adwaita, color-scheme 0,
+                                          font-name "Cantarell 11")
     fake-portal-backend.py silent-frontend owns org.freedesktop.portal.Desktop and never answers a call
 
 It refuses any bus but a private test bus (GF_TEST_BUS=1, the address under GF_TEST_BUS_DIR), as the other fakes do.
 """
 import argparse
 import os
+import signal
 import sys
 
 import gi
@@ -63,6 +66,17 @@ def main():
         node = Gio.DBusNodeInfo.new_for_xml(XML)
         conn.register_object("/org/freedesktop/portal/desktop", node.interfaces[0], call, lambda *_: V("u", 1), None)
         name = "org.freedesktop.impl.portal.desktop.gtk"
+
+        def changed():
+            # What x-d-p-gtk emits when the user's dconf changes (omarchy-theme-set, a GNOME tool): keys Grassfield owns and
+            # one it does not.
+            for ns, key, value in (("org.gnome.desktop.interface", "gtk-theme", V("s", "Adwaita")),
+                                   ("org.freedesktop.appearance", "color-scheme", V("u", 0)),
+                                   ("org.gnome.desktop.interface", "font-name", V("s", "Cantarell 11"))):
+                conn.emit_signal(None, "/org/freedesktop/portal/desktop", "org.freedesktop.impl.portal.Settings", "SettingChanged",
+                                 V("(ssv)", (ns, key, value)))
+            return GLib.SOURCE_CONTINUE
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, changed)
     else:
         # Owns the frontend's name and lets every call time out.
         conn.add_filter(lambda c, message, incoming: None if incoming and message.get_destination() == c.get_unique_name() else message)
