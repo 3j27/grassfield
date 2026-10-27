@@ -11,8 +11,8 @@ This ADR is also part of the contract between this repository (the app, `apps/st
 our texts, built and signed there). That contract extends ADR-0033's (channel URLs and tree, signing key, trust, atomic
 publication), and this PR amends ADR-0033 where the Store needs it (d, g, h.2; section "Amendments"). Parity with macOS 27:
 `docs/audits/store-2026-10-27/parity.md`. Behaviour, keyboard, accessibility, refusals and limits: `docs/specs/store.md`.
-Evidence: the probes S0 to S15 of `docs/audits/store-2026-10-27/store-probes.sh` and S16 to S18 of `store-probes-2.sh`,
-each run in a throwaway `archlinux:base` container, outputs next to them. Legal points are marked "needs legal review"
+Evidence: the probes S0 to S15 of `docs/audits/store-2026-10-27/store-probes.sh`, S16 to S18 of `store-probes-2.sh` and S19
+of `store-probes-3.sh`, each run in a throwaway `archlinux:base` container, outputs next to them. Legal points are marked "needs legal review"
 (master-prompt §14); none is a conclusion.
 
 ## Context
@@ -150,9 +150,15 @@ The scripts named below were read for this ADR; probe S1 classifies 80 scripts (
   database lists (S15: 21 563 985 bytes), but Arch's databases are not signed, so that match alone proves nothing. The
   package's own signature sits beside it on the mirror (`<url>.sig`, 310 bytes) and a user can check it by pacman's own rule
   (S17): pacman's keyring is readable by everyone (`/etc/pacman.d/gnupg` 0755, `pubring.gpg` and `trustdb.gpg` 0644);
-  `pacman-key --verify` runs as the user ("Note: trustdb not writable" is all it adds), passes only for a signer pacman's
-  keyring trusts fully (`[GNUPG:] TRUST_FULLY`), and exits 0; with one byte of the file changed it exits 1. Arch's other copy,
-  on sources.archlinux.org, carries no signature.
+  `pacman-key --verify` runs as the user ("Note: trustdb not writable" is all it adds), shows `[GNUPG:] TRUST_FULLY` for Arch's
+  signer and exits 0; with one byte of the file changed it exits 1. Arch's other copy, on sources.archlinux.org, carries no
+  signature. **Corrected after the step-1 review (S19):** S17 never tried a signer pacman does not trust, and its exit code
+  does not say trust. With a throwaway packager key in pacman's keyring, `pacman-key --verify` (pacman 7.1.0) exits 0 for a
+  good signature while gpg says `TRUST_UNDEFINED` (the key added, not locally signed); its trust test reads
+  `${PIPESTATUS[1]}` after a `[[ ]]` has reset it, so it never runs. gpg says `TRUST_FULLY` once the key is locally signed,
+  and still `TRUST_FULLY` once the key is disabled (what `pacman-key --populate` does to a revoked packager): only the key
+  listing shows it (capabilities `scSCD`). A signed message given as the `.sig` makes gpg exit 2 (NODATA). So the Store reads
+  gpg itself (c).
 - **The AUR (S7).** RPC v5 `info` gives Name, Version, Description, Maintainer, NumVotes, Popularity, OutOfDate,
   LastModified, License, URL, URLPath, Depends, OptDepends, Keywords, FirstSubmitted. `search` by name answers
   in one request (72 results for "chrome"). The whole-AUR dump `packages-meta-v1.json.gz` is 10.6 MB (123 087 packages, no
@@ -162,7 +168,8 @@ The scripts named below were read for this ADR; probe S1 classifies 80 scripts (
   `~/.local/share/flatpak`). Flathub lists 3502 apps; its AppStream is 10.8 MB compressed plus a 50.9 MB uncompressed copy;
   117 MB under `~/.local/share/flatpak` before any app. No app was installed (runtimes are hundreds of MB): NOT VERIFIED.
 - S5 to S15 ran on Arch's archive snapshot of 2026-09-01 (S12 moves the database to 2026-10-20), S1 to S3 on Omarchy's stable
-  mirror. S16 to S18 (`store-probes-2.sh`) ran on the same 2026-09-01 snapshot.
+  mirror. S16 to S18 (`store-probes-2.sh`) ran on the same 2026-09-01 snapshot. S19 (`store-probes-3.sh`) needs no network:
+  pacman 7.1.0 and gnupg 2.4.9 of the image itself.
 
 ### The owner's machine (integrator's survey, 2026-10-27)
 pacman, yay and the `appstream` library are installed; flatpak, PackageKit and `archlinux-appstream-data` are not. The owner's
@@ -329,14 +336,18 @@ nothing ever signals pacman.
   the list of setups and web apps. (2) AppStream for Arch packages (ST5): the installed `archlinux-appstream-data` when there
   is one (an `optdepends`, signed by Arch, updated with the system); otherwise the Store fetches the same package file and
   its signature (`<url>.sig`) from pacman's own mirror (`pacman -Sp archlinux-appstream-data`, as the user), checks the
-  signature with `pacman-key --verify <file>.sig <file>` as the user (pacman's keyring and pacman's rule: a fully trusted Arch
-  signer, S17; the SHA-256 of the unsigned sync database is not enough, counter-review; SD4), and only then extracts its XML
-  and icons into its cache. That copy is used for display only: a package name it
+  signature as pacman does (pacman's keyring and pacman's rule, S17, S19; the SHA-256 of the unsigned sync database is not
+  enough, counter-review; SD4): gpg `--verify` as the user against a private copy of pacman's public keyring and trust
+  database (`pubring.gpg` or `pubring.kbx`, `trustdb.gpg`; nothing written in `/etc`), passing only with exactly one good
+  detached signature (one `VALIDSIG`), `TRUST_FULLY` or `TRUST_ULTIMATE`, the key's listing valid and not disabled, and none
+  of `PLAINTEXT`, `BADSIG`, `ERRSIG`, `EXPSIG`, `EXPKEYSIG`, `REVKEYSIG`; `pacman-key --verify`'s exit code is not used (S19).
+  Only then does it extract the XML and icons into its cache (`bsdtar` given only `usr/share/swcatalog`, with no owner,
+  permission, extended attribute or ACL from the archive). That copy is used for display only: a package name it
   gives must exist in pacman's database, and the sheet shows the package that will be installed. It is replaced when
   pacman's database names another version. (3) pacman for every package: version, sizes, licence (`License`, used when
   AppStream has none), description. (4) The AUR RPC for AUR packages (ST7). (5) Flathub's AppStream through `flatpak` (ST2).
-- **Display.** Every remote or package-provided text is plain text (`Text.PlainText`), control characters removed except
-  line feeds, bounded (name 80, summary 200, description 4000 characters); AppStream's description markup (`<p>`, `<ul>`,
+- **Display.** Every remote or package-provided text is plain text (`Text.PlainText`), control and format characters
+  removed (by code point, so the ones beyond U+FFFF too) except line feeds, bounded (name 80, summary 200, description 4000 characters); AppStream's description markup (`<p>`, `<ul>`,
   `<li>`) becomes paragraphs and bullet characters, never rich text; no link inside a text is active. URLs (homepage, bug
   tracker) are buttons that open the default browser on click only (ADR-0011's open path), https only.
 - **Screenshots (ST6).** Loaded when a product page opens, https only, no cookie, no `Referer`, cached; a switch in the
@@ -459,10 +470,12 @@ nothing ever signals pacman.
 - **Build.** A CMake target in `apps/store/CMakeLists.txt` with the same wrapper as the other apps (ADR-0023), and
   `package_grassfield-store()` in `packaging/arch/PKGBUILD`, depending on `grassfield-desktop=$pkgver-$pkgrel` (design system,
   translations, menu bridge).
-- **Child processes the Store owns for reading** (pacman queries, `gpgv`, `pacman-key --verify`, `bsdtar`, `flatpak`
-  queries; `apps/store/src/childprocess.cpp`): an
+- **Child processes the Store owns for reading** (pacman queries, `gpgv`, gpg on a copy of pacman's keyring, `bsdtar`,
+  `flatpak` queries; `apps/store/src/childprocess.cpp`): an
   argument vector, `LC_ALL=C`, stdin from `/dev/null`, output capped (8 MiB), each in its own process group, stopped after
-  20 s with SIGTERM then SIGKILL 5 s later, and all stopped the same way when the Store quits. None of them writes.
+  20 s with SIGTERM then SIGKILL 5 s later (60 s for gpg's check of the AppStream package and 120 s for `bsdtar`'s unpacking
+  of it, a package of up to 64 MiB), and all stopped the same way when the Store quits. None of them writes outside the
+  Store's own cache and temporary folders.
 - **Operations** follow b: pkexec is waited for (b.1); the terminal is followed through its files (b.2); web apps and
   Flatpaks are waited for (b.3). The Store never sends a signal to pacman, yay, makepkg, a recipe, their terminal or the
   helper (S6).
@@ -587,7 +600,8 @@ and refuses the whole file when its top level is invalid):
 - `categories`: at most 32, each with freedesktop category names; apps outside our list are placed by their AppStream
   categories.
 - `apps`: at most 2000; `id` `^[A-Za-z0-9._-]{1,255}$`, unique (an AppStream id when one exists, so our texts overlay its
-  metadata); `source.kind` is `repo` (`repo` among `core`, `extra`, `multilib`, `omarchy`; the Store hides the entry when
+  metadata; AppStream's data joins an entry only when that component's package is one of the entry's packages, so an id
+  alone never lends an entry another package's texts or desktop id); `source.kind` is `repo` (`repo` among `core`, `extra`, `multilib`, `omarchy`; the Store hides the entry when
   pacman's database has no such package), `aur` (shown only while the AUR is on), `omarchy-setup` (`install` and `remove`
   as in e.5, each of its own kind; `packages` say when it is installed; optional `removes`, the user data its removal
   deletes), `webapp` (an https URL; `icon` required), or `flatpak` (`remote` `flathub`, `app` a Flatpak id; shown only while
@@ -614,8 +628,9 @@ ADR-0033 d.8 verifies the release notes: `gpgv --keyring /usr/share/grassfield/p
 (the keyring's private folder, ADR-0033 b.2), the signer is VALIDSIG's argument 10 (the primary key's fingerprint), listed in
 `grassfield-trusted` and absent from `grassfield-revoked` of that folder (their entries compared in upper case, spaces
 around them ignored, so a hand-written revoked entry always counts; a list with any other line, such as a grouped
-fingerprint, a `0x` prefix or a trailing comment, is not used at all, and then no catalog is; a signature file with two
-signers is refused). The check reads those files, not pacman's keyring,
+fingerprint, a `0x` prefix or a trailing comment, or a `grassfield-revoked` that is there but cannot be read, is not used
+at all, and then no catalog is; a signature file with two signers is refused, and so is a `.sig` that is a signed message
+of its own rather than a detached signature, `PLAINTEXT`). The check reads those files, not pacman's keyring,
 so it works whether or not Grassfield updates are on. A catalog that fails is not used and not cached; the previous one
 stays. While `grassfield-keyring` holds no key (until the owner's key exists, ADR-0033 O20) or is not installed, no catalog is
 used and the Store says why.
@@ -651,7 +666,7 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD1 | Which repository apps the Store installs, now that `remove` takes apps with an application entry only (b.1) | only packages that own an application entry (AppStream desktop applications; catalog `repo` entries, checked by CI) · also command-line tools (AppStream `console-application`), which the helper could then not remove without a wider rule | only apps with an entry | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the Store can always remove what it installed, with no terminal; a wider removal rule would widen root rights, which stays the owner's; (a) the macOS store application installs apps, not tools |
 | SD2 | How the polkit sheet names the packages (counter-review) | the sheet shows "Install" or "Remove" and the names, read by a strict pattern from the line polkit expands for this action id only, else the line as is · the line as polkit expands it (the helper's path, the operation id, the names) · no names (refused by the review) | the verb and the names; the raw line when it does not match | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet is plain words, no path; (b) the user reads what they authorize. The names still come from polkit (pkexec's argument vector), not from the Store; the sheet is a security module (step 3, opus review); no polkit rule changes |
 | SD3 | Which step adds the list of other updates to the checker, and what goes first at its 256 KiB cap (counter-review, PR #16) | Software Update's step 2 adds it (`otherPackages`, PR #16's plan after its own review), the list cut before the notes · Store step 4 adds it · the notes cut first | Software Update's step 2, as PR #16 writes it; the list first | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's Software Update always shows its release notes, while the per-app list is an addition; one checker, one list, one name for both PRs |
-| SD4 | How the Store checks a fetched AppStream package (counter-review) | its own `.sig` with `pacman-key --verify` as the user (pacman's keyring and trust rule) · `gpgv` with pacman's public keyring (no trust check) · the sync database's SHA-256 (unsigned; refused by the review) | `pacman-key --verify` | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing to set up; the Store trusts exactly what pacman trusts (S17) |
+| SD4 | How the Store checks a fetched AppStream package (counter-review) | its own `.sig` with `pacman-key --verify` as the user (pacman's keyring and trust rule) · `gpgv` with pacman's public keyring (no trust check) · the sync database's SHA-256 (unsigned; refused by the review) | `pacman-key --verify`; **amended after the step-1 review**: gpg against a private copy of pacman's keyring, pacman's rule read from gpg's status lines and the key listing (c), since `pacman-key --verify`'s exit code passes any key of the keyring and a disabled one (S19) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing to set up; the Store trusts exactly what pacman trusts (S17, S19) |
 | SD5 | How the Store reads Arch's AppStream (step 1) | its own reader of the catalog XML (`QXmlStreamReader`, zlib; the fields the Store shows, every text made plain) · `appstream-qt` (libappstream's pool, a new runtime dependency; it reads the system's data locations, so the fetched copy would need its extra-location API) | its own reader | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing for the user to install or set up, and one reader for the installed and the fetched copy; CLAUDE.md "no new dependency without need": f's list loses `appstream-qt` |
 
 ## Amendments made in this PR (other documents)
@@ -674,6 +689,8 @@ irreversible action on the owner's machine. The integrator checks each row in th
   inside it is root, makes a user `alice`, installs packages from Omarchy's stable mirror and from Arch's archive
   (archive.archlinux.org, snapshots 2026-03-01, 2026-09-01, 2026-10-20), interrupts pacman on purpose, and everything goes with
   the container. The one change to Omarchy's template is `DisableSandbox` (Docker has no Landlock), as in ADR-0033.
+- `docs/audits/store-2026-10-27/store-probes-3.sh` (S19, after the opus review of step 1) and its output `probes-3-output.txt`
+  (docker exit 0): a throwaway packager key in the image's own pacman keyring, added, locally signed, then disabled.
 - `docs/audits/store-2026-10-27/store-probes-2.sh` (S16 to S18, after the counter-review) and its output
   `probes-2-output.txt` (docker exit 0), with the same container, image and Omarchy checkout. It registers system packages
   with `pacman -S --dbonly --noscriptlet` (the rule reads pacman's database; nothing of theirs runs), builds one local package
@@ -768,3 +785,18 @@ where it is answered, in both halves (tools/catalog.py and the Store's `catalog.
   d clone` and the language installers (11 of Omarchy v4.0.4's 63 recipes refused, the catalog's three setups still pass);
   every release file's signature checked before upload; deep JSON a one-line problem (Qt's parser stops at its nesting
   limit); the owner creates and protects the `publish-<channel>` environments before the job is enabled.
+
+Opus review of step 1 here, at 17567e8 (integrator, 2026-10-27): FAIL, 1 MAJOR. Each finding and where it is answered:
+- **MAJOR**, `pacman-key --verify`'s exit code was trusted: it is 0 for a good signature by any key of pacman's keyring,
+  trusted or not (S19, a probe this time with an untrusted signer, which S17 never had). The Store now reads gpg itself
+  against a private copy of pacman's keyring: one `VALIDSIG`, `TRUST_FULLY` or `TRUST_ULTIMATE`, the key valid and not
+  disabled in its listing, none of `PLAINTEXT`, `BADSIG`, `ERRSIG`, `EXPSIG`, `EXPKEYSIG`, `REVKEYSIG` (c, SD4). The
+  container test has the untrusted, trusted and disabled cases with the real gpg, and a real package unpacked by the real
+  `bsdtar`.
+- **Minors:** a `grassfield-revoked` that is there but unreadable or over 1 MiB, or any list with a line that does not
+  parse, refuses the catalog (g); text and URL checks go by code point, so format characters beyond U+FFFF are caught (c,
+  e.5); AppStream's data joins a catalog entry only for one of the entry's packages (g `apps`); a `.sig` that is a signed
+  message of its own is refused (g); leftover work folders are removed when a refresh starts; the longer limits of gpg's
+  check (60 s) and of the unpacking (120 s) are written above (f); the request's cookie, Referer, cache and redirect
+  settings, a real https server's redirects (five followed, a sixth refused, http refused), cookies never sent back and
+  the size cap, and `bsdtar`'s argument vector are tested.

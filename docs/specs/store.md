@@ -185,9 +185,10 @@ Catalog and network (step 1)
 - SR27. Requests per ADR-0037 c: https only, no cookie, no referer, User-Agent `Grassfield-Store/1`, 15 s, size caps. No search
   query leaves for Grassfield's host. The Store's settings window lists what is fetched and from where, in plain words.
 - SR27b. Arch's AppStream (owner, ST5): the installed `archlinux-appstream-data` when there is one; otherwise the Store fetches
-  that package's file and its `.sig` from pacman's own mirror (`pacman -Sp`), checks the signature with `pacman-key
-  --verify` as the user (pacman's keyring and trust rule, S17, SD4; a failed check keeps nothing and says "Arch's app data
-  could not be verified" « Les données d'apps d'Arch n'ont pas pu être vérifiées » in the settings window), and keeps its XML
+  that package's file and its `.sig` from pacman's own mirror (`pacman -Sp`), checks the signature as pacman does, as the
+  user (gpg against a private copy of pacman's keyring: one good detached signature by a key fully trusted and not
+  disabled; S17, S19, SD4; a failed check keeps nothing and says "Arch's app data could not be verified" « Les données
+  d'apps d'Arch n'ont pas pu être vérifiées » in the settings window), and keeps its XML
   and icons in its cache (64 MiB at most), replaced when pacman's database names another version. Used for
   display only: a package it names must exist in pacman's database.
 
@@ -256,7 +257,7 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 | An exit code 0 without the planned state, or the planned state without an exit code | "interrupted" (SR20), never "installed" |
 | Omarchy's terminal does not start the script within 60 s | "The terminal did not open"; the late script refuses to start |
 | "Uninstall" of a package of Omarchy's two lists, Grassfield's packages, the system's (deny list, `HoldPkg`), a dependency, a package without an application entry (from a repository), or a package whose `-Rs --print` plan names a protected one | not offered, with the reason (SR22); the helper refuses them too (ADR-0037 b.1) |
-| A fetched AppStream package whose signature `pacman-key --verify` refuses | not used, not cached; "Arch's app data could not be verified" in the settings window; pacman's descriptions only |
+| A fetched AppStream package whose signature does not pass pacman's rule (ADR-0037 c, S19) | not used, not cached; "Arch's app data could not be verified" in the settings window; pacman's descriptions only |
 | A catalog whose `channel` is not the channel it was fetched from | not used, as a bad signature |
 | A stale `db.lck` with no pacman running | an explanation and Arch's recovery as text; the Store never removes it |
 | An uninstall that would break another installed package | the sheet names the packages that need it; nothing runs |
