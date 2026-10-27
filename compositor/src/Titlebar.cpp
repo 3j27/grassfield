@@ -852,8 +852,8 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     }
 
     // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
-    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, or nothing (the
-    // press is then a single press). Otherwise the press starts an interactive move.
+    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, Fill (tiling.md M40), or
+    // nothing (the press is then a single press). Otherwise the press starts an interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         switch (gf::state().doubleClickAction) {
             case gf::gfc::DoubleClickAction::Zoom:
@@ -864,6 +864,11 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
             case gf::gfc::DoubleClickAction::Minimize:
                 gf::logRequest(Log::DEBUG, "titlebar double-click -> minimize");
                 requestMinimize(w);
+                input.presses.claim(e.button, false);
+                return true;
+            case gf::gfc::DoubleClickAction::Fill:
+                gf::logRequest(Log::DEBUG, "titlebar double-click -> fill");
+                gf::tiler::tile(w, gf::tiling::Place::Fill);
                 input.presses.claim(e.button, false);
                 return true;
             case gf::gfc::DoubleClickAction::None: break;
