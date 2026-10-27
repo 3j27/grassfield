@@ -105,7 +105,7 @@ namespace gf::gfc {
 
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview, bool desktopFocus, bool stagesAvailable, bool stagesEnabled,
                                            bool cursorRefresh, bool overviewFocus, bool minimizeEffect, bool windowTiling, bool layerPointer, bool appearance,
-                                           bool clientChrome, bool frameTimes, bool keyboardFocus) {
+                                           bool clientChrome, bool frameTimes, bool keyboardFocus, bool tilingArrange) {
         std::vector<std::string_view> out{kFeatureDecorations};
         if (minimize)
             out.push_back(kFeatureMinimize);
@@ -142,6 +142,8 @@ namespace gf::gfc {
             out.push_back(kFeatureFrameTimes);
         if (keyboardFocus)
             out.push_back(kFeatureKeyboardFocus);
+        if (windowTiling && tilingArrange)
+            out.push_back(kFeatureTilingArrange);
         return out;
     }
 
@@ -164,6 +166,8 @@ namespace gf::gfc {
             return DoubleClickAction::Minimize;
         if (value == "none")
             return DoubleClickAction::None;
+        if (value == "fill")
+            return DoubleClickAction::Fill;
         return std::nullopt;
     }
 

@@ -3,6 +3,7 @@
 #include "core/OverviewFocus.hpp"
 #include "core/Protocol.hpp"
 #include "core/Stages.hpp"
+#include "core/Tiling.hpp"
 
 #include <gtest/gtest.h>
 
@@ -115,6 +116,8 @@ TEST(Protocol, ConfigAllowlist) {
     EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "zoom"), DoubleClickAction::Zoom);
     EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "minimize"), DoubleClickAction::Minimize);
     EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "none"), DoubleClickAction::None);
+    EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "fill"), DoubleClickAction::Fill) << "macOS 26/27 Fill (ADR-0036 step 1)";
+    EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", "Fill"));
     EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", "Zoom"));
     EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", "zoom "));
     EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", ""));
@@ -234,4 +237,21 @@ TEST(Protocol, EveryEventStaysUnderHyprlandsSocket2Limit) {
     }
     const auto state = gf::stages::stateJson(std::numeric_limits<uint64_t>::max(), true, monitors);
     EXPECT_GT(state.size(), kMaxEventBytes) << "64 windows on 4 monitors: only the request socket can carry it";
+
+    // Window tiling (ADR-0036): the notice is bounded; the state (every tile record) is the reply of hyprctl grassfield-tiling.
+    EXPECT_TRUE(under(gf::tiling::noticeJson(std::numeric_limits<uint64_t>::max(), gf::tiling::Reason::Unavailable)));
+}
+
+// ADR-0036 step 1: tiling-arrange (hl.plugin.grassfield.arrange, the tiling notice and its hyprctl state) comes only with
+// window-tiling, last in the list.
+TEST(Protocol, TilingArrangeComesWithWindowTiling) {
+    EXPECT_EQ(kFeatureTilingArrange, "tiling-arrange");
+    EXPECT_EQ(kLuaArrange, "arrange");
+    EXPECT_EQ(kHyprctlTilingCommand, "grassfield-tiling");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
+        << "never without window-tiling";
+    EXPECT_EQ(luaDispatchRequest(kLuaArrange), "hl.plugin.grassfield.arrange()");
 }

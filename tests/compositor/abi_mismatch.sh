@@ -99,8 +99,19 @@ entry=$(plugins)
 [[ $(jq -r '.[0].description // ""' <<<"$entry") == *"[inactive: Hyprland version mismatch]"* ]]
 check "the extension refuses itself (plugin list)" $? "$entry"
 hyprlog=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/hyprland.log
-grep -q "ABI mismatch: Hyprland .* vs plugin built for $foreign" "$hyprlog" 2>/dev/null
-check "its log names both ABIs" $? "$(grep -m1 -o 'ABI mismatch[^;]*' "$hyprlog" 2>/dev/null)"
+# Hyprland's in-memory log (`hyprctl rollinglog`) or its log file, polled for up to 3 s: the file is buffered and the line
+# can reach it late (integrator nested pass of 6355acb).
+abi_line() {
+  local _ log
+  for _ in $(seq 1 15); do
+    log=$(nestctl rollinglog 2>/dev/null; cat "$hyprlog" 2>/dev/null)
+    grep -a -m1 -o "ABI mismatch: Hyprland .* vs plugin built for $foreign" <<<"$log" && return 0
+    sleep 0.2
+  done
+  return 1
+}
+abi=$(abi_line)
+check "its log names both ABIs" $? "${abi:-no such line in rollinglog or $hyprlog}"
 features=$(nestctl -j grassfield 2>/dev/null | jq -r '.features // empty | join(",")' 2>/dev/null)
 [[ -z $features ]]
 check "no gfc/1 command or feature registered" $? "${features:-none}"
