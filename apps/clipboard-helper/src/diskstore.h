@@ -21,6 +21,7 @@ public:
         Status status = Status::Empty;
         QList<ClipLogic::Item> items;
         int dropped = 0; // item files that broke a rule (deleted)
+        int orphans = 0; // the store's files the index does not name (deleted)
     };
     Loaded load();
 

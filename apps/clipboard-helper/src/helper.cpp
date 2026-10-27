@@ -22,7 +22,14 @@ namespace
 constexpr int kReadDeadlineMs = 2000;
 constexpr int kExpiryMs = 60 * 1000;
 constexpr int kMaxWriters = 16;
+constexpr int kWriterDeadlineMs = 2000;
 constexpr int kPreviewTextChars = 64 * 1024;
+// New copies' images waiting for the worker (each up to 16 MiB in memory): past this, a new image is not recorded.
+constexpr int kMaxWaitingImages = 4;
+// A stored image whose worker failed (late under load, failed to start) keeps its item without a thumbnail and is tried again
+// this many times in a run, a minute apart; the next start tries again.
+constexpr int kThumbnailAttempts = 3;
+constexpr int kThumbnailRetryMs = 60 * 1000;
 
 QByteArray readBootId()
 {
@@ -55,12 +62,13 @@ struct Helper::Pending {
     qint64 cap = 0;
 };
 
-// One answer to a `send` of our source: the bytes go out as the reader takes them, never blocking the helper.
+// One answer to a `send` of our source: the bytes go out as the reader takes them, never blocking the helper, within 2 s.
 struct Helper::Writer {
     int fd = -1;
     QByteArray bytes;
     qint64 written = 0;
     QSocketNotifier *notifier = nullptr;
+    QTimer *deadline = nullptr;
 };
 
 Helper::Helper(Options options, Output output, Quit quit, QObject *parent)
@@ -82,7 +90,7 @@ Helper::~Helper()
     abortPending();
     for (Writer *w : std::as_const(m_writers)) {
         ::close(w->fd);
-        delete w;
+        delete w; // its notifier and timer are children of this object
     }
 }
 
@@ -172,6 +180,8 @@ int Helper::start()
         log("the pinned store broke a rule and was deleted");
     if (pinned.dropped)
         log("pinned items whose files broke a rule were deleted");
+    if (pinned.orphans)
+        log("files of the pinned store that its index did not name were deleted");
     m_store.loadPinned(pinned.items);
     if (!m_options.historyStore)
         m_historyDisk.deleteAll(); // a store left from when the switch was on: never read, deleted
@@ -179,6 +189,8 @@ int Helper::start()
         const DiskStore::Loaded history = m_historyDisk.load();
         if (history.status == DiskStore::Status::Deleted)
             log("the history store broke a rule and was deleted");
+        if (history.orphans)
+            log("files of the history store that its index did not name were deleted");
         m_store.loadHistory(history.items);
         expire();
     }
@@ -435,21 +447,7 @@ void Helper::finishRead()
         return;
     }
     // An image is recorded only once the worker made its thumbnail (ADR-0034 §1f).
-    const QByteArray data = item.parts.first().data;
-    auto holder = std::make_shared<ThumbnailJob *>(nullptr);
-    auto *job = new ThumbnailJob(m_options.program, item.imageFormat, kThumbnailPx, data,
-                                 [this, item, holder](const QByteArray &png) {
-                                     if (*holder)
-                                         (*holder)->deleteLater();
-                                     if (png.isEmpty()) {
-                                         log("not recorded: the image worker failed");
-                                         return;
-                                     }
-                                     addItem(item, png);
-                                 },
-                                 this);
-    *holder = job;
-    job->start();
+    queueNewImage(item);
 }
 
 void Helper::addItem(Item item, const QByteArray &thumbnail)
@@ -469,41 +467,86 @@ void Helper::addItem(Item item, const QByteArray &thumbnail)
 
 // --- Thumbnails of stored images --------------------------------------------------------------------------------------------
 
+void Helper::queueNewImage(const Item &item)
+{
+    qsizetype waiting = m_thumbJob && m_thumbJobFresh ? 1 : 0;
+    for (const ImageJob &job : std::as_const(m_imageQueue))
+        waiting += job.fresh ? 1 : 0;
+    if (waiting >= kMaxWaitingImages) {
+        log("not recorded: too many images waiting for the image worker");
+        return;
+    }
+    m_imageQueue << ImageJob{item.id, true, item};
+    nextThumbnail();
+}
+
 void Helper::queueThumbnail(const QByteArray &id)
 {
-    m_thumbQueue << id;
-    if (!m_thumbJob)
-        nextThumbnail();
+    m_imageQueue << ImageJob{id, false, {}};
+    nextThumbnail();
 }
 
 void Helper::nextThumbnail()
 {
-    while (!m_thumbQueue.isEmpty()) {
-        const QByteArray id = m_thumbQueue.takeFirst();
-        const Item *it = m_store.find(id);
-        if (!it || it->kind != Kind::Image)
-            continue;
+    while (!m_thumbJob && !m_imageQueue.isEmpty()) {
+        const ImageJob job = m_imageQueue.takeFirst();
+        const Item *stored = job.fresh ? nullptr : m_store.find(job.id);
+        if (!job.fresh && (!stored || stored->kind != Kind::Image))
+            continue; // removed or cleared while it waited
+        const Item &image = job.fresh ? job.item : *stored;
+        const quint64 generation = m_imageGeneration;
         auto holder = std::make_shared<ThumbnailJob *>(nullptr);
-        m_thumbJob = new ThumbnailJob(m_options.program, it->imageFormat, kThumbnailPx, it->parts.first().data,
-                                      [this, id, holder](const QByteArray &png) {
+        m_thumbJob = new ThumbnailJob(m_options.program, image.imageFormat, kThumbnailPx, image.parts.first().data,
+                                      [this, job, generation, holder](const QByteArray &png) {
                                           (*holder)->deleteLater();
                                           if (m_thumbJob == *holder)
                                               m_thumbJob = nullptr;
-                                          if (png.isEmpty() || !writeRuntimeFile(thumbPath(id), png)) {
-                                              // A stored image that no longer decodes is dropped, as a new one would be.
-                                              log("a stored image no longer decodes: removed");
-                                              remove(id);
-                                          } else {
-                                              m_thumbs.insert(id, thumbPath(id));
-                                              emitItem(id);
-                                          }
+                                          // A new copy's image that a clear cancelled while the worker ran is never added.
+                                          if (!job.fresh || generation == m_imageGeneration)
+                                              imageDone(job, png);
                                           nextThumbnail();
                                       },
                                       this);
+        m_thumbJobFresh = job.fresh;
         *holder = m_thumbJob;
         m_thumbJob->start();
+    }
+}
+
+void Helper::imageDone(const ImageJob &job, const QByteArray &png)
+{
+    if (job.fresh) {
+        if (png.isEmpty())
+            log("not recorded: the image worker failed");
+        else
+            addItem(job.item, png);
         return;
     }
+    if (!m_store.find(job.id))
+        return; // removed or cleared while the worker ran
+    if (!png.isEmpty() && writeRuntimeFile(thumbPath(job.id), png)) {
+        m_thumbAttempts.remove(job.id);
+        m_thumbs.insert(job.id, thumbPath(job.id));
+        emitItem(job.id);
+        return;
+    }
+    // Never delete what the user kept on a worker's failure (it may be late under load): the item stays, shown without a
+    // thumbnail, and its thumbnail is tried again later.
+    log("a stored image's thumbnail failed: the item is kept without one");
+    emitItem(job.id);
+    const int attempts = m_thumbAttempts.value(job.id) + 1;
+    m_thumbAttempts.insert(job.id, attempts);
+    if (attempts < kThumbnailAttempts) {
+        const QByteArray id = job.id;
+        QTimer::singleShot(kThumbnailRetryMs, this, [this, id] { queueThumbnail(id); });
+    }
+}
+
+void Helper::cancelNewImages()
+{
+    // The clears drop every new copy's image not yet recorded: waiting ones now, the running one when its worker answers.
+    ++m_imageGeneration;
+    m_imageQueue.removeIf([](const ImageJob &job) { return job.fresh; });
 }
 
 // --- Commands ---------------------------------------------------------------------------------------------------------------
@@ -619,6 +662,7 @@ void Helper::remove(const QByteArray &id)
 
 void Helper::clearHistory()
 {
+    cancelNewImages();
     const QList<QByteArray> ids = m_store.clearHistory();
     m_historyDisk.deleteAll();
     emitRemoved(ids);
@@ -626,6 +670,7 @@ void Helper::clearHistory()
 
 void Helper::clearPinnedItems()
 {
+    cancelNewImages();
     const QList<QByteArray> ids = m_store.clearPinned();
     m_pinnedDisk.deleteAll();
     emitRemoved(ids);
@@ -727,9 +772,12 @@ void Helper::send(const QByteArray &mime, int fd)
     w->fd = fd;
     w->bytes = bytes;
     w->notifier = new QSocketNotifier(fd, QSocketNotifier::Write, this);
+    w->deadline = new QTimer(this);
+    w->deadline->setSingleShot(true);
     m_writers << w;
+    // A reader that stops reading never holds a writer (one of kMaxWriters) longer than this.
+    connect(w->deadline, &QTimer::timeout, this, [this, w] { closeWriter(w); });
     connect(w->notifier, &QSocketNotifier::activated, this, [this, w] {
-        bool done = false;
         while (w->written < w->bytes.size()) {
             const ssize_t n = ::write(w->fd, w->bytes.constData() + w->written, size_t(w->bytes.size() - w->written));
             if (n > 0) {
@@ -740,16 +788,23 @@ void Helper::send(const QByteArray &mime, int fd)
                 continue;
             if (n < 0 && errno == EAGAIN)
                 return;
-            done = true; // the reader went away
-            break;
+            break; // the reader went away
         }
-        (void)done;
-        w->notifier->setEnabled(false);
-        w->notifier->deleteLater();
-        ::close(w->fd);
-        m_writers.removeOne(w);
-        delete w;
+        closeWriter(w);
     });
+    w->deadline->start(kWriterDeadlineMs);
+}
+
+void Helper::closeWriter(Writer *w)
+{
+    if (!m_writers.removeOne(w))
+        return;
+    w->notifier->setEnabled(false);
+    w->notifier->deleteLater();
+    w->deadline->stop();
+    w->deadline->deleteLater();
+    ::close(w->fd);
+    delete w;
 }
 
 // --- Previews ---------------------------------------------------------------------------------------------------------------
@@ -822,4 +877,5 @@ void Helper::forgetFiles(const QByteArray &id)
     ::unlink(QFile::encodeName(thumbPath(id)).constData());
     ::unlink(QFile::encodeName(previewPath(id)).constData());
     m_thumbs.remove(id);
+    m_thumbAttempts.remove(id);
 }

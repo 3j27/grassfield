@@ -30,12 +30,14 @@ int runWorker(const QByteArray &format, int maxPx);
 } // namespace Thumbnail
 
 // One worker run, from the helper. `done` gets the PNG, or nothing when the worker failed, was killed, was late or answered too
-// much; it is called once.
+// much; it is called at most once, never after the job is deleted.
 class ThumbnailJob : public QObject
 {
 public:
     using Done = std::function<void(const QByteArray &png)>;
     ThumbnailJob(const QString &program, const QByteArray &format, int maxPx, const QByteArray &image, Done done, QObject *parent = nullptr);
+    // Kills and reaps a running worker; `done` is not called (the helper may be ending).
+    ~ThumbnailJob() override;
     void start();
 
 private:

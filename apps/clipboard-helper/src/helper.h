@@ -50,6 +50,12 @@ public:
 private:
     struct Pending;
     struct Writer;
+    // One worker run waiting its turn: a new copy's image (recorded only with its thumbnail) or a stored image's thumbnail.
+    struct ImageJob {
+        QByteArray id;
+        bool fresh = false;
+        ClipLogic::Item item; // a fresh image only
+    };
 
     void emitLine(const QList<QByteArray> &fields);
     void emitItem(const QByteArray &id);
@@ -64,8 +70,12 @@ private:
     void readDone(ClipLogic::ReadResult::Status status);
     void finishRead();
     void addItem(ClipLogic::Item item, const QByteArray &thumbnail);
+    void queueNewImage(const ClipLogic::Item &item);
     void queueThumbnail(const QByteArray &id);
     void nextThumbnail();
+    void imageDone(const ImageJob &job, const QByteArray &png);
+    void cancelNewImages();
+    void closeWriter(Writer *w);
     void expire();
     void pin(const QByteArray &id);
     void unpin(const QByteArray &id);
@@ -98,8 +108,12 @@ private:
     quint64 m_seq = 0;
     std::unique_ptr<Pending> m_pending;
     QHash<QByteArray, QString> m_thumbs;
-    QList<QByteArray> m_thumbQueue;
+    // One worker at a time for every image (ADR-0034 §1f); the clears cancel the new copies' images, waiting or running.
+    QList<ImageJob> m_imageQueue;
     ThumbnailJob *m_thumbJob = nullptr;
+    bool m_thumbJobFresh = false;
+    quint64 m_imageGeneration = 0;
+    QHash<QByteArray, int> m_thumbAttempts;
     ThumbnailJob *m_previewJob = nullptr;
     QTimer m_expiry;
     // The item we serve (a copy: it stays on the clipboard when the history drops it), and whether only its plain text is offered.

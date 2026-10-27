@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 
 #include <cerrno>
 
@@ -59,6 +60,34 @@ bool ownFileName(const QString &name)
 {
     static const QRegularExpression re(QStringLiteral("^(index\\.json|[0-9a-f]{16}\\.item)(\\..*)?$"));
     return re.match(name).hasMatch();
+}
+
+// Unlinks the store's own files (ownFileName) in <dirfd> that are not in `keep`; never what a link points to. Returns how many.
+int removeOthers(int dirfd, const QSet<QByteArray> &keep)
+{
+    const int fd = ::dup(dirfd); // fdopendir takes the descriptor it is given
+    if (fd < 0)
+        return 0;
+    DIR *d = ::fdopendir(fd);
+    if (!d) {
+        ::close(fd);
+        return 0;
+    }
+    QList<QByteArray> names;
+    while (const dirent *e = ::readdir(d)) {
+        const QByteArray name(e->d_name);
+        if (!keep.contains(name) && ownFileName(QFile::decodeName(name)))
+            names << name;
+    }
+    ::closedir(d);
+    int removed = 0;
+    for (const QByteArray &name : std::as_const(names)) {
+        struct stat st {};
+        if (::fstatat(dirfd, name.constData(), &st, AT_SYMLINK_NOFOLLOW) == 0 && (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode))
+            && ::unlinkat(dirfd, name.constData(), 0) == 0)
+            ++removed;
+    }
+    return removed;
 }
 } // namespace
 
@@ -248,6 +277,12 @@ DiskStore::Loaded DiskStore::load()
         item.app = o.value(QStringLiteral("app")).toString().left(255);
         result.items << item;
     }
+    // What the index does not name: the file of an item removed or expired that a crash left behind (the index is written
+    // first), the temporary of an interrupted write. Nothing would ever show or delete it, so it does not stay on disk.
+    QSet<QByteArray> keep{QByteArrayLiteral("index.json")};
+    for (const Item &it : std::as_const(result.items))
+        keep.insert(it.id + ".item");
+    result.orphans = removeOthers(dirfd, keep);
     ::close(dirfd);
     result.status = Status::Loaded;
     if (result.dropped > 0)

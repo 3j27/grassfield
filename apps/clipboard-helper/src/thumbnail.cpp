@@ -139,6 +139,19 @@ ThumbnailJob::ThumbnailJob(const QString &program, const QByteArray &format, int
     });
 }
 
+ThumbnailJob::~ThumbnailJob()
+{
+    // ~QProcess would kill the worker and report `finished` to the lambdas above after the members they use are gone (and into a
+    // helper that is itself being destroyed): nothing is reported any more, and the worker is reaped here.
+    m_finished = true;
+    m_deadline.stop();
+    m_process.disconnect(this);
+    if (m_process.state() != QProcess::NotRunning) {
+        m_process.kill();
+        m_process.waitForFinished(1000);
+    }
+}
+
 void ThumbnailJob::start()
 {
     // An environment holding only LC_ALL=C (an empty QProcessEnvironment would mean "inherit"): nothing of the helper's.
