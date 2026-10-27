@@ -371,13 +371,12 @@ nothing ever signals pacman.
 - **No partial upgrade, ever.** The Store never runs `pacman -Sy`, `-Syu` or `yay -Sua` itself, and never offers "Update"
   for one repository or AUR app: those update only with the whole system (S4, S12).
 - **One checker.** The Store reads ADR-0033's result (`$XDG_STATE_HOME/grassfield/software-update.json`, written by the
-  shell's checker) and asks the shell to check, as Settings does (ADR-0033 d.7). Its JSON gains a bounded list of the other
-  updates (name, installed, available; at most 2000), so the Store shows which apps the next update brings without a second
-  `checkupdates` (ADR-0033 d amended, section "Amendments"). Software Update's step 1 (PR #16) ships the count only
-  (`"others":N`): **Store step 4 adds the list** (`"otherUpdates"`) to `grassfield-update-check`, and until then the Updates
-  page shows the count (SD3). At the checker's 256 KiB cap the list goes first (the count stays exact, with
-  `"otherUpdatesTruncated": true`), then the release notes, as the checker already drops them; the Store then says "N other
-  updates" without names.
+  shell's checker) and asks the shell to check, as Settings does (ADR-0033 d.7). **Software Update's step 2 adds the list**
+  of the other updates beside their count (`otherPackages`: name, installed and available version, sorted by name; ADR-0033
+  d.3.5 as PR #16 writes it), so the Store shows which apps the next update brings without a second `checkupdates`; until
+  then the Updates page shows the count (`others`, step 1). At the checker's 256 KiB cap that list is cut first
+  (`otherPackagesTruncated: true`), then the notes; the counts always stay, and the Store then says "N other updates"
+  without names (SD3).
 - **Updates page.** The apps (entries with a desktop id) that the next system update upgrades, each marked "Updates with the
   system" (no per-app button), then "N other system packages", then "Update All…", which starts ADR-0033's "Update Now" (the
   same command and lock checks). While Omarchy's update runs: "Update in progress". When `pacman -Qu` lists packages while
@@ -631,13 +630,13 @@ irreversible action on the owner's machine. The integrator checks each row in th
 |---|---|---|---|---|
 | SD1 | Which repository apps the Store installs, now that `remove` takes apps with an application entry only (b.1) | only packages that own an application entry (AppStream desktop applications; catalog `repo` entries, checked by CI) · also command-line tools (AppStream `console-application`), which the helper could then not remove without a wider rule | only apps with an entry | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the Store can always remove what it installed, with no terminal; a wider removal rule would widen root rights, which stays the owner's; (a) the macOS store application installs apps, not tools |
 | SD2 | How the polkit sheet names the packages (counter-review) | the sheet shows "Install" or "Remove" and the names, read by a strict pattern from the line polkit expands for this action id only, else the line as is · the line as polkit expands it (the helper's path, the operation id, the names) · no names (refused by the review) | the verb and the names; the raw line when it does not match | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet is plain words, no path; (b) the user reads what they authorize. The names still come from polkit (pkexec's argument vector), not from the Store; the sheet is a security module (step 3, opus review); no polkit rule changes |
-| SD3 | Which step adds the list of other updates to the checker, and what goes first at its 256 KiB cap (counter-review, PR #16) | Store step 4 adds it, and the list goes before the notes · PR #16 adds it now · the notes go first | Store step 4; the list first | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's Software Update always shows its release notes, while the per-app list is the Store's addition; PR #16 stays as reviewed |
+| SD3 | Which step adds the list of other updates to the checker, and what goes first at its 256 KiB cap (counter-review, PR #16) | Software Update's step 2 adds it (`otherPackages`, PR #16's plan after its own review), the list cut before the notes · Store step 4 adds it · the notes cut first | Software Update's step 2, as PR #16 writes it; the list first | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's Software Update always shows its release notes, while the per-app list is an addition; one checker, one list, one name for both PRs |
 | SD4 | How the Store checks a fetched AppStream package (counter-review) | its own `.sig` with `pacman-key --verify` as the user (pacman's keyring and trust rule) · `gpgv` with pacman's public keyring (no trust check) · the sync database's SHA-256 (unsigned; refused by the review) | `pacman-key --verify` | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing to set up; the Store trusts exactly what pacman trusts (S17) |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
-- **ADR-0033**: d (the checker's JSON gains the bounded list of other updates, added by Store step 4 and dropped first at the
-  256 KiB cap), g (the catalog's files in the contract; the publication row), h.2 (one serialized publisher that publishes
+- **ADR-0033**: d (the Store reads the list of other updates that Software Update's step 2 adds, `otherPackages`, in PR #16's
+  words), g (the catalog's files in the contract; the publication row), h.2 (one serialized publisher that publishes
   the latest state, built from the current snapshot, a conditional pointer write), and the
   "no root code to install anything" of its context (ST4's helper is the exception). Its spec `docs/specs/updates.md`: U3 and
   the non-goals likewise.
@@ -679,8 +678,7 @@ irreversible action on the owner's machine. The integrator checks each row in th
   apps and Flatpaks (b.3); container tests with real pacman installs, a real recipe, a real `flatpak install --user` of a
   small app and an interrupted one (throwaway container), fake programs everywhere else; opus security review; the owner
   checks the real polkit dialog, sudo in Omarchy's terminal and a closed terminal in a real session.
-- **Step 4:** the list of other updates added to `grassfield-update-check` (SD3); the Updates page (system updates through
-  ADR-0033's checker and that list; Flatpak updates checked by the Store) and the sidebar count; no Dock badge of the
+- **Step 4:** the Updates page (system updates through ADR-0033's checker and its `otherPackages`, SD3; Flatpak updates checked by the Store) and the sidebar count; no Dock badge of the
   Store's own (ST8).
 - **IPC.** Steps 1 to 3 add no shell IPC. Any new `IpcHandler` function (for example, asking the shell to check for updates
   if ADR-0033's own call does not fit) is added to `docs/specs/security.md`'s table in the same PR (`ipc_inventory`).
@@ -722,7 +720,8 @@ The three earlier MAJORs confirmed closed. Each finding and where it is answered
   --print` plan checked (b.1, a); the package names in the polkit sheet, through the policy's `$(command_line)` (b.1, SD2;
   S18); the probe S16 proves the rule and the deny list (and found that `-Rns --print` is refused, so the plan is read with
   `-Rs --print` and a plan that does not resolve refuses).
-- **Minors:** the list of other updates is added by Store step 4 and goes first at the checker's cap (d, SD3); the Store's hold
+- **Minors:** the list of other updates is Software Update's step 2 (`otherPackages`, PR #16's text, carried word for word
+  into ADR-0033 here) and goes first at the checker's cap (d, SD3); the Store's hold
   on Omarchy's lock shows "Update in progress" in Software Update (b.1, spec); a fetched AppStream package is checked by its
   own signature with `pacman-key --verify` (c, SD4; S17); the publisher publishes the latest state, so a cancelled pending
   run loses nothing (g); `store-probes.sh:11` names S13 too; the AUR field list matches the output (no MakeDepends).

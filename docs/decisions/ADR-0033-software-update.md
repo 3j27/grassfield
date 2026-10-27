@@ -386,10 +386,10 @@ Rejected:
    5. Split the result:
       - `[grassfield]` packages: the names that `pacman --dbpath <own db> -Sql grassfield` lists;
       - Omarchy: the `omarchy` or `omarchy-dev` line;
-      - the rest: a count, and (amendment ADR-0037) a list of the same updates for Grassfield Store: name, installed
-        version, available version, at most 2000 entries, sorted by name. The list is added by Grassfield Store's step 4
-        (`"otherUpdates"`; step 1 of this ADR outputs the count only). At the 256 KiB cap of the checker's output the list
-        goes first (the count stays exact, `"otherUpdatesTruncated": true`), then the release notes (ADR-0037 d, SD3).
+      - the rest: a count (`others`).
+      Step 2 adds the list beside the count (`otherPackages`: name, installed and available version, sorted by name), which
+      the pane and the Store (PR #15, ADR-0037) need. When the output would pass its 256 KiB cap, that list is cut first
+      (truncated, `otherPackagesTruncated: true`), then the notes (`notesError`); the counts always stay.
 4. **What counts as an update (O3)** for the badge, the menu and the notification: a Grassfield release (a new
    `grassfield-desktop` version, pkgrel included) and an Omarchy release.
 5. **When.**
@@ -550,9 +550,8 @@ The owner gave every answer in this Claude Code session on 2026-10-27, through i
 were recorded in `fd49abc` and confirmed again after the first review.
 
 ## Amendments
-- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the checker's result also lists the other updates
-  (name, installed, available; at most 2000) so the Store reuses this one `checkupdates`; Store step 4 adds the list, and it
-  goes first at the 256 KiB cap. g: the Store catalog's files join the contract, and publication is the serialized
+- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the Store reads the list of other updates that
+  step 2 adds (`otherPackages`, cut first at the 256 KiB cap), so it runs no second `checkupdates`. g: the Store catalog's files join the contract, and publication is the serialized
   publisher of h.2. h.2: one serialized publisher per channel that publishes the latest state, building from the current
   snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
   to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit

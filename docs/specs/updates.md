@@ -65,9 +65,7 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
   `available` lists, from one `checkupdates` run:
   - the Grassfield release (`grassfield-desktop` installed → candidate, pkgver-pkgrel) with its notes;
   - Omarchy's release (`omarchy` or `omarchy-dev`) as `omarchy-update-available` reports it;
-  - the number of other package updates, and their list (name, installed, available; at most 2000, sorted by name) for
-    Grassfield Store (ADR-0037 d, amending ADR-0033 d.3.5; the list is added by the Store's step 4, and it is dropped first
-    when the output would pass 256 KiB, the count kept, `otherUpdatesTruncated` true).
+  - the number of other package updates.
   Other `grassfield-*` packages are not listed on their own.
 - U4. One check at a time. A request while one runs joins it.
   - A request while `omarchy update` holds `$XDG_RUNTIME_DIR/omarchy-update.lock` (tested with `flock -n`, released at
