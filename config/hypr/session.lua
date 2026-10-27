@@ -8,14 +8,28 @@ local self_path = debug and debug.getinfo and debug.getinfo(1, "S").source or ""
 local config_dir = self_path:match("^@(.+)/[^/]+$") or "/usr/share/grassfield/hypr"
 package.path = config_dir .. "/?.lua;" .. package.path
 
+-- A parse starts with none of Grassfield's modules loaded, so each one runs again on a reload (should Hyprland keep
+-- package.loaded) and a module loaded before core.lua stays loaded for the rest of this parse: bindings.lua reads the
+-- Trackpad gestures from grassfield.input, which omarchy.lua loads.
+for module in pairs(package.loaded) do
+  if module == "grassfield" or module:sub(1, 11) == "grassfield." then
+    package.loaded[module] = nil
+  end
+end
+
 -- Hardware/env from Omarchy (read-only). Grassfield defaults apply if it fails.
 local omarchy = require("grassfield.omarchy")
 if not omarchy.ok then
   print("grassfield: Omarchy include skipped: " .. tostring(omarchy.reason))
 end
 -- GF-066: the pointer defaults normally went in before the user's input.lua (omarchy.lua); without that include they apply here.
+-- Optional, like every module before core.lua: a failure is logged and costs the pointer defaults and the Settings
+-- choices, never the bindings, the lock key or the lid handling below.
 if not omarchy.input_applied then
-  require("grassfield.input")
+  local input_ok, input_err = pcall(require, "grassfield.input")
+  if not input_ok then
+    print("grassfield: input: " .. tostring(input_err))
+  end
 end
 if not omarchy.ok or not omarchy.monitors then
   hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })

@@ -7,6 +7,14 @@ if not config_dir or config_dir == "" then
 end
 package.path = config_dir .. "/?.lua;" .. package.path
 
+-- A parse starts with none of Grassfield's modules loaded, so edits are picked up on a reload (should Hyprland keep
+-- package.loaded), as in session.lua.
+for module in pairs(package.loaded) do
+  if module == "grassfield" or module:sub(1, 11) == "grassfield." then
+    package.loaded[module] = nil
+  end
+end
+
 _G.grassfield_dev = true
 
 -- The nested output is a window inside the owner's session; keep it smaller than the 1080p panel.

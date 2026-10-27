@@ -4,13 +4,41 @@
 # defaults, falls back to the same defaults when Omarchy's module cannot load, and puts the Omarchy-shell stand-ins first in
 # PATH. config/hypr/grassfield/omarchy.lua run by a plain Lua interpreter against a stub of Hyprland's `hl` table and
 # fixture Omarchy trees (plus the installed Omarchy when present). Needs `lua`.
+# The Lua is Hyprland's own (the liblua its binary needs; 5.5 for Hyprland 0.56 when it is not installed): in Lua 5.5 a
+# for-loop variable is const, and a module that assigns to one compiles under 5.4 but fails to load in the session (review
+# of the Settings stack: input.lua took the whole session down to Hyprland's emergency config). Every file of
+# config/hypr must compile under it; session.lua and dev.lua run whole, also with a broken optional module, and keep their
+# lock key and lid handling.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
-if ! command -v lua >/dev/null; then echo "SKIP: no Lua interpreter"; exit 0; fi
+want=5.5
+if hypr=$(command -v Hyprland) && command -v readelf >/dev/null; then
+  linked=$(readelf -d "$hypr" 2>/dev/null | sed -n 's/.*(NEEDED).*\[liblua[0-9.]*\.so\.\(5\.[0-9]*\)\].*/\1/p' | head -1)
+  [[ -n $linked ]] && want=$linked
+fi
+lua=
+for c in "lua$want" lua; do
+  if command -v "$c" >/dev/null && [[ $("$c" -v 2>&1) == "Lua $want."* ]]; then lua=$c; break; fi
+done
+if [[ -z $lua ]]; then
+  if ! command -v lua >/dev/null; then echo "SKIP: no Lua interpreter"; exit 0; fi
+  lua=lua
+  echo "SKIP: no Lua $want interpreter (the Lua Hyprland runs): the cases run under $(lua -v 2>&1 | cut -d' ' -f1-2); Lua $want NOT VERIFIED"
+fi
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/session-input.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
+
+# Every Lua file of the session's configuration compiles under that Lua.
+printf '%s\n' 'for _, path in ipairs(arg) do local f, err = loadfile(path); print(f and ("compiled " .. path) or ("error " .. tostring(err))) end' \
+  >"$tmp/compile.lua"
+files=("$root"/config/hypr/*.lua "$root"/config/hypr/grassfield/*.lua)
+compiled=$("$lua" "$tmp/compile.lua" "${files[@]}" 2>&1 || true)
+all_compile() { [[ $(grep -c '^compiled ' <<<"$compiled") == "${#files[@]}" ]] && ! grep -q '^error ' <<<"$compiled"; }
+desc="every file of config/hypr (${#files[@]}) compiles under $("$lua" -v 2>&1 | cut -d' ' -f1-2)"
+check all_compile
+grep '^error ' <<<"$compiled" || true
 
 cat >"$tmp/case.lua" <<'LUA'
 -- usage: lua case.lua <case> <repo root>
@@ -175,6 +203,33 @@ elseif case == "real" then
   say("ok", tostring(m.ok), "input", m.input, "problems", #m.problems, "compose", tostring((flat("kb_options") or ""):find("compose:caps", 1, true) ~= nil),
       "rate", tostring(flat("repeat_rate")), "numlock", tostring(flat("numlock_by_default")))
   for _, p in ipairs(m.problems) do say("problem:", p) end
+elseif case:match("^session") or case:match("^dev") then
+  -- An entry file whole (TREE/session.lua or TREE/dev.lua). Every hl name it reaches is a callable stub; the compositor
+  -- extension's loader is a stub (nothing is chosen, nothing written).
+  local d = os.getenv("TMPCASE")
+  local binds, gestures = {}, {}
+  local function deep(path)
+    return setmetatable({}, { __index = function(t, k) local v = deep(path .. "." .. k); rawset(t, k, v); return v end,
+                              __call = function(_, ...) return { dsp = path, args = { ... } } end })
+  end
+  hl = deep("hl")
+  hl.config = function(t) log.config[#log.config + 1] = t end
+  hl.env = function(k, v) log.env[k] = v end
+  hl.bind = function(keys) binds[keys] = true end
+  hl.gesture = function(g) gestures[#gestures + 1] = g.fingers .. ":" .. g.direction end
+  hl.plugin = { load = function() end }
+  package.preload["grassfield.compositor"] = function()
+    return { choose = function() return nil, "none" end, verifying = function() return true end, remember = function() end }
+  end
+  local entry = case:match("^session") and "session" or "dev"
+  if entry == "session" then fixture(d .. "/omarchy", 'hl.config({ input = { kb_layout = "us" } })\n') end
+  local ok, err = pcall(dofile, os.getenv("TREE") .. "/" .. entry .. ".lua")
+  if not ok then say("error", tostring(err)) end
+  table.sort(gestures)
+  local omarchy = package.loaded["grassfield.omarchy"]
+  say(case, "ran", tostring(ok), "lock", tostring(binds["SUPER + CTRL + Q"] == true), "lid", tostring(binds["switch:on:Lid Switch"] == true),
+      "pointer", tostring(flat("follow_mouse") ~= nil), "problems", type(omarchy) == "table" and #omarchy.problems or 0,
+      "gestures", table.concat(gestures, " "))
 elseif case == "guard" then
   local d = os.getenv("TMPCASE")
   fixture(d .. "/omarchy", "")
@@ -186,10 +241,15 @@ elseif case == "guard" then
 end
 LUA
 
-run() { # run <case> [env...]
-  local name=$1; shift
+run() { # run <case> [env...]; a case that stops (a Lua error) is a failure, named with its error
+  local name=$1 rc=0; shift
   mkdir -p "$tmp/$name/home"
-  env -i PATH="$PATH" TMPCASE="$tmp/$name" HOME="$tmp/$name/home" "$@" lua "$tmp/case.lua" "$name" "$root"
+  env -i PATH="$PATH" TMPCASE="$tmp/$name" HOME="$tmp/$name/home" "$@" "$lua" "$tmp/case.lua" "$name" "$root" >"$tmp/$name.out" 2>&1 || rc=$?
+  cat "$tmp/$name.out"
+  if ((rc != 0)); then
+    echo "FAIL: case $name stopped (exit $rc): $(grep -m1 . <(grep -v '^PASS\|^ok \|^grassfield:' "$tmp/$name.out") | cut -c1-300)" >&2
+    : >"$tmp/stopped"
+  fi
 }
 
 # The result lines of one case.
@@ -271,4 +331,31 @@ check grep -q "^PATH $tmp/guard/shims:$tmp/guard/omarchy/bin:/usr/local/bin:/usr
 desc="no stand-in directory installed: PATH is left alone"
 check grep -q "^missing-dir false$" <<<"$out"
 
+# The entry files whole: session.lua (with an Omarchy fixture and the Settings file turning the Spaces swipe off) and
+# dev.lua, from the tree, then from a copy whose grassfield/input.lua cannot load. An optional module that fails is logged
+# and costs only its own settings: the bindings, the lock key and (session.lua) the lid stay.
+cp -r "$root/config/hypr" "$tmp/broken"
+printf 'error("input.lua broken on purpose")\n' >"$tmp/broken/grassfield/input.lua"
+gestures_off() { mkdir -p "$tmp/$1/cfg"; printf 'return {\n  gesture_spaces = false,\n}\n' >"$tmp/$1/cfg/mouse-trackpad.lua"; }
+gestures_off session; gestures_off session-broken; gestures_off dev; gestures_off dev-broken
+out=$(run session TREE="$root/config/hypr" OMARCHY_PATH="$tmp/session/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session/cfg")
+desc="session.lua runs whole under Hyprland's Lua: lock key, lid switch, pointer defaults, no problem"
+check grep -q "^session ran true lock true lid true pointer true problems 0 " <<<"$out"
+desc="session.lua: Settings > Trackpad > More Gestures applies in the real session (Spaces swipe off; grassfield.input stays loaded for bindings.lua)"
+check grep -q "^session .* gestures 3:down 3:up 4:pinchin 4:pinchout$" <<<"$out"
+out=$(run session-broken TREE="$tmp/broken" OMARCHY_PATH="$tmp/session-broken/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session-broken/cfg")
+desc="session.lua with an input.lua that cannot load: the parse goes on, the lock key and the lid switch are bound"
+check grep -q "^session-broken ran true lock true lid true pointer false " <<<"$out"
+desc="session.lua with an input.lua that cannot load: the failure is logged (and announced as an Omarchy include problem)"
+check grep -q "^grassfield: Omarchy include: pointer defaults: .*input.lua broken on purpose" <<<"$out"
+check grep -q "^session-broken .* problems 1 gestures 3:down 3:horizontal 3:up 4:pinchin 4:pinchout$" <<<"$out"
+out=$(run dev TREE="$root/config/hypr" GRASSFIELD_CONFIG_DIR="$root/config/hypr" GRASSFIELD_CONFIG_HOME="$tmp/dev/cfg")
+desc="dev.lua runs whole under Hyprland's Lua: lock key, pointer defaults, the Settings gestures (no lid: real session only)"
+check grep -q "^dev ran true lock true lid false pointer true problems 0 gestures 3:down 3:up 4:pinchin 4:pinchout$" <<<"$out"
+out=$(run dev-broken TREE="$tmp/broken" GRASSFIELD_CONFIG_DIR="$tmp/broken" GRASSFIELD_CONFIG_HOME="$tmp/dev-broken/cfg")
+desc="dev.lua with an input.lua that cannot load: logged, the lock key is still bound"
+check grep -q "^dev-broken ran true lock true lid false pointer false " <<<"$out"
+check grep -q "^grassfield: input: .*input.lua broken on purpose" <<<"$out"
+
+if [[ -e $tmp/stopped ]]; then echo "FAIL: a case stopped on a Lua error (above)"; fail=1; fi
 exit $fail

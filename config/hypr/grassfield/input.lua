@@ -86,7 +86,10 @@ local function read_table(path)
     pos = close + 2
   end
   local out = {}
-  for line in table.concat(kept, "\n"):gmatch("[^\n]+") do
+  -- A copy of the loop variable is changed, never the variable itself: Hyprland runs Lua 5.5, where a for-loop variable
+  -- is const (assigning to it is a compile error that drops the whole module).
+  for raw in table.concat(kept, "\n"):gmatch("[^\n]+") do
+    local line = raw
     local comment = line:find("--", 1, true)
     if comment then line = line:sub(1, comment - 1) end
     if #line <= MAX_LINE then
