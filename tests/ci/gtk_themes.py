@@ -3,8 +3,9 @@
 Contrast (36), each with its GTK 3 and GTK 4 stylesheet; every theme name the Settings portal backend can publish exists
 (apps/portal-settings/src/PaletteTokens.hpp); each stylesheet imports GTK's built-in theme of its appearance and contrast from
 the library's resources and copies none of it; no colour function (the owner's GTK 4.22 must read them as GTK 4.24 does); the colour pairs hold their
-contrast (WCAG 2.x): selected and highlighted text 4.5:1, links 4.5:1 against the window, the focus ring and the thin marks
-3:1, except the light yellow accent's thin marks (2.0:1, the shell's own yellow: pinned, not hidden).
+contrast (WCAG 2.x): selected and highlighted text 4.5:1; links 4.5:1, the focus ring and the thin marks 3:1 against the
+Grassfield window and GTK's own window and view backgrounds, except the light yellow accent's thin marks (1.86:1 on GTK's
+window, 1.99:1 under high contrast, 2.0:1 on the shell's: the shell's own yellow, pinned, not hidden).
 The rendering itself is tests/integration/gtk_themes.sh.
 """
 import importlib.util
@@ -60,21 +61,32 @@ with tempfile.TemporaryDirectory() as out:
     check(not copied, f"no stylesheet carries GTK's accent or a copy of GTK's theme (small, own rules only) {copied}")
     check(not functions, f"no colour function in any stylesheet {functions}")
 
+# The backgrounds the marks are drawn on: the Grassfield window (the shell's) and GTK's own window and view backgrounds under
+# each stylesheet (theme_bg_color, theme_base_color of GTK 3.24.52 and GTK 4.24.1: the same in both versions).
+GTK_BACKGROUNDS = {(False, False): ["#f6f5f4", "#ffffff"], (True, False): ["#353535", "#2d2d2d"],
+                   (False, True): ["#fdfdfc", "#ffffff"], (True, True): ["#303030", "#2d2d2d"]}
 low = []
+worst = {}
 for name in gen.accent_names(tokens):
-    for dark in (False, True):
-        p = gen.palette(tokens, name, dark)
-        theme = gen.theme_name(name, dark)
-        pairs = [("selection", gen.contrast(p["selection"], p["selectionText"]), 4.5),
-                 ("highlight", gen.contrast(p["highlight"], p["highlightText"]), 4.5),
-                 ("link", gen.contrast(p["link"], p["window"]), 4.5),
-                 ("focus", gen.contrast(p["focus"], p["window"]), 3.0)]
-        accent = gen.contrast(p["accent"], p["window"])
-        pairs.append(("accent", accent, 2.0 if theme == "Grassfield-yellow" else 3.0))
-        low += [f"{theme} {what} {ratio:.2f} < {need}" for what, ratio, need in pairs if ratio < need]
-check(not low, f"colour pairs hold their contrast {low}")
+    for hc in (False, True):
+        for dark in (False, True):
+            p = gen.palette(tokens, name, dark)
+            theme = gen.theme_name(name, dark, hc)
+            grounds = [p["window"]] + GTK_BACKGROUNDS[dark, hc]
+            on = lambda colour: min(gen.contrast(colour, g) for g in grounds)  # noqa: E731
+            pairs = [("selection", gen.contrast(p["selection"], p["selectionText"]), 4.5),
+                     ("highlight", gen.contrast(p["highlight"], p["highlightText"]), 4.5),
+                     ("link", on(p["link"]), 4.5),
+                     ("focus", on(p["focus"]), 3.0),
+                     ("accent", on(p["accent"]), 1.8 if name == "yellow" and not dark else 3.0)]
+            low += [f"{theme} {what} {ratio:.2f} < {need}" for what, ratio, need in pairs if ratio < need]
+            worst[theme] = on(p["accent"])
+check(not low, f"colour pairs hold their contrast on the Grassfield window and GTK's backgrounds {low}")
 yellow = gen.palette(tokens, "yellow", False)
 check(gen.contrast(yellow["accent"], yellow["window"]) < 3.0 and yellow["focus"] == yellow["text"],
-      "the light yellow accent: thin marks 2.0:1 (the shell's own yellow), its focus ring the text colour (Accent.js focusRing)")
+      "the light yellow accent: thin marks under 3:1 (the shell's own yellow), its focus ring the text colour (Accent.js focusRing)")
+check(round(worst["Grassfield-yellow"], 2) == 1.86 and round(worst["Grassfield-yellow-hc"], 2) == 1.99,
+      f"the light yellow thin marks: 1.86:1 at worst on GTK's window, 1.99:1 under high contrast (pinned) "
+      f"[{worst['Grassfield-yellow']:.2f}, {worst['Grassfield-yellow-hc']:.2f}]")
 
 sys.exit(1 if failures else 0)
