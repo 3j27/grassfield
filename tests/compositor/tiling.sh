@@ -287,16 +287,21 @@ area_now() {
 area_now
 say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 
-# drag WHERE_X WHERE_Y [hold-capture-name] (layout coordinates): press on the titlebar's middle, glide to the point,
-# release there. pointer.sh takes coordinates relative to GF-REF.
+# drag WHERE_X WHERE_Y [hold-capture-name hold-place] (layout coordinates): press on the titlebar's middle, glide to the
+# point, release there. pointer.sh takes coordinates relative to GF-REF. With a capture name, the capture is taken once the
+# plugin logged that the preview of HOLD-PLACE shows for this window (it waits for the preview delay since tiling step 2,
+# TL17; integrator nested pass of 412b42e: a capture taken at a fixed 1.6 s could precede it), one frame later.
 drag() {
-  local tx=$(($1 - mx)) ty=$(($2 - my)) shot=${3:-} x y w h _a
+  local tx=$(($1 - mx)) ty=$(($2 - my)) shot=${3:-} place=${4:-} x y w h _a
   read -r x y w h _a < <(geometry)
   local px=$((x + w / 2 - mx)) py=$((y - GF_TB_MID - my))
   if [[ -n $shot ]]; then
     pointer abs "$px" "$py" down sleep 150 drag $(((px + tx) / 2)) $(((py + ty) / 2)) sleep 150 drag "$tx" "$ty" sleep 2500 up &
     local p=$!
-    sleep 1.6
+    if ! plugin_logged "tiling preview ${addr#0x}: $place on "; then
+      say "  no \"tiling preview ${addr#0x}: $place\" line within 3 s: the capture is taken anyway"
+    fi
+    sleep 0.3
     "$root/scripts/dev/shot.sh" "$shot" "$out" >>"$log" 2>&1 && cp "$dev/shots/$shot.png" "$run/" 2>/dev/null
     wait "$p"
   else
@@ -355,7 +360,7 @@ if [[ -n $pattern_addr ]]; then
   "$root/scripts/dev/shot.sh" tiling-pattern-baseline "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-pattern-baseline.png" "$run/" 2>/dev/null
 fi
 area_now
-drag "$edge_x" $((my + mh / 2)) "tiling-preview-$side"
+drag "$edge_x" $((my + mh / 2)) "tiling-preview-$side" "$side"
 if [[ -n $pattern_addr ]]; then
   d0=$(detail "$run/tiling-pattern-baseline.png")
   d1=$(detail "$run/tiling-preview-$side.png")
@@ -383,7 +388,7 @@ else
   say "SKIP: shared-edge (no output touches $out)"
 fi
 area_now
-drag $((mx + mw / 2)) $((my + 2)) tiling-preview-fill
+drag $((mx + mw / 2)) $((my + 2)) tiling-preview-fill fill
 check "menu-bar: released on the menu bar, the free area is filled" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
 drag $((mx + mw / 2)) $((my + mh / 2))
 check "drag-out after fill: ${w0}x${h0} again" size_is "$w0" "$h0"
@@ -616,6 +621,9 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   free_foot
   super_drag "$edge_x" $((my + mh / 2)) 40
   check "delay: Hyprland's move released at the edge before the delay does not tile (${w0}x${h0} kept)" size_is "$w0" "$h0"
+  # Back at (300, 200) first: Hyprland's move above left the window's middle on the edge, and a titlebar drag pressed there
+  # rests on the place from the press (integrator nested pass of 412b42e).
+  free_foot
   read -r x y w h _a < <(geometry)
   px=$((x + w / 2 - mx)) py=$((y - GF_TB_MID - my))
   pointer abs "$px" "$py" down sleep 150 drag $(((px + edge_x - mx) / 2)) $(((py + mh / 2) / 2)) sleep 150 drag $((edge_x - mx)) $((mh / 2)) sleep 40 up

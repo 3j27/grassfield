@@ -982,6 +982,9 @@ namespace gf::tiler {
             damage(before);
             damage(after);
         }
+        // The line tests wait for before they capture the preview (tests/compositor/tiling.sh): it shows now.
+        if (after && (!before || before->place != after->place))
+            logRequest(Log::DEBUG, "tiling preview {:x}: {} on {}", idOf(w), tiling::nameOf(after->place), m ? m->m_name : std::string{});
         if (const auto wait = d.dwell.remaining(now))
             armPreviewTimer(*wait);
         return after;
