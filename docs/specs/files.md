@@ -30,8 +30,9 @@ Browse and manage files on KDE Frameworks KIO (owner decision D6): the feature i
 `grassfield-files`, app id `org.grassfield.Files`; never "Finder"). Trash, mounts, network protocols and thumbnailers
 are KIO/Solid's, never reimplemented. Non-goals for v1: an indexed search (the shell Search covers files; the tag
 search walks one folder tree, F16), named tags created in Files (only the colour tags are set here; tags of other
-applications are shown, kept and searchable), Recents, sharing, Group By, a built-in viewer (Space
-starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
+applications are shown, kept and searchable), sharing, a built-in viewer (Space
+starts Glance of `grassfield-preview`, see `docs/specs/preview.md`). Recents and Group By arrived with PR 2 ("Views and
+selection").
 
 ## Functional requirements
 1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's conflict/Open With/undo dialogs are widgets),
@@ -39,9 +40,11 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    (default: home). QML from `GRASSFIELD_FILES_QML` or the baked-in directory (installed
    `/usr/share/grassfield/files/qml`). Image providers `image://icon/<theme name>` and `image://thumbnail/<id>`.
 2. F2 Listing: `FolderModel` = KIO `KDirModel` (+`KDirLister`) behind a `QSortFilterProxyModel` with flat QML roles
-   (name, url, iconName, isDir, size(Text), modified(Text), kind, thumbnail, selected, hidden, canPreview, emblem).
-   Sort by name (natural, case-insensitive), kind, date or size; Keep Folders on Top; ascending/descending (name and
-   kind default ascending, date and size descending); show hidden files; name filter (search field).
+   (name, url, iconName, isDir, size(Text), modified(Text), kind, thumbnail, largeThumbnail, selected, hidden, canPreview,
+   emblem, tags, tagColors, folderColor, folderGlyph, group).
+   Sort By the eight keys of "Views and selection" (Name natural and case-insensitive, Kind, Application, Date Last Opened,
+   Date Modified, Date Created, Size, Tags) and Group By; Keep Folders on Top; ascending/descending (the dates and Size
+   default descending, the others ascending: `FileLogic::defaultDescending`); show hidden files; name filter (search field).
 3. F3 Selection: click, Shift (range), Ctrl (toggle), Ctrl+A, rubber band (icon, list and column views), keyboard arrows, Home/End,
    PageUp/PageDown, type-to-select (1 s reset). The selection is keyed by URL and survives re-sorting.
 4. F4 Views: Icon (thumbnails), List (sortable headers), Columns (miller columns + preview column), Gallery (F15);
@@ -83,8 +86,9 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
     "K of N selected", job progress), both hidden by default (View > Show Path Bar, Show Status Bar; "Views and
     selection").
 11. F11 Drag and drop: items drag out as `text/uri-list` (Drag.Automatic, works with other apps); drops on the
-    background, folders, sidebar items and path segments; same filesystem moves, otherwise copies; Ctrl/Alt forces
-    a copy.
+    background, folders, sidebar items and path segments; same filesystem moves, otherwise copies; Option (Alt) copies,
+    Cmd (Ctrl) moves, Cmd+Option makes a symbolic link (`FileLogic::dropAction`, "Views and selection" Drop modifiers);
+    Recents refuses every drop (no target, the drag shows it); spring-loaded folders open under a resting drag.
 12. F12 Glance: Space and the menu item "Glance at “name”" call `FilesApp.glance(urls)`, which starts
     `grassfield-preview --glance -- <paths>` detached for the local regular files of the selection (folders and remote
     items are skipped, at most 50 files). The Glance window takes the focus; Space or Esc there closes it. Blocked by
@@ -174,10 +178,13 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 | ID | Test | Level |
 |---|---|---|
 | F2 sort keys (the eight of Sort By, missing values last), sizes, dates, groups (dates newest first, kind, name, size, tags, application), drop modifiers, F10 path segments, F6 names, F5 hidden Network entry | `tests/unit/files/tst_filelogic.cpp` (gtest, 27 tests, run by `scripts/dev/test.sh`) | L0 |
-| F3/F10 keyboard moves (also grouped), history, type-to-select, header sort, rubber band (also grouped: list spans, icon cells with sideways scroll), grouped icon layout, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row | `tests/unit/tst_filesnav.qml` (19 cases) | L0 |
-| F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, preview pane preference, the pane's Tags field | `tests/unit/tst_filesgallery.qml` (6 cases) | L0 |
-| Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused | `tests/unit/files/tst_imagerotate.cpp` (gtest, 10 tests) | L0 |
-| Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed | `tests/unit/files/tst_recents.cpp` (gtest, 6 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| F3/F10 keyboard moves (also grouped), history, type-to-select, header sort, rubber band (also grouped: list spans, icon cells with sideways scroll), grouped icon layout, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row; a drag keeps its view (`Nav.shownView`) | `tests/unit/tst_filesnav.qml` (20 cases) | L0 |
+| F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, preview pane preference, the pane's Tags field; Recents refuses a drag, a strip drag is bracketed by the tab's dragStarted/dragFinished | `tests/unit/tst_filesgallery.qml` (8 cases) | L0 |
+| Grouped icon view on a stand-in listing: a view made before its size makes the cells it shows, only the sections near the view are made (600 groups), Show All and reveal | `tests/unit/tst_filesgrouped.qml` (3 cases) | L0 |
+| Sidebar: Eject target and menu; Recents takes no drop and does not spring | `tests/unit/tst_filessidebar.qml` (5 cases) | L0 |
+| Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
+| Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 6 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Per-folder views (F-3) with grouping and the new sort keys | `tests/unit/files/tst_folderviews.cpp` (gtest, 12 tests) | L0 |
 | Global menu: bar items (Path Bar, Status Bar, Sidebar, Preview), Group By follows the tab | `tests/unit/tst_filesglobalmenu.qml` (6 cases) | L0 |
 | F16 tag parse/serialize, colour keys, selection states, search locations; byte-for-byte edits (`applyTag`, the reviewer's foreign value), sidebar hiding, `user.xdg.tags` write/read/remove, raw round trip, foreign tags, long values, links, FIFOs, read-only files, the probe cache, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest) | L0 |
@@ -261,7 +268,8 @@ installed (not built here).
   known, and rows a view displays refine their type from content once (never the whole folder on the GUI thread).
   Kind sort of 2000 extension-less files: 529 ms (was ~3100 ms).
 - Tags cost one `lgetxattr` per shown item (cached per URL; 8-17 us each measured, so a screenful costs about 1 ms);
-  sorting and filtering never read them. The menus ask the tag state of the whole selection on every selection change:
+  filtering never reads them, and sorting or grouping reads them only by Tags (one read per item, the same cache; not
+  measured on a large folder). The menus ask the tag state of the whole selection on every selection change:
   measured with 1000 selected files, 41 ms (untagged) and 66 ms (tagged) per change before; now one probe pass
   (lstat, access, one lgetxattr per file, 19-28 ms) the first time and 2-3 ms from the 3 s cache (`TagStore::Cache`,
   dropped for the files Files writes; another application's change shows on the next lookup (one `lstat`, the ctime moves; two changes inside one kernel clock tick may be missed until the 3 s expire); a write always reads afresh). The tag search runs
@@ -579,8 +587,21 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
   at all, and a shown one reads the item again only when the shown or a selected row changes.
 - **Information**: Created, Modified, Dimensions (pictures: read from the file's header, turned by its EXIF orientation);
   Show More adds Last opened, Size in bytes (zero and one spelt out) and Where.
+- **Dimensions are never read on the GUI thread** (`FolderModel::dimensionsAt`, `src/imagesize.h`): an item's type comes
+  from its name, so a FIFO named `pipe.png` or a link to `/dev/zero` named `x.png` is "a picture" to KIO, and opening it
+  would never return. The row is asked only when the listing says a local regular file of an image type; a worker thread
+  (one per listing, started when there is work) then walks the path from the root against the mount table before each
+  `lstat` (local, removable and memory filesystems only: a network share, FUSE or a pseudo filesystem is never looked at,
+  links into them included), opens only a regular file (`O_NONBLOCK`, the same inode checked on the descriptor), reads the
+  format from the content and at most 16 MiB. The answer arrives as the row's `dataChanged` and the pane reads it then;
+  answers are kept per path for the listed time and size (at most 256). A listing destroyed during a read waits 150 ms for
+  it, then abandons it.
 - **Quick actions** (pictures Files can turn without a loss: JPEG, PNG, BMP; `imagerotate.h`): Rotate Left, and More…
   with Rotate Right; none for a selection of more than 100 items (each is looked at on disk as the selection changes).
+  The name's type only offers the action; what is done is decided by the content (`ImageRotate::methodForContent`): a
+  JPEG turns through its tag whatever it is called, a real PNG or BMP is written again in that same format (Qt's reading
+  of the content must agree), anything else (a GIF, TIFF or WebP named `.png`) is left byte for byte. A file over 128 MiB
+  (`kMaxFileSize`: it is held in memory whole, decoded and encoded again) is refused before it is read.
   The files are read and written on a thread of their own, one batch at a time and in order; Files waits for the batch
   running when it quits. Each file is opened once without following links (`O_NOFOLLOW`) and handled through that
   descriptor. A JPEG turns through its EXIF orientation tag, changed in place (two bytes, then `fsync`), or a minimal
@@ -594,7 +615,9 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
   not offered: Grassfield has no annotation editor (`docs/specs/preview.md` non-goals). A turn is not part of Undo.
 - Tests: `tests/unit/files/tst_imagerotate.cpp` (the EXIF table, the kinds, the minimal segment, little-endian tags,
   broken files, a JPEG without EXIF keeps its tags and mode and leaves no temporary file, an in-place change keeps the
-  inode, a PNG turned pixel by pixel, links, other kinds, animated PNGs and hard-linked files refused).
+  inode, a PNG turned pixel by pixel, links, other kinds, animated PNGs and hard-linked files refused; misnamed pictures
+  by their content; the size limit), `tests/unit/files/tst_imagesize.cpp` (Dimensions: special files, a huge file, remote
+  and FUSE mounts, the worker).
 
 ## Views and selection
 PR 2 of the Finder parity brief (matrix rows FP-18, FP-19, FP-23, FP-39 to FP-43, FP-45, FP-46, FP-66). References:
@@ -621,7 +644,14 @@ Finder-Home and Finder-Search (toolbar), the macOS
   little as it takes to show the item (down the page, then along its line; a first line comes with its header). The
   sections are placed from the group sizes (`Nav.groupedIconTops`, `groupedIconCell`, `groupedIconCells`), so the band and
   the keyboard menu work from the same numbers; a section keeps its cells and its sideways scroll while the folder
-  changes or is sorted again, and only the cells near the view are made (a group of thousands shown in full included). An
+  changes or is sorted again, and only the cells near the view are made (a group of thousands shown in full included).
+  A section far from the view is an empty item of its height: its header, the DelegateModel of its rows and its views are
+  made while it is near the view (and the view has a cell width), so a folder grouped by name into thousands of first
+  letters does not pay one DelegateModel per group on every change of the listing. Measured offscreen (software scene
+  graph, 5,000 items, `tests/unit/tst_filesgrouped.qml` checks the behaviour): 2,500 groups made in 7.5 s and 4.7 ms per
+  changed row before, 1.1 s and 0.3 ms now; 27 groups of 185 made 1,908 cells (4.6 s) when the view was made before it
+  had its size, 168 cells (0.4 s) now; the flat grid of the same folder 0.5 s. Not measured nested or on the reference
+  hardware (L2). An
   icon cell takes drops on its icon and name, like clicks; elsewhere a drop goes to the shown folder. Groups are cached
   per item and dropped item by item when an item changes, goes or is renamed (KDirModel reports each type it finds); at
   midnight (or the first grouping after it) the date groups are made again.
@@ -648,14 +678,19 @@ Finder-Home and Finder-Search (toolbar), the macOS
   another application springs too; when it leaves the window (or is cancelled over it) the window's tabs go back, and a
   drop on the window keeps them where they are, whichever view took it (`FilesApp.outsideDragEnded`). The folder opened under a resting pointer becomes the drop target at once
   (`FilesApp.refreshDrag` sends the last drag move again), so a release without moving drops into it. Space does not open
-  at once: Qt's platform drag takes every key press.
+  at once: Qt's platform drag takes every key press. While a drag Files started from a view runs, the tab keeps that view
+  (`BrowserTab.dragView`, `Nav.shownView`): a folder sprung open in another view of its own (or a search ending) shows in
+  the dragging view until the drag ends, then in its own. Qt Quick's drag uses the item that started it after its nested
+  event loop returns, so destroying the view under it would be a use-after-free.
 - **Drop modifiers** (FP-66, ⌘ as Ctrl, `FileLogic::dropAction`): a plain drop moves within a volume and copies across
   volumes, Option (Alt) copies, Cmd (Ctrl) moves, Cmd+Option makes a symbolic link in the target (`KIO::link`, part of
   Undo). Drags offer copy and move only: Wayland's drag and drop has no link action, so Files makes the link itself.
 - **Recents** (FP-46, decision F-5): first in the sidebar without a header, Go > Recents (Shift+Cmd+F); the local
   regular files listed in `recently-used.xbel`, newest first, at most 500, read on a thread of their own and again when
   the file changes (watched with its folder, a burst read once). Sorted by Date Last Opened, newest first, until arranged
-  otherwise; the time is the latest the list records for the file. Read only: a drop there is refused. A recent file
+  otherwise; the time is the latest the list records for the file. The list is read only when it is a regular file of at
+  most 32 MiB, bounded and to its end (`Recents::readList`: a FIFO, a device or a link to one is never opened). Read only:
+  a drop there is refused (the background, its path segment and its sidebar row take no drag, as in the Finder). A recent file
   renamed or moved while a Recents view is open keeps its place under the new path (`Recents::noteRenamed`, for the
   session; an entry used after the rename is the new file at the old path); to the Trash it leaves the list.
 - **Glance and Redo**: Cmd+Y opens Glance like Space (Finder's Quick Look shortcut); Redo is Shift+Cmd+Z only, as in
