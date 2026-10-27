@@ -106,6 +106,7 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
 | Q24 | Where Settings > Search puts the clipboard history's settings (step 3) | first, above Search History; between Search History and Search Results; last, after Search Results | last, in a group of its own after Search Results | macOS first: macOS 26.0 shows its Clipboard Search group last in the pane (W-39); macOS 27's layout of it is not captured |
 | Q25 | The duration pop-up and Keep clipboard history after logging out while the history is off (step 3) | always active; inactive (dimmed) while off; hidden while off | inactive while off; Clear Clipboard History… stays active (pinned items stay while the history is off and can be cleared) | macOS first: a setting that does nothing is dimmed, not hidden, as macOS dims dependent controls; nothing to set by hand |
 | Q26 | Clear Clipboard History…'s "Also delete pinned items" (step 3) | checked by default; unchecked each time the sheet opens; remembered | unchecked each time; Clear keeps pins unless the person checks it then | macOS first: Clear deletes what macOS's history holds (no pins there); deleting pins, Windows' "Clear all" never does, only on an explicit choice; nothing irreversible by default |
+| Q27 | grassfield.json becomes unusable (malformed, unreadable, too large, unsafe, missing) while the history runs: what does the clipboard history do? (review of c1fc254) | follow the values read then (the defaults: the history off, which deletes it); stop recording but delete nothing; keep the last usable values until the file is usable again | keep the last usable values: nothing is started, stopped, cleared or deleted until a usable read; then only what differs from them is applied | macOS first: preferences that cannot be read never erase a person's data, and the history keeps working as the person set it; no technical intervention: the history keeps working as set, with nothing to repair for it |
 
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
@@ -265,9 +266,17 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
    anything is loaded, shown or recorded, a value other than the one carried out deletes that store (also after a clock set
    back: never fewer deletions); with no record (a store from before it existed) only the items from before the clear go (the
    copy's time for the history, the pin's for the pinned store). With the history off the shell runs the helper once with
-   `--apply-clears`, at its first decision and at each change. The shell decides nothing before grassfield.json's first read:
-   before it every key reads its default (the history off, no clear asked), and acting on them deleted a kept history at
-   each shell start; a missing file is taken as the defaults after 10 s.
+   `--apply-clears`, at its first decision and at each change; the store jobs (`--clear-history`, `--apply-clears`) run one
+   after the other, never beside each other or the helper, and `--apply-clears` is given the times as they are when it starts.
+   If the record cannot be written, the next start finds it older than the setting and deletes that store again, items
+   copied or pinned since the clear included: never fewer deletions, so a failed write costs data, never privacy.
+   The settings the shell acts on (review of c1fc254): only a usable read of grassfield.json (`Settings.validRead`). Before
+   the first read every key reads its default (the history off, no clear asked); a malformed, unreadable, too large or
+   unsafe file reads the defaults or the last good values, a missing one the defaults. Acting on those deleted a kept
+   history at each shell start, and an unreadable file would delete a history the person kept. So the service takes the
+   history's settings only from a usable read, once the read is complete, and keeps the last usable values while the file
+   is not usable (Q27). Nothing is decided, run or deleted before the first usable read; with no usable file (a missing
+   one included) the history stays off and nothing is deleted until Settings or Search's Allow writes one.
 
 7. **Presentation and settings** (`docs/specs/clipboard.md`): the Clipboard view of Search, reached by ⌘4 (Super+4, which
    `forwarding.lua` sends to Search as Ctrl+4; physical Ctrl+4 switches to Space 4), the Clipboard button to the right of the
