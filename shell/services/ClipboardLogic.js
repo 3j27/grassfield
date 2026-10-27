@@ -10,6 +10,8 @@ const US = "\x1f";
 const AUTH_GRACE_MS = 2000;
 // The paste is sent only this long after Search's close asked for the keyboard back (ADR-0034 §4).
 const PASTE_WAIT_MS = 1000;
+// How often the service looks whether the target window is active again.
+const PASTE_POLL_MS = 50;
 // macOS 27's three durations (Settings > Search), in milliseconds.
 const RETENTION = {"30m": 30 * 60 * 1000, "8h": 8 * 3600 * 1000, "7d": 7 * 24 * 3600 * 1000};
 
@@ -156,6 +158,11 @@ function mayPaste(s) {
 // A window address as Hyprland names it, with or without "0x" (Minimized.normalizeAddress, the platform's one validator).
 function isAddress(address) {
     return Minimized.normalizeAddress(address) !== "";
+}
+
+// The address as the service keeps it: lower-case hex without 0x, "" when invalid.
+function addressHex(address) {
+    return Minimized.normalizeAddress(address || "");
 }
 
 // The Lua function Hyprland runs for a paste (Quickshell sends it as `return hl.dispatch(<request>)`, the Zoom.js pattern). It
