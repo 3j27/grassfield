@@ -12,8 +12,8 @@ T.Button {
     // macOS 27 push button: a buttonHeight (24) tall capsule instead of the roomier default (a row's "Set…").
     property bool push: false
 
-    // Whole pixels, so that a row of buttons keeps every edge sharp.
-    implicitWidth: Math.ceil(Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg))
+    // Whole pixels, so that a row of buttons keeps every edge sharp. A push button is as wide as its label and its padding.
+    implicitWidth: root.push ? Math.ceil(label.implicitWidth + 2 * Tokens.controlPushPadding) : Math.ceil(Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg))
     implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : (root.push ? Tokens.controlButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm)
     // Disabled: the whole button dims, once (callers no longer set an opacity of their own).
     opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity

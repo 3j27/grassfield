@@ -19,7 +19,9 @@ import "../../lib/RunMode.js" as RunMode
 // protocol. Display power-off on the lock screen (D-4, macOS): IdleModel.DISPLAY_OFF_SECONDS without input while
 // locked switch the displays off (Hyprland DPMS); input or the unlock switch them on (the compositor also wakes them on
 // a key press or pointer motion: misc.key_press_enables_dpms / mouse_move_enables_dpms, looknfeel.lua, so a shell that
-// died meanwhile cannot leave the screen dark). Also hosts the lock-before-sleep inhibitor.
+// died meanwhile cannot leave the screen dark). While unlocked, lock.displayOffBattery / lock.displayOffPower minutes without
+// input (the power source in use; 0 = never) also switch them off, without locking (macOS 27 Lock Screen: Turn display off when
+// inactive); a lock that follows keeps them off until input. Also hosts the lock-before-sleep inhibitor.
 Scope {
     id: root
 
@@ -33,18 +35,65 @@ Scope {
     property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
     // This module switched the displays off (and must switch them on again).
     property bool displayOff: false
+    // Seconds without input before the displays go off while unlocked, for the power source in use; 0 = never. Always off in
+    // the nested dev session (a dark nested output would spoil every capture; no test needs it there).
+    readonly property int inactiveOffSeconds: devHooks ? 0 : IdleModel.inactiveDisplayOffSeconds(Settings.lockDisplayOffBattery, Settings.lockDisplayOffPower, Battery.onBattery)
+    // The unlocked monitor turned the displays off and no input came since.
+    property bool offForInactivity: false
+    property bool rearmingInactive: false
 
+    // The compositor also switches the displays on at a key press or pointer motion, so "off" is sent whenever the state is
+    // recomputed, never skipped as already done (a stale "off" would keep the next "off" from being sent); "on" only when this
+    // module had them off (a repeated enable can flicker on some hardware), and always while a lock is being acquired: an
+    // instance restarted with the displays dark starts with displayOff false, and the compositor confirms a lock only once it
+    // has drawn it.
     function setDisplays(on: bool): void {
-        if (on === !displayOff)
+        if (on && !displayOff && !(Lock.locked && !Lock.holding))
             return;
+        if (on === displayOff)
+            console.info("grassfield-idle: displays " + (on ? "on" : (Lock.locked ? "off (locked, no input)" : "off (inactive)")));
         displayOff = !on;
-        console.info("grassfield-idle: displays " + (on ? "on" : "off (locked, no input)"));
         const action = on ? "enable" : "disable";
         Hyprland.dispatch(Hyprland.usingLua ? "hl.dsp.dpms({ action = \"" + action + "\" })" : "dpms " + (on ? "on" : "off"));
     }
 
     function updateDisplays(): void {
-        setDisplays(!(lockedMonitor.enabled && lockedMonitor.isIdle));
+        setDisplays(!IdleModel.displaysOff(lockedMonitor.enabled && lockedMonitor.isIdle, root.offForInactivity && inactiveMonitor.enabled && inactiveMonitor.isIdle, Lock.locked, Lock.holding));
+    }
+
+    // A lock that starts lights the displays until it holds (IdleModel.displaysOff); an unlock without Wayland input (a
+    // fingerprint) lights a session that went dark for inactivity. Later in the turn (Qt.callLater runs one call for all the
+    // requests of a turn): once locked and holding have both settled, and after the lock request has been queued.
+    Connections {
+        target: Lock
+
+        function onLockedChanged(): void {
+            if (!Lock.locked)
+                root.offForInactivity = false;
+            root.acquireOnTries = 0;
+            Qt.callLater(root.updateDisplays);
+        }
+
+        function onHoldingChanged(): void {
+            root.acquireOnTries = 0;
+            Qt.callLater(root.updateDisplays);
+        }
+    }
+
+    // A lock restored at start (a restarted shell) may not change Lock.locked: light the displays it has to draw on.
+    Component.onCompleted: updateDisplays()
+
+    // While a lock is being acquired, "on" again until it holds (a lost request would leave it undrawn until input), a few
+    // times only.
+    property int acquireOnTries: 0
+    Timer {
+        interval: IdleModel.ACQUIRE_DISPLAYS_ON_MS
+        repeat: true
+        running: Lock.locked && !Lock.holding && root.acquireOnTries < IdleModel.ACQUIRE_DISPLAYS_ON_TRIES
+        onTriggered: {
+            root.acquireOnTries++;
+            root.updateDisplays();
+        }
     }
 
     function update(): void {
@@ -94,6 +143,29 @@ Scope {
             root.dimmed = false;
             if (result !== "ok")
                 console.warn("grassfield-idle: idle lock not engaged:", result);
+        }
+    }
+
+    // No input while unlocked for inactiveOffSeconds: the displays go off; the session stays unlocked until the idle lock.
+    IdleMonitor {
+        id: inactiveMonitor
+        // Armed only once its timeout is the one wanted, so that turning the setting on never arms it with the placeholder 1 s.
+        enabled: timeout === root.inactiveOffSeconds && IdleModel.inactiveOffArmed(root.inactiveOffSeconds, Lock.locked, root.offForInactivity, root.rearmingInactive, root.busInhibited)
+        timeout: Math.max(1, root.inactiveOffSeconds)
+        respectInhibitors: true
+        onIsIdleChanged: {
+            root.offForInactivity = isIdle && enabled;
+            root.updateDisplays();
+        }
+        onEnabledChanged: {
+            if (!enabled)
+                root.offForInactivity = false;
+            Qt.callLater(root.updateDisplays);
+        }
+        // The power source changed (or the setting): re-enable so that the new timeout applies (see `rearming`).
+        onTimeoutChanged: {
+            root.rearmingInactive = true;
+            Qt.callLater(() => root.rearmingInactive = false);
         }
     }
 
@@ -176,6 +248,9 @@ Scope {
                 sleepBudgetMs: sleepInhibitor.budgetMs,
                 displayOffSeconds: root.displayOffSeconds,
                 displayOff: root.displayOff,
+                inactiveOffSeconds: root.inactiveOffSeconds,
+                inactiveOffArmed: inactiveMonitor.enabled,
+                offForInactivity: root.offForInactivity,
                 busInhibited: root.busInhibited
             });
         }

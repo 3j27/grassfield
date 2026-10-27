@@ -15,7 +15,7 @@ bool devSession();
 
 // Exactly the read-only commands the pages issue (qml/System.js builds the same argument vectors; tst_settingssystem
 // checks that every System.QUERY entry is accepted here). Anything else, also a variation of these, is not a query:
-//   wpctl      1 fixed (status), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
+//   wpctl      2 fixed (status, status -n), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
 // Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
@@ -46,11 +46,34 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
-// & Region). Anything else is refused: Wi-Fi, Bluetooth and the General pane's system changes are D-Bus calls (Backend::busAct).
+// & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays, lpoptions for Printers: the user's own CUPS
+// defaults). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system changes and adding or removing a printer
+// are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
+// A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
+bool isBacklightName(const QString &name);
+
+// Settings > Displays (ADR-0031): one line of displays.conf or of a display trial, the rule config/hypr/grassfield/displays.lua
+// applies: v1 <TAB> desc:<1 to 160 bytes, no control character> <TAB> <W>x<H>@<Hz> (1-16384, 1-1000 Hz) <TAB> <X>x<Y>
+// (-32768 to 32768) <TAB> <scale> (0.5 to 4) <TAB> <transform> (0 to 7).
+bool isDisplayLine(const QString &line);
+// A trial's id: 1 to 32 ASCII letters and digits.
+bool isDisplayTrialId(const QString &id);
+
+// Settings > Printers (ADR-0030): a CUPS queue name as Settings takes it, 1 to 127 of [A-Za-z0-9_.+@-], not starting with "-"
+// (CUPS allows more; a queue named otherwise is shown but cannot be chosen); a PPD paper size keyword ("A4", "Letter",
+// "Custom.WIDTHxHEIGHT" is not one), 1 to 40 of [A-Za-z0-9._-] starting with a letter or a digit; a URI cupsd turns into an
+// IPP Everywhere queue (dnssd, ipp, ipps or ippusb), at most 1024 characters, without spaces or control characters.
+bool isPrinterName(const QString &name);
+bool isPaperKeyword(const QString &keyword);
+bool isPrinterUri(const QString &uri);
+
 // A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
-// local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code.
+// local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
+// exactly `-q -d <backlight> set <0-100>%`, for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
+// `set-mute <id> 0|1`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
+// ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions).
 bool isAllowedAction(const QStringList &argv);
 
 // An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt). Backend::act runs one per
@@ -99,5 +122,12 @@ QString mountPointOf(const QList<Mount> &mounts, const QString &path);
 
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);
+
+// Privacy & Security (the portal permission store, ADR-0030 amendment): an application id as the store keys a grant (a
+// Flatpak id such as org.example.App, snap.<name>, or a host application's desktop id), never "" (unsandboxed applications
+// without an id share that key) and never a path; and a saved screen-sharing or remote-desktop selection's restore token, as
+// the portal makes and accepts them ([A-Za-z0-9_], at most 128 here, or a legacy UUID).
+bool isPortalAppId(const QString &s);
+bool isPortalToken(const QString &s);
 
 } // namespace grassfield::settings

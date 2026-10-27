@@ -41,6 +41,40 @@ function idleArmed(enabled, locked, rearming, busInhibited) {
 // while locked before the displays go off (Hyprland DPMS); any input switches them on again.
 var DISPLAY_OFF_SECONDS = 30;
 
+// While a lock is being acquired, "on" is sent again this often, at most this many times: a lost request (a restarted shell,
+// a dispatch the compositor refused) must not keep the lock undrawn, hence unconfirmed, until input; a lock that cannot hold
+// (no display connected) is not woken all night.
+var ACQUIRE_DISPLAYS_ON_MS = 2000;
+var ACQUIRE_DISPLAYS_ON_TRIES = 5;
+
+// Display power-off while the session is unlocked (macOS 27 Lock Screen: Turn display off on battery / on power adapter when
+// inactive): the minutes of the power source in use, as seconds; 0 = never. The values arrive read through the contract
+// (integers 0..240); anything else is never: turning the displays off is not what keeps the session safe (the lock is, and it
+// does not depend on this).
+function inactiveDisplayOffSeconds(batteryMinutes, powerMinutes, onBattery) {
+    var m = onBattery === true ? batteryMinutes : powerMinutes;
+    if (typeof m !== "number" || !isFinite(m) || m <= 0 || m > MAX_MINUTES || Math.floor(m) !== m)
+        return 0;
+    return m * 60;
+}
+
+// The unlocked display-off monitor is armed: a delay is set, it is not being re-armed, and no application holds an idle
+// inhibitor (a video plays). While locked it stays armed only when it had already turned the displays off (`offForInactivity`):
+// the lock that follows keeps them dark until input, instead of lighting them for its own display-off delay.
+function inactiveOffArmed(seconds, locked, offForInactivity, rearming, busInhibited) {
+    return seconds > 0 && (locked !== true || offForInactivity === true) && rearming !== true && busInhibited !== true;
+}
+
+// The displays are off: the lock screen's monitor is idle, or the unlocked one turned them off (`inactiveOff`), but never
+// while a lock is being acquired (locked, not holding yet): the compositor confirms a lock only once it has drawn it on every
+// display, and a display that is off draws nothing (review of 6e61829: the sleep inhibitor would wait out its budget and the
+// ownership check would not run). Once the lock holds, a session that went dark for inactivity is dark again.
+function displaysOff(lockedIdle, inactiveOff, locked, holding) {
+    if (lockedIdle === true)
+        return true;
+    return inactiveOff === true && (locked !== true || holding === true);
+}
+
 // Sleep inhibitor and PrepareForSleep watcher restarts (GF-030: never given up silently). A child that exits within
 // FAST_EXIT_MS of its start is a failure; MAX_FAST_FAILURES in a row make the module "degraded" (a notice tells the user)
 // and the child is then retried every SLOW_RETRY_MS instead of every FAST_RETRY_MS, for as long as the shell runs.

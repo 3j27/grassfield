@@ -1,0 +1,4 @@
+module qs.saver
+Saver 1.0 Saver.qml
+SaverView 1.0 SaverView.qml
+SaverSlides 1.0 SaverSlides.qml

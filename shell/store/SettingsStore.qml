@@ -237,6 +237,7 @@ Scope {
     readonly property string menubarClockHours: read("menubar.clockHours")
     readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
+    readonly property string accentHighlight: read("accent.highlight")
     // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
     // auto | a locale name ("fr_CH"), and auto | monday … sunday (Settings > General > Language & Region): the formats of dates,
@@ -265,6 +266,28 @@ Scope {
     // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:
     // false or "0" in a hand-edited file must not switch the auto-lock off).
     readonly property int lockIdleMinutes: read("lock.idleMinutes")
+    // Minutes without input before the displays turn off while unlocked, on battery and on the power adapter; 0 = never.
+    readonly property int lockDisplayOffBattery: read("lock.displayOffBattery")
+    readonly property int lockDisplayOffPower: read("lock.displayOffPower")
+    // The lock screen shows the account's name and picture, and the user's message (plain text, one line).
+    readonly property bool lockShowUser: read("lock.showUser")
+    readonly property bool lockShowMessage: read("lock.showMessage")
+    readonly property string lockMessage: read("lock.message")
+    // The kinds of results Search shows (Settings > Search > Search Results), and the last Delete Search History (milliseconds
+    // since the epoch, 0 = never; a real: it does not fit an int).
+    readonly property bool searchShowApps: read("search.showApps")
+    readonly property bool searchShowDocuments: read("search.showDocuments")
+    readonly property bool searchShowRecents: read("search.showRecents")
+    readonly property bool searchShowCalculator: read("search.showCalculator")
+    readonly property bool searchShowConversions: read("search.showConversions")
+    readonly property bool searchShowSettings: read("search.showSettings")
+    readonly property bool searchShowCommands: read("search.showCommands")
+    readonly property real searchHistoryResetAt: read("search.historyResetAt")
+    // The screen saver (Settings > Wallpaper > Screen Saver, ADR-0032): its delay in minutes (0 = never), which one, and the
+    // slideshow's folder ("" = the Pictures folder).
+    readonly property int screenSaverIdleMinutes: read("screensaver.idleMinutes")
+    readonly property string screenSaverKind: read("screensaver.kind")
+    readonly property string screenSaverFolder: read("screensaver.folder")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")

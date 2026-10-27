@@ -2,7 +2,8 @@ import QtQuick
 import Grassfield.Ui
 
 // One login item in Settings > General > Login Items: the app's icon, its name, where it comes from, a switch. A click selects
-// the row (the list's − then acts on it); the selected row has the selection colours, as a table row (macOS).
+// the row (the list's − then acts on it); the selected row has the selection colours, as a table row (macOS). Privacy &
+// Security's lists use it too, its saved selections without the switch (`showToggle`).
 Item {
     id: root
 
@@ -12,6 +13,7 @@ Item {
     property bool checked: false
     property bool selected: false
     property bool toggleEnabled: true
+    property bool showToggle: true
 
     signal clicked
     signal toggled(bool checked)
@@ -54,8 +56,8 @@ Item {
         anchors {
             left: parent.left
             leftMargin: Tokens.settingsNavLabelInset
-            right: toggle.left
-            rightMargin: Tokens.spacingLg
+            right: root.showToggle ? toggle.left : parent.right
+            rightMargin: root.showToggle ? Tokens.spacingLg : Tokens.settingsRowInset
             verticalCenter: parent.verticalCenter
         }
 
@@ -87,6 +89,7 @@ Item {
             rightMargin: Tokens.settingsRowInset
             verticalCenter: parent.verticalCenter
         }
+        visible: root.showToggle
         enabled: root.toggleEnabled
         accessibleName: root.title
         checked: root.checked
