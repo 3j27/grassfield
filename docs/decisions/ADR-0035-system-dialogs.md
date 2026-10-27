@@ -1,10 +1,10 @@
 # ADR-0035: System dialogs in the Grassfield session
 Status: Proposed (cloud session, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »; step 0, docs
-only, no code before the opus PASS; the owner answered Q1–Q16 on 2026-10-27, Q17 is open; revised after the opus review of
-PR #13: five MAJORs and the minors, each marked "review of PR #13" where it changed the text) · Date: 2026-10-27 · Decider:
-owner (the questions in "Owner decisions"), integrator (merge after the opus review) · Number: 0035 (0033 is Software
-Update, 0034 is the clipboard history, merged with #12; 0035 is free on main 642a9b6 and on every open pull request, #7 to
-#15; #14 and #15 use 0036 and 0037)
+only, no code before the opus PASS; the owner answered Q1–Q17 on 2026-10-27; revised after the opus review of PR #13 (five
+MAJORs and the minors, each marked "review of PR #13" where it changed the text) and after its counter-review (one MAJOR and
+minors, marked "counter-review of PR #13")) · Date: 2026-10-27 · Decider: owner (the questions in "Owner decisions"),
+integrator (merge after the opus review) · Number: 0035 (0033 is Software Update, 0034 the clipboard history, 0036 window
+tiling, merged with #11, #12 and #14; 0035 is free on main 4026a99 and on every open pull request; #15 uses 0037)
 
 ## Context
 Owner brief (2026-10-27): in a Grassfield session no system window or question may look like Omarchy, GNOME, Hyprland or
@@ -67,7 +67,9 @@ Each handle changes the Grassfield session only and has a precedent or a cited u
    855-925`). Hyprland exports `XDG_DATA_DIRS` to the portal services (above); `config/hypr/grassfield/cursor.lua:62-65`
    already prepends a directory in the dev session. `XDG_CURRENT_DESKTOP` stays `Hyprland` (ADR-0001), so the user's own
    `~/.config/xdg-desktop-portal/` keeps the last word.
-4. **The dconf session profile** (ADR-0017, `packaging/dconf/`): read-only defaults and locks for the session.
+4. **The dconf session profile** (ADR-0017, `packaging/dconf/`): read-only defaults and locks for the session. Its
+   counterpart for KConfig files: a Grassfield directory first in `XDG_CONFIG_DIRS` (owner decision Q17), read below the
+   user's `~/.config`, so the user's own files still win.
 5. **Session environment variables** (`packaging/uwsm/env-grassfield` for the systemd user manager and D-Bus activation, and
    `hl.env` after the Omarchy include for the compositor's children).
 6. **Grassfield's own units**: the udiskie command line in `grassfield-automount.service`; a new D-Bus activated service
@@ -114,7 +116,7 @@ patching any upstream package (D1).
     (**owner decision Q2, 2026-10-27: the macOS model**). The app menu keeps "Quit" (**owner decision Q16, 2026-10-27: no
     rename, as macOS**). Force Quit kills the app as today (`ForceQuitPanel.qml`); Hyprland then kills the stand-in.
   - Identification (review of PR #13, MAJOR 3: two processes of one app can share class and title, and Force Quit sends
-    SIGKILL to the pid of the selected window, `ForceQuitPanel.qml:6, 17`): Hyprland passes only localised text, built from
+    SIGKILL to the pid of the selected window, `ForceQuitPanel.qml:15, 26`): Hyprland passes only localised text, built from
     the first mapped window of the hung client (`ANRManager.cpp:89`, `runDialog(m_title, m_class, pid)`). The stand-in knows the
     templates of Grassfield's two languages as Hyprland 0.56.2 ships them (`src/i18n/Engine.cpp:213-217` en_US "An application
     {title} - {class} is not responding.", buttons "Terminate;Wait"; `:577-581` fr_FR "L'application {title} - {class} ne
@@ -225,25 +227,37 @@ patching any upstream package (D1).
 - **The answer's path** (review of PR #13, MAJOR 2: an IPC call with a 1-s deadline cannot wait for the user, and nothing kept
   two pickers from opening):
   1. The stand-in (a small Python program run with `-I`, like `grassfield-session-end`) makes a one-time channel: a Unix socket
-     at `$XDG_RUNTIME_DIR/grassfield/picker/<128-bit random>.sock` (directory 0700, socket 0600), with a random request id.
+     at `$XDG_RUNTIME_DIR/grassfield/picker/<128-bit random>.sock` (directory 0700, socket 0600), with a random request id. It
+     removes the socket file on every exit.
   2. It asks the shell with `qs ipc … call picker request <id> <socket path>` under a 1-s deadline. The shell answers at once:
      `accepted`, `busy` (a picker is already open: the stand-in prints nothing, the share is cancelled), `locked` (Q15, below)
      or nothing (no shell, or no answer in 1 s).
-  3. After `accepted`, the shell connects to the socket within 1 s and keeps the connection while its picker is open; the
-     stand-in reads it with no deadline (the user's choice may take minutes, as with the stock picker). The shell writes one line,
-     `<id> <selection>` or `<id> cancel`, and closes. End of file without that line (the shell crashed or restarted) means
-     "cancelled". After `accepted`, the stand-in never starts the stock picker, so two pickers never show.
-  4. The stand-in checks the answer before printing it: the id; the grammar; a `window:` handle that is in
+  3. After `accepted`, the stand-in waits **at most 2 s** for the shell's connection (counter-review of PR #13, MAJOR: a shell
+     that crashed, or failed to connect, between `accepted` and the connection left the stand-in waiting for ever, and xdph,
+     which blocks its main loop while a picker runs, with it). No connection in 2 s → the stand-in removes the socket file,
+     closes it, prints nothing (cancelled) and exits; it never starts the stock picker after `accepted`, so two pickers never
+     show. The shell shows its panel **only once its connection is established**: a connection that fails (the socket is gone
+     because the stand-in gave up, or the `accepted` came late) shows nothing, and the shell closes its panel as soon as the
+     stand-in's end closes (the stand-in timed out, or xdph ended).
+  4. Connected, the shell writes `<id> wait` every 5 s while its panel is open, then one answer line, `<id> <selection>` or
+     `<id> cancel`, and closes. The stand-in waits for the user with no overall deadline (the choice may take minutes, as with
+     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without any line** (the
+     shell hangs: `grassfield-shell.service` restarts a crashed shell, `Restart=always`, but has no watchdog for a hung one,
+     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 3 s
+     after the request when the shell dies before connecting, and at most 15 s after the shell's last line when it hangs.
+  5. The stand-in checks the answer before printing it: the id; the grammar; a `window:` handle that is in
      `XDPH_WINDOW_SHARING_LIST`; a `screen:` or `region:` output that Hyprland lists (`hyprctl -j monitors`), with the region
      inside that output's logical size. Anything else prints nothing (cancelled), never a guess.
-  5. No answer to step 2 (the shell is absent) and the session is not locked → exec the stock binary named (absolute path, same
-     arguments and environment).
+  6. No answer to step 2 (the shell is absent) and the session is not locked → the stand-in **removes the socket file first**
+     (a late `accepted` then finds nothing to connect to and shows no panel), then execs the stock binary named (absolute path,
+     same arguments and environment).
 - **While the session is locked** (owner decision Q15, 2026-10-27: cancel): the request is cancelled at once and no picker
   shows, neither the Grassfield one nor the stock one, so no key typed around an unlock can reach a picker. The stand-in checks
-  the lock itself before asking the shell, the way the `omarchy-shell` stand-in does (`packaging/shims/omarchy-shell:62-74`:
-  Hyprland's `solitaryBlockedBy` contains `LOCK` on every monitor, or grassfield-shell's crash-recovery marker says "locked"),
-  and the shell answers `locked` from `SessionState.refuses("picker")`. A cancelled request also frees xdph, which blocks its main
-  loop while a picker runs.
+  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on every monitor, or grassfield-shell's
+  crash-recovery marker says "locked" (the test of `packaging/shims/omarchy-shell:64-74`). **Every error counts as locked**
+  (counter-review of PR #13, minor; the shim reports "not secure" when `hyprctl` fails): `hyprctl` failing or not answering
+  within 1 s, output that is not the expected JSON, no monitor listed, a marker file that exists but cannot be read. The shell
+  answers `locked` from `SessionState.refuses("picker")`. A cancelled request also frees xdph.
 - The shell's picker: a panel on the active display with "Entire Screen" (one live thumbnail per display, from the
   ScreencopyView already used by the Overview), "Window" (live thumbnails of the listed windows, by app, with their titles)
   and "Selection" (a crosshair, D-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
@@ -259,7 +273,9 @@ patching any upstream package (D1).
   user's choice wins).
 - Cost: medium (stand-in, IPC target `picker` with `request`, the socket, a shell panel). Risk: xdph blocks its main loop while
   the picker runs (upstream behaviour, also with the stock picker); a wrong answer cancels the share, never shares something
-  else (tests feed the stand-in's output to a copy of xdph's parser, with one and two displays for `region:` coordinates).
+  else (tests feed the stand-in's output to a copy of xdph's parser, with one and two displays for `region:` coordinates);
+  every wait on the shell is bounded (tests: `accepted` and no connection, a late `accepted` after the fallback, a shell that
+  stops writing, `hyprctl` failing).
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.
@@ -307,8 +323,11 @@ Decision:
     MIT, no copy of Adwaita), `color-scheme`, `enable-animations` (not Reduce Motion); every other key falls through to
     x-d-p-gtk (fonts and icons already come from the session dconf profile, ADR-0003 and ADR-0017).
   The backend has no window and stays running for the session (the frontend listens to its `SettingChanged`); it is started
-  with the session, before the shell. A crash is restarted by D-Bus activation at the frontend's next read (D-4); until then
-  the frontend merges the other backends' values (x-d-p-gtk's). Test: kill it, read again, get Grassfield's values back.
+  with the session, before the shell, and its unit has `Restart=on-failure` (`RestartSec=1`; counter-review of PR #13: without
+  it, live appearance changes stopped after a crash until the next read). The frontend's proxy follows the bus name to the new
+  process (xdg-desktop-portal 1.22.1 `src/settings.c:333-339`; GLib 2.90.1 `gio/gdbusproxy.c:1704-1734`). D-Bus activation
+  also starts it at the next read (D-4); until then the frontend merges the other backends' values (x-d-p-gtk's). Tests: kill
+  it, read again, get Grassfield's values back; kill it, change the settings file, the client receives `SettingChanged`.
 - **`GTK_USE_PORTAL=1`** in the Grassfield session (`env-grassfield`): GTK 3 apps then read their theme from the portal and
   change with the appearance live, and their `GtkFileChooserNative`, `GtkPrintOperation` and colour picker go through the
   portal (Grassfield's panels for files). This covers evince, LocalSend, the GTK 3 parts of Qt's `gtk3` theme (Qt apps'
@@ -358,7 +377,8 @@ Options:
   - **The bridge.** `grassfield-prompter`, C++/Qt 6 like the menu bridge (ADR-0008: QtCore, QtDBus, QtNetwork's
     `QLocalServer`), plus libgcr-4's `GcrSystemPrompter` for gcr's protocol and its `sx-aes-1` exchange (gcr is a C library;
     Qt's GLib event loop runs its callbacks). No C code of Grassfield's own (review of PR #13, minor). New library dependencies
-    of a Grassfield binary: libgcr-4 (gcr-4, already installed: gnome-keyring depends on gcr and gcr-4, probe P15). No libnm:
+    of a Grassfield binary: libgcr-4 (gcr-4, already installed: gnome-keyring depends on gcr and gcr-4, probe P15) and
+    libsecret (already installed: pinentry depends on it, P15) for D-12's remembered passwords. No libnm:
     NetworkManager's and BlueZ's agent interfaces are plain D-Bus, spoken with QtDBus as Settings already does (ADR-0030).
   - **The name.** It owns `org.gnome.keyring.SystemPrompter` for the whole Grassfield session (requested without
     `ALLOW_REPLACEMENT`, so no process can take it over; queued behind a stock gcr-prompter that still holds it) and lets
@@ -371,13 +391,20 @@ Options:
     shell keeps one queue for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
     request never takes the keyboard from a sheet on screen and is shown only when that sheet is answered or cancelled; a
     queued request whose caller gives up (gcr `StopPrompting`, NM `CancelGetSecrets`, BlueZ `Cancel`) leaves the queue without
-    ever showing. The queue is bounded (8); a request beyond it is answered "cancelled".
+    ever showing. At most 8 secret requests wait; a secret request beyond that is answered "cancelled". A polkit request is
+    never refused by that bound and always queues (counter-review of PR #13, minor).
   - **Not a phishing tool.** A secret sheet never looks like the authorization sheet: no lock-and-shield glyph, no
     "Authentication required" title, a different header (the requester's own icon and name in a fixed top row), so an
-    administrator password is never typed into it by habit. The requester is always shown and is never the caller's text: the
-    bridge resolves the caller's process from `GetConnectionCredentials` (PID, then `/proc/<pid>/exe`) and the desktop entry it
-    belongs to; for gnome-keyring and gpg-agent, which ask on another app's behalf, the row says "Keyring" or "GnuPG" and the
-    caller's text names the app below it, in the secondary style. Caller text (title, message, description) is plain text,
+    administrator password is never typed into it by habit. The requester is always shown and is never the caller's text. The
+    bridge identifies the caller through the pidfd that `GetConnectionCredentials` hands out as `ProcessFD` (dbus-broker 37 and
+    dbus-daemon 1.16.2 both provide it, probe P17), never through a bare PID (counter-review of PR #13, minor: a PID can be
+    reused and a file name imitated): it reads the PID from the pidfd (`/proc/self/fdinfo/<fd>`), then `/proc/<pid>/exe`, then
+    checks that the pidfd's process still runs, so the PID was not reused in between. It trusts only an absolute executable
+    path whose file and parent directories belong to root and are not writable by the user, and maps it only to a desktop
+    entry of the same kind (`/usr/share/applications`). Anything else (no `ProcessFD`, the process gone, an executable in the
+    home or deleted) shows "Unidentified program" with the path in the secondary style. For gnome-keyring and gpg-agent, which
+    ask on another app's behalf, the row says "Keyring" or "GnuPG" (their root-owned executables) and the caller's text names
+    the app below it, in the secondary style. Caller text (title, message, description) is plain text,
     flattened and capped, under the fixed rows. Today's stock prompter shows caller text with no identity at all.
   - The sheet's surface (`grassfield-secret` layer namespace) is hidden from screen sharing by a session layer rule
     (`hl.layer_rule({ match = { namespace = "^grassfield-secret$" }, no_screen_share = true })`: layer rules accept
@@ -478,7 +505,7 @@ passwords too (D-12). Q12: the amendment text above.
 
 ### D-12. KIO's and KWallet's dialogs in Grassfield's own apps (category A + S; inventory K1–K8; owner decision Q11)
 Upstream facts (inventory § K, KIO and KWallet v6.31.0): `grassfield-desktop` depends on kio (`packaging/arch/PKGBUILD:136`),
-which depends on kwallet (probe P15). Files runs its jobs with KIO's default widget delegate (`apps/files/src/filesapp.cpp:59-63`),
+which depends on kwallet (probe P15). Files runs its jobs with KIO's default widget delegate (`apps/files/src/filesapp.cpp:62-67`),
 so KIO's Qt-widget dialogs (file exists, skip, certificate, Open With) appear inside a Grassfield app, and the D-4 panel built
 from Files' sources would inherit them. Network passwords come from KIO's password server `org.kde.kpasswdserver6`
 (`src/core/kpasswdserverclient.cpp:31`), D-Bus activated as kiod6 (P15): KDE's `KPasswordDialog`
@@ -486,16 +513,28 @@ from Files' sources would inherit them. Network passwords come from KIO's passwo
 472-481, 952-955`), which brings KWallet's first-use wizard and wallet password.
 
 Options (asked 2026-10-27, recommended first):
-- **K1. Grassfield takes them.** (a) Files and `grassfield-portal` install Grassfield implementations of KIO's delegate
-  extensions (`KIO::setDefaultJobUiDelegateFactory`, `src/core/jobuidelegatefactory.h:92`; `AskUserActionInterface`,
-  `OpenWithHandlerInterface`, `UntrustedProgramHandlerInterface`, `OpenOrExecuteFileInterface`): the macOS "An item named “X”
-  already exists" alert (Keep Both / Stop / Replace, Apply to All), the skip and certificate sheets, the D-5 Open With sheet,
-  and a refusal for executables (Files' `LaunchGuard` already decides first). (b) In step 9, `grassfield-prompter` also owns
-  `org.kde.kpasswdserver6` (path `/modules/kpasswdserver`, interface `org.kde.KPasswdServer` with `checkAuthInfoAsync`,
+- **K1. Grassfield takes them.** (a) Files and `grassfield-portal` set a Grassfield UI delegate on each job they start, as Files
+  already sets KIO's (`apps/files/src/filesapp.cpp:62-67`), with Grassfield implementations of KIO's delegate extensions as its
+  children (`AskUserActionInterface`, `OpenWithHandlerInterface`, `UntrustedProgramHandlerInterface`,
+  `OpenOrExecuteFileInterface`); KIO finds them through the job, its parent job or its composite job
+  (`KIO::delegateExtension`, `src/core/jobuidelegatefactory.h:102-126`). Not `KIO::setDefaultJobUiDelegateFactory`: it is
+  marked Internal and KIOWidgets registers its own factory through it (`:85-92`; counter-review of PR #13, minor). The sheets:
+  the macOS "An item named “X” already exists" alert (Keep Both / Stop / Replace, Apply to All), the skip sheet, the
+  certificate sheet (Cancel is the default button; Continue accepts for 30 minutes, as KIO's "Current Session only",
+  `src/widgets/sslui.cpp:96-106`; a permanent rule only when the user ticks "Always trust “host”", unticked every time), the
+  D-5 Open With sheet, and a refusal for executables (Files' `LaunchGuard` already decides first). (b) In step 9,
+  `grassfield-prompter` also owns `org.kde.kpasswdserver6` (path `/modules/kpasswdserver`, interface `org.kde.KPasswdServer` with `checkAuthInfoAsync`,
   `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo` and their result signals, `src/core/org.kde.KPasswdServer.xml`) and
   shows the D-9 secret sheet ("Enter your name and password for the server “X”", Remember this password); remembered
   passwords go to the Secret Service through libsecret, never through KWallet's API, so no KDE password dialog and no KWallet
-  wizard appear for KIO in a Grassfield session; which daemon holds the Secret Service is Q17, below. Caveat shown in the
+  wizard appear for KIO in a Grassfield session; the Secret Service stays gnome-keyring's there (Q17-b, below). Unlike
+  kpasswdserver, which broadcasts its results, credentials included, to every listener on the session bus
+  (`src/core/org.kde.KPasswdServer.xml:4-15`, `src/kpasswdserver/kpasswdserver.cpp:330, 852, 883`), the bridge sends each result
+  to the caller's unique name only (a cached credential still goes to any same-user caller that names its URL, as today:
+  upstream protocol, known limitation). It stores
+  with libsecret's asynchronous calls and answers `addAuthInfo` at once: storing into a locked keyring makes gnome-keyring ask
+  through gcr's prompter, which is the bridge, so a synchronous store would wait on itself (counter-review of PR #13, minors).
+  Caveat shown in the
   spec: Omarchy's default keyring is unencrypted (probe P12), so a remembered network password is stored in clear on disk
   until the user protects the keyring (macOS encrypts the login keychain). Fallback: bridge down → D-Bus activation starts
   kiod6 (KDE's dialog, as today).
@@ -512,27 +551,42 @@ Cost: (a) medium, (b) medium (five methods and two signals, the `KIO::AuthInfo` 
 `kpasswdserver.cpp`, tests against a fake KIO worker client). Risk: (b) is a second protocol on the secret path: same queue,
 same identity rules, same opus review as D-9.
 
-**Who holds the Secret Service** (found by the checks of this pass, after the owner's answers; inventory S12, probe P16;
-owner question Q17, open). Nobody owns `org.freedesktop.secrets` at login in either session: Arch enables only
-gnome-keyring's control socket, its service stays disabled, and Omarchy starts nothing (P16); D-Bus activates gnome-keyring
-on first use (P4). KWallet's `ksecretd` requests the same name whenever it starts and the name is free
+**Who holds the Secret Service** (found after the owner's answers to Q1–Q16; inventory S12, probe P16; owner decision Q17).
+Nobody owns `org.freedesktop.secrets` at login in either session: Arch enables only gnome-keyring's control socket, its
+service stays disabled, and Omarchy starts nothing (P16); D-Bus activates gnome-keyring on first use (P4). KWallet's
+`ksecretd` requests the same name whenever it starts and the name is free
 (`src/runtime/ksecretd/kwalletfreedesktopservice.cpp:155-158`, on by default), and it starts with any KWallet client:
 today, Files opening an `sftp:` or `smb:` location that needs a password is enough (kpasswdserver → kwalletd6 → ksecretd,
 inventory S12). Neither daemon queues for or takes over the name (Qt's `registerService` defaults, qtbase
 `src/dbus/qdbusconnectioninterface.h:63-65`), so the first one keeps it for the session, and Chromium's saved passwords
 (Omarchy's `--password-store=gnome-libsecret`) and every libsecret client follow it, with KWallet's wizard and wallet
 password (K2) in place of the keyring prompts. Read in source, not run (UNVERIFIED in the inventory). With K1 (b) in step 9,
-Files no longer starts KWallet, but other KF6 apps (K8) and the fallback to kiod6 still can. Options (recommended first):
-- **Q17-a.** The Grassfield session starts gnome-keyring's Secret Service with the session (D-Bus `StartServiceByName` of
+Files no longer starts KWallet, but other KF6 apps (K8) and the fallback to kiod6 still can. Options (asked 2026-10-27,
+recommended first):
+- Q17-a (recommended). The Grassfield session starts gnome-keyring's Secret Service with the session (D-Bus `StartServiceByName` of
   `org.freedesktop.secrets` from a Grassfield unit gated by `GRASSFIELD_SESSION=1`, before the shell), so gnome-keyring,
   the keyring Omarchy sets up, always holds it; ksecretd keeps only its own compatibility name. No owner file is written.
   Cost: one small unit and a test; gnome-keyring then runs for the whole session (it asks nothing until an app reads a
   secret). Risk: none known.
-- Q17-b. A session-only `kwalletrc` with `[org.freedesktop.secrets] apiEnabled=false` in a Grassfield `XDG_CONFIG_DIRS`
-  entry (`src/kwalletsettings.kcfg:49-53`; the user's own `kwalletrc` wins): ksecretd never takes the name. A new
-  configuration directory for the session.
+- **Q17-b (chosen).** A session-only `kwalletrc` with `[org.freedesktop.secrets] apiEnabled=false` in a Grassfield
+  `XDG_CONFIG_DIRS` entry (`src/kwalletsettings.kcfg:49-53`; the user's own `kwalletrc` wins): ksecretd never takes the name.
+  A new configuration directory for the session.
 - Q17-c. Kept as is: a known limitation.
-Delivery: with step 9 (the secret path), unless the owner places it earlier; it touches no shell code.
+**Owner decision Q17 (2026-10-27): Q17-b** (« Bloquer KWallet », not the recommended option), **delivered with step 2**
+(« Avec l'étape 2 (Recommandé) »). What step 2 adds:
+- `/usr/share/grassfield/xdg-config/kwalletrc`, two lines: `[org.freedesktop.secrets]` and `apiEnabled=false`;
+- in `env-grassfield`, `XDG_CONFIG_DIRS="/usr/share/grassfield/xdg-config:${XDG_CONFIG_DIRS:-/etc/xdg}"`, only when the file is
+  readable (the pattern of the dconf and fontconfig lines), so `/etc/xdg` stays in the list; uwsm exports it to the systemd
+  user manager and the D-Bus activation environment, where ksecretd starts (handle 5).
+Effects: in the Grassfield session ksecretd keeps only `org.kde.secretservicecompat` (`kwalletfreedesktopservice.cpp:155-161`),
+so `org.freedesktop.secrets` is always gnome-keyring's, started by D-Bus activation on first use (P4); KWallet's own API
+clients (kiod6 until step 9, KF6 apps, K8) keep KWallet and its dialogs (K2). KConfig reads `XDG_CONFIG_DIRS` below the
+user's `~/.config`, so a user `kwalletrc` that sets the key wins (the owner's choice; nothing is written there). The Omarchy
+session is unchanged. Tests (step 2): a static test of the file and the environment line; `kreadconfig6 --file kwalletrc
+--group org.freedesktop.secrets --key apiEnabled` with the session's `XDG_CONFIG_DIRS` and an empty `XDG_CONFIG_HOME` prints
+`false`; on a private bus (`dbus-run-session`, a temporary `HOME`, `QT_QPA_PLATFORM=offscreen`), the real ksecretd started
+with the session's `XDG_CONFIG_DIRS` owns `org.kde.secretservicecompat` and not `org.freedesktop.secrets`. No nested check:
+a nested session shares the owner's session bus, whose activation environment is not the Grassfield one.
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
@@ -557,7 +611,8 @@ requests #8, #9 and #10 are merged (owner).
    Can start right after the opus PASS of this step.
 2. **Appearance follows Grassfield** (D-8): `grassfield-portal-settings` (no window), the session's `hyprland-portals.conf`
    under `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS` and `GTK_USE_PORTAL=1` in `env-grassfield`, `UnsetEnvironment` in the
-   backend's and the shell's units (D-4's start-up loop), the 18 generated GTK themes (Q7). Packaging, a new service and one
+   backend's and the shell's units (D-4's start-up loop), the 18 generated GTK themes (Q7), and the session's `kwalletrc`
+   under `/usr/share/grassfield/xdg-config` with its `XDG_CONFIG_DIRS` line (D-12, Q17-b). Packaging, a new service and one
    line of `grassfield-shell.service`; no shell code.
 3. **Not responding and Hyprland's notices** (D-3, D-2): `session-bin/hyprland-dialog`, IPC `anr`, Force Quit and Dock
    marks (the app menu keeps Quit, Q16), `debug.suppress_errors` with the shell's notice. After #8–#10.
@@ -572,8 +627,8 @@ requests #8, #9 and #10 are merged (owner).
 8. **Screenshots re-wired** (D-10, Q4). After #8–#10 (bindings and a shell notice).
 9. **Password prompts** (D-9, Q1 = S2, Q10, Q11, Q12): the amendment of the security rule first (Q12's text, after the
    integrator's review and the owner's agreement), then the bridge, the socket protocol, the shell's one queue and secret
-   sheets, the udiskie helper, the NetworkManager secret agent, `org.kde.kpasswdserver6` (D-12 b), and Q17's answer; opus
-   PASS. After #8–#10.
+   sheets, the udiskie helper, the NetworkManager secret agent, `org.kde.kpasswdserver6` (D-12 b); opus PASS. After
+   #8–#10.
 10. **Bluetooth pairing sheet** (D-11, Q9: "en plus des 8 étapes", Q13): the BlueZ agent in the bridge, the drop-in for
     Omarchy's `bt-agent`, the sheet's pairing forms; opus PASS. After step 9, whose bridge and queue it reuses.
 
@@ -582,8 +637,8 @@ dialogs (3, 4), the security-sensitive ones last, after the patterns they reuse 
 
 ## Owner decisions
 Asked on 2026-10-27 in the cloud session with the options above (recommended option first, in French): Q1–Q10 with step 0,
-Q11–Q16 after the opus review of PR #13; Q1–Q16 are answered, and the "Owner's words" column is the option the owner
-picked, verbatim. Q17 comes from a check made after those answers and is open: it is asked before step 9. Q1 also accepts
+Q11–Q16 after the opus review of PR #13, Q17 (found after those answers) after its counter-review. Every question is
+answered; the "Owner's words" column is the option the owner picked, verbatim. Q1 also accepts
 that a new secret prompt enters `shell/security/`; Q12 fixes the amendment's text, applied in step 9 after the integrator's
 review.
 
@@ -605,7 +660,8 @@ review.
 | Q14 | "Remember this choice" in the screen-sharing picker | unticked every time / follow xdph's `--allow-token` | « Décoché toujours (Recommandé) » | unticked every time |
 | Q15 | Screen-sharing request while the session is locked | cancel / hold until the unlock | « Annuler (Recommandé) » | cancel |
 | Q16 | Rename Quit to "Force Quit" in the app menu of a hung app | no, macOS model / yes | « Non, modèle macOS (Recommandé) » | no |
-| Q17 | Which daemon holds the Secret Service in the Grassfield session (D-12) | Q17-a gnome-keyring started with the session / Q17-b KWallet's takeover off for the session / Q17-c as is | not asked yet | open |
+| Q17 | Which daemon holds the Secret Service in the Grassfield session (D-12) | Q17-a gnome-keyring started with the session / Q17-b KWallet's takeover off for the session / Q17-c as is | « Bloquer KWallet » | Q17-b (not the recommended option) |
+| Q17 (when) | When to deliver Q17's answer | with step 2 / in step 9 | « Avec l'étape 2 (Recommandé) » | with step 2 |
 
 ## macOS reference
 One system draws every system question: open and save panels and the print sheet are AppKit's, shown as sheets of the app's
@@ -628,7 +684,7 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   wrapper, the helper names in Hyprland's and xdph's binaries, udiskie's default prompt, Omarchy's inherited settings, the
   packages that already pull libcups, BlueZ and NetworkManager (P14), kio's dependency on kwallet, the kpasswdserver and
   kwalletd service files, and what pulls gcr and gcr-4 (P15), gnome-keyring's globally enabled units and Omarchy's
-  references to the keyrings (P16).
+  references to the keyrings (P16), the session bus implementations and their `ProcessFD` support (P17).
 - Source reading, every citation in the inventory: Hyprland v0.56.2 (efb5099), xdph v1.4.1 (cc8e5ef), hyprland-guiutils v0.2.2
   (a16ad89), hyprtoolkit v0.6.0, hyprutils v0.14.3, xdg-desktop-portal 1.22.1 (1d20fad), xdg-desktop-portal-gtk 1.15.3
   (337202d), gtk 3.24.52 (6a0b360) and 4.24.1, libadwaita 1.10.0, qtbase v6.11.2 and v6.12.0, gcr 3.41.2 and 4.4.1,
@@ -638,22 +694,24 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   marked UNVERIFIED in the inventory, and the live update of GTK 3 apps through `SettingChanged` (code-read only).
 
 ## Consequences
-- Q17 (open) decides which daemon holds the Secret Service in the Grassfield session; its answer lands with step 9.
+- The Secret Service stays gnome-keyring's in the Grassfield session: KWallet's takeover is turned off by a session-only
+  `kwalletrc` (Q17-b, step 2).
 - New services: `grassfield-portal-settings` (always on, no window) and `grassfield-portal` (panels, D-Bus activated) from
   steps 2 and 4; `grassfield-prompter` from step 9 (gcr prompts, KIO network passwords, NetworkManager secrets, and in step 10
   the BlueZ agent). All gated by `GRASSFIELD_SESSION=1`, hardened, with budgets; §5.8 is answered per service in its step.
-- New library dependencies of Grassfield binaries: libcups (step 6, already installed with qt6-base and gtk3) and libgcr-4
-  (step 9, already installed with gnome-keyring); no libnm.
+- New library dependencies of Grassfield binaries: libcups (step 6, already installed with qt6-base and gtk3), libgcr-4 (step
+  9, already installed with gnome-keyring) and libsecret (step 9, already installed with pinentry; counter-review of PR #13,
+  minor); no libnm.
 - A packaged drop-in keeps Omarchy's `bt-agent` out of the Grassfield session (step 10).
 - The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12).
-- One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins) and `/usr/share/grassfield/xdg` (the
-  session's portal configuration).
-- The Grassfield session exports `GTK_USE_PORTAL=1` and prepends `XDG_DATA_DIRS`; the Omarchy session is unchanged
-  (`env-grassfield` is read only for the Grassfield desktop name, ADR-0017).
+- One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins), `/usr/share/grassfield/xdg` (the
+  session's portal configuration) and `/usr/share/grassfield/xdg-config` (the session's `kwalletrc`, Q17-b).
+- The Grassfield session exports `GTK_USE_PORTAL=1` and prepends `XDG_DATA_DIRS` and `XDG_CONFIG_DIRS`; the Omarchy session is
+  unchanged (`env-grassfield` is read only for the Grassfield desktop name, ADR-0017).
 - New IPC targets `anr` and `picker`, the picker's one-time sockets and the prompter socket are listed in
   `docs/specs/security.md` in their steps.
 - The inventory is the checklist of the chantier: a row is closed when its step merges, with its evidence.
 - Known limitations recorded in `docs/specs/system-dialogs.md`: no true sheets (modal child windows), no wait cursor, apps
   that print or pick files in-process (Chromium's and Firefox's previews, LibreOffice, Electron's print, Qt apps) keep their own
-  dialogs (themed), remote file picks refused, Hyprland's safe-mode dialog and a few toasts stay Hyprland's, VPN secrets stay
-  with each VPN plugin, a user's own picker or portal configuration wins.
+  dialogs (themed), remote file picks refused, Hyprland's safe-mode dialog and a few toasts stay Hyprland's, VPN secrets are
+  not asked (no agent runs a VPN plugin's dialog, as today; D-9), a user's own picker or portal configuration wins.
