@@ -19,7 +19,7 @@ namespace {
 
 // A fake pacman whose answers depend on files in its folder: qu (pacman -Qu's output), installed (pacman -Qq), and the
 // targets of -S --print and -Rs --print by name.
-const QByteArray kPacman = R"(here=$(dirname "$0")
+const QByteArray kPacman = R"SH(here=$(dirname "$0")
 case "$1" in
   -Qu) [ -s "$here/qu" ] && cat "$here/qu" && exit 0; exit 1 ;;
   -Qq) cat "$here/installed" 2>/dev/null ;;
@@ -38,11 +38,12 @@ case "$1" in
          xterm) printf '%s\n' 'xterm 411-1' 'libxaw 1.0.16-1' ;;
          probe-app) printf '%s\n' 'probe-app 1-1' 'efibootmgr 18-3' ;;
          glib2) echo "checking dependencies..." >&2
-                echo ":: removing glib2 breaks dependency 'glib2' required by accountsservice" >&2; exit 1 ;;
+                echo "error: failed to prepare transaction (could not satisfy dependencies)" >&2
+                echo ":: removing glib2 breaks dependency 'glib2' required by accountsservice"; exit 1 ;;
          *) echo "error: target not found: $last" >&2; exit 1 ;;
        esac ;;
   *) exit 1 ;;
-esac)";
+esac)SH";
 
 struct Fixture {
     QTemporaryDir dir;

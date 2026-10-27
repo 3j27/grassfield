@@ -22,7 +22,7 @@ ScrollPage {
     signal tryAgainRequested(var app, string kind)
 
     // What the buttons may do (StoreBackend::actions), the app's operation and how its last one ended (spec SR13, SR19, SR22).
-    readonly property var actions: root.app.id ? (root.backend.revision, root.backend.actions(root.app.id)) : ({})
+    readonly property var actions: root.app.id && root.backend.revision >= 0 ? root.backend.actions(root.app.id) : ({})
     readonly property bool busy: (root.backend.operations || []).some(o => o.app === root.app.id)
     readonly property var result: root.app.id ? (root.backend.results || {})[root.app.id] : undefined
 

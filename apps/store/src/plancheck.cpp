@@ -211,9 +211,10 @@ RemovePlan checkRemove(const QStringList &packages, const DenyList &deny, const 
                                                              QStringLiteral("%n %v"), QStringLiteral("--")}
                                                      + packages);
     if (!r.ok()) {
-        plan.dependents = dependentsFromError(r.err);
+        // The "breaks dependency" lines go to stdout, "error: failed to prepare transaction" to stderr (probed, pacman 7).
+        plan.dependents = dependentsFromError(r.out + '\n' + r.err);
         plan.refusal = plan.dependents.isEmpty() ? Refusal::Failed : Refusal::Dependency;
-        plan.detail = firstLines(r.err);
+        plan.detail = firstLines(r.err + r.out);
         return plan;
     }
     QStringList lines;

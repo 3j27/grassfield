@@ -969,7 +969,7 @@
     </message>
     <message>
         <source>Program: %1</source>
-        <translation>Programme : %1</translation>
+        <translation>Programme&#xa0;: %1</translation>
     </message>
     <message>
         <source>User: %1</source>
@@ -5427,7 +5427,7 @@
     </message>
     <message>
         <source>“%1” could not be opened.</source>
-        <translation>« %1 » n’a pas pu être ouverte.</translation>
+        <translation>«&#xa0;%1&#xa0;» n’a pas pu être ouverte.</translation>
     </message>
     <message>
         <source>Details</source>
@@ -5455,7 +5455,7 @@
     </message>
     <message>
         <source>A package manager stopped mid-way and left its lock: nothing installs until it goes.</source>
-        <translation>Un gestionnaire de paquets s’est arrêté en cours de route et a laissé son verrou : rien ne s’installe tant qu’il est là.</translation>
+        <translation>Un gestionnaire de paquets s’est arrêté en cours de route et a laissé son verrou&#xa0;: rien ne s’installe tant qu’il est là.</translation>
     </message>
     <message>
         <source>Try Again</source>
@@ -5475,7 +5475,7 @@
     </message>
     <message>
         <source>pacman&apos;s lock file is still there, but no pacman is running. If nothing is installing or updating (Software Update included), remove the lock in a terminal, then try again:</source>
-        <translation>Le fichier de verrou de pacman est toujours là, mais aucun pacman ne tourne. Si rien n’est en cours d’installation ni de mise à jour (Mise à jour de logiciels comprise), supprimez le verrou dans un terminal, puis réessayez :</translation>
+        <translation>Le fichier de verrou de pacman est toujours là, mais aucun pacman ne tourne. Si rien n’est en cours d’installation ni de mise à jour (Mise à jour de logiciels comprise), supprimez le verrou dans un terminal, puis réessayez&#xa0;:</translation>
     </message>
     <message>
         <source>You&apos;re offline. The catalog is from %1.</source>
@@ -5495,15 +5495,15 @@
     </message>
     <message>
         <source>Installations: %1</source>
-        <translation>Installations : %1</translation>
+        <translation>Installations&#xa0;: %1</translation>
     </message>
     <message>
         <source>Don&apos;t Uninstall “%1”</source>
-        <translation>Ne pas désinstaller « %1 »</translation>
+        <translation>Ne pas désinstaller «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
         <source>Don&apos;t Install “%1”</source>
-        <translation>Ne pas installer « %1 »</translation>
+        <translation>Ne pas installer «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
         <source>Store Settings</source>
@@ -6172,11 +6172,11 @@
     <name>OperationSheet</name>
     <message>
         <source>Uninstall “%1”?</source>
-        <translation>Désinstaller « %1 » ?</translation>
+        <translation>Désinstaller «&#xa0;%1&#xa0;»&#xa0;?</translation>
     </message>
     <message>
         <source>Install “%1”?</source>
-        <translation>Installer « %1 » ?</translation>
+        <translation>Installer «&#xa0;%1&#xa0;»&#xa0;?</translation>
     </message>
     <message>
         <source>Finish the system update first</source>
@@ -6196,7 +6196,7 @@
     </message>
     <message>
         <source>“%1” can&apos;t be uninstalled</source>
-        <translation>« %1 » ne peut pas être désinstallée</translation>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être désinstallée</translation>
     </message>
     <message>
         <source>Uninstalling it would also remove part of the system</source>
@@ -6204,11 +6204,11 @@
     </message>
     <message>
         <source>“%1” can&apos;t be uninstalled now</source>
-        <translation>« %1 » ne peut pas être désinstallée pour le moment</translation>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être désinstallée pour le moment</translation>
     </message>
     <message>
         <source>“%1” can&apos;t be installed now</source>
-        <translation>« %1 » ne peut pas être installée pour le moment</translation>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être installée pour le moment</translation>
     </message>
     <message>
         <source>Checking what this changes…</source>
@@ -6228,11 +6228,11 @@
     </message>
     <message>
         <source>These packages are installed:</source>
-        <translation>Ces paquets sont installés :</translation>
+        <translation>Ces paquets sont installés&#xa0;:</translation>
     </message>
     <message>
         <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
-        <translation>La dernière mise à jour du système n’est pas terminée : des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
+        <translation>La dernière mise à jour du système n’est pas terminée&#xa0;: des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
     </message>
     <message>
         <source>This app needs newer packages than this computer has. Update your system in Software Update, then try again.</source>
@@ -6248,11 +6248,11 @@
     </message>
     <message>
         <source>Other apps need it: %1.</source>
-        <translation>D’autres apps en ont besoin : %1.</translation>
+        <translation>D’autres apps en ont besoin&#xa0;: %1.</translation>
     </message>
     <message>
         <source>Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.</source>
-        <translation>Désinstaller « %1 » retirerait aussi %2, dont le système, Omarchy ou Grassfield a besoin. Elle reste installée.</translation>
+        <translation>Désinstaller «&#xa0;%1&#xa0;» retirerait aussi %2, dont le système, Omarchy ou Grassfield a besoin. Elle reste installée.</translation>
     </message>
     <message>
         <source>The Store could not read what this would change.</source>
@@ -8581,7 +8581,7 @@
     </message>
     <message>
         <source>This computer can&apos;t install apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
-        <translation>Cet ordinateur ne peut pas installer d’apps depuis le Store : il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+        <translation>Cet ordinateur ne peut pas installer d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
     </message>
     <message>
         <source>This web app&apos;s icon hasn&apos;t been downloaded yet. Refresh the Store, then try again.</source>
@@ -8613,11 +8613,11 @@
     </message>
     <message>
         <source>Uninstalling: %1 of %2</source>
-        <translation>Désinstallation : %1 sur %2</translation>
+        <translation>Désinstallation&#xa0;: %1 sur %2</translation>
     </message>
     <message>
         <source>Installing: %1 of %2</source>
-        <translation>Installation : %1 sur %2</translation>
+        <translation>Installation&#xa0;: %1 sur %2</translation>
     </message>
     <message>
         <source>Uninstalling…</source>
@@ -8629,11 +8629,11 @@
     </message>
     <message>
         <source>The uninstallation was interrupted: %1 of %2 packages were removed.</source>
-        <translation>La désinstallation a été interrompue : %1 paquets sur %2 ont été supprimés.</translation>
+        <translation>La désinstallation a été interrompue&#xa0;: %1 paquets sur %2 ont été supprimés.</translation>
     </message>
     <message>
         <source>The installation was interrupted: %1 of %2 packages were installed.</source>
-        <translation>L’installation a été interrompue : %1 paquets sur %2 ont été installés.</translation>
+        <translation>L’installation a été interrompue&#xa0;: %1 paquets sur %2 ont été installés.</translation>
     </message>
     <message>
         <source>The uninstallation did not finish.</source>
@@ -8653,11 +8653,11 @@
     </message>
     <message>
         <source>The uninstallation could not start: permission was not given.</source>
-        <translation>La désinstallation n’a pas pu démarrer : l’autorisation n’a pas été donnée.</translation>
+        <translation>La désinstallation n’a pas pu démarrer&#xa0;: l’autorisation n’a pas été donnée.</translation>
     </message>
     <message>
         <source>The installation could not start: permission was not given.</source>
-        <translation>L’installation n’a pas pu démarrer : l’autorisation n’a pas été donnée.</translation>
+        <translation>L’installation n’a pas pu démarrer&#xa0;: l’autorisation n’a pas été donnée.</translation>
     </message>
     <message>
         <source>Another installation or an update is running.</source>
@@ -8677,7 +8677,7 @@
     </message>
     <message>
         <source>This package isn&apos;t an app: the Store installs only apps.</source>
-        <translation>Ce paquet n’est pas une app : le Store n’installe que des apps.</translation>
+        <translation>Ce paquet n’est pas une app&#xa0;: le Store n’installe que des apps.</translation>
     </message>
     <message>
         <source>The uninstallation failed.</source>
@@ -8705,19 +8705,19 @@
     </message>
     <message>
         <source>Not an app: it has no window of its own</source>
-        <translation>Pas une app : elle n’a pas de fenêtre à elle</translation>
+        <translation>Pas une app&#xa0;: elle n’a pas de fenêtre à elle</translation>
     </message>
     <message>
         <source>Not from a repository: uninstalling it comes in a later version of the Store</source>
-        <translation>Hors dépôts : sa désinstallation arrive dans une prochaine version du Store</translation>
+        <translation>Hors dépôts&#xa0;: sa désinstallation arrive dans une prochaine version du Store</translation>
     </message>
     <message>
         <source>Omarchy&apos;s package lists can&apos;t be read, so the Store uninstalls nothing</source>
-        <translation>Les listes de paquets d’Omarchy ne peuvent pas être lues : le Store ne désinstalle rien</translation>
+        <translation>Les listes de paquets d’Omarchy ne peuvent pas être lues&#xa0;: le Store ne désinstalle rien</translation>
     </message>
     <message>
         <source>This computer can&apos;t uninstall apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
-        <translation>Cet ordinateur ne peut pas désinstaller d’apps depuis le Store : il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+        <translation>Cet ordinateur ne peut pas désinstaller d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
     </message>
     <message>
         <source>Open</source>

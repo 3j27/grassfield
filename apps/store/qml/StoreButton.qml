@@ -19,7 +19,7 @@ Item {
     readonly property var backend: root.host && root.host.backend !== undefined ? root.host.backend : null
     readonly property string appId: (root.app && root.app.id) || ""
     // What the button may do now (StoreBackend::actions), read again with every new snapshot.
-    readonly property var actions: root.backend && root.appId !== "" ? (root.backend.revision, root.backend.actions(root.appId)) : null
+    readonly property var actions: root.backend && root.appId !== "" && root.backend.revision >= 0 ? root.backend.actions(root.appId) : null
     readonly property var operation: root.backend ? (root.backend.operations || []).find(o => o.app === root.appId) || null : null
     readonly property string state_: Store.buttonState(root.app, root.actions, root.operation)
     readonly property string appName: (root.app && root.app.name) || ""

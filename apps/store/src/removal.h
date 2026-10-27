@@ -53,7 +53,8 @@ Removal removal(const QString &package, const RemovalFacts &facts, const DenyLis
 // first protected package it would take along, "" when none.
 QString protectedInPlan(const QStringList &plan, const DenyList &deny);
 
-// "removing X breaks dependency 'X' required by Y" (pacman -Rs --print, refused): the packages that need it, sorted.
-QStringList dependentsFromError(const QByteArray &pacmanErr);
+// "removing X breaks dependency 'X' required by Y" (pacman -Rs --print, refused; stdout and stderr together): the packages
+// that need it, sorted.
+QStringList dependentsFromError(const QByteArray &pacmanOutput);
 
 } // namespace grassfield::store

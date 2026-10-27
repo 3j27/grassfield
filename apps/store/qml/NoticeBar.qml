@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Grassfield.Ui
 
@@ -59,10 +61,11 @@ Rectangle {
             model: root.actions
 
             delegate: LinkText {
+                id: link
                 required property var modelData
-                text: modelData.text
+                text: link.modelData.text
                 maximumLineCount: 1
-                onActivated: root.acted(modelData.id)
+                onActivated: root.acted(link.modelData.id)
             }
         }
     }

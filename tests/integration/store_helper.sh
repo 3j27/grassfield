@@ -333,11 +333,18 @@ src=/src/apps/store/src
 /usr/lib/qt6/moc "$src/operations.h" -o "$W/moc_operations.cpp"
 e2e_sources=()
 for f in "$src"/*.cpp; do case ${f##*/} in main.cpp | screenshotprovider.cpp | storebackend.cpp) ;; *) e2e_sources+=("$f") ;; esac; done
+# -fPIC: Qt's libraries are built with reduced relocations, which CMake's Qt targets ask for.
 # shellcheck disable=SC2046
-g++ -std=c++17 -O1 -I"$src" -I/src/apps -I/src/ui/i18n $(pkg-config --cflags Qt6Core Qt6Gui Qt6Network zlib) \
+g++ -std=c++17 -O1 -fPIC -I"$src" -I/src/apps -I/src/ui/i18n $(pkg-config --cflags Qt6Core Qt6Gui Qt6Network zlib) \
   "${e2e_sources[@]}" "$W/moc_operations.cpp" /src/tests/integration/store_e2e.cpp \
   $(pkg-config --libs Qt6Core Qt6Gui Qt6Network zlib) -o "$W/store_e2e" >"$W/e2e-build.log" 2>&1
-expect "the driver builds against the Store's sources" test -x "$W/store_e2e" || tail -5 "$W/e2e-build.log"
+if [[ ! -x $W/store_e2e ]]; then
+  fail "the driver builds against the Store's sources"
+  tail -5 "$W/e2e-build.log"
+  printf '\n== result\n%s FAIL\n' "$fails"
+  exit 1
+fi
+pass "the driver builds against the Store's sources"
 useradd -m carol
 cuid=$(id -u carol)
 mkdir -p "/run/user/$cuid" && chown carol: "/run/user/$cuid" && chmod 700 "/run/user/$cuid"
@@ -360,6 +367,7 @@ expect "remove gs-lib: the plan names it, the operation is done, it is gone" \
   eval 'has "$out" "plan=none packages=gs-lib dependents=" && has "$out" "result=done" && ! pacman -Q gs-lib >/dev/null 2>&1'
 quiet pacman -S --noconfirm gs-app2
 out=$(e2e remove gs-lib)
+sed 's/^/    /' <<<"$out"
 expect "remove gs-lib while gs-app2 needs it: the plan names the app that needs it, nothing runs" \
   eval 'has "$out" "plan=dependency packages= dependents=gs-app2" && pacman -Q gs-lib >/dev/null'
 quiet pacman -Rns --noconfirm gs-app2
@@ -378,6 +386,7 @@ chmod 644 "$W/gs-icon.png"
 out=$(e2e webapp-install "GS Web" https://example.org/ "$W/gs-icon.png")
 sed 's/^/    /' <<<"$out"
 entry="/home/carol/.local/share/applications/GS Web.desktop"
+# shellcheck disable=SC2034 # read by the eval below
 icon=/home/carol/.local/share/icons/hicolor/256x256/apps/gs-web.png
 expect "a web app through Omarchy's omarchy-webapp-install: done, its launcher and icon in carol's files" \
   eval 'has "$out" "result=done" && grep -qxF "Exec=omarchy-launch-webapp \"https://example.org/\"" "$entry" && test -f "$icon"'

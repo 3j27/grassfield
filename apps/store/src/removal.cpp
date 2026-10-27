@@ -95,12 +95,12 @@ QString protectedInPlan(const QStringList &plan, const DenyList &deny)
     return {};
 }
 
-QStringList dependentsFromError(const QByteArray &pacmanErr)
+QStringList dependentsFromError(const QByteArray &pacmanOutput)
 {
-    // pacman 7: ":: removing glib2 breaks dependency 'glib2' required by accountsservice"
+    // pacman 7, on stdout: ":: removing glib2 breaks dependency 'glib2' required by accountsservice"
     static const QRegularExpression re(QStringLiteral("breaks dependency '[^']*' required by ([a-z0-9@_+][a-z0-9@._+-]*)"));
     QStringList out;
-    auto it = re.globalMatch(QString::fromUtf8(pacmanErr));
+    auto it = re.globalMatch(QString::fromUtf8(pacmanOutput));
     while (it.hasNext()) {
         const QString name = it.next().captured(1);
         if (!out.contains(name))
