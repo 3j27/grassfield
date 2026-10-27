@@ -1,16 +1,19 @@
 # ADR-0037: Grassfield Store: an app that installs, opens and uninstalls apps through pacman and Omarchy, with a signed catalog
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no code in either repository before the opus
-PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. The first opus review (FAIL, 3 MAJOR) is
-answered in "Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), integrator (merge after the opus PASS) ·
-Number: 0037 (0033 Software Update, 0034 clipboard and 0036 tiling are merged; 0035 dialogs is open)
+PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. Later questions follow the
+owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD4),
+checked by the integrator. The first opus review (FAIL, 3 MAJOR) and the counter-review (FAIL, 1 MAJOR) are answered in
+"Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), delegated (SD1 to SD4), integrator (merge after the
+opus PASS) · Number: 0037 (0033 Software Update, 0034 clipboard, 0035 dialogs and 0036 tiling are merged)
 
 This ADR is also part of the contract between this repository (the app, `apps/store`, packaged as `grassfield-store`) and
 `grassfieldhq/grassfield-packages` (the catalog Grassfield edits: the Discover selection, the sections, the categories and
 our texts, built and signed there). That contract extends ADR-0033's (channel URLs and tree, signing key, trust, atomic
 publication), and this PR amends ADR-0033 where the Store needs it (d, g, h.2; section "Amendments"). Parity with macOS 27:
 `docs/audits/store-2026-10-27/parity.md`. Behaviour, keyboard, accessibility, refusals and limits: `docs/specs/store.md`.
-Evidence: the probes S0 to S15 of `docs/audits/store-2026-10-27/store-probes.sh`, run in a throwaway `archlinux:base`
-container, output next to it. Legal points are marked "needs legal review" (master-prompt §14); none is a conclusion.
+Evidence: the probes S0 to S15 of `docs/audits/store-2026-10-27/store-probes.sh` and S16 to S18 of `store-probes-2.sh`,
+each run in a throwaway `archlinux:base` container, outputs next to them. Legal points are marked "needs legal review"
+(master-prompt §14); none is a conclusion.
 
 ## Context
 
@@ -88,7 +91,7 @@ The scripts named below were read for this ADR; probe S1 classifies 80 scripts (
   (`omarchy-update-aur-pkgs`), mise, orphans; under the update lock. No Flatpak update. Omarchy installs a Flatpak only for
   GeForce NOW; its launcher can remove any Flatpak.
 
-### Arch Linux facts measured here (S3 to S15)
+### Arch Linux facts measured here (S3 to S18)
 - **A database newer than the system breaks installs (S4).** System at the Arch snapshot of 2026-03-01 with python, gtk3,
   qt6-base and ffmpeg; database of 2026-10-20 (`pacman -Syy` without `-u`; 220 of the 322 installed packages have newer
   versions in it). `pacman -S gimp` is refused: "installing libjxl (0.12.0-1) breaks dependency 'libjxl.so=0.11-64' required
@@ -119,17 +122,39 @@ The scripts named below were read for this ADR; probe S1 classifies 80 scripts (
 - **uwsm's desktop ids (S14).** uwsm 0.27.1's `misc.py:87` accepts a desktop entry id only if it matches
   `\A[a-zA-Z0-9_][a-zA-Z0-9_.-]*.desktop\Z`: "example-mail.desktop" matches, "Example Mail.desktop" (the name
   `omarchy-webapp-install` writes, S9) does not. So a web app is opened by its URL, never by its entry's file name.
+- **What a removal rule must see (S16).** Omarchy 4.0.4's `omarchy-base.packages` omits the kernel, the firmware, `base`,
+  `sudo`, `systemd` and the boot tools; its `omarchy-other.packages` has them (`base`, `linux-omarchy`, `linux-firmware`,
+  `limine`, `snapper`, `btrfs-progs`, …; 204 names in the two lists), and pacman's `HoldPkg` is only `pacman glibc`. b.1's
+  rule (explicit, an application entry, the deny list, the whole plan) refused every system package S16 registered (linux,
+  sudo, systemd, limine, snapper, btrfs-progs, base, pacman, glibc), a command-line tool (tree: no entry), an app pulled in as
+  a dependency (galculator), an Omarchy app (btop) and a local app whose plan takes a boot tool with it (`probe-app`: `pacman
+  -Rs --print` lists probe-app, efibootmgr, efivar); it allowed xterm (its plan: xterm and seven libraries). The deny list
+  denied all 252 names checked (Omarchy's two lists, the fixed list, HoldPkg and ten variants such as `linux-zen`,
+  `sof-firmware`, `yay-bin`); without Omarchy's lists the rule refused everything. pacman refuses `-Rns --print` ("'--nosave'
+  and '--print' may not be used together", exit 1): the plan is read with `-Rs --print`, which lists what `-Rns` removes.
+- **Polkit and the Store's action (S18, polkit 127-3).** An action's `<message>` may hold `$(command_line)`: pkexec puts the
+  program and its arguments in the details (`command_line`, polkit 128 `src/programs/pkexec.c:864`), and polkitd expands
+  `$(…)` in the message before any agent sees it (`src/polkitbackend/polkitbackendinteractiveauthority.c:2327`). S18's agent
+  showed "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install
+  0123456789abcdef0123456789abcdef xterm". Only trusted callers (uid 0, as pkexec is, or the action's owner) may pass details
+  (`polkitbackendinteractiveauthority.c:1130`). With `auth_admin`, each of three calls asked for the password, two of them from
+  one process. What `auth_admin_keep` keeps in a session is NOT VERIFIED: in the container pkexec registers its own text agent
+  for each call and there is no logind session, and it kept nothing there either.
 - **AppStream for Arch (S3, S15).** `archlinux-appstream-data` 20261017-1 (`[extra]`, 20.6 MiB download, 21 MiB installed):
   `/usr/share/swcatalog/xml/extra.xml.gz` (8.2 MB) has 1390 desktop applications, all with `pkgname`, a desktop-id
   `launchable`, categories and a cached icon; 946 with `project_license`; 916 with screenshots, hosted on 280 different hosts
   (raw.githubusercontent.com, cdn.kde.org, gitlab.gnome.org first). Its 3860 cached icons are JPEG XL (`.jxl`). `[core]` has
   none, `[multilib]` one (Steam), `[omarchy]` none: Spotify, 1Password, Heroic, Visual Studio Code, Chrome have no AppStream
   entry. `appstreamcli search` reads the pool as a user. Without the package
-  installed, a user can fetch the package file from pacman's own mirror (`pacman -Sp`) and check it against the SHA-256 in
-  pacman's sync database (S15: the file a user downloaded from the mirror `pacman -Sp` named, 21 563 985 bytes, has the SHA-256 the sync database
-  lists). Arch's other copy, on sources.archlinux.org, carries no signature.
+  installed, a user can fetch the package file from pacman's own mirror (`pacman -Sp`): it has the SHA-256 pacman's sync
+  database lists (S15: 21 563 985 bytes), but Arch's databases are not signed, so that match alone proves nothing. The
+  package's own signature sits beside it on the mirror (`<url>.sig`, 310 bytes) and a user can check it by pacman's own rule
+  (S17): pacman's keyring is readable by everyone (`/etc/pacman.d/gnupg` 0755, `pubring.gpg` and `trustdb.gpg` 0644);
+  `pacman-key --verify` runs as the user ("Note: trustdb not writable" is all it adds), passes only for a signer pacman's
+  keyring trusts fully (`[GNUPG:] TRUST_FULLY`), and exits 0; with one byte of the file changed it exits 1. Arch's other copy,
+  on sources.archlinux.org, carries no signature.
 - **The AUR (S7).** RPC v5 `info` gives Name, Version, Description, Maintainer, NumVotes, Popularity, OutOfDate,
-  LastModified, License, URL, URLPath, Depends, MakeDepends, OptDepends, Keywords, FirstSubmitted. `search` by name answers
+  LastModified, License, URL, URLPath, Depends, OptDepends, Keywords, FirstSubmitted. `search` by name answers
   in one request (72 results for "chrome"). The whole-AUR dump `packages-meta-v1.json.gz` is 10.6 MB (123 087 packages, no
   licence field, served with `cache-control: max-age=300`); `packages-meta-ext-v1.json.gz` 14.6 MB.
 - **Flatpak and Flathub (S8).** `flatpak` 1:1.18.2-1 (Arch's archive of 2026-09-01) adds 20 packages to the probe's machine; 2 (pipewire, python-gobject) of them are in
@@ -137,7 +162,7 @@ The scripts named below were read for this ADR; probe S1 classifies 80 scripts (
   `~/.local/share/flatpak`). Flathub lists 3502 apps; its AppStream is 10.8 MB compressed plus a 50.9 MB uncompressed copy;
   117 MB under `~/.local/share/flatpak` before any app. No app was installed (runtimes are hundreds of MB): NOT VERIFIED.
 - S5 to S15 ran on Arch's archive snapshot of 2026-09-01 (S12 moves the database to 2026-10-20), S1 to S3 on Omarchy's stable
-  mirror.
+  mirror. S16 to S18 (`store-probes-2.sh`) ran on the same 2026-09-01 snapshot.
 
 ### The owner's machine (integrator's survey, 2026-10-27)
 pacman, yay and the `appstream` library are installed; flatpak, PackageKit and `archlinux-appstream-data` are not. The owner's
@@ -201,9 +226,13 @@ it pulls. Its metadata is Flathub's AppStream in the user's installation, refres
 the catalog's schedule (c). Cancelling a Flatpak operation and its effect are NOT VERIFIED (S8 installed no app); step 3
 measures them before any cancel is offered.
 
-**Packages that are not offered for removal.** Omarchy's own apps (the names in `${OMARCHY_PATH:-/usr/share/omarchy}/
-install/omarchy-base.packages`, such as `chromium`), Grassfield's packages (`grassfield-*`) and pacman's `HoldPkg`: no
-"Uninstall…"; their page says "Part of Omarchy" or "Part of Grassfield". Removing them stays possible outside the Store.
+**What the Store removes (counter-review MAJOR).** "Uninstall…" exists only for an app the user installed: a package
+installed explicitly that owns an application entry (an AUR package needs no entry, b.2) and that b.1's deny list does not
+name (the system's packages, Omarchy's two package lists, `grassfield-*`, `HoldPkg`), with a removal plan that takes no
+denied package. Otherwise the page says why and offers nothing: "Part of Omarchy" (an app Omarchy ships, such as
+`chromium`), "Part of Grassfield", "Part of the system" (the fixed list), "Installed with another app" (pulled in as a
+dependency). Removing them stays possible outside the Store. The Store installs from the repositories only apps that own an
+entry (SD1), so it can remove whatever it installed.
 
 **Foreign packages.** `pacman -Qm` lists every package no repository has: AUR packages, but also local builds such as the
 owner's `makepkg -si` of Grassfield. The Store calls them "Not from a repository" and says "AUR" only when the AUR's
@@ -218,10 +247,15 @@ is not enough (S6: an interrupted pacman exits 0); the state alone is not enough
 **b.1 Repository packages: `grassfield-store-helper`, a root helper behind the Store's own polkit action (P2).**
 - `/usr/lib/grassfield/grassfield-store-helper`, run by `pkexec` as a direct, waited-for child of the Store, so the Store
   gets its exit code. Polkit action `org.grassfield.store.manage-packages` in
-  `/usr/share/polkit-1/actions/org.grassfield.store.policy`: `allow_active` `auth_admin_keep`, `allow_any` and
-  `allow_inactive` `no`, `org.freedesktop.policykit.exec.path` the helper; message "Authentication is required to install or
-  remove apps" / « Une authentification est nécessaire pour installer ou supprimer des apps ». The dialog is Grassfield's
-  polkit sheet (SEC6).
+  `/usr/share/polkit-1/actions/org.grassfield.store.policy`: `allow_active` **`auth_admin`** (the password at every
+  operation, never kept: counter-review MAJOR, S18), `allow_any` and `allow_inactive` `no`,
+  `org.freedesktop.policykit.exec.path` the helper; message "Authentication is required to install or remove apps:
+  $(command_line)" / « Une authentification est nécessaire pour installer ou supprimer des apps : $(command_line) ». polkitd
+  replaces `$(command_line)` with the helper's argument vector as pkexec reports it (S18), so the names come from polkit, not
+  from the Store. The dialog is Grassfield's polkit sheet (SEC6). For this one action id it shows "Install" or "Remove" and
+  the package names, read from that line by a strict pattern (the helper's path, `install` or `remove`, an operation id,
+  names of e.5); a line that does not match is shown as polkit gives it (SD2). Each operation asks once: a queue of three
+  operations asks three times.
 - Verbs, its argument vector only: `install <op-id> <package>…` and `remove <op-id> <package>…` (1 to 64 names). It reads no
   environment variable except `PKEXEC_UID`, which pkexec sets; it sets its own `PATH` and `umask 022`; it refuses unless its
   effective uid is 0.
@@ -229,14 +263,30 @@ is not enough (S6: an interrupted pacman exits 0); the state alone is not enough
   <names>`. Never `-y`, `--overwrite`, `-dd`, `-U`, a file path, a hook, or anything else. It installs from the repositories
   only (names, not files).
 - Before pacman, it checks again (MAJOR 1): no `db.lck`; `pacman -Qu` lists nothing that is not "[ignored]" (S12); every name
-  matches the pattern of e.5 and, for `install`, resolves in a repository, for `remove`, is installed and not protected (a;
-  the helper reads Omarchy's list at `/usr/share/omarchy/install/omarchy-base.packages`, never a path from the environment).
+  matches the pattern of e.5 and, for `install`, resolves in a repository.
+- **`remove` takes apps only (counter-review MAJOR; S16).** Every name must be a package of a repository (`pacman -Si`; a
+  package no repository has is removed through b.2), installed explicitly (`pacman -Qqe`), the owner of an application entry
+  (a file `/usr/share/applications/<id>.desktop` in `pacman -Qlq`), and not denied. Denied:
+  - the fixed list `base`, `base-devel`, `filesystem`, `glibc`, `bash`, `coreutils`, `util-linux`, `shadow`, `pam`, `sudo`,
+    `polkit`, `dbus`, `dbus-broker`, `dbus-broker-units`, `kmod`, `mkinitcpio`, `dracut`, `grub`, `efibootmgr`, `refind`,
+    `syslinux`, `snapper`, `btrfs-progs`, `cryptsetup`, `lvm2`, `plymouth`, `archlinux-keyring`, `intel-ucode`, `amd-ucode`;
+  - every name that is `linux`, `systemd`, `limine`, `pacman`, `yay`, `omarchy` or `grassfield`, or one of them followed by
+    `-` and anything (kernels and their headers, the boot manager's hooks, Omarchy's and Grassfield's packages);
+  - every name that ends in `-firmware` or holds `-firmware-`;
+  - every name in Omarchy's `omarchy-base.packages` and `omarchy-other.packages`, read at `/usr/share/omarchy/install/`, never
+    a path from the environment (both missing or empty: every `remove` is refused);
+  - pacman's `HoldPkg`.
+
+  Then the whole plan: `pacman -Rs --print --print-format '%n' -- <names>` (what `-Rns` removes; pacman refuses `--print`
+  with `-n`) must resolve and name no denied package, since `-s` also removes dependencies. The list is in the helper's code,
+  not in a file: changing it is a reviewed change.
 - Its own descriptors go to `/dev/null` and to a log, never to the pipe it was started with, and it ignores SIGHUP and SIGPIPE:
   the Store quitting cannot kill pacman through a closed pipe (S6 shows what a killed pacman leaves). It writes, in the
   root-owned `/run/grassfield-store/` (0755): `<op-id>.started` (its pid and start time), `<op-id>.log` (pacman's output, 0644,
   at most 8 MiB, for the progress and the error), `<op-id>.exit` (the exit code, written by rename).
 - While it runs, the Store holds Omarchy's update lock (the same file, opened with close-on-exec, so neither pkexec nor
-  pacman inherits it): `omarchy update` cannot start meanwhile.
+  pacman inherits it): `omarchy update` cannot start meanwhile, and Software Update, which reads the same lock (ADR-0033
+  d.5), shows "Update in progress" until the operation ends. The same holds while `grassfield-store-run` holds it (b.2).
 - Waits: the authentication up to 120 s (ADR-0030); the transaction up to 2 h, after which the Store stops waiting, says it
   lost track, and reads the state; it never signals the helper (a user cannot signal a root process anyway).
 - It and its policy need the security reviewer's (opus) PASS before they merge (step 3), like ADR-0033's two programs.
@@ -253,7 +303,10 @@ and the recipes call sudo themselves and write in the user's home, so the helper
      otherwise hold the lock as long as an app the recipe starts runs, S13); refuses when it is held;
   3. writes `$XDG_RUNTIME_DIR/grassfield/store/<op-id>.started` (its pid and start time);
   4. checks again: no `db.lck`, `pacman -Qu` lists nothing that is not "[ignored]" (S12);
-  5. runs `omarchy-pkg-aur-add <names>` or the recipe (`<omarchy-install-…> <args>`), as an argument vector;
+  5. runs `omarchy-pkg-aur-add <names>`, `omarchy-pkg-drop <names>` to remove an AUR package (after b.1's deny list and
+     whole-plan check, made by the Store and again here; no application entry needed: the user installed it from the AUR, and
+     sudo asks in the user's own terminal, as in Omarchy's menu), or the recipe (`<omarchy-install-…>` or
+     `<omarchy-remove-…>` with its arguments), as an argument vector;
   6. writes `<op-id>.exit` with the code (by rename) and exits with it.
 - The Store waits for `<op-id>.exit` (watched); while it waits, the `started` file's pid and start time tell whether the
   script still runs. No `started` file 60 s after the request: "The terminal did not open", and the operation is dropped.
@@ -274,9 +327,11 @@ nothing ever signals pacman.
 ### c. Catalog and metadata (owner, ST5, ST6, ST7)
 - **Sources of metadata.** (1) Our catalog (g): sections, cards, categories, our texts, icons for apps without metadata (ST10),
   the list of setups and web apps. (2) AppStream for Arch packages (ST5): the installed `archlinux-appstream-data` when there
-  is one (an `optdepends`, signed by Arch, updated with the system); otherwise the Store fetches the same package file from
-  pacman's own mirror (`pacman -Sp archlinux-appstream-data`, as the user), checks it against the SHA-256 in pacman's sync
-  database (S15), and extracts its XML and icons into its cache. That copy is used for display only: a package name it
+  is one (an `optdepends`, signed by Arch, updated with the system); otherwise the Store fetches the same package file and
+  its signature (`<url>.sig`) from pacman's own mirror (`pacman -Sp archlinux-appstream-data`, as the user), checks the
+  signature with `pacman-key --verify <file>.sig <file>` as the user (pacman's keyring and pacman's rule: a fully trusted Arch
+  signer, S17; the SHA-256 of the unsigned sync database is not enough, counter-review; SD4), and only then extracts its XML
+  and icons into its cache. That copy is used for display only: a package name it
   gives must exist in pacman's database, and the sheet shows the package that will be installed. It is replaced when
   pacman's database names another version. (3) pacman for every package: version, sizes, licence (`License`, used when
   AppStream has none), description. (4) The AUR RPC for AUR packages (ST7). (5) Flathub's AppStream through `flatpak` (ST2).
@@ -292,7 +347,7 @@ nothing ever signals pacman.
   | Host | What | When |
   |---|---|---|
   | Grassfield's host (ADR-0033 g) | `grassfield-catalog.v1.json` and `.sig` (ETag), catalog icons by hash | at Store start when the cached catalog is older than 6 h; Ctrl+R; never while the Store is closed |
-  | Arch and Omarchy mirrors (pacman's own `Server`) | `archlinux-appstream-data`'s package file, when that package is not installed (ST5) | when pacman's database names a version the cache does not have |
+  | Arch and Omarchy mirrors (pacman's own `Server`) | `archlinux-appstream-data`'s package file and its `.sig`, when that package is not installed (ST5) | when pacman's database names a version the cache does not have |
   | Arch and Omarchy mirrors | one HEAD request for the first package of a plan (e.4) | before an install |
   | Screenshot hosts named by AppStream | the images of one product page | when it opens (ST6), unless turned off |
   | aur.archlinux.org | `info` for the AUR page opened and for foreign packages' names; `search` after Return; the PKGBUILD text on click | only while the AUR is turned on (ST7) |
@@ -302,8 +357,8 @@ nothing ever signals pacman.
 
   Requests carry no cookie, no `Referer`, the User-Agent `Grassfield-Store/1`, https only (redirects too; `file://` only
   through dev plumbing), a 15 s transfer timeout (5 minutes for the AppStream package) and a size cap (catalog 1 MiB, icon
-  256 KiB, screenshot 4 MiB, AUR answer 512 KiB, AppStream package 64 MiB). Nothing that identifies the user or the machine
-  leaves it: no installed-app list, no identifier, no telemetry, no search query to Grassfield's host (search is local; AUR
+  256 KiB, screenshot 4 MiB, AUR answer 512 KiB, AppStream package 64 MiB, its signature 4 KiB). Nothing that identifies
+  the user or the machine leaves it: no installed-app list, no identifier, no telemetry, no search query to Grassfield's host (search is local; AUR
   searches go to the AUR, ST7). Metered connections: no automatic fetch.
 - **Cache (bounded, ADR-0020 classes).** `$XDG_CACHE_HOME/grassfield/store/` (regenerable): the verified catalog per channel
   with its ETag, catalog icons (32 MiB, least recently used first), screenshots (128 MiB, 30 days), AUR answers (4 MiB, 1 h),
@@ -318,7 +373,11 @@ nothing ever signals pacman.
 - **One checker.** The Store reads ADR-0033's result (`$XDG_STATE_HOME/grassfield/software-update.json`, written by the
   shell's checker) and asks the shell to check, as Settings does (ADR-0033 d.7). Its JSON gains a bounded list of the other
   updates (name, installed, available; at most 2000), so the Store shows which apps the next update brings without a second
-  `checkupdates` (ADR-0033 d amended, section "Amendments").
+  `checkupdates` (ADR-0033 d amended, section "Amendments"). Software Update's step 1 (PR #16) ships the count only
+  (`"others":N`): **Store step 4 adds the list** (`"otherUpdates"`) to `grassfield-update-check`, and until then the Updates
+  page shows the count (SD3). At the checker's 256 KiB cap the list goes first (the count stays exact, with
+  `"otherUpdatesTruncated": true`), then the release notes, as the checker already drops them; the Store then says "N other
+  updates" without names.
 - **Updates page.** The apps (entries with a desktop id) that the next system update upgrades, each marked "Updates with the
   system" (no per-app button), then "N other system packages", then "Update All…", which starts ADR-0033's "Update Now" (the
   same command and lock checks). While Omarchy's update runs: "Update in progress". When `pacman -Qu` lists packages while
@@ -335,12 +394,14 @@ nothing ever signals pacman.
    default button. The sheet shows the source, the licence, the download and installed sizes, every package the plan adds
    (`pacman -S --print`, as the user, S10), and: for a setup, what it changes (our catalog's text, written after reading the
    recipe, plus the recipe's name); for a removal recipe, the user data it deletes; for a Flatpak, what it can reach; for the
-   AUR, the warning (spec). The authentication: repository packages, the polkit dialog of b.1; the AUR and setups, sudo's
+   AUR, the warning (spec). The authentication: repository packages, the polkit sheet of b.1 at every operation, naming
+   the packages (`auth_admin`, never kept); the AUR and setups, sudo's
    prompt in Omarchy's terminal (b.2); per-user installs (web apps, Flatpaks), **the sheet alone** (owner, ST3): its default
    button is the user's consent; anything running as the user can already write those files.
 2. **Source and licence always shown**, on results, cards, the product page and the sheet. Without a licence the Store says
    "Licence not stated"; it never hides the row.
-3. **Root code.** Only `grassfield-store-helper` (b.1) runs as root, and it runs pacman only, on validated names. The Store,
+3. **Root code.** Only `grassfield-store-helper` (b.1) runs as root, and it runs pacman only, on validated names; it
+   removes only apps the user installed, never a package of the system (b.1, S16). The Store,
    `grassfield-store-run` and everything else run as the user. Omarchy's recipes and yay call sudo themselves, as in
    Omarchy's own menu.
 4. **The plan is checked before anything runs**, as the user, without root or the lock (S10), and checked again right before
@@ -365,10 +426,10 @@ nothing ever signals pacman.
    `^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$` (at most 255 bytes; no leading `-`); operation ids
    `^[0-9a-f]{32}$`. The one command string is b.2's terminal command, built only from those tokens; Omarchy's
    `omarchy-install-app` / `-and-launch` quote their own arguments.
-6. **Untrusted data stays data.** The catalog is verified before it is parsed (g); AppStream comes from a signed Arch package
-   or from its package file checked against pacman's database (S15); AUR answers, Flathub data and screenshots are
-   third-party: bounded, never executed, never rendered as rich text. An AUR package's PKGBUILD is shown as plain text on
-   request, never run by the Store (yay builds it, in Omarchy's terminal).
+6. **Untrusted data stays data.** The catalog is verified before it is parsed (g); AppStream comes from a signed Arch
+   package, installed, or fetched and checked by its own signature with pacman's keyring (S17); AUR answers, Flathub data
+   and screenshots are third-party: bounded, never executed, never rendered as rich text. An AUR package's PKGBUILD is
+   shown as plain text on request, never run by the Store (yay builds it, in Omarchy's terminal).
 7. **The AUR warning** before every AUR install, and the AUR's facts on the product page: maintainer (or "orphaned"), votes,
    popularity, last change, out-of-date flag.
 8. **Dev sessions (ADR-0019)** never install, uninstall or start Omarchy's commands, pkexec or flatpak operations: the queue
@@ -448,12 +509,18 @@ ADR-0033 a), else from `GRASSFIELD_REPO_BASE` of `packaging/pacman/repository.co
 amended).** Package releases and catalog updates share each channel's pointer. A catalog job built from snapshot A and
 published after a release B would point the channel back to A's `grassfield.db`: every client already on B would then get
 "signature … is invalid" (ADR-0033 R4), and, by ADR-0033 a2, every `omarchy update` would fail. So, per channel:
-1. **One publisher.** Releases and catalog updates go through one publishing job per channel, serialized (one run at a time,
-   queued, never cancelled half way: a CI concurrency group per channel).
+1. **One publisher, publishing the latest state.** Releases and catalog updates go through one publishing job per channel,
+   serialized by a CI concurrency group per channel (one run at a time, never cancelled half way). GitHub keeps one run
+   pending per group and cancels it when a newer one queues (GitHub Docs, "Control the concurrency of workflows and jobs":
+   "any existing `pending` job or workflow in the same concurrency group will be canceled"), and ADR-0033 builds each tag
+   once (counter-review). So a run takes nothing from the event that started it: it publishes the latest state, the newest
+   release built and signed for the channel (each tag's build keeps its packages, databases and notes where the publisher
+   reads them, never under the pointer) and the catalog of `main`'s head. A cancelled pending run loses nothing: the next run
+   publishes what it would have; a run with nothing new writes nothing.
 2. **Built from the current snapshot.** The job reads the pointer (the snapshot id and its version tag), takes that snapshot's
-   manifest (every file with its SHA-256), and builds the new snapshot from it: a release replaces the packages, the
-   databases and the notes and keeps the current catalog; a catalog update keeps the current packages, databases and notes
-   and replaces the catalog.
+   manifest (every file with its SHA-256), and builds the new snapshot from it: the newest built release's packages,
+   databases and notes when that release is newer than the snapshot's, else the snapshot's own; the catalog of `main`'s head
+   when it differs from the snapshot's, else the snapshot's own.
 3. **Never backwards.** The job refuses a snapshot whose `grassfield.db` names an older version of any package than the
    current one, unless it is ADR-0033 h.2's deliberate rollback (a new snapshot with a pkgrel above the bad one).
 4. **A conditional pointer write.** The pointer is written only if it still names the snapshot step 2 read (a
@@ -520,7 +587,8 @@ and refuses the whole file when its top level is invalid):
   hash, with no signature per icon. Each records its licence and where it came from (`origin`, never fetched by the
   Store). An app with AppStream or Flathub metadata uses that icon, never ours. Publishers' icons are their owners'
   trademarks: needs legal review before any publication.
-- CI also refuses: a `repo` package absent from the build container's Omarchy stable package set (ADR-0033 f); a recipe name
+- CI also refuses: a `repo` package absent from the build container's Omarchy stable package set (ADR-0033 f), or one that
+  owns no application entry (its file list, `pacman -Fl`; SD1); a recipe name
   absent from the pinned Omarchy release, or whose text runs `pacman -Sy`, `-Syu` or `yay -Sy` (e.4); a `flatpak` id absent
   from Flathub's AppStream in the build container; a URL that is not https.
 
@@ -551,14 +619,31 @@ artifact; publication stays disabled with ADR-0033's, and is the serialized publ
 | ST9 | Order of the steps | 1 catalog read-only and its build and signature; 2 the UI; 3 install, open, uninstall; 4 updates · UI first · 1 and 2 together | « Ordre proposé (Recommandé) » |
 | ST10 | Icons of apps without metadata (the brief: "from their metadata, with their licence") | metadata only (the package's own icon, else a Grassfield glyph) · publishers' icons in our catalog, licence and origin recorded, legal review · a generic glyph | « Icônes d'éditeurs » |
 
+## Decisions delegated by the owner (2026-10-27)
+The owner's working rule of 2026-10-27, until further notice: the session decides, choosing the option that (a) brings
+Grassfield closest to macOS 27 (behaviour, presentation, vocabulary) and (b) lets the end user do everything without technical
+intervention (never a terminal, a configuration file, a command or a manual step of their own). Still asked: legal questions
+(§14, marks, licences, publication), making anything public, a key, a secret or a release, wider root rights or changed
+security rules (CLAUDE.md, master-prompt, ADR-0010, polkit beyond what is approved), money or an external service, and any
+irreversible action on the owner's machine. The integrator checks each row in the review.
+
+| Id | Question | Options | Choice | Rule applied |
+|---|---|---|---|---|
+| SD1 | Which repository apps the Store installs, now that `remove` takes apps with an application entry only (b.1) | only packages that own an application entry (AppStream desktop applications; catalog `repo` entries, checked by CI) · also command-line tools (AppStream `console-application`), which the helper could then not remove without a wider rule | only apps with an entry | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the Store can always remove what it installed, with no terminal; a wider removal rule would widen root rights, which stays the owner's; (a) the macOS store application installs apps, not tools |
+| SD2 | How the polkit sheet names the packages (counter-review) | the sheet shows "Install" or "Remove" and the names, read by a strict pattern from the line polkit expands for this action id only, else the line as is · the line as polkit expands it (the helper's path, the operation id, the names) · no names (refused by the review) | the verb and the names; the raw line when it does not match | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet is plain words, no path; (b) the user reads what they authorize. The names still come from polkit (pkexec's argument vector), not from the Store; the sheet is a security module (step 3, opus review); no polkit rule changes |
+| SD3 | Which step adds the list of other updates to the checker, and what goes first at its 256 KiB cap (counter-review, PR #16) | Store step 4 adds it, and the list goes before the notes · PR #16 adds it now · the notes go first | Store step 4; the list first | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's Software Update always shows its release notes, while the per-app list is the Store's addition; PR #16 stays as reviewed |
+| SD4 | How the Store checks a fetched AppStream package (counter-review) | its own `.sig` with `pacman-key --verify` as the user (pacman's keyring and trust rule) · `gpgv` with pacman's public keyring (no trust check) · the sync database's SHA-256 (unsigned; refused by the review) | `pacman-key --verify` | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing to set up; the Store trusts exactly what pacman trusts (S17) |
+
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
-- **ADR-0033**: d (the checker's JSON gains the bounded list of other updates), g (the catalog's files in the contract; the
-  publication row), h.2 (one serialized publisher, built from the current snapshot, a conditional pointer write), and the
+- **ADR-0033**: d (the checker's JSON gains the bounded list of other updates, added by Store step 4 and dropped first at the
+  256 KiB cap), g (the catalog's files in the contract; the publication row), h.2 (one serialized publisher that publishes
+  the latest state, built from the current snapshot, a conditional pointer write), and the
   "no root code to install anything" of its context (ST4's helper is the exception). Its spec `docs/specs/updates.md`: U3 and
   the non-goals likewise.
 - **ADR-0028**: its R12 sentence names `grassfield-store-helper` beside ADR-0033's two programs.
-- **ADR-0030**: an amendment for the Store's helper and its polkit policy, beside ADR-0033's.
+- **ADR-0030**: an amendment for the Store's helper and its polkit policy (`auth_admin`, never kept; the names in the
+  message), beside ADR-0033's.
 
 ## Evidence
 - `docs/audits/store-2026-10-27/store-probes.sh` (S0 to S15) and its output `probes-output.txt` (docker exit 0). It ran in this
@@ -569,6 +654,13 @@ artifact; publication stays disabled with ADR-0033's, and is the serialized publ
   inside it is root, makes a user `alice`, installs packages from Omarchy's stable mirror and from Arch's archive
   (archive.archlinux.org, snapshots 2026-03-01, 2026-09-01, 2026-10-20), interrupts pacman on purpose, and everything goes with
   the container. The one change to Omarchy's template is `DisableSandbox` (Docker has no Landlock), as in ADR-0033.
+- `docs/audits/store-2026-10-27/store-probes-2.sh` (S16 to S18, after the counter-review) and its output
+  `probes-2-output.txt` (docker exit 0), with the same container, image and Omarchy checkout. It registers system packages
+  with `pacman -S --dbonly --noscriptlet` (the rule reads pacman's database; nothing of theirs runs), builds one local package
+  with `makepkg` as the user, starts a system bus and polkitd, and gives the user `alice` a throwaway password. The rule and
+  the helper in it are models for the probe; the helper is step 3's code. S18 ran polkit 127-3 (the 2026-09-01 snapshot);
+  the source lines cited are polkit 128's (Arch's current version; tag 128 of github.com/polkit-org/polkit), where they read
+  the same.
 - The macOS 27 reference: `docs/audits/store-2026-10-27/parity.md` (Apple's user guide, two public captures, not committed).
 
 ## Consequences
@@ -582,15 +674,19 @@ artifact; publication stays disabled with ADR-0033's, and is the serialized publ
 - **Step 2:** the UI (Discover, sections, Categories, product page, search, Installed, the Updates list read-only), measured
   F1 against the captures, en and fr, light and dark, keyboard; offscreen captures with the fake backend; the nested shot by
   the integrator. The legal items of e.10 go to `docs/legal/visual-review.md`.
-- **Step 3:** install, open, uninstall: `grassfield-store-helper` and its policy (b.1), `grassfield-store-run` (b.2), web
+- **Step 3:** install, open, uninstall: `grassfield-store-helper` and its policy (b.1: `auth_admin`, the remove rule with
+  S16's cases as tests, the plan check), the polkit sheet's names for this action (SD2), `grassfield-store-run` (b.2), web
   apps and Flatpaks (b.3); container tests with real pacman installs, a real recipe, a real `flatpak install --user` of a
   small app and an interrupted one (throwaway container), fake programs everywhere else; opus security review; the owner
   checks the real polkit dialog, sudo in Omarchy's terminal and a closed terminal in a real session.
-- **Step 4:** the Updates page (system updates through ADR-0033's checker and its list of other updates; Flatpak updates
-  checked by the Store) and the sidebar count; no Dock badge of the Store's own (ST8).
+- **Step 4:** the list of other updates added to `grassfield-update-check` (SD3); the Updates page (system updates through
+  ADR-0033's checker and that list; Flatpak updates checked by the Store) and the sidebar count; no Dock badge of the
+  Store's own (ST8).
 - **IPC.** Steps 1 to 3 add no shell IPC. Any new `IpcHandler` function (for example, asking the shell to check for updates
   if ADR-0033's own call does not fit) is added to `docs/specs/security.md`'s table in the same PR (`ipc_inventory`).
-- **Known limits** (spec): no per-app update for repository and AUR apps (Flatpaks have one); nothing installs while the last
+- **Known limits** (spec): a password for every repository install or removal (no grace period); "Uninstall…" only for apps
+  the user installed, never for Omarchy's, Grassfield's or the system's packages; no per-app update for repository and AUR
+  apps (Flatpaks have one); nothing installs while the last
   system update is unfinished; Flatpak updates are not part of `omarchy update` and have no Dock badge; no ratings or
   reviews; no pause or resume; the AUR and setups cancel only in Omarchy's terminal; apps outside AppStream and our catalog
   show pacman's text only; Omarchy's recipes are Omarchy's, their effects as they are in the installed release; a replayed
@@ -617,3 +713,17 @@ grassfield-packages. Each finding and where it is answered:
   corrected (S5 to S15 on Arch's archive), the S7 and S8 values now in the output (flatpak's version, the overlap with
   Omarchy's lists, `cache-control` instead of a refresh period), the closed real terminal marked NOT VERIFIED (S6), the
   parity matrix's capture URLs in full. All ten owner decisions asked again and recorded in the owner's words.
+
+Opus counter-review of PR #15 at 3292292 and grassfield-packages PR #1 at 7ea772e (integrator, 2026-10-27): FAIL, 1 MAJOR.
+The three earlier MAJORs confirmed closed. Each finding and where it is answered:
+- **MAJOR** (P2 wider than the owner's choice): `auth_admin`, never `_keep` (b.1; S18: every call asks); `remove` takes only
+  explicitly installed packages that own an application entry, with a fixed deny list (kernels, firmware, `base`, `sudo`,
+  `systemd`, the boot tools, pacman, Omarchy's two package lists, Grassfield's packages, `HoldPkg`) and the whole `-Rs
+  --print` plan checked (b.1, a); the package names in the polkit sheet, through the policy's `$(command_line)` (b.1, SD2;
+  S18); the probe S16 proves the rule and the deny list (and found that `-Rns --print` is refused, so the plan is read with
+  `-Rs --print` and a plan that does not resolve refuses).
+- **Minors:** the list of other updates is added by Store step 4 and goes first at the checker's cap (d, SD3); the Store's hold
+  on Omarchy's lock shows "Update in progress" in Software Update (b.1, spec); a fetched AppStream package is checked by its
+  own signature with `pacman-key --verify` (c, SD4; S17); the publisher publishes the latest state, so a cancelled pending
+  run loses nothing (g); `store-probes.sh:11` names S13 too; the AUR field list matches the output (no MakeDepends).
+- Delegated decisions SD1 to SD4 recorded under the owner's working rule of 2026-10-27.
