@@ -178,9 +178,11 @@ and `Tokens.qml` by `ui/tools/gen-tokens.py` (`--check` in `just check-shell` al
   over it and hide it again), minus the margins when "Tiled windows have margins" is on. Tiled windows are re-placed only
   when the margins setting changes and when their output goes away; a Dock that moves, grows, shrinks or hides moves no
   tile (Hyprland emits no event for a reserved-area change anyway).
-- Rounding: zones are computed in logical coordinates and every edge is snapped to the output's device pixels
-  (`round(v × scale) / scale`); sizes are differences of snapped edges, so adjacent tiles share one device-pixel edge at
-  fractional scales.
+- Rounding: every frame edge is a whole logical pixel, so sizes are integers and Hyprland's truncation of xdg sizes to
+  whole logical pixels (Window.cpp:1752-1753) cannot open a slit between neighbours; where the output's scale (a 1/120
+  step with an integer logical size, Monitor.cpp:996-1048) has a common grid of at most 4 logical pixels that is also
+  whole device pixels (scales 1, 1.25, 1.333…, 1.5, 1.75, 2…), edges sit on that grid; at other scales a one-device-pixel
+  seam or overlap is possible and documented (tiling.md TL3).
 - A zone smaller than a window's minimum: the window gets its minimum, aligned to the zone's outer edge so it stays on the
   output; in an arrangement the neighbours shrink to make room when their own minimum allows, else the windows overlap
   (macOS does the same, Apple's developer guidance). A maximum smaller than the zone: the window takes its maximum, centred
@@ -278,7 +280,7 @@ meaning: `docs/audits/tiling-2026-10-27/decisions.md`.
 - FR49's rule "a window moved or resized since its tiling is no longer tiled" gives way to the tile record's state machine
   (tiling.md TL10) in step 1; compositor.md FR49 is updated then.
 - Gate C3: the plugin with the new internals builds and passes C1/C2 against the Hyprland of the Omarchy rc channel before
-  it reaches stable (the CI job of master-prompt §11); the internals list below is re-read on each Hyprland update.
+  it reaches stable (the CI job of master-prompt §11); the internals list above is re-read on each Hyprland update.
 - The layout catalogue becomes a token group; `gen-tokens.py` gains its C++ and QML output.
 - What we give up: Hyprland's tiled layouts in the Grassfield session stay out of tiling (SUPER+T still floats or tiles a
   window the Hyprland way, outside Grassfield's tiles); xdg TILED_* states are not managed per window; no per-move

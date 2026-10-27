@@ -86,11 +86,22 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **TL2** Margins: with "Tiled windows have margins" on, `tiling.margin` (8) between the work area's edge and each frame,
   and between frames; off, frames touch each other and the work area edges. Changing the setting re-places every tiled
   window on every output (M39).
-- **TL3** Frames, not surfaces, fill zones: the surface box is the zone minus the titlebar band. Rounding: zones are
-  computed in logical coordinates, then every edge (outer edges, margins, shared edges) is snapped to the output's device
-  pixels, `edge = round(v × scale) / scale` with the output's scale; sizes are the differences of snapped edges, never
-  rounded on their own, so two tiles that share an edge share the same device-pixel column (no seam, no overlap) at scale
-  1, 1.25, 1.5 and 2.
+- **TL3** Frames, not surfaces, fill zones: the surface box is the zone minus the titlebar band. Rounding (review of
+  14e807c: Hyprland configures an xdg window with its size truncated to whole logical pixels, `sendConfigure` of
+  `realToReportSize`, Window.cpp:1752-1753, so a fractional size loses up to one logical pixel and two neighbours would
+  show a slit): every frame edge is an integer in logical pixels, so every size is an integer and the truncation changes
+  nothing. Edges also sit on device pixels where a common grid exists: Hyprland keeps an output's scale on steps of 1/120
+  with an integer logical size (output/Monitor.cpp:996-1048), so the grid step is `g = 120 / gcd(round(scale × 120),
+  120)` logical pixels from the output's logical origin, an integer in both logical and device pixels (1 at scale 1 and
+  2, 2 at 1.5 and 2.5, 3 at 1.333…, 4 at 1.25 and 1.75). With `g` up to 4 every edge is on that grid; above 4 (scales
+  such as 1.2, 1.6, 1.8, 1.125) edges are whole logical pixels only, and the device position is Hyprland's rounding: a
+  one-device-pixel seam or overlap between two neighbours is possible there (known limitation). Snapping: an edge between
+  two tiles without margins is one shared value, rounded to the nearest grid line, for both tiles (no slit, no overlap);
+  with margins each frame edge is rounded on its own (`b − m/2` and `b + m/2` around the exact boundary `b`), so the
+  margin between two tiles is `tiling.margin` exactly when `g` divides it (1, 2, 4) and within `g` of it otherwise. An
+  outer edge (the work area's border, plus the margin when margins are on) goes to the nearest grid line inside the work
+  area: where the menu bar or the Dock ends off the grid, the outer margin is up to `g − 1` pixels wider (none at `g` =
+  1). Unit-tested at scales 1, 1.25, 1.333…, 1.5, 1.6, 2.
 - **TL4** Places: left, right, top, bottom, top-left, top-right, bottom-left, bottom-right, fill, center (today); left
   third, middle third, right third, left two thirds, right two thirds, and the quarter columns of the ultra-wide class
   (T1f). Center keeps the window's size (at most `tiling.centerMaxFraction` of the work area) in the middle.
@@ -133,13 +144,22 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 | Resizing | the resize ends (seen after Hyprland ended it, the FR56 pattern) | Tiled | `box` = the new frame; `before` and the group kept; through the handle the neighbours' boxes too (TL30) |
 | Tiled | enters full screen or zoom; is minimized or hidden | Suspended | kept |
 | Suspended | leaves full screen or zoom | Tiled | `box` re-applied when Hyprland's restore differs |
-| Suspended | restored or shown again | Tiled if its zone is free on its output, else Free at `before` | — |
+| Suspended | restored or shown again | Tiled if its zone is free (below) on the output it comes back to, else Free at `before` | — |
 | Tiled | the margins setting changes; its output goes away | Tiled | re-placed (TL2, TL11) |
 | Tiled | its box differs from `box` when the plugin next reads the record, outside a known drag or resize (an app's own configure of an X11 window, a keyboard move or resize dispatcher, a rule) | Free | forgotten |
 | any | the window closes or unmaps; the plugin unloads | — | forgotten |
 
   Move to Desktop keeps the state (the box does not change). A group lives while it has two members that are Tiled,
   Resizing or Suspended.
+
+  A zone is **free** on an output and Desktop when no other window that is Tiled or Resizing there has a frame that
+  overlaps the zone's frame by more than 1 logical pixel on both axes (windows that are Free, Moving or Suspended do not
+  count). The output a Suspended window comes back to is the one Hyprland restores it on: the output under the middle of
+  its restored box, else the focused output. When the output of its record went away while it was Suspended (Hyprland
+  moves only mapped, visible windows to the remaining output, state/WorkspacePlacementController.cpp:307-311, so a
+  minimized or hidden window keeps a box on the removed output), the zone is taken on the output it comes back to, and
+  when that zone is not free the window is Free at `before`, centred on that output when `before` lies off every output
+  (as Return to Previous Size).
 - **TL11** Output removed: Hyprland moves the windows to another output (it translates them, H22); the plugin then places
   each tiled window into the same zone of the output it landed on and keeps its group. Output added: nothing moves.
 - **TL12** Full screen and zoom: Suspended in TL10; on leaving, Hyprland restores the floating box and the plugin
@@ -147,7 +167,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **TL13** Stages (ADR-0013): tiled windows are floating and belong to stages; a stage swap changes no geometry; a drop
   that tiles wins over a drop on the strip (today).
 - **TL14** Minimize, hide, Move to Desktop: as TL10 (Suspended, then back to its zone if it is free, else Free at
-  `before`; Move to Desktop keeps the state).
+  `before`, also after its output went away; Move to Desktop keeps the state).
 - **TL15** State: the plugin keeps, per output, the tiled windows (address, place or layout zone, group id); a change posts
   the `tiling` notice; `hyprctl grassfield-tiling` returns the state (ADR-0007 rule: no event grows with the windows).
 
@@ -370,6 +390,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - X11 windows: their minimum comes from size hints and Hyprland's commit clamp does not apply to them.
 - No per-move animation curve: every tile move uses the `windowsMove` animation.
 - Windows do not return to an output when it is connected again (macOS 27 does).
+- At output scales whose 1/120 step has no common grid of at most 4 logical pixels (1.2, 1.6, 1.8, 1.125…), two
+  neighbouring tiles may show a one-device-pixel seam or overlap (TL3).
 - Tiles do not follow a later change of the work area (the Dock resized, moved or auto-hidden, the menu bar hidden, the
   Stages strip): they keep the box they were given until the next tiling (TL1).
 - Windows tiled the Hyprland way (SUPER+T) are outside Grassfield's tiles, groups and popover.
