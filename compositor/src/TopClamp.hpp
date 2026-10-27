@@ -44,4 +44,8 @@ namespace gf::topClamp {
     // Hyprland ended it.
     void beforePointerButton(bool pressed);
 
+    // A release that tiles `w` (tiling.md TL16, gf::tiler::beforePointerButton, right after this listener): its pending clamp
+    // is dropped; the tile's frame lies below the menu bar already.
+    void skip(const PHLWINDOW& w);
+
 } // namespace gf::topClamp
