@@ -4,8 +4,9 @@
 # 4.5 s) Hyprland runs its dialog, which in this session is the repository's stand-in (config/hypr/dev.lua puts
 # packaging/session-bin first in the nested compositor's PATH; the stand-in reports to the dev shell through
 # GRASSFIELD_SHELL_DIR, dev plumbing). Checks:
-#   1 within 12 s the shell marks the window's process (`anr status`, a dev hook) and no stock dialog window opened;
-#   2 the stand-in waits as `sleep`, with the pid it reported;
+#   1 within 12 s the shell marks the window's process (`anr status`, a dev hook) and no stock dialog runs (no
+#     /usr/bin/hyprland-dialog process);
+#   2 the stand-in waits, with the pid it reported, as the repository's packaging/session-bin/hyprland-dialog;
 #   3 SIGCONT (the app answers again): within 4 s Hyprland killed the stand-in and the mark is gone;
 #   4 stopped again until marked, then killed (what Force Quit does): within 4 s the mark is gone.
 # The test closes the windows it opened (EXIT trap, and at the start those of an earlier run). Only this tree's nested
@@ -32,7 +33,7 @@ status() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 qs i
 marked() { [[ $(status | jq --argjson p "$1" '[.[] | select(.pid == $p)] | length' 2>/dev/null) == 1 ]]; }
 not_marked() { [[ $(status | jq --argjson p "$1" '[.[] | select(.pid == $p)] | length' 2>/dev/null) == 0 ]]; }
 standin_of() { status | jq -r --argjson p "$1" '.[] | select(.pid == $p) | .standin' 2>/dev/null; }
-stock_dialogs() { hq clients | jq '[.[] | select(.title == "Application Not Responding" or .title == "L'"'"'application ne répond plus")] | length'; }
+stock_dialogs() { pgrep -c -u "$(id -u)" -f '^/usr/bin/hyprland-dialog ' || true; }
 wait_for() { local secs=$1 n; shift; for ((n = 0; n < secs * 5; n++)); do "$@" && return 0; sleep 0.2; done; return 1; }
 
 [[ $(status) == "["* ]] || { echo "anr: the dev shell has no anr target or refused its status (run this tree's shell)"; exit 2; }
@@ -66,10 +67,10 @@ kill -STOP "$WIN"
 if wait_for 12 marked "$WIN"; then pass "1 a stopped app is marked as not responding (pid $WIN)"; else fail "1 no mark for pid $WIN within 12 s: $(status)"; fi
 [[ $(stock_dialogs) == 0 ]] && pass "1 no stock dialog window opened" || fail "1 a stock \"not responding\" dialog opened"
 standin=$(standin_of "$WIN")
-if [[ -n $standin && $(cat "/proc/$standin/comm" 2>/dev/null) == sleep ]]; then
-  pass "2 the stand-in ($standin) waits as sleep"
+if [[ -n $standin && $(tr '\0' ' ' <"/proc/$standin/cmdline" 2>/dev/null) == *"$root/packaging/session-bin/hyprland-dialog "* ]]; then
+  pass "2 the stand-in ($standin) waits"
 else
-  fail "2 the stand-in '$standin' is not a waiting sleep ($(cat "/proc/$standin/comm" 2>/dev/null || echo gone))"
+  fail "2 the stand-in '$standin' is not the repository's waiting hyprland-dialog"
 fi
 kill -CONT "$WIN"
 if wait_for 4 not_marked "$WIN"; then pass "3 the app answers again: the mark is gone"; else fail "3 still marked 4 s after SIGCONT: $(status)"; fi

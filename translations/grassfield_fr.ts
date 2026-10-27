@@ -3184,7 +3184,7 @@
     </message>
     <message>
         <source>Application Not Responding</source>
-        <translation>Application ne répondant pas</translation>
+        <translation>L’application ne répond pas</translation>
     </message>
     <message>
         <source>Recent Documents</source>
@@ -6183,7 +6183,7 @@
     </message>
     <message>
         <source>The application had already quit.</source>
-        <translation>L’application avait déjà quitté.</translation>
+        <translation>L’application s’était déjà fermée.</translation>
     </message>
 </context>
 <context>

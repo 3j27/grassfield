@@ -19,8 +19,9 @@ _G.grassfield_dev = true
 
 -- ADR-0035 D-3: Hyprland's "not responding" dialog goes through the repository's stand-in, as in the real session; it
 -- reports to the shell run from GRASSFIELD_SHELL_DIR (dev plumbing, honoured in a dev session only).
-local session_bin = (config_dir:match("^(.*)/config/hypr/?$") or "") .. "/packaging/session-bin"
-local dialog = io.open(session_bin .. "/hyprland-dialog", "r")
+local repo = config_dir:match("^(.*)/config/hypr/?$")
+local session_bin = repo and repo .. "/packaging/session-bin"
+local dialog = session_bin and io.open(session_bin .. "/hyprland-dialog", "r")
 if dialog then
   dialog:close()
   local parts = { session_bin }
