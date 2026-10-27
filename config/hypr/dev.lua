@@ -17,6 +17,19 @@ end
 
 _G.grassfield_dev = true
 
+-- ADR-0035 D-3: Hyprland's "not responding" dialog goes through the repository's stand-in, as in the real session; it
+-- reports to the shell run from GRASSFIELD_SHELL_DIR (dev plumbing, honoured in a dev session only).
+local session_bin = (config_dir:match("^(.*)/config/hypr/?$") or "") .. "/packaging/session-bin"
+local dialog = io.open(session_bin .. "/hyprland-dialog", "r")
+if dialog then
+  dialog:close()
+  local parts = { session_bin }
+  for entry in (os.getenv("PATH") or "/usr/local/bin:/usr/bin"):gmatch("[^:]+") do
+    if entry ~= session_bin then parts[#parts + 1] = entry end
+  end
+  hl.env("PATH", table.concat(parts, ":"))
+end
+
 -- The nested output is a window inside the owner's session; keep it smaller than the 1080p panel.
 hl.monitor({ output = "", mode = "1440x900", position = "auto", scale = 1 })
 

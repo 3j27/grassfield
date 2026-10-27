@@ -1,0 +1,91 @@
+#!/bin/sh
+# Grassfield session stand-in for hyprland-guiutils' `hyprland-dialog` (ADR-0035 D-3, step 3). Installed to
+# /usr/lib/grassfield/session-bin/, a directory that comes first in the compositor's PATH only in a Grassfield session
+# (config/hypr/grassfield/omarchy.lua guard_path); Hyprland runs every dialog it shows as
+# `hyprland-dialog --title T --text X --buttons "A;B"`, reads the answer on stdout, and SIGKILLs the dialog's pid when it no
+# longer needs it (Hyprland 0.56.2 src/helpers/AsyncDialogBox.cpp:103, 148).
+#
+# "Application Not Responding" (ANR, en_US or fr_FR, the two languages of Grassfield): no alert (owner decision Q2, the
+# macOS model). The stand-in finds the hung app's process from the window Hyprland names (its class and title, exactly one
+# client pid), reports it to the shell (`anr report`), which marks the app in Force Quit and in its Dock menu, and then
+# waits silently with the same pid: Hyprland kills it when the app answers again or closes, and the shell clears the mark
+# when it ends. Every other call (Safe Mode, a permission prompt, another language, an unknown button set), and every case
+# where the window cannot be told apart or the shell does not acknowledge within 1 s, runs the stock dialog by absolute
+# path with the same arguments and the same pid. No window title or class is ever printed or logged.
+stock=/usr/bin/hyprland-dialog
+shell_dir=/usr/share/grassfield/shell
+# Dev plumbing (ADR-0019): the nested dev session runs the shell from the repository. GRASSFIELD_SHELL_DIR is honoured only
+# in a dev session (GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"), as in bindings.lua: a stray value in a real
+# session cannot send the report to another shell.
+if [ "${GRASSFIELD_DEV:-}" = 1 ] && [ "${GRASSFIELD_SESSION:-}" != 1 ] && [ -n "${GRASSFIELD_SHELL_DIR:-}" ]; then
+  shell_dir=$GRASSFIELD_SHELL_DIR
+fi
+# Quickshell's option variables would make `qs ipc -p` refuse (security.md, tests/security/lock_request_env.sh).
+unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+
+# The texts of Hyprland 0.56.2 (src/i18n/Engine.cpp, TXT_KEY_ANR_*), pinned by tests/shell/hyprland_dialog.sh against the
+# installed Hyprland. A release that changes them makes this stand-in fall back to the stock dialog, never guess.
+nl='
+'
+en_title='Application Not Responding'
+en_head='An application '
+en_tail=" is not responding.${nl}What do you want to do with it?"
+en_buttons='Terminate;Wait'
+en_unknown='(unknown)'
+fr_title="L'application ne répond plus"
+fr_head="L'application "
+fr_tail=" ne répond plus.${nl}Que voulez-vous faire?"
+fr_buttons="Forcer l'arrêt;Attendre"
+fr_unknown='(inconnu)'
+
+stock() {
+  exec "$stock" "$@"
+}
+
+# Exactly Hyprland's form: --title T --text X --buttons B, in this order; anything else is not an ANR call.
+[ "$#" -eq 6 ] && [ "$1" = --title ] && [ "$3" = --text ] && [ "$5" = --buttons ] || stock "$@"
+title=$2 text=$4 buttons=$6
+case "$title|$buttons" in
+  "$en_title|$en_buttons") head=$en_head tail=$en_tail unknown=$en_unknown ;;
+  "$fr_title|$fr_buttons") head=$fr_head tail=$fr_tail unknown=$fr_unknown ;;
+  *) stock "$@" ;;
+esac
+case "$text" in
+  "$head"*"$tail") ;;
+  *) stock "$@" ;;
+esac
+body=${text#"$head"}
+body=${body%"$tail"}
+# "{title} - {class}": the class is after the last " - " (a title may hold one, a class does not).
+case "$body" in
+  *" - "*) ;;
+  *) stock "$@" ;;
+esac
+class=${body##* - }
+window=${body% - *}
+[ -n "$class" ] || stock "$@"
+
+# The client pids of the windows with this class and title (Hyprland names an untitled window "(unknown)"): exactly one,
+# else the windows cannot be told apart.
+pids=$(hyprctl -j clients 2>/dev/null | python3 -I -c '
+import json, sys
+c, t, u = sys.argv[1:4]
+found = {w.get("pid") for w in json.load(sys.stdin) if w.get("class") == c and (w.get("title") == t or (t == u and w.get("title") == ""))}
+print("\n".join(sorted(str(p) for p in found)))
+' "$class" "$window" "$unknown" 2>/dev/null)
+case "$pids" in
+  "" | *"$nl"*) stock "$@" ;;
+esac
+pid=$pids
+case "$pid" in
+  *[!0-9]*) stock "$@" ;;
+esac
+[ "$pid" -gt 1 ] || stock "$@"
+
+# The shell acknowledges within 1 s ("ok"), or the stock dialog runs. The strings carry a prefix: qs ipc takes an argument
+# that starts with "-" for an option. The compositor's instance lets the shell refuse a nested session's call.
+answer=$(timeout 1 qs ipc -p "$shell_dir" call anr report "$$" "$pid" "c:$class" "t:$window" \
+  "i:${HYPRLAND_INSTANCE_SIGNATURE:-}" 2>/dev/null)
+[ "$answer" = ok ] || stock "$@"
+# Hyprland's dialog from now on: silent, same pid, until Hyprland kills it.
+exec sleep infinity

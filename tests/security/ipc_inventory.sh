@@ -2,7 +2,7 @@
 # GF-AUDIT-001 SEC-03/SEC-04: the shell's IPC surface (Quickshell IpcHandler, callable by any process of the user) is
 # exactly the table in docs/specs/security.md "IPC surface", and each function is what its class says:
 #   action    has a real-session caller (a binding or gesture in config/hypr/grassfield/*.lua, a session helper in
-#             packaging/bin or packaging/shims, or a screen corner in shell/desktop/HotCornerActions.js) and is not gated
+#             packaging/bin, packaging/shims or packaging/session-bin, or a screen corner in shell/desktop/HotCornerActions.js) and is not gated
 #   dev       refused outside a dev session: its body checks the one dev rule (ADR-0019) by an exact gate, directly or
 #             through a property or a function of the same file:
 #               - in a security module (shell/security/**): the call
@@ -157,7 +157,7 @@ def load():
     for path in walk_all("ui"):
         if is_hidden(path):
             files[path] = read(path)
-    for pattern in ("config/hypr/grassfield/*.lua", "packaging/bin/*", "packaging/shims/*"):
+    for pattern in ("config/hypr/grassfield/*.lua", "packaging/bin/*", "packaging/shims/*", "packaging/session-bin/*"):
         for path in sorted(glob.glob(pattern)):
             if os.path.isfile(path):
                 files[path] = read(path)
@@ -847,13 +847,13 @@ def check(files):
     if not missing and not stale:
         passes.append("%d functions of %d targets, all documented" % (len(code), len({t for t, _ in code})))
 
-    # Real-session callers: the Hyprland config, the session helpers and shims, the screen corners. A `call <target> <fn>`
+    # Real-session callers: the Hyprland config, the session helpers and stand-ins, the screen corners. A `call <target> <fn>`
     # counts only on a line that runs `qs ipc` (comments say "call" too).
     bindings = files.get("config/hypr/grassfield/bindings.lua", "")
     callers = set(re.findall(r'shell\("(\w+)",\s*"(\w+)', bindings))
     callers |= {("switcher", f) for f in re.findall(r'(?:switcher_request|in_switcher_else)\("(\w+)"', bindings)}
     for path in sorted(files):
-        if path.startswith(("config/hypr/grassfield/", "packaging/bin/", "packaging/shims/")):
+        if path.startswith(("config/hypr/grassfield/", "packaging/bin/", "packaging/shims/", "packaging/session-bin/")):
             for line in files[path].splitlines():
                 # bindings.lua builds its requests on `qs_ipc` (the qs ipc command with Quickshell's option variables
                 # cleared, re-review of bf9e280 M1).
