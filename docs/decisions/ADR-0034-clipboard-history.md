@@ -125,7 +125,7 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
       `RLIMIT_AS` 1 GiB, `RLIMIT_CPU` 2 s, `RLIMIT_FSIZE` 0, `PR_SET_PDEATHSIG`, and a 2 s wall deadline after which it is
       killed; it writes a PNG of at most 256 px on its long side (1 MiB at most) to stdout. A worker that fails, is killed or
       answers anything else: the copy is not recorded. The original bytes are kept as they came, for pasting. One worker runs
-      at a time for every image, new copies and stored thumbnails in turn; at most 4 new images wait for it (a newer one is not
+      at a time for every image, new copies before stored thumbnails (up to 150 at start); at most 4 new images wait for it (a newer one is not
       recorded), and Clear History and Clear Pinned cancel the new images waiting or running (one whose worker ends after a
       clear is never added). A stored image (pinned, or in the opt-in history) whose worker fails is never deleted: it is shown
       without a thumbnail, which is tried again up to 3 times a minute apart, then at the next start (review of 963e173);
@@ -174,8 +174,9 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
    cut: a cut item from the history is pasted as a copy); plus the marker type `application/x-grassfield-clipboard-item` (the
    item id), by which the helper knows its own selection (the item moves to the top, step 1g). "Paste as Plain Text" (the
    menu, Shift+Return) offers the plain types and the marker only. The helper serves until another client takes the selection
-   or it exits (the clipboard is then empty, as when any Wayland app that owns it quits); each answer is written within 2 s,
-   after which that reader's pipe is closed (a reader that stops reading never holds the helper).
+   or it exits (the clipboard is then empty, as when any Wayland app that owns it quits); a reader that takes nothing for 2 s
+   has its pipe closed (one that stops reading never holds the helper; a slow one that keeps reading, such as an X11 app
+   pasting a large image through XWayland, gets the whole answer).
    To paste (Q9: Return, Enter, a click, the menu's Paste; Shift+Return or the menu's Paste as Plain Text): the helper copies
    the item; when it reports owning the selection, Search closes and `FocusReturn` gives the keyboard back to the window active
    when Search opened; once that window is active again (at most 1 s), and only while neither `SessionState.locked` nor the
