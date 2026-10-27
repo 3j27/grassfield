@@ -8,6 +8,7 @@
 #include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QDBusVariant>
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QMap>
 #include <QRegularExpression>
@@ -1156,23 +1157,52 @@ constexpr uint kKeyMgmtPsk = 0x100;
 constexpr uint kKeyMgmtSae = 0x400;
 constexpr int kJoinPollMs = 250;
 
-// Waits (kActMs at most) for a connection NetworkManager is activating: "" once it is up. A connection that went down or away
-// failed (a wrong password: no agent gives NetworkManager another one); its new profile is deleted, so a failed join leaves no
-// saved network behind (as nmcli does).
-QString awaitJoin(BusCaller &bus, const QString &profile, const QString &active)
+// Whether a call's error says the object is gone (NetworkManager removes an active connection once it went down).
+bool objectGone(const QString &error)
 {
-    for (int waited = 0; waited <= kActMs; waited += kJoinPollMs) {
-        const Result state = property(bus, kNmService, active, kNmActive, QStringLiteral("State"));
-        const uint value = state.ok ? state.value.toUInt() : 4;
-        if (value == 2)
-            return QString();
-        if (value >= 3)
-            break;
-        QThread::msleep(kJoinPollMs);
-    }
-    bus.call(kNmService, profile, kNmConnection, QStringLiteral("Delete"), {}, kActMs);
+    return error.startsWith(QLatin1String("org.freedesktop.DBus.Error.UnknownObject"))
+        || error.startsWith(QLatin1String("org.freedesktop.DBus.Error.UnknownMethod"))
+        || error.startsWith(QLatin1String("org.freedesktop.DBus.Error.UnknownInterface"));
+}
+
+// A join that failed (a wrong password: no agent gives NetworkManager another one) leaves no saved network behind, as nmcli
+// does: its new profile, one of the whole system, is deleted (NetworkManager may ask polkit first), and a Delete that fails is said.
+QString dropFailedJoin(BusCaller &bus, const QString &profile)
+{
+    const BusReply r = bus.call(kNmService, profile, kNmConnection, QStringLiteral("Delete"), {}, kPrivilegedMs);
+    if (!r.ok)
+        return QCoreApplication::translate("SystemBus", "the network could not be joined, and its new settings could not be removed: %1").arg(fail(r.error));
     return QCoreApplication::translate("SystemBus", "the network could not be joined");
 }
+} // namespace
+
+QString awaitJoin(BusCaller &bus, const QString &profile, const QString &active, int deadlineMs, int pollMs)
+{
+    QElapsedTimer clock;
+    clock.start();
+    bool known = false;
+    while (true) {
+        const Result state = property(bus, kNmService, active, kNmActive, QStringLiteral("State"));
+        if (state.ok) {
+            known = true;
+            const uint value = state.value.toUInt();
+            if (value == 2)
+                return QString();
+            if (value >= 3)
+                return dropFailedJoin(bus, profile);
+        } else if (objectGone(state.error)) {
+            return dropFailedJoin(bus, profile);
+        }
+        if (clock.elapsed() + pollMs > deadlineMs)
+            break;
+        QThread::msleep(static_cast<unsigned long>(pollMs));
+    }
+    if (known)
+        return dropFailedJoin(bus, profile);
+    return QCoreApplication::translate("SystemBus", "the network's state could not be read: it may still be joining");
+}
+
+namespace {
 
 // Joins a WPA/WPA2/WPA3 personal network with its passphrase: the strongest access point of that SSID that takes one (PSK or
 // SAE), with a new profile of the whole system (NetworkManager may ask polkit, ADR-0030). WPA3-only access points get
@@ -1206,7 +1236,7 @@ QString joinWithPassphrase(BusCaller &bus, const QString &devicePath, const QByt
         return fail(r.error);
     if (r.args.size() < 2)
         return QString();
-    return awaitJoin(bus, cast<QDBusObjectPath>(r.args.value(0)).path(), cast<QDBusObjectPath>(r.args.value(1)).path());
+    return awaitJoin(bus, cast<QDBusObjectPath>(r.args.value(0)).path(), cast<QDBusObjectPath>(r.args.value(1)).path(), kActMs, kJoinPollMs);
 }
 } // namespace
 

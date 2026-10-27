@@ -152,6 +152,14 @@ StateResult privacyState(BusCaller &bus);
 // `ownDirs`: the user's unit directories (user.enable acts only on a unit listed there, userUnits).
 QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs = {});
 
+// wifi.connectSecure's wait for the connection NetworkManager activates (`active`, from AddAndActivateConnection, with its new
+// profile `profile`), its State read every `pollMs` for `deadlineMs` at most: "" once it is up (2). One that went down (3, 4) or
+// went away (NetworkManager removes it then: an unknown object, method or interface answers) failed: the new profile is deleted
+// (kPrivilegedMs: NetworkManager may ask polkit) and a Delete that fails is said too. Any other read failure leaves the state
+// unknown, never a failure: still unknown at the deadline, the profile stays and the answer says the state could not be read;
+// still activating at the deadline, the join failed. runAction waits 30 s, polling every 250 ms.
+QString awaitJoin(BusCaller &bus, const QString &profile, const QString &active, int deadlineMs, int pollMs);
+
 // Whether an op goes to the session bus (user.*, privacy.*) rather than the system bus.
 bool sessionAction(const QVariantMap &op);
 

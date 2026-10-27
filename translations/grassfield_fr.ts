@@ -7473,8 +7473,16 @@
         <translation>Ce réseau n’est plus à portée</translation>
     </message>
     <message>
+        <source>the network could not be joined, and its new settings could not be removed: %1</source>
+        <translation>Impossible de rejoindre le réseau, et ses nouveaux réglages n’ont pas pu être supprimés&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>the network could not be joined</source>
         <translation>Impossible de rejoindre le réseau</translation>
+    </message>
+    <message>
+        <source>the network&apos;s state could not be read: it may still be joining</source>
+        <translation>L’état du réseau n’a pas pu être lu&#xa0;: la connexion est peut-être encore en cours</translation>
     </message>
     <message>
         <source>that network does not take a password</source>

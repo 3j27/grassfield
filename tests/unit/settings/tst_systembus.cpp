@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 
 #include "systembus.h"
 
@@ -351,12 +352,68 @@ TEST(SystemBusWifi, AFailedJoinDeletesItsNewProfileAndSaysSo)
         EXPECT_EQ(runAction(f.bus, {{"op", "wifi.connectSecure"}, {"hex", "486F6D65"}, {"psk", "wrong horse"}}), QStringLiteral("the network could not be joined"));
         EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("Delete"));
         EXPECT_EQ(f.bus.calls.last().path, QStringLiteral("/conn/new"));
+        // The profile is one of the whole system: its Delete may wait for the polkit dialog.
+        EXPECT_EQ(f.bus.calls.last().timeoutMs, 120000);
     }
     // An open network takes no password, a missing one is not joined at all.
     NmFixture o;
     EXPECT_EQ(runAction(o.bus, {{"op", "wifi.connectSecure"}, {"hex", "43616665"}, {"psk", "correct horse"}}), QStringLiteral("that network does not take a password"));
     EXPECT_EQ(runAction(o.bus, {{"op", "wifi.connectSecure"}, {"hex", "4E6F7065"}, {"psk", "correct horse"}}), QStringLiteral("that network is no longer in range"));
     EXPECT_FALSE(o.bus.members().contains(QStringLiteral("NetworkManager.AddAndActivateConnection")));
+}
+
+TEST(SystemBusWifi, AJoinWhoseStateCannotBeReadIsNoFailure)
+{
+    // A State read that fails for another reason (no reply, the service restarting) is not a failure: the next read decides.
+    const auto reads = [](QList<BusReply> answers, bool deleteOk = true) {
+        auto bus = std::make_shared<FakeBus>();
+        auto left = std::make_shared<QList<BusReply>>(std::move(answers));
+        bus->handler = [left, deleteOk](const Call &c) {
+            if (c.member == QLatin1String("Get") && c.path == QLatin1String("/active/1") && c.args.value(1).toString() == QLatin1String("State"))
+                return left->isEmpty() ? err(QStringLiteral("org.freedesktop.DBus.Error.NoReply: no answer")) : left->takeFirst();
+            if (c.member == QLatin1String("Delete"))
+                return deleteOk ? ok() : err(QStringLiteral("org.freedesktop.NetworkManager.Settings.Connection.PermissionDenied: Insufficient privileges"));
+            return err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: ") + c.member);
+        };
+        return bus;
+    };
+    const BusReply noReply = err(QStringLiteral("org.freedesktop.DBus.Error.NoReply: no answer"));
+    const BusReply restarting = err(QStringLiteral("org.freedesktop.DBus.Error.ServiceUnknown: restarting"));
+    auto up = reads({noReply, restarting, ok({variant(u32(1))}), ok({variant(u32(2))})});
+    EXPECT_EQ(awaitJoin(*up, QStringLiteral("/conn/new"), QStringLiteral("/active/1"), 5000, 1), QString());
+    EXPECT_FALSE(up->members().contains(QStringLiteral("Connection.Delete")));
+
+    // Unknown, then down: the join failed and its profile is deleted.
+    auto down = reads({noReply, ok({variant(u32(4))})});
+    EXPECT_EQ(awaitJoin(*down, QStringLiteral("/conn/new"), QStringLiteral("/active/1"), 5000, 1), QStringLiteral("the network could not be joined"));
+    EXPECT_EQ(down->calls.last().member, QStringLiteral("Delete"));
+
+    // Gone as GDBus says it too (no such interface on that path): failed.
+    auto gone = reads({noReply, err(QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod: No such interface"))});
+    EXPECT_EQ(awaitJoin(*gone, QStringLiteral("/conn/new"), QStringLiteral("/active/1"), 5000, 1), QStringLiteral("the network could not be joined"));
+    EXPECT_EQ(gone->calls.last().member, QStringLiteral("Delete"));
+
+    // Never readable until the deadline: the profile stays (it may still come up), and the answer says what is known.
+    auto unknown = reads({});
+    EXPECT_EQ(awaitJoin(*unknown, QStringLiteral("/conn/new"), QStringLiteral("/active/1"), 30, 1),
+              QStringLiteral("the network's state could not be read: it may still be joining"));
+    EXPECT_FALSE(unknown->members().contains(QStringLiteral("Connection.Delete")));
+    EXPECT_GE(unknown->calls.size(), 2);
+
+    // Still activating at the deadline: the join failed.
+    QList<BusReply> activating;
+    for (int i = 0; i < 1000; ++i)
+        activating.append(ok({variant(u32(1))}));
+    auto slow = reads(activating);
+    EXPECT_EQ(awaitJoin(*slow, QStringLiteral("/conn/new"), QStringLiteral("/active/1"), 30, 1), QStringLiteral("the network could not be joined"));
+    EXPECT_EQ(slow->calls.last().member, QStringLiteral("Delete"));
+
+    // A cleanup Delete that fails is said, with its reason.
+    auto refused = reads({ok({variant(u32(4))})}, false);
+    EXPECT_EQ(awaitJoin(*refused, QStringLiteral("/conn/new"), QStringLiteral("/active/1"), 5000, 1),
+              QStringLiteral("the network could not be joined, and its new settings could not be removed: not allowed: the system refused the request"));
+    EXPECT_EQ(refused->calls.last().member, QStringLiteral("Delete"));
+    EXPECT_EQ(refused->calls.last().timeoutMs, 120000);
 }
 
 TEST(SystemBusWifi, APassphraseIsEightToSixtyThreePrintableCharactersOrSixtyFourHexDigits)
