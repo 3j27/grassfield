@@ -59,20 +59,27 @@ Scope {
     property var shownFlow: null
 
     // A request arrives (`follows`: it replaced the one in the sheet) or none is left: whether it is held and why, the
-    // keyboard not given yet, the time its notice prints. One that follows starts empty and its click guard starts over; if
-    // the sheet had the keyboard (the user was typing the first one's password), it keeps it on the key sink, so the rest of
-    // what is typed reaches neither its field nor the window underneath (re-check of b5d7657, MEDIUM-2). No request left:
-    // the next one within heldAfterUnlockMs is held (noteEnded).
+    // keyboard not given yet, the time its notice prints. One that follows starts empty and its click guard starts over. The
+    // keys keep going to the key sink when the request replaced the one that had the keyboard (the user was typing its
+    // password; re-check of b5d7657, MEDIUM-2) and whenever the sink already had them: a request that ends meanwhile leaves
+    // the sink lingering (`lingering`; check of 38dbfe8, MEDIUM-B), and one that arrives meanwhile keeps it and is held, as
+    // right after another (only a click past its guard gives it the keyboard). So the rest of what is typed reaches neither a
+    // field nor the window underneath. `typing` is read first, before this function changes what takesKeys reads. No request
+    // left: the next one within heldAfterUnlockMs is held (noteEnded).
     function arrive(follows: bool): void {
-        const typing = follows && win.takesKeys;
-        const queued = follows || (dialogModel.active && dialogModel.followsAnother());
+        const typing = (follows && win.takesKeys) || root.sinkingKeys;
+        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());
         root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : queued ? "queued" : "unlock";
-        root.heldByLock = dialogModel.active && (follows || dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
+        root.heldByLock = dialogModel.active && (follows || typing || dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
         root.userFocused = false;
         root.sinkingKeys = typing;
         root.requestStartedAt = dialogModel.active ? new Date() : null;
         if (!dialogModel.active)
             dialogModel.noteEnded();
+        if (root.lingering) {
+            sinkIdle.restart();
+            sinkCap.restart();
+        }
         if (follows) {
             dialogModel.clearRequested();
             dialogModel.noteShown();
@@ -88,31 +95,42 @@ Scope {
     // wall-clock time the notice prints (display, never compared).
     property bool heldByLock: false
     property string heldWhy: "unlock"
-    // A held request whose sheet keeps the keyboard on the key sink (it replaced the one being typed into).
+    // The window keeps the keyboard on the key sink: a held request that replaced the one being typed into, or no request
+    // left while the sink had the keys (`lingering`).
     property bool sinkingKeys: false
     onSinkingKeysChanged: if (sinkingKeys)
         keySink.forceActiveFocus()
+    // The request ended while the sink had the keys (its requester gave up, or the request it replaced completed): the
+    // window stays mapped, clear, with the keyboard on the sink, until no key came for heldAfterUnlockMs (sinkIdle), at most
+    // sinkLingerMaxMs (sinkCap), or a click, the lock or the screen saver ends it (check of 38dbfe8, MEDIUM-B).
+    readonly property bool lingering: root.sinkingKeys && !dialogModel.active && !SessionState.locked
     property bool userFocused: false
     property var requestStartedAt: null
 
     Connections {
         target: SessionState
 
+        // The lock has the keyboard now: the sink lets go (a linger ends), and an open request is held.
         function onLockedChanged(): void {
             if (!SessionState.locked) {
                 dialogModel.noteUnlock();
-            } else if (dialogModel.active) {
+                return;
+            }
+            root.sinkingKeys = false;
+            if (dialogModel.active) {
                 root.heldByLock = true;
                 root.heldWhy = "locked";
                 root.userFocused = false;
-                root.sinkingKeys = false;
             }
         }
 
-        // The screen saver came up over an open request: held as by the lock, its field emptied; the saver holds the keyboard
-        // meanwhile. It ended over a held one: the click guard starts over, so no click in the next heldGuardMs gives the sheet
-        // the keyboard (such a click still reaches the control it hits, as after an unlock: Cancel at worst).
+        // The screen saver came up: it holds the keyboard, so the sink lets go (a linger ends); an open request is held as by
+        // the lock, its field emptied. It ended over a held one: the click guard starts over, so no click in the next
+        // heldGuardMs gives the sheet the keyboard (such a click still reaches the control it hits, as after an unlock: Cancel
+        // at worst).
         function onSaverShownChanged(): void {
+            if (SessionState.saverShown)
+                root.sinkingKeys = false;
             if (!dialogModel.active || SessionState.locked)
                 return;
             if (SessionState.saverShown) {
@@ -120,12 +138,26 @@ Scope {
                     root.heldWhy = "saver";
                 root.heldByLock = true;
                 root.userFocused = false;
-                root.sinkingKeys = false;
                 dialogModel.clearRequested();
             } else if (root.heldByLock) {
                 dialogModel.noteUncovered();
             }
         }
+    }
+
+    // The sink's linger ends when no key came for heldAfterUnlockMs, and at the latest sinkLingerMaxMs after the request
+    // ended (both restarted by arrive; a key restarts sinkIdle). Neither touches a sink that holds a request's keys.
+    Timer {
+        id: sinkIdle
+        interval: dialogModel.heldAfterUnlockMs
+        onTriggered: if (root.lingering)
+            root.sinkingKeys = false
+    }
+    Timer {
+        id: sinkCap
+        interval: dialogModel.sinkLingerMaxMs
+        onTriggered: if (root.lingering)
+            root.sinkingKeys = false
     }
 
     // Registration is asynchronous; report a refusal once, after it had time to complete.
@@ -148,11 +180,12 @@ Scope {
         // once the user is back): the sheet is mapped, and takes the keyboard, only after the unlock (GF-116). The request
         // itself stays pending; nothing is answered or approved meanwhile.
         readonly property bool shown: dialogModel.active && !SessionState.locked
-        // The sheet holds the keyboard: shown, and not a held request the user has not clicked yet (unless it keeps the keys on
-        // the sink).
-        readonly property bool takesKeys: shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)
+        // The window holds the keyboard: the sheet is shown and not a held request the user has not clicked yet (unless it
+        // keeps the keys on the sink), or the sink lingers after the request ended.
+        readonly property bool takesKeys: (shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)) || root.lingering
 
-        visible: shown
+        // Mapped with the sheet, and while the sink lingers (clear then: no sheet, no dimming, no blur).
+        visible: shown || root.lingering
         // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: a request that was not
         // held takes the keys at once; a held one waits for a click (takesKeys) with an empty field.
         onShownChanged: {
@@ -173,7 +206,7 @@ Scope {
             right: true
         }
         exclusionMode: ExclusionMode.Ignore
-        color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity)
+        color: win.shown ? Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity) : "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: win.takesKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-polkit"
@@ -187,20 +220,36 @@ Scope {
             radius: Tokens.radiusDialog
         }
 
-        // The keys of a held request that kept the keyboard (sinkingKeys) stop here: no field, no Esc, nothing underneath,
-        // until a click past the guard gives the sheet its field.
+        // The keys the window keeps (sinkingKeys) stop here: no field, nothing underneath, until a click past the guard gives
+        // the sheet its field, or the linger ends. Esc cancels a held request (it fails closed; check of 38dbfe8, LOW-1); a
+        // key while the sink lingers keeps it a while longer. Whatever takes the focus while the sink has the keys (a press
+        // on the sheet within the guard, the field's own press, the dialog focusing its field when it loads or after a
+        // failure), the sink takes it back (check of 38dbfe8, MEDIUM-A).
         Item {
             id: keySink
-            Keys.onPressed: event => event.accepted = true
+            Keys.onPressed: event => {
+                event.accepted = true;
+                if (root.lingering)
+                    sinkIdle.restart();
+                else if (event.key === Qt.Key_Escape)
+                    dialogModel.cancel();
+            }
             Keys.onReleased: event => event.accepted = true
+            onActiveFocusChanged: if (!activeFocus && root.sinkingKeys && win.takesKeys)
+                forceActiveFocus()
         }
 
-        // Clicks outside the sheet do nothing (no click-outside cancel for authentication).
+        // Clicks outside the sheet do nothing (no click-outside cancel for authentication) but give the field the focus when
+        // the sheet has the keyboard for it; one while the sink lingers ends the linger.
         MouseArea {
             anchors.fill: parent
             onPressed: {
+                if (root.lingering) {
+                    root.sinkingKeys = false;
+                    return;
+                }
                 const dialog = holder.item as AuthDialog;
-                if (dialog)
+                if (dialog && win.takesKeys && !root.sinkingKeys)
                     dialog.focusField();
             }
         }

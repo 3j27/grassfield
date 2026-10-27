@@ -148,15 +148,18 @@ expect("screen corners call the IPC actions (overview toggle, apps toggle) or No
 agent = code(read("shell/security/polkit/AuthAgent.qml"))
 arrive = code(function(agent, "arrive") or "")
 expect("polkit sheet: shown only while active and unlocked", re.search(r"property bool shown:\s*dialogModel\.active\s*&&\s*!SessionState\.locked", agent) is not None)
-expect("polkit sheet: mapped only when shown", re.search(r"\bvisible:\s*shown\b", agent) is not None)
-expect("polkit sheet: takes the keyboard only when shown and not held", re.search(r"keyboardFocus:\s*win\.takesKeys\s*\?\s*WlrKeyboardFocus\.Exclusive", agent) is not None
-       and re.search(r"property bool takesKeys:\s*shown\s*&&\s*\(!root\.heldByLock\s*\|\|\s*root\.userFocused\s*\|\|\s*root\.sinkingKeys\)", agent) is not None)
+expect("polkit sheet: mapped only when shown, or while the sink lingers (never while locked)",
+       re.search(r"\bvisible:\s*shown\s*\|\|\s*root\.lingering\s*\n", agent) is not None
+       and re.search(r"property bool lingering:\s*root\.sinkingKeys\s*&&\s*!dialogModel\.active\s*&&\s*!SessionState\.locked\s*\n", agent) is not None)
+expect("polkit sheet: takes the keyboard only when shown and not held, or for the sink", re.search(r"keyboardFocus:\s*win\.takesKeys\s*\?\s*WlrKeyboardFocus\.Exclusive", agent) is not None
+       and re.search(r"property bool takesKeys:\s*\(shown\s*&&\s*\(!root\.heldByLock\s*\|\|\s*root\.userFocused\s*\|\|\s*root\.sinkingKeys\)\)\s*\|\|\s*root\.lingering\s*\n", agent) is not None)
 # Review of 1d2c856: a request held behind the lock takes the keyboard only after a click past the guard, never at once.
 expect("polkit sheet: a held request takes the keyboard only after a click past the guard",
        re.search(r"enabled:\s*root\.heldByLock\s*&&\s*!root\.userFocused.*?if\s*\(!dialogModel\.heldClickAccepted\(\)\)\s*return;.*?root\.userFocused\s*=\s*true", agent, re.S) is not None
        and re.search(r"onShownChanged:\s*\{\s*if\s*\(shown\)\s*dialogModel\.noteShown\(\);", agent) is not None)
 expect("polkit sheet: a request arriving while locked, or just after an unlock, is held",
-       re.search(r"heldByLock\s*=\s*dialogModel\.active\s*&&\s*\(follows\s*\|\|\s*dialogModel\.arrivesHeld\(SessionState\.locked\s*\|\|\s*SessionState\.saverShown\)\);", agent) is not None
+       re.search(r"heldByLock\s*=\s*dialogModel\.active\s*&&\s*\(follows\s*\|\|\s*typing\s*\|\|\s*dialogModel\.arrivesHeld\(SessionState\.locked\s*\|\|\s*SessionState\.saverShown\)\);", agent) is not None
+       and re.search(r"const queued\s*=\s*follows\s*\|\|\s*typing\s*\|\|\s*\(dialogModel\.active\s*&&\s*dialogModel\.followsAnother\(\)\);", arrive) is not None
        and re.search(r"if\s*\(!SessionState\.locked\)\s*\{\s*dialogModel\.noteUnlock\(\);", agent) is not None)
 # Review of 6e24d36: the unlock hold and the click guard are timed by Timers (monotonic), never by the wall clock; the
 # agent reads Date.now() only for the arrival time the notice shows.
@@ -183,9 +186,9 @@ expect("polkit holds: each Timer only in its own functions (clickGuard 4, unlock
 # ADR-0032 (owner decision 2026-10-26): the screen saver holds a request as the lock does, its waking click answers nothing,
 # and the click guard starts over when it ends.
 saver_hold = code(function(agent, "onSaverShownChanged") or "")
-expect("polkit sheet: a request open when the screen saver comes up is held, its field emptied (nothing but the lock and no request return first)",
-       re.match(r"\s*if\s*\(!dialogModel\.active\s*\|\|\s*SessionState\.locked\)\s*return;\s*if\s*\(SessionState\.saverShown\)\s*\{", saver_hold) is not None
-       and re.search(r"if\s*\(SessionState\.saverShown\)\s*\{.*?root\.heldByLock\s*=\s*true;\s*root\.userFocused\s*=\s*false;\s*root\.sinkingKeys\s*=\s*false;\s*dialogModel\.clearRequested\(\);", saver_hold, re.S) is not None)
+expect("polkit sheet: the screen saver takes the sink's keys, then a request open when it comes up is held, its field emptied (nothing but the lock and no request return first)",
+       re.match(r"\s*if\s*\(SessionState\.saverShown\)\s*root\.sinkingKeys\s*=\s*false;\s*if\s*\(!dialogModel\.active\s*\|\|\s*SessionState\.locked\)\s*return;\s*if\s*\(SessionState\.saverShown\)\s*\{", saver_hold) is not None
+       and re.search(r"if\s*\(SessionState\.saverShown\)\s*\{.*?root\.heldByLock\s*=\s*true;\s*root\.userFocused\s*=\s*false;\s*dialogModel\.clearRequested\(\);", saver_hold, re.S) is not None)
 # Review of f513b3b (MEDIUM-1): the link that carries the saver's state, and who may give the keyboard or set the hold.
 expect("shell.qml binds SessionState.saverShown to the screen saver's shown",
        re.search(r"Binding\s*\{\s*target:\s*SessionState\s*property:\s*\"saverShown\"\s*value:\s*saver\.shown\s*\}", shell) is not None
@@ -199,12 +202,32 @@ order = [m.start() if m else -1 for m in (re.search(r"\bLoader\s*\{\s*id:\s*hold
 expect("polkit sheet: the sheet, its held-click guard above it, the saver's swallowing area on top", -1 not in order and order == sorted(order))
 # Re-check of b5d7657 (MEDIUM-2): a request that replaces the one being typed into keeps the keyboard on a sink, never
 # handing the rest of a password to the window underneath, until a click past the guard.
-expect("polkit sheet: a request replacing the one being typed into keeps the keys on the sink",
-       re.search(r"const typing\s*=\s*follows\s*&&\s*win\.takesKeys;", arrive) is not None
+# Check of 38dbfe8: `typing` is read before arrive changes what takesKeys reads (its LOW-2 M1), the sink keeps the keys when
+# the request ends (MEDIUM-B) and takes back any focus while it has them (MEDIUM-A), and Esc cancels a held request (LOW-1).
+expect("polkit sheet: a request replacing the one being typed into, or arriving or ending while the sink has the keys, keeps them on the sink (read first)",
+       re.match(r"\s*const typing\s*=\s*\(follows\s*&&\s*win\.takesKeys\)\s*\|\|\s*root\.sinkingKeys;\s*\n", arrive) is not None
        and re.search(r"root\.sinkingKeys\s*=\s*typing;", arrive) is not None
        and re.search(r"onSinkingKeysChanged:\s*if\s*\(sinkingKeys\)\s*keySink\.forceActiveFocus\(\)", agent) is not None
-       and re.search(r"Item\s*\{\s*id:\s*keySink\s*Keys\.onPressed:\s*event\s*=>\s*event\.accepted\s*=\s*true\s*Keys\.onReleased:\s*event\s*=>\s*event\.accepted\s*=\s*true\s*\}", agent) is not None
+       and re.search(r"Item\s*\{\s*id:\s*keySink\s*Keys\.onPressed:\s*event\s*=>\s*\{\s*event\.accepted\s*=\s*true;\s*if\s*\(root\.lingering\)\s*sinkIdle\.restart\(\);\s*"
+                     r"else if\s*\(event\.key\s*===\s*Qt\.Key_Escape\)\s*dialogModel\.cancel\(\);\s*\}\s*Keys\.onReleased:\s*event\s*=>\s*event\.accepted\s*=\s*true\s*"
+                     r"onActiveFocusChanged:\s*if\s*\(!activeFocus\s*&&\s*root\.sinkingKeys\s*&&\s*win\.takesKeys\)\s*forceActiveFocus\(\)\s*\}", agent) is not None
        and re.search(r"root\.userFocused\s*=\s*true;\s*root\.sinkingKeys\s*=\s*false;", agent) is not None)
+expect("polkit sheet: the sink lets go only on a click past the guard, the lock, the screen saver, or the linger's click or timers (six sinkingKeys = false, one = typing)",
+       len(re.findall(r"\bsinkingKeys\s*=\s*false\b", agent)) == 6 and len(re.findall(r"\bsinkingKeys\s*=(?!=)", agent)) == 7
+       and re.search(r"function onLockedChanged\(\):\s*void\s*\{\s*if\s*\(!SessionState\.locked\)\s*\{\s*dialogModel\.noteUnlock\(\);\s*return;\s*\}\s*root\.sinkingKeys\s*=\s*false;", agent) is not None)
+expect("polkit sheet: the linger ends after heldAfterUnlockMs without a key or sinkLingerMaxMs, both started when it starts, neither touching a request's sink",
+       len(re.findall(r"Timer\s*\{\s*id:\s*sink(?:Idle|Cap)\s*interval:\s*dialogModel\.(?:heldAfterUnlockMs|sinkLingerMaxMs)\s*onTriggered:\s*if\s*\(root\.lingering\)\s*root\.sinkingKeys\s*=\s*false\s*\}", agent)) == 2
+       and re.search(r"id:\s*sinkIdle\s*interval:\s*dialogModel\.heldAfterUnlockMs\b", agent) is not None
+       and re.search(r"id:\s*sinkCap\s*interval:\s*dialogModel\.sinkLingerMaxMs\b", agent) is not None
+       and re.search(r"if\s*\(root\.lingering\)\s*\{\s*sinkIdle\.restart\(\);\s*sinkCap\.restart\(\);\s*\}", arrive) is not None
+       and re.search(r"readonly property int sinkLingerMaxMs:\s*3000\s*\n", model) is not None)
+dialog_src = code(read("shell/security/polkit/AuthDialog.qml"))
+backdrop = re.search(r"MouseArea\s*\{\s*anchors\.fill:\s*parent\s*onPressed:\s*\{\s*if\s*\(root\.lingering\)\s*\{\s*root\.sinkingKeys\s*=\s*false;\s*return;\s*\}\s*"
+                     r"const dialog\s*=\s*holder\.item as AuthDialog;\s*if\s*\(dialog\s*&&\s*win\.takesKeys\s*&&\s*!root\.sinkingKeys\)\s*dialog\.focusField\(\);\s*\}\s*\}", agent)
+expect("polkit sheet: the field is focused only where it may be (the agent: when shown unheld, a backdrop click with the keyboard and no sink, the click past the guard; the sheet: when it loads and after a failure)",
+       backdrop is not None and len(re.findall(r"\.focusField\(\)", agent)) == 3
+       and len(re.findall(r"\bfocusField\(\)", dialog_src)) == 3 and re.search(r"Component\.onCompleted:\s*focusField\(\)", dialog_src) is not None
+       and re.search(r"function onFailed\(\):\s*void\s*\{\s*shakeAnimation\.restart\(\);\s*root\.focusField\(\);\s*\}", dialog_src) is not None)
 expect("polkit sheet: a request that comes right after another one ended is held (noteEnded when none is left)",
        re.search(r"if\s*\(!dialogModel\.active\)\s*dialogModel\.noteEnded\(\);", arrive) is not None)
 expect("polkit sheet: the hold is set only on an arrival, a lock and the screen saver",
@@ -219,7 +242,8 @@ expect("polkit sheet: the click guard starts over when the screen saver ends",
        re.search(r"else if\s*\(root\.heldByLock\)\s*\{\s*dialogModel\.noteUncovered\(\);", saver_hold) is not None)
 expect("polkit sheet: a press goes nowhere while the screen saver shows",
        re.search(r"MouseArea\s*\{\s*anchors\.fill:\s*parent\s*enabled:\s*SessionState\.saverShown\s*acceptedButtons:\s*Qt\.AllButtons\s*onPressed:\s*mouse\s*=>\s*mouse\.accepted\s*=\s*true\s*onWheel:\s*wheel\s*=>\s*wheel\.accepted\s*=\s*true\s*\}", agent) is not None)
-expect("polkit sheet: a request open when the lock engages is held", re.search(r"else if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true", agent) is not None)
+expect("polkit sheet: a request open when the lock engages is held",
+       re.search(r"root\.sinkingKeys\s*=\s*false;\s*if\s*\(dialogModel\.active\)\s*\{\s*root\.heldByLock\s*=\s*true;\s*root\.heldWhy\s*=\s*\"locked\";\s*root\.userFocused\s*=\s*false;\s*\}", agent) is not None)
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
 
@@ -327,15 +351,15 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
   'shell/security/polkit/AuthAgent.qml#shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)#shown' \
-  'shell/security/polkit/AuthAgent.qml#const typing = follows && win.takesKeys;#const typing = false;' \
-  'shell/security/polkit/AuthAgent.qml#Keys.onPressed: event => event.accepted = true#Keys.onPressed: event => event.accepted = false' \
+  'shell/security/polkit/AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys;#const typing = false;' \
+  'shell/security/polkit/AuthAgent.qml#                event.accepted = true;\n                if (root.lingering)#                event.accepted = false;\n                if (root.lingering)' \
   'shell/security/polkit/AuthAgent.qml#        root.userFocused = false;\n        root.sinkingKeys = typing;#        root.sinkingKeys = typing;' \
   'shell/security/polkit/AuthAgent.qml#            dialogModel.noteEnded();#            ;' \
   'shell/security/polkit/AuthDialogModel.qml#return locked || unlockHold.running || afterRequest.running;#return locked || unlockHold.running;' \
   'shell/security/polkit/AuthAgent.qml#if (shown && !root.heldByLock)#if (shown)' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown)#SessionState.locked || SessionState.saverShown' \
   'shell/security/polkit/AuthAgent.qml#arrivesHeld(SessionState.locked || SessionState.saverShown)#arrivesHeld(SessionState.locked)' \
-  'shell/security/polkit/AuthAgent.qml#                root.heldByLock = true;\n                root.userFocused = false;\n                root.sinkingKeys = false;\n                dialogModel.clearRequested();#                root.userFocused = false;' \
+  'shell/security/polkit/AuthAgent.qml#                root.heldByLock = true;\n                root.userFocused = false;\n                dialogModel.clearRequested();#                root.userFocused = false;' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.noteUncovered();#;' \
   'shell/security/polkit/AuthAgent.qml#enabled: SessionState.saverShown#enabled: false' \
   'shell/security/polkit/AuthAgent.qml#acceptedButtons: Qt.AllButtons#acceptedButtons: Qt.LeftButton' \
@@ -351,6 +375,20 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthDialogModel.qml#return locked || unlockHold.running || afterRequest.running;#return locked || Date.now() - priv.unlockedAt < heldAfterUnlockMs;' \
   'shell/security/polkit/AuthDialogModel.qml#return priv.shown && !clickGuard.running;#return !clickGuard.running;' \
   'shell/security/polkit/AuthAgent.qml#active ? new Date() : null#active ? Date.now() : 0' \
+  'shell/security/polkit/AuthAgent.qml#onActiveFocusChanged: if (!activeFocus && root.sinkingKeys && win.takesKeys)#onActiveFocusChanged: if (false)' \
+  'shell/security/polkit/AuthAgent.qml#        const typing = (follows && win.takesKeys) || root.sinkingKeys;\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());#        let typing = false;\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());\n        typing = (follows && win.takesKeys) || root.sinkingKeys;' \
+  'shell/security/polkit/AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys;#const typing = follows && win.takesKeys;' \
+  'shell/security/polkit/AuthAgent.qml#visible: shown || root.lingering#visible: shown' \
+  'shell/security/polkit/AuthAgent.qml#root.sinkingKeys && !dialogModel.active && !SessionState.locked#root.sinkingKeys && !dialogModel.active' \
+  'shell/security/polkit/AuthAgent.qml#                return;\n            }\n            root.sinkingKeys = false;#                return;\n            }' \
+  'shell/security/polkit/AuthAgent.qml#            if (SessionState.saverShown)\n                root.sinkingKeys = false;\n#' \
+  'shell/security/polkit/AuthAgent.qml#        interval: dialogModel.heldAfterUnlockMs\n        onTriggered: if (root.lingering)#        interval: dialogModel.heldAfterUnlockMs\n        onTriggered: if (true)' \
+  'shell/security/polkit/AuthAgent.qml#        if (root.lingering) {\n            sinkIdle.restart();\n            sinkCap.restart();\n        }\n#' \
+  'shell/security/polkit/AuthAgent.qml#if (dialog && win.takesKeys && !root.sinkingKeys)#if (dialog)' \
+  'shell/security/polkit/AuthAgent.qml#(follows || typing || dialogModel.arrivesHeld(#(follows || dialogModel.arrivesHeld(' \
+  'shell/security/polkit/AuthDialog.qml#            field.clear();\n#            field.clear();\n            root.focusField();\n' \
+  'shell/security/polkit/AuthAgent.qml#                else if (event.key === Qt.Key_Escape)\n                    dialogModel.cancel();#                else if (event.key === Qt.Key_Escape)\n                    ;' \
+  'shell/security/polkit/AuthDialogModel.qml#readonly property int sinkLingerMaxMs: 3000#readonly property int sinkLingerMaxMs: 30000' \
   'shell/security/lock/Lock.qml#secureGrace.restart();#root.securedAt = Date.now();' \
   'shell/security/lock/Lock.qml#if (!holding || secureGrace.running) {#if (!holding || Date.now() - root.securedAt < 500) {' \
   'shell/security/lock/Lock.qml#if (!holding || !hyprland || secureGrace.running)#if (!holding || !hyprland)' \

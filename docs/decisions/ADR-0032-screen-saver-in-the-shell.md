@@ -65,9 +65,16 @@ black; and the waking key or click consumed, as on macOS.
   nowhere. Opus review of f513b3b: PASS; its findings (the lint did not check the saver's Binding; a second request
   inherited the first one's hold and focus, pre-existing; every button and the wheel) fixed in b5d7657. Its re-check:
   PASS; its findings (a request right after another ended was not held; a replacement while typing let the rest of a
-  password reach the window underneath, new in b5d7657; lint gaps) fixed in the commit after (docs/specs/security.md). `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the
-  saver's state to `shell/security/polkit`, the one change there (docs/specs/security.md § Nothing opens over the lock); it
-  can only hold a request, never release one. An opus review covers this input handling before merge.
+  password reach the window underneath, new in b5d7657; lint gaps) fixed in 38dbfe8 (a key sink). Its check: PASS with
+  two mediums, both from the fix: anything that moved the focus defeated the sink (MEDIUM-A), and a request that ended
+  while keys were sunk handed the rest to the window underneath (MEDIUM-B); lows: no Esc on the sink, lint gaps only a
+  behavioural test caught, a wrong upstream note. Two fixes of the same hazard having failed review, the owner decided
+  (2026-10-26, "Corriger A et B"): the sink takes back any focus and Esc cancels, and a request ending while keys are sunk
+  leaves the sink lingering, clear, for up to 1 s after the last key (3 s at most); the reviewers' harness is in the
+  repository (tests/security/authagent_flows.sh), fixed in the commit after (docs/specs/security.md).
+  `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the saver's state to `shell/security/polkit`,
+  the one change there (docs/specs/security.md § Nothing opens over the lock); it can only hold a request, never release
+  one. An opus review covers this input handling before merge.
 - Only the waking key or click is consumed: the keys typed after it reach the focused window, as on macOS (owner decision
   2026-10-26, opus review of 0231b44 M2: the wallpaper-with-clock saver uses the lock screen's clock, and a password typed
   out of habit after the first key goes to that window; the owner kept macOS's behaviour).

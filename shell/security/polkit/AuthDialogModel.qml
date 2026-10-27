@@ -67,6 +67,9 @@ QtObject {
     readonly property Timer afterRequest: Timer {
         interval: root.heldAfterUnlockMs
     }
+    // The longest the agent keeps the keyboard on its key sink after a request ended while the user typed (AuthAgent
+    // `lingering`): their keys go nowhere meanwhile, then to the window underneath again.
+    readonly property int sinkLingerMaxMs: 3000
 
     // The session was unlocked: requests arriving in the next heldAfterUnlockMs are held.
     function noteUnlock(): void {
