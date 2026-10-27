@@ -68,7 +68,7 @@ private:
 };
 } // namespace
 
-Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *out)
+Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *out, QString *resolved)
 {
     if (!QDir::isAbsolutePath(path))
         return Refusal::Unreadable;
@@ -106,6 +106,8 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
                 return Refusal::NotRegular;
             if (out)
                 *out = st;
+            if (resolved)
+                *resolved = next;
             return Refusal::None;
         }
         if (!S_ISDIR(st.st_mode))
@@ -115,20 +117,32 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
     return Refusal::NotRegular; // the root folder itself
 }
 
-QSize read(const QString &path, const FolderStyleStore::Mounts &mounts)
+int openChecked(const QString &resolved, const struct stat &checked)
 {
-    struct stat checked {};
-    if (check(path, mounts, &checked) != Refusal::None)
-        return QSize();
-    // O_NONBLOCK: a FIFO swapped in after the check opens at once (and is refused below) instead of waiting for a writer.
-    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+    // O_NOFOLLOW: a link swapped in at the checked path after the check is refused (ELOOP) instead of followed, wherever it
+    // leads (a network share would block the open). O_NONBLOCK: a FIFO swapped in opens at once (and is refused below)
+    // instead of waiting for a writer.
+    const int fd = ::open(QFile::encodeName(resolved).constData(), O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC | O_NOFOLLOW);
     if (fd < 0)
-        return QSize();
+        return -1;
     struct stat opened {};
     if (::fstat(fd, &opened) != 0 || !S_ISREG(opened.st_mode) || opened.st_dev != checked.st_dev || opened.st_ino != checked.st_ino) {
         ::close(fd);
-        return QSize();
+        return -1;
     }
+    return fd;
+}
+
+QSize read(const QString &path, const FolderStyleStore::Mounts &mounts)
+{
+    struct stat checked {};
+    QString resolved;
+    if (check(path, mounts, &checked, &resolved) != Refusal::None)
+        return QSize();
+    // The path check() reached (a link to a picture is read through its target), never a link any more.
+    const int fd = openChecked(resolved, checked);
+    if (fd < 0)
+        return QSize();
     BudgetFile file;
     if (!file.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
         ::close(fd);

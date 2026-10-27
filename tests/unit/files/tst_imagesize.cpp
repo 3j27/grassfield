@@ -1,8 +1,9 @@
 // Unit tests for apps/files/src/imagesize.{h,cpp} (gtest): the preview pane's Dimensions never block the GUI thread
 // (docs/specs/files.md "Preview pane"): a FIFO or a link to /dev/zero named like a picture is never opened, a huge file is
-// read up to the budget only, a path on a network or FUSE mount is never looked at, and the Reader answers later on the
-// caller's thread. Built and run by scripts/dev/test.sh. The files are made only under GRASSFIELD_TEST_TMP, a directory
-// inside the repository's .dev/ (set by scripts/dev/test.sh); the tests skip without it.
+// read up to the budget only, a path on a network or FUSE mount is never looked at, a link swapped in after the check is
+// never followed, and the Reader answers later on the caller's thread. Built and run by scripts/dev/test.sh. The files
+// are made only under GRASSFIELD_TEST_TMP, a directory inside the repository's .dev/ (set by scripts/dev/test.sh); the
+// tests skip without it.
 #include "imagerotate.h"
 #include "imagesize.h"
 
@@ -12,6 +13,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QImage>
 #include <QTemporaryDir>
@@ -181,6 +183,45 @@ TEST(ImageSize, AHugeFileIsReadUpToTheBudget)
     EXPECT_TRUE(returnsWithin(5000, [&] { size = ImageSize::read(big, mounts); }));
     EXPECT_EQ(size, QSize(30, 20));
     std::printf("huge files: %lld ms for both reads\n", static_cast<long long>(clock.elapsed()));
+}
+
+// A link swapped in at the checked path after the check is never followed by the open, wherever it leads (a network share
+// would block the open itself): here even to the checked file (a hard link elsewhere keeps its inode), which the device and
+// inode comparison after the open would accept. A picture reached through a link is still read: check() follows the link
+// and the file is opened by the path it reached.
+TEST(ImageSize, ALinkSwappedInAfterTheCheckIsNeverFollowed)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    QImage image(16, 9, QImage::Format_RGB32);
+    image.fill(Qt::yellow);
+    const QString pictures = dir->path() + QStringLiteral("/pictures");
+    const QString elsewhere = dir->path() + QStringLiteral("/elsewhere");
+    ASSERT_TRUE(QDir().mkpath(pictures));
+    ASSERT_TRUE(QDir().mkpath(elsewhere));
+    const QString png = pictures + QStringLiteral("/swap.png");
+    ASSERT_TRUE(write(png, encoded(image, "PNG")));
+    struct stat checked {};
+    QString resolved;
+    ASSERT_EQ(ImageSize::check(png, mounts, &checked, &resolved), ImageSize::Refusal::None);
+    EXPECT_EQ(QFileInfo(resolved).canonicalFilePath(), QFileInfo(png).canonicalFilePath());
+    int fd = ImageSize::openChecked(resolved, checked);
+    EXPECT_GE(fd, 0) << "the checked file, unchanged";
+    if (fd >= 0)
+        ::close(fd);
+    // After the check: the checked name becomes a link to the same inode.
+    const QString same = elsewhere + QStringLiteral("/same.png");
+    ASSERT_EQ(::link(QFile::encodeName(png).constData(), QFile::encodeName(same).constData()), 0);
+    ASSERT_EQ(::unlink(QFile::encodeName(png).constData()), 0);
+    ASSERT_TRUE(QFile::link(same, png));
+    fd = ImageSize::openChecked(resolved, checked);
+    EXPECT_EQ(fd, -1) << "the link swapped in after the check was followed";
+    if (fd >= 0)
+        ::close(fd);
+    // A fresh read through that link: checked again, opened by its target's path.
+    EXPECT_EQ(ImageSize::read(png, mounts), QSize(16, 9));
 }
 
 TEST(ImageSize, NetworkAndFuseMountsAreNeverLookedAt)

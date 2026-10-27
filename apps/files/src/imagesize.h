@@ -33,12 +33,18 @@ enum class Refusal {
 // Whether the picture at `path` may be opened: the path is walked one component at a time from the root, a symbolic
 // link followed by its text, and every component's filesystem is checked against `mounts` BEFORE it is looked at (local
 // disks, removable disks and memory only); the file at the end must be a regular file (lstat, nothing is opened). `st`
-// (optional) receives its status. A lstat: never on the GUI thread.
-Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *st = nullptr);
+// (optional) receives its status and `resolved` (optional) the path that was reached: every link in `path` followed, no
+// link left in it. A lstat: never on the GUI thread.
+Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *st = nullptr, QString *resolved = nullptr);
+
+// Opens the file check() approved by the path check() reached (`resolved`), read only, without blocking (O_NONBLOCK,
+// O_NOCTTY) and without following a link (O_NOFOLLOW: a link swapped in at that path after the check is refused, wherever
+// it leads); the descriptor is returned only when it is still the file checked (same device and inode, a regular file),
+// -1 otherwise. Never on the GUI thread.
+int openChecked(const QString &resolved, const struct stat &checked);
 
 // The size as shown (a picture turned by its EXIF orientation reports the turned size), invalid when unknown or refused.
-// check() first; then the file is opened without blocking (O_NONBLOCK, O_NOCTTY) and the descriptor must be the file
-// checked (same device and inode, still regular); the format is the content's, and at most kReadBudget bytes are read.
+// check() first, then openChecked(); the format is the content's, and at most kReadBudget bytes are read.
 // Never on the GUI thread.
 QSize read(const QString &path, const FolderStyleStore::Mounts &mounts);
 
