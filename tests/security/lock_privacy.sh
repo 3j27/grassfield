@@ -99,13 +99,25 @@ near() { # <a> <b> <a0> <b0>: four integers, a within 2 of a0 and b within 2 of 
   (($1 - $3 <= 2 && $3 - $1 <= 2 && $2 - $4 <= 2 && $4 - $2 <= 2))
 }
 
+# Grabs one output to <png>, never leaving an older file in its place: the captures stay in $work between runs and
+# the fixture windows open at the same places every run, so a stale image would pass every check. The file is deleted
+# first and must exist, be non-empty and be no older than the grab's start; a failure is reported on stderr.
+grab() { # <output> <png>
+  local start t
+  start=$(date +%s)
+  rm -f "$2"
+  nested grim -o "$1" "$2" 2>/dev/null || { echo "lock_privacy: grim -o $1 failed ($2)" >&2; return 1; }
+  t=$(stat -c %Y "$2" 2>/dev/null) && [[ -s $2 && $t =~ ^[0-9]+$ ]] && ((t >= start)) \
+    || { echo "lock_privacy: grim -o $1 left no fresh $2" >&2; return 1; }
+}
+
 # Captures both nested outputs (GF-REF headless reference, WAYLAND-1 window) to $work/<name>-<output>.png: prints
-# "<magenta> <green>" summed.
+# "<magenta> <green>" summed, or "error error" when a grab or a count fails (the callers then FAIL).
 capture() { # <name>
   local output png m=0 g=0 c
   for output in GF-REF WAYLAND-1; do
     png=$work/$1-$output.png
-    nested grim -o "$output" "$png" 2>/dev/null || { echo "error error"; return; }
+    grab "$output" "$png" || { echo "error error"; return; }
     c=$(count_colour "$png" "#ff00ff"); [[ $c =~ ^[0-9]+$ ]] || { echo "error error"; return; }
     m=$((m + c))
     c=$(count_colour "$png" "#00ff00"); [[ $c =~ ^[0-9]+$ ]] || { echo "error error"; return; }
@@ -135,8 +147,15 @@ fixture_get() { # <key>: the last value setup wrote
   [[ -s $fixture ]] && sed -n "s/^$1=//p" "$fixture" | tail -n 1
 }
 
-# Succeeds when the setup's self-check passed and its probe and Bitwarden windows are still open; sets why otherwise.
+# The fixture record was written by a setup in this nested instance (it stays in $work between runs and sessions).
+fixture_ours() {
+  [[ $(fixture_get instance) == "$sig" ]] || { why="no setup ran in this nested session (setup step)"; return 1; }
+}
+
+# Succeeds when the setup's self-check passed in this session and its probe and Bitwarden windows are still open;
+# sets why otherwise.
 fixture_proven() {
+  fixture_ours || return 1
   [[ $(fixture_get proven) == 1 ]] || { why="the fixture self-check did not pass (setup step)"; return 1; }
   [[ $(client_info "$(fixture_get probe)") == *" gf-privacy-probe "* ]] || { why="the self-checked probe window is gone"; return 1; }
   [[ $(client_info "$(fixture_get protected)") == *" Bitwarden "* ]] || { why="the self-checked Bitwarden window is gone"; return 1; }
@@ -147,6 +166,7 @@ fixture_proven() {
 region() { # <capture png> <window address> <name> <#rrggbb>
   local x y w h png=$work/$3.png geometry centre
   read -r x y w h _ < <(client_info "$2")
+  rm -f "$png"
   [[ ${h:-} =~ ^[0-9]+$ ]] && ((w > 2 * inset && h > 2 * inset)) || { echo "error none"; return; }
   geometry=$(awk -v x="$x" -v y="$y" -v w="$w" -v h="$h" -v mx="$mon_x" -v my="$mon_y" -v s="$mon_scale" -v i="$inset" \
     'BEGIN { printf "%dx%d+%d+%d", (w - 2 * i) * s, (h - 2 * i) * s, (x - mx + i) * s, (y - my + i) * s }')
@@ -165,7 +185,7 @@ settle() { # <name> <address> <#rrggbb> [<address> <#rrggbb>...]
   png=$work/$name-settle-$out.png
   for _ in $(seq 1 6); do
     ok=0
-    if nested grim -o "$out" "$png" 2>/dev/null; then
+    if grab "$out" "$png" 2>/dev/null; then
       ok=1
       for ((k = 0; k + 1 < ${#pairs[@]}; k += 2)); do
         read -r f _ < <(region "$png" "${pairs[k]}" "$name-settle" "${pairs[k + 1]}")
@@ -254,6 +274,7 @@ foot_window() { # <app id> <rrggbb> <x> <y>
 step_setup() {
   local px py rx probe twin i m="" g="" pm="error" pc="none" gm="error" gc="none" ok=1 tx ty tw th bx by bw bh
   rm -f "$fixture"
+  echo "instance=$sig" >>"$fixture"
   magick -size 64x64 xc:"#ff00ff" "$marker" || { fail "setup: cannot draw the marker image"; return; }
   monitor_load || { fail "setup: $why"; return; }
   px=$((mon_w / 10)) py=$(((mon_h - win_h) / 2)) rx=$((mon_w - mon_w / 10 - win_w))
@@ -272,6 +293,7 @@ step_setup() {
   # Self-check: each fixture colour renders, read in the windows' own regions (not the banners).
   settle selfcheck "$probe" "#ff00ff" "$twin" "#00ff00" || true
   read -r m g < <(capture selfcheck)
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "setup: self-check: the capture failed (no fresh $work/selfcheck-*.png), nothing is proven"; return; }
   read -r pm pc < <(region "$work/selfcheck-$out.png" "$probe" selfcheck-probe "#ff00ff")
   read -r gm gc < <(region "$work/selfcheck-$out.png" "$twin" selfcheck-twin "#00ff00")
   echo "self-check capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc); both outputs: magenta $m px, green $g px ($work/selfcheck-*.png)"
@@ -308,7 +330,7 @@ step_screenshare() {
   probe=$(fixture_get probe) protected=$(fixture_get protected)
   settle screenshare "$probe" "#ff00ff" "$protected" "#000000" || true
   read -r m g < <(capture screenshare)
-  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "screenshare: capture failed"; return; }
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "screenshare: the capture failed (no fresh $work/screenshare-*.png)"; return; }
   read -r pm pc < <(region "$work/screenshare-$out.png" "$probe" screenshare-probe "#ff00ff")
   read -r bk bc < <(region "$work/screenshare-$out.png" "$protected" screenshare-bitwarden "#000000")
   echo "screenshare capture: probe region magenta $pm (centre $pc), Bitwarden region black $bk (centre $bc); both outputs: magenta $m px, green $g px ($work/screenshare-*.png)"
@@ -323,10 +345,12 @@ step_screenshare() {
 step_control() {
   local m="" g="" pm pc probe
   monitor_load || { fail "control: $why"; return; }
+  fixture_ours || { fail "control: $why"; return; }
   probe=$(fixture_get probe)
   [[ $(client_info "$probe") == *" gf-privacy-probe "* ]] || { fail "control: no probe window (run the setup step first)"; return; }
   settle control "$probe" "#ff00ff" || true
   read -r m g < <(capture control)
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "control: the capture failed (no fresh $work/control-*.png)"; return; }
   read -r pm pc < <(region "$work/control-$out.png" "$probe" control-probe "#ff00ff")
   echo "control capture: probe region magenta $pm (centre $pc); both outputs, banners included: magenta $m px ($work/control-*.png)"
   at_least "$pm" 0.9 && pass "control: the probe window shows the marker colour before the lock ($pm of its region): the detector works" \
@@ -359,7 +383,7 @@ step_privacy() {
   sleep 1.5
   read -r m g < <(capture privacy)
   echo "privacy capture: magenta $m, green $g ($work/privacy-*.png)"
-  [[ $m =~ ^[0-9]+$ ]] || { fail "privacy: capture failed"; return; }
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "privacy: the capture failed (no fresh $work/privacy-*.png)"; return; }
   if ((m != 0)); then
     fail "privacy: $m marker pixels on the lock screen (notification or window content visible, L4)"
   elif ((proven)); then
