@@ -1,4 +1,5 @@
 .pragma library
+.import "../platform/Minimized.js" as Minimized
 
 // The clipboard history's decisions on the shell side (ADR-0034): whether a copy may be recorded, where the helper looks, the
 // helper's lines, the item list, and the paste request sent to Hyprland. Pure functions, unit-tested (tests/unit/tst_clipboard.qml);
@@ -145,32 +146,35 @@ function removeId(items, id) {
 function mayPaste(s) {
     if (!s || s.locked !== false || s.helperLocked !== false || s.closedSinceOpen !== false || s.otherSurfaceOpen !== false)
         return false;
-    const want = String(s.rememberedAddress || "");
-    if (!isAddress(want) || String(s.activeAddress || "") !== want)
+    const want = Minimized.normalizeAddress(s.rememberedAddress || "");
+    if (want === "" || Minimized.normalizeAddress(s.activeAddress || "") !== want)
         return false;
     const elapsed = Number(s.elapsedMs);
     return isFinite(elapsed) && elapsed >= 0 && elapsed <= PASTE_WAIT_MS;
 }
 
+// A window address as Hyprland names it, with or without "0x" (Minimized.normalizeAddress, the platform's one validator).
 function isAddress(address) {
-    return /^0x[0-9a-f]{1,16}$/.test(String(address));
+    return Minimized.normalizeAddress(address) !== "";
 }
 
 // The Lua function Hyprland runs for a paste (Quickshell sends it as `return hl.dispatch(<request>)`, the Zoom.js pattern). It
-// checks, in the same compositor call, that the active window is still the remembered address, then sends that window Ctrl+V
-// (Ctrl+Shift+V when its class passes forwarding.lua's terminal test) by address. The key up's timer is armed before the key
-// down is sent, in the same call, and is unconditional: a V that went down is always released in the window that got it. ""
-// for an invalid address.
+// checks, in the same compositor call, that the active window is still the remembered address (compared without "0x" and in
+// lower case, whichever form Hyprland's Lua gives), then sends that window Ctrl+V (Ctrl+Shift+V when its class passes
+// forwarding.lua's terminal test) by `address:0x<hex>`, the selector Minimized.js uses. The key up's timer is armed before the
+// key down is sent, in the same call, and is unconditional: a V that went down is always released in the window that got it.
+// "" for an invalid address.
 function pasteRequest(address) {
-    if (!isAddress(address))
+    const hex = Minimized.normalizeAddress(address);
+    if (hex === "")
         return "";
     const quote = s => "\"" + s + "\"";
     const classes = "{ " + TERMINAL_CLASSES.map(quote).join(", ") + " }";
     const prefixes = "{ " + TERMINAL_PREFIXES.map(p => quote(p.replace(/\./g, "%."))).join(", ") + " }";
-    const target = quote("address:" + address);
+    const target = quote("address:0x" + hex);
     return "function() "
         + "local w = hl.get_active_window(); "
-        + "if not w or w.address ~= " + quote(address) + " then return end; "
+        + "if not w or (string.lower(tostring(w.address or \"\")):gsub(\"^0x\", \"\")) ~= " + quote(hex) + " then return end; "
         + "local c = (w.class or \"\"):lower(); local terminal = false; "
         + "for _, n in ipairs(" + classes + ") do if c == n then terminal = true end end; "
         + "for _, p in ipairs(" + prefixes + ") do if c:find(\"^\" .. p) then terminal = true end end; "

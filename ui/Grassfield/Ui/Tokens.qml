@@ -914,6 +914,36 @@ QtObject {
     readonly property int searchPanelTop: 20
     // result icon 26 from the panel edge [ref: docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Search]
     readonly property int searchRowIconInset: 26
+    // the clipboard row's source app badge at the thumbnail's bottom right: macOS 26.0 about 10 pt, 12 so that an app icon still reads at Grassfield's 36 tile [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipBadgeSize: 12
+    // estimate: how far the badge overhangs the thumbnail's bottom right corner (macOS 26.0 capture W-38) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipBadgeOverhang: 3
+    // estimate: the text thumbnail, a page 28 x 36 in the 36 tile (macOS 26.0: a page with the text) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPageWidth: 28
+    // estimate: the excerpt printed on the text thumbnail's page, a texture more than a text (macOS 26.0) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPageTextSize: Math.round(5 * Appearance.textScale)
+    // estimate: the excerpt's margin inside the text thumbnail's page [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPageInset: 3
+    // the round copy button: macOS 26.0 disc 26.5 pt (W-38); the pin button is the same disc [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipButtonSize: 26
+    // the pin button 8 left of the copy button (Grassfield: macOS has no pin) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipButtonGap: 8
+    // the copy button's right edge 12 from the selected row's right edge (to measure on a macOS 27 capture) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipButtonInset: 12
+    // estimate: the copy and pin glyphs in the 26 disc (macOS 26.0: about 0.55 of the disc) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipButtonGlyph: 15
+    // the More (…) button at the capsule's right end: macOS 26.0 circle outline 20 pt (W-40) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipMoreSize: 20
+    // estimate: how long a row says Copied after the copy button or Ctrl+C (CB-8: a short Copied state) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipCopiedMs: 1500
+    // estimate: the item preview panel beside Search (CB-11; macOS shows the item in Quick Look) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPreviewWidth: 440
+    // the preview panel's gap to the results panel, the capsule-to-panel gap (search.capsuleGap) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPreviewGap: 11
+    // estimate: the preview's plain text, a reading size (CB-11) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPreviewTextSize: Math.round(14 * Appearance.textScale)
+    // estimate: the first-use prompt's margins inside the results panel (CB-6, macOS 26.0 capture W-36) [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPromptPadding: 24
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockTopMargin: 64
