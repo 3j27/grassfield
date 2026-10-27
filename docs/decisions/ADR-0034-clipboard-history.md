@@ -84,7 +84,7 @@ Each question was asked in French with these options (the first one marked "Reco
 | Q8 | Effacement quand il y a des épinglés | « Modèle Windows (Recommandé) » (Clear History spares pins; Settings' confirmation can also delete them; turning off keeps pins); « Tout effacer toujours » | « Modèle Windows (Recommandé) » |
 | Q9 | Choisir un élément (asked with Apple's text: "Click [icon] … or select the item and press Command-C." then "To paste the item, click where you want it to appear, then press Command-V."): que fait Retour (ou un clic) ? | « Coller automatiquement (Recommandé) » (Windows' model and the brief; ⌘C and the copy button only copy, as Apple documents); « Copier puis ⌘V (Apple) »; « Les deux » | « Coller automatiquement (Recommandé) » |
 | Q10 | Libellé du bouton de l'invite au premier usage | « Autoriser (Recommandé) » (macOS 27's "Allow"); « Activer » (macOS 26 "Enable", Windows "Turn on") | « Autoriser (Recommandé) » |
-| Q11 | Une invite polkit en écho peut être copiée depuis son champ : que fait l'historique ? | « Ne rien enregistrer (Recommandé) » (no copy recorded while an authorization dialog is shown and 2 s after it closes; no change in `shell/security`); « Bloquer aussi la copie » (also change `PasswordField.qml`, opus PASS); « Enregistrer normalement » | « Ne rien enregistrer (Recommandé) » |
+| Q11 | Une invite polkit en écho peut être copiée depuis son champ : que fait l'historique ? | « Ne rien enregistrer (Recommandé) » (no copy recorded while an authorization dialog is shown and 2 s after it closes; described as needing no change in `shell/security`, which proved wrong: the binding needs one read-only property in `AuthAgent`, §2); « Bloquer aussi la copie » (also change `PasswordField.qml`, opus PASS); « Enregistrer normalement » | « Ne rien enregistrer (Recommandé) » |
 
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
@@ -139,11 +139,17 @@ Each question was asked in French with these options (the first one marked "Reco
    item n", search results (ids), notices (pin limit), and its state (`ok`, `unsupported`, `paused`). The full text stays in
    the helper: the search runs there (case- and accent-insensitive substring of the plain text and file names).
    The shell answers `Y` only while the history is on, the session is not locked by either source (6), no authorization
-   dialog is shown and none closed in the last 2 s (Q11; `shell.qml` binds the polkit agent's dialog state into
-   `SessionState`, as it does for the lock: `shell/security` is not changed), and the active window is not a password manager
+   dialog is shown and none closed in the last 2 s (Q11), and the active window is not a password manager
    the session hides from screen sharing (`config/hypr/grassfield/privacy.lua`; for apps that set no hint, such as
    Bitwarden). Neither process logs content: counts, kinds, sizes and reasons only, never text, file names, URLs, titles or
    hashes.
+   The authorization state (counter-review of the step 0 PASS, minor d): `AuthAgent` exposes no "dialog shown" property
+   (`win.shown` is internal; `requestStartedAt` is for display only and never compared). Step 1 adds one read-only property
+   to `shell/security/polkit/AuthAgent.qml`, `requestActive: dialogModel.active` (a request is open: its sheet shown, or held
+   behind the lock), which nothing in the agent reads; `shell.qml` gives the agent an id and binds it to a new
+   `SessionState.authorizing`, as it binds `Lock.locked` to `SessionState.locked`. The service keeps the time `authorizing`
+   last became false and answers `N` within 2 s of it. That line under `shell/security` needs an opus PASS (R12) and is
+   named in the step 1 pull request.
 
 3. **Source app.** Data control does not say which client set the selection. The shell's `Y` carries the app of the window
    active when the offer was decided (Hyprland's active window), and the row shows its icon as macOS shows the source app;
@@ -161,7 +167,12 @@ Each question was asked in French with these options (the first one marked "Reco
    when Search opened; once that window is active again (at most 1 s), and only while neither `SessionState.locked` nor the
    helper's `L 1` says the session is locked, the shell sends Hyprland one Lua function (`Hyprland.dispatch`, the `Zoom.js`
    pattern) that checks that the active window is still that address and only then sends it Ctrl+V, or Ctrl+Shift+V when the
-   window is a terminal, key down then key up 50 ms later, with `window = "address:<addr>"`. Ctrl+Shift+V is the clipboard
+   window is a terminal, key down, with `window = "address:<addr>"`. The key up follows 50 ms later from a Hyprland timer that
+   the same function arms, to the same address, and does **not** check the active window again: a V that went down is always
+   released in the window that got it, whatever became active meanwhile (counter-review, minor b); if that window has closed,
+   the up is a no-op (`window not found`). Window addresses can be reused by a new window (counter-review, minor c): the
+   shell drops the paste when Hyprland reports `closewindow` for the remembered address at any time between Search's opening
+   and the dispatch, so a new window that took the address never gets the keys. Ctrl+Shift+V is the clipboard
    paste of alacritty, kitty, ghostty, foot and wezterm by default and is kept by Omarchy 4.0.4's terminal configs
    (`foot.ini:20` lists it beside Shift+Insert); Shift+Insert is not used, as kitty pastes the primary selection with it. The
    terminal test is the one of `config/hypr/grassfield/forwarding.lua:26-37` as a whole (its class list and its
@@ -225,10 +236,15 @@ Each question was asked in French with these options (the first one marked "Reco
    `.retention`, `.keepOnDisk`, `.clearedAt`, `.pinnedClearedAt`) come from the schema (ADR-0020) in step 1, as the shell
    reads them.
 
-8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET`: it connects only to the
-   socket named by `--display <absolute path>`, which has no default; a missing or relative path, or a path that is not a
-   socket owned by the user (`lstat`, `S_ISSOCK`, `st_uid`), stops it with an error. So no test, script or debugging run of the
-   helper can reach a display it was not explicitly given. The shell names the socket: in a real session
+8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` and never calls
+   `wl_display_connect`: libwayland takes `WAYLAND_SOCKET` first even when a display name is given (the counter-review
+   connected through a decoy `WAYLAND_SOCKET` and the path was ignored, minor a). The helper unsets both variables first, then
+   checks the path named by `--display <absolute path>` (no default; `lstat`: a socket owned by the user), opens an `AF_UNIX`
+   socket itself, `connect()`s to that path, checks the peer (`SO_PEERCRED`: the same user) and hands the descriptor to
+   `wl_display_connect_to_fd`. A missing or relative path, a path that is not such a socket, a failed connect or another peer
+   user stops it with an error. So no test, script or debugging run of the helper can reach a display it was not explicitly
+   given; a test passes a decoy `WAYLAND_SOCKET` (a connected descriptor to a second fake server) and checks that this server
+   sees no client and that the helper talks to the `--display` server only. The shell names the socket: in a real session
    `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY` (or `WAYLAND_DISPLAY` when absolute); in a dev session only the absolute path in
    `GRASSFIELD_CLIPBOARD_DISPLAY` (`scripts/dev/shell-run.sh` sets the nested socket), and without it no helper starts and the
    view says the history is off in development. `CLIPBOARD_HELPER` names another helper binary in dev. Tests run the helper
@@ -287,8 +303,8 @@ larger limits; it keeps everything on the machine.
   `THIRD_PARTY.md`.
 - New settings keys (5), a state directory with an always-on pinned store and an opt-in history store (ADR-0020 table), two
   dev plumbing variables (ADR-0019 table), one binding (Super+Ctrl+V, with its Settings > Keyboard description in
-  `apps/settings/qml/Bindings.js` and the French catalog), one `SessionState` property for the authorization dialog (bound in
-  `shell.qml`; `shell/security` unchanged).
+  `apps/settings/qml/Bindings.js` and the French catalog), one read-only `AuthAgent.requestActive` (the only change under
+  `shell/security`, opus PASS required) bound in `shell.qml` to a new `SessionState.authorizing`.
 - IPC, documented in `docs/specs/security.md` with its code: one action-class function, `search clipboard` (Super+Ctrl+V;
   opens or closes the view, returns nothing, refused while locked), and dev-class functions (`clipboard status`,
   `search view`, the paste and offer test hooks). The Settings app clears through `search.clipboard.clearedAt` and
