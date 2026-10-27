@@ -41,6 +41,7 @@ struct StoreApp {
     bool installed = false;
     bool inCatalog = false;
     bool hasAppStream = false;
+    int component = -1;                // its AppStream component: an index into ModelInputs::appstream, -1 for none
     const CatalogApp *entry = nullptr; // the catalog entry, when there is one (owned by the Catalog)
 };
 
