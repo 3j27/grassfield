@@ -28,9 +28,10 @@ start Omarchy's own update; let them choose the stable or beta channel; keep the
 Omarchy's own changes.
 
 Non-goals:
-- no installation code (the install is `omarchy update`). The only Grassfield code that runs as root writes pacman's
-  configuration for `[grassfield]` and its trust: `grassfield-channel-helper` (pkexec, owner decision O1) and
-  `grassfield-channel-scriptlet` (pacman's scriptlets), ADR-0033 c;
+- no installation code (the install is `omarchy update`). The only Grassfield code of Software Update that runs as root
+  writes pacman's configuration for `[grassfield]` and its trust: `grassfield-channel-helper` (pkexec, owner decision O1)
+  and `grassfield-channel-scriptlet` (pacman's scriptlets), ADR-0033 c. (Grassfield Store's own root helper installs apps
+  the user picks there: ADR-0037 b.1, which amends ADR-0033);
 - no automatic download or install;
 - no per-package choice, no rollback button (Omarchy's snapshots are the rollback);
 - no App Center (master-prompt §4);
@@ -64,7 +65,8 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
   `available` lists, from one `checkupdates` run:
   - the Grassfield release (`grassfield-desktop` installed → candidate, pkgver-pkgrel) with its notes;
   - Omarchy's release (`omarchy` or `omarchy-dev`) as `omarchy-update-available` reports it;
-  - the number of other package updates.
+  - the number of other package updates, and their list (name, installed, available; at most 2000, sorted by name) for
+    Grassfield Store (ADR-0037 d, amending ADR-0033 d.3.5).
   Other `grassfield-*` packages are not listed on their own.
 - U4. One check at a time. A request while one runs joins it.
   - A request while `omarchy update` holds `$XDG_RUNTIME_DIR/omarchy-update.lock` (tested with `flock -n`, released at

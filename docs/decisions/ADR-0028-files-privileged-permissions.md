@@ -18,7 +18,8 @@ history") · Date: 2026-10-26 · Decider: integrator
   available on Omarchy.
 - Grassfield never writes code that runs as root (R12), except the root programs of ADR-0033 c.1
   (`grassfield-channel-helper` and `grassfield-channel-scriptlet`, owner decision O1; ADR-0030's amendment for Settings'
-  path); Files has no such exception. The session's polkit agent is the shell's (Quickshell Polkit, `shell/security`,
+  path) and Grassfield Store's `grassfield-store-helper` (ADR-0037 b.1, owner decision ST4 of 2026-10-27; ADR-0030's second
+  amendment); Files has no such exception. The session's polkit agent is the shell's (Quickshell Polkit, `shell/security`,
   R12 PASS). `pkexec` and GNU coreutils are installed on Omarchy: polkit 127 and coreutils 9.11 on the owner's machine
   (Omarchy 4.0.4); the probes below ran with coreutils 9.12 (the cloud sysroot; its pkexec is 128 and could not run: no
   polkit daemon there).

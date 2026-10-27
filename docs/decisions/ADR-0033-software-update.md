@@ -17,7 +17,8 @@ Both ran in a throwaway `archlinux:base` container ("Evidence" says where and ho
 - The Omarchy model (D1: never fork Omarchy). Grassfield gets a `[grassfield]` repository with two channels, **stable** and
   **beta**, on the same pattern as Omarchy's `pkgs.omarchy.org/{stable,rc,edge}/$arch`.
 - "Update Now" updates the **whole system through Omarchy**, in a terminal, as Omarchy's own menu does. Grassfield has no
-  root code to install anything.
+  root code to install anything. (Amended by ADR-0037, owner decision ST4 of 2026-10-27: Grassfield Store's
+  `grassfield-store-helper` installs and removes repository packages the user picks in the Store; see "Amendments".)
 - The beta channel also receives stable versions when they are newer (macOS model). Leaving the beta keeps the installed
   version until a stable one passes it (`pacman -Syu` does not downgrade).
 - UI as on macOS 27: Settings > General > Software Update (available version, notes, "Update Now", "Beta Updates",
@@ -385,7 +386,8 @@ Rejected:
    5. Split the result:
       - `[grassfield]` packages: the names that `pacman --dbpath <own db> -Sql grassfield` lists;
       - Omarchy: the `omarchy` or `omarchy-dev` line;
-      - the rest: a count.
+      - the rest: a count, and (amendment ADR-0037) a list of the same updates for Grassfield Store: name, installed
+        version, available version, at most 2000 entries, sorted by name.
 4. **What counts as an update (O3)** for the badge, the menu and the notification: a Grassfield release (a new
    `grassfield-desktop` version, pkgrel included) and an Omarchy release.
 5. **When.**
@@ -450,7 +452,8 @@ Rejected:
 | Signatures | detached, binary; packages, both databases and the notes; by a key in `grassfield-trusted` or its signing subkey |
 | Release notes | `grassfield-notes.json` and `.sig`, UTF-8, at most 64 KiB: `{"version":1,"channel":"stable","releases":[{"version":"1.0.1-1","date":"2026-11-02","notes":{"en":"…","fr":"…"}}]}`. Newest first, at most 20, `en` required, plain text, at most 8000 characters each. |
 | Notes source | `packaging/release-notes/<VERSION>.{en,fr}.txt` in this repository at the tag (O9). A pkgrel rebuild gets "Rebuilt for Hyprland X.Y.Z" / « Reconstruit pour Hyprland X.Y.Z ». |
-| Publication | atomic (h): an immutable snapshot, then one pointer write |
+| Publication | atomic (h): one serialized publisher per channel builds an immutable snapshot from the current one, then writes the pointer only if it has not moved (h.2 as amended by ADR-0037) |
+| Store catalog | `grassfield-catalog.v1.json`, its `.sig` and `catalog/<sha256>.png` in each channel's snapshot, signed with the repository's key; format, rules and checks in ADR-0037 g (amendment) |
 | Trust anchor | the pinned fingerprint and key (b.3) are in `grassfield-keyring`'s trusted list; CI checks it |
 | Build input | a tag (or, for tests, a commit) of grassfield; `VERSION` decides the channel; `makepkg` of `packaging/arch/PKGBUILD` with `GRASSFIELD_PKGREL` |
 | Source access | a read-only deploy key on grassfield (O13), secret `GRASSFIELD_DEPLOY_KEY`. Until it exists, the build is tested in a container with both checkouts. |
@@ -475,6 +478,16 @@ Rejected:
      every client already on B.
    - A new snapshot C, built now with A's packages, worked: `200` for both, `-Sy` exit 0, and `-Syu` "local (1.0.1-1) is
      newer than grassfield (1.0.0-1)", no downgrade.
+   **Amended by ADR-0037 (2026-10-27): one serialized publisher, built from the current snapshot, a conditional pointer
+   write.** Releases and Grassfield Store's catalog updates share each channel's pointer, so a job built from an older
+   snapshot and published later would move the pointer back (R4 above, then a2: every `omarchy update` fails). Per channel:
+   one publishing job, serialized (one run at a time, queued, never cancelled half way); it reads the pointer and builds the
+   new snapshot from the current snapshot's manifest (a release replaces the packages, databases and notes and keeps the
+   catalog; a catalog update keeps them and replaces the catalog); it refuses a `grassfield.db` older than the current one
+   for any package, except a deliberate rollback below; it writes the pointer only if it still names the snapshot it read
+   (a compare-and-swap on the storage's version tag), else it starts again. A conditional write on the chosen storage is NOT
+   VERIFIED (the host is not chosen, O8); without one, the serialization alone holds, with a fresh read of the pointer just
+   before the write. Details: ADR-0037 g.
    So the previous release is published again as a new snapshot (a pkgrel above the bad one when clients must move to it). Residual: a client whose two
    requests straddle the pointer write gets a mismatched pair once; that run fails ("signature … is invalid"), the next one
    works. The window is the time between pacman's two requests. Mirrors serve the same snapshots and pointer.
@@ -584,6 +597,15 @@ were recorded in `fd49abc` and confirmed again after the first review.
   - an old but validly signed database can be replayed;
   - a pointer switch can fail one run; a rollback is a new snapshot (h.2);
   - a Hyprland update can come before the matching plugin.
+
+## Amendments
+- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the checker's result also lists the other updates
+  (name, installed, available; at most 2000) so the Store reuses this one `checkupdates`. g: the Store catalog's files join
+  the contract, and publication is the serialized publisher of h.2. h.2: one serialized publisher per channel, building from
+  the current snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
+  to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit
+  action, `pacman -S --needed` / `pacman -Rns` of validated repository names only, ADR-0037 b.1); Software Update itself
+  still installs nothing.
 
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:
