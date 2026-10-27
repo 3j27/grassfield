@@ -266,7 +266,9 @@ a rotation done wrong, the only key revoked, an upload caught half way. The defe
    (O6), a compromise proceeds as follows:
    - the revoking keyring, signed by that key, still installs, and then every client's `[grassfield]` stops;
    - every system update therefore fails (a2) until the user turns Grassfield updates off ("Turn Off…") or trusts a new key
-     through b.3a. The owner publishes the incident with those steps.
+     through b.3a. The owner publishes the incident with those steps, and tells users to come back through b.3a only,
+     never through "Set Up…": a user who turned updates off before receiving the revoking keyring would otherwise trust
+     the compromised pinned key again (b.3 bootstrap plus populate).
    The owner accepted this rather than a second, offline key trusted from day one.
 6. **What the key can do.** A locally signed key is trusted for **every** repository; pacman does not scope keys (Q6: a
    package of another repository, signed by the Grassfield key under `SigLevel = Required`, installs). Packages also run their
@@ -276,11 +278,12 @@ a rotation done wrong, the only key revoked, an upload caught half way. The defe
    `GRASSFIELD_SIGNING_PASSPHRASE` if it has one) of a protected GitHub environment of grassfield-packages:
    - only the signing and publishing jobs use it, never on a `pull_request`;
    - the owner approves each run;
-   - builds and tests sign with throwaway keys.
+   - builds and tests sign with throwaway keys, and every CI build artifact carries the keyless `grassfield-keyring` (U23)
+     until O11.
    The owner creates the environment and the secret after M5.
 8. **The key leaves with Grassfield.** Grassfield takes back the trust it gave:
    - the helper's `off` deletes from pacman's keyring every key of `grassfield-trusted` and the pinned key (`pacman-key
-     --delete`), after removing the section. Since the keyring lives in its private folder (b.2), a later plain `pacman-key
+     --delete`), after removing the section; with the keyless keyring (no pinned key yet, U23) it skips the delete. Since the keyring lives in its private folder (b.2), a later plain `pacman-key
      --populate` does not trust them again (R2);
    - `grassfield-keyring`'s `pre_remove` deletes the keys of its own trusted list. omarchy-keyring has no such step; Grassfield
      adds one;
