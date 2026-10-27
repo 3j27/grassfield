@@ -311,8 +311,9 @@ installed (not built here).
 - Window position: a Wayland client cannot place its window, so a new window (New Window, a dragged-out tab) opens
   where the compositor puts it, today exactly over the previous one (centred); the size is remembered. Position memory and
   cascading belong to the compositor's placement rules (ADR-0026 part 2, not done: it needs the nested session).
-- View Options (Cmd+J) do not exist yet: the default view and sort of folders without their own are the last values of
-  `view/mode`, `view/sortKey`, `view/sortDescending` (PR 2 adds "Use as Defaults").
+- View Options (Cmd+J) do not exist yet, so the defaults cannot be changed: the view and sort of folders without their own
+  are `view/mode`, `view/sortKey`, `view/sortDescending` as written before PR 1 (else icons by name), and a choice made
+  in a folder is that folder's only (F-3). "Use as Defaults" comes with View Options in PR 2 (FP-86, open).
 - A tab dragged out and dropped while the pointer is outside every Files window becomes a window, also when the drag was
   cancelled there with Esc (the platform reports a cancel and a drop nobody took the same way).
 - Reopen Closed Tab remembers the tabs closed in this session only (not across launches), at most 10.
@@ -367,7 +368,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-11 | Reopen the last closed tab | done (PR 1, this session's tabs) | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
 | FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | done (PR 1) | none | — | — | 1 |
 | FP-13 | The window remembers its size and position; new windows cascade | partial (PR 1: the size; position and cascade wait for ADR-0026 part 2) | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0026) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
-| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | partial (PR 1: view and sort per folder; View Options in PR 2) | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (View Options) |
+| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | partial (PR 1: view and sort per folder; View Options in PR 2; the defaults cannot be changed until then: FP-86) | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (View Options) |
 | FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md); the tab items in View (PR 1) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
 | FP-16 | Windows and tabs restored at the next launch | missing | none | QSettings | — | later |
 
@@ -409,6 +410,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-45 | Quick Look: Space, ⌘Y, ⌥Space full screen, arrows walk the selection | partial: Space starts Glance (Preview) | Finder-Quick-Look, Finder-Quick-Look-Markup | `grassfield-preview --glance` | — | 2 (⌘Y), Preview spec (the rest) |
 | FP-46 | Recents (Go ⇧⌘F, sidebar) | missing | Finder-Home, Go-Menu | `$XDG_DATA_HOME/recently-used.xbel` (decision F-5) | KIO's `recentlyused:/` needs the activity manager daemon, absent on Omarchy | 2 |
 | FP-47 | View Options ⌘J (always open in, browse in, group/sort, icon size, grid spacing, text size, label position, show item info, show icon preview, calculate all sizes, list columns, Use as Defaults) | missing | none | per-folder store (F-3) | — | 2 |
+| FP-86 | View Options "Use as Defaults": the shown folder's view and arrangement become those of every folder without its own | missing, **open since PR 1**: since a view or sort chosen in a folder is that folder's (F-3), nothing changes the defaults (`view/mode`, `view/sortKey`, `view/sortDescending` keep the values written before PR 1, else icons by name); the Finder sets them only with this button, so no menu item stands in for it (opus review of PR #5) | none | QSettings `view/*` | — | 2 (with FP-47) |
 | FP-48 | Icon view free arrangement, Clean Up, Clean Up By, Snap to Grid | missing: always a sorted grid | none | — | free positions need a per-folder position store; not planned | later |
 
 ### File operations
