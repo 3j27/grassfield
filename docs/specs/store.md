@@ -1,11 +1,14 @@
 # Store spec · apps-engineer (app), platform-engineer (sources, install path) · owner brief 2026-10-27
-Status: step 0 (this spec, ADR-0037 and the parity matrix). Nothing is built. The owner answered ADR-0037 ST1 (§4 amended),
-ST2 (AUR opt-in, Flathub optional), ST3 (the sheet alone for per-user installs) and ST8 (the only Dock badge stays on
-Settings) on 2026-10-27; the choices still open (ST5, ST6, ST7, ST9) are marked **open**. The install path is P1, Omarchy's
-commands in its floating terminal (ST4: the path ADR-0033 keeps, ADR-0033 having passed and been merged).
-Decisions and evidence: `docs/decisions/ADR-0037-store.md` (probes S0 to S11). Parity and measures:
+Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Nothing is
+built. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in his words in the ADR): §4 amended; AUR and Flathub both
+off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
+polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
+when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
+icons in our catalog for apps without metadata.
+Decisions and evidence: `docs/decisions/ADR-0037-store.md` (probes S0 to S15). Parity and measures:
 `docs/audits/store-2026-10-27/parity.md`. App id `org.grassfield.Store`, binary `grassfield-store`, package `grassfield-store`.
-Name: "Grassfield Store" in both languages (a product name, like other stores in French). Never "App Store" or "Arcade" (§14).
+Name: "Grassfield Store" in both languages (a product name). Never "App Store" or "Arcade" (§14). The name and the
+sidebar's structure need legal review (ADR-0037 e.10).
 
 ## macOS reference behavior (described in words; no Apple image committed)
 - One window with the macOS 27 unified sidebar: the search field at the top of the sidebar, then Discover, Arcade, Create,
@@ -30,8 +33,9 @@ Non-goals:
 - no ratings or reviews (no identity leaves the machine); no stories, events, videos;
 - no per-app update of repository or AUR apps (Arch: no partial upgrade; Flatpaks have one), no automatic updates, no pause
   or resume;
-- no `pacman -Sy`, no `--overwrite`, no removal of `db.lck`, no root code of the Store's own under P1;
-- no installer of its own: pacman, yay and Omarchy's commands install (ADR-0037 b);
+- no `pacman -Sy`, no `--overwrite`, no removal of `db.lck`; the only root code is `grassfield-store-helper`, which runs
+  pacman on validated repository names (ADR-0037 b.1);
+- no installer of its own: pacman, yay, flatpak and Omarchy's commands install (ADR-0037 b);
 - no publication of the catalog before the owner's decision (ADR-0033 h).
 
 ## Functional requirements
@@ -72,7 +76,7 @@ Categories (step 2)
 
 Product page (step 2)
 - SR9. Header: icon, name, summary, developer, the button (SR13), source badge and licence ("Licence not stated" when none).
-- SR10. Screenshots (when AppStream has them; **open** ADR-0037 ST6), a gallery with arrows; description (plain text,
+- SR10. Screenshots (when AppStream has them; loaded when the page opens unless turned off, ST6), a gallery with arrows; description (plain text,
   paragraphs and bullets); What's New (AppStream releases, else the version and the package's build date).
 - SR11. Information: Source (with the repository, e.g. "Arch Linux · extra", "Omarchy", "Omarchy setup", "Web app", "AUR"),
   Package, Version, Download size, Installed size, Category, Languages (AppStream), Content rating (OARS, else "Not rated"),
@@ -84,7 +88,7 @@ Product page (step 2)
 - SR12. An app with several launchers names the one "Open" uses; an app with none (a command-line tool) says so and has no
   "Open".
 
-Get, Open, Uninstall (step 3; the path is ADR-0037 ST4)
+Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
 - SR13. The button: "Get" (« Obtenir ») when not installed; "Open" (« Ouvrir ») when installed with a launcher ("Update"
   « Mettre à jour » for a Flatpak with an update; never for a repository or AUR app); a progress
   ring while its operation runs or waits in the queue ("Waiting" « En attente »); "Installed" (« Installée ») when installed
@@ -94,50 +98,70 @@ Get, Open, Uninstall (step 3; the path is ADR-0037 ST4)
   (« Installer depuis l'AUR ») for the AUR. It lists: source, licence, sizes, every package the plan adds (from `pacman -S
   --print` as the user), for a setup what it changes, for the AUR the warning (SR16), for a Flatpak what it can reach and the
   runtimes it pulls. Cancel (Esc) closes it and nothing runs.
-- SR15. Before the operation runs, the plan check of ADR-0037 e.4: a plan that upgrades an installed package, an unresolvable
-  plan, or a package file the mirror no longer has → the sheet says "Update your system first" (« Mettez d'abord le système à
-  jour ») with "Open Software Update"; `db.lck` present or Omarchy's update lock held → "Another installation or an update is
-  running" (« Une autre installation ou une mise à jour est en cours »). Nothing is queued then.
+- SR15. Before the operation runs, the plan check of ADR-0037 e.4, and again right before it starts (the helper and
+  `grassfield-store-run` check under Omarchy's lock):
+  - `pacman -Qu` lists a package not marked "[ignored]" (the last system update did not finish, S12) → "Finish the system
+    update first" (« Terminez d'abord la mise à jour du système ») with "Open Software Update";
+  - a plan that upgrades an installed package, an unresolvable plan, or a package file the mirror no longer has → "Update your
+    system first" (« Mettez d'abord le système à jour ») with "Open Software Update";
+  - `db.lck` present or Omarchy's update lock held → "Another installation or an update is running" (« Une autre installation
+    ou une mise à jour est en cours »).
+  Nothing is queued then. The web apps and Flatpaks, which pacman does not install, skip the first two checks.
 - SR16. The AUR warning, on the sheet, every time (en / fr):
   "AUR packages are made by users and reviewed by no one, neither Arch Linux nor Grassfield. Their build script runs on this
   computer and the package is then installed with administrator rights. Install only what you trust." /
   « Les paquets de l'AUR sont faits par des utilisateurs et ne sont vérifiés par personne, ni Arch Linux ni Grassfield. Leur
   script de construction s'exécute sur cet ordinateur, puis le paquet est installé avec les droits d'administrateur.
   N'installez que ce en quoi vous avez confiance. »
-- SR17. The authentication is sudo's prompt in Omarchy's terminal (P1, ST4). Per-user installs
-  (web apps, Flatpaks): the sheet alone, its default button being the consent; no password (owner, ST3, 2026-10-27).
-- SR18. One operation at a time; later ones wait in the queue (shown on their buttons and in a queue popover in the toolbar,
-  where a waiting one can be removed). The running one shows progress: indeterminate while downloading, then "n of N" from
-  pacman's log; P1 also names the terminal ("Installing in Terminal…" « Installation dans le Terminal… »).
-- SR19. Success is the system's state after the operation (ADR-0037 f): the packages of the plan present (`pacman -Q`), the web
-  app's `.desktop` file present. Then the button becomes "Open". A failure shows one line under the button and a "Details"
-  popover (pacman's message when there is one, and what to do); "Try Again" re-runs the same plan.
-- SR20. Recovery at start (ADR-0037 f): an operation recorded in `store.json` and not running is compared with the system and
-  reported as done (silently), interrupted ("16 of 110 packages were installed", with "Try Again"), or not finished; a stale
-  `db.lck` is explained with Arch's recovery as text to copy, never removed by the Store.
-- SR21. "Open" starts the app through ADR-0011 (`uwsm-app -- <desktop-id>` in a real session, `apps/appscope.h`); the Store
-  stays open. In a dev session only fixture apps open (ADR-0011 dev open policy).
+- SR17. The authentication (owner, ST4 and ST3): repository packages, the polkit dialog of `grassfield-store-helper`
+  (Grassfield's polkit sheet; "Waiting for permission…" « En attente de l'autorisation… » meanwhile, 120 s at most); the AUR and
+  Omarchy setups, sudo's prompt in Omarchy's terminal; web apps and Flatpaks, the sheet alone, its default button being the
+  consent.
+- SR18. One operation at a time, whatever its path; later ones wait in the queue (shown on their buttons and in a queue
+  popover in the toolbar, where a waiting one can be removed). The next one starts only when the previous one has its exit
+  code, Omarchy's update lock is free and `db.lck` is absent. The running one shows progress: indeterminate while
+  downloading, then "n of N" from pacman's log; in Omarchy's terminal it also says so ("Installing in Terminal…"
+  « Installation dans le Terminal… »).
+- SR19. Every operation ends with an exit code the Store receives (ADR-0037 b): pkexec's (b.1), the `exit` file of
+  `grassfield-store-run` (b.2), the child's (b.3). Success is that code being 0 **and** the system's state matching the plan
+  (the packages present at the planned versions, the web app's entry present, the Flatpak listed). Then the button becomes
+  "Open". Otherwise one line under the button and a "Details" popover (pacman's message from the helper's log or the
+  terminal, and what to do); "Try Again" re-runs the same plan. Time limits: the polkit dialog 120 s; Omarchy's terminal must
+  start the script within 60 s ("The terminal did not open" « Le terminal ne s'est pas ouvert »); a running operation is
+  followed up to 2 h (helper) or 3 h (terminal), then the Store says it lost track and reads the state; it never stops one.
+- SR20. Recovery at start (ADR-0037 f): an operation recorded in `store.json` is compared with its `exit` file, its running
+  helper or script, and the system, and reported as done (silently), still running (followed again), interrupted ("15 of 110
+  packages were installed", with "Try Again"), or not finished; a stale `db.lck` is explained with Arch's recovery as text to
+  copy, never removed by the Store.
+- SR21. "Open" starts the app through ADR-0011 (`uwsm-app -- <desktop-id>` in a real session, `apps/appscope.h`); a web app
+  with `omarchy-launch-webapp <url>` (its entry's file name has spaces, which uwsm refuses, S14); the Store stays open. In a
+  dev session only fixture apps open (ADR-0011 dev open policy).
 - SR22. "Uninstall…" (« Désinstaller… »): in the product page's "…" menu, in Installed, and in the context menu of an installed
   app's item. Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
   S10), or the setup's removal recipe and the user data it deletes (our catalog's `removes`), or the web app's launcher and
   icon, or the Flatpak (its data in `~/.var/app/<app-id>` stays, and the sheet says so). A package other installed packages
   need is not removable (S10: "removing glib2 breaks dependency … required by
   accountsservice"): the sheet says which ones need it, and nothing runs. Default button "Uninstall" (« Désinstaller »),
-  destructive style.
+  destructive style. Omarchy's own apps (its base package list, such as Chromium), Grassfield's packages and pacman's
+  `HoldPkg` have no "Uninstall…": their page says "Part of Omarchy" (« Fait partie d'Omarchy ») or "Part of Grassfield"
+  (« Fait partie de Grassfield »).
 
 Installed (step 2 read-only, step 3 actions)
 - SR23. The apps installed from the Store's sources that have a launcher or a catalog entry: explicitly installed packages
   (`pacman -Qe`) with an AppStream or catalog entry, setups whose packages are present, Omarchy web apps
-  (`~/.local/share/applications/*.desktop` whose Exec is `omarchy-launch-webapp`), AUR packages (`pacman -Qm`), Flatpaks of
-  the user's installation (`flatpak list --user --app`, when Flathub is on). Each with Open and Uninstall…. Grouped by source,
-  sorted by name.
+  (`~/.local/share/applications/*.desktop` whose Exec is `omarchy-launch-webapp`), packages no repository has (`pacman -Qm`:
+  "Not from a repository" « Hors dépôts », called "AUR" only when the AUR knows the name; Grassfield's own local builds never
+  listed), Flatpaks of the user's installation (`flatpak list --user --app`, when Flathub is on). Each with Open and, unless
+  protected (SR22), Uninstall…. Grouped by source, sorted by name.
 
 Updates (step 4; ADR-0037 d, owner ST8)
 - SR24. From ADR-0033's result (`software-update.json`): the installed apps with an update, each marked "Updates with the
   system" (« Mise à jour avec le système »), then "N other system packages", the Grassfield and Omarchy releases as Software
   Update names them, and "Update All…" (« Tout mettre à jour… ») which starts ADR-0033's "Update Now". "Check Now" asks the shell
   to check (ADR-0033). States: checking, up to date (with the last check time), update running, failed (offline or
-  unavailable, with the last success), blocking (ADR-0033 a2: a link to Software Update's "Turn Off…").
+  unavailable, with the last success), blocking (ADR-0033 a2: a link to Software Update's "Turn Off…"), and "The last
+  system update did not finish" (« La dernière mise à jour du système n'est pas terminée ») when `pacman -Qu` lists packages
+  while no update runs (S12).
   Flatpaks (Flathub on) form their own group: "Update" per app and "Update All" for the group (`flatpak update --user`),
   checked by the Store when it opens and on "Check Now" (`flatpak remote-ls --user --updates`).
 - SR25. The sidebar's Updates row shows the number of apps with an update, Flatpaks included. The Store's Dock tile has no
@@ -150,6 +174,10 @@ Catalog and network (step 1)
   validated, then cached; a lower serial than the accepted one is refused (ADR-0037 g).
 - SR27. Requests per ADR-0037 c: https only, no cookie, no referer, User-Agent `Grassfield-Store/1`, 15 s, size caps. No search
   query leaves for Grassfield's host. The Store's settings window lists what is fetched and from where, in plain words.
+- SR27b. Arch's AppStream (owner, ST5): the installed `archlinux-appstream-data` when there is one; otherwise the Store fetches
+  that package's file from pacman's own mirror (`pacman -Sp`), checks it against the SHA-256 of pacman's sync database (S15),
+  and keeps its XML and icons in its cache (64 MiB at most), replaced when pacman's database names another version. Used for
+  display only: a package it names must exist in pacman's database.
 
 Settings window (Ctrl+, ; step 2 reads, step 3 writes)
 - SR28. "Sources": switches for the optional sources, both off until turned on, each with one line saying what it means: AUR;
@@ -165,9 +193,10 @@ Offline
   by a placeholder; a catalog older than 30 days is used with a note.
 
 Dev sessions (ADR-0019)
-- SR30. No real operation, ever: the queue runs the fake installer only (`GRASSFIELD_STORE_INSTALLER`); catalogs, keyrings and
-  package roots from fixtures (`GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`); without a
-  fixture installer the buttons show "dev: not applied".
+- SR30. No real operation, ever: no pkexec, no Omarchy terminal, no flatpak operation; the queue runs fake programs only
+  (`GRASSFIELD_STORE_PKEXEC` for the helper's path, `GRASSFIELD_STORE_INSTALLER` for the others); catalogs, keyrings and
+  package roots from fixtures (`GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`); without
+  them the buttons show "dev: not applied".
 
 ## Keyboard
 | Keys | Action |
@@ -210,7 +239,12 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 |---|---|
 | A plan that upgrades an installed package or cannot be resolved (database newer than the system, S4) | sheet: "Update your system first", "Open Software Update"; nothing runs |
 | A package the mirror no longer has (database older than the mirror, S5) | same message |
+| `pacman -Qu` lists packages not "[ignored]" (the last system update did not finish, S12) | "Finish the system update first", "Open Software Update"; nothing installs from a repository, the AUR or a setup |
 | `db.lck` present, or Omarchy's update running (S11) | "Another installation or an update is running"; nothing queued |
+| An exit code 0 without the planned state, or the planned state without an exit code | "interrupted" (SR20), never "installed" |
+| Omarchy's terminal does not start the script within 60 s | "The terminal did not open"; the late script refuses to start |
+| "Uninstall" of Omarchy's base apps, Grassfield's packages, `HoldPkg` | not offered ("Part of Omarchy" / "Part of Grassfield") |
+| A catalog whose `channel` is not the channel it was fetched from | not used, as a bad signature |
 | A stale `db.lck` with no pacman running | an explanation and Arch's recovery as text; the Store never removes it |
 | An uninstall that would break another installed package | the sheet names the packages that need it; nothing runs |
 | A catalog with a bad or missing signature, a key not trusted or revoked, a lower serial, an invalid top level | not used, not cached; the previous catalog stays; one line in the settings window "The catalog could not be verified" |
@@ -228,21 +262,26 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 | A2 | entry rules: each broken rule drops only its entry | unit with vectors shared with grassfield-packages' validator | L0 |
 | A3 | merge: catalog over AppStream over pacman; source precedence; licence fallback | unit with fake AppStream and pacman roots | L0 |
 | A4 | search ranking and the AUR section (fake RPC answers) | unit | L0 |
-| A5 | plan check: a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman | L0 |
-| A6 | queue: one at a time; success read from the system (an exit 0 with a partial install is "interrupted") | unit with the fake installer | L0 |
+| A5 | plan check: `pacman -Qu` non-empty (and "[ignored]" lines allowed), a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman | L0 |
+| A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs | L0 |
+| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`, protected packages), descriptors not on the caller's pipe, status files; `grassfield-store-run`: deadline, `flock -o` on Omarchy's lock file, re-check, exit file | container tests, fake pacman and the real one (step 3) | L1 (container) |
 | A7 | recovery: each start case of SR20 | unit with recorded `store.json` | L0 |
-| A8 | real install, open (`uwsm-app` argv), uninstall of a repository package, a web app, a setup and a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
+| A8 | real install, open (`uwsm-app` argv; a web app by `omarchy-launch-webapp`), uninstall of a repository package (helper), a web app, a setup and an AUR package (terminal script), a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
 | A10 | F1 geometry and tints against the parity matrix | measurement script on the captures | L1 |
 | A11 | keyboard paths and accessible names | QML tests + checklist | L0/L1 |
-| A12 | the real sudo prompt in Omarchy's terminal, an interrupted install, the absence of a Store badge | owner, real session | L2 |
+| A12 | the real polkit dialog of the helper, sudo's prompt in Omarchy's terminal, a terminal closed during an install (SIGHUP through sudo, NOT VERIFIED in S6), the absence of a Store badge | owner, real session | L2 |
 
 ## Interfaces / contracts (versions)
 - Catalog `grassfield-catalog.v1.json` + `.sig` + `catalog/<sha256>.png` (ADR-0037 g; the contract with grassfield-packages).
 - ADR-0033: the channel URL tree and key; `software-update.json` (with the added list of other updates, ADR-0037 d); "Update
   Now"; the request to check.
 - `store.json` (state, `version: 1`); Store preference keys in `grassfield.json` (schema, ADR-0020).
-- Launch: ADR-0011 (`apps/appscope.h`). Badge: none of the Store's own (ST8); Software Update's on Settings (ADR-0033 U18).
+- Launch: ADR-0011 (`apps/appscope.h`); web apps by `omarchy-launch-webapp <url>`. Badge: none of the Store's own (ST8);
+  Software Update's on Settings (ADR-0033 U18).
+- `grassfield-store-helper` (pkexec, polkit action `org.grassfield.store.manage-packages`), `grassfield-store-run` (Omarchy's
+  terminal), their status files (`/run/grassfield-store/<op-id>.{started,log,exit}`, `$XDG_RUNTIME_DIR/grassfield/store/
+  <op-id>.{started,exit}`): ADR-0037 b.
 - Flatpak 1.18 (when installed): `flatpak install|uninstall|update --user --noninteractive`, `flatpak remote-ls --user
   --updates`, `flatpak list --user --app`, `flatpak remote-info --show-metadata`, `flatpak remote-add --user --if-not-exists`.
 - Omarchy 4.0.4 commands, pinned in `docs/upstream/omarchy.lock` with the step that uses them: `omarchy-install-app`,
@@ -250,18 +289,19 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
   `omarchy-launch-floating-terminal-with-presentation`, `omarchy-webapp-install`, `omarchy-webapp-remove`, the recipes the
   catalog names.
 
-## Dependencies (verified versions, S3 and S8; at step 1 again)
-`grassfield-desktop` (same version), `archlinux-appstream-data` 20261017-1 and `appstream-qt` 1.2.1 (if ST5 = A),
-`kimageformats` (JPEG XL icons), `gnupg` (`gpgv`), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's, only for the AUR),
-`flatpak` 1.18.4 as an `optdepends` only (ST2; not installed on the owner's machine).
+## Dependencies (versions seen in S3, S8 and S14; checked again at step 1)
+`grassfield-desktop` (same version), `appstream-qt` (of `appstream` 1.2.1, S3), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`), polkit (`pkexec`,
+installed on Omarchy), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's, only for the AUR); as `optdepends` only:
+`archlinux-appstream-data` 20261017-1 (ST5) and `flatpak` (ST2; neither is installed on the owner's machine).
 
 ## Degraded behavior
 - No catalog (no hosting yet, offline at first start, verification failed): no editorial sections; AppStream and pacman still
   give Discover's lists, Categories and search.
 - No `grassfield-keyring`, or one without a key (until the owner's key exists, ADR-0033 O20): the catalog is never used; the
   settings window says why.
-- No `archlinux-appstream-data` (ST5 ≠ A): pacman's descriptions only, catalog icons where we have them, generic icons
-  elsewhere.
+- No `archlinux-appstream-data`: the fetched copy (SR27b); before it is fetched, or offline, pacman's descriptions, catalog
+  icons where we have them, generic icons elsewhere.
+- No polkit agent (no dialog can appear): repository installs fail at once with polkit's refusal, shown on one line.
 - Omarchy's commands missing (a non-Omarchy system): no install, no uninstall; the Store browses and opens.
 - No shell (Updates): the Store shows the last `software-update.json` and its date; "Check Now" is disabled for system updates
   (Flatpak updates are still checked by the Store).
@@ -283,14 +323,16 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 ## Known limitations
 - No per-app update for repository or AUR apps, and no "Update" button for them: they update with the whole system (Arch).
 - No ratings or reviews; the AUR's votes and popularity are its own facts, not ratings.
-- No pause or resume; under P1, cancelling happens in Omarchy's terminal and can leave a part of the packages installed (S6);
-  the Store reports it.
+- No pause or resume. The AUR and setups cancel only in Omarchy's terminal, which can leave a part of the packages installed
+  (S6); the Store reports it. Repository installs cannot be cancelled once polkit has said yes.
+- Nothing installs from a repository, the AUR or a setup while the last system update is unfinished (`pacman -Qu`, S12).
 - Apps outside AppStream and our catalog show pacman's one-line description and a generic icon.
 - Omarchy's recipes are Omarchy's: their effects are those of the installed Omarchy release; our catalog's text describes the
   release it was written against (4.0.4), and CI checks the names, not the behaviour.
 - A replayed old catalog is refused only once a newer one has been seen on that machine.
 - Flatpaks are not updated by `omarchy update` (the Store updates them) and have no Dock badge (ST8); cancelling a Flatpak
   operation is offered only once step 3 has measured what it leaves.
-- Screenshots come from third-party hosts (ST6).
+- Screenshots come from third-party hosts (ST6). Apps without metadata show their publisher's icon from our catalog (ST10;
+  needs legal review).
 - Visual parity of the product page, search, Categories and Updates rests on the guide and the macOS 27 Settings panes: no
   public capture of those pages exists (parity matrix).
