@@ -662,6 +662,31 @@ A starting instance (session start, crash restart, soft reload) locks when ANY o
    It is taken over. Only ever locks. Verified in nested: forged `unlocked` + `kill -9` → restarted shell reports
    `locked` (before: `unlocked` behind Hyprland's "lockscreen app died" screen). A live foreign locker's later release
    is handled by "Lock ownership" below.
+   Monitor model (review of the lock's monitor queries, Quickshell v0.3.1 source read as data): the QML
+   `Hyprland.refreshMonitors()` is `refreshMonitors(false)`, which updates existing monitor objects and never creates
+   one; sent before Hyprland answered Quickshell's own first query (`j/status`, whose answer starts its
+   `refreshMonitors(true)`), it makes Quickshell drop that query as a duplicate, and `Hyprland.monitors` stays empty
+   until a monitor event. Every lock query therefore goes through `Lock.requestMonitors()`, which sends none while the
+   model is empty (`LockMachine.monitorQueryAllowed`) and logs that once (cleared when a monitor appears). An empty
+   model is an unknown state (never `unlocked`): the check asks again on the next tick, and if the 20 ticks run out the
+   marker decides (no takeover, fail closed as before) until monitors appear: a check that has not decided
+   (`strandedUndecided`: no `locked` or `unlocked` answer yet, this shell not locked) runs once more when the model
+   fills (`monitorsAdded`), so a dead client's stranded lock is taken over as soon as Quickshell's first answer arrives,
+   however late (opus review of 94ab527, MINOR-1; before, an answer after the 10 s left the session behind Hyprland's
+   "lockscreen app died" screen, locked but out of reach). That run only ever takes the lock over. Any lock of this
+   shell (`lock()`) ends the undecided state for good, so the check never reads cached answers that show this shell's
+   own lock (re-review of 1449bf3, MINOR-A: after an unlock, a stale LOCK read on a monitor plugged in would have
+   re-locked the session). Residual: before this shell first locks, an undecided check re-run on a monitor plugged in
+   reads the other monitors' cached answers; if a foreign locker's lock showed there and was released since, it is
+   "taken over" again, i.e. an unwanted lock, never an unlock. The only other
+   `Hyprland.refreshMonitors()` in the shell is Displays' handler of Hyprland events, which cannot run before
+   Quickshell's first answer (Quickshell connects its event socket in that answer's callback). Tests:
+   `tst_lockmachine` `test_monitorQueryAllowed`, `tests/security/lock_surfaces.sh` (the guarded call, its callers, the
+   re-run on the filling, every `refreshMonitors` of shell/ and ui/ but Displays' event handler, with mutants),
+   `tests/security/lock_monitor_model.sh` (the real Lock offscreen: with no Hyprland socket, Quickshell's own query is
+   the only one, 20 before the fix; against a fake Hyprland that answers `j/status` after 1.2 s, the model fills and a
+   stranded lock is taken over, while the code before the fix leaves the model empty; with the answer after 12.5 s,
+   the takeover follows the check's "unknown" end, and none without the re-run; the fake needs Unix sockets).
 
 A fresh session (marker absent, no carried intent, compositor not locked) starts unlocked. A removed or forged marker
 cannot expose a locked session: when a lock client dies, Hyprland keeps the session locked (ext-session-lock; no input
@@ -697,7 +722,13 @@ Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
    −4.4 MB. The remaining per-answer cost is one `lastIpcObject` conversion, the only source of the lock state that
    Quickshell.Hyprland offers.
    Also at once when a lock surface loses keyboard focus, and on every monitor answer anyone requested. Suspicion only
-   ever speeds the check up; it never unlocks. Cost of the 100 ms check (nested, `probe-cost`, three runs): +1.2 to
+   ever speeds the check up; it never unlocks. No query is sent while Quickshell's monitor model is empty (see "Lock
+   survival" rule 4): until it fills, nothing is verified (`verify()` leaves `secure` false, so the sleep delay waits as
+   it did for a missing answer), relocked or taken over, and WlSessionLock keeps the session locked. The answer
+   watcher (`monitorAnswers`) follows the live model: a monitor object created later (the model filling after the lock
+   was taken, an output plugged in) gets its delegate at once, and while holding a fresh answer is asked for at once
+   (`monitorsAdded`), because Quickshell fills a new monitor before it adds it to the model, so the answer that created
+   it reaches no delegate. Cost of the 100 ms check (nested, `probe-cost`, three runs): +1.2 to
    +1.9 % CPU in the shell (0.8–1.0 → 2.0–2.7 %), Hyprland +0 to +0.6 % (0.3–0.4 → 0.3–0.9 %).
 2. An answer reporting the session unlocked is confirmed by a second, fresh answer (answers in the first 500 ms after
    the lock was confirmed are ignored), then the shell takes a fresh lock: `lockLost()` (→ `locking`, PAM aborted,

@@ -150,7 +150,8 @@ function restoreAtStart(intent, markerAvailable, markerText, sleepsNow) {
 // (Quickshell HyprlandMonitor.lastIpcObject). Hyprland has no lock query, but an active
 // ext-session-lock, including one whose client died, puts "LOCK" in solitaryBlockedBy. Hyprland
 // stops listing at "WORKSPACE" (monitor without a workspace yet), so such a list proves nothing.
-// Returns "locked", "unlocked" or "unknown" (no complete list; e.g. not Hyprland).
+// Returns "locked", "unlocked" or "unknown" (no complete list, e.g. not Hyprland; no monitor at all, e.g. Quickshell's
+// monitor model still empty: see monitorQueryAllowed).
 function compositorLockState(monitors) {
     var list = monitors || [];
     return compositorLockStateLazy(list.length, function (i) {
@@ -186,6 +187,19 @@ function compositorLockStateLazy(count, get) {
             readable = true;
     }
     return readable ? "unlocked" : "unknown";
+}
+
+// Whether the lock may ask Hyprland for its monitors (Lock.qml requestMonitors, the lock's only Hyprland.refreshMonitors()
+// call), from the number of monitor objects in Quickshell's model (Hyprland.monitors). The QML call is Quickshell 0.3.1's
+// refreshMonitors(false): it updates the monitor objects that exist and never creates one. Sent before Hyprland answered
+// Quickshell's own first query (`j/status`, whose answer starts Quickshell's refreshMonitors(true)), it makes Quickshell drop
+// that query as a duplicate; its own answer then creates nothing, and the model stays EMPTY until a monitor event
+// (configreloaded, monitoraddedv2, ...): no lock check (stranded lock, ownership, verify) would ever get an answer again. With
+// no monitor object there is nothing such a query could update, so none is sent; the answer that fills the model is
+// Quickshell's own, and until then the compositor lock state is unknown (never "unlocked"). Anything but a positive count
+// is empty.
+function monitorQueryAllowed(count) {
+    return typeof count === "number" && count >= 1;
 }
 
 // Lock watchdog decision while this shell holds a lock the compositor confirmed (locked or
