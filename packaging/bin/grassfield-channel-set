@@ -45,9 +45,13 @@ conf_value() { # KEY -> its value in the packaged repository.conf
   done <"$repository"
 }
 
+sections() { # the number of [grassfield] sections of pacman.conf
+  awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") n++ } END { print n + 0 }' \
+    "$pacman_conf" 2>/dev/null || echo 0
+}
+
 has_section() {
-  awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") f = 1 } END { exit !f }' \
-    "$pacman_conf" 2>/dev/null
+  (($(sections) > 0))
 }
 
 primary() { # the first Server value of the included file
@@ -63,7 +67,8 @@ state() {
     has_section && echo repair || echo off
     return
   fi
-  has_section || { echo repair; return; }
+  # Missing, or twice (pacman refuses "already registered"): the helper's restore leaves exactly one.
+  [[ $(sections) == 1 ]] || { echo repair; return; }
   base=$(conf_value GRASSFIELD_REPO_BASE)
   server=$(primary)
   case $server in

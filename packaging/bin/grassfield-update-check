@@ -14,6 +14,7 @@ usage error or when started as root.
 
 What it does, in order (its own lock first: a second run answers `busy`):
   1. `pacman-conf --repo-list`: no [grassfield] -> `repair` when /etc/pacman.d/grassfield.conf exists, else `not-set-up`;
+     the [grassfield] lines without that file, or twice (pacman cannot run then) -> `repair` too;
   2. the channel: the file's first Server is <base>/stable/$arch or <base>/beta/$arch for this build's base, else `custom`;
   3. a sync of [grassfield] alone, under fakeroot, in its own database ($XDG_CACHE_HOME/grassfield/health-db) with
      checkupdates' --disable-sandbox-filesystem. A failure while online is counted: a second failure at least 15
@@ -46,6 +47,7 @@ import sys
 import tempfile
 import time
 
+PACMAN_CONF = "/etc/pacman.conf"
 GRASSFIELD_CONF = "/etc/pacman.d/grassfield.conf"
 REPOSITORY_CONF = "/usr/share/grassfield/pacman/repository.conf"
 KEYRING_DIR = "/usr/share/grassfield/pacman-keyring"
@@ -161,6 +163,11 @@ def servers(conf_text):
         if m:
             out.append(m.group(1))
     return out
+
+
+def sections(conf_text):
+    """The number of [grassfield] sections of pacman.conf (comments and blanks removed, as pacman reads it)."""
+    return sum(1 for line in conf_text.splitlines() if line.split("#", 1)[0].strip() == "[grassfield]")
 
 
 def channel_of(primary, base):
@@ -280,13 +287,19 @@ class Checker:
         for d in (self.checkup, os.path.join(self.health, "local")):
             os.makedirs(d, mode=0o700, exist_ok=True)
         rc, out, _ = self.children.run(["pacman-conf", "--repo-list"], env=child_env())
-        if rc != 0:
-            return self.failed("unavailable", "pacman's configuration cannot be read")
         conf_text = read_text(GRASSFIELD_CONF)
         base = repository_value("GRASSFIELD_REPO_BASE")
         if conf_text is not None:
             listed = servers(conf_text)
             self.result["channel"] = channel_of(listed[0] if listed else "", base)
+        # The [grassfield] lines without their file, or twice: every pacman command fails, and "Repair…" (the helper's
+        # restore, or set when the file is gone) is the way out (review of 0338116, minor 3).
+        count = sections(read_text(PACMAN_CONF, 1 << 20) or "")
+        if count > 1 or (count == 1 and conf_text is None):
+            self.result["state"] = "repair"
+            return self.result
+        if rc != 0:
+            return self.failed("unavailable", "pacman's configuration cannot be read")
         if "grassfield" not in out.split():
             self.result["state"] = "repair" if conf_text is not None else "not-set-up"
             return self.result
