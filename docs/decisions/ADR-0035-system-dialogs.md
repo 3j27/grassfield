@@ -386,11 +386,11 @@ Options:
     the same rule for `grassfield-polkit`, under the same review.
   - Other polkit-sheet rules reused: nothing over the lock, held after an unlock without the keyboard until a click, the field
     cleared after each attempt, `ImhSensitiveData`.
-  - **What can and cannot be wiped** (SC4, reformulated): the typed password lives in QML strings that the JavaScript engine
-    may copy and that cannot be zeroed; the shell clears the field and drops its references, sends the password once over the
-    socket, and keeps no copy it controls. The bridge reads it into a buffer it zeroes after handing it to libgcr (which holds
-    secrets in its own secure memory). Copies left in the shell's heap until reuse are a known limitation, the same as the
-    polkit sheet's today.
+  - **What can and cannot be wiped** (the spec's SC5, SC4 in the first version, reformulated): the typed password lives in QML
+    strings that the JavaScript engine may copy and that cannot be zeroed; the shell clears the field and drops its references,
+    sends the password once over the socket, and keeps no copy it controls. The bridge reads it into a buffer it zeroes after
+    handing it to libgcr (which holds secrets in its own secure memory). Copies left in the shell's heap until reuse are a known
+    limitation, the same as the polkit sheet's today.
   - udiskie: `grassfield-automount.service` passes `--password-prompt "/usr/lib/grassfield/grassfield-askpass udiskie
     {device_presentation}"`; the helper is a gcr client (libgcr `gcr_system_prompt_open`) that prints the password on stdout,
     so the same sheet draws it (or gcr-prompter when the bridge is down).
