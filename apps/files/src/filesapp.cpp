@@ -7,7 +7,9 @@
 #include "launchguard.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
+#include "imagerotate.h"
 #include "placesmodel.h"
+#include "recents.h"
 #include "taglogic.h"
 #include "tagstore.h"
 
@@ -19,6 +21,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDropEvent>
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QProcess>
@@ -31,6 +34,7 @@
 #include <memory>
 
 #include <KApplicationTrader>
+#include <KDirNotify>
 #include <KIO/ApplicationLauncherJob>
 #include <KIO/CopyJob>
 #include <KIO/DeleteJob>
@@ -149,6 +153,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
     , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
 {
+    m_rotations.setMaxThreadCount(1);
     auto *undo = KIO::FileUndoManager::self();
     connect(undo, &KIO::FileUndoManager::undoAvailable, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoAvailable, this, &FilesApp::undoChanged);
@@ -156,6 +161,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(undo, &KIO::FileUndoManager::redoTextChanged, this, &FilesApp::undoChanged);
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &FilesApp::clipboardChanged);
     connect(m_places, &PlacesModel::error, this, &FilesApp::operationFailed);
+    qApp->installEventFilter(this);
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
     const QString file = configFile();
@@ -221,6 +227,8 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
 
 FilesApp::~FilesApp()
 {
+    // A picture being turned is finished before Files goes (its replacement is written whole or not at all).
+    m_rotations.waitForDone();
     if (!m_folderViews.hasPending())
         return;
     QString error;
@@ -343,7 +351,7 @@ void FilesApp::setViewMode(const QString &mode)
 
 int FilesApp::sortKey() const
 {
-    return qBound(0, m_settings.value(QStringLiteral("view/sortKey"), 0).toInt(), 3);
+    return qBound(0, m_settings.value(QStringLiteral("view/sortKey"), 0).toInt(), FileLogic::kSortKeyCount - 1);
 }
 
 void FilesApp::setSortKey(int key)
@@ -419,6 +427,117 @@ void FilesApp::setTabBarShown(bool on)
     emit prefsChanged();
 }
 
+bool FilesApp::pathBarShown() const
+{
+    return m_settings.value(QStringLiteral("view/pathBar"), false).toBool();
+}
+
+void FilesApp::setPathBarShown(bool on)
+{
+    if (on == pathBarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/pathBar"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::statusBarShown() const
+{
+    return m_settings.value(QStringLiteral("view/statusBar"), false).toBool();
+}
+
+void FilesApp::setStatusBarShown(bool on)
+{
+    if (on == statusBarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/statusBar"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::sidebarShown() const
+{
+    return m_settings.value(QStringLiteral("view/sidebar"), true).toBool();
+}
+
+void FilesApp::setSidebarShown(bool on)
+{
+    if (on == sidebarShown())
+        return;
+    m_settings.setValue(QStringLiteral("view/sidebar"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::previewPane() const
+{
+    return m_settings.value(QStringLiteral("view/preview"), false).toBool();
+}
+
+void FilesApp::setPreviewPane(bool on)
+{
+    if (on == previewPane())
+        return;
+    m_settings.setValue(QStringLiteral("view/preview"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::columnPreview() const
+{
+    return m_settings.value(QStringLiteral("view/columnPreview"), true).toBool();
+}
+
+void FilesApp::setColumnPreview(bool on)
+{
+    if (on == columnPreview())
+        return;
+    m_settings.setValue(QStringLiteral("view/columnPreview"), on);
+    emit prefsChanged();
+}
+
+QList<QUrl> FilesApp::rotatableImages(const QList<QUrl> &urls) const
+{
+    QList<QUrl> out;
+    if (urls.size() > kMaxQuickActionItems)
+        return out;
+    static const QMimeDatabase mimes;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile())
+            continue;
+        const QFileInfo fi(url.toLocalFile());
+        if (fi.isSymLink() || !fi.isFile() || !fi.isWritable())
+            continue;
+        if (ImageRotate::methodFor(mimes.mimeTypeForFile(fi).name().toLatin1()) != ImageRotate::Method::None)
+            out.append(url);
+    }
+    return out;
+}
+
+void FilesApp::rotateImages(const QList<QUrl> &urls, bool clockwise)
+{
+    const QList<QUrl> todo = rotatableImages(urls);
+    if (todo.isEmpty())
+        return;
+    // A large picture or a slow disk must not stop the windows: the files are read and written on m_rotations' thread.
+    m_rotations.start([this, todo, clockwise] {
+        const QMimeDatabase mimes;
+        QStringList failures;
+        QList<QUrl> changed;
+        for (const QUrl &url : todo) {
+            const QString path = url.toLocalFile();
+            const QString error = ImageRotate::rotate(path, mimes.mimeTypeForFile(path).name().toLatin1(), clockwise);
+            if (error.isEmpty())
+                changed.append(url);
+            else
+                failures.append(tr("“%1” couldn’t be turned: %2.").arg(FileLogic::displayName(QFileInfo(path).fileName()), error));
+        }
+        QMetaObject::invokeMethod(this, [this, failures, changed] {
+            for (const QString &failure : failures)
+                emit operationFailed(failure);
+            // Listings and thumbnails follow (KDirLister refreshes the items, the thumbnails are made again).
+            if (!changed.isEmpty())
+                org::kde::KDirNotify::emitFilesChanged(changed);
+        }, Qt::QueuedConnection);
+    });
+}
+
 int FilesApp::windowWidth() const
 {
     return FileLogic::keptWindowSide(m_settings.value(QStringLiteral("window/width")));
@@ -457,6 +576,8 @@ QVariantMap FilesApp::folderView(const QUrl &url) const
         out.insert(QStringLiteral("sortKey"), e.sortKey);
     if (e.descending >= 0)
         out.insert(QStringLiteral("sortDescending"), e.descending == 1);
+    if (e.groupBy >= 0)
+        out.insert(QStringLiteral("groupBy"), e.groupBy);
     return out;
 }
 
@@ -469,6 +590,8 @@ void FilesApp::setFolderView(const QUrl &url, const QVariantMap &fields)
         e.sortKey = fields.value(QStringLiteral("sortKey")).toInt();
     if (fields.contains(QStringLiteral("sortDescending")))
         e.descending = fields.value(QStringLiteral("sortDescending")).toBool() ? 1 : 0;
+    if (fields.contains(QStringLiteral("groupBy")))
+        e.groupBy = fields.value(QStringLiteral("groupBy")).toInt();
     QString error;
     const FolderViews::WriteResult result = m_folderViews.set(FolderViews::keyFor(url), e, &error);
     folderViewsWritten(result, error);
@@ -480,6 +603,7 @@ void FilesApp::folderViewsWritten(FolderViews::WriteResult result, const QString
     case FolderViews::WriteResult::Written:
         m_folderViewsRetryMs = 0;
         m_folderViewsRetry.stop();
+        m_folderViewsRefusal.clear();
         return;
     case FolderViews::WriteResult::Busy:
         // Another Files process is writing (a few ms): try again shortly, then less and less often (a lock held by a
@@ -488,13 +612,15 @@ void FilesApp::folderViewsWritten(FolderViews::WriteResult result, const QString
         m_folderViewsRetry.start(m_folderViewsRetryMs);
         return;
     case FolderViews::WriteResult::Refused:
-        // The file can't be written (not a regular file, too large, unreadable, a newer version's): the choice holds in
-        // this process and is written with the next one once the file is usable. The view itself already changed; the
-        // failure is logged, not shown.
+        // The file can't be written (not a regular file, too large, unreadable, a newer version's, a lock path that is
+        // not a lock file): the choice holds in this process and is written with the next one once the file is usable.
+        // The view itself already changed; the failure is logged once per reason, not shown, and never retried by timer.
         m_folderViewsRetryMs = 0;
         m_folderViewsRetry.stop();
-        if (!error.isEmpty())
+        if (!error.isEmpty() && error != m_folderViewsRefusal) {
+            m_folderViewsRefusal = error;
             qWarning("grassfield-files: view settings not kept: %s", qUtf8Printable(error));
+        }
         return;
     }
 }
@@ -519,6 +645,10 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 QVariantList FilesApp::pathSegments(const QUrl &url) const
 {
     QVariantList out;
+    if (Recents::isRecentsUrl(url)) {
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Recents")}, {QStringLiteral("url"), url}});
+        return out;
+    }
     // A tag search: the segments of its folder, then the tag.
     const bool search = TagLogic::isSearchUrl(url);
     const QUrl folder = search ? TagLogic::searchFolder(url) : url;
@@ -547,7 +677,7 @@ int FilesApp::baseNameLength(const QString &name, bool isDir) const
 
 bool FilesApp::defaultDescending(int sortKey) const
 {
-    return FileLogic::defaultDescending(FileLogic::SortKey(qBound(0, sortKey, 3)));
+    return FileLogic::defaultDescending(FileLogic::SortKey(qBound(0, sortKey, FileLogic::kSortKeyCount - 1)));
 }
 
 QString FilesApp::uriList(const QList<QUrl> &urls) const
@@ -987,6 +1117,9 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         trash(urls);
         return;
     }
+    // Recents is a list, not a place: nothing can be dropped into it.
+    if (Recents::isRecentsUrl(destination))
+        return;
     // A drop on a tag search (its background, its path segment) tags the items, like a drop on the sidebar tag.
     if (TagLogic::isSearchUrl(destination)) {
         addTag(urls, TagLogic::searchTag(destination));
@@ -1007,15 +1140,26 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
     if (sources.isEmpty() || refuseTwin(this, dest, sources))
         return;
     const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
-    bool copy = mods & (Qt::ControlModifier | Qt::AltModifier);
-    if (!copy) {
-        // Across filesystems a drop copies, like the macOS file manager.
-        const QString destDevice = dest.isLocalFile() ? QString::fromUtf8(QStorageInfo(dest.toLocalFile()).device()) : QString();
-        for (const QUrl &u : std::as_const(sources)) {
-            if (!u.isLocalFile() || destDevice.isEmpty() || QString::fromUtf8(QStorageInfo(u.toLocalFile()).device()) != destDevice)
-                copy = true;
-        }
+    // Across filesystems a drop copies, like the macOS file manager (unless a modifier says otherwise).
+    const QString destDevice = dest.isLocalFile() ? QString::fromUtf8(QStorageInfo(dest.toLocalFile()).device()) : QString();
+    bool sameVolume = !destDevice.isEmpty();
+    for (const QUrl &u : std::as_const(sources)) {
+        if (!u.isLocalFile() || QString::fromUtf8(QStorageInfo(u.toLocalFile()).device()) != destDevice)
+            sameVolume = false;
     }
+    const FileLogic::DropAction action = FileLogic::dropAction(mods & Qt::ControlModifier, mods & Qt::AltModifier, sameVolume);
+    if (action == FileLogic::DropAction::Link) {
+        // Make Alias (decision: an alias is a symbolic link); one per item, named after it.
+        KIO::CopyJob *link = KIO::link(sources, dest, KIO::HideProgressInfo);
+        attachDelegate(link);
+        KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Link, sources, dest, link);
+        connect(link, &KJob::result, this, [this, link] {
+            if (link->error() && link->error() != KIO::ERR_USER_CANCELED)
+                emit operationFailed(link->errorString());
+        });
+        return;
+    }
+    const bool copy = action == FileLogic::DropAction::Copy;
     KIO::CopyJob *job = copy ? KIO::copy(sources, dest, KIO::HideProgressInfo) : KIO::move(sources, dest, KIO::HideProgressInfo);
     attachDelegate(job);
     if (copy)
@@ -1180,6 +1324,17 @@ void FilesApp::addTag(const QList<QUrl> &urls, const QString &tag)
     rewriteTags(urls, tag, true);
 }
 
+void FilesApp::addTypedTag(const QList<QUrl> &urls, const QString &typed)
+{
+    addTag(urls, TagLogic::typedTag(typed));
+}
+
+void FilesApp::removeTag(const QList<QUrl> &urls, const QString &tag)
+{
+    if (!tag.trimmed().isEmpty())
+        rewriteTags(urls, tag, false);
+}
+
 void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
 {
     QList<QUrl> changed;
@@ -1342,6 +1497,57 @@ QUrl FilesApp::tagSearchUrl(const QString &tag, const QUrl &from) const
 bool FilesApp::isTagSearch(const QUrl &url) const
 {
     return TagLogic::isSearchUrl(url);
+}
+
+bool FilesApp::eventFilter(QObject *watched, QEvent *event)
+{
+    if (!watched->isWindowType())
+        return false;
+    switch (event->type()) {
+    case QEvent::DragEnter:
+    case QEvent::DragMove: {
+        const auto *e = static_cast<QDragMoveEvent *>(event);
+        m_drags.insert(watched, {e->position(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers(), e->source() != nullptr});
+        break;
+    }
+    case QEvent::DragLeave:
+    case QEvent::Drop: {
+        const auto it = m_drags.constFind(watched);
+        const bool outside = it != m_drags.cend() && !it->local;
+        m_drags.remove(watched);
+        if (outside)
+            emit outsideDragEnded(watched, event->type() == QEvent::Drop);
+        break;
+    }
+    default:
+        break;
+    }
+    return false;
+}
+
+void FilesApp::refreshDrag(QObject *window)
+{
+    const auto it = m_drags.constFind(window);
+    if (!window || it == m_drags.cend() || !it->mime)
+        return;
+    // Qt 6.11's QDragMoveEvent takes a whole-pixel position.
+    QDragMoveEvent move(it->position.toPoint(), it->actions, it->mime, it->buttons, it->modifiers);
+    QCoreApplication::sendEvent(window, &move);
+}
+
+bool FilesApp::isRecents(const QUrl &url) const
+{
+    return Recents::isRecentsUrl(url);
+}
+
+QUrl FilesApp::recentsUrl() const
+{
+    return Recents::locationUrl();
+}
+
+int FilesApp::recentsSortKey() const
+{
+    return int(FileLogic::SortKey::Opened);
 }
 
 QString FilesApp::searchedTag(const QUrl &url) const

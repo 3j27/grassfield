@@ -1657,16 +1657,20 @@
         <translation>Ctrl+V</translation>
     </message>
     <message>
+        <source>Use Groups</source>
+        <translation>Utiliser les groupes</translation>
+    </message>
+    <message>
+        <source>Ctrl+Super+0</source>
+        <translation>Ctrl+Super+0</translation>
+    </message>
+    <message>
         <source>Show Hidden Files</source>
         <translation>Afficher les fichiers cachés</translation>
     </message>
     <message>
         <source>Ctrl+H</source>
         <translation>Ctrl+H</translation>
-    </message>
-    <message>
-        <source>Show Info Panel</source>
-        <translation>Afficher le panneau d’informations</translation>
     </message>
     <message>
         <source>Ctrl+Shift+P</source>
@@ -1701,12 +1705,40 @@
         <translation>Liste</translation>
     </message>
     <message>
+        <source>Hide Preview</source>
+        <translation>Masquer l’aperçu</translation>
+    </message>
+    <message>
+        <source>Show Preview</source>
+        <translation>Afficher l’aperçu</translation>
+    </message>
+    <message>
         <source>Columns</source>
         <translation>Colonnes</translation>
     </message>
     <message>
         <source>Gallery</source>
         <translation>Galerie</translation>
+    </message>
+    <message>
+        <source>Group By</source>
+        <translation>Grouper par</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucun</translation>
+    </message>
+    <message>
+        <source>Application</source>
+        <translation>Application</translation>
+    </message>
+    <message>
+        <source>Date Last Opened</source>
+        <translation>Date de dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
     </message>
     <message>
         <source>Sort By</source>
@@ -1774,6 +1806,10 @@
     <message>
         <source>as Gallery</source>
         <translation>en galerie</translation>
+    </message>
+    <message>
+        <source>Group By</source>
+        <translation>Grouper par</translation>
     </message>
     <message>
         <source>Action</source>
@@ -1980,14 +2016,6 @@
     <message>
         <source>Columns</source>
         <translation>Colonnes</translation>
-    </message>
-    <message>
-        <source>%1 · %2</source>
-        <translation>%1 · %2</translation>
-    </message>
-    <message>
-        <source>Modified %1</source>
-        <translation>Modifié le %1</translation>
     </message>
 </context>
 <context>
@@ -2905,8 +2933,96 @@
 <context>
     <name>FileLogic</name>
     <message>
+        <source>Folders</source>
+        <translation>Dossiers</translation>
+    </message>
+    <message>
+        <source>PDF Documents</source>
+        <translation>Documents PDF</translation>
+    </message>
+    <message>
+        <source>Presentations</source>
+        <translation>Présentations</translation>
+    </message>
+    <message>
+        <source>Spreadsheets</source>
+        <translation>Feuilles de calcul</translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Movies</source>
+        <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>Archives</source>
+        <translation>Archives</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnu</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Aujourd’hui</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Hier</translation>
+    </message>
+    <message>
+        <source>Previous 7 Days</source>
+        <translation>7 jours précédents</translation>
+    </message>
+    <message>
+        <source>Previous 30 Days</source>
+        <translation>30 jours précédents</translation>
+    </message>
+    <message>
+        <source>More than 1 GB</source>
+        <translation>Plus de 1 Go</translation>
+    </message>
+    <message>
+        <source>100 MB to 1 GB</source>
+        <translation>100 Mo à 1 Go</translation>
+    </message>
+    <message>
+        <source>1 MB to 100 MB</source>
+        <translation>1 Mo à 100 Mo</translation>
+    </message>
+    <message>
+        <source>100 KB to 1 MB</source>
+        <translation>100 Ko à 1 Mo</translation>
+    </message>
+    <message>
+        <source>Less than 100 KB</source>
+        <translation>Moins de 100 Ko</translation>
+    </message>
+    <message>
         <source>Zero bytes</source>
         <translation>Zéro octet</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>No Tags</source>
+        <translation>Sans tag</translation>
     </message>
     <message>
         <source>1 byte</source>
@@ -3108,6 +3224,14 @@
         <translation>«&#xa0;%1&#xa0;» ne peut pas être copié ou déplacé ici&#xa0;: le dossier contient «&#xa0;%2&#xa0;», qui a le même nom une fois les accents composés. Renommez l’un des deux d’abord.</translation>
     </message>
     <message>
+        <source>“%1” couldn’t be turned: %2.</source>
+        <translation>Impossible de faire pivoter «&#xa0;%1&#xa0;»&#xa0;: %2.</translation>
+    </message>
+    <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
+    <message>
         <source>Links can’t carry tags.</source>
         <translation>Les liens ne peuvent pas recevoir de tags.</translation>
     </message>
@@ -3131,12 +3255,20 @@
 <context>
     <name>FolderModel</name>
     <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
+    <message>
         <source>Computer</source>
         <translation>Ordinateur</translation>
     </message>
     <message>
         <source>Trash</source>
         <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>%1 × %2</source>
+        <translation>%1 × %2</translation>
     </message>
     <message>
         <source>Tags are only searched in local folders.</source>
@@ -3172,6 +3304,10 @@
 </context>
 <context>
     <name>FolderViews</name>
+    <message>
+        <source>the view settings lock file is not a regular file</source>
+        <translation>le fichier de verrou des réglages de présentation n’est pas un fichier ordinaire</translation>
+    </message>
     <message>
         <source>another Files window is saving its view settings</source>
         <translation>une autre fenêtre de Fichiers enregistre ses réglages de présentation</translation>
@@ -3225,38 +3361,6 @@
     <message>
         <source>Gallery</source>
         <translation>Galerie</translation>
-    </message>
-    <message>
-        <source>Info Panel</source>
-        <translation>Panneau d’informations</translation>
-    </message>
-    <message>
-        <source>%1 · %2</source>
-        <translation>%1 · %2</translation>
-    </message>
-    <message>
-        <source>Information</source>
-        <translation>Informations</translation>
-    </message>
-    <message>
-        <source>Created</source>
-        <translation>Création</translation>
-    </message>
-    <message>
-        <source>Modified</source>
-        <translation>Modification</translation>
-    </message>
-    <message>
-        <source>Last opened</source>
-        <translation>Dernière ouverture</translation>
-    </message>
-    <message>
-        <source>Where</source>
-        <translation>Emplacement</translation>
-    </message>
-    <message>
-        <source>Tags</source>
-        <translation>Tags</translation>
     </message>
     <message>
         <source>No Results</source>
@@ -3460,8 +3564,20 @@
         <translation>en galerie</translation>
     </message>
     <message>
-        <source>Show Info Panel</source>
-        <translation>Afficher le panneau d’informations</translation>
+        <source>Hide Sidebar</source>
+        <translation>Masquer la barre latérale</translation>
+    </message>
+    <message>
+        <source>Show Sidebar</source>
+        <translation>Afficher la barre latérale</translation>
+    </message>
+    <message>
+        <source>Hide Preview</source>
+        <translation>Masquer l’aperçu</translation>
+    </message>
+    <message>
+        <source>Show Preview</source>
+        <translation>Afficher l’aperçu</translation>
     </message>
     <message>
         <source>Sort By</source>
@@ -3476,12 +3592,36 @@
         <translation>Type</translation>
     </message>
     <message>
+        <source>Application</source>
+        <translation>Application</translation>
+    </message>
+    <message>
         <source>Date Modified</source>
         <translation>Date de modification</translation>
     </message>
     <message>
+        <source>Date Last Opened</source>
+        <translation>Date de dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
         <source>Size</source>
         <translation>Taille</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucun</translation>
+    </message>
+    <message>
+        <source>Use Groups</source>
+        <translation>Utiliser les groupes</translation>
+    </message>
+    <message>
+        <source>Group By</source>
+        <translation>Grouper par</translation>
     </message>
     <message>
         <source>Descending</source>
@@ -3502,6 +3642,22 @@
     <message>
         <source>Show Tab Bar</source>
         <translation>Afficher la barre d’onglets</translation>
+    </message>
+    <message>
+        <source>Hide Path Bar</source>
+        <translation>Masquer la barre du chemin d’accès</translation>
+    </message>
+    <message>
+        <source>Show Path Bar</source>
+        <translation>Afficher la barre du chemin d’accès</translation>
+    </message>
+    <message>
+        <source>Hide Status Bar</source>
+        <translation>Masquer la barre d’état</translation>
+    </message>
+    <message>
+        <source>Show Status Bar</source>
+        <translation>Afficher la barre d’état</translation>
     </message>
     <message>
         <source>Show Previous Tab</source>
@@ -3778,6 +3934,14 @@
         <translation>Fichiers</translation>
     </message>
     <message>
+        <source>Show Less</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show All</source>
+        <translation>Tout afficher</translation>
+    </message>
+    <message>
         <source>No Results</source>
         <translation>Aucun résultat</translation>
     </message>
@@ -3791,6 +3955,77 @@
     <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
+    </message>
+</context>
+<context>
+    <name>ImageRotate</name>
+    <message>
+        <source>its tags could not be read, so it was left as it is</source>
+        <translation>ses tags n’ont pas pu être lus, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>its tags could not be kept, so it was left as it is</source>
+        <translation>ses tags n’auraient pas pu être conservés, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>only pictures themselves can be turned, not links to them</source>
+        <translation>seules les images elles-mêmes peuvent pivoter, pas les liens vers elles</translation>
+    </message>
+    <message>
+        <source>you can’t change it</source>
+        <translation>vous ne pouvez pas la modifier</translation>
+    </message>
+    <message>
+        <source>this kind of picture can’t be turned without losing quality</source>
+        <translation>ce type d’image ne peut pas pivoter sans perte de qualité</translation>
+    </message>
+    <message>
+        <source>its group could not be kept, so it was left as it is</source>
+        <translation>son groupe n’aurait pas pu être conservé, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>some of its attributes could not be kept, so it was left as it is</source>
+        <translation>certains de ses attributs n’auraient pas pu être conservés, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it changed while it was being turned, so it was left as it is</source>
+        <translation>elle a changé pendant la rotation, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it is larger than %1 MB, so it was left as it is</source>
+        <translation>elle dépasse %1 Mo, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it could not be read whole, so it was left as it is</source>
+        <translation>elle n’a pas pu être lue en entier, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it is not a JPEG, PNG or BMP picture inside, whatever its name says, so it was left as it is</source>
+        <translation>son contenu n’est pas une image JPEG, PNG ou BMP, quel que soit son nom, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it is not a JPEG picture that can be read</source>
+        <translation>ce n’est pas une image JPEG lisible</translation>
+    </message>
+    <message>
+        <source>its EXIF data has no orientation that can be changed</source>
+        <translation>ses données EXIF n’ont pas d’orientation modifiable</translation>
+    </message>
+    <message>
+        <source>animated pictures are not turned</source>
+        <translation>les images animées ne pivotent pas</translation>
+    </message>
+    <message>
+        <source>its orientation tag would no longer match, so it was left as it is</source>
+        <translation>sa balise d’orientation ne correspondrait plus, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it belongs to someone else, so it was left as it is</source>
+        <translation>elle appartient à quelqu’un d’autre, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it has other names (hard links), so it was left as it is</source>
+        <translation>elle a d’autres noms (liens physiques), elle a été laissée telle quelle</translation>
     </message>
 </context>
 <context>
@@ -5039,6 +5274,10 @@
 <context>
     <name>PlacesModel</name>
     <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
+    <message>
         <source>Home</source>
         <translation>Dossier personnel</translation>
     </message>
@@ -5162,6 +5401,93 @@
     <message>
         <source>There is no preview for this kind of file.</source>
         <translation>Aucun aperçu n’est disponible pour ce type de fichier.</translation>
+    </message>
+</context>
+<context>
+    <name>PreviewPane</name>
+    <message>
+        <source>Preview</source>
+        <translation>Aperçu</translation>
+    </message>
+    <message>
+        <source>%1 items</source>
+        <translation>%1 éléments</translation>
+    </message>
+    <message>
+        <source>%1 – %2</source>
+        <translation>%1 – %2</translation>
+    </message>
+    <message>
+        <source>Information</source>
+        <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Show Less</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show More</source>
+        <translation>Afficher plus</translation>
+    </message>
+    <message>
+        <source>Created</source>
+        <translation>Création</translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation>Modification</translation>
+    </message>
+    <message>
+        <source>Dimensions</source>
+        <translation>Dimensions</translation>
+    </message>
+    <message>
+        <source>Last opened</source>
+        <translation>Dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>%1 bytes</source>
+        <translation>%1 octets</translation>
+    </message>
+    <message>
+        <source>Zero bytes</source>
+        <translation>Zéro octet</translation>
+    </message>
+    <message>
+        <source>1 byte</source>
+        <translation>1 octet</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
+    </message>
+    <message>
+        <source>Add Tags</source>
+        <translation>Ajouter des tags</translation>
+    </message>
+    <message>
+        <source>Add Tags…</source>
+        <translation>Ajouter des tags…</translation>
+    </message>
+    <message>
+        <source>Rotate Left</source>
+        <translation>Faire pivoter à gauche</translation>
+    </message>
+    <message>
+        <source>More…</source>
+        <translation>Plus…</translation>
+    </message>
+    <message>
+        <source>Rotate Right</source>
+        <translation>Faire pivoter à droite</translation>
     </message>
 </context>
 <context>
