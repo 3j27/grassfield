@@ -3,12 +3,14 @@
 #
 # Private D-Bus session bus (the default; --session-bus or GRASSFIELD_PRIVATE_BUS=0 keeps the owner's session bus for
 # the rare test that needs it): the shell owns org.freedesktop.Notifications without touching the owner's session, and
-# anything the bus activates (a D-Bus activatable handler, gvfs, portals) runs isolated: the bus daemon starts with the
-# XDG_* homes under .dev/apps-home and GRASSFIELD_DEV=1 (ADR-0011). One dbus-daemon per nested
-# session (session configuration, socket in /tmp as with dbus-run-session: libdbus caps socket paths at
-# 99 bytes, too short for .dev/ in a worktree), started by the first shell start and reused by shell restarts, so
-# applications on it keep their connection as on a real session bus; nested-down.sh stops it. The
-# address is in .dev/bus.address for test clients (notify-send, busctl --address, test apps).
+# the bus starts nothing of the machine: scripts/dev/dev-bus.conf has no service folder, so no D-Bus activatable handler,
+# gvfs, keyring, dconf or portal can run on it with the owner's XDG_RUNTIME_DIR (security counter-review of f9e24e1, LOW-2;
+# ADR-0011). The bus daemon still starts with the XDG_* homes under .dev/apps-home and GRASSFIELD_DEV=1. One dbus-daemon per
+# nested session (socket in /tmp as with dbus-run-session: libdbus caps socket paths at 99 bytes, too short for .dev/ in a
+# worktree), started by the first shell start and reused by shell restarts, so applications on it keep their connection as
+# on a real session bus; nested-down.sh stops it. A bus that can start anything (one kept from a run before this
+# configuration) is refused (scripts/dev/dev-bus-check.sh). The address is in .dev/bus.address for test clients
+# (notify-send, busctl --address, test apps).
 #
 # Global menus (ADR-0008): with the private bus, grassfield-menu-bridge (.dev/build/grassfield-menu-bridge
 # from bridges/menu-bridge/build-direct.sh, or GRASSFIELD_MENU_BRIDGE) is (re)started on that bus before
@@ -67,31 +69,16 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
   chmod 700 "$dev/run"
   # sockaddr_un.sun_path: 107 bytes for the bridge socket.
   ((${#dev} + 21 < 108)) || { echo "shell-run: $dev is too long for the bridge's Unix socket path" >&2; exit 1; }
-  # The desktop portal and the document portal never start on this bus (re-check of 06da80f, MEDIUM-1; owner decision
-  # 2026-10-26, ADR-0011): activated services inherit the owner's XDG_RUNTIME_DIR, Qt's gtk3 platform theme asks the portal
-  # when the shell or an app starts, and xdg-desktop-portal starts xdg-document-portal, which unmounts the owner's
-  # $XDG_RUNTIME_DIR/doc to mount its own. A service file of the same name in the bus's data home wins over the system's
-  # (written each run: dbus-daemon reads its folders again when they change); one in $XDG_RUNTIME_DIR/dbus-1/services would
-  # win over it, so the bus is not started when that folder names either.
-  mkdir -p "$apps_home/data/dbus-1/services"
-  for name in org.freedesktop.portal.Desktop org.freedesktop.portal.Documents; do
-    if [[ -n ${XDG_RUNTIME_DIR:-} ]] && grep -qsE "^[[:space:]]*Name[[:space:]]*=[[:space:]]*${name//./\\.}[[:space:]]*$" "$XDG_RUNTIME_DIR"/dbus-1/services/*.service; then
-      echo "shell-run: refusing: $XDG_RUNTIME_DIR/dbus-1/services names $name, which would start on the private bus" >&2
-      exit 1
-    fi
-    printf '[D-BUS Service]\nName=%s\nExec=/bin/false\n' "$name" >"$apps_home/data/dbus-1/services/$name.service"
-  done
   if ! { [[ -s $dev/bus.address ]] && dev_live_pid "$dev/bus.pid" >/dev/null; }; then
     dev_stop "$dev/bus.pid" "private D-Bus bus" >/dev/null || exit 1
     rm -f "$dev/bus.address" "$dev/bus.address.new"
-    # Same configuration as dbus-run-session (session bus, service activation, unix:tmpdir=/tmp); activated
-    # services inherit the nested Wayland socket, never the owner's.
-    # The isolated homes make every activated service isolated too (ADR-0011).
+    # The session bus's configuration without any service folder (scripts/dev/dev-bus.conf: nothing is activatable but the
+    # bus itself). The nested Wayland socket and the isolated homes stay in its environment (ADR-0011).
     mkdir -p "$apps_home"/{config,cache,state,data,home}
     env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_DEV=1 HOME="$apps_home/home" \
       XDG_CONFIG_HOME="$apps_home/config" XDG_CACHE_HOME="$apps_home/cache" XDG_STATE_HOME="$apps_home/state" \
       XDG_DATA_HOME="$apps_home/data" \
-      setsid dbus-daemon --session --nofork --print-address=1 \
+      setsid dbus-daemon --config-file="$root/scripts/dev/dev-bus.conf" --nofork --print-address=1 \
       >"$dev/bus.address.new" 2>"$dev/bus.log" </dev/null &
     dev_record_pid "$dev/bus.pid" "$!"
     for _ in $(seq 1 50); do [[ -s $dev/bus.address.new ]] && break; sleep 0.1; done
@@ -104,16 +91,12 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
     unix:path=/tmp/dbus-*) ;;
     *) echo "shell-run: refusing: unexpected private bus address $bus" >&2; exit 1 ;;
   esac
-  # A bus kept from an earlier run may predate the portal block: it reads its service folders again (it watches only the
-  # folders that existed when it started), and a portal it already started is reported (the block cannot stop it).
-  if command -v dbus-send >/dev/null; then
-    dbus-send --bus="$bus" --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ReloadConfig >/dev/null 2>&1 ||
-      echo "shell-run: warning: the private bus did not read its service folders again" >&2
-    for name in org.freedesktop.portal.Desktop org.freedesktop.portal.Documents; do
-      if dbus-send --bus="$bus" --print-reply=literal --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner "string:$name" 2>/dev/null | grep -qw true; then
-        echo "shell-run: warning: $name already runs on the private bus (started before the block): just nested-down, then just nested-up" >&2
-      fi
-    done
+  # Nothing but the bus itself is activatable on it, also on a bus kept from an earlier run (one started with the standard
+  # session folders before dev-bus.conf is refused: it would start gvfs, the keyring, dconf or a portal on demand), else the
+  # shell does not start. A service such a bus already started cannot be stopped from here: restart the nested session.
+  if ! unexpected=$("$root/scripts/dev/dev-bus-check.sh" "$bus"); then
+    echo "shell-run: refusing: the private bus can start services of the machine or could not be checked (${unexpected//$'\n'/, }): just nested-down, then just nested-up" >&2
+    exit 1
   fi
   bus_env=(DBUS_SESSION_BUS_ADDRESS="$bus")
   private=1

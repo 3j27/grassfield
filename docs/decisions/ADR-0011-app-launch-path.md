@@ -91,6 +91,22 @@ session, with the owner's real trash in its sidebar. Any D-Bus activatable handl
   planted in `XDG_DATA_DIRS`: neither starts, also on a bus started before the block and reloaded; without the block both
   start. Not verified nested: after `just nested-up` and opening Settings, `busctl --address=$(cat .dev/bus.address) list
   | grep portal` lists nothing.
+- Amendment 2026-10-27 (security counter-review of f9e24e1, LOW-2): the block above covered two names, and the bus still read
+  the standard session service folders with the owner's `XDG_RUNTIME_DIR`, where this machine also has gvfs
+  (`org.gtk.vfs.Daemon`, whose gvfsd-fuse mounts `$XDG_RUNTIME_DIR/gvfs`), gnome-keyring, dconf and some forty others
+  activatable. The bus is now an allowlist of none: `scripts/dev/dev-bus.conf`, the session configuration without
+  `<standard_session_servicedirs/>` and without its includes (a `session-local.conf` could add a folder), so the only
+  activatable name is `org.freedesktop.DBus`; the per-name block, its refusal on `$XDG_RUNTIME_DIR/dbus-1/services` and the
+  `ReloadConfig` are gone with it. The dev session needs no activation: the names it uses are owned by what `shell-run.sh`
+  starts (the shell, the menu bridge); apps and tests are clients. `shell-run.sh` refuses a bus that lists anything else
+  (`scripts/dev/dev-bus-check.sh`, `ListActivatableNames`), such as one kept from an earlier run: `just nested-down`, then
+  `just nested-up`. Cost: in a dev session no portal (as before), no dconf writes (reads need none), no gvfs, no keyring,
+  no accessibility bus, no permission store (Settings > Privacy & Security shows the bus's reason instead of its lists), no
+  input method daemon. `tests/security/dev_bus.sh` starts a bus with that file under `.dev/` (never the owner's bus), with
+  service files planted in every folder the standard configuration reads, and checks it lists only itself; controls (the
+  standard folders, a service folder, the system's `session.conf`) make the guard fail. Not changed: the other tests that
+  start their own `dbus-daemon --session` (`tests/apps/files_*.sh`, `tests/integration/tray_host.sh`, `launcher_entry.sh`,
+  `menu_bridge_memory.sh`). Not verified nested.
 - `isolated.sh` exports `GRASSFIELD_DEV=1`, so Grassfield Files started through it hides its Trash place, and in a dev
   session also the "Empty Trash" action (no confirmation that does nothing).
 

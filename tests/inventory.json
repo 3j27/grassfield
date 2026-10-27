@@ -213,6 +213,7 @@
  {"path": "tests/security/sleep_lock_units.sh", "layer": "data"},
  {"path": "tests/security/ipc_inventory.sh", "layer": "data"},
  {"path": "tests/security/dev_gate.sh", "layer": "headless"},
+ {"path": "tests/security/dev_bus.sh", "layer": "headless"},
  {"path": "tests/security/tst_devgate.qml", "layer": "headless"},
  {"path": "tests/security/lock_privacy.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/security/l2_wrong_password.sh", "layer": "nested", "runner": "bare"},
