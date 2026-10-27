@@ -17,7 +17,8 @@ Both ran in a throwaway `archlinux:base` container ("Evidence" says where and ho
 - The Omarchy model (D1: never fork Omarchy). Grassfield gets a `[grassfield]` repository with two channels, **stable** and
   **beta**, on the same pattern as Omarchy's `pkgs.omarchy.org/{stable,rc,edge}/$arch`.
 - "Update Now" updates the **whole system through Omarchy**, in a terminal, as Omarchy's own menu does. Grassfield has no
-  root code to install anything.
+  root code to install anything. (Amended by ADR-0037, owner decision ST4 of 2026-10-27: Grassfield Store's
+  `grassfield-store-helper` installs and removes repository packages the user picks in the Store; see "Amendments".)
 - The beta channel also receives stable versions when they are newer (macOS model). Leaving the beta keeps the installed
   version until a stable one passes it (`pacman -Syu` does not downgrade).
 - UI as on macOS 27: Settings > General > Software Update (available version, notes, "Update Now", "Beta Updates",
@@ -385,7 +386,10 @@ Rejected:
    5. Split the result:
       - `[grassfield]` packages: the names that `pacman --dbpath <own db> -Sql grassfield` lists;
       - Omarchy: the `omarchy` or `omarchy-dev` line;
-      - the rest: a count.
+      - the rest: a count (`others`).
+      Step 2 adds the list beside the count (`otherPackages`: name, installed and available version, sorted by name), which
+      the pane and the Store (PR #15, ADR-0037) need. When the output would pass its 256 KiB cap, that list is cut first
+      (truncated, `otherPackagesTruncated: true`), then the notes (`notesError`); the counts always stay.
 4. **What counts as an update (O3)** for the badge, the menu and the notification: a Grassfield release (a new
    `grassfield-desktop` version, pkgrel included) and an Omarchy release.
 5. **When.**
@@ -450,7 +454,8 @@ Rejected:
 | Signatures | detached, binary; packages, both databases and the notes; by a key in `grassfield-trusted` or its signing subkey |
 | Release notes | `grassfield-notes.json` and `.sig`, UTF-8, at most 64 KiB: `{"version":1,"channel":"stable","releases":[{"version":"1.0.1-1","date":"2026-11-02","notes":{"en":"…","fr":"…"}}]}`. Newest first, at most 20, `en` required, plain text, at most 8000 characters each. |
 | Notes source | `packaging/release-notes/<VERSION>.{en,fr}.txt` in this repository at the tag (O9). A pkgrel rebuild gets "Rebuilt for Hyprland X.Y.Z" / « Reconstruit pour Hyprland X.Y.Z ». |
-| Publication | atomic (h): an immutable snapshot, then one pointer write |
+| Publication | atomic (h): one serialized publisher per channel builds an immutable snapshot from the current one, then writes the pointer only if it has not moved (h.2 as amended by ADR-0037) |
+| Store catalog | `grassfield-catalog.v1.json`, its `.sig` and `catalog/<sha256>.png` in each channel's snapshot, signed with the repository's key; format, rules and checks in ADR-0037 g (amendment) |
 | Trust anchor | the pinned fingerprint and key (b.3) are in `grassfield-keyring`'s trusted list; CI checks it |
 | Build input | a tag (or, for tests, a commit) of grassfield; `VERSION` decides the channel; `makepkg` of `packaging/arch/PKGBUILD` with `GRASSFIELD_PKGREL` |
 | Source access | a read-only deploy key on grassfield (O13), secret `GRASSFIELD_DEPLOY_KEY`. Until it exists, the build is tested in a container with both checkouts. |
@@ -475,6 +480,18 @@ Rejected:
      every client already on B.
    - A new snapshot C, built now with A's packages, worked: `200` for both, `-Sy` exit 0, and `-Syu` "local (1.0.1-1) is
      newer than grassfield (1.0.0-1)", no downgrade.
+   **Amended by ADR-0037 (2026-10-27): one serialized publisher, built from the current snapshot, a conditional pointer
+   write.** Releases and Grassfield Store's catalog updates share each channel's pointer, so a job built from an older
+   snapshot and published later would move the pointer back (R4 above, then a2: every `omarchy update` fails). Per channel:
+   one publishing job, serialized (one run at a time, never cancelled half way); since GitHub cancels a pending run when a
+   newer one queues and each tag is built once, a run takes nothing from its trigger and publishes the latest state: the
+   newest release built and signed for the channel and the catalog of `main`'s head (a cancelled pending run loses nothing);
+   it reads the pointer and builds the new snapshot from the current snapshot's manifest (the newest release's packages,
+   databases and notes when newer than the snapshot's, the catalog when it differs, the rest kept); it refuses a `grassfield.db` older than the current one
+   for any package, except a deliberate rollback below; it writes the pointer only if it still names the snapshot it read
+   (a compare-and-swap on the storage's version tag), else it starts again. A conditional write on the chosen storage is NOT
+   VERIFIED (the host is not chosen, O8); without one, the serialization alone holds, with a fresh read of the pointer just
+   before the write. Details: ADR-0037 g.
    So the previous release is published again as a new snapshot (a pkgrel above the bad one when clients must move to it). Residual: a client whose two
    requests straddle the pointer write gets a mismatched pair once; that run fails ("signature … is invalid"), the next one
    works. The window is the time between pacman's two requests. Mirrors serve the same snapshots and pointer.
@@ -531,6 +548,15 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 
 The owner gave every answer in this Claude Code session on 2026-10-27, through its question tool. The answers to O1-O16
 were recorded in `fd49abc` and confirmed again after the first review.
+
+## Amendments
+- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the Store reads the list of other updates that
+  step 2 adds (`otherPackages`, cut first at the 256 KiB cap), so it runs no second `checkupdates`. g: the Store catalog's files join the contract, and publication is the serialized
+  publisher of h.2. h.2: one serialized publisher per channel that publishes the latest state, building from the current
+  snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
+  to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit
+  action, `pacman -S --needed` / `pacman -Rns` of validated repository names only, ADR-0037 b.1); Software Update itself
+  still installs nothing.
 
 ## Evidence
 - `adr0033-probes.sh` (P0-P13), `adr0033-probes-2.sh` (Q0-Q8) and `adr0033-probes-3.sh` (R0-R5), in
