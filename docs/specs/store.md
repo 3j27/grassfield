@@ -319,7 +319,12 @@ installed on Omarchy), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's,
 
 ## Degraded behavior
 - No catalog (no hosting yet, offline at first start, verification failed): no editorial sections; AppStream and pacman still
-  give Discover's lists, Categories and search.
+  give Discover's lists, Categories and search, and a notice says "The Grassfield catalog isn't available: Arch's apps are
+  shown."
+- No catalog and no app data from Arch either (both missing, or offline at first start): Discover says "The Store Isn't
+  Available Right Now" (« Le Store n’est pas disponible pour le moment »), why in plain words (offline; no trusted key yet;
+  no catalog host; the catalog not fetched or not verified; Arch's app data not installed and not fetched, or not
+  verified), and "Try Again" (Ctrl+R); never a blank page.
 - No `grassfield-keyring`, or one without a key (until the owner's key exists, ADR-0033 O20): the catalog is never used; the
   settings window says why.
 - No `archlinux-appstream-data`: the fetched copy (SR27b); before it is fetched, or offline, pacman's descriptions, catalog

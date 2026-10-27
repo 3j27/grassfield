@@ -844,3 +844,27 @@ answered:
   `StoreEnv.OfflineOnlyInADevSession` tests `GRASSFIELD_STORE_OFFLINE` (honoured in dev, ignored in a packaged session);
   Tab (and any keyboard focus move) scrolls the focused item into view below the toolbar (`ScrollPage.reveal`;
   test_focusScrollsIntoView).
+
+Counter-review of f978601 (integrator, 2026-10-27): PASS; the integrator's nested pass found three gaps, answered here:
+- **The menu bar showed "org.grassfield.Store" and Window only.** The name: the Store is not packaged before step 3 (SD9),
+  so `apps/store/build-direct.sh` now puts its desktop entry (Exec on the dev build) and icon under `.dev/share`, which
+  `scripts/dev/devenv.sh` puts first in `XDG_DATA_DIRS`. The window rules: `config/hypr/grassfield/windows.lua` now
+  counts `org.grassfield.Store` among the apps that draw their own chrome (`gf-client-chrome`, and the maximize exemption),
+  as Files, Settings and Preview. Qt's export was probed under KWin's virtual backend (it serves `org_kde_kwin_appmenu`)
+  with a stand-in registrar on a private bus: the Store calls `org_kde_kwin_appmenu.set_address(<its bus name>,
+  "/MenuBar/1")` as Settings does, and `GetLayout` returns File (Settings…, Close Window), Edit and View in 21 ms. The T1 menus are then the
+  bridge's and the shell's to show; if they still do not, the bridge's log line for the window (opened, or refused with
+  its reason) and the plugin's `appmenu: set_address` line tell which step drops them.
+- **Ctrl+, opened nothing.** With the global menu, the window's shortcut and the menu item carry the same key: on Qt 6.11.2
+  (Arch Linux Archive), `tst_storemain` test_keysWithTheGlobalMenu opens the settings window with Ctrl+, and picks the
+  second sidebar item with Ctrl+2, and test_globalMenuAndSettingsBuild builds the menu (File, Edit, View) and the window.
+  Not reproduced in a real session here (no nested Hyprland): the nested pass checks it again.
+- **No catalog and no app data: an empty page.** Discover now says "The Store Isn't Available Right Now" with the reason
+  (spec "Degraded behavior") and Try Again; with Arch's apps but no catalog, a notice says the catalog isn't available
+  (this ADR's "Offline").
+- **Also from the counter-review:** a disabled `Toggle` keeps its track (an off switch stays visible on white) and fades its
+  knob (`controlToggleDisabledKnobOpacity`), and its accent when on; it does not dim again inside a disabled container
+  that dims itself (Settings' blocked page); `tst_controlsbuttons` test_disabledToggleLook. be35a43 does not build on its
+  own (two lines of fcc9a30's screenshot gate went into it); the history is not rewritten (CLAUDE.md), so a bisect skips
+  it (`git bisect skip be35a43`): be35a43 and fcc9a30 build together.
+
