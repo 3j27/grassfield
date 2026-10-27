@@ -90,6 +90,21 @@ read -r out_w out_h < <(timeout 20 "$root/scripts/dev/pointer.sh" outputs 2>/dev
   | awk -v o="$out" '$1 == o { split($3, s, "x"); print s[1], s[2] }')
 [[ -n ${out_w:-} && -n ${out_h:-} ]] || { echo "soak: output $out not found" >&2; exit 2; }
 
+# A window opens on the focused output, and a fresh nested session focuses WAYLAND-1, not $out: make $out the focused
+# output (compositor focus, then the pointer parked on it; as tests/visual/flow-lib.sh fl_focus_output) before every
+# window the churn opens. Returns 1 when the focus did not take.
+focus_out() {
+  timeout 10 "$root/scripts/nestctl" dispatch "hl.dsp.focus({ monitor = '$out' })" >/dev/null 2>&1 || true
+  pointer abs $((out_w / 2)) $((out_h / 2))
+  local n
+  for n in 1 2 3 4 5 6; do
+    [[ $(timeout 10 "$root/scripts/nestctl" monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .name' | head -n 1) == "$out" ]] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+focus_out || { echo "soak: harness error: could not make $out the focused output (the churn windows would open on another output)" >&2; exit 2; }
+
 # shellcheck source=soak_lib.sh
 . "$root/tests/compositor/soak_lib.sh"
 # shellcheck source=window_geometry.sh
@@ -282,6 +297,7 @@ while (( $(date +%s) < end_epoch )); do
   for p in "${resident[@]}"; do kill -0 "$p" 2>/dev/null && alive+=("$p"); done
   resident=("${alive[@]}")
   while (( ${#resident[@]} < 2 )); do
+    focus_out || say "soak: warning: $out is not the focused output (a window may open elsewhere)"
     resident+=("$(foot_bg -e sleep "$duration")")
     sleep 0.6
     # Out of the way: grab the new window's real titlebar.
@@ -305,6 +321,14 @@ while (( $(date +%s) < end_epoch )); do
   if (( ${#pool[@]} >= pool_max )); then
     kill "${pool[0]}" 2>/dev/null
     pool=("${pool[@]:1}")
+  fi
+  # A churn window may have moved the focus: $out again before this one opens. A focus that does not take counts as a
+  # round without the new window (unmapped), which fails the run as a harness error when frequent.
+  if ! focus_out; then
+    spawned=$((spawned + 1))
+    unmapped=$((unmapped + 1))
+    say "soak: warning: $out is not the focused output: round skipped"
+    continue
   fi
   pool+=("$(foot_bg -e sleep 600)")
   npid=${pool[-1]}
