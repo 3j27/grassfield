@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -47,6 +48,9 @@ QString home(const char *variable, const QString &fallback)
 
 int main(int argc, char **argv)
 {
+    // Secret values pass through this process: no core file and no ptrace by the user's other processes (the unit also sets
+    // LimitCORE=0 and MemorySwapMax=0). Its own /proc/self stays readable (its pidfds' fdinfo).
+    ::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
     // QDBUS_DEBUG makes Qt print every D-Bus message with its arguments, secrets included, to the journal: never here (the
     // unit unsets it too).
     qunsetenv("QDBUS_DEBUG");
@@ -98,8 +102,8 @@ int main(int argc, char **argv)
     grassfield::handover::Handover handover(bus, config);
     handover.releaseLeftover();
     notifyReady();
-    const auto outcome = handover.move();
-    std::printf("grassfield-secrets-handover: %s moved=%d kept=%d\n",
-                outcome == grassfield::handover::Outcome::Done ? "done" : "deferred", handover.moved(), handover.kept());
+    const QString outcome = handover.move();
+    std::printf("grassfield-secrets-handover: %s moved=%d kept=%d skipped=%d\n", qPrintable(outcome), handover.moved(), handover.kept(),
+                handover.skipped());
     return 0;
 }

@@ -4,9 +4,14 @@
     fake-secret-service.py kwallet|keychain|leftover|notifications --log FILE [--store FILE] [options]
 
 kwallet        owns org.kde.secretservicecompat, as KWallet's ksecretd does: one collection (kdewallet) holding two items a
-               libsecret client saved (Chromium's key, an example app) and one entry of KWallet's own API (server, user, type).
-               --locked: the collection starts locked; Unlock answers with a prompt. --only-legacy: the legacy entry only.
+               libsecret client saved (Chromium's key, an example app) and one entry of KWallet's own API, stored as kwalletd
+               6.29 stores it through libsecret (schema org.qt.keychain: server, user, type, and the "xdg:schema" libsecret
+               0.21 adds; KWallet src/runtime/kwalletd/secretserviceclient.cpp, checked against gnome-keyring 51.1).
+               --locked: the collection starts locked; Unlock answers with a prompt. --only-legacy: KWallet's entry only.
                --duplicate: an older wallet, listed first, holds an older copy of Chromium's item (same attributes).
+               --empty: no item at all. --old-entry: also an entry of an older KWallet, which ksecretd lists (server, user,
+               type, no "xdg:schema") only once the wallet is open (kwalletfreedesktopcollection.cpp, onWalletChangeState).
+               --empty-value: Chromium's item holds an empty value. --fail-get: GetSecret answers with an error.
 keychain       owns org.freedesktop.secrets, as gnome-keyring does: a "login" collection with the alias "default", already
                holding the example app's item (same attributes, another value, so an overwrite shows). --locked as above.
                --no-default: no collection yet; CreateCollection answers with a prompt. CreateItem appends what it stored to
@@ -136,16 +141,18 @@ class World:
                 self.registered.add((path, name))
 
     def add_collection(self, path, label, locked, alias=None):
-        self.collections[path] = {"label": label, "locked": locked, "items": []}
+        self.collections[path] = {"label": label, "locked": locked, "items": [], "pending": []}
         if alias:
             self.aliases[alias] = path
         self.export(path, "org.freedesktop.Secret.Collection")
 
-    def add_item(self, collection, label, attributes, value, modified=1000):
-        path = "%s/%d" % (collection, len(self.collections[collection]["items"]) + 1)
+    def add_item(self, collection, label, attributes, value, modified=1000, pending=False):
+        c = self.collections[collection]
+        path = "%s/%d" % (collection, len(c["items"]) + len(c["pending"]) + 1)
         self.items[path] = {"collection": collection, "label": label, "attributes": dict(attributes), "value": value, "type": "text/plain",
                             "modified": modified}
-        self.collections[collection]["items"].append(path)
+        # A pending entry is listed once the collection is unlocked (ksecretd's onWalletChangeState).
+        c["pending" if pending and c["locked"] else "items"].append(path)
         self.export(path, "org.freedesktop.Secret.Item")
         return path
 
@@ -212,6 +219,8 @@ class World:
                 def accept():
                     for p in targets:
                         self.collections[p]["locked"] = False
+                        self.collections[p]["items"] += self.collections[p]["pending"]
+                        self.collections[p]["pending"] = []
                     return V("ao", targets)
 
                 return invocation.return_value(V("(aoo)", ([], self.prompt(accept))))
@@ -239,6 +248,8 @@ class World:
                 f.write(json.dumps({"label": self.items[item]["label"], "attributes": attributes, "value": value, "replace": replace}) + "\n")
             return invocation.return_value(V("(oo)", (item, "/")))
         if interface == "org.freedesktop.Secret.Item" and method == "GetSecret":
+            if self.args.fail_get:
+                return invocation.return_dbus_error("org.freedesktop.DBus.Error.Failed", "test failure")
             i = self.items[path]
             if self.collections[i["collection"]]["locked"]:
                 return invocation.return_dbus_error("org.freedesktop.Secret.Error.IsLocked", "locked")
@@ -268,6 +279,10 @@ def main():
     ap.add_argument("--no-default", action="store_true")
     ap.add_argument("--ignore-quit", action="store_true")
     ap.add_argument("--duplicate", action="store_true")
+    ap.add_argument("--empty", action="store_true")
+    ap.add_argument("--old-entry", action="store_true")
+    ap.add_argument("--empty-value", action="store_true")
+    ap.add_argument("--fail-get", action="store_true")
     ap.add_argument("--answer", choices=["accept", "dismiss"], default="accept")
     ap.add_argument("--delay", type=float, default=0.2)
     args = ap.parse_args()
@@ -292,11 +307,16 @@ def main():
                            "kwallet-chromium-key-old", modified=100)
         c = ROOT + "/collection/kdewallet"
         world.add_collection(c, "kdewallet", args.locked, alias="default")
-        if not args.only_legacy:
-            world.add_item(c, "Chromium Safe Storage", {"xdg:schema": "chrome_libsecret_os_crypt_password_v2", "application": "chromium"},
-                           "kwallet-chromium-key")
-            world.add_item(c, "Example App", {"xdg:schema": "org.example.App", "account": "me"}, "kwallet-example")
-        world.add_item(c, "Passwords/smb-share", {"server": "Passwords", "user": "smb-share", "type": "plaintext"}, "kwallet-legacy")
+        if not args.empty:
+            if not args.only_legacy:
+                world.add_item(c, "Chromium Safe Storage", {"xdg:schema": "chrome_libsecret_os_crypt_password_v2", "application": "chromium"},
+                               "" if args.empty_value else "kwallet-chromium-key")
+                world.add_item(c, "Example App", {"xdg:schema": "org.example.App", "account": "me"}, "kwallet-example")
+            world.add_item(c, "Passwords/smb-share", {"xdg:schema": "org.qt.keychain", "server": "Passwords", "user": "smb-share",
+                                                      "type": "plaintext"}, "kwallet-legacy")
+            if args.old_entry:
+                world.add_item(c, "Form Data/old-site", {"server": "Form Data", "user": "old-site", "type": "map"}, "kwallet-old-entry",
+                               pending=True)
     if args.role == "keychain" and not args.no_default:
         c = ROOT + "/collection/login"
         world.add_collection(c, "Login", args.locked, alias="default")

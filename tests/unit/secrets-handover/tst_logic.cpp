@@ -15,15 +15,29 @@
 
 using namespace grassfield::handover;
 
-TEST(SecretsHandover, OnlyItemsALibsecretClientSavedMove)
+// The executable checks need a system where /usr/bin/env is root's. In a sandbox that runs the tests in a user namespace
+// without root (bubblewrap, an unprivileged container), root's files show the overflow uid and nothing is trusted there.
+static bool rootOwnsSystemFiles()
 {
-    EXPECT_TRUE(isLibsecretItem({{QStringLiteral("xdg:schema"), QStringLiteral("chrome_libsecret_os_crypt_password_v2")},
-                                 {QStringLiteral("application"), QStringLiteral("chromium")}}));
-    // An entry written through KWallet's own API: server, user and type only.
-    EXPECT_FALSE(isLibsecretItem({{QStringLiteral("server"), QStringLiteral("Passwords")}, {QStringLiteral("user"), QStringLiteral("smb-share")},
-                                  {QStringLiteral("type"), QStringLiteral("plaintext")}}));
-    EXPECT_FALSE(isLibsecretItem({{QStringLiteral("xdg:schema"), QString()}}));
-    EXPECT_FALSE(isLibsecretItem({}));
+    struct stat st {};
+    return ::stat("/usr/bin/env", &st) == 0 && st.st_uid == 0 && ::stat("/usr/bin", &st) == 0 && st.st_uid == 0;
+}
+#define SKIP_UNLESS_ROOT_OWNS_SYSTEM_FILES()                                                                                 \
+    if (!rootOwnsSystemFiles())                                                                                              \
+    GTEST_SKIP() << "/usr/bin is not owned by root here (a user namespace that does not map root): executables cannot be checked"
+
+TEST(SecretsHandover, EveryItemALookupCanFindMoves)
+{
+    // What a libsecret client saved.
+    EXPECT_TRUE(isFindable({{QStringLiteral("xdg:schema"), QStringLiteral("chrome_libsecret_os_crypt_password_v2")},
+                            {QStringLiteral("application"), QStringLiteral("chromium")}}));
+    // An entry of KWallet's own API, as kwalletd stores it through libsecret (schema org.qt.keychain).
+    EXPECT_TRUE(isFindable({{QStringLiteral("xdg:schema"), QStringLiteral("org.qt.keychain")}, {QStringLiteral("server"), QStringLiteral("Passwords")},
+                            {QStringLiteral("user"), QStringLiteral("smb-share")}, {QStringLiteral("type"), QStringLiteral("plaintext")}}));
+    // An entry of an older KWallet, as ksecretd lists it once the wallet is open: server, user and type only.
+    EXPECT_TRUE(isFindable({{QStringLiteral("server"), QStringLiteral("Form Data")}, {QStringLiteral("user"), QStringLiteral("old-site")},
+                            {QStringLiteral("type"), QStringLiteral("map")}}));
+    EXPECT_FALSE(isFindable({})); // no lookup can find it
 }
 
 TEST(SecretsHandover, NoWalletFileMeansNothingToAsk)
@@ -45,7 +59,7 @@ TEST(SecretsHandover, NoWalletFileMeansNothingToAsk)
 TEST(SecretsHandover, MarkerSaysOnlyCounts)
 {
     EXPECT_EQ(markerPath(QStringLiteral("/home/u/.local/state/grassfield")), QStringLiteral("/home/u/.local/state/grassfield/secrets-handover"));
-    EXPECT_EQ(markerLine(QStringLiteral("moved"), 2, 1), QStringLiteral("moved moved=2 kept=1\n"));
+    EXPECT_EQ(markerLine(QStringLiteral("moved"), 2, 1, 0), QStringLiteral("moved moved=2 kept=1 skipped=0\n"));
 }
 
 TEST(SecretsHandover, MarkerGoesToTheUnitsStateDirectory)
@@ -95,6 +109,7 @@ TEST(SecretsHandover, ADevRunUsesOnlyAPrivateTestBus)
 
 TEST(SecretsHandover, TrustedExecutables)
 {
+    SKIP_UNLESS_ROOT_OWNS_SYSTEM_FILES();
     // A system executable: root-owned file and directories, not writable by group or others.
     EXPECT_TRUE(trustedExecutable(QStringLiteral("/usr/bin/env")));
     EXPECT_FALSE(trustedExecutable(QStringLiteral("usr/bin/env")));
@@ -130,6 +145,7 @@ static Peer peerRunning(const char *exe, const struct stat &file)
 
 TEST(SecretsHandover, PeersAreTheExpectedFileByInode)
 {
+    SKIP_UNLESS_ROOT_OWNS_SYSTEM_FILES();
     struct stat env {};
     ASSERT_EQ(::stat("/usr/bin/env", &env), 0);
     Peer peer = peerRunning("/usr/bin/env", env);
@@ -143,6 +159,7 @@ TEST(SecretsHandover, PeersAreTheExpectedFileByInode)
 
 TEST(SecretsHandover, ALeftoverFromAReplacedBinaryMayOnlyBeAskedToQuit)
 {
+    SKIP_UNLESS_ROOT_OWNS_SYSTEM_FILES();
     // ksecretd started before a KWallet upgrade: /proc/<pid>/exe says "<path> (deleted)", the old file has no link left.
     struct stat old {};
     ASSERT_EQ(::stat("/usr/bin/env", &old), 0);

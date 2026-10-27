@@ -84,7 +84,7 @@ bool trustedExecutable(const QString &path)
     if (!rootOwnedNotWritable(current, false))
         return false;
     while (true) {
-        const int slash = current.lastIndexOf('/');
+        const qsizetype slash = current.lastIndexOf('/');
         current = slash <= 0 ? QByteArrayLiteral("/") : current.left(slash);
         if (!rootOwnedNotWritable(current, true))
             return false;

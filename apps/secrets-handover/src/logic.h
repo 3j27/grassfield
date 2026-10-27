@@ -12,13 +12,16 @@ namespace grassfield::handover {
 
 using Attributes = QMap<QString, QString>;
 
-// An item that a libsecret client saved: libsecret tags every item it stores with the schema it used ("xdg:schema"). Entries
-// written through KWallet's own API carry only server, user and type (KWallet src/runtime/ksecretd/
-// kwalletfreedesktopcollection.cpp, the attributes of a wallet's existing entries): they stay in KWallet for the apps that
-// use KWallet.
-inline bool isLibsecretItem(const Attributes &attributes)
+// Every item KWallet lists moves (integrator decision in the review of fbfe34d, ADR-0035 decision 2c-10): what libsecret
+// clients saved ("xdg:schema" of their schema), KWallet's own entries, which kwalletd also stores through libsecret
+// (schema "org.qt.keychain": server, user, type; KWallet src/runtime/kwalletd/secretserviceclient.cpp, qtKeychainSchema), and
+// entries of older KWallet versions, which ksecretd lists with server, user and type only once the wallet is open
+// (src/runtime/ksecretd/kwalletfreedesktopcollection.cpp, onWalletChangeState). QtKeychain and libsecret clients look them up
+// by these attributes in the Secret Service, which is the keychain in a Grassfield session. Only an item without attributes
+// stays: no lookup can find it.
+inline bool isFindable(const Attributes &attributes)
 {
-    return !attributes.value(QStringLiteral("xdg:schema")).isEmpty();
+    return !attributes.isEmpty();
 }
 
 // KWallet keeps its wallets as <name>.kwl in $XDG_DATA_HOME/kwalletd (KWallet src/runtime/kwalletbackend/kwalletbackend.cc,
@@ -42,10 +45,11 @@ inline QString markerPath(const QString &stateDir)
     return stateDir + QStringLiteral("/secrets-handover");
 }
 
-// One line, no item, label, attribute or value: what ran and how much it moved.
-inline QString markerLine(const QString &outcome, int moved, int kept)
+// One line, no item, label, attribute or value: what ran and how much it moved, kept (already in the keychain, or an older
+// copy of an item that moved) and skipped (no attributes, an empty value, or a wallet left locked).
+inline QString markerLine(const QString &outcome, int moved, int kept, int skipped)
 {
-    return QStringLiteral("%1 moved=%2 kept=%3\n").arg(outcome).arg(moved).arg(kept);
+    return QStringLiteral("%1 moved=%2 kept=%3 skipped=%4\n").arg(outcome).arg(moved).arg(kept).arg(skipped);
 }
 
 // The user's own kwalletrc gives the Secret Service back to KWallet ([org.freedesktop.secrets] apiEnabled true; KConfig reads
@@ -65,7 +69,7 @@ inline bool userKeepsKWalletService(const QString &configHome)
             group = line.mid(1, line.indexOf(QLatin1Char(']')) - 1);
             continue;
         }
-        const int eq = line.indexOf(QLatin1Char('='));
+        const qsizetype eq = line.indexOf(QLatin1Char('='));
         if (group != QLatin1String("org.freedesktop.secrets") || eq <= 0)
             continue;
         if (line.left(eq).section(QLatin1Char('['), 0, 0).trimmed() == QLatin1String("apiEnabled")) {
@@ -92,13 +96,13 @@ inline bool isPrivateTestBus(const QString &address, const QString &dir)
     if (entries.isEmpty())
         return false;
     for (const QString &entry : entries) {
-        const int colon = entry.indexOf(QLatin1Char(':'));
+        const qsizetype colon = entry.indexOf(QLatin1Char(':'));
         if (colon <= 0)
             return false;
         const QString transport = entry.left(colon);
         QMap<QString, QString> kv;
         for (const QString &pair : entry.mid(colon + 1).split(QLatin1Char(','), Qt::SkipEmptyParts)) {
-            const int eq = pair.indexOf(QLatin1Char('='));
+            const qsizetype eq = pair.indexOf(QLatin1Char('='));
             if (eq <= 0)
                 return false;
             kv.insert(pair.left(eq), QString::fromUtf8(QByteArray::fromPercentEncoding(pair.mid(eq + 1).toUtf8())));

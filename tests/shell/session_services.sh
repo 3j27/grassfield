@@ -99,6 +99,8 @@ desc="grassfield-secrets-handover.service: started before the shell in the same 
 check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
 desc="grassfield-secrets-handover.service: started by the session, skips itself outside it, NoNewPrivileges, seccomp, installed by the PKGBUILD"
 check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -q "for unit in .*secrets-handover" "$2"' _ "$u" "$pk/arch/PKGBUILD"
+desc="grassfield-secrets-handover.service: no core file, no swap, no Qt D-Bus message dump (secret values pass through it)"
+check bash -c 'grep -qx "LimitCORE=0" "$1" && grep -qx "MemorySwapMax=0" "$1" && grep -qx "UnsetEnvironment=QDBUS_DEBUG" "$1"' _ "$u"
 # In a user unit these options make systemd add PrivateUsers=self (systemd src/core/exec-invoke.c,
 # exec_context_need_unprivileged_private_users), and from that namespace /proc/<pid>/exe of the handover's peers cannot be read:
 # it would refuse every peer (ADR-0035 decision 2c-6). tests/integration/secrets_handover.sh shows that refusal.
