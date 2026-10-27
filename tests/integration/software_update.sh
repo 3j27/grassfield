@@ -93,7 +93,10 @@ quiet pacman -S --noconfirm --needed pacman-contrib sudo fakeroot binutils pytho
 pacman -Q pacman pacman-contrib gnupg polkit | tr '\n' ' '; echo
 useradd -m builder && useradd -m alice && useradd -m bob
 for u in alice bob; do d=/run/user/$(id -u $u); mkdir -p "$d" && chown $u: "$d" && chmod 700 "$d"; done
-echo 'alice ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/90-alice && chmod 440 /etc/sudoers.d/90-alice
+# sudo keeps the proxy variables passed in, so that Omarchy's `sudo pacman` (A5, A7b) reaches the network the way root's
+# pacman does; without a proxy they are unset and this changes nothing.
+printf '%s\n' 'Defaults env_keep += "HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy"' 'alice ALL=(ALL) NOPASSWD: ALL' \
+  >/etc/sudoers.d/90-alice && chmod 440 /etc/sudoers.d/90-alice
 mkdir -p /run/dbus && dbus-daemon --system --fork
 /usr/lib/polkit-1/polkitd --no-debug >"$W/polkitd.log" 2>&1 &
 cat >/etc/polkit-1/rules.d/50-grassfield-test.rules <<'EOF'
