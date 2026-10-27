@@ -14,6 +14,9 @@ Platform.MenuBar {
 
     // BrowserWindow.qml.
     required property var win
+    // The items with a key are live only while no window of the browser's own (Get Info, Customize Folder) is the key
+    // window: Qt matches their keys there too (BrowserWindow.childIsKey), and Ctrl+W typed in Get Info closed the browser.
+    readonly property bool keysHere: bar.win.childIsKey !== true
     readonly property var app: bar.win.app
     readonly property var tab: bar.win.tab
     // The listing the selection actions apply to (the focused column in the column view).
@@ -86,30 +89,32 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("New Window")
             shortcut: "Ctrl+N"
+            enabled: bar.keysHere
             onTriggered: bar.win.manager.newWindow(bar.app.newWindowUrl, null)
         }
         Platform.MenuItem {
             text: qsTr("New Folder")
             shortcut: "Ctrl+Shift+N"
-            enabled: bar.writable && !bar.inTrash
+            enabled: bar.keysHere && bar.writable && !bar.inTrash
             onTriggered: bar.tab.newFolder()
         }
         Platform.MenuItem {
             text: qsTr("New Tab")
             shortcut: "Ctrl+T"
+            enabled: bar.keysHere
             onTriggered: bar.win.newTab(bar.app.newWindowUrl, null)
         }
         Platform.MenuItem {
             text: qsTr("Reopen Closed Tab")
             shortcut: "Ctrl+Alt+Shift+T"
-            enabled: bar.win.manager.closedTabs.length > 0
+            enabled: bar.keysHere && bar.win.manager.closedTabs.length > 0
             onTriggered: bar.win.manager.reopenClosedTab(bar.win)
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Open")
             shortcut: "Ctrl+O"
-            enabled: bar.count > 0
+            enabled: bar.keysHere && bar.count > 0
             onTriggered: bar.tab.openSelection()
         }
         Platform.Menu {
@@ -134,32 +139,35 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.win.tabs.length > 1 ? qsTr("Close Tab") : qsTr("Close Window")
             shortcut: "Ctrl+W"
+            enabled: bar.keysHere
             onTriggered: bar.win.closeTab(bar.win.currentIndex)
         }
         // With tabs, the window closes with Shift (Finder).
         Platform.MenuItem {
             text: qsTr("Close Window")
             shortcut: "Ctrl+Shift+W"
+            enabled: bar.keysHere
             visible: bar.win.tabs.length > 1
             onTriggered: bar.win.close()
         }
         Platform.MenuItem {
             text: qsTr("Close All")
             shortcut: "Ctrl+Alt+W"
+            enabled: bar.keysHere
             visible: bar.win.manager.windows.length > 1
             onTriggered: bar.win.manager.closeAllWindows()
         }
         Platform.MenuItem {
             text: qsTr("Eject")
             shortcut: "Ctrl+E"
-            enabled: bar.win.canEject === true
+            enabled: bar.keysHere && bar.win.canEject === true
             onTriggered: bar.win.ejectVolume()
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Get Info")
             shortcut: "Ctrl+I"
-            enabled: bar.tab !== null
+            enabled: bar.keysHere && bar.tab !== null
             onTriggered: bar.tab.getInfo()
         }
         Platform.MenuItem {
@@ -170,20 +178,20 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Rename")
             shortcut: "F2"
-            enabled: bar.count === 1 && bar.editable
+            enabled: bar.keysHere && bar.count === 1 && bar.editable
             onTriggered: bar.tab.renameSelection()
         }
         Platform.MenuItem {
             text: qsTr("Duplicate")
             shortcut: "Ctrl+D"
-            enabled: bar.count > 0 && bar.writable && !bar.inTrash
+            enabled: bar.keysHere && bar.count > 0 && bar.writable && !bar.inTrash
             onTriggered: bar.tab.duplicateSelection()
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Glance at %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Glance at “%1”").arg(bar.firstName) : qsTr("Glance")
             // Finder's File > Quick Look (Cmd+Y); Space in the views too.
             shortcut: "Ctrl+Y"
-            enabled: bar.count > 0 && !bar.inTrash
+            enabled: bar.keysHere && bar.count > 0 && !bar.inTrash
             onTriggered: bar.tab.glance()
         }
         // The colour tags of the selection (the window's item menu shows them as a row of colour dots).
@@ -212,7 +220,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.inTrash ? qsTr("Put Back") : qsTr("Move to Trash")
             shortcut: "Ctrl+Backspace"
-            enabled: bar.count > 0 && (bar.inTrash || bar.editable)
+            enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable)
             onTriggered: bar.tab.trashSelection()
         }
         Platform.MenuItem {
@@ -232,6 +240,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Find")
             shortcut: "Ctrl+F"
+            enabled: bar.keysHere
             onTriggered: bar.win.focusSearch()
         }
     }
@@ -242,38 +251,38 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Undo")
             shortcut: "Ctrl+Z"
-            enabled: bar.app.canUndo
+            enabled: bar.keysHere && bar.app.canUndo
             onTriggered: bar.app.undo()
         }
         Platform.MenuItem {
             text: qsTr("Redo")
             shortcut: "Ctrl+Shift+Z"
-            enabled: bar.app.canRedo
+            enabled: bar.keysHere && bar.app.canRedo
             onTriggered: bar.app.redo()
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Cut")
             shortcut: "Ctrl+X"
-            enabled: bar.count > 0 && bar.editable
+            enabled: bar.keysHere && bar.count > 0 && bar.editable
             onTriggered: bar.tab.copySelection(true)
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Copy %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Copy “%1”").arg(bar.firstName) : qsTr("Copy")
             shortcut: "Ctrl+C"
-            enabled: bar.count > 0
+            enabled: bar.keysHere && bar.count > 0
             onTriggered: bar.tab.copySelection(false)
         }
         Platform.MenuItem {
             text: bar.app.clipboardCount > 1 ? qsTr("Paste %1 Items").arg(bar.app.clipboardCount) : qsTr("Paste")
             shortcut: "Ctrl+V"
-            enabled: bar.app.canPaste && bar.writable
+            enabled: bar.keysHere && bar.app.canPaste && bar.writable
             onTriggered: bar.tab.paste()
         }
         Platform.MenuItem {
             text: qsTr("Select All")
             shortcut: "Ctrl+A"
-            enabled: bar.folder !== null && bar.folder.count > 0
+            enabled: bar.keysHere && bar.folder !== null && bar.folder.count > 0
             onTriggered: bar.folder.selectAll()
         }
     }
@@ -284,24 +293,28 @@ Platform.MenuBar {
         MenuCheckItem {
             text: qsTr("as Icons")
             shortcut: "Super+1"
+            enabled: bar.keysHere
             on: bar.tab !== null && bar.tab.viewMode === "icons"
             onChosen: bar.tab.setViewMode("icons")
         }
         MenuCheckItem {
             text: qsTr("as List")
             shortcut: "Super+2"
+            enabled: bar.keysHere
             on: bar.tab !== null && bar.tab.viewMode === "list"
             onChosen: bar.tab.setViewMode("list")
         }
         MenuCheckItem {
             text: qsTr("as Columns")
             shortcut: "Super+3"
+            enabled: bar.keysHere
             on: bar.tab !== null && bar.tab.viewMode === "columns"
             onChosen: bar.tab.setViewMode("columns")
         }
         MenuCheckItem {
             text: qsTr("as Gallery")
             shortcut: "Super+4"
+            enabled: bar.keysHere
             on: bar.tab !== null && bar.tab.viewMode === "gallery"
             onChosen: bar.tab.setViewMode("gallery")
         }
@@ -309,19 +322,20 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.app.sidebarShown ? qsTr("Hide Sidebar") : qsTr("Show Sidebar")
             shortcut: "Ctrl+Super+S"
+            enabled: bar.keysHere
             onTriggered: bar.app.sidebarShown = !bar.app.sidebarShown
         }
         Platform.MenuItem {
             text: bar.tab !== null && bar.tab.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview")
             shortcut: "Ctrl+Shift+P"
-            enabled: bar.tab !== null
+            enabled: bar.keysHere && bar.tab !== null
             onTriggered: bar.tab.togglePreview()
         }
         Platform.MenuSeparator {}
         MenuCheckItem {
             text: qsTr("Use Groups")
             shortcut: "Ctrl+Super+0"
-            enabled: bar.tab !== null
+            enabled: bar.keysHere && bar.tab !== null
             on: bar.tab !== null && bar.tab.groupBy > 0
             onChosen: bar.tab.toggleGroups()
         }
@@ -372,6 +386,7 @@ Platform.MenuBar {
         MenuCheckItem {
             text: qsTr("Show Hidden Files")
             shortcut: "Ctrl+H"
+            enabled: bar.keysHere
             on: bar.app.showHidden
             onChosen: bar.app.showHidden = !bar.app.showHidden
         }
@@ -380,29 +395,31 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.win.tabBarVisible ? qsTr("Hide Tab Bar") : qsTr("Show Tab Bar")
             shortcut: "Ctrl+Shift+T"
-            enabled: bar.win.tabs.length <= 1
+            enabled: bar.keysHere && bar.win.tabs.length <= 1
             onTriggered: bar.app.tabBarShown = !bar.app.tabBarShown
         }
         Platform.MenuItem {
             text: bar.app.pathBarShown ? qsTr("Hide Path Bar") : qsTr("Show Path Bar")
             shortcut: "Ctrl+Alt+P"
+            enabled: bar.keysHere
             onTriggered: bar.app.pathBarShown = !bar.app.pathBarShown
         }
         Platform.MenuItem {
             text: bar.app.statusBarShown ? qsTr("Hide Status Bar") : qsTr("Show Status Bar")
             shortcut: "Ctrl+/"
+            enabled: bar.keysHere
             onTriggered: bar.app.statusBarShown = !bar.app.statusBarShown
         }
         Platform.MenuItem {
             text: qsTr("Show Previous Tab")
             shortcut: "Ctrl+Shift+Tab"
-            enabled: bar.win.tabs.length > 1
+            enabled: bar.keysHere && bar.win.tabs.length > 1
             onTriggered: bar.win.selectTab(bar.win.currentIndex - 1)
         }
         Platform.MenuItem {
             text: qsTr("Show Next Tab")
             shortcut: "Ctrl+Tab"
-            enabled: bar.win.tabs.length > 1
+            enabled: bar.keysHere && bar.win.tabs.length > 1
             onTriggered: bar.win.selectTab(bar.win.currentIndex + 1)
         }
         // Finder's Window menu items for tabs (the Window menu is the shell's T0 menu: docs/specs/files.md F-10).
@@ -420,7 +437,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Reload")
             shortcut: "Ctrl+R"
-            enabled: bar.tab !== null
+            enabled: bar.keysHere && bar.tab !== null
             onTriggered: bar.tab.folder.reload()
         }
     }
@@ -432,19 +449,19 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Back")
             shortcut: "Ctrl+["
-            enabled: bar.tab !== null && bar.tab.canBack
+            enabled: bar.keysHere && bar.tab !== null && bar.tab.canBack
             onTriggered: bar.tab.back()
         }
         Platform.MenuItem {
             text: qsTr("Forward")
             shortcut: "Ctrl+]"
-            enabled: bar.tab !== null && bar.tab.canForward
+            enabled: bar.keysHere && bar.tab !== null && bar.tab.canForward
             onTriggered: bar.tab.forward()
         }
         Platform.MenuItem {
             text: qsTr("Enclosing Folder")
             shortcut: "Super+Up"
-            enabled: bar.tab !== null && bar.tab.segments.length > 1
+            enabled: bar.keysHere && bar.tab !== null && bar.tab.segments.length > 1
             onTriggered: bar.tab.up()
         }
         Platform.MenuSeparator {}
@@ -463,6 +480,7 @@ Platform.MenuBar {
                 visible: kind !== "tag"
                 text: bar.label(name)
                 shortcut: kind === "recents" ? "Ctrl+Shift+F" : bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
+                enabled: bar.keysHere
                 onTriggered: bar.win.openPlace(index, url, mounted)
             }
 
@@ -474,6 +492,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Go to Folder…")
             shortcut: "Ctrl+Shift+G"
+            enabled: bar.keysHere
             onTriggered: bar.win.goToFolder()
         }
     }

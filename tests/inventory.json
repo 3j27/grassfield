@@ -76,6 +76,7 @@
  {"path": "tests/unit/tst_exclusivesurfaces.qml", "layer": "headless"},
  {"path": "tests/unit/tst_displaysfile.qml", "layer": "logic"},
  {"path": "tests/unit/tst_extensionstatus.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_filesbrowser.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filescustomize.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesgallery.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesgrouped.qml", "layer": "headless"},
