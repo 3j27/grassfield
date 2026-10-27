@@ -56,36 +56,65 @@ case "$text" in
 esac
 body=${text#"$head"}
 body=${body%"$tail"}
-# "{title} - {class}": the class is after the last " - " (a title may hold one, a class does not).
-case "$body" in
-  *" - "*) ;;
+
+# "{title} - {class}", and either may hold " - " (an app sets both). Every split is tried against Hyprland's client list:
+# exactly one (split, client pid) may match, else the windows cannot be told apart and the stock dialog runs, so an app that
+# names itself after another app's window cannot move the mark onto it. Hyprland names an untitled window "(unknown)".
+# Out: the pid, 1 when the window is untitled, the class (one without a newline).
+found=$(hyprctl -j clients 2>/dev/null | python3 -I -c '
+import json, sys
+body, u = sys.argv[1:3]
+clients = json.load(sys.stdin)
+hits = set()
+i = body.find(" - ")
+while i >= 0:
+    t, c = body[:i], body[i + 3:]
+    for w in clients:
+        wt = w.get("title")
+        if c != "" and w.get("class") == c and (wt == t or (t == u and wt == "")):
+            hits.add((w.get("pid"), i, t == u and wt == ""))
+    i = body.find(" - ", i + 1)
+if len(hits) == 1:
+    pid, i, untitled = hits.pop()
+    c = body[i + 3:]
+    if type(pid) is int and pid > 1 and "\n" not in c:
+        print(pid)
+        print(1 if untitled else 0)
+        print(c)
+' "$body" "$unknown" 2>/dev/null)
+case "$found" in
+  *"$nl"*"$nl"*) ;;
   *) stock "$@" ;;
 esac
-class=${body##* - }
-window=${body% - *}
-[ -n "$class" ] || stock "$@"
-
-# The client pids of the windows with this class and title (Hyprland names an untitled window "(unknown)"): exactly one,
-# else the windows cannot be told apart.
-pids=$(hyprctl -j clients 2>/dev/null | python3 -I -c '
-import json, sys
-c, t, u = sys.argv[1:4]
-found = {w.get("pid") for w in json.load(sys.stdin) if w.get("class") == c and (w.get("title") == t or (t == u and w.get("title") == ""))}
-print("\n".join(sorted(str(p) for p in found)))
-' "$class" "$window" "$unknown" 2>/dev/null)
-case "$pids" in
-  "" | *"$nl"*) stock "$@" ;;
-esac
-pid=$pids
+pid=${found%%"$nl"*}
+rest=${found#*"$nl"}
+untitled=${rest%%"$nl"*}
+class=${rest#*"$nl"}
 case "$pid" in
-  *[!0-9]*) stock "$@" ;;
+  "" | *[!0-9]*) stock "$@" ;;
 esac
 [ "$pid" -gt 1 ] || stock "$@"
+case "$untitled" in
+  1) window= ;;
+  0) window=${body%" - $class"} ;;
+  *) stock "$@" ;;
+esac
+[ -n "$class" ] && [ "${window:-$unknown} - $class" = "$body" ] || stock "$@"
 
 # The shell acknowledges within 1 s ("ok"), or the stock dialog runs. The strings carry a prefix: qs ipc takes an argument
 # that starts with "-" for an option. The compositor's instance lets the shell refuse a nested session's call.
-answer=$(timeout 1 qs ipc -p "$shell_dir" call anr report "$$" "$pid" "c:$class" "t:$window" \
+answer=$(timeout -k 0.2 1 qs ipc -p "$shell_dir" call anr report "$$" "$pid" "c:$class" "t:$window" \
   "i:${HYPRLAND_INSTANCE_SIGNATURE:-}" 2>/dev/null)
 [ "$answer" = ok ] || stock "$@"
-# Hyprland's dialog from now on: silent, same pid, until Hyprland kills it.
-exec sleep infinity
+
+# Hyprland's dialog from now on: silent, same pid, its stdout (Hyprland's pipe) kept open and held by no child, until
+# Hyprland kills it. A compositor that is gone (a crash) kills nothing: the stand-in ends once it was given another parent
+# (a dead parent can stay a zombie, which `kill -0` still finds). Its name has no space, so /proc's field 4 is the parent.
+parent=$PPID
+parent_now() {
+  read -r _ _ _ p _ <"/proc/$$/stat" && echo "$p"
+}
+while [ "$(parent_now)" = "$parent" ]; do
+  sleep 2 >/dev/null 2>&1
+done
+exit 0

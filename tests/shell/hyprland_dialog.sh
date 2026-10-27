@@ -95,10 +95,11 @@ ran_stock() {
   for a in "$@"; do want+="$a|"; done
   [[ -f $tmp/stock.args && $(record stock.args) == "$want" ]]
 }
-# The stand-in still runs, as `sleep` (exec kept the pid), and printed nothing.
+# The stand-in still runs with the pid Hyprland would kill (the script itself, no exec), and printed nothing.
 waits_silently() {
   sleep 0.6
-  kill -0 "$run_pid" 2>/dev/null && [[ $(cat "/proc/$run_pid/comm" 2>/dev/null) == sleep && ! -s $tmp/out && ! -f $tmp/stock.args ]]
+  kill -0 "$run_pid" 2>/dev/null && [[ $(tr '\0' ' ' <"/proc/$run_pid/cmdline" 2>/dev/null) == *"$tmp/bin/hyprland-dialog "* &&
+    ! -s $tmp/out && ! -f $tmp/stock.args ]]
 }
 stop() { kill "$run_pid" 2>/dev/null || true; wait "$run_pid" 2>/dev/null || true; }
 
@@ -142,9 +143,47 @@ FAKE_CLIENTS=$(clients 4242 foot "" 4300 foot "(other)")
 start "${EN[@]}" --text "$(en_text "(unknown)" foot)" "${EN_B[@]}"
 desc="an untitled window: the stand-in waits silently"
 check waits_silently
-desc="an untitled window (\"(unknown)\" in Hyprland's text) is found by its empty title"
-check bash -c '[[ $(tr "\0" "|" <"$1/qs.args") == *"|$2|4242|c:foot|t:(unknown)|"* ]]' _ "$tmp" "$run_pid"
+desc="an untitled window (\"(unknown)\" in Hyprland's text) is found by its empty title, and reported with it"
+check bash -c '[[ $(tr "\0" "|" <"$1/qs.args") == *"|$2|4242|c:foot|t:|"* ]]' _ "$tmp" "$run_pid"
 stop
+
+# A class may hold " - " too (an app sets its own app id): every split is tried.
+FAKE_CLIENTS=$(clients 4242 "z - victim" "Victim" 5000 firefox "Mozilla Firefox")
+start "${EN[@]}" --text "$(en_text "Victim" "z - victim")" "${EN_B[@]}"
+desc="a class holding \" - \": the stand-in waits silently"
+check waits_silently
+desc="a class holding \" - \" is reported whole"
+check bash -c '[[ $(tr "\0" "|" <"$1/qs.args") == *"|$2|4242|c:z - victim|t:Victim|"* ]]' _ "$tmp" "$run_pid"
+stop
+
+# The stand-in's stdout is Hyprland's pipe: nothing else may hold it, or Hyprland would read no end when it kills the
+# stand-in. And a compositor that is gone kills nothing: the stand-in ends once its parent did.
+FAKE_CLIENTS=$(clients 4242 foot "~")
+rm -f "$tmp/qs.args" "$tmp/eof"
+( FAKE_DIR=$tmp PATH="$tmp/bin:$tmp/fake:/usr/bin:/bin" HYPRLAND_INSTANCE_SIGNATURE=sig_1_2 \
+    "$tmp/bin/hyprland-dialog" "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}" 2>/dev/null ) |
+  { cat >/dev/null; date +%s%N >"$tmp/eof"; } &
+pids+=($!)
+for ((i = 0; i < 40; i++)); do [[ -s $tmp/qs.args ]] && break; sleep 0.05; done
+sleep 2.5 # past the first poll of its parent, so a poll's child is running
+standin_pid=$(tr '\0' '\n' <"$tmp/qs.args" 2>/dev/null | sed -n 7p)
+desc="the waiting stand-in holds Hyprland's pipe alone: SIGKILL ends the pipe within 0.5 s"
+check bash -c 't0=$(date +%s%N); kill -KILL "$2"; for ((i = 0; i < 40; i++)); do [[ -s $1/eof ]] && break; sleep 0.05; done;
+  [[ -s $1/eof && $(( ($(cat "$1/eof") - t0) / 1000000 )) -lt 500 ]]' _ "$tmp" "$standin_pid"
+wait "${pids[-1]}" 2>/dev/null || true
+rm -f "$tmp/qs.args"
+FAKE_DIR=$tmp PATH="$tmp/bin:$tmp/fake:/usr/bin:/bin" HYPRLAND_INSTANCE_SIGNATURE=sig_1_2 \
+  bash -c '"$0" "$@" & wait' "$tmp/bin/hyprland-dialog" "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}" >/dev/null 2>&1 &
+parent=$!
+pids+=("$parent")
+for ((i = 0; i < 40; i++)); do [[ -s $tmp/qs.args ]] && break; sleep 0.05; done
+standin_pid=$(tr '\0' '\n' <"$tmp/qs.args" 2>/dev/null | sed -n 7p)
+desc="the stand-in ends within 3 s once its parent (the compositor) is gone"
+# (Ended: gone, or a zombie its new parent has not reaped yet; a container's init may never reap it.)
+check bash -c 'runs() { local st; st=$(cut -d" " -f3 "/proc/$1/stat" 2>/dev/null) && [[ $st != Z ]]; }
+  [[ -n $2 ]] && runs "$2" && kill -KILL "$1" || exit 1
+  for ((i = 0; i < 60; i++)); do runs "$2" || exit 0; sleep 0.05; done; exit 1' _ "$parent" "$standin_pid"
+wait "$parent" 2>/dev/null || true
 
 # 4. Text with a newline inside the title, and no Hyprland instance in the environment.
 FAKE_CLIENTS=$(clients 4242 foot "a${nl}b")
@@ -176,6 +215,15 @@ falls_back "two processes with the same class and title" 2 "${EN[@]}" --text "$(
 desc="... and the shell was not asked"
 check test ! -e "$tmp/qs.args"
 
+# An app that names itself after another app's window (class "victim", title "Victim - z") while the hung one is class
+# "z - victim", title "Victim": two splits match two processes, so the mark cannot go to either.
+FAKE_CLIENTS=$(clients 4242 "z - victim" "Victim" 77 victim "Victim - z")
+falls_back "a window named to match another split" 2 "${EN[@]}" --text "$(en_text "Victim" "z - victim")" "${EN_B[@]}"
+desc="... and the shell was not asked"
+check test ! -e "$tmp/qs.args"
+FAKE_CLIENTS=$(clients 4242 foot "" 4242 foot "(unknown)")
+falls_back "one process with an untitled window and one titled \"(unknown)\"" 2 "${EN[@]}" --text "$(en_text "(unknown)" foot)" "${EN_B[@]}"
+
 FAKE_CLIENTS=$(clients 5000 firefox "Mozilla Firefox")
 falls_back "no window with this class and title" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
 
@@ -187,7 +235,7 @@ FAKE_CLIENTS='not json'
 falls_back "an unreadable client list" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
 
 FAKE_CLIENTS=$(clients 4242 foot "~")
-FAKE_QS="refused: ambiguous" falls_back "the shell refuses" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
+FAKE_QS="refused" falls_back "the shell refuses" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
 desc="... after asking it"
 check test -e "$tmp/qs.args"
 FAKE_QS=fail falls_back "no shell answers" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
