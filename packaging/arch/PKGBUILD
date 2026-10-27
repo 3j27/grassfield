@@ -186,7 +186,7 @@ package_grassfield-desktop() {
     'kio-extras: network locations and image thumbnails in Files'
     'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
     'udiskie: mounts removable media when they are connected'
-    'hyprsunset: Night Shift (grassfield-nightshift)'
+    'hyprsunset: Night Light (grassfield-nightshift)'
     'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
   )
   # Login screen entry and a login-path check after install and upgrade (GF-015); the SDDM drop-in is a config file.
