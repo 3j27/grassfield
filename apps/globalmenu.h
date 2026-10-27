@@ -4,12 +4,29 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusServiceWatcher>
+#include <QGuiApplication>
+#include <QKeySequence>
 #include <QObject>
 #include <QPointer>
+#include <QShortcut>
 #include <QString>
 #include <QTimer>
 
 namespace grassfield::apps {
+
+// Qt.labs.platform's MenuItem (Qt 6.11) keeps -1 for "no key registered", and -1 is also the id Qt's shortcut map gives
+// the first key registered in a process (the map counts down from -1). The menu item that gets it never takes its key
+// back: not when it is disabled (the key still triggers it), not when its key changes, not when it is destroyed. Once
+// that item is gone (its window closed, or the registrar went away), the next press of its key in the app reads the
+// deleted item: SIGSEGV in QQuickShortcutContext::matcher, called from QShortcutMap::find. Each app calls this right
+// after creating its application object, before any QML exists: a disabled key that never matches takes id -1, so no
+// menu item can get it, whatever order the QML registers its keys in (tests/unit/files/tst_menushortcuts.cpp).
+inline void reserveFirstShortcutId(QGuiApplication &app)
+{
+    // Never acts: a window shortcut owned by no window does not match, and it is disabled.
+    auto *placeholder = new QShortcut(QKeySequence(Qt::Key_F35), &app);
+    placeholder->setEnabled(false);
+}
 
 inline QString globalMenuRegistrar()
 {
