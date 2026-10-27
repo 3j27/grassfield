@@ -1,6 +1,7 @@
 # ADR-0033: Software Update: a signed [grassfield] pacman repository in two channels, installed through Omarchy
-Status: Proposed (cloud session, owner brief 2026-10-27, step 0; no code in either repository before the opus PASS) ·
-Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions to validate"), integrator (merge after the opus PASS)
+Status: Proposed (cloud session, owner brief 2026-10-27, step 0; no code in either repository before the opus PASS; owner
+answers to O1-O4 recorded 2026-10-27) · Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator
+(merge after the opus PASS)
 
 This ADR is the contract between this repository (the desktop, its `PKGBUILD` and the Software Update client) and
 `grassfieldhq/grassfield-packages` (building, signing and, later, serving the repository). Its README and CLAUDE.md cite it
@@ -67,6 +68,8 @@ container (digest `sha256:52dfbd5a…`) with Omarchy's v4.0.4 tree mounted read-
   stable and rc, 0.14.3 on edge and Arch (same minor, so the same plugin ABI string, ADR-0009).
 - Omarchy's own plugin package `omarchy-hyprland-titlebars-0.2.2-2` depends on `hyprland=0.56.2` exactly. Grassfield keeps
   ADR-0009 (no pin, degraded mode on a mismatch).
+- `omarchy-4.0.6-1` depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot` (its `%DEPENDS%` in the stable database):
+  the keyring arrives as a dependency of the main package.
 
 ### Grassfield today
 - `VERSION` 1.0.0-rc1; `packaging/arch/PKGBUILD`: pkgbase `grassfield`, packages `grassfield-desktop`,
@@ -89,7 +92,8 @@ grassfield tag vX.Y.Z[-betaN|-rcN]
            <base>/stable/x86_64/   <base>/beta/x86_64/
 User's machine (Omarchy 4)
   /etc/pacman.conf, last line:   Include = /etc/pacman.d/grassfield.conf   ← put back by Omarchy's pre-refresh-pacman hook
-  /etc/pacman.d/grassfield.conf: [grassfield] SigLevel = Required, Server = <base>/<channel>/$arch  ← grassfield-channel-set
+  /etc/pacman.d/grassfield.conf: [grassfield] SigLevel = Required, Server = <base>/<channel>/$arch
+                                 ← grassfield-channel-set → pkexec grassfield-channel-helper (Grassfield's polkit action)
   grassfield-shell → grassfield-update-check (the user, checkupdates on its own database) → pane, Dock badge, menu, banner
   "Update Now" → omarchy-launch-floating-terminal-with-presentation omarchy-update        (Omarchy's command, unchanged)
 ```
@@ -116,10 +120,12 @@ User's machine (Omarchy 4)
    (P11: `omarchy-hook pre-refresh-pacman` exit 0, no "Hook failed").
 5. **Fallback.** The checker reads `pacman-conf --repo-list` (no root). No `grassfield` there: if
    `/etc/pacman.d/grassfield.conf` exists, the state is `repair` (the pane says Omarchy reset the package configuration and
-   offers "Repair…", which runs `grassfield-channel-set <its channel>` in the terminal); otherwise `not-set-up` ("Set Up…").
+   offers "Repair…", which runs `grassfield-channel-set repair` behind the polkit dialog, c); otherwise `not-set-up`
+   ("Set Up…").
    This covers another user's channel change (the hook is per user), a cold sudo cache with no terminal, and a hand edit.
-6. First set-up: "Set Up…" in the pane, or `grassfield-channel-set stable` in a terminal. Removal: `grassfield-channel-set
-   off` before `pacman -Rns`. If it is skipped nothing breaks (the file stays, the repository stays configured).
+6. First set-up: "Set Up…" in the pane (`grassfield-channel-set stable`, polkit dialog), or the same command in a terminal.
+   Removal: `grassfield-channel-set off` before `pacman -Rns`. If it is skipped nothing breaks (the file stays, the
+   repository stays configured).
 
 Rejected: an alpm hook re-adding the line (Grassfield code as root in every transaction, and no hook fires on Omarchy's
 `cp`); the section written straight into `/etc/pacman.conf` (the same loss, more lines to restore); only detection and
@@ -140,11 +146,12 @@ Rejected: an alpm hook re-adding the line (Grassfield code as root in every tran
 3. **Bootstrap (first set-up), Omarchy's model without a keyserver.** This repository pins the signing key:
    `packaging/pacman/repository.conf` holds its fingerprint, and the public key ships beside it. Until the owner provides them
    both are empty and `grassfield-channel-set` refuses ("no signing key in this build"). When the pinned fingerprint is not in
-   pacman's keyring, `grassfield-channel-set` checks that the shipped key file is exactly that fingerprint, then runs `sudo
-   pacman-key --add` and `--lsign-key <fingerprint>` (P5: before, the database itself is refused, "key … is unknown"; after,
-   `grassfield-keyring` and the packages install). Once the section is written it installs `grassfield-keyring` with `sudo
-   pacman -Sy --needed grassfield-keyring`, the one partial sync Omarchy also makes for its keyring (`omarchy-update-keyring`:
-   "a special case"). From then on keyring updates arrive with every `omarchy update`.
+   pacman's keyring, the helper's `set` (c) checks that the shipped key file is exactly that fingerprint, then runs
+   `pacman-key --add` and `--lsign-key <fingerprint>` (P5: before, the database itself is refused, "key … is unknown"; after,
+   `grassfield-keyring` and the packages install). `grassfield-keyring` itself arrives as a **dependency**: `grassfield-desktop`
+   depends on it, as `omarchy` depends on `omarchy-keyring`. The first install or the first upgrade from the channel brings
+   it, and keyring updates then come with every `omarchy update`. No Grassfield code installs a package. A local `makepkg -si`
+   (the owner's build) needs `grassfield-keyring` installed first; grassfield-packages builds it.
 4. **Rotation.** A new key enters `grassfield-keyring` (trusted) and ships signed by the old key. Once that keyring has been
    in both channels for one release cycle, CI signs with the new key. The old key then goes to `grassfield-revoked`, and the
    pinned fingerprint changes in the next release.
@@ -158,36 +165,61 @@ Rejected: an alpm hook re-adding the line (Grassfield code as root in every tran
    `grassfield-*` and none with `replaces=`; grassfield-packages' CI refuses anything else. The master key stays offline;
    only a signing subkey reaches CI, in a protected environment (O6).
 
-### c. Changing the channel (owner decision O1)
-Writing `/etc/pacman.d/*` and `/etc/pacman.conf` needs root. Two options; the helper commands are the same in both.
-- **A (recommended, the owner's own recommendation and Omarchy's model).** `grassfield-channel-set <stable|beta|off>` is a
-  user command (it refuses to run as root: the hook link is the user's). It is run in Omarchy's floating terminal, exactly
-  like Omarchy's channel entries:
-  `omarchy-launch-floating-terminal-with-presentation 'grassfield-channel-set beta'`. Every privileged step is a system tool
-  under `sudo` with fixed arguments: `install` of a root-owned template from the package to `grassfield.conf.new`, then
-  `mv -f` (one rename, so pacman never sees the file missing), `sed -i '$a …'`, `rm -f`, `pacman-key`, and the bootstrap's
-  `pacman -Sy --needed grassfield-keyring`. The content written to `/etc` comes only from root-owned packaged files
-  (`/usr/share/grassfield/pacman/grassfield-{stable,beta}.conf`, generated at build time from `repository.conf`), never from
-  a file the user can write. The only variable input is the channel name, checked against that list. No Grassfield code runs
-  as root; no polkit policy.
-- **B. polkit (ADR-0030's route).** No system service owns `pacman.conf`, so B needs a Grassfield root helper run by
-  `pkexec` and a new polkit policy (`org.grassfield.packages.set-channel`, `auth_admin_keep`). That is new privileged code
-  and a new policy, which ADR-0030 refused for Settings, plus an opus review of the helper. Gain: a password sheet instead of
-  a terminal. The hook of (a) still needs sudo in Omarchy's terminal, so B does not remove sudo.
+### c. Changing the channel: a helper behind Grassfield's own polkit action (owner decision O1, 2026-10-27)
+Writing `/etc/pacman.d/*` and `/etc/pacman.conf` needs root, and no system service owns those files, so there is no service
+polkit action to call (ADR-0030's route for hostname1 and timedate1). The owner chose a Grassfield helper behind its own
+polkit action (option B). The alternative was Omarchy's model, sudo in its floating terminal (option A, recommended in the
+first version of this ADR). Three pieces:
+1. **`/usr/lib/grassfield/grassfield-channel-helper`** is the only Grassfield code that runs as root. **It needs an opus
+   security review before merge.** `pkexec` starts it, called only by `grassfield-channel-set`.
+   - Its interface is its argument vector and nothing else: `set stable`, `set beta`, `restore`, `off`; anything else is
+     refused. pkexec gives it a clean environment; the helper sets its own `PATH` and `umask 022` and reads no variable.
+   - It refuses to run unless its effective uid is 0, and while pacman's `/var/lib/pacman/db.lck` exists (a transaction is
+     running).
+   - `set`:
+     - writes the section from the root-owned `/usr/share/grassfield/pacman/grassfield-<channel>.conf` (generated at build
+       time from `repository.conf`): copied to `grassfield.conf.new` in `/etc/pacman.d`, then renamed over `grassfield.conf`
+       (one rename, so pacman never sees the file missing, P2);
+     - appends the Include line when missing (`/etc/pacman.conf` rewritten to a temporary file in `/etc` and renamed,
+       keeping its mode);
+     - deletes pacman's synced `[grassfield]` files (`/var/lib/pacman/sync/grassfield.{db,files}{,.sig}`, below);
+     - runs the trust bootstrap of b.3 when the pinned key is missing.
+   - `restore` ("Repair…") puts back only the Include line, and only when `grassfield.conf` exists.
+   - `off` removes the Include line first, then `grassfield.conf`, then the synced files.
+   - It installs no package, uses no network and writes nothing in a user's home. The only variable input is the channel
+     name, checked against the two names. Nothing written to `/etc` comes from a file the user can write.
+2. **The polkit action** `org.grassfield.packages.set-channel`, in `/usr/share/polkit-1/actions/org.grassfield.packages.policy`:
+   - `allow_any` and `allow_inactive` are `no`, `allow_active` is `auth_admin_keep`;
+   - `org.freedesktop.policykit.exec.path` is the helper;
+   - message, en and fr: "Authentication is required to change where Grassfield gets its updates" (« Une authentification
+     est nécessaire pour changer la source des mises à jour de Grassfield »).
+   Who asks for the password: Grassfield's own polkit sheet in a Grassfield session (SEC6: action id and program shown);
+   Omarchy's agent in an Omarchy session; pkexec itself on a text console.
+3. **`grassfield-channel-set [stable|beta|off|repair]`**, in `/usr/bin`, is the user's command (it refuses to run as root).
+   - It validates the argument, runs `pkexec /usr/lib/grassfield/grassfield-channel-helper <verb>`, then, as the user, links
+     the hook of a.4 (or removes the link, for `off`). Without an argument it prints the channel.
+   - Settings' "Beta Updates", "Set Up…" and "Repair…" run it as a child process, with no terminal. They follow ADR-0030's
+     pattern: a worker; the argument checked in QML and in C++; "Waiting for permission…" while the dialog is up; one
+     action at a time; up to 120 s for the answer; a refusal or a cancel shown on one line, nothing retried.
 
-`grassfield-channel-set` (option A) does, in order: validate; bootstrap trust if needed (b.3); write the section; add the
-Include line if missing; **drop pacman's synced `[grassfield]` database** (`sudo rm -f
-/var/lib/pacman/sync/grassfield.{db,files}{,.sig}`); link the hook; print the result. The drop matters: after a Server
-change, pacman kept the other channel's newer database and fetched the new channel's signature, so every `[grassfield]`
-operation failed (P7: "signature … is invalid", even `pacman -Q` prints it); after the drop, `pacman -Syu` works and does not
-downgrade (P7). Omarchy reaches the same with `-Syyuu`. With an unsigned database pacman would have used the wrong channel
-silently.
+The persistence hook (a.4) keeps `sudo sed`. It runs inside `omarchy-refresh-pacman`, whose sudo cache is warm, so it adds no
+prompt. Going through pkexec there would open a password dialog in the middle of Omarchy's channel change. It is one fixed
+command, the same as Omarchy's own sample hook.
 
-**Sub-decision O2.** `grassfield-channel-set` only switches; it does not install. Leaving the beta keeps the installed
-version (P7: "local (1.1.0beta1-1) is newer than grassfield (1.0.1-1)", nothing to do; 1.1.0 stable then upgrades). The pane
-checks again (it watches `/etc/pacman.d/grassfield.conf`) and offers the beta with "Update Now", as macOS does once beta
-updates are on. Omarchy's own `omarchy-channel-set` runs `omarchy-update -y` straight away; doing the same is the
-alternative, rejected because the owner asked for no installation without the user.
+**Why `set` drops the synced database.** After a Server change, pacman kept the other channel's newer database and fetched
+the new channel's signature, so every `[grassfield]` operation failed (P7: "signature … is invalid", even `pacman -Q` prints
+it). After the drop, `pacman -Syu` works and does not downgrade (P7). Omarchy reaches the same with `-Syyuu`. With an
+unsigned database, pacman would have used the wrong channel silently.
+
+**O2, owner 2026-10-27: switch only.** Switching installs nothing. Leaving the beta keeps the installed version (P7: "local
+(1.1.0beta1-1) is newer than grassfield (1.0.1-1)", nothing to do; stable 1.1.0 then upgrades). The pane watches
+`/etc/pacman.d/grassfield.conf`, checks again, and offers the beta with "Update Now", as macOS does once beta updates are on.
+Omarchy's own `omarchy-channel-set` runs `omarchy-update -y` straight away; that alternative was not chosen (no installation
+without the user).
+
+Rejected (owner decision): A, sudo in Omarchy's floating terminal. It needs no Grassfield root code and no policy, but
+switching from Settings would open a terminal. Also rejected: `pkexec` on `install`, `sed` and `rm` themselves. A policy for
+generic programs would authorise any argument.
 
 ### d. Checking for updates
 1. **`grassfield-update-check`** (Python 3, standard library only, like `grassfield-session-end`; `/usr/lib/grassfield/`)
@@ -307,21 +339,22 @@ The checker runs in a dev session as in a real one: read-only, with its cache un
 "Repair…" and the beta switch never run there (`dev guard: … suppressed`), so a nested session cannot update or reconfigure
 the owner's machine. New dev plumbing: `GRASSFIELD_UPDATE_FIXTURE` (a JSON answer used instead of the checker: offscreen
 tests and captures), `GRASSFIELD_UPDATE_CHECK_CMD` (the repository's checker), `GRASSFIELD_UPDATE_LAUNCHER` (a recording
-stand-in for the terminal launcher).
+stand-in for the terminal launcher), `GRASSFIELD_UPDATE_PKEXEC` (a recording stand-in for `pkexec`, as ADR-0028's
+`FILES_PKEXEC`).
 
-## Owner decisions to validate
-| Id | Question | Options | Recommended |
+## Owner decisions
+| Id | Question | Options | Answer |
 |---|---|---|---|
-| O1 | Channel change (c) | A: `grassfield-channel-set` in Omarchy's terminal with sudo · B: a pkexec helper and a polkit policy | A |
-| O2 | After switching to beta | switch only, the pane offers the beta · switch then `omarchy-update -y` (Omarchy) | switch only |
-| O3 | What raises the badge, menu count and banner | Grassfield and Omarchy releases · Grassfield only · every package | Grassfield and Omarchy |
-| O4 | Grassfield writes a link in `~/.config/omarchy/hooks/pre-refresh-pacman.d/` | yes (a.4) · no, detection and "Repair…" only | yes |
-| O5 | Sign the database and the notes | both · packages only (Omarchy's level) | both |
-| O6 | Keys | offline master plus a CI signing subkey in a protected environment, and a second offline key trusted from day one · the owner signs every channel by hand | the first |
-| O7 | pkgrel of a rebuild | `GRASSFIELD_PKGREL` read by the PKGBUILD · a commit and tag per rebuild | `GRASSFIELD_PKGREL` |
-| O8 | Hosting, after the legal review | Pages · Releases · GitLab · own domain | Pages |
-| O9 | Release notes source | `packaging/release-notes/<VERSION>.{en,fr}.txt` · CHANGELOG.md sections | the text files |
-| O10 | master-prompt §4/M6 | the repository's build and contract now, publication after M5 (this ADR) · wait for M6 | now, unpublished |
+| O1 | Channel change (c) | A: `grassfield-channel-set` in Omarchy's terminal with sudo · B: a pkexec helper and a polkit policy | **B** (owner, 2026-10-27) |
+| O2 | After switching to beta | switch only, the pane offers the beta · switch then `omarchy-update -y` (Omarchy) | **switch only** (owner, 2026-10-27) |
+| O3 | What raises the badge, menu count and banner | Grassfield and Omarchy releases · Grassfield only · every package | **Grassfield and Omarchy** (owner, 2026-10-27) |
+| O4 | Grassfield writes a link in `~/.config/omarchy/hooks/pre-refresh-pacman.d/` | yes (a.4) · no, detection and "Repair…" only | **yes**, by `grassfield-channel-set` (owner, 2026-10-27) |
+| O5 | Sign the database and the notes | both · packages only (Omarchy's level) | open; recommended: both |
+| O6 | Keys | offline master plus a CI signing subkey in a protected environment, and a second offline key trusted from day one · the owner signs every channel by hand | open; recommended: the first |
+| O7 | pkgrel of a rebuild | `GRASSFIELD_PKGREL` read by the PKGBUILD · a commit and tag per rebuild | open; recommended: `GRASSFIELD_PKGREL` |
+| O8 | Hosting, after the legal review | Pages · Releases · GitLab · own domain | open; recommended: Pages |
+| O9 | Release notes source | `packaging/release-notes/<VERSION>.{en,fr}.txt` · CHANGELOG.md sections | open; recommended: the text files |
+| O10 | master-prompt §4/M6 | the repository's build and contract now, publication after M5 (this ADR) · wait for M6 | open; recommended: now, unpublished |
 
 ## Evidence
 `docs/audits/software-update-2026-10-27/adr0033-probes.sh` (P0–P13), output in `probes-output.txt` (docker exit 0). The
@@ -330,14 +363,23 @@ deviation from Omarchy's template, `DisableSandbox`, is needed because Docker ha
 the v4.0.4 tree; server facts were taken with curl on 2026-10-27.
 
 ## Consequences
-- Step 1, here: `grassfield-channel-set`, `grassfield-update-check`, the hook, `packaging/pacman/` (repository.conf, the two
-  section templates generated at build time), the shim's `omarchy.system-update` forward, `pacman-contrib` added to
-  `depends` (Omarchy's base has it; declared, not assumed, ARCH-08), the `GRASSFIELD_PKGREL` line (O7), the setting
-  `updates.automaticCheck`, `software-update.json`, and a container test (spec § Automated tests). In grassfield-packages:
+- Step 1, here:
+  - `grassfield-channel-set`, `grassfield-channel-helper` and its polkit policy, `grassfield-update-check`, the hook;
+  - `packaging/pacman/` (repository.conf; the two section templates, generated at build time);
+  - the shim's `omarchy.system-update` forward;
+  - `grassfield-keyring` and `pacman-contrib` added to `grassfield-desktop`'s `depends`. `pacman-contrib` is in Omarchy's
+    base and `omarchy` itself depends on both kinds; declared, not assumed (ARCH-08);
+  - the `GRASSFIELD_PKGREL` line (O7), the setting `updates.automaticCheck`, `software-update.json`;
+  - a container test (spec § Automated tests). In grassfield-packages:
   the channel build, `grassfield-keyring`, workflows (publishing disabled), the end-to-end exercise with the real packages.
   Step 2 (after the Settings PRs merge): the pane, the badge, the menu count, the notification.
-- Code that runs `sudo` (`grassfield-channel-set`, the hook) is privileged code by the brief's rule: named in its PR, opus
-  review. Option B would add a root helper and a policy, both reviewed.
+- Privileged code, by the brief's rule, is named in the step 1 PR and needs an **opus security review before merge**: the
+  helper, the policy and the hook's `sudo sed`. Their tests:
+  - the container test runs the helper as root with every verb;
+  - the refusals: another verb, a running transaction (`db.lck`), a missing or mismatching key file;
+  - the writes are atomic, and the Include line is never present without its file;
+  - Settings' calls are tested on the recording pkexec stand-in.
+  The real polkit dialog is an owner check in the real session (L2): cancel once, a wrong password once, then accept.
 - The keys, hosting, source access and the publishing switch remain the owner's; nothing in this ADR publishes anything.
 - Known limits are listed in `docs/specs/updates.md`. Among them: Omarchy's own channel change (`-Syyuu`) and
   `omarchy-reinstall-pkgs` (`-Suu`) move a Grassfield beta back to the stable version (P11: "downgrading from version
