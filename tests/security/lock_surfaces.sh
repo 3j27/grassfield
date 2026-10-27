@@ -371,7 +371,8 @@ expect("lock ownership check: the grace is 500 ms and only restart() and `runnin
 #   watcher  monitorAnswers follows the live model, its delegates hand every answer to checkOwnership, and a monitor added
 #            while holding asks for a fresh answer at once (monitorsAdded);
 #   stranded only Hyprland's answers decide; an empty model is "unknown" (LockMachine, unit-tested): no takeover and no stop
-#            as "nothing stranded" until the ticks run out;
+#            as "nothing stranded" until the ticks run out; a check still undecided (running, or out of ticks because
+#            Quickshell's first answer came later) runs again when monitors appear, before this shell locked (MINOR-1);
 #   log      the empty model is logged once: the flag is read before the warning, set after it, cleared only in monitorsAdded.
 refresh_hits = []
 for base, _, files in os.walk(f"{root}/shell/security"):
@@ -381,28 +382,43 @@ for base, _, files in os.walk(f"{root}/shell/security"):
             refresh_hits += [rel for _ in re.finditer(r"\brefreshMonitors\s*\(", nocomments(read(rel)))]
 request = code(function(lock, "requestMonitors") or "")
 expect("lock monitor queries: one Hyprland.refreshMonitors() in shell/security, in requestMonitors() behind the empty-model guard (" + ", ".join(refresh_hits) + ")",
-       refresh_hits == ["shell/security/lock/Lock.qml"]
+       refresh_hits.count("shell/security/lock/Lock.qml") == 1
+       and not any(h.startswith("shell/security/") and h != "shell/security/lock/Lock.qml" for h in refresh_hits)
        and re.fullmatch(r"\s*if\s*\(!Machine\.monitorQueryAllowed\(Hyprland\.monitors\.values\.length\)\)\s*\{\s*if\s*\(!emptyModelLogged\)\s*console\.warn\(\"[^\"]*\"\);\s*emptyModelLogged\s*=\s*true;\s*return false;\s*\}\s*Hyprland\.refreshMonitors\(\);\s*return true;\s*", request) is not None)
+monitors_added = code(function(lock, "monitorsAdded") or "")
 expect("lock monitor queries: verify(), the ownership confirmation, the stranded check, ownershipProbe and monitorsAdded go through requestMonitors()",
        re.search(r"verified\s*=\s*false;\s*requestMonitors\(\);\s*$", code(function(lock, "verify") or "")) is not None
        and re.search(r"if\s*\(action\s*===\s*\"confirm\"\)\s*requestMonitors\(\);\s*else if", code(function(lock, "checkOwnership") or "")) is not None
        and re.search(r"\}\s*else\s*\{\s*requestMonitors\(\);\s*\}\s*$", code(function(lock, "checkStranded") or "")) is not None
        and re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?onTriggered:\s*root\.requestMonitors\(\)\s*\}", lock, re.S) is not None
-       and re.search(r"if\s*\(holding\)\s*requestMonitors\(\);\s*$", code(function(lock, "monitorsAdded") or "")) is not None)
+       and re.search(r"if\s*\(holding\)\s*requestMonitors\(\);", monitors_added) is not None)
 expect("lock ownership watcher: follows the live monitor model, every answer reaches checkOwnership, an added monitor calls monitorsAdded",
        re.search(r"Instantiator\s*\{\s*id:\s*monitorAnswers\s+active:\s*root\.hyprland\s+model:\s*Hyprland\.monitors\s+onObjectAdded:\s*Qt\.callLater\(root\.monitorsAdded\)\s+"
                  r"delegate:\s*Connections\s*\{\s*required property HyprlandMonitor modelData\s+target:\s*modelData\s+"
                  r"function onLastIpcObjectChanged\(\):\s*void\s*\{\s*Qt\.callLater\(root\.checkOwnership\);\s*\}\s*\}\s*\}", lock) is not None)
 stranded = code(function(lock, "checkStranded") or "")
 expect("lock stranded check: only Hyprland's answers decide; unknown (an empty model) neither takes over nor stops before the ticks run out",
-       re.search(r"const monitors\s*=\s*Hyprland\.monitors\.values\.map\(m\s*=>\s*m\.lastIpcObject\);\s*const state\s*=\s*Machine\.compositorLockState\(monitors\);\s*"
-                 r"if\s*\(state\s*===\s*\"locked\"\)\s*\{[^}]*\}\s*else if\s*\(state\s*===\s*\"unlocked\"\)\s*\{\s*strandedProbe\.stop\(\);\s*\}\s*"
+       re.search(r"if\s*\(currentlyLocked\(\)\)\s*\{\s*strandedProbe\.stop\(\);\s*strandedUndecided\s*=\s*false;\s*return;\s*\}\s*"
+                 r"const monitors\s*=\s*Hyprland\.monitors\.values\.map\(m\s*=>\s*m\.lastIpcObject\);\s*const state\s*=\s*Machine\.compositorLockState\(monitors\);\s*"
+                 r"if\s*\(state\s*===\s*\"locked\"\)\s*\{\s*strandedProbe\.stop\(\);\s*strandedUndecided\s*=\s*false;[^}]*\}\s*"
+                 r"else if\s*\(state\s*===\s*\"unlocked\"\)\s*\{\s*strandedProbe\.stop\(\);\s*strandedUndecided\s*=\s*false;\s*\}\s*"
                  r"else if\s*\(--strandedProbe\.remaining\s*<=\s*0\)\s*\{", stranded) is not None)
+unknown_m = re.search(r"else if\s*\(--strandedProbe\.remaining\s*<=\s*0\)\s*\{", stranded)
+unknown_branch = block_after(stranded, unknown_m.start()) if unknown_m else "strandedUndecided"
+expect("lock stranded check: undecided from its start until Hyprland answers locked or unlocked (or this shell locks); "
+       "monitors appearing before this shell locked run it again (only ever a takeover)",
+       re.search(r"^\s*property bool strandedUndecided:\s*false\s*$", lock, re.M) is not None
+       and re.search(r"if\s*\(!controller\.locked\s*&&\s*root\.hyprland\)\s*\{\s*strandedUndecided\s*=\s*true;\s*strandedProbe\.start\(\);\s*\}", lock) is not None
+       and len(re.findall(r"\bstrandedUndecided\s*=\s*true;", lock)) == 1
+       and len(re.findall(r"\bstrandedUndecided\s*=\s*false;", lock)) == 3
+       and len(re.findall(r"\bstrandedUndecided\s*=\s*false;", stranded)) == 3
+       and "strandedUndecided" not in unknown_branch
+       and re.search(r"if\s*\(holding\)\s*requestMonitors\(\);\s*else if\s*\(strandedUndecided\)\s*checkStranded\(\);\s*$", monitors_added) is not None)
 expect("lock monitor queries: the empty model is logged once, the flag cleared only when a monitor appears",
        re.search(r"^\s*property bool emptyModelLogged:\s*false\s*$", lock, re.M) is not None
        and len(re.findall(r"\bemptyModelLogged\s*=\s*true;", lock)) == 1
        and len(re.findall(r"\bemptyModelLogged\s*=\s*false;", lock)) == 1
-       and re.search(r"^\s*if\s*\(emptyModelLogged\)\s*\{\s*emptyModelLogged\s*=\s*false;", code(function(lock, "monitorsAdded") or "")) is not None)
+       and re.search(r"^\s*if\s*\(emptyModelLogged\)\s*\{\s*emptyModelLogged\s*=\s*false;", monitors_added) is not None)
 sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
 idle = code(read("shell/security/idle/IdleModel.js"))
 # Reviews of 2dfd992 and eee45cc: a child is healthy only when its health Timer saw it running FAST_EXIT_MS AND it showed
@@ -553,7 +569,11 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#        } else if (state === "unlocked") {\n            strandedProbe.stop();#        } else if (state !== "locked") {\n            strandedProbe.stop();' \
   'shell/security/lock/Lock.qml#            if (!emptyModelLogged)\n                console.warn(#            if (true)\n                console.warn(' \
   'shell/security/lock/Lock.qml#            emptyModelLogged = true;#            ;' \
-  'shell/security/lock/Lock.qml#        if (emptyModelLogged) {\n            emptyModelLogged = false;#        if (emptyModelLogged) {\n            ;'; do
+  'shell/security/lock/Lock.qml#        if (emptyModelLogged) {\n            emptyModelLogged = false;#        if (emptyModelLogged) {\n            ;' \
+  'shell/security/lock/Lock.qml#        else if (strandedUndecided)\n            checkStranded();\n#' \
+  'shell/security/lock/Lock.qml#        else if (strandedUndecided)\n            checkStranded();#        else if (strandedUndecided)\n            release();' \
+  'shell/security/lock/Lock.qml#            strandedUndecided = true;\n#' \
+  'shell/security/lock/Lock.qml#            strandedProbe.stop(); // still undecided#            strandedProbe.stop(); strandedUndecided = false; // still undecided'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'

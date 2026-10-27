@@ -105,6 +105,10 @@ Singleton {
     // Quickshell's monitor model was found empty when the lock wanted to ask Hyprland (requestMonitors): logged once, cleared
     // when a monitor object appears (monitorsAdded).
     property bool emptyModelLogged: false
+    // The start-up stranded-lock check has not decided yet: it is running, or it ran out of ticks on an unknown state (the
+    // monitor model still empty, outputs still coming up). Cleared once Hyprland reported the session locked (taken over)
+    // or unlocked, or this shell locked; while set, monitors appearing run the check again at once (monitorsAdded).
+    property bool strandedUndecided: false
     // The lock surface (one per screen) whose window has the keyboard, else null: none of this shell's lock
     // surfaces has it (another client's lock surface took it, or a window did after the session was unlocked
     // under this lock). Only ever speeds the ownership check up.
@@ -264,7 +268,10 @@ Singleton {
     // Quickshell created a monitor object: the model filled once Hyprland answered Quickshell's own query, or an output
     // appeared. monitorAnswers watches it from now on, but the answer that created it came before (Quickshell fills a new
     // monitor, then adds it to the model), so while holding a fresh answer is asked for at once rather than at the next
-    // ownershipProbe tick; it reaches checkOwnership through the new delegate.
+    // ownershipProbe tick; it reaches checkOwnership through the new delegate. Before this shell locked, a start-up
+    // stranded check that has not decided (still running, or out of ticks because Quickshell's first answer came after
+    // them) runs again on that answer, so a dead client's stranded lock is taken over as soon as the model fills. That
+    // check only ever locks.
     function monitorsAdded(): void {
         if (emptyModelLogged) {
             emptyModelLogged = false;
@@ -272,6 +279,8 @@ Singleton {
         }
         if (holding)
             requestMonitors();
+        else if (strandedUndecided)
+            checkStranded();
     }
 
     // Called by the controller after a PAM success only: the only path that clears the carried
@@ -359,18 +368,21 @@ Singleton {
     function checkStranded(): void {
         if (currentlyLocked()) {
             strandedProbe.stop();
+            strandedUndecided = false;
             return;
         }
         const monitors = Hyprland.monitors.values.map(m => m.lastIpcObject);
         const state = Machine.compositorLockState(monitors);
         if (state === "locked") {
             strandedProbe.stop();
+            strandedUndecided = false;
             console.warn("grassfield-lock: the compositor holds a session lock this shell did not take (a crash with a missing or wrong marker, or a foreign locker); taking it over");
             lock("restore");
         } else if (state === "unlocked") {
             strandedProbe.stop();
+            strandedUndecided = false;
         } else if (--strandedProbe.remaining <= 0) {
-            strandedProbe.stop();
+            strandedProbe.stop(); // still undecided: monitorsAdded runs the check again when monitors appear
             console.info("grassfield-lock: compositor lock state unknown; relying on the crash recovery marker");
         } else {
             requestMonitors(); // none while the monitor model is empty: Quickshell's own answer fills it
@@ -580,7 +592,8 @@ Singleton {
     // Bounded startup check (at most 20 Hyprland monitor queries in 10 s, only until this instance
     // first locks); outputs may still be coming up, so an unknown answer is asked again. While
     // Quickshell's monitor model is still empty nothing is asked (requestMonitors) and the state stays
-    // unknown; if it is still unknown after the 20 ticks, the crash recovery marker decides.
+    // unknown; if it is still unknown after the 20 ticks, the crash recovery marker decides until
+    // monitors appear, which runs the check once more (monitorsAdded, strandedUndecided).
     Timer {
         id: strandedProbe
 
@@ -722,8 +735,10 @@ Singleton {
         if (controller.pamSuppressed)
             console.warn("grassfield-lock: dev: PAM is suppressed on the lock (no real authentication; set GRASSFIELD_DEV_ALLOW_PAM=1 for the L2 failure-path test)");
         restore(false, "start");
-        if (!controller.locked && root.hyprland)
+        if (!controller.locked && root.hyprland) {
+            strandedUndecided = true;
             strandedProbe.start();
+        }
     }
 
     // Dev hooks (dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of

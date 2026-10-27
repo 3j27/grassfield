@@ -668,11 +668,17 @@ A starting instance (session start, crash restart, soft reload) locks when ANY o
    until a monitor event. Every lock query therefore goes through `Lock.requestMonitors()`, which sends none while the
    model is empty (`LockMachine.monitorQueryAllowed`) and logs that once (cleared when a monitor appears). An empty
    model is an unknown state (never `unlocked`): the check asks again on the next tick, and if the 20 ticks run out the
-   marker decides (no takeover, fail closed as before). Tests: `tst_lockmachine` `test_monitorQueryAllowed`,
-   `tests/security/lock_surfaces.sh` (the single guarded call, its callers, with mutants),
+   marker decides (no takeover, fail closed as before) until monitors appear: a check that has not decided
+   (`strandedUndecided`: no `locked` or `unlocked` answer yet, this shell not locked) runs once more when the model
+   fills (`monitorsAdded`), so a dead client's stranded lock is taken over as soon as Quickshell's first answer arrives,
+   however late (opus review of 94ab527, MINOR-1; before, an answer after the 10 s left the session behind Hyprland's
+   "lockscreen app died" screen, locked but out of reach). That run only ever takes the lock over. Tests:
+   `tst_lockmachine` `test_monitorQueryAllowed`, `tests/security/lock_surfaces.sh` (the guarded call, its callers, the
+   re-run on the filling, with mutants),
    `tests/security/lock_monitor_model.sh` (the real Lock offscreen: with no Hyprland socket, Quickshell's own query is
-   the only one, 20 before the fix; against a fake Hyprland that answers `j/status` late, the model fills and a
-   stranded lock is taken over, while the code before the fix leaves the model empty; the fake needs Unix sockets).
+   the only one, 20 before the fix; against a fake Hyprland that answers `j/status` after 1.2 s, the model fills and a
+   stranded lock is taken over, while the code before the fix leaves the model empty; with the answer after 12.5 s,
+   the takeover follows the check's "unknown" end, and none without the re-run; the fake needs Unix sockets).
 
 A fresh session (marker absent, no carried intent, compositor not locked) starts unlocked. A removed or forged marker
 cannot expose a locked session: when a lock client dies, Hyprland keeps the session locked (ext-session-lock; no input

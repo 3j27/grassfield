@@ -8,6 +8,8 @@ import qs.security.lock
 //   slow-status  a fake Hyprland answers Quickshell's first query late; its one monitor lists LOCK (a stranded session
 //                lock): Quickshell's monitor model fills, the start-up check takes the stranded lock over, and an answer
 //                about the monitor created after start reaches checkOwnership (the ownership watcher attached to it);
+//   late-status  the same, with Quickshell's first answer after the start-up check's 20 ticks: the stranded lock is taken
+//                over once the model fills (the check runs again then);
 //   empty        Hyprland never answers (a fake that holds Quickshell's first query, or no socket at all): after the
 //                start-up check's 20 ticks the model is still empty and the lock was neither taken nor released (unknown:
 //                the crash recovery marker decides).
@@ -52,14 +54,14 @@ ShellRoot {
             check("model-still-empty", count === 0);
             check("no-takeover-no-release", Lock.lockState === "unlocked");
             finish();
-        } else if (scenario !== "slow-status") {
+        } else if (scenario !== "slow-status" && scenario !== "late-status") {
             check("LOCK_MONITOR_SCENARIO-set", false);
             finish();
         } else if (phase === "fill") {
             if (count > 0) {
                 phase = "takeover";
                 phaseAt = elapsed;
-            } else if (elapsed >= 8000) {
+            } else if (elapsed >= (scenario === "late-status" ? 20000 : 8000)) {
                 check("model-filled", false);
                 finish();
             }

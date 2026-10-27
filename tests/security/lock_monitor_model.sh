@@ -14,11 +14,15 @@
 #                stranded session lock). No monitors query reaches it before the status answer; the model fills from
 #                Quickshell's own query; the start-up check takes the stranded lock over; an answer about the monitor
 #                created after start reaches checkOwnership (the ownership watcher attached to it).
+#   late-status  the same LOCK monitor, `j/status` answered after 12.5 s, past the start-up check's 20 ticks of 500 ms (opus
+#                review of 94ab527, MINOR-1): the check ends unknown first, then the model fills and the check runs again
+#                (monitorsAdded): the stranded lock is taken over once, after the "unknown" line.
 #   no-status    a fake Hyprland that never answers `j/status`: no monitors query reaches it at all, the start-up check ends
 #                unknown and the empty model is logged exactly once.
 #   controls     no-socket and slow-status again on a copy of shell/security whose empty-model guard is removed (the code
 #                before the fix): the lock queries an empty model, and with the slow fake the model never fills (the
-#                probe fails). They prove the checks above see the bug.
+#                probe fails); late-status on a copy whose re-run on the filling is removed: no takeover. They prove the
+#                checks above see the bugs.
 # The fake needs Unix sockets: its scenarios SKIP where none can be created (the sandbox). A socket path holds at most 107
 # bytes, which a checkout path can exceed: the runtime directories (Hyprland's sockets) sit on a short base of their own
 # (/tmp/gf-lmm.*), and a fake-backed scenario whose fake did not bind both sockets, or exited, FAILs without running its
@@ -74,7 +78,7 @@ def answer(c):
         if scenario == "no-status":
             time.sleep(3600)  # never answered
             return
-        time.sleep(1.2)
+        time.sleep(12.5 if scenario == "late-status" else 1.2)
         c.sendall(json.dumps({"configProvider": "lua"}).encode())
         note("answered j/status")
         status_answered.set()
@@ -105,29 +109,33 @@ while True:
 PY
 
 # A config directory: the probe as shell.qml next to links to every module of the real shell; with "remove", shell/security
-# is a copy whose empty-model guard is removed.
-make_cfg() { # <dir> keep|remove
+# is a copy whose empty-model guard is removed; with "norerun", a copy whose stranded check does not run again when the
+# model fills.
+make_cfg() { # <dir> keep|remove|norerun
   local dir=$1 entry name
   mkdir -p "$dir"
   for entry in shell/*; do
     name=$(basename "$entry")
     if [[ $name == shell.qml ]]; then
       continue
-    elif [[ $name == security && $2 == remove ]]; then
+    elif [[ $name == security && $2 != keep ]]; then
       cp -a "$root/$entry" "$dir/security"
     else
       ln -s "$root/$entry" "$dir/$name"
     fi
   done
   cp tests/security/lock_monitor_model.d/probe.qml "$dir/shell.qml"
-  if [[ $2 == remove ]]; then
-    python3 -I - "$dir/security/lock/Lock.qml" <<'PY'
+  if [[ $2 != keep ]]; then
+    python3 -I - "$dir/security/lock/Lock.qml" "$2" <<'PY'
 import sys
-p = sys.argv[1]
+p, mutation = sys.argv[1], sys.argv[2]
 s = open(p).read()
-guard = "if (!Machine.monitorQueryAllowed(Hyprland.monitors.values.length)) {"
-assert s.count(guard) == 1, "the guard is not in Lock.qml"
-open(p, "w").write(s.replace(guard, "if (false) {"))
+old, new = {
+    "remove": ("if (!Machine.monitorQueryAllowed(Hyprland.monitors.values.length)) {", "if (false) {"),
+    "norerun": ("else if (strandedUndecided)\n            checkStranded();", "else if (false)\n            checkStranded();"),
+}[mutation]
+assert s.count(old) == 1, "not in Lock.qml: " + old
+open(p, "w").write(s.replace(old, new))
 PY
   fi
 }
@@ -191,6 +199,7 @@ check_empty() { # <label>
 
 make_cfg "$tmp/cfg" keep
 make_cfg "$tmp/cfg-control" remove
+make_cfg "$tmp/cfg-norerun" norerun
 
 run nosock none empty "$tmp/cfg"
 check_empty "no Hyprland socket"
@@ -209,7 +218,7 @@ else
 fi
 
 if ! python3 -I -c 'import socket; socket.socket(socket.AF_UNIX).close()' 2>/dev/null; then
-  echo "SKIP: lock monitor model: the fake Hyprland scenarios (slow-status, no-status, their control) need Unix sockets, which cannot be created here (sandbox): NOT VERIFIED"
+  echo "SKIP: lock monitor model: the fake Hyprland scenarios (slow-status, late-status, no-status, their controls) need Unix sockets, which cannot be created here (sandbox): NOT VERIFIED"
   exit $fail
 fi
 
@@ -233,6 +242,31 @@ if run slow slow-status slow-status "$tmp/cfg"; then
     pass "slow first answer: the empty model was logged at most once ($empty), and its filling as often ($resumed)"
   else
     bad "slow first answer: the empty model was logged $empty times, its filling $resumed times"
+  fi
+fi
+
+if run late late-status late-status "$tmp/cfg"; then
+  if grep -q "lock-monitor-model: PASS late-status" <<<"$out"; then
+    pass "late first answer: the model fills after the start-up check's ticks, the stranded lock is taken over"
+  else
+    bad "late first answer: $(grep -E 'lock-monitor-model:|ERROR|WARN qml' <<<"$out" | head -n 5)"
+  fi
+  # The check ran out of ticks first: the takeover came from the model filling (monitorsAdded), and only once.
+  unknown_at=$(grep -n -m1 "compositor lock state unknown; relying on the crash recovery marker" <<<"$out" | cut -d: -f1 || true)
+  takeover_at=$(grep -n -m1 "taking it over" <<<"$out" | cut -d: -f1 || true)
+  if grep -qx 'answered j/status' "$requests" && [[ -n $unknown_at && -n $takeover_at ]] && ((takeover_at > unknown_at)) \
+    && [[ $(count "taking it over" "$out") == 1 ]]; then
+    pass "late first answer: the check ended unknown, then took the stranded lock over once when the model filled"
+  else
+    bad "late first answer: unknown at line ${unknown_at:-none}, takeover at line ${takeover_at:-none} ($(count "taking it over" "$out") takeovers)"
+  fi
+fi
+
+if run latec late-status late-status "$tmp/cfg-norerun"; then
+  if grep -qx 'answered j/status' "$requests" && grep -q "lock-monitor-model: FAIL late-status: stranded-lock-taken-over" <<<"$out"; then
+    pass "control: without the re-run on the filling, a late first answer leaves the stranded lock alone (the bug is seen)"
+  else
+    bad "control: without the re-run the late-status probe did not fail on the takeover, or the fake was not asked: $(grep 'lock-monitor-model:' <<<"$out" || echo 'no result')"
   fi
 fi
 
