@@ -215,7 +215,9 @@ selection").
   hold in the running Files and are written with the next choice once the file is usable again. Writes take
   `files-views.json.lock` without waiting: when another Files process holds it, the write stays pending and is tried
   again on a timer (50 ms doubling up to 5 s; a lock left by a dead process is taken over at once), and at exit Files
-  waits at most 0.5 s for it (`folderviews.h`).
+  waits at most 0.5 s for it (`folderviews.h`). A lock path that is not a regular file (a directory, a FIFO, a link) is
+  not another Files writing: the write is refused at once without opening it, never retried by the timer, and the reason
+  is logged once until a write succeeds; the choice stays pending for the next one.
 - QSettings `~/.config/Grassfield/Files.conf`: `view/tabBar` (Show Tab Bar), `window/width` and `window/height` (the
   last browser window's normal size, 200-16384, ADR-0026 part 1), `view/mode` (the default view: icons|list|columns|gallery, anything else reads as icons),
   `view/sortKey` (0 name, 1 kind, 2 date modified, 3 size, 4 date created, 5 date last opened, 6 tags, 7 application),

@@ -3305,6 +3305,10 @@
 <context>
     <name>FolderViews</name>
     <message>
+        <source>the view settings lock file is not a regular file</source>
+        <translation>le fichier de verrou des réglages de présentation n’est pas un fichier ordinaire</translation>
+    </message>
+    <message>
         <source>another Files window is saving its view settings</source>
         <translation>une autre fenêtre de Fichiers enregistre ses réglages de présentation</translation>
     </message>

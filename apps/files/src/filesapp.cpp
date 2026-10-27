@@ -603,6 +603,7 @@ void FilesApp::folderViewsWritten(FolderViews::WriteResult result, const QString
     case FolderViews::WriteResult::Written:
         m_folderViewsRetryMs = 0;
         m_folderViewsRetry.stop();
+        m_folderViewsRefusal.clear();
         return;
     case FolderViews::WriteResult::Busy:
         // Another Files process is writing (a few ms): try again shortly, then less and less often (a lock held by a
@@ -611,13 +612,15 @@ void FilesApp::folderViewsWritten(FolderViews::WriteResult result, const QString
         m_folderViewsRetry.start(m_folderViewsRetryMs);
         return;
     case FolderViews::WriteResult::Refused:
-        // The file can't be written (not a regular file, too large, unreadable, a newer version's): the choice holds in
-        // this process and is written with the next one once the file is usable. The view itself already changed; the
-        // failure is logged, not shown.
+        // The file can't be written (not a regular file, too large, unreadable, a newer version's, a lock path that is
+        // not a lock file): the choice holds in this process and is written with the next one once the file is usable.
+        // The view itself already changed; the failure is logged once per reason, not shown, and never retried by timer.
         m_folderViewsRetryMs = 0;
         m_folderViewsRetry.stop();
-        if (!error.isEmpty())
+        if (!error.isEmpty() && error != m_folderViewsRefusal) {
+            m_folderViewsRefusal = error;
             qWarning("grassfield-files: view settings not kept: %s", qUtf8Printable(error));
+        }
         return;
     }
 }

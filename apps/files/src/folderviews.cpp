@@ -271,7 +271,17 @@ FolderViews::WriteResult FolderViews::flush(QString *error, int waitMs)
     if (!hasPending())
         return WriteResult::Written;
     QDir().mkpath(QFileInfo(m_file).absolutePath());
-    QLockFile lock(m_file + QStringLiteral(".lock"));
+    const QString lockPath = m_file + QStringLiteral(".lock");
+    // QLockFile only ever makes a regular file there. Anything else (a directory, a FIFO, a socket, a link) is not a lock
+    // another Files holds: QLockFile would report it as taken for good (Busy: a retry every 5 s for the session), or, to
+    // check a FIFO for staleness, open it and wait for a writer on the UI thread. Refused, without touching it.
+    struct stat lockStat {};
+    if (::lstat(QFile::encodeName(lockPath).constData(), &lockStat) == 0 && !S_ISREG(lockStat.st_mode)) {
+        if (error)
+            *error = QCoreApplication::translate("FolderViews", "the view settings lock file is not a regular file");
+        return WriteResult::Refused;
+    }
+    QLockFile lock(lockPath);
     // A lock left by a process that died is taken over by QLockFile (its process is gone); a live holder only writes for
     // a moment, so the pending changes wait for the next flush instead of blocking the UI thread.
     if (!lock.tryLock(waitMs)) {

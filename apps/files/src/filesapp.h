@@ -372,4 +372,6 @@ private:
     // on the UI thread; the pause doubles from kFolderViewsRetryFirstMs up to kFolderViewsRetryMaxMs.
     QTimer m_folderViewsRetry;
     int m_folderViewsRetryMs = 0;
+    // The last refusal logged: the same reason is logged once until a write succeeds (every view choice tries again).
+    QString m_folderViewsRefusal;
 };
