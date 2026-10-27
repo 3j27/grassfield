@@ -78,6 +78,19 @@ function initialIndex(rowPids, marks) {
     return rowPids && rowPids.length > 0 ? 0 : -1;
 }
 
+// Force Quit's selection after its window list or the marks changed (ADR-0035 decision 3-13). `kept` is the row of the
+// window selected before (-1 when it is gone or there was none), `preferred` initialIndex's row, `preferredMarked` whether
+// that app does not respond. The user's own choice is kept, by window (-1 when that window is gone: nothing is selected and
+// Force Quit is off). Before the user moved, the selection goes onto an app that does not respond, else stays on the window
+// it was on, else the first row: a mark that clears never moves it away from the app the user was shown.
+function selectionAfterChange(userMoved, kept, preferred, preferredMarked) {
+    if (userMoved)
+        return kept;
+    if (preferred >= 0 && preferredMarked)
+        return preferred;
+    return kept >= 0 ? kept : preferred;
+}
+
 // What `anr status` shows, in a dev session only (it holds window titles: private state, security.md "IPC surface").
 function statusJson(marks) {
     return JSON.stringify((marks || []).map(m => ({standin: m.standin, pid: m.pid, cls: m.cls, title: m.title})));

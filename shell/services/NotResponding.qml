@@ -37,6 +37,10 @@ Singleton {
         return Logic.initialIndex(rowPids, root.marks);
     }
 
+    function selectionAfterChange(userMoved: bool, kept: int, preferred: int, preferredMarked: bool): int {
+        return Logic.selectionAfterChange(userMoved, kept, preferred, preferredMarked);
+    }
+
     // The stand-ins that ended: their marks go (Hyprland killed them when the app answered or closed, or Force Quit
     // killed the app and Hyprland its dialog). Checked every 250 ms while there is a mark.
     Timer {

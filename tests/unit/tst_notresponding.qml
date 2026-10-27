@@ -100,6 +100,23 @@ TestCase {
         compare(Logic.initialIndex([], marks), -1);
     }
 
+    function test_forceQuitSelectionFollowsTheWindow() {
+        // Before the user moved: onto an app that does not respond (a hang that starts while the panel is open)...
+        compare(Logic.selectionAfterChange(false, 0, 2, true), 2);
+        // ... and never away from the app shown when its mark clears (initialIndex falls back to row 0, unmarked).
+        compare(Logic.selectionAfterChange(false, 2, 0, false), 2);
+        // A window opened or closed: the shown window keeps the selection at its new row.
+        compare(Logic.selectionAfterChange(false, 3, 0, false), 3);
+        // The shown window closed: the first row, or nothing when there is none.
+        compare(Logic.selectionAfterChange(false, -1, 0, false), 0);
+        compare(Logic.selectionAfterChange(false, -1, -1, false), -1);
+        // The user's choice is kept, even when another app stops responding...
+        compare(Logic.selectionAfterChange(true, 1, 2, true), 1);
+        // ... and when its window closed nothing is selected (Force Quit off), never another app.
+        compare(Logic.selectionAfterChange(true, -1, 0, false), -1);
+        compare(Logic.selectionAfterChange(true, -1, 2, true), -1);
+    }
+
     function test_forceQuitRefusesAReusedPid() {
         const windows = [win(4242, "foot", "~"), win(5000, "firefox", "Mozilla Firefox")];
         verify(Logic.stillOwns(windows, 4242, "foot"));

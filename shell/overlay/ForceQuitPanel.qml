@@ -20,21 +20,34 @@ Dialog {
         return top && top.lastIpcObject && top.lastIpcObject.class ? top.lastIpcObject.class : "";
     }
 
-    // The row the panel selects: the first app that does not respond, else the first (NotResponding.initialIndex). It is
-    // applied until the user moves the selection, and only ever moves it onto an app that does not respond: a mark that
-    // clears never moves the selection away from the app the user was shown (Return would then target another app).
+    // The selection follows a window, not a row: the window list is a new array each time a window opens or closes, which
+    // resets the view's row. Before the user moves it, it goes onto the first app that does not respond and never away from
+    // the app shown when a mark clears (NotResponding.selectionAfterChange, ADR-0035 decision 3-13).
     readonly property int preferred: NotResponding.initialIndex(windows.map(t => Compositor.pidOf(t)))
+    property var current: null
     property bool userMoved: false
 
-    function applyPreferred(): void {
-        if (userMoved || preferred < 0 || preferred >= windows.length)
-            return;
-        if (list.currentIndex < 0 || list.currentIndex >= windows.length || NotResponding.isMarked(Compositor.pidOf(windows[preferred])))
-            list.currentIndex = preferred;
+    function select(index: int): void {
+        list.currentIndex = index;
+        current = index >= 0 && index < windows.length ? windows[index] : null;
+        if (index >= 0)
+            list.positionViewAtIndex(index, ListView.Contain);
     }
 
-    onPreferredChanged: applyPreferred()
-    onWindowsChanged: applyPreferred()
+    function userSelect(index: int): void {
+        userMoved = true;
+        select(index);
+    }
+
+    function sync(): void {
+        const kept = current ? windows.indexOf(current) : -1;
+        const marked = preferred >= 0 && preferred < windows.length && NotResponding.isMarked(Compositor.pidOf(windows[preferred]));
+        select(NotResponding.selectionAfterChange(userMoved, kept, preferred, marked));
+    }
+
+    onPreferredChanged: sync()
+    // After the view took its new model (which resets its row).
+    onWindowsChanged: Qt.callLater(sync)
 
     title: qsTr("Force Quit Applications")
     message: qsTr("If an app is not responding, select it and choose Force Quit.")
@@ -53,7 +66,7 @@ Dialog {
     // Windows opened after the shell started have no pid until Hyprland's list is refreshed.
     Component.onCompleted: {
         Compositor.refreshToplevels();
-        applyPreferred();
+        sync();
     }
 
     content: [
@@ -76,12 +89,8 @@ Dialog {
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Open applications")
                 Keys.onReturnPressed: root.ask()
-                // Before ListView's own navigation: the user moved the selection.
-                Keys.onPressed: event => {
-                    if ([Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown].indexOf(event.key) >= 0)
-                        root.userMoved = true;
-                    event.accepted = false;
-                }
+                Keys.onUpPressed: root.userSelect(Math.max(0, list.currentIndex - 1))
+                Keys.onDownPressed: root.userSelect(Math.min(root.windows.length - 1, list.currentIndex + 1))
 
                 delegate: Item {
                     id: row
@@ -135,8 +144,7 @@ Dialog {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            root.userMoved = true;
-                            list.currentIndex = row.index;
+                            root.userSelect(row.index);
                             list.forceActiveFocus();
                         }
                         onDoubleClicked: root.ask()
