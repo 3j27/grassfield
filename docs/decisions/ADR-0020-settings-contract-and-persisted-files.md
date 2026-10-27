@@ -30,7 +30,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `mouse-trackpad.lua` | config | Settings (`MousePage.qml:16`) / Hyprland | n/a (Lua) | stays |
 | Files QSettings | config | Files / Files, Preview | n/a | stays |
 | `software-update.json` (ADR-0033) | state | shell / Settings | 1 | none (versioned from the start) |
-| `checkup-db/` (ADR-0033) | cache (`$XDG_CACHE_HOME/grassfield`) | the update checker (`checkupdates`) / the checker | n/a (pacman databases) | none (regenerable; its `[grassfield]` files are deleted when the channel's Server changes) |
+| `checkup-db/`, `health-db/`, `checkup.lock` (ADR-0033) | cache (`$XDG_CACHE_HOME/grassfield`) | the update checker (`checkupdates`, the `[grassfield]`-only sync, its lock) / the checker | n/a (pacman databases, a lock file) | none (regenerable; the `[grassfield]` files are deleted when the channel's Server changes, a stale `db.lck` under the checker's lock) |
 | `pre-refresh-pacman.d/50-grassfield` (ADR-0033) | Omarchy's user hooks (`~/.config/omarchy/hooks/`) | `grassfield-channel-set` / Omarchy's `omarchy-hook` | n/a (a symbolic link to a packaged file) | stays (removed by `grassfield-channel-set off`) |
 | `wallpaper-state.json` | config (`WallpaperState.qml:43`, `backend.cpp:105`) | shell / Settings | none | state, v1 |
 | `pointer-theme.json` | config (`shell.qml:151`) | shell (`PointerTheme.qml:254`) / Settings (`PointerThemeStatus.qml:16`) | none | state, v1 |
@@ -125,7 +125,8 @@ managed preferences. Preferences live in `~/Library/Preferences`, status and cac
 
 ## Amendment (ADR-0033, Software Update, 2026-10-27, Proposed)
 Three rows were added to the table: `software-update.json` (state; the shell writes it, Settings reads it; `version` 1 from the
-start; the last checker answer and the versions already announced), the checker's `checkup-db/` cache, and the link in
+start; the last checker answer and the versions already announced), the checker's caches (`checkup-db/`, `health-db/`,
+`checkup.lock`), and the link in
 Omarchy's user hook folder (`grassfield-channel-set` writes it as the user). `grassfield.json` gains one key,
 `updates.automaticCheck` (boolean, default true), generated from the schema like every other key (decision 1). Two files
 outside the user's home are not user files and are not in the table: `/etc/pacman.d/grassfield.conf` and the `Include` line
