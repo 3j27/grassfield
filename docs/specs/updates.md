@@ -28,9 +28,10 @@ start Omarchy's own update; let them choose the stable or beta channel; keep the
 Omarchy's own changes.
 
 Non-goals:
-- no installation code (the install is `omarchy update`). The only Grassfield code that runs as root writes pacman's
-  configuration for `[grassfield]` and its trust: `grassfield-channel-helper` (pkexec, owner decision O1) and
-  `grassfield-channel-scriptlet` (pacman's scriptlets), ADR-0033 c;
+- no installation code (the install is `omarchy update`). The only Grassfield code of Software Update that runs as root
+  writes pacman's configuration for `[grassfield]` and its trust: `grassfield-channel-helper` (pkexec, owner decision O1)
+  and `grassfield-channel-scriptlet` (pacman's scriptlets), ADR-0033 c. (Grassfield Store's own root helper installs apps
+  the user picks there: ADR-0037 b.1, which amends ADR-0033);
 - no automatic download or install;
 - no per-package choice, no rollback button (Omarchy's snapshots are the rollback);
 - no App Center (master-prompt §4);
