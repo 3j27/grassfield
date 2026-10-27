@@ -17,9 +17,12 @@ Colours (the same rules as the shell, Accent.js):
               light accent and its text colour in the light appearance; color.selectionDark in the dark one (selectionPair)
   highlight   selected text in fields, labels and editors: the appearance's accent and its text colour (highlight,
               "automatic"; the `accent.highlight` setting is not followed: a theme per highlight would make 162 themes)
-  focus       the accent where it holds control.focusRingMinContrast against the window, else the text colour (focusRing)
+  focus       the accent where it holds control.focusRingMinContrast against the window, else the text colour (focusRing),
+              drawn at control.focusOutlineOpacity (opaque, as the shell's ring)
   link        blue in every accent, as macOS draws links (accentLight.blue / accentDark.blue)
-Shades (borders, pressed and hovered fills) are computed here, so the CSS needs no colour function of either GTK version.
+Borders, pressed and hovered fills are the shell's overlays made opaque here (material.borderOpacity, material.hoverOpacity,
+control.pressedOpacity over the appearance's materialBorder and hover colours), so the CSS needs no colour function of either GTK
+version. The selected tab's indicator keeps GTK's own width (gtk.tabIndicatorWidth); visited links stay blue.
 
 Usage: gen-gtk-themes.py OUTDIR     write OUTDIR/Grassfield-*/{index.theme,gtk-3.0/gtk.css,gtk-4.0/gtk.css}
        gen-gtk-themes.py --list     print the theme names
@@ -72,12 +75,9 @@ def contrast(a, b):
     return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 
 
-def shade(hex_colour, factor):
-    """GTK 3's shade(): lightness and saturation scaled by `factor` (clamped), as #RRGGBB."""
-    import colorsys
-    h, lightness, saturation = colorsys.rgb_to_hls(*rgb(hex_colour))
-    r, g, b = colorsys.hls_to_rgb(h, min(1.0, lightness * factor), min(1.0, saturation * factor))
-    return "#%02X%02X%02X" % tuple(round(c * 255) for c in (r, g, b))
+def mix(hex_colour, over, amount):
+    """`over` laid on `hex_colour` at `amount` (0..1), as #RRGGBB: the shell's overlays (hover, pressed, border) made opaque."""
+    return "#%02X%02X%02X" % tuple(round((a * (1 - amount) + b * amount) * 255) for a, b in zip(rgb(hex_colour), rgb(over)))
 
 
 def with_alpha(hex_colour, alpha):
@@ -105,10 +105,15 @@ def palette(tokens, name, dark):
     minimum = value(tokens["control"]["focusRingMinContrast"])
     focus = accent if contrast(accent, window) >= minimum else text
     link = value(color["accentDark" if dark else "accentLight"]["blue"])
+    # The shell's overlays: hover and pressed lay the appearance's hover colour on a fill, a border its material border colour.
+    overlay, border = value(appearance["hover"]), value(appearance["materialBorder"])
     return {"accent": accent, "selection": selection, "selectionText": selection_text, "highlight": accent,
-            "highlightText": accent_text, "focus": focus, "focusRing": with_alpha(focus, 0.5), "link": link,
-            "linkVisited": shade(link, 0.85), "selectionBorder": shade(selection, 0.85),
-            "selectionHover": shade(selection, 1.08), "selectionActive": shade(selection, 0.9), "window": window, "text": text}
+            "highlightText": accent_text, "focus": focus,
+            "focusRing": with_alpha(focus, value(tokens["control"]["focusOutlineOpacity"])), "link": link,
+            "selectionBorder": mix(selection, border, value(tokens["material"]["borderOpacity"])),
+            "selectionHover": mix(selection, overlay, value(tokens["material"]["hoverOpacity"])),
+            "selectionActive": mix(selection, overlay, value(tokens["control"]["pressedOpacity"])),
+            "tabIndicator": value(tokens["gtk"]["tabIndicatorWidth"]), "window": window, "text": text}
 
 
 def theme_name(name, dark, hc=False):
@@ -123,7 +128,7 @@ def header(name, dark, hc, gtk):
 
 def gtk3_css(name, dark, hc, p):
     a, s, st, f, link = p["accent"], p["selection"], p["selectionText"], p["focus"], p["link"]
-    hl, hlt, sb = p["highlight"], p["highlightText"], p["selectionBorder"]
+    hl, hlt, sb, w = p["highlight"], p["highlightText"], p["selectionBorder"], p["tabIndicator"]
     return header(name, dark, hc, 3) + f"""@import url("{GTK3_IMPORT[dark, hc]}");
 
 @define-color theme_selected_bg_color {s};
@@ -191,10 +196,10 @@ entry:focus, spinbutton:not(.vertical):focus, spinbutton.vertical entry:focus, c
 }}
 
 /* Selected tabs */
-notebook > header.top > tabs > tab:checked {{ box-shadow: inset 0 -3px {a}; }}
-notebook > header.bottom > tabs > tab:checked {{ box-shadow: inset 0 3px {a}; }}
-notebook > header.left > tabs > tab:checked {{ box-shadow: inset -3px 0 {a}; }}
-notebook > header.right > tabs > tab:checked {{ box-shadow: inset 3px 0 {a}; }}
+notebook > header.top > tabs > tab:checked {{ box-shadow: inset 0 -{w}px {a}; }}
+notebook > header.bottom > tabs > tab:checked {{ box-shadow: inset 0 {w}px {a}; }}
+notebook > header.left > tabs > tab:checked {{ box-shadow: inset -{w}px 0 {a}; }}
+notebook > header.right > tabs > tab:checked {{ box-shadow: inset {w}px 0 {a}; }}
 
 /* Menu items under the pointer */
 menu menuitem:hover, .menu menuitem:hover, .context-menu menuitem:hover {{
@@ -208,14 +213,14 @@ button:active:link, button:link > label:active, *:link:backdrop, button:backdrop
   color: {link};
 }}
 *:link:visited, button:visited, button:visited > label, button:link > label:visited, button:visited > label:visited {{
-  color: {p["linkVisited"]};
+  color: {link};
 }}
 """
 
 
 def gtk4_css(name, dark, hc, p):
     a, s, st, link = p["accent"], p["selection"], p["selectionText"], p["link"]
-    hl, hlt, sb, ring = p["highlight"], p["highlightText"], p["selectionBorder"], p["focusRing"]
+    hl, hlt, sb, ring, w = p["highlight"], p["highlightText"], p["selectionBorder"], p["focusRing"], p["tabIndicator"]
     return header(name, dark, hc, 4) + f"""@import url("{GTK4_IMPORT[dark, hc]}");
 
 @define-color theme_selected_bg_color {s};
@@ -230,7 +235,7 @@ calendar > grid > label.day-number:selected {{
   background-color: {s};
   color: {st};
 }}
-calendar > grid > label.day-number:checked {{ background-color: {with_alpha(s, 0.3)}; }}
+calendar > grid > label.day-number:checked {{ background-color: {s}; color: {st}; }}
 
 /* Selected text */
 selection, text > selection, text > selection:focus-within, label > selection, label > selection:focus-within,
@@ -282,14 +287,14 @@ entry > progress > trough > progress {{
 entry:focus-within, spinbutton:focus-within:not(.vertical), spinbutton.vertical > text:focus-within {{ outline-color: {ring}; }}
 
 /* Selected tabs */
-notebook > header.top > tabs > tab:checked {{ box-shadow: inset 0 -4px {a}; }}
-notebook > header.bottom > tabs > tab:checked {{ box-shadow: inset 0 4px {a}; }}
-notebook > header.left > tabs > tab:checked {{ box-shadow: inset -4px 0 {a}; }}
-notebook > header.right > tabs > tab:checked {{ box-shadow: inset 4px 0 {a}; }}
+notebook > header.top > tabs > tab:checked {{ box-shadow: inset 0 -{w}px {a}; }}
+notebook > header.bottom > tabs > tab:checked {{ box-shadow: inset 0 {w}px {a}; }}
+notebook > header.left > tabs > tab:checked {{ box-shadow: inset -{w}px 0 {a}; }}
+notebook > header.right > tabs > tab:checked {{ box-shadow: inset {w}px 0 {a}; }}
 
 /* Links: blue, as macOS draws them in every accent */
 link, button.link, link:hover, button.link:hover, link:active, button.link:active {{ color: {link}; }}
-link:visited, button.link:visited {{ color: {p["linkVisited"]}; }}
+link:visited, button.link:visited {{ color: {link}; }}
 """
 
 

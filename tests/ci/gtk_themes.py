@@ -82,6 +82,10 @@ for name in gen.accent_names(tokens):
             low += [f"{theme} {what} {ratio:.2f} < {need}" for what, ratio, need in pairs if ratio < need]
             worst[theme] = on(p["accent"])
 check(not low, f"colour pairs hold their contrast on the Grassfield window and GTK's backgrounds {low}")
+# The ring is checked at its solid colour: it must be drawn so (control.focusOutlineOpacity, the shell's opaque ring).
+rings = {gen.palette(tokens, n, d)["focusRing"] for n in gen.accent_names(tokens) for d in (False, True)}
+check(gen.value(tokens["control"]["focusOutlineOpacity"]) == 1.0 and all(r.endswith(", 1.0)") for r in rings),
+      f"the GTK 4 focus ring is drawn opaque, the colour its contrast is checked at [{sorted(rings)[:2]}...]")
 yellow = gen.palette(tokens, "yellow", False)
 check(gen.contrast(yellow["accent"], yellow["window"]) < 3.0 and yellow["focus"] == yellow["text"],
       "the light yellow accent: thin marks under 3:1 (the shell's own yellow), its focus ring the text colour (Accent.js focusRing)")

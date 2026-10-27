@@ -2847,4 +2847,7 @@ QtObject {
     readonly property real titlebarPreviewRimOpacity: 0.22
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property int titlebarPreviewRimWidth: 2
+
+    // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
+    readonly property int gtkTabIndicatorWidth: 4
 }
