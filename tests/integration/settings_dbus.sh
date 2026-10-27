@@ -82,9 +82,26 @@ g++ -std=c++17 -O1 -fPIC -Wno-sfinae-incomplete -I"$src" -I"$root/apps" -I/usr/i
   { cat "$work/build.log"; die "the probe did not build"; }
 
 # The private bus: a unix socket in the test's own directory; else loopback TCP with anonymous authentication (a sandbox that
-# forbids unix sockets): a bus that lives for this test and serves only the fakes below.
+# forbids unix sockets): a bus that lives for this test and serves only the fakes below. Neither configuration has a service
+# directory: `dbus-daemon --session` would read the machine's (session.conf's <standard_session_servicedirs/>), and a call to
+# a name no fake owns would then start the machine's own service on this bus, in the caller's environment (where
+# xdg-desktop-portal is installed, the first Lookup of [15] started /usr/lib/xdg-permission-store, which then answered
+# instead of "the service is not running" and held the name the fake permission store asks for).
 start_bus() {
-  setsid dbus-daemon --session --nofork --address="unix:path=$work/bus.sock" --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
+  cat >"$work/unix.conf" <<EOF
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:path=$work/bus.sock</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+EOF
+  setsid dbus-daemon --config-file="$work/unix.conf" --nofork --print-address=1 >"$work/bus.address" 2>"$work/bus.log" </dev/null &
   bus_pid=$!
   if wait_until 3 test -s "$work/bus.address"; then
     bus=$(head -n 1 "$work/bus.address")
@@ -168,6 +185,20 @@ start_service bluez
 
 say ""
 say "[1] the guard"
+# The bus can start nothing of the machine: no name is activatable but the bus's own (start_bus).
+activatable=$(python3 -I -c '
+import sys
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib
+c = Gio.DBusConnection.new_for_address_sync(
+    sys.argv[1], Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+r = c.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListActivatableNames", None,
+                GLib.VariantType("(as)"), Gio.DBusCallFlags.NONE, 5000, None)
+print(" ".join(n for n in r.unpack()[0] if n != "org.freedesktop.DBus"))' "$bus" 2>&1) || die "the private bus did not list its activatable names ($activatable)"
+# A bus that could would hand the actions below to the machine's own services: stop before any.
+[[ -z $activatable ]] || die "the private bus could start the machine's own services ($activatable)"
+say "  PASS the private bus starts no service of the machine (no name is activatable but its own)"
 # The refusal parses the address: only unix:path=<socket under the scratch directory> or loopback tcp pass (every entry).
 refused() { # ADDRESS...: the probe and the fake service both exit non-zero on it, whatever spelling it has
   local addr=$1 rc
