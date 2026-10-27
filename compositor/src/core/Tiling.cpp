@@ -161,6 +161,7 @@ namespace gf::tiling {
                         ax.pos(frames[i]) -= d;
                         ax.len(frames[i]) += d;
                     }
+                    std::vector<size_t> gave; // the zones across the edge that made room
                     for (size_t j = 0; j < n && shared; ++j) {
                         if (j == i)
                             continue;
@@ -172,6 +173,31 @@ namespace gf::tiling {
                         if (farSide)
                             ax.pos(frames[j]) += d;
                         ax.len(frames[j]) -= d;
+                        gave.push_back(j);
+                    }
+                    // The other zones on this side of the same edge follow it when every zone facing them across the
+                    // edge made room (Left & Quarters: the right column's other quarter meets the narrower left half;
+                    // no hole between them).
+                    for (size_t k = 0; k < n && !gave.empty(); ++k) {
+                        const Zone& zk     = zones[k];
+                        const bool  beside = farSide ? ax.zoneStart(zk) + ax.zoneSize(zk) == far : ax.zoneStart(zk) == near;
+                        if (k == i || !beside)
+                            continue;
+                        bool faced = false, allGave = true;
+                        for (size_t j = 0; j < n; ++j) {
+                            const Zone& zj    = zones[j];
+                            const bool  touch = farSide ? ax.zoneStart(zj) == far : ax.zoneStart(zj) + ax.zoneSize(zj) == near;
+                            if (j == i || j == k || !touch ||
+                                !overlaps(ax.crossStart(zk), ax.crossStart(zk) + ax.crossSize(zk), ax.crossStart(zj), ax.crossStart(zj) + ax.crossSize(zj)))
+                                continue;
+                            faced = true;
+                            allGave = allGave && std::ranges::find(gave, j) != gave.end();
+                        }
+                        if (!faced || !allGave)
+                            continue;
+                        if (!farSide)
+                            ax.pos(frames[k]) -= d;
+                        ax.len(frames[k]) += d;
                     }
                     need -= d;
                 };
@@ -200,7 +226,7 @@ namespace gf::tiling {
                 const double max = ax.maxOf(cons[i]);
                 if (max <= 0 || ax.len(frames[i]) <= max)
                     continue;
-                ax.pos(frames[i]) += std::floor((ax.len(frames[i]) - max) / 2);
+                ax.pos(frames[i]) += floorTo((ax.len(frames[i]) - max) / 2, step); // centred, on the grid
                 ax.len(frames[i]) = max;
             }
         }

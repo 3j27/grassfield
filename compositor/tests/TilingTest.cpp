@@ -256,6 +256,91 @@ TEST(TilingFit, AMinimumTakesRoomFromItsNeighbourAsFarAsItsMinimumAllows) {
     EXPECT_DOUBLE_EQ(big[0].w, 2500);
 }
 
+TEST(TilingGrid, OuterEdgesSnapInsideTheWorkArea) {
+    // A work area that starts and ends off the grid (step 4 from the output's origin): the outer edges go inside it.
+    const Area a{Rect{1, 25, 1917, 973}, 0, Grid{0, 0, 4}};
+    EXPECT_EQ(zoneFrame(Zone{}, a), (Rect{4, 28, 1912, 968}));
+    const Area m{Rect{1, 25, 1917, 973}, 6, Grid{0, 0, 4}};
+    EXPECT_EQ(zoneFrame(Zone{}, m), (Rect{8, 32, 1904, 960})) << "the margin first, then the grid line inside";
+}
+
+TEST(TilingGrid, InnerEdgesGoToTheNearestLine) {
+    // Thirds of 1000 px: the boundaries 333.3 and 666.7 go to 333 and 667 (nearest, not down).
+    const Area a{Rect{0, 0, 1000, 1000}, 0, Grid{0, 0, 1}};
+    const auto thirds = framesOf("thirds", a);
+    EXPECT_DOUBLE_EQ(thirds[1].x, 333);
+    EXPECT_DOUBLE_EQ(thirds[2].x, 667);
+    EXPECT_DOUBLE_EQ(thirds[0].w, 333);
+    EXPECT_DOUBLE_EQ(thirds[2].w, 333);
+}
+
+TEST(TilingFit, ARightWindowTakesRoomFromItsLeftNeighbour) {
+    // Left & Right, the right window needs 1200: the left one gives 240 across their shared edge (no overlap).
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    const auto& zones = layoutById("left-right")->zones;
+    const std::vector<Constraints> cons{Constraints{}, Constraints{.minW = 1200}};
+    const auto fit = fitFrames(zones, framesOf("left-right", a), cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].x, 0);
+    EXPECT_DOUBLE_EQ(fit[0].w, 720);
+    EXPECT_DOUBLE_EQ(fit[1].x, 720);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1200);
+}
+
+TEST(TilingFit, AWindowGrowingAloneStaysInsideTheWorkArea) {
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    // The middle third alone (no neighbour placed) needs 1800: it grows to the right, then moves back inside.
+    const std::array<Zone, 1> middle{Zone{4, 0, 4, 12}};
+    const std::array<Rect, 1> middleFrame{zoneFrame(middle[0], a)};
+    const std::array<Constraints, 1> wide{Constraints{.minW = 1800}};
+    const auto m = fitFrames(middle, middleFrame, wide, a);
+    EXPECT_DOUBLE_EQ(m[0].x, 120);
+    EXPECT_DOUBLE_EQ(m[0].x + m[0].w, 1920);
+    // The right third alone with a minimum larger than the work area: aligned to its start.
+    const std::array<Zone, 1> right{Zone{8, 0, 4, 12}};
+    const std::array<Rect, 1> rightFrame{zoneFrame(right[0], a)};
+    const std::array<Constraints, 1> huge{Constraints{.minW = 2000}};
+    const auto r = fitFrames(right, rightFrame, huge, a);
+    EXPECT_DOUBLE_EQ(r[0].x, 0);
+    EXPECT_DOUBLE_EQ(r[0].w, 2000);
+    // With margins: a right window that must grow alone keeps its margin to the work area's right edge.
+    const Area margins{Rect{0, 0, 1920, 1000}, 8, Grid{0, 0, 1}};
+    const auto& zones = layoutById("left-right")->zones;
+    const std::vector<Constraints> cons{Constraints{.minW = 900}, Constraints{.minW = 1500}};
+    const auto fit = fitFrames(zones, framesOf("left-right", margins), cons, margins);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1500);
+    EXPECT_DOUBLE_EQ(fit[1].x + fit[1].w, 1912) << "the margin stays";
+}
+
+TEST(TilingFit, TheOtherQuarterFollowsTheSharedEdge) {
+    // Left & Quarters, the top-right window needs 1200: the left half gives 240 and the bottom-right quarter follows the
+    // shared edge, so no hole opens beside it (review of 3831dc0).
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    const auto& zones = layoutById("left-quarters")->zones;
+    const std::vector<Constraints> cons{Constraints{}, Constraints{.minW = 1200}, Constraints{}};
+    const auto fit = fitFrames(zones, framesOf("left-quarters", a), cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].w, 720);
+    EXPECT_DOUBLE_EQ(fit[1].x, 720);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1200);
+    EXPECT_DOUBLE_EQ(fit[2].x, 720) << "no hole between the left half and the bottom-right quarter";
+    EXPECT_DOUBLE_EQ(fit[2].w, 1200);
+    // Quarters: the top-left window's need moves only the top row's shared edge; the bottom row keeps its own.
+    const auto& quarters = layoutById("quarters")->zones;
+    const std::vector<Constraints> topLeft{Constraints{.minW = 1200}, Constraints{}, Constraints{}, Constraints{}};
+    const auto q = fitFrames(quarters, framesOf("quarters", a), topLeft, a);
+    EXPECT_DOUBLE_EQ(q[1].x, 1200);
+    EXPECT_DOUBLE_EQ(q[2].w, 960);
+    EXPECT_DOUBLE_EQ(q[3].x, 960);
+}
+
+TEST(TilingFit, AMaximumIsCentredOnTheGrid) {
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 2}};
+    const auto& zones = layoutById("left-right")->zones;
+    const std::vector<Constraints> cons{Constraints{.maxW = 901}, Constraints{}};
+    const auto fit = fitFrames(zones, framesOf("left-right", a), cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].w, 901);
+    EXPECT_DOUBLE_EQ(fit[0].x, 28) << "29.5 px to centre it, 28 on the grid";
+}
+
 TEST(TilingFit, MaximaCentreAndIncrementsRoundDown) {
     const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
     const auto& zones  = layoutById("left-right")->zones;
@@ -273,28 +358,53 @@ TEST(TilingFit, MaximaCentreAndIncrementsRoundDown) {
 TEST(TilingNeighbour, AHalfBesideATiledWindowTakesTheRest) {
     const Area a{Rect{0, 24, 1920, 974}, 8, Grid{0, 0, 1}};
     // A window holding the right two thirds (full height): Left takes the rest, one margin before it.
-    const Rect twoThirds = zoneFrame(*zoneOf(Place::RightTwoThirds), a);
+    const Rect twoThirds = zoneFrame(zoneOf(Place::RightTwoThirds).value_or(Zone{}), a);
     const std::array<Rect, 1> neighbours{twoThirds};
     const auto left = halfBesideNeighbour(Place::Left, a, neighbours);
     ASSERT_TRUE(left.has_value());
-    EXPECT_DOUBLE_EQ(left->x, 8);
-    EXPECT_DOUBLE_EQ(left->x + left->w + 8, twoThirds.x);
-    EXPECT_DOUBLE_EQ(left->h, twoThirds.h);
+    const Rect l = left.value_or(Rect{});
+    EXPECT_DOUBLE_EQ(l.x, 8);
+    EXPECT_DOUBLE_EQ(l.x + l.w + 8, twoThirds.x);
+    EXPECT_DOUBLE_EQ(l.h, twoThirds.h);
     // Not full height, or leaving less than a quarter: an exact half.
-    const std::array<Rect, 1> quarter{zoneFrame(*zoneOf(Place::TopRight), a)};
+    const std::array<Rect, 1> quarter{zoneFrame(zoneOf(Place::TopRight).value_or(Zone{}), a)};
     EXPECT_FALSE(halfBesideNeighbour(Place::Left, a, quarter).has_value());
-    const std::array<Rect, 1> fill{zoneFrame(*zoneOf(Place::Fill), a)};
+    const std::array<Rect, 1> fill{zoneFrame(zoneOf(Place::Fill).value_or(Zone{}), a)};
     EXPECT_FALSE(halfBesideNeighbour(Place::Left, a, fill).has_value());
+    const std::array<Rect, 1> wide{Rect{300, 32, 1612, 958}};
+    EXPECT_FALSE(halfBesideNeighbour(Place::Left, a, wide).has_value()) << "it leaves less than a quarter: an exact half";
     // The other sides.
-    const std::array<Rect, 1> leftThird{zoneFrame(*zoneOf(Place::LeftThird), a)};
+    const std::array<Rect, 1> leftThird{zoneFrame(zoneOf(Place::LeftThird).value_or(Zone{}), a)};
     const auto right = halfBesideNeighbour(Place::Right, a, leftThird);
     ASSERT_TRUE(right.has_value());
-    EXPECT_DOUBLE_EQ(right->x, leftThird[0].x + leftThird[0].w + 8);
-    const std::array<Rect, 1> bottom{zoneFrame(*zoneOf(Place::Bottom), a)};
+    EXPECT_DOUBLE_EQ(right.value_or(Rect{}).x, leftThird[0].x + leftThird[0].w + 8);
+    const std::array<Rect, 1> bottom{zoneFrame(zoneOf(Place::Bottom).value_or(Zone{}), a)};
     const auto top = halfBesideNeighbour(Place::Top, a, bottom);
     ASSERT_TRUE(top.has_value());
-    EXPECT_DOUBLE_EQ(top->y + top->h + 8, bottom[0].y);
+    const Rect t = top.value_or(Rect{});
+    EXPECT_DOUBLE_EQ(t.y + t.h + 8, bottom[0].y);
     EXPECT_FALSE(halfBesideNeighbour(Place::Fill, a, bottom).has_value()) << "halves only";
+}
+
+TEST(TilingNeighbour, TheNearestNeighbourWins) {
+    const Area a{Rect{0, 24, 1920, 974}, 8, Grid{0, 0, 1}};
+    // Two windows hold the right side, the nearer one first: Left stops one margin before the nearer one.
+    const std::array<Rect, 2> right{Rect{1100, 32, 812, 958}, Rect{1300, 32, 612, 958}};
+    const auto left = halfBesideNeighbour(Place::Left, a, right);
+    ASSERT_TRUE(left.has_value());
+    EXPECT_DOUBLE_EQ(left.value_or(Rect{}).x + left.value_or(Rect{}).w, 1092);
+    const std::array<Rect, 2> leftSide{Rect{8, 32, 800, 958}, Rect{8, 32, 600, 958}};
+    const auto rightHalf = halfBesideNeighbour(Place::Right, a, leftSide);
+    ASSERT_TRUE(rightHalf.has_value());
+    EXPECT_DOUBLE_EQ(rightHalf.value_or(Rect{}).x, 816);
+    const std::array<Rect, 2> below{Rect{8, 600, 1904, 390}, Rect{8, 700, 1904, 290}};
+    const auto top = halfBesideNeighbour(Place::Top, a, below);
+    ASSERT_TRUE(top.has_value());
+    EXPECT_DOUBLE_EQ(top.value_or(Rect{}).y + top.value_or(Rect{}).h, 592);
+    const std::array<Rect, 2> above{Rect{8, 32, 1904, 400}, Rect{8, 32, 1904, 300}};
+    const auto bottom = halfBesideNeighbour(Place::Bottom, a, above);
+    ASSERT_TRUE(bottom.has_value());
+    EXPECT_DOUBLE_EQ(bottom.value_or(Rect{}).y, 440);
 }
 
 TEST(TilingCenter, KeepsTheSizeOnTheGrid) {
@@ -314,6 +424,12 @@ TEST(TilingCatalogue, ClassesNameLayoutsThatTileTheWholeArea) {
     EXPECT_EQ(classify(2560, 1080), OutputClass::UltraWide);
     EXPECT_EQ(classify(1080, 1920), OutputClass::Portrait);
     EXPECT_EQ(classify(0, 0), OutputClass::Small);
+    // The ultra-wide boundary is the 21:9 aspect itself, whatever the width.
+    EXPECT_EQ(classify(2520, 1080), OutputClass::UltraWide) << "exactly 21:9";
+    EXPECT_EQ(classify(2510, 1080), OutputClass::Large) << "just under 21:9";
+    EXPECT_EQ(classify(1800, 760), OutputClass::UltraWide) << "narrower than the large class, still 21:9";
+    EXPECT_EQ(classify(1919, 1080), OutputClass::Small);
+    EXPECT_EQ(classify(1000, 1000), OutputClass::Small) << "square is not portrait";
     for (OutputClass c : {OutputClass::Small, OutputClass::Large, OutputClass::UltraWide, OutputClass::Portrait}) {
         EXPECT_FALSE(layoutsFor(c).empty()) << nameOf(c);
         for (std::string_view id : layoutsFor(c))
@@ -341,8 +457,8 @@ TEST(TilingNames, TheThirdsArePlaces) {
     for (const char* name : {"left-third", "middle-third", "right-third", "left-two-thirds", "right-two-thirds"}) {
         const auto p = parsePlace(name);
         ASSERT_TRUE(p.has_value()) << name;
-        EXPECT_EQ(nameOf(*p), name);
-        EXPECT_TRUE(zoneOf(*p).has_value());
+        EXPECT_EQ(nameOf(p.value_or(Place::Center)), name);
+        EXPECT_TRUE(zoneOf(p.value_or(Place::Center)).has_value());
     }
     EXPECT_EQ(zoneOf(Place::RightTwoThirds), (Zone{4, 0, 8, 12}));
     EXPECT_FALSE(zoneOf(Place::Center).has_value());
@@ -446,6 +562,29 @@ TEST(TilingRecord, MoveToDesktopAndALostOutput) {
     EXPECT_FALSE(book.check(1, Rect{2000, 64, 948, 926})) << "checked again once placed";
 }
 
+TEST(TilingRecord, ASuspendedMemberKeepsItsGroupAlive) {
+    CTileBook  book;
+    const auto group = book.newGroup();
+    const Rect any{0, 0, 10, 10};
+    book.placed(1, any, any, 0, inLayout("thirds", 0), "A", 1, group);
+    book.placed(2, any, any, 0, inLayout("thirds", 1), "A", 1, group);
+    book.placed(3, any, any, 0, inLayout("thirds", 2), "A", 1, group);
+    book.suspend(3);
+    book.beginMove(1);
+    EXPECT_EQ(book.find(2)->group, group) << "one Tiled and one Suspended member: the group lives";
+    EXPECT_EQ(book.find(3)->group, group);
+    book.forget(2);
+    EXPECT_EQ(book.find(3)->group, 0U) << "a Suspended member alone: dissolved";
+}
+
+TEST(TilingArrange, TheSizeLimitIsExact) {
+    const std::string body = R"("layout":"quarters","windows":["1"]})";
+    const auto padded = [&body](size_t total) { return "{" + std::string(total - 1 - body.size(), ' ') + body; };
+    ASSERT_EQ(padded(kMaxArrangeBytes).size(), kMaxArrangeBytes);
+    EXPECT_TRUE(parseArrange(padded(kMaxArrangeBytes)).has_value());
+    EXPECT_FALSE(parseArrange(padded(kMaxArrangeBytes + 1)).has_value());
+}
+
 TEST(TilingArrange, RequestsAreStrict) {
     const auto ok = parseArrange(R"({"layout":"left-quarters","windows":["0x1a2b","3c"],"output":"GF-REF"})");
     ASSERT_TRUE(ok.has_value()) << ok.error();
@@ -490,4 +629,5 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
                      Reason::Locked, Reason::Unavailable})
         EXPECT_FALSE(reasonName(r).empty());
     EXPECT_EQ(noticeJson(9, Reason::Locked), R"({"v":"gfc/1","type":"tiling","gen":9,"reason":"locked"})");
+    EXPECT_EQ(noticeJson(std::numeric_limits<uint64_t>::max(), Reason::Unavailable).size(), 79U) << "the bound ADR-0007 states";
 }

@@ -269,6 +269,8 @@ namespace gf::tiler {
         std::vector<tiling::Rect> fitted(const std::vector<tiling::Zone>& zones, const std::vector<PHLWINDOW>& windows, const tiling::Area& area) {
             std::vector<tiling::Rect>        frames;
             std::vector<tiling::Constraints> limits;
+            frames.reserve(zones.size());
+            limits.reserve(zones.size());
             for (size_t i = 0; i < zones.size(); ++i) {
                 frames.push_back(tiling::zoneFrame(zones[i], area));
                 limits.push_back(constraintsOf(windows[i]));
@@ -332,9 +334,8 @@ namespace gf::tiler {
             for (const auto& r : s.book.records()) {
                 const auto w      = windowById(r.id);
                 const auto target = w && w->m_isMapped ? w->layoutTarget() : nullptr;
-                if (!target)
-                    gone.push_back(r.id);
-                else if (r.state == tiling::TileState::Tiled && !r.relayout && !sameBox(target->position(), toCBox(r.box)))
+                const bool moved  = target && r.state == tiling::TileState::Tiled && !r.relayout && !sameBox(target->position(), toCBox(r.box));
+                if (!target || moved)
                     gone.push_back(r.id);
             }
             for (const auto id : gone)
@@ -369,6 +370,7 @@ namespace gf::tiler {
             };
             std::vector<SItem>    items;
             std::vector<uint64_t> suspended;
+            std::vector<uint64_t> lost; // cannot be placed again (not tileable any more, on no output): Free
             for (const auto& r : s.book.records()) {
                 if (r.state == tiling::TileState::Suspended) {
                     if (all)
@@ -377,18 +379,21 @@ namespace gf::tiler {
                 }
                 if (r.state != tiling::TileState::Tiled || (!all && !r.relayout))
                     continue;
-                const auto w = windowById(r.id);
-                if (!placeable(w))
-                    continue;
-                PHLMONITOR m = all ? monitorByName(r.output) : nullptr;
-                if (!m)
+                const auto w  = windowById(r.id);
+                const bool ok = placeable(w);
+                PHLMONITOR m  = ok && all ? monitorByName(r.output) : nullptr;
+                if (!m && ok)
                     m = monitorOf(w);
-                if (!m)
+                if (!m) {
+                    lost.push_back(r.id);
                     continue;
+                }
                 items.push_back(SItem{.id = r.id, .w = w, .m = m, .where = r.where, .group = r.group, .workspace = w->m_workspace->m_id});
             }
             for (const auto id : suspended)
                 s.book.markRelayout(id, true);
+            for (const auto id : lost)
+                s.book.forget(id); // never left with relayout set: it would never be checked again
             const auto place = [&s](SItem& item, const tiling::Rect& frame) {
                 const CBox surface = toCBox(tiling::surfaceOf(frame, gf::chrome::bandOf(item.w)));
                 applySurface(item.w, surface);
@@ -482,8 +487,13 @@ namespace gf::tiler {
                 notify(tiling::Reason::Forgotten);
                 return;
             }
-            if (!placeable(w) || !g_layoutManager)
-                return; // still full screen, minimized, or not tileable any more: stays Suspended
+            if (!g_layoutManager || fullscreenNow(w) || !w->m_workspace || w->m_workspace->m_isSpecialWorkspace)
+                return; // still full screen, zoomed or minimized: stays Suspended (its own event resumes it)
+            if (!placeable(w)) {
+                s.book.forget(resume.id); // back, but not tileable any more (pinned, a parent, a strip): Free for good
+                notify(tiling::Reason::Forgotten);
+                return;
+            }
             if (heldByHyprlandDrag(w)) {
                 s.book.forget(resume.id); // dragged out of its zoom: it leaves its tile under the pointer
                 notify(tiling::Reason::Moved);
@@ -727,13 +737,12 @@ namespace gf::tiler {
             notify(tiling::Reason::Locked);
             return;
         }
-        const auto parsed = minimize::parseAddress(addressText);
-        const auto window = parsed ? windowById(*parsed) : nullptr;
+        const uint64_t address = minimize::parseAddress(addressText).value_or(0); // 0 is never a window
+        const auto     window  = address != 0 ? windowById(address) : nullptr;
         if (!window) {
             logRequest(Log::WARN, "tile: rejected: no such window");
             return;
         }
-        const uint64_t address = *parsed;
         if (placeName == "previous") {
             auto&      s      = st();
             const auto r      = placeable(window) && g_layoutManager ? s.book.find(address) : nullptr;
@@ -801,6 +810,8 @@ namespace gf::tiler {
         const auto*               layout = tiling::layoutById(request->layout); // parseArrange checked the id
         std::vector<int>          zoneIndex;
         std::vector<tiling::Zone> zones;
+        zoneIndex.reserve(layout->zones.size());
+        zones.reserve(layout->zones.size());
         if (request->zone) {
             zoneIndex.push_back(*request->zone);
         } else {
@@ -843,8 +854,10 @@ namespace gf::tiler {
     std::string stateReply() {
         auto& s = st();
         reconcile();
+        const auto                       all = monitors();
         std::vector<tiling::StateOutput> outputs;
-        for (const auto& m : monitors()) {
+        outputs.reserve(all.size());
+        for (const auto& m : all) {
             const auto area = areaFor(m);
             const CBox box  = m->logicalBox();
             tiling::StateOutput o{.name = m->m_name, .area = area.box, .outputClass = tiling::classify(box.w, box.h), .grid = area.grid.step, .windows = {}};

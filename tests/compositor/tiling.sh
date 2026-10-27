@@ -26,6 +26,8 @@
 #   minimize       a move to special:minimized suspends it; back on its Desktop it returns to its free zone (TL14)
 #   zone-taken     minimized again, its zone taken by the other window: back on its Desktop it is Free at its size
 #                  from before (TL10)
+#   locked         while the foreign locker fixture holds the session lock (tests/security/foreign_locker, released over
+#                  its IPC, nothing typed), tile and arrange move nothing and leave the records unchanged (TL34, D4)
 # Usage (bare command, nested session of this tree running with the plugin loaded): tests/compositor/tiling.sh
 # Logs and captures: .dev/tiling/run-<timestamp>/.
 set -uo pipefail
@@ -67,7 +69,17 @@ neighbour_on() { # left|right
 }
 
 pids=()
-cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done; }
+locker_pid=""
+foreign=$root/tests/security/foreign_locker/ForeignLocker.qml
+foreign_ipc() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG timeout 5 qs ipc -p "$foreign" call foreign "$@" 2>/dev/null; }
+cleanup() {
+  if [[ -n $locker_pid ]] && kill -0 "$locker_pid" 2>/dev/null; then
+    foreign_ipc unlock >/dev/null # never leave the nested session locked
+    sleep 0.5
+    kill "$locker_pid" 2>/dev/null
+  fi
+  for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
+}
 trap cleanup EXIT
 env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
   foot -T tiling-foot -w 800x500 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
@@ -321,6 +333,32 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     check "zone-taken: its zone taken meanwhile, it comes back at its size from before" size2
     check "zone-taken: it is Free" record_is "$addr2" none
     tile_ipc "$addr" previous
+
+    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
+      setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
+    locker_pid=$!
+    locked=""
+    for _ in $(seq 1 60); do
+      locked=$(foreign_ipc status)
+      [[ $locked == "locked secure" ]] && break
+      sleep 0.1
+    done
+    if [[ $locked == "locked secure" ]]; then
+      read -r lx ly lw lh _ < <(geometry_of tiling-foot)
+      gen_l0=$(tiling_state | jq -r '.gen')
+      tile_ipc "$addr" left
+      arrange "{\"layout\":\"quarters\",\"windows\":[\"$addr\"]}"
+      gen_l1=$(tiling_state | jq -r '.gen')
+      check "locked: tile and arrange move nothing while the session is locked" box_of tiling-foot "$lx" "$ly" "$lw" "$lh"
+      check "locked: the records are unchanged (generation $gen_l0 -> $gen_l1)" test "$gen_l0" = "$gen_l1"
+    else
+      check "locked: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    foreign_ipc unlock >/dev/null
+    for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
+    locker_pid=""
+    sleep 0.5
   fi
 else
   say "SKIP: step 1 cases (the plugin does not advertise tiling-arrange)"
