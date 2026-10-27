@@ -296,6 +296,12 @@ if want logic; then
   python3 -I tests/ci/run_mode.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/run_mode.py "$rc" PASS
+  # The generated GTK themes (ADR-0035 D-8): 36, each importing GTK's own theme, no colour function, the pairs' contrast. Their
+  # rendering under Xvfb is tests/integration/gtk_themes.sh.
+  rc=0
+  python3 -I tests/ci/gtk_themes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/gtk_themes.py "$rc" PASS
   # Symbolic glyph stroke width (ADR-0003, audit GF-124): the scanner on samples, then every shipped glyph.
   rc=0
   python3 -I tests/ci/icon_strokes.py --selftest || rc=1
