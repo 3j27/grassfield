@@ -15,7 +15,11 @@
 #include <optional>
 #include <thread>
 
+#include <cerrno>
+
 #include <fcntl.h>
+#include <linux/openat2.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 namespace ImageSize
@@ -119,10 +123,19 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
 
 int openChecked(const QString &resolved, const struct stat &checked)
 {
-    // O_NOFOLLOW: a link swapped in at the checked path after the check is refused (ELOOP) instead of followed, wherever it
-    // leads (a network share would block the open). O_NONBLOCK: a FIFO swapped in opens at once (and is refused below)
-    // instead of waiting for a writer.
-    const int fd = ::open(QFile::encodeName(resolved).constData(), O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC | O_NOFOLLOW);
+    // No link is followed anywhere in the path (openat2 RESOLVE_NO_SYMLINKS, Linux 5.6): a link swapped in after the check,
+    // for the file or for a folder above it, is refused (ELOOP) instead of followed, wherever it leads (a network share
+    // would block the open). A kernel without openat2 (ENOSYS) gets open() with O_NOFOLLOW, which refuses a link at the
+    // end of the path only. O_NONBLOCK: a FIFO swapped in opens at once (and is refused below) instead of waiting for a
+    // writer.
+    const QByteArray path = QFile::encodeName(resolved);
+    const int flags = O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC | O_NOFOLLOW;
+    struct open_how how {};
+    how.flags = static_cast<__u64>(flags);
+    how.resolve = RESOLVE_NO_SYMLINKS;
+    int fd = static_cast<int>(::syscall(SYS_openat2, AT_FDCWD, path.constData(), &how, sizeof how));
+    if (fd < 0 && errno == ENOSYS)
+        fd = ::open(path.constData(), flags);
     if (fd < 0)
         return -1;
     struct stat opened {};

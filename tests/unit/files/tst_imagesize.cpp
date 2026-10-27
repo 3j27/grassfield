@@ -20,12 +20,16 @@
 #include <QThread>
 #include <QTimer>
 
+#include <cerrno>
 #include <cstdio>
 #include <future>
 #include <memory>
 #include <thread>
 
+#include <fcntl.h>
+#include <linux/openat2.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <gtest/gtest.h>
@@ -249,6 +253,43 @@ TEST(ImageSize, ALinkSwappedInAfterTheCheckIsNeverFollowed)
         ::close(fd);
     // A fresh read through that link: checked again, opened by its target's path.
     EXPECT_EQ(ImageSize::read(png, mounts), QSize(16, 9));
+}
+
+// A folder above the checked file swapped for a link after the check is never followed either (O_NOFOLLOW alone covers
+// the last component only): the link leads to the checked file itself, which the inode comparison would accept. Needs
+// openat2 (Linux 5.6); a kernel or sandbox without it skips (the open then falls back to O_NOFOLLOW).
+TEST(ImageSize, AFolderSwappedForALinkAfterTheCheckIsNeverFollowed)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    struct open_how probe {};
+    probe.flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+    const long probeFd = ::syscall(SYS_openat2, AT_FDCWD, "/", &probe, sizeof probe);
+    if (probeFd < 0 && errno == ENOSYS)
+        GTEST_SKIP() << "no openat2 here";
+    if (probeFd >= 0)
+        ::close(static_cast<int>(probeFd));
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    QImage image(7, 5, QImage::Format_RGB32);
+    image.fill(Qt::cyan);
+    const QString album = dir->path() + QStringLiteral("/album");
+    ASSERT_TRUE(QDir().mkpath(album));
+    const QString png = album + QStringLiteral("/photo.png");
+    ASSERT_TRUE(write(png, encoded(image, "PNG")));
+    struct stat checked {};
+    QString resolved;
+    ASSERT_EQ(ImageSize::check(png, mounts, &checked, &resolved), ImageSize::Refusal::None);
+    // After the check: the folder moves away and a link to it takes its name (the same file at the end of the path).
+    const QString moved = dir->path() + QStringLiteral("/album-moved");
+    ASSERT_EQ(::rename(QFile::encodeName(album).constData(), QFile::encodeName(moved).constData()), 0);
+    ASSERT_TRUE(QFile::link(moved, album));
+    const int fd = ImageSize::openChecked(resolved, checked);
+    EXPECT_EQ(fd, -1) << "the folder link swapped in after the check was followed";
+    if (fd >= 0)
+        ::close(fd);
+    // A fresh read through that path: checked again, opened by the path it reaches now.
+    EXPECT_EQ(ImageSize::read(png, mounts), QSize(7, 5));
 }
 
 TEST(ImageSize, NetworkAndFuseMountsAreNeverLookedAt)

@@ -38,9 +38,10 @@ enum class Refusal {
 Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *st = nullptr, QString *resolved = nullptr);
 
 // Opens the file check() approved by the path check() reached (`resolved`), read only, without blocking (O_NONBLOCK,
-// O_NOCTTY) and without following a link (O_NOFOLLOW: a link swapped in at that path after the check is refused, wherever
-// it leads); the descriptor is returned only when it is still the file checked (same device and inode, a regular file),
-// -1 otherwise. Never on the GUI thread.
+// O_NOCTTY) and without following a link anywhere in that path (openat2 RESOLVE_NO_SYMLINKS: a link swapped in after the
+// check, for the file or a folder above it, is refused, wherever it leads; without openat2, ENOSYS, O_NOFOLLOW refuses one
+// at the end only); the descriptor is returned only when it is still the file checked (same device and inode, a regular
+// file), -1 otherwise. Never on the GUI thread.
 int openChecked(const QString &resolved, const struct stat &checked);
 
 // The size as shown (a picture turned by its EXIF orientation reports the turned size), invalid when unknown or refused.

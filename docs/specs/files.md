@@ -183,7 +183,7 @@ selection").
 | Grouped icon view on a stand-in listing: a view made before its size makes the cells it shows, only the sections near the view are made (600 groups), Show All and reveal | `tests/unit/tst_filesgrouped.qml` (3 cases) | L0 |
 | Sidebar: Eject target and menu; Recents takes no drop and does not spring | `tests/unit/tst_filessidebar.qml` (5 cases) | L0 |
 | Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
-| Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a header that never ends (a PBM comment running through 4 GiB) stopped by the budget, a link swapped in after the check never followed, network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a header that never ends (a PBM comment running through 4 GiB) stopped by the budget, a link swapped in after the check never followed (for the file or a folder above it), network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 9 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Key window: Get Info (opened with Ctrl+I) and Customize Folder take the keys; Ctrl+W (Escape in Get Info) closes them alone and the browser window stays with its tab, with and without the global menu; none of the browser's Shortcuts or keyed global menu items is live meanwhile, all are again after; with Get Info or Customize Folder open and the browser the key window, Ctrl+T, Ctrl+W (every press) and Escape act on the browser only. A drag keeps its view on a real tab until its handlers have returned | `tests/unit/tst_filesbrowser.qml` (9 cases: the real windows offscreen over a stand-in FilesApp) | L0 |
 | Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Per-folder views (F-3) with grouping and the new sort keys; hostile files and lock paths | `tests/unit/files/tst_folderviews.cpp` (gtest, 23 tests) | L0 |
@@ -563,7 +563,9 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   default, Recents, arrives with PR 2). Open in New Tab and Cmd-double-click on a folder open that folder in a new tab.
   New tabs go last.
 - **Closing**: Ctrl+W closes the tab (the window with its last tab), Ctrl+Shift+W the window with all its tabs (File >
-  Close Window, shown while there are tabs), Ctrl+Alt+W every window (File > Close All, shown with more than   F-2): it brings back the location, the history (Back/Forward) and the view. Ctrl+W closes the key window only: typed
+  Close Window, shown while there are tabs), Ctrl+Alt+W every window (File > Close All, shown with more than one window).
+  Closed tabs (also those of a closed window) go on a stack of 10 for File > Reopen Closed Tab (Ctrl+Alt+Shift+T, decision
+  F-2): it brings back the location, the history (Back/Forward) and the view. Ctrl+W closes the key window only: typed
   in Get Info or Customize Folder (the browser window's own windows, its transient children) it closes that window, and
   the browser stays. While one of them is the key window none of the browser's keys is live, neither its Shortcuts nor
   its global menu's keyed items (`BrowserWindow.childIsKey`); while the browser is the key window, Get Info and Customize
@@ -571,8 +573,6 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   window and its transient children active together, and the shortcut matcher of QtQuick.Templates (loaded with
   Grassfield.Ui's controls) matches all their keys on that ground, so the key window is read from
   `FilesApp.focusWindow` (`QGuiApplication::focusWindow`), never from `active`.
-hild as active,
-  and the shortcut matcher of QtQuick.Templates (loaded with Grassfield.Ui's controls) matches its keys on that ground.
 - **Moving tabs** (Main.qml): View > Move Tab to New Window (and the tab menu) gives the current tab a window of its own;
   View > Merge All Windows brings every other window's tabs into this one, window by window, and closes the emptied
   windows (both are in View because the Window menu is the shell's, decision F-10). A tab keeps its state when it moves
@@ -630,11 +630,12 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
   would never return. The row is asked only when the listing says a local regular file of an image type; a worker thread
   (one per listing, started when there is work) then walks the path from the root against the mount table before each
   `lstat` (local, removable and memory filesystems only: a network share, FUSE or a pseudo filesystem is never looked at,
-  links into them included), opens only a regular file by the path the walk reached (`O_NONBLOCK`, `O_NOFOLLOW`: a link
-  swapped in after the walk is refused, wherever it leads; the same inode checked on the descriptor), reads the
-  format from the content and at most 16 MiB. The answer arrives as the row's `dataChanged` and the pane reads it then;
-  answers are kept per path for the listed time and size (at most 256). A listing destroyed during a read waits 150 ms for
-  it, then abandons it.
+  links into them included), opens only a regular file by the path the walk reached (`O_NONBLOCK`; no link followed
+  anywhere in it, openat2 `RESOLVE_NO_SYMLINKS`, so a link swapped in after the walk for the file or a folder above it is
+  refused wherever it leads; `O_NOFOLLOW` on the last component where the kernel has no openat2; the same inode checked
+  on the descriptor), reads the format from the content and at most 16 MiB. The answer arrives as the row's
+  `dataChanged` and the pane reads it then; answers are kept per path for the listed time and size (at most 256). A
+  listing destroyed during a read waits 150 ms for it, then abandons it.
 - **Quick actions** (pictures Files can turn without a loss: JPEG, PNG, BMP; `imagerotate.h`): Rotate Left, and More…
   with Rotate Right; none for a selection of more than 100 items (each is looked at on disk as the selection changes).
   The name's type only offers the action; what is done is decided by the content (`ImageRotate::methodForContent`): a
@@ -656,7 +657,8 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
   broken files, a JPEG without EXIF keeps its tags and mode and leaves no temporary file, an in-place change keeps the
   inode, a PNG turned pixel by pixel, links, other kinds, animated PNGs and hard-linked files refused; misnamed pictures
   by their content; the size limit), `tests/unit/files/tst_imagesize.cpp` (Dimensions: special files, a huge file, a
-  header that never ends, a link swapped in after the check, remote and FUSE mounts, the worker).
+  header that never ends, a link swapped in after the check for the file or a folder above it, remote and FUSE mounts,
+  the worker).
 
 ## Views and selection
 PR 2 of the Finder parity brief (matrix rows FP-18, FP-19, FP-23, FP-39 to FP-43, FP-45, FP-46, FP-66). References:
