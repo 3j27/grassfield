@@ -569,6 +569,8 @@ QtObject {
     readonly property int controlToggleKnobWidth: 21
     // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobHeight: 12
+    // estimate: a disabled switch keeps its track (visible when off, on white too) and fades its knob, and its accent when on (macOS 27) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property real controlToggleDisabledKnobOpacity: 0.5
     // pill knob 20 wide (macOS 27 Settings > Sound, Alert volume; F1 gap 18 read about 21x16 +-2) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
     readonly property int controlSliderKnobWidth: 20
     // F1 gap 18: Quick Settings slider track stays 4 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -3064,6 +3066,8 @@ QtObject {
     readonly property int storeEmptyTop: 80
     // estimate: No Results [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeEmptyTextSize: Math.round(20 * Appearance.textScale)
+    // estimate: between an empty page's heading, its reason and its button [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeEmptyGap: 12
     // estimate: under a page's last block [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storePageBottom: 40
     // estimate: the arrows' scroll step [ref: docs/audits/store-2026-10-27/parity.md]
