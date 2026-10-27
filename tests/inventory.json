@@ -277,6 +277,7 @@
  {"path": "tests/shell/session_input.sh", "layer": "logic"},
  {"path": "tests/shell/omarchy_guard.sh", "layer": "logic"},
  {"path": "tests/shell/hyprland_screens.sh", "layer": "logic"},
+ {"path": "tests/security/kwallet_secret_service.sh", "layer": "headless"},
  {"path": "tests/shell/bindings_forward.sh", "layer": "logic"},
  {"path": "tests/shell/session_services.sh", "layer": "logic"},
  {"path": "tests/shell/crash_watch.sh", "layer": "logic"},
