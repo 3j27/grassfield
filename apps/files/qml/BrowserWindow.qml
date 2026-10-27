@@ -200,11 +200,13 @@ Window {
     // The windows this window opened for itself and that are still open (Get Info, Customize Folder): its transient
     // children, placed and stacked with it and closed with it.
     property var ownWindows: []
-    // One of them is the key window. Qt still counts this window as active then (QWindow::isActive includes transient
-    // children), and the shortcut matcher of QtQuick.Templates, loaded with Grassfield.Ui's controls (GF-085), matches
-    // this window's Shortcuts and its global menu's keys on that ground: Ctrl+W typed in Get Info closed this window, and
-    // Get Info with it. A key belongs to the key window alone (macOS), so this window's keys wait meanwhile.
-    readonly property bool childIsKey: win.ownWindows.some(w => w !== null && w.active)
+    // One of them is the key window (FilesApp.focusWindow; never `active`: Qt reports a window and its transient children
+    // active together, whichever has the keyboard). Qt still counts this window as active then, and the shortcut matcher
+    // of QtQuick.Templates, loaded with Grassfield.Ui's controls (GF-085), matches this window's Shortcuts and its global
+    // menu's keys on that ground: Ctrl+W typed in Get Info closed this window, and Get Info with it. A key belongs to the
+    // key window alone (macOS), so this window's keys wait meanwhile (and those windows' own keys wait while this one is
+    // the key window: InfoWindow, CustomizeFolderWindow).
+    readonly property bool childIsKey: win.app.focusWindow !== null && win.app.focusWindow !== undefined && win.ownWindows.indexOf(win.app.focusWindow) >= 0
 
     function openOwnWindow(component: Component, props: var): var {
         const w = component.createObject(win, Object.assign({transientParent: win}, props));

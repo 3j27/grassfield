@@ -8,6 +8,7 @@ import "../../apps/files/qml"
 // - The window the browser opens for itself (Get Info, Customize Folder) is the key window once it opens: Ctrl+W closes it
 //   alone and the browser window stays with its tab (macOS: Cmd+W closes the key window only), with and without the
 //   global menu, whose items carry the same keys. Meanwhile none of the browser's keys is live (BrowserWindow.childIsKey).
+//   The other way round, the browser the key window with such a window open: its keys act on the browser only.
 // - A tab keeps the view a drag started from until the drag has ended (BrowserTab.dragView): the view chosen meanwhile
 //   applies once the drag's own handlers have returned.
 TestCase {
@@ -147,6 +148,9 @@ TestCase {
         property var hiddenTags: []
         property string homePath: "/sandbox"
         property var places: places
+        // FilesApp.focusWindow is QGuiApplication::focusWindow(), which QML cannot read: the test sets it wherever it moves
+        // the keyboard (test.giveKeys), as the compositor and Qt do in the app.
+        property var focusWindow: null
         // The views each folder was given (FilesApp.setFolderView), by url.
         property var folderViews: ({})
         signal prefsChanged
@@ -235,10 +239,18 @@ TestCase {
         verify(files !== null, "Main.qml");
         tryCompare(files.windows, "length", 1);
         const browser = files.windows[0];
-        browser.requestActivate();
-        tryVerify(() => browser.active, 2000, "the browser window is active");
+        test.giveKeys(browser);
         compare(browser.tabs.length, 1);
         return files;
+    }
+
+    // Gives `w` the keyboard (offscreen Qt moves the focus window on requestActivate) and tells the stand-in FilesApp.
+    // `active` alone proves nothing: Qt reports a window and its transient children active together.
+    function giveKeys(w: var): void {
+        w.requestActivate();
+        tryVerify(() => w.active, 2000, "the window is active");
+        wait(50);
+        fakeApp.focusWindow = w;
     }
 
     // A key as a user types it, into the window that has the keyboard. Not keyClick: QTest sends a click's release to the
@@ -252,8 +264,9 @@ TestCase {
     function newOwnWindow(browser: var, before: int): var {
         tryVerify(() => browser.ownWindows.length === before + 1, 2000, "the browser opened a window of its own");
         const w = browser.ownWindows[before];
-        tryVerify(() => w.active, 2000, "the new window takes the keyboard");
         verify(w.transientParent === browser, "a transient child of the browser");
+        // A new window takes the keyboard (the compositor gives it the focus).
+        test.giveKeys(w);
         return w;
     }
 
@@ -289,7 +302,8 @@ TestCase {
         return list;
     }
 
-    // `on`: the browser's Ctrl+W (its Shortcut, File > Close) is live; otherwise none of its keys is.
+    // `on`: the browser's keys that depend on nothing else (Ctrl+N, Ctrl+T, Ctrl+W, Ctrl+F: Shortcuts and menu items) are
+    // live; otherwise none of its keys is.
     function verifyBrowserKeys(browser: var, globalMenu: bool, on: bool, what: string): void {
         const shortcuts = test.browserShortcuts(browser);
         verify(shortcuts.length >= 40, what + ": the browser's Shortcuts are found (" + shortcuts.length + ")");
@@ -298,11 +312,15 @@ TestCase {
             verify(items.length >= 30, what + ": the global menu's keyed items are found (" + items.length + ")");
         else
             compare(items.length, 0, what + ": no global menu");
-        const closeKey = shortcuts.filter(s => s.sequence === "Ctrl+W");
-        compare(closeKey.length, 1, what + ": the browser's Ctrl+W");
         if (on) {
-            verify(closeKey[0].enabled, what + ": the browser's Ctrl+W is live");
-            verify(items.filter(i => String(i.shortcut) === "Ctrl+W").every(i => i.enabled), what + ": File > Close is live");
+            for (const key of ["Ctrl+N", "Ctrl+T", "Ctrl+W", "Ctrl+F"]) {
+                const own = shortcuts.filter(s => s.sequence === key);
+                compare(own.length, 1, what + ": the browser's " + key);
+                verify(own[0].enabled, what + ": the browser's " + key + " is live");
+                const item = items.filter(i => String(i.shortcut) === key);
+                compare(item.length, globalMenu ? 1 : 0, what + ": the menu item of " + key);
+                verify(item.every(i => i.enabled), what + ": the menu item of " + key + " is live");
+            }
             return;
         }
         const live = shortcuts.filter(s => s.enabled).map(s => s.sequence !== "" ? s.sequence : String(s.sequences));
@@ -348,10 +366,74 @@ TestCase {
         // map that a later press of that key in this process reaches.)
         if (data.globalMenu)
             return;
-        browser.requestActivate();
-        tryVerify(() => browser.active, 2000);
+        test.giveKeys(browser);
         test.type(Qt.Key_W, Qt.ControlModifier);
         tryCompare(files.windows, "length", 0, 2000, "the browser's Ctrl+W closes the browser");
+    }
+
+    function test_browserKeysWhileGetInfoIsOpen_data() {
+        return [
+            {tag: "without the global menu", globalMenu: false},
+            {tag: "with the global menu", globalMenu: true}
+        ];
+    }
+
+    // Get Info open, the browser the key window again: the browser's keys are its own (Qt reports Get Info active too, as a
+    // transient child of the key window). Escape leaves Get Info open, Ctrl+T opens tabs, every Ctrl+W closes a browser
+    // tab (none goes to Get Info), the menu items are live; back in Get Info, Ctrl+W closes it alone.
+    function test_browserKeysWhileGetInfoIsOpen(data) {
+        const files = test.openFiles(data.globalMenu);
+        const browser = files.windows[0];
+        test.type(Qt.Key_I, Qt.ControlModifier);
+        const info = test.newOwnWindow(browser, 0);
+        const closed = signalSpy.createObject(test, {target: info, signalName: "closing"});
+        test.giveKeys(browser);
+        verify(info.active, "Qt still reports Get Info active (its transient parent has the keyboard)");
+        verify(!browser.childIsKey, "the browser is the key window");
+        test.verifyBrowserKeys(browser, data.globalMenu, true, "the browser is the key window, Get Info open");
+        test.type(Qt.Key_Escape, Qt.NoModifier);
+        compare(closed.count, 0, "Escape typed in the browser leaves Get Info open");
+        test.type(Qt.Key_T, Qt.ControlModifier);
+        test.type(Qt.Key_T, Qt.ControlModifier);
+        tryCompare(browser.tabs, "length", 3, 2000, "Ctrl+T opens a tab each time");
+        test.type(Qt.Key_W, Qt.ControlModifier);
+        test.type(Qt.Key_W, Qt.ControlModifier);
+        tryCompare(browser.tabs, "length", 1, 2000, "each Ctrl+W closes a tab of the browser");
+        compare(closed.count, 0, "Get Info is still open");
+        compare(browser.ownWindows.length, 1);
+        compare(files.windows.length, 1);
+        // Back in Get Info: Ctrl+W closes it alone.
+        test.giveKeys(info);
+        verify(browser.childIsKey);
+        test.type(Qt.Key_W, Qt.ControlModifier);
+        compare(closed.count, 1, "Ctrl+W typed in Get Info closes it");
+        compare(browser.tabs.length, 1, "the browser keeps its tab");
+        compare(files.windows.length, 1);
+    }
+
+    // The same for Customize Folder: Ctrl+W typed in the browser closes a browser tab, typed in Customize Folder that window.
+    function test_browserKeysWhileCustomizeIsOpen() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        browser.customizeFolders(["file:///sandbox/Folder"], "Folder", "folder");
+        const customize = test.newOwnWindow(browser, 0);
+        const closed = signalSpy.createObject(test, {target: customize, signalName: "closing"});
+        test.giveKeys(browser);
+        test.verifyBrowserKeys(browser, false, true, "the browser is the key window, Customize Folder open");
+        test.type(Qt.Key_T, Qt.ControlModifier);
+        test.type(Qt.Key_T, Qt.ControlModifier);
+        tryCompare(browser.tabs, "length", 3, 2000, "Ctrl+T opens a tab each time");
+        // Two presses: Qt hands an ambiguous key to each matching Shortcut in turn, so one live Shortcut of Customize Folder
+        // would take every second press.
+        test.type(Qt.Key_W, Qt.ControlModifier);
+        test.type(Qt.Key_W, Qt.ControlModifier);
+        tryCompare(browser.tabs, "length", 1, 2000, "each Ctrl+W closes a tab of the browser");
+        compare(closed.count, 0, "Customize Folder is still open");
+        test.giveKeys(customize);
+        test.type(Qt.Key_W, Qt.ControlModifier);
+        compare(closed.count, 1, "Ctrl+W typed in Customize Folder closes it");
+        compare(browser.tabs.length, 1);
+        compare(files.windows.length, 1);
     }
 
     // Customize Folder (a window of the browser too): Ctrl+W closes it alone.

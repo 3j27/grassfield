@@ -88,6 +88,9 @@ class FilesApp : public QObject
     Q_PROPERTY(QUrl newWindowUrl READ newWindowUrl CONSTANT)
     // This process (a dragged tab names it: a tab dropped into another Files process is refused).
     Q_PROPERTY(qint64 processId READ processId CONSTANT)
+    // The key window (QGuiApplication::focusWindow), null while no window of Files has the keyboard. A window's own
+    // `active` cannot tell: Qt reports a window and its transient children active together.
+    Q_PROPERTY(QObject *focusWindow READ focusWindow NOTIFY focusWindowChanged)
     // Translated names of the seven colour tags, in palette order (tokens files.tagRed ... files.tagGray).
     Q_PROPERTY(QStringList colorTagNames READ colorTagNames CONSTANT)
     // Changes whenever Files writes tags (bindings that show tag states re-read them).
@@ -153,6 +156,7 @@ public:
     int windowHeight() const;
     QUrl newWindowUrl() const;
     qint64 processId() const { return QCoreApplication::applicationPid(); }
+    QObject *focusWindow() const;
     QStringList colorTagNames() const;
     int tagRevision() const { return m_tagRevision; }
     QStringList hiddenTags() const { return m_hiddenTags; }
@@ -284,6 +288,7 @@ signals:
     void clipboardChanged();
     void prefsChanged();
     void windowSizeChanged();
+    void focusWindowChanged();
     void activityChanged();
     void operationFailed(const QString &message);
     // Files wrote the tags of `urls` (every listing reads them again).

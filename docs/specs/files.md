@@ -184,7 +184,7 @@ selection").
 | Sidebar: Eject target and menu; Recents takes no drop and does not spring | `tests/unit/tst_filessidebar.qml` (5 cases) | L0 |
 | Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
 | Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a header that never ends (a PBM comment running through 4 GiB) stopped by the budget, a link swapped in after the check never followed, network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
-| Key window: Get Info (opened with Ctrl+I) and Customize Folder take the keys; Ctrl+W (Escape in Get Info) closes them alone and the browser window stays with its tab, with and without the global menu; none of the browser's Shortcuts or keyed global menu items is live meanwhile, all are again after. A drag keeps its view on a real tab until its handlers have returned | `tests/unit/tst_filesbrowser.qml` (6 cases: the real windows offscreen over a stand-in FilesApp) | L0 |
+| Key window: Get Info (opened with Ctrl+I) and Customize Folder take the keys; Ctrl+W (Escape in Get Info) closes them alone and the browser window stays with its tab, with and without the global menu; none of the browser's Shortcuts or keyed global menu items is live meanwhile, all are again after; with Get Info or Customize Folder open and the browser the key window, Ctrl+T, Ctrl+W (every press) and Escape act on the browser only. A drag keeps its view on a real tab until its handlers have returned | `tests/unit/tst_filesbrowser.qml` (9 cases: the real windows offscreen over a stand-in FilesApp) | L0 |
 | Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Per-folder views (F-3) with grouping and the new sort keys; hostile files and lock paths | `tests/unit/files/tst_folderviews.cpp` (gtest, 23 tests) | L0 |
 | Global menu: bar items (Path Bar, Status Bar, Sidebar, Preview), Group By follows the tab | `tests/unit/tst_filesglobalmenu.qml` (6 cases) | L0 |
@@ -563,12 +563,15 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   default, Recents, arrives with PR 2). Open in New Tab and Cmd-double-click on a folder open that folder in a new tab.
   New tabs go last.
 - **Closing**: Ctrl+W closes the tab (the window with its last tab), Ctrl+Shift+W the window with all its tabs (File >
-  Close Window, shown while there are tabs), Ctrl+Alt+W every window (File > Close All, shown with more than one window).
-  Closed tabs (also those of a closed window) go on a stack of 10 for File > Reopen Closed Tab (Ctrl+Alt+Shift+T, decision
-  F-2): it brings back the location, the history (Back/Forward) and the view. Ctrl+W closes the key window only: typed
+  Close Window, shown while there are tabs), Ctrl+Alt+W every window (File > Close All, shown with more than   F-2): it brings back the location, the history (Back/Forward) and the view. Ctrl+W closes the key window only: typed
   in Get Info or Customize Folder (the browser window's own windows, its transient children) it closes that window, and
   the browser stays. While one of them is the key window none of the browser's keys is live, neither its Shortcuts nor
-  its global menu's keyed items (`BrowserWindow.childIsKey`): Qt counts a window with a focused transient child as active,
+  its global menu's keyed items (`BrowserWindow.childIsKey`); while the browser is the key window, Get Info and Customize
+  Folder take none of its keys (Escape and Ctrl+W there are live only while that window is the key window). Qt reports a
+  window and its transient children active together, and the shortcut matcher of QtQuick.Templates (loaded with
+  Grassfield.Ui's controls) matches all their keys on that ground, so the key window is read from
+  `FilesApp.focusWindow` (`QGuiApplication::focusWindow`), never from `active`.
+hild as active,
   and the shortcut matcher of QtQuick.Templates (loaded with Grassfield.Ui's controls) matches its keys on that ground.
 - **Moving tabs** (Main.qml): View > Move Tab to New Window (and the tab menu) gives the current tab a window of its own;
   View > Merge All Windows brings every other window's tabs into this one, window by window, and closes the emptied

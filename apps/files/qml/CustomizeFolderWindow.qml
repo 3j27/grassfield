@@ -46,9 +46,11 @@ Window {
 
     onClosing: Qt.callLater(root.destroy)
 
-    // Cmd+W closes the key window (macOS): like Cancel (Escape, below).
+    // Cmd+W closes the key window (macOS): like Cancel (Escape, below). Only while this window is the key window: Qt
+    // also matches it while the browser, its transient parent, has the keyboard.
     Shortcut {
         sequences: [StandardKey.Close]
+        enabled: root.app.focusWindow === root
         onActivated: root.close()
     }
 
