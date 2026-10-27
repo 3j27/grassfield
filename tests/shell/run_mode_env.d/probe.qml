@@ -30,6 +30,7 @@ ShellRoot {
             configDir: Mode.configDir,
             stateHome: Mode.stateHome,
             appsTrace: Mode.appsTrace,
+            appsGtkPortal: Mode.appsGtkPortal,
             stateDir: Mode.stateDir,
             shellDirIsTheShellDir: Mode.shellDir === Quickshell.shellDir && Mode.shellDir !== "",
             devValues: devValues

@@ -17,9 +17,9 @@ function isolatedEnvironment(appsHome) {
 
 // What the apps the shell starts get back of the session's portal routing (ADR-0035 D-8): the shell's unit clears
 // GTK_USE_PORTAL for the shell itself (its gtk3 platform theme would wait on the portal at start, gate P5), and env-grassfield
-// records in GRASSFIELD_APPS_GTK_USE_PORTAL that the session sets it. `stash` is that variable's value.
-function portalEnvironment(stash) {
-    return stash === "1" ? {"GTK_USE_PORTAL": "1"} : {};
+// records that the session sets it (Mode.appsGtkPortal). `on` is that answer.
+function portalEnvironment(on) {
+    return on === true ? {"GTK_USE_PORTAL": "1"} : {};
 }
 
 // `extra` entries added to `base` (a new object, neither input changes).

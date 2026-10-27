@@ -138,7 +138,7 @@ Singleton {
     // application the shell starts gets a scope of its own (AppLaunch.scopedArgv), never the shell's unit.
     readonly property bool realSession: Mode.session && !devSession
     // GTK_USE_PORTAL=1 for the apps the shell starts when the session routes GTK to the portal (launchEnvironment).
-    readonly property var portalEnvironment: AppLaunch.portalEnvironment(Quickshell.env("GRASSFIELD_APPS_GTK_USE_PORTAL"))
+    readonly property var portalEnvironment: AppLaunch.portalEnvironment(Mode.appsGtkPortal)
     property bool uwsmApp: false
     readonly property bool scopedLaunch: realSession && uwsmApp
 

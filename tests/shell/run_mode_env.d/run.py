@@ -79,6 +79,8 @@ def jobs(names):
         out.append((f"homes: {v['name']}", v["env"], {"stateHome": v["stateHome"]}))
     for v in VECTORS["traces"]:
         out.append((f"traces: {v['name']}", v["env"], {"appsTrace": v["appsTrace"]}))
+    for v in VECTORS["portal"]:
+        out.append((f"portal: {v['name']}", v["env"], {"appsGtkPortal": v["appsGtkPortal"]}))
     return out
 
 
