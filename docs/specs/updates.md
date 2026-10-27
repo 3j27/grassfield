@@ -241,8 +241,9 @@ Pane (step 2)
 On Omarchy 4.0.4 (its `install/omarchy-base.packages`): `pacman-contrib` (`checkupdates`; P0: 1.13.1-1), `fakeroot`, `jq`,
 `gum`, `uwsm`, `xdg-terminal-exec`; pacman 7.1 (P0); gnupg 2.4 (`gpgv`); curl; python; polkit (`pkexec`). `omarchy` 4.0.6
 itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `fakeroot` are in
-`grassfield-desktop`'s `depends` since step 1 (declared, not assumed); `grassfield-keyring` joins once grassfield-packages
-builds it (owner decision O21). Omarchy's commands used:
+`grassfield-desktop`'s `depends` since step 1 (declared, not assumed); `grassfield-keyring` joined them once
+grassfield-packages built it (owner decision O21; until the repository is published, a source build installs it first,
+owner decision O22). Omarchy's commands used:
 `omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself).
 
 ## Degraded behavior

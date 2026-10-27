@@ -101,8 +101,8 @@ check grep -q "^repeat true true$" <<<"$out"
 desc="Files and Preview advertise the keys that Super now delivers (Ctrl+1..4, Ctrl+Up; Ctrl+9)"
 check bash -c 'grep -q "Ctrl+1" "$1/apps/files/qml/BrowserWindow.qml" && grep -q "Ctrl+Up" "$1/apps/files/qml/BrowserWindow.qml" && grep -q "Ctrl+9" "$1/apps/preview/qml/Viewer.qml"' _ "$root"
 
-desc="Files and Preview menus show the chord the user presses (Super+1..4, Super+Up, Super+Down, Super+9), not the Ctrl one they accept"
-check bash -c 'f="$1/apps/files/qml/GlobalMenu.qml"; p="$1/apps/preview/qml/GlobalMenu.qml"; for k in 1 2 3 4 Up Down; do grep -q "shortcut: \"Super+$k\"" "$f" || exit 1; done; grep -q "shortcut: \"Super+9\"" "$p" && ! grep -q "shortcut: \"Ctrl+\(1\|2\|3\|4\|Up\|Down\|9\)\"" "$f" "$p"' _ "$root"
+desc="Files and Preview menus show the chord the user presses (Super+1..4, Super+Up, Super+9; Open is Cmd+O, decision F-4), not the Ctrl one they accept"
+check bash -c 'f="$1/apps/files/qml/GlobalMenu.qml"; p="$1/apps/preview/qml/GlobalMenu.qml"; for k in 1 2 3 4 Up; do grep -q "shortcut: \"Super+$k\"" "$f" || exit 1; done; grep -q "shortcut: \"Super+9\"" "$p" && grep -q "shortcut: \"Ctrl+O\"" "$f" && ! grep -q "shortcut: \"Ctrl+\(1\|2\|3\|4\|Up\|Down\|9\)\"" "$f" "$p"' _ "$root"
 
 desc="Settings > Keyboard lists forwarding.lua (page reads it, parser accepts word_key lines)"
 check bash -c 'grep -q "forwarding.lua" "$1/apps/settings/qml/KeyboardPage.qml" && grep -q "word_key" "$1/apps/settings/qml/Bindings.js"' _ "$root"
