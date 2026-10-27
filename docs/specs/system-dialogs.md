@@ -407,15 +407,15 @@ apply to every app.
   u: 1 when Reduce Motion) and `org.gnome.desktop.interface` (`gtk-theme`, `color-scheme` `prefer-dark`/`prefer-light`,
   `enable-animations`), from the Grassfield settings file, watched (its nearest existing parent while its directory does not
   exist yet) and read as ADR-0020 §2 requires: never without a bound (a FIFO, a device or a directory is never read, at most
-  1 MiB, read whole; no wait on a FIFO or a device, but a home that stops answering blocks it: ADR-0020's 5 s cut is not
-  implemented here, the apps then keep x-d-p-gtk's values); a malformed or unreadable file keeps the last good settings
-  (defaults only at start); a missing file means the schema's defaults. `auto` follows `AutoAppearance`'s schedule, checked
-  again every minute as the shell does (ADR-0035 decision 2b-8). A key it does not own answers
-  `org.freedesktop.portal.Error.NotFound` (the frontend then asks x-d-p-gtk). Only the keys whose value changed are
-  signalled; once its bus name is owned it signals every value once (decision 2b-9); it answers x-d-p-gtk's `SettingChanged`
-  (by its bus name) for a key it owns and a value other than its own with its own value (decision 2b-13). A dev run refuses
-  any bus but a private test bus. Budget: ≤ 4 MB private and ≤ 20 MB resident memory, no CPU while nothing changes but one
-  file read a minute (decision 2b-11).
+  1 MiB, read whole), on a worker thread, one read at a time: a read that hangs is not waited for (ADR-0020's 5 s cut, logged
+  once), the calls are answered at once with the last settings all along, and the start waits 3 s at most for the first read;
+  a malformed or unreadable file keeps the last good settings (defaults only at start); a missing file means the schema's
+  defaults. `auto` follows `AutoAppearance`'s schedule: the clock is checked again every minute as the shell does, the file
+  never (ADR-0035 decision 2b-8). A key it does not own answers `org.freedesktop.portal.Error.NotFound` (the frontend then
+  asks x-d-p-gtk). Only the keys whose value changed are signalled; once its bus name is owned it signals every value once
+  (decision 2b-9); it answers x-d-p-gtk's `SettingChanged` (by its bus name) for a key it owns and a value other than its own
+  with its own value (decision 2b-13). A dev run refuses any bus but a private test bus. Budget: ≤ 4 MB private and ≤ 20 MB
+  resident memory, no CPU while nothing changes but a clock check a minute under `auto` (decision 2b-11).
 - AP1b its unit has `Restart=on-failure` (`RestartSec=1`; counter-review of PR #13): a crashed backend is back within about a
   second, so live changes resume without waiting for a read. The frontend's proxy is bound to the bus name, not to the process,
   and follows its new owner (xdg-desktop-portal 1.22.1 `src/settings.c:333-339`, `G_DBUS_PROXY_FLAGS_NONE`; GLib 2.90.1
@@ -425,17 +425,20 @@ apply to every app.
   `org.freedesktop.impl.portal.desktop.grassfield_settings`); every other interface keeps the stock file's routing.
 - AP2b the backend's unit clears `GTK_USE_PORTAL` and `QT_QPA_PLATFORMTHEME`, and `grassfield-shell.service` clears
   `GTK_USE_PORTAL`, so neither waits on the portal at start (ADR-0035 D-4); the shell gives `GTK_USE_PORTAL=1` back to every
-  app it starts when `env-grassfield` recorded `GRASSFIELD_APPS_GTK_USE_PORTAL=1` (decision 2b-12). `autostart.lua` starts
-  the backend without waiting for it; its unit gives a start 5 s.
+  app it starts when `env-grassfield` recorded `GRASSFIELD_APPS_GTK_USE_PORTAL=1` (`Mode.appsGtkPortal`, decision 2b-12).
+  `autostart.lua` starts the backend without waiting for it, and its unit gives a start 5 s; the frontend's unit wants the
+  backend and starts after it (packaged drop-in, decision 2b-14), since the frontend makes its backend proxies once, when it
+  starts.
 - AP3 `env-grassfield`, when the routing file is readable: `/usr/share/grassfield/xdg` first in `XDG_DATA_DIRS` (once, the
   list or its default kept), `GTK_USE_PORTAL=1`, and `portals` added once to `GDK_DEBUG` (plain GTK 4 apps outside a sandbox
   read the portal only with it; decision 2b-1); never `GTK_THEME`.
 - AP4 (owner decision Q7, decision 2b-2) `/usr/share/themes/Grassfield-<accent>[-hc][-dark]/` with `gtk-3.0/gtk.css` and
   `gtk-4.0/gtk.css` (36 themes: nine accents, two appearances, Increase Contrast), generated at build time from
   `ui/tokens/tokens.json`, each `@import`ing GTK's built-in stylesheet (GTK 3: Adwaita, or HighContrast with `-hc`; GTK 4:
-  Default, or Default-hc) and setting only Grassfield's colours where that stylesheet draws its accent, with the shell's colour
-  roles (decision 2b-5); no CSS colour function; the radii stay GTK's (decision 2b-7). MIT, no copy of Adwaita. `gtk-theme`
-  names the matching one.
+  Default, or Default-hc) and setting only Grassfield's colours where that stylesheet draws its accent, with the shell's
+  colour roles (decision 2b-5): the GTK 4 focus ring opaque (`control.focusOutlineOpacity`, decision 2b-15), hover, pressed
+  and border shades as the shell's overlays, the selected tab's indicator at GTK's own width (`gtk.tabIndicatorWidth`); no
+  CSS colour function; the radii stay GTK's (decision 2b-7). MIT, no copy of Adwaita. `gtk-theme` names the matching one.
 - AP5 a change of appearance, accent, contrast or motion in Settings or Quick Settings reaches running GTK 3 (with the
   variable), GTK 4 (with `GDK_DEBUG=portals`), libadwaita, Qt (`gtk3` theme), Chromium, Electron and Firefox within 1 s.
 
@@ -458,7 +461,8 @@ apply to every app.
   show their own colours, against GTK's four stylesheets as controls (`tests/integration/gtk_themes.sh`).
 - A-AP4 (L0) crash: the backend killed, the next read through the real frontend activates it again and returns Grassfield's
   values, and the new process signals the next change; with a frontend that never answers, the backend still starts (no GUI,
-  no wait) (scenarios 3, 5).
+  no wait) (scenarios 3, 5); a backend whose activation fails when the frontend starts is left out by that frontend for good
+  (scenario 4b), so the frontend's unit starts after the backend (static check of the drop-in).
 - A-AP5 (L0) crash without a read: the backend killed, the settings file changed while it is down, then the backend started
   with no read (as systemd's `Restart=on-failure` starts it): the change reaches the client (scenario 3); after a restart
   the apps keep their state (scenario 7). systemd's restart itself is not run in the container (no user manager): the unit's
