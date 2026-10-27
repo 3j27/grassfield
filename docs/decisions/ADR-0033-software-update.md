@@ -387,7 +387,9 @@ Rejected:
       - `[grassfield]` packages: the names that `pacman --dbpath <own db> -Sql grassfield` lists;
       - Omarchy: the `omarchy` or `omarchy-dev` line;
       - the rest: a count, and (amendment ADR-0037) a list of the same updates for Grassfield Store: name, installed
-        version, available version, at most 2000 entries, sorted by name.
+        version, available version, at most 2000 entries, sorted by name. The list is added by Grassfield Store's step 4
+        (`"otherUpdates"`; step 1 of this ADR outputs the count only). At the 256 KiB cap of the checker's output the list
+        goes first (the count stays exact, `"otherUpdatesTruncated": true`), then the release notes (ADR-0037 d, SD3).
 4. **What counts as an update (O3)** for the badge, the menu and the notification: a Grassfield release (a new
    `grassfield-desktop` version, pkgrel included) and an Omarchy release.
 5. **When.**
@@ -481,9 +483,11 @@ Rejected:
    **Amended by ADR-0037 (2026-10-27): one serialized publisher, built from the current snapshot, a conditional pointer
    write.** Releases and Grassfield Store's catalog updates share each channel's pointer, so a job built from an older
    snapshot and published later would move the pointer back (R4 above, then a2: every `omarchy update` fails). Per channel:
-   one publishing job, serialized (one run at a time, queued, never cancelled half way); it reads the pointer and builds the
-   new snapshot from the current snapshot's manifest (a release replaces the packages, databases and notes and keeps the
-   catalog; a catalog update keeps them and replaces the catalog); it refuses a `grassfield.db` older than the current one
+   one publishing job, serialized (one run at a time, never cancelled half way); since GitHub cancels a pending run when a
+   newer one queues and each tag is built once, a run takes nothing from its trigger and publishes the latest state: the
+   newest release built and signed for the channel and the catalog of `main`'s head (a cancelled pending run loses nothing);
+   it reads the pointer and builds the new snapshot from the current snapshot's manifest (the newest release's packages,
+   databases and notes when newer than the snapshot's, the catalog when it differs, the rest kept); it refuses a `grassfield.db` older than the current one
    for any package, except a deliberate rollback below; it writes the pointer only if it still names the snapshot it read
    (a compare-and-swap on the storage's version tag), else it starts again. A conditional write on the chosen storage is NOT
    VERIFIED (the host is not chosen, O8); without one, the serialization alone holds, with a fresh read of the pointer just
@@ -547,9 +551,10 @@ were recorded in `fd49abc` and confirmed again after the first review.
 
 ## Amendments
 - **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the checker's result also lists the other updates
-  (name, installed, available; at most 2000) so the Store reuses this one `checkupdates`. g: the Store catalog's files join
-  the contract, and publication is the serialized publisher of h.2. h.2: one serialized publisher per channel, building from
-  the current snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
+  (name, installed, available; at most 2000) so the Store reuses this one `checkupdates`; Store step 4 adds the list, and it
+  goes first at the 256 KiB cap. g: the Store catalog's files join the contract, and publication is the serialized
+  publisher of h.2. h.2: one serialized publisher per channel that publishes the latest state, building from the current
+  snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
   to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit
   action, `pacman -S --needed` / `pacman -Rns` of validated repository names only, ADR-0037 b.1); Software Update itself
   still installs nothing.

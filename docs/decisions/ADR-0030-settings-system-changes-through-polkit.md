@@ -133,10 +133,15 @@ Grassfield Store is a second exception to "No Grassfield code runs as root: no h
 by the owner's decision ST4 (2026-10-27): installing and removing the repository packages the user picks in the Store goes
 through a Grassfield root helper (ADR-0037 b.1):
 - `/usr/lib/grassfield/grassfield-store-helper`, run by `pkexec` as a waited-for child of the Store;
-- its own polkit action `org.grassfield.store.manage-packages` (`auth_admin_keep` for the active session, `no` otherwise).
+- its own polkit action `org.grassfield.store.manage-packages` (`auth_admin` for the active session, never kept: the password
+  at every operation; `no` otherwise), whose message names the packages through polkit's `$(command_line)` (ADR-0037 b.1,
+  S18).
 The Store follows this ADR's pattern: a worker, the arguments checked in QML and in C++, "Waiting for permission…", one
 action at a time, up to 120 s for the dialog, a refusal or a cancel shown on one line, nothing in a dev session. The helper:
-- takes only `install <op-id> <packages>` and `remove <op-id> <packages>`, 1 to 64 validated names;
+- takes only `install <op-id> <packages>` and `remove <op-id> <packages>`, 1 to 64 validated names; `remove` only for
+  explicitly installed repository packages that own an application entry, never a name of its fixed deny list (kernels, firmware,
+  `base`, `sudo`, `systemd`, the boot tools, pacman), of Omarchy's two package lists, `grassfield-*` or `HoldPkg`, and only
+  when the whole `pacman -Rs --print` plan names none of them (ADR-0037 b.1, S16);
 - reads no environment variable but `PKEXEC_UID`;
 - runs only `pacman -S --needed --noconfirm` or `pacman -Rns --noconfirm` on those names (never `-y`, `--overwrite`, `-dd`
   or a file), after checking `db.lck` and `pacman -Qu`;
