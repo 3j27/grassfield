@@ -97,8 +97,10 @@ public:
     // Every command (query, act, run) runs with LC_ALL=C and LANG=C (LANGUAGE unset): the parsers expect English output.
     // Read-only query without blocking the window: runs argv (no shell), emits finished(tag, ok, stdout). In a dev
     // session only the queries of systemguard.h::isReadOnlyQuery run; anything else is refused (logged, finished(false)).
-    // The same command still running under the same tag is not started again: its answer comes under that tag.
-    Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000);
+    // Every call gets its own finished (a page may count its requests: WallpaperPage's thumbnails). With `shared`, the same
+    // command still running under the same tag is not started again and its one answer comes under that tag (Storage's counts,
+    // which a page shown again asks for while they run).
+    Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000, bool shared = false);
     // State-changing action (Wi-Fi, Bluetooth, volume). Only nmcli, bluetoothctl and wpctl run. In a dev session
     // nothing runs: one "dev guard: <what> suppressed" line is logged, suppressed(what) is emitted, false returned.
     // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started. An action that may wait

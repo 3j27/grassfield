@@ -60,8 +60,9 @@ private:
 // blocked calls filled kMaxInFlight, and every read of the system bus then answered "timed out"):
 //  - actions that may wait for a password (polkit, omarchy-language): one per tag until it finished; the next one of that tag
 //    is refused, and the pages show their waiting state from map() (tag -> what);
-//  - queries: a command already running under a tag is not started again; its answer reaches whoever listens to that tag
-//    (Storage shown again gets the du and pacman counts in progress instead of starting two more).
+//  - shared queries (Backend::query's `shared`, opt-in): a command already running under a tag is not started again; its answer
+//    reaches whoever listens to that tag (Storage shown again gets the du and pacman counts in progress instead of starting two
+//    more). Any other query gets its own process and its own answer.
 class InFlight
 {
 public:

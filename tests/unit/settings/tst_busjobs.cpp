@@ -20,8 +20,11 @@ using namespace grassfield::settings;
 
 namespace {
 
+// One application object per process: tst_backend.cpp, in the same binary, may have made it first.
 QCoreApplication &app()
 {
+    if (QCoreApplication *existing = QCoreApplication::instance())
+        return *existing;
     static int argc = 1;
     static char name[] = "tst_busjobs";
     static char *argv[] = {name, nullptr};

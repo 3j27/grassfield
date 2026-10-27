@@ -2092,8 +2092,28 @@ QtObject {
     readonly property int filesToolbarIconSize: 16
     // Expanded width of the search capsule (macOS ~200); collapsed it is a 36-pt circle; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesSearchWidth: 200
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
+    // macOS 26 AppKit tab bar (the Finder's): the capsule track 27.5 tall, measured on a Tahoe capture at 2 px/pt; also the round + button [ref: docs/specs/files.md § Tabs and windows]
     readonly property int filesTabHeight: 28
+    // macOS 26 tab bar: the track right under the toolbar, 8 under it to the hairline [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesTabBarHeight: 36
+    // macOS 26 tab bar: the track 8 from the content edge, the + button 8 from the window edge [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesTabBarInset: 8
+    // macOS 26 tab bar: 4.5 between the track and the + button [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesTabPlusGap: 4
+    // macOS 26 tab bar: the selected pill 2 inside the track [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesTabPillInset: 2
+    // macOS 26 tab bar: the track reads 222 on the 255 window, black at 0.13; the dark appearance uses the material fill (no dark capture) [ref: docs/specs/files.md § Tabs and windows]
+    readonly property real filesTabTrackOpacityLight: 0.13
+    // macOS 26 tab bar: the selected pill reads 247 over the 222 track, white at 0.76; the dark appearance uses the material fill (no dark capture) [ref: docs/specs/files.md § Tabs and windows]
+    readonly property real filesTabPillOpacityLight: 0.76
+    // macOS 26 tab bar: the + arms 10.5 long (0.75 of the glyph box, ViewGlyph) and about 1.25 thick [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesTabPlusGlyph: 14
+    // own value: the close button of a hovered tab (no capture of the hover state) [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesTabCloseSize: 16
+    // own value: a tab hovered this long during a drag opens (macOS spring-loading, medium delay; no measurement) [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesSpringDelay: 500
+    // own value: a window size is kept this long after the last resize step (one write per resize, not per frame) [ref: docs/specs/files.md § Tabs and windows]
+    readonly property int filesWindowSizeDelay: 250
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPathBarHeight: 26
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]

@@ -85,6 +85,34 @@ function viewModeForShortcut(number) {
     return number >= 1 && number <= viewModes.length ? viewModes[number - 1] : "";
 }
 
+// A double-click in the column view opens what it hits: a file always; a folder only with Cmd (Ctrl here), which opens
+// it in a new tab as in the other views (a plain click already shows a folder's contents in the next column).
+function columnDoubleClickOpens(isDir, command) {
+    return isDir !== true || command === true;
+}
+
+// The view a tab shows when it opens a folder (docs/specs/files.md F-3): column view sticks while browsing; otherwise the
+// folder's own view when one was chosen for it (`stored`), else the view the tab already shows (`current`; "" for a new
+// tab), else the default view (`fallback`).
+function viewFor(current, stored, fallback) {
+    const c = viewModes.indexOf(String(current)) >= 0 ? String(current) : "";
+    if (c === "columns")
+        return c;
+    if (viewModes.indexOf(String(stored)) >= 0)
+        return String(stored);
+    return c !== "" ? c : normalizeViewMode(fallback);
+}
+
+// The arrangement of a folder: its own sort key and order when they were chosen for it (`stored`: {sortKey,
+// sortDescending}, each optional), else the defaults; a stored key without an order takes that key's default order.
+function sortFor(stored, defaultKey, defaultDescending, defaultDescendingOf) {
+    if (stored && stored.sortKey !== undefined) {
+        const key = Number(stored.sortKey);
+        return {key: key, descending: stored.sortDescending !== undefined ? stored.sortDescending === true : defaultDescendingOf(key)};
+    }
+    return {key: defaultKey, descending: stored && stored.sortDescending !== undefined ? stored.sortDescending === true : defaultDescending};
+}
+
 // The view that draws a tab: its mode, except that tag search results (a flat list of files from several folders)
 // have no folder columns and show as a list in the column mode.
 function effectiveView(mode, isSearch) {
