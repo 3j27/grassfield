@@ -960,4 +960,84 @@ TestCase {
         compare(page.pending, -1);
         verify(soundRow(page, "Built-in Audio Analog Stereo").selected);
     }
+
+    // ---- the focus ring of the list rows and their buttons: the keyboard's focus only ----
+
+    Component {
+        id: ringHost
+        Column {
+            width: 600
+            property alias network: network
+            property alias device: device
+            property alias info: info
+            property alias more: more
+            SettingsQml.NetworkRow {
+                id: network
+                title: "Home"
+                menuItems: [{id: "forget", text: "Forget"}]
+            }
+            SettingsQml.BluetoothDeviceRow {
+                id: device
+                title: "Keyboard"
+            }
+            SettingsQml.InfoButton {
+                id: info
+            }
+            SettingsQml.MoreButton {
+                id: more
+                items: [{id: "forget", text: "Forget"}]
+            }
+        }
+    }
+
+    // The ring a row or a button draws for its focus (a FocusRing, or the row's own outline).
+    function ringOf(item) {
+        for (const c of item.children) {
+            if (c.border !== undefined && c.border.color === Appearance.focusRingColor && c.color.a === 0)
+                return c;
+            if (c.shapeRadius !== undefined)
+                return c;
+        }
+        return null;
+    }
+
+    function test_focusRingFollowsTheKeyboardOnly() {
+        const host = createTemporaryObject(ringHost, testCase);
+        for (const item of [host.network, host.device, host.info]) {
+            const ring = ringOf(item);
+            verify(ring, item.toString());
+            // A click focuses it without the ring (a control's visualFocus).
+            mouseClick(item, 5, item.height / 2);
+            verify(item.activeFocus, item.toString());
+            verify(!item.visualFocus, item.toString());
+            verify(!ring.visible, item.toString());
+            // Tab away and back: the keyboard's focus shows it.
+            item.focus = false;
+            testCase.forceActiveFocus();
+            verify(!item.activeFocus);
+            item.forceActiveFocus(Qt.TabFocusReason);
+            verify(item.visualFocus, item.toString());
+            verify(ring.visible, item.toString());
+            // A click on the focused item takes it away again.
+            mouseClick(item, 5, item.height / 2);
+            verify(!ring.visible, item.toString());
+            testCase.forceActiveFocus();
+        }
+        // The (…) button: its menu takes the keyboard and hands it back as the menu was opened.
+        const more = host.more;
+        const ring = ringOf(more);
+        mouseClick(more);
+        tryVerify(() => !more.activeFocus, 1000, "the menu holds the keyboard");
+        keyClick(Qt.Key_Escape);
+        tryVerify(() => more.activeFocus);
+        verify(!ring.visible, "opened by a click: no ring after the menu");
+        testCase.forceActiveFocus();
+        more.forceActiveFocus(Qt.TabFocusReason);
+        verify(ring.visible);
+        keyClick(Qt.Key_Space);
+        tryVerify(() => !more.activeFocus, 1000, "the menu holds the keyboard");
+        keyClick(Qt.Key_Escape);
+        tryVerify(() => more.activeFocus);
+        verify(ring.visible, "opened from the keyboard: the ring is back");
+    }
 }

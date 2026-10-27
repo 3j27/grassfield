@@ -24,10 +24,15 @@ Item {
 
     readonly property real contentTop: root.Positioner.index > 0 ? 1 : 0
     readonly property real rowHeight: root.nearby ? Tokens.settingsWifiOtherRowHeight : Tokens.settingsDeviceRowHeight
+    // The ring shows for the keyboard's focus only, as a control's visualFocus (PrinterRow): a click focuses the row without it.
+    property bool clickFocused: false
+    readonly property bool visualFocus: root.activeFocus && !root.clickFocused
 
     width: parent ? parent.width : implicitWidth
     implicitHeight: root.contentTop + root.rowHeight
     activeFocusOnTab: !root.nearby
+    onActiveFocusChanged: if (!root.activeFocus)
+        root.clickFocused = false
     Accessible.role: root.nearby ? Accessible.StaticText : Accessible.Button
     Accessible.name: root.title
     Accessible.description: root.status
@@ -56,7 +61,7 @@ Item {
         y: root.contentTop + Tokens.controlFocusOutline / 2
         width: parent.width - Tokens.controlFocusOutline
         height: root.rowHeight - Tokens.controlFocusOutline
-        visible: root.activeFocus
+        visible: root.visualFocus
         radius: Tokens.radiusMenu
         color: "transparent"
         border.width: Tokens.controlFocusOutline
@@ -67,6 +72,7 @@ Item {
         anchors.fill: parent
         enabled: !root.nearby
         onClicked: {
+            root.clickFocused = true;
             root.forceActiveFocus();
             root.activated();
         }

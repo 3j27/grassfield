@@ -11,25 +11,33 @@ Item {
 
     property var items: []
     property string accessibleName: ""
+    // The ring shows for the keyboard's focus only, as a control's visualFocus: a click focuses the button without it, and
+    // the focus the menu hands back keeps the way the menu was opened.
+    property bool clickFocused: false
+    property bool clickOpened: false
+    readonly property bool visualFocus: root.activeFocus && !root.clickFocused
 
     signal chosen(string id)
 
     implicitWidth: Tokens.settingsWifiMoreSize
     implicitHeight: Tokens.settingsWifiMoreSize
     activeFocusOnTab: true
+    onActiveFocusChanged: if (!root.activeFocus)
+        root.clickFocused = false
     Accessible.role: Accessible.ButtonMenu
     Accessible.name: root.accessibleName
     Accessible.focusable: true
-    Accessible.onPressAction: root.openMenu()
+    Accessible.onPressAction: root.openMenu(false)
 
-    function openMenu(): void {
+    function openMenu(byClick: bool): void {
+        root.clickOpened = byClick;
         if (root.items.length > 0)
             popup.open();
     }
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.openMenu();
+            root.openMenu(false);
             event.accepted = true;
         }
     }
@@ -43,15 +51,16 @@ Item {
 
     FocusRing {
         shapeRadius: root.width / 2
-        visible: root.activeFocus
+        visible: root.visualFocus
     }
 
     MouseArea {
         id: mouse
         anchors.fill: parent
         onClicked: {
+            root.clickFocused = true;
             root.forceActiveFocus();
-            root.openMenu();
+            root.openMenu(true);
         }
     }
 
@@ -73,8 +82,10 @@ Item {
         }
         onOpened: menu.forceActiveFocus()
         onClosed: {
-            if (root.visible)
+            if (root.visible) {
+                root.clickFocused = root.clickOpened;
                 root.forceActiveFocus();
+            }
         }
 
         // A Popup resizes its content item, which would replace the menu's own size bindings: the menu sits in a plain Item.
