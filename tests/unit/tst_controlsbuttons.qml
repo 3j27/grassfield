@@ -131,6 +131,20 @@ TestCase {
             checked: false
             onToggled: checked => tc.toggles++
         }
+
+        // A container that disables (and dims) what it holds, as Settings' blocked page does.
+        Item {
+            id: dimmedBox
+            width: boxedToggle.width
+            height: boxedToggle.height
+            enabled: false
+            opacity: Tokens.materialDisabledOpacity
+
+            Toggle {
+                id: boxedToggle
+                accessibleName: "Boxed"
+            }
+        }
     }
 
     function init() {
@@ -303,6 +317,30 @@ TestCase {
         compare(tc.toggles, 2);
         verify(toggle.activeFocus);
         compare(toggle.Accessible.role, Accessible.CheckBox);
+    }
+
+    // A Toggle disabled on its own keeps its track (an off switch stays visible on white) and fades its knob, and its
+    // accent when on; one inside a disabled container is not dimmed again (the container dims it once).
+    function test_disabledToggleLook() {
+        const track = toggle.children.find(c => c.radius === toggle.height / 2 && c.color !== undefined);
+        const knob = toggle.children.find(c => c.x !== undefined && c.width === Tokens.controlToggleKnobWidth);
+        verify(track && knob);
+        toggle.checked = false;
+        const offColor = String(track.color);
+        compare(toggle.opacity, 1);
+        toggle.enabled = false;
+        verify(toggle.dimmed);
+        tryVerify(() => String(track.color) === offColor, 1000, "an off switch keeps its track");
+        compare(knob.opacity, Tokens.controlToggleDisabledKnobOpacity);
+        toggle.checked = true;
+        tryVerify(() => Math.abs(track.color.a - Tokens.materialDisabledOpacity) < 0.01, 1000, "the accent fades");
+        toggle.enabled = true;
+        tryVerify(() => track.color.a === 1, 1000, "and comes back");
+        compare(knob.opacity, 1);
+        toggle.checked = false;
+        verify(!boxedToggle.enabled);
+        verify(!boxedToggle.dimmed, "the container dims it once");
+        compare(boxedToggle.opacity, 1);
     }
 
     // A disabled or hidden control ignores every activation path, assistive technology included (R12).

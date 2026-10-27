@@ -63,10 +63,11 @@ QList<StoreApp> buildModel(const ModelInputs &in)
         if (isStoreRepository(p.repo) && !sync.contains(p.name))
             sync.insert(p.name, p); // pacman's order: the first repository that has it wins, as for pacman -S
     }
-    QHash<QString, const AppStreamComponent *> byId;
-    for (const AppStreamComponent &c : in.appstream) {
+    QHash<QString, int> byId; // index into in.appstream
+    for (int i = 0; i < in.appstream.size(); ++i) {
+        const AppStreamComponent &c = in.appstream.at(i);
         if (c.type == QLatin1String("desktop-application") && !byId.contains(c.id))
-            byId.insert(c.id, &c);
+            byId.insert(c.id, i);
     }
 
     QList<StoreApp> apps;
@@ -119,10 +120,12 @@ QList<StoreApp> buildModel(const ModelInputs &in)
             }
             // AppStream's data only for the package this entry installs: an id alone could lend an entry another package's
             // texts and desktop id, and step 3 would open the wrong app (web apps and Flatpaks have no Arch package).
-            const AppStreamComponent *c = byId.value(e.id);
+            const int found = byId.value(e.id, -1);
+            const AppStreamComponent *c = found >= 0 ? &in.appstream.at(found) : nullptr;
             if (c && !a.packages.contains(c->pkgname))
                 c = nullptr;
             a.hasAppStream = c != nullptr;
+            a.component = c ? found : -1;
             a.name = prefer(e.name, c ? c->name : LocalizedText{});
             a.summary = prefer(e.summary, c ? c->summary : LocalizedText{});
             a.description = prefer(e.description, c ? c->description : LocalizedText{});
@@ -144,7 +147,8 @@ QList<StoreApp> buildModel(const ModelInputs &in)
             apps.append(a);
         }
     }
-    for (const AppStreamComponent &c : in.appstream) {
+    for (int i = 0; i < in.appstream.size(); ++i) {
+        const AppStreamComponent &c = in.appstream.at(i);
         if (c.type != QLatin1String("desktop-application") || listedIds.contains(c.id) || listedPackages.contains(c.pkgname))
             continue;
         const auto it = sync.constFind(c.pkgname);
@@ -157,6 +161,7 @@ QList<StoreApp> buildModel(const ModelInputs &in)
         a.packages = {c.pkgname};
         a.installed = it->installed;
         a.hasAppStream = true;
+        a.component = i;
         a.name = c.name.isEmpty() ? LocalizedText{c.pkgname, {}} : c.name;
         a.summary = c.summary;
         a.description = c.description;

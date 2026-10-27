@@ -189,7 +189,6 @@ SettingsPage {
             Toggle {
                 accessibleName: root.side === "output" ? qsTr("Mute output") : qsTr("Mute input")
                 enabled: root.current !== null
-                opacity: enabled ? 1 : Tokens.materialDisabledOpacity
                 checked: root.current ? root.current.muted : false
                 onToggled: c => root.system.act("mute", System.setMute(root.current ? root.current.id : -1, c), "audio.act")
             }

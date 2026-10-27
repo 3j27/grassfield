@@ -1,9 +1,8 @@
 import QtQuick
 import QtQuick.Window
-import Grassfield.Ui
 
-// A glass capsule of the Settings window chrome (macOS 27): the sidebar's search field and the toolbar's back / forward
-// group. An almost clear fill, one device pixel of dark rim outside and one of light rim inside
+// A glass capsule of an app window's chrome (macOS 27; Settings and the Store): the sidebar's search field and the
+// toolbar's back / forward group. An almost clear fill, one device pixel of dark rim outside and one of light rim inside
 // (docs/audits/settings-parity-2026-10-26.md § Window and sidebar).
 Rectangle {
     id: root

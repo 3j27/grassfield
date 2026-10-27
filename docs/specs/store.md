@@ -1,6 +1,8 @@
 # Store spec · apps-engineer (app), platform-engineer (sources, install path) · owner brief 2026-10-27
-Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Nothing is
-built. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
+Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Step 1
+(the read-only backend) is merged; step 2 (the UI, read only: SR1 to SR13 shown, buttons disabled, Installed, the Updates
+list, the settings window without its switches; ADR-0037 SD6 to SD10) is built and measured
+(`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
@@ -220,12 +222,14 @@ Dev sessions (ADR-0019)
 | Ctrl+[ / Ctrl+] , Alt+Left / Alt+Right | back / forward |
 | Ctrl+, | the Store's settings |
 | Ctrl+W, Ctrl+Q | close the window, quit (a running operation goes on, ADR-0037 f) |
-| Tab / Shift+Tab | sidebar → content → toolbar; inside the content, the cards and buttons in reading order |
+| Tab / Shift+Tab | sidebar → content → toolbar; inside the content, the cards and buttons in reading order, each scrolled into view below the toolbar |
 | Arrows | inside a carousel or a grid, move between items; Up/Down in the sidebar |
 | Return / Space | open the focused item / press the focused button |
 | Esc | close a sheet or popover (Cancel); in the search field, clear then leave |
 Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutstyle.h`). The menus are exported to the menu bar
-(T1, as the other apps): Store (About, Settings…, Quit), Edit, View (the sidebar items, Refresh), Window, Help.
+(T1, as the other apps), between the shell's app menu (About, Quit) and Window (T0, ADR-0008): File (Settings…, Close
+Window), Edit (for the search field, and Find), View (the sidebar items, Back, Forward, Refresh). "Settings…" is in File
+because the app menu is the shell's (ADR-0037 SD6); without a global menu bar the toolbar shows a gear for it.
 
 ## Accessibility
 - Every control reachable by keyboard with a visible focus ring (A1); `Accessible.name`, `role` and `description` on the
@@ -302,6 +306,11 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
   `omarchy-install-and-launch`, `omarchy-pkg-add`, `omarchy-pkg-aur-add`, `omarchy-pkg-drop`,
   `omarchy-launch-floating-terminal-with-presentation`, `omarchy-webapp-install`, `omarchy-webapp-remove`, the recipes the
   catalog names.
+- Environment: `GRASSFIELD_STORE_QML` (the QML directory, as the other apps' `_QML`; the installed one by default). Dev
+  plumbing, honoured only in a dev session and inert in a packaged one (ADR-0019, `apps/store/src/storeenv.h`):
+  `GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`, `GRASSFIELD_STORE_OFFLINE` (`1`:
+  offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession). Command line:
+  `--page` (`discover`, `section:<id>`, `categories`, `category:<id>`, `app:<id>`, `search:<words>`, `installed`, `updates`).
 
 ## Dependencies (versions seen in S3, S8 and S14; checked again at step 1)
 `grassfield-desktop` (same version), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`; AppStream is read by the Store's own reader, ADR-0037 SD5), polkit (`pkexec`,
@@ -310,7 +319,12 @@ installed on Omarchy), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's,
 
 ## Degraded behavior
 - No catalog (no hosting yet, offline at first start, verification failed): no editorial sections; AppStream and pacman still
-  give Discover's lists, Categories and search.
+  give Discover's lists, Categories and search, and a notice says "The Grassfield catalog isn't available: Arch's apps are
+  shown."
+- No catalog and no app data from Arch either (both missing, or offline at first start): Discover says "The Store Isn't
+  Available Right Now" (« Le Store n’est pas disponible pour le moment »), why in plain words (offline; no trusted key yet;
+  no catalog host; the catalog not fetched or not verified; Arch's app data not installed and not fetched, or not
+  verified), and "Try Again" (Ctrl+R); never a blank page.
 - No `grassfield-keyring`, or one without a key (until the owner's key exists, ADR-0033 O20): the catalog is never used; the
   settings window says why.
 - No `archlinux-appstream-data`: the fetched copy (SR27b); before it is fetched, or offline, pacman's descriptions, catalog
