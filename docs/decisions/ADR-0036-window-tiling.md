@@ -253,6 +253,24 @@ meaning: `docs/audits/tiling-2026-10-27/decisions.md`.
 | T5: the green light click? | « Garder ADR-0002 (Recommandé) » |
 | T6: the order of the steps? | « Cet ordre (Recommandé) » |
 
+## Delegated decisions (owner rule of 2026-10-27)
+From 2026-10-27 the owner no longer answers design questions: each one is settled by the option that brings Grassfield
+closest to macOS 27 (behaviour, presentation, vocabulary) and lets the user do everything without technical work (no
+terminal, configuration file, command or manual step). Legal questions, publishing, keys, secrets, releases, root rights,
+security rules, money, external services and irreversible actions on the owner's machine are still asked. Each decision
+below names the rule: « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique
+pour l'utilisateur ». The integrator checks them in review.
+
+| # | Question | Options | Choice | Rule applied |
+|---|---|---|---|---|
+| D1 (step 1) | How far right of the Stages strip may tiles start (TL1)? | (a) the strip's tiles plus its drop margin `kStripDropMargin` (16); (b) the tiles plus the overlap band of stages.md ST12 (8); (c) the tiles alone | (a) | macOS first: with Stage Manager on, tiled windows fill the screen beside the strip and never reach it; (a) also keeps the whole drop zone free, so a window can still be dragged onto the strip. No user step. |
+| D2 (step 1) | Hyprland's own move of a tiled window (an app's toolbar drag, Super+drag) before step 2 restarts it at the size from before (TL16)? | (a) the record ends at the first motion, the window keeps its tiled size and is Free; (b) the record stays Tiled until a later check forgets it; (c) build the restart in step 1 | (a) | macOS first within the step's scope: on macOS a tile dragged away is no longer a tile and never snaps back by itself; (b) would let a later resume or re-layout pull it back into a tile the user left. (c) is step 2's work (one step per PR, T6). |
+| D3 (step 1) | `arrange` naming an output that does not show the first window's Desktop? | (a) refused, reason `invalid`, nothing moves; (b) the windows move to that output first | (a) | macOS first: Arrange acts on the screen the window is on; moving to another display is the popover's "Move to" (step 3), an explicit user choice. |
+| D4 (step 1) | `tile` and `arrange` while the session is locked? | (a) the plugin refuses them too (reason `locked`); (b) only the shell refuses (TL34) | (a) | macOS first: nothing changes behind the lock screen. Defence in depth only: no security rule or polkit change. |
+| D5 (step 1) | The maximum size a tile honours (TL8)? | (a) the smaller of a `max_size` rule and the xdg protocol maximum; (b) the rule replaces the protocol maximum, as `CWindow::maxSize()` does | (a) | macOS first: a tile never jumps after it is placed; Hyprland's commit clamp applies the protocol maximum anyway (Window.cpp:2741-2747), so (b) would recentre the window. |
+| D6 (step 1) | How the plugin recognises X11 windows Hyprland floats by type (TL9)? | (a) read the window's type atoms, role and flags as `shouldBeFloated` does, without calling it (`HYPRATOMS` looked up by name, never written); (b) call `shouldBeFloated`; (c) skip the type test | (a) | macOS first: dialogs, panels, menus and splash windows never tile; (b) also sets focus flags on the window (the plugin never changes Hyprland's state, R13); (c) would tile dialogs. |
+| D7 (step 1) | A tiled window that is zoomed, then dragged by its titlebar out of the zoom? | (a) it leaves its tile (Free) under the pointer; (b) leaving the zoom puts it back in its tile, mid-drag | (a) | macOS first: the window follows the pointer; a window the user drags never jumps into a tile. |
+
 ## Evidence
 - Hyprland facts above: read in the v0.56.2 sources (commit efb50993, matching the owner's installed 0.56.2), file and line
   references in `docs/audits/tiling-2026-10-27/sources.md`. Not compiled or run in this session (no Hyprland, no DRM device
