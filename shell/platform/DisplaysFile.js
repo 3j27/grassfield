@@ -63,6 +63,11 @@ function payload(monitors, backlight, trial) {
     return JSON.stringify({v: VERSION, monitors: list, backlight: light, trial: t}) + "\n";
 }
 
+// Whether `text` is what the state file already holds (`last` is the text last written, "" before any): then it is not written again.
+function same(last, text) {
+    return typeof last === "string" && last !== "" && last === text;
+}
+
 // The first line of a trial file: {state: "trial", id, until (unix seconds)} | {state: "kept"|"revert", id} | null.
 function parseTrial(text) {
     const first = String(text).split("\n")[0];

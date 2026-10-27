@@ -39,6 +39,8 @@ Singleton {
     property int applying: 0
     // The monitors (IPC objects) last published with a name.
     property var described: []
+    // The last text written: an identical payload is not written again.
+    property string written: ""
 
     function publish(): void {
         if (root.statePath === "")
@@ -52,7 +54,12 @@ Singleton {
         if (monitors.length === 0 && objects.length > 0 && root.described.length > 0)
             monitors = root.described;
         root.described = monitors;
-        stateFile.setText(DisplaysFile.payload(monitors, root.backlight, root.trialState));
+        const text = DisplaysFile.payload(monitors, root.backlight, root.trialState);
+        // Quickshell reports every `monitors` answer as a change, changed or not (the lock asks every second): write only news.
+        if (DisplaysFile.same(root.written, text))
+            return;
+        root.written = text;
+        stateFile.setText(text);
     }
 
     onBacklightChanged: publishDebounce.restart()
@@ -121,11 +128,15 @@ Singleton {
         onObjectAdded: publishDebounce.restart()
         onObjectRemoved: publishDebounce.restart()
 
-        delegate: QtObject {
-            id: watch
-            required property var modelData
-            readonly property var ipc: watch.modelData ? watch.modelData.lastIpcObject : null
-            onIpcChanged: publishDebounce.restart()
+        // The signal only: the value is a whole map converted for every answer, and publish() reads it once per settle.
+        delegate: Connections {
+            required property HyprlandMonitor modelData
+
+            target: modelData
+
+            function onLastIpcObjectChanged(): void {
+                publishDebounce.restart();
+            }
         }
     }
 
@@ -159,6 +170,8 @@ Singleton {
         id: stateFile
         printErrors: false
         atomicWrites: true
+        // A failed write is tried again with the next publish, even when the text is the same.
+        onSaveFailed: root.written = ""
     }
 
     FileView {

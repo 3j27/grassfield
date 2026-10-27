@@ -1,6 +1,8 @@
 # ADR-0033: Software Update: a signed [grassfield] pacman repository in two channels, installed through Omarchy
-Status: Proposed (cloud session, owner brief 2026-10-27, step 0; no code in either repository before the opus PASS). The
-owner's answers O1-O20 are recorded below; the first two opus reviews (FAIL) are answered in "Review history". ·
+Status: Proposed, applied provisionally until the owner accepts it (cloud session, owner brief 2026-10-27). Step 0 (this
+ADR and the spec) passed the opus review on its third round and was merged in 609017f (PR #11); step 1 is grassfield PR
+#16 (the client) and the step 1b PR of grassfield-packages. The owner's answers O1-O21 are recorded below; the opus
+reviews are in "Review history". ·
 Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator (merge after the opus PASS)
 
 This ADR is the contract between this repository (the desktop, its `PKGBUILD` and the Software Update client) and
@@ -17,7 +19,8 @@ Both ran in a throwaway `archlinux:base` container ("Evidence" says where and ho
 - The Omarchy model (D1: never fork Omarchy). Grassfield gets a `[grassfield]` repository with two channels, **stable** and
   **beta**, on the same pattern as Omarchy's `pkgs.omarchy.org/{stable,rc,edge}/$arch`.
 - "Update Now" updates the **whole system through Omarchy**, in a terminal, as Omarchy's own menu does. Grassfield has no
-  root code to install anything.
+  root code to install anything. (Amended by ADR-0037, owner decision ST4 of 2026-10-27: Grassfield Store's
+  `grassfield-store-helper` installs and removes repository packages the user picks in the Store; see "Amendments".)
 - The beta channel also receives stable versions when they are newer (macOS model). Leaving the beta keeps the installed
   version until a stable one passes it (`pacman -Syu` does not downgrade).
 - UI as on macOS 27: Settings > General > Software Update (available version, notes, "Update Now", "Beta Updates",
@@ -385,7 +388,10 @@ Rejected:
    5. Split the result:
       - `[grassfield]` packages: the names that `pacman --dbpath <own db> -Sql grassfield` lists;
       - Omarchy: the `omarchy` or `omarchy-dev` line;
-      - the rest: a count.
+      - the rest: a count (`others`).
+      Step 2 adds the list beside the count (`otherPackages`: name, installed and available version, sorted by name), which
+      the pane and the Store (PR #15, ADR-0037) need. When the output would pass its 256 KiB cap, that list is cut first
+      (truncated, `otherPackagesTruncated: true`), then the notes (`notesError`); the counts always stay.
 4. **What counts as an update (O3)** for the badge, the menu and the notification: a Grassfield release (a new
    `grassfield-desktop` version, pkgrel included) and an Omarchy release.
 5. **When.**
@@ -450,7 +456,8 @@ Rejected:
 | Signatures | detached, binary; packages, both databases and the notes; by a key in `grassfield-trusted` or its signing subkey |
 | Release notes | `grassfield-notes.json` and `.sig`, UTF-8, at most 64 KiB: `{"version":1,"channel":"stable","releases":[{"version":"1.0.1-1","date":"2026-11-02","notes":{"en":"…","fr":"…"}}]}`. Newest first, at most 20, `en` required, plain text, at most 8000 characters each. |
 | Notes source | `packaging/release-notes/<VERSION>.{en,fr}.txt` in this repository at the tag (O9). A pkgrel rebuild gets "Rebuilt for Hyprland X.Y.Z" / « Reconstruit pour Hyprland X.Y.Z ». |
-| Publication | atomic (h): an immutable snapshot, then one pointer write |
+| Publication | atomic (h): one serialized publisher per channel builds an immutable snapshot from the current one, then writes the pointer only if it has not moved (h.2 as amended by ADR-0037) |
+| Store catalog | `grassfield-catalog.v1.json`, its `.sig` and `catalog/<sha256>.png` in each channel's snapshot, signed with the repository's key; format, rules and checks in ADR-0037 g (amendment) |
 | Trust anchor | the pinned fingerprint and key (b.3) are in `grassfield-keyring`'s trusted list; CI checks it |
 | Build input | a tag (or, for tests, a commit) of grassfield; `VERSION` decides the channel; `makepkg` of `packaging/arch/PKGBUILD` with `GRASSFIELD_PKGREL` |
 | Source access | a read-only deploy key on grassfield (O13), secret `GRASSFIELD_DEPLOY_KEY`. Until it exists, the build is tested in a container with both checkouts. |
@@ -475,6 +482,18 @@ Rejected:
      every client already on B.
    - A new snapshot C, built now with A's packages, worked: `200` for both, `-Sy` exit 0, and `-Syu` "local (1.0.1-1) is
      newer than grassfield (1.0.0-1)", no downgrade.
+   **Amended by ADR-0037 (2026-10-27): one serialized publisher, built from the current snapshot, a conditional pointer
+   write.** Releases and Grassfield Store's catalog updates share each channel's pointer, so a job built from an older
+   snapshot and published later would move the pointer back (R4 above, then a2: every `omarchy update` fails). Per channel:
+   one publishing job, serialized (one run at a time, never cancelled half way); since GitHub cancels a pending run when a
+   newer one queues and each tag is built once, a run takes nothing from its trigger and publishes the latest state: the
+   newest release built and signed for the channel and the catalog of `main`'s head (a cancelled pending run loses nothing);
+   it reads the pointer and builds the new snapshot from the current snapshot's manifest (the newest release's packages,
+   databases and notes when newer than the snapshot's, the catalog when it differs, the rest kept); it refuses a `grassfield.db` older than the current one
+   for any package, except a deliberate rollback below; it writes the pointer only if it still names the snapshot it read
+   (a compare-and-swap on the storage's version tag), else it starts again. A conditional write on the chosen storage is NOT
+   VERIFIED (the host is not chosen, O8); without one, the serialization alone holds, with a fresh read of the pointer just
+   before the write. Details: ADR-0037 g.
    So the previous release is published again as a new snapshot (a pkgrel above the bad one when clients must move to it). Residual: a client whose two
    requests straddle the pointer write gets a mismatched pair once; that run fails ("signature … is invalid"), the next one
    works. The window is the time between pacman's two requests. Mirrors serve the same snapshots and pointer.
@@ -528,9 +547,19 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | O18 | A `[grassfield]` that blocks every update (review 1, MAJOR 1) | pane + notification offering "Turn Off…" (recommended) · pane only · automatic removal | **pane + notification**, never automatic |
 | O19 | Change of host (review 1, MAJOR 5) | `post_upgrade` migration + old host serving and redirecting ≥ 90 days (recommended) · redirect only · manual "Repair…" | **migration + redirect** |
 | O20 | Keyring before the owner's key exists (review 2, MAJOR) | a keyring with no key until O11 (recommended) · withhold the dependency until O11 | **no key until O11** (b.2) |
+| O21 | `grassfield-keyring` dependency until grassfield-packages builds the package (step 1 review, minor 5) | hold it back; a follow-up adds it once grassfield-packages' step 1b is merged (recommended) · keep it, the owner builds the keyring once · a keyless keyring from this repository's PKGBUILD | **hold it back** |
 
 The owner gave every answer in this Claude Code session on 2026-10-27, through its question tool. The answers to O1-O16
-were recorded in `fd49abc` and confirmed again after the first review.
+were recorded in `fd49abc` and confirmed again after the first review; O21 was asked after the step 1 review.
+
+## Amendments
+- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the Store reads the list of other updates that
+  step 2 adds (`otherPackages`, cut first at the 256 KiB cap), so it runs no second `checkupdates`. g: the Store catalog's files join the contract, and publication is the serialized
+  publisher of h.2. h.2: one serialized publisher per channel that publishes the latest state, building from the current
+  snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
+  to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit
+  action, `pacman -S --needed` / `pacman -Rns` of validated repository names only, ADR-0037 b.1); Software Update itself
+  still installs nothing.
 
 ## Evidence
 - `adr0033-probes.sh` (P0-P13), `adr0033-probes-2.sh` (Q0-Q8) and `adr0033-probes-3.sh` (R0-R5), in
@@ -584,6 +613,56 @@ were recorded in `fd49abc` and confirmed again after the first review.
   - an old but validly signed database can be replayed;
   - a pointer switch can fail one run; a rollback is a new snapshot (h.2);
   - a Hyprland update can come before the matching plugin.
+
+## Step 1 as built (2026-10-27, branch `claude/software-update-step1`)
+Landed in this repository:
+- `packaging/pacman/`: `repository.conf` (still the `.invalid` base and no key, O11), the empty
+  `grassfield-signing-key.asc`, `generate.py` (build time: checks the values and the key file, which must be exactly the
+  pinned public key, and writes `/usr/share/grassfield/pacman/{repository.conf,grassfield-stable.conf,grassfield-beta.conf,
+  grassfield-signing-key.asc}`), `grassfield-channel-helper`, `grassfield-channel-scriptlet`, `grassfield-channel.sh`,
+  `org.grassfield.packages.policy`, `pre-refresh-pacman` (the hook);
+- `packaging/bin/grassfield-channel-set` (also `/usr/bin`) and `packaging/bin/grassfield-update-check`;
+- `packaging/arch/PKGBUILD` (`GRASSFIELD_PKGREL`, the three dependencies, the files above) and
+  `grassfield-desktop.install` (`pre_remove`, `post_upgrade`);
+- the Omarchy pins of `docs/upstream/omarchy.lock`;
+- `tests/shell/update_check.sh` (the checker, logic layer) and `tests/integration/software_update.sh` (the container test).
+
+`grassfield-keyring` is not yet in grassfield-desktop's `depends` (owner decision O21): it joins in a follow-up once
+grassfield-packages' step 1b, which builds it, is merged, so that a local `makepkg -si` never asks for a package that does
+not exist. `makedepends` now holds everything the build compiles against (`makepkg -s` installs the global depends and
+makedepends only): `hyprwayland-scanner`, `kio`, `solid`, `kcoreaddons`, `kservice`, `qt6-webengine`, `qt6-multimedia`,
+found by the first builds in a clean container.
+
+Moved to step 2, with the shell code that uses them: the shim's `omarchy.system-update` forward (its target, the shell's
+`update check` IPC, belongs to the step 2 shell service), `updates.automaticCheck` (a key goes through
+`ui/Grassfield/Ui/SettingsContract.js`, the settings vectors and the store, which the open Settings stack #8-#10 changes;
+its only reader is the step 2 scheduler) and `software-update.json` (written by that service). The pins of
+`omarchy-update-status` and `omarchy-launch-floating-terminal-with-presentation` move with their derived files. The
+waiter of d.5 is the checker's `--after-update-lock` mode, which the step 2 service starts.
+
+Choices made within this ADR:
+- "Reads no environment variable" (c.1): both root programs start as `#!/bin/bash -p` (no `BASH_ENV`, no imported
+  function) and remove every exported variable before sourcing their library, which then sets `PATH=/usr/bin`, `LC_ALL=C`,
+  `umask 022` and `cd /`.
+- One change at a time: both root programs take `flock` on `/run/grassfield/channel.lock`, in a folder only root can
+  open (0700; the file 0600, made under umask 077 and checked before use: flock needs no write access, so a lock others
+  can read would let any user block "Turn Off…" and the removal, step 1 review MAJOR 1). The helper refuses when it is
+  held; the scriptlet program waits up to 120 s, since the helper can start just before a pacman transaction whose
+  scriptlet runs it, and two rewrites of `pacman.conf` could otherwise lose one another. Under the lock, temporary files
+  a killed run left in `/etc` are removed.
+- No environment at all: while their environment holds anything, both programs run themselves again under `env -i`
+  (entries such as `BASH_FUNC_x%%` are no variables, so no unset loop removes them, and `pacman-key` is a bash script).
+- Exactly one `[grassfield]` section: `set` and `restore` replace several by one (the hook can append between the
+  helper's read and its rename; pacman then refuses a database "already registered"). Several sections, or the lines
+  without their file, read `repair` in the checker and in `grassfield-channel-set`.
+- `[grassfield]` lines whose file is missing (pacman cannot run at all then) are removed first by `set`, `restore` and
+  `off`, so `pacman-key` and `pacman-conf` can run; `grassfield-channel-set` shows that state as `repair`, and its
+  `repair` runs `set stable` there.
+- The checker keeps its failure count, the Server lines it last synced and its last success in `health-db/` (ADR-0020's
+  row). Its `--offline` flag carries the shell's connectivity: a failure while offline is not counted.
+- A notes file whose `channel` is not the client's channel is refused, like any other invalid notes.
+- `grassfield-channel-set` honours `GRASSFIELD_UPDATE_PKEXEC` only in a dev session (ADR-0019's predicate) and never makes
+  or removes the hook link there; without the stand-in, a dev session refuses the change.
 
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:

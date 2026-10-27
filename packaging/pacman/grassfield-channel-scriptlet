@@ -1,0 +1,31 @@
+#!/bin/bash -p
+# grassfield-channel-scriptlet: run as root by grassfield-desktop's pacman scriptlets (grassfield-desktop.install;
+# ADR-0033 c.1, b.8, h.3; docs/specs/updates.md U16). OPUS SECURITY REVIEW REQUIRED: it runs as root.
+#   remove    (pre_remove) what the helper's off does: the [grassfield] lines, /etc/pacman.d/grassfield.conf, the synced
+#             files, the Grassfield keys; `pacman -R grassfield-desktop` leaves no [grassfield] and no trusted key
+#   upgrade   (post_upgrade) the host migration: a file whose primary Server is <previous base>/<channel>/$arch is written
+#             again from this build's template; anything else is left alone
+# Not the polkit action's program: run through pkexec it falls under polkit's generic org.freedesktop.policykit.exec. It
+# does not check pacman's db.lck (pacman holds it while scriptlets run). Exit 0 done, 1 failed, 2 usage.
+# Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
+# environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it
+# starts, valid name or not (BASH_FUNC_x%% entries are not variables: compgen cannot see them, pacman-key, a bash script,
+# would import them). The variables bash exports itself (PWD, SHLVL) are removed last.
+if IFS= read -r -d '' _ 2>/dev/null </proc/$$/environ; then   # stderr first: without /proc, no message
+  exec /usr/bin/env -i /usr/bin/bash -p /usr/lib/grassfield/grassfield-channel-scriptlet "$@"
+fi
+while read -r gf_var; do unset -v "$gf_var" 2>/dev/null; done < <(compgen -e)
+unset -v gf_var
+GF_PROG=grassfield-channel-scriptlet
+. /usr/lib/grassfield/grassfield-channel.sh || exit 1
+gf_start
+gf_lock 120
+
+case "$#:${1-}" in
+  1:remove) gf_off ;;
+  1:upgrade) gf_migrate ;;
+  *)
+    echo "usage: grassfield-channel-scriptlet remove|upgrade (run by grassfield-desktop's pacman scriptlets)" >&2
+    exit 2
+    ;;
+esac

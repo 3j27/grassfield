@@ -1,0 +1,192 @@
+#!/bin/bash
+# Grassfield's Software Update channel (ADR-0033 c.3, owner decisions O1 and O4; docs/specs/updates.md U15).
+#
+#   grassfield-channel-set           print the channel: stable, beta, custom, repair or off
+#   grassfield-channel-set stable    set Grassfield updates up, or leave the beta (installs nothing: pacman never downgrades)
+#   grassfield-channel-set beta      switch to the beta channel (installs nothing; "Update Now" does)
+#   grassfield-channel-set repair    put [grassfield] back after Omarchy rewrote pacman.conf, or rewrite a custom file
+#   grassfield-channel-set off       turn Grassfield updates off: no [grassfield], no Grassfield key left in pacman
+#
+# The user's command, also run by Settings with no terminal; it refuses to run as root. The change itself is made by
+# `pkexec /usr/lib/grassfield/grassfield-channel-helper <verb>` (polkit action org.grassfield.packages.set-channel: an
+# administrator's password). Then, as the user, it links Omarchy's hook so that the [grassfield] lines survive Omarchy's
+# own channel changes: omarchy-refresh-pacman runs `omarchy-hook pre-refresh-pacman`, which runs the files of
+# ~/.config/omarchy/hooks/pre-refresh-pacman.d/ (50-grassfield -> /usr/share/grassfield/omarchy-hooks/pre-refresh-pacman);
+# `off` removes that link. Refused while an Omarchy update runs (omarchy-update-lock holds its lock).
+# Exit 0 done; 1 refused, cancelled or failed (the message says which); 2 usage.
+#
+# Dev plumbing (ADR-0019, honoured only in a dev session: GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"):
+# GRASSFIELD_UPDATE_PKEXEC, the recording stand-in run instead of pkexec. In a dev session nothing else runs: without the
+# stand-in the change is refused, and the hook link in the home folder is never made or removed.
+set -uo pipefail
+
+helper=/usr/lib/grassfield/grassfield-channel-helper
+repository=/usr/share/grassfield/pacman/repository.conf
+pacman_conf=/etc/pacman.conf
+include=/etc/pacman.d/grassfield.conf
+hook=/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman
+pkexec=pkexec
+dev=0
+if [[ ${GRASSFIELD_DEV:-} == 1 && ${GRASSFIELD_SESSION:-} != 1 ]]; then
+  dev=1
+  pkexec=${GRASSFIELD_UPDATE_PKEXEC:-}
+fi
+
+fail() {
+  echo "grassfield-channel-set: $*" >&2
+  exit 1
+}
+
+conf_value() { # KEY -> its value in the packaged repository.conf
+  local line
+  [[ -r $repository ]] || fail "missing $repository"
+  while IFS= read -r line; do
+    [[ $line == "$1="* ]] && { printf '%s\n' "${line#*=}"; return 0; }
+  done <"$repository"
+}
+
+sections() { # the number of [grassfield] sections of pacman.conf
+  awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") n++ } END { print n + 0 }' \
+    "$pacman_conf" 2>/dev/null || echo 0
+}
+
+has_section() {
+  (($(sections) > 0))
+}
+
+primary() { # the first Server value of the included file
+  awk '{ l = $0; sub(/#.*/, "", l)
+         if (match(l, /^[ \t]*Server[ \t]*=[ \t]*/)) { v = substr(l, RLENGTH + 1); gsub(/[ \t]+$/, "", v); print v; exit } }' \
+    "$include" 2>/dev/null
+}
+
+state() {
+  local base server
+  if [[ ! -f $include ]]; then
+    # Lines without their file stop every pacman command: "repair" writes the file again.
+    has_section && echo repair || echo off
+    return
+  fi
+  # Missing, or twice (pacman refuses "already registered"): the helper's restore leaves exactly one.
+  [[ $(sections) == 1 ]] || { echo repair; return; }
+  base=$(conf_value GRASSFIELD_REPO_BASE)
+  server=$(primary)
+  case $server in
+    "$base/stable/\$arch") echo stable ;;
+    "$base/beta/\$arch") echo beta ;;
+    *) echo custom ;;
+  esac
+}
+
+require_build() {
+  local base host
+  base=$(conf_value GRASSFIELD_REPO_BASE)
+  host=${base#https://}
+  host=${host%%/*}
+  host=${host%%:*}
+  [[ -n $(conf_value GRASSFIELD_SIGNING_FINGERPRINT) ]] || fail "no signing key in this build"
+  [[ $base == file://* || ($host != *.invalid && $host != invalid) ]] || fail "no package repository in this build"
+}
+
+# Omarchy's update holds ${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock (omarchy-update-lock): tested, released at once.
+require_no_update() {
+  local lock=${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock
+  [[ -e $lock ]] || return 0
+  flock -n "$lock" true || fail "an Omarchy update is running: try again when it has finished"
+}
+
+run_helper() {
+  local rc
+  if [[ -z $pkexec ]]; then
+    echo "grassfield-channel-set: dev guard: $* suppressed in a dev session" >&2
+    exit 1
+  fi
+  "$pkexec" "$helper" "$@"
+  rc=$?
+  case $rc in
+    0) return 0 ;;
+    126 | 127) fail "not allowed: the authentication was cancelled or refused, or no authentication agent answered" ;;
+    *) fail "the change failed (grassfield-channel-helper $*: exit $rc); nothing else was changed" ;;
+  esac
+}
+
+hook_link() {
+  [[ -n ${HOME:-} ]] || fail "HOME is not set: the Omarchy hook cannot be linked"
+  printf '%s\n' "$HOME/.config/omarchy/hooks/pre-refresh-pacman.d/50-grassfield"
+}
+
+link_hook() {
+  local link
+  link=$(hook_link)
+  if ((dev)); then
+    echo "grassfield-channel-set: dev guard: link $link suppressed in a dev session" >&2
+    return 0
+  fi
+  mkdir -p -- "${link%/*}" && ln -sfnT -- "$hook" "$link" || fail "cannot link the Omarchy hook $link"
+}
+
+unlink_hook() {
+  local link
+  link=$(hook_link)
+  if ((dev)); then
+    echo "grassfield-channel-set: dev guard: removing $link suppressed in a dev session" >&2
+    return 0
+  fi
+  if [[ -L $link ]]; then
+    rm -f -- "$link" || fail "cannot remove the Omarchy hook $link"
+  fi
+}
+
+if ((EUID == 0)); then
+  fail "run it as your user; it asks for permission itself"
+fi
+if (($# > 1)); then
+  echo "usage: grassfield-channel-set [stable|beta|repair|off]" >&2
+  exit 2
+fi
+
+case ${1-} in
+  "")
+    state
+    ;;
+  stable | beta)
+    require_build
+    require_no_update
+    run_helper set "$1"
+    link_hook
+    ;;
+  repair)
+    current=$(state)
+    case $current in
+      repair)
+        require_no_update
+        if [[ -f $include ]]; then
+          run_helper restore
+        else
+          require_build
+          run_helper set stable
+        fi
+        ;;
+      custom)
+        require_build
+        require_no_update
+        case $(primary) in
+          */beta/\$arch) run_helper set beta ;;
+          *) run_helper set stable ;;
+        esac
+        ;;
+      stable | beta) echo "grassfield-channel-set: nothing to repair ($current)" ;;
+      *) fail "Grassfield updates are off: grassfield-channel-set stable sets them up" ;;
+    esac
+    link_hook
+    ;;
+  off)
+    require_no_update
+    run_helper off
+    unlink_hook
+    ;;
+  *)
+    echo "usage: grassfield-channel-set [stable|beta|repair|off]" >&2
+    exit 2
+    ;;
+esac
