@@ -193,6 +193,7 @@
  {"path": "tests/unit/files/tst_tags.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_tagsearch.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_launchguard.cpp", "layer": "logic"},
+ {"path": "tests/unit/files/tst_menushortcuts.cpp", "layer": "logic"},
  {"path": "tests/unit/menu-bridge/tst_menubridge.cpp", "layer": "logic"},
  {"path": "tests/unit/menu-bridge/tst_screensaver.cpp", "layer": "logic"},
  {"path": "tests/unit/preview/tst_previewlogic.cpp", "layer": "logic"},
