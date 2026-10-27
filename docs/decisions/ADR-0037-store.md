@@ -826,3 +826,20 @@ Opus review of step 1 here, at 17567e8 (integrator, 2026-10-27): FAIL, 1 MAJOR. 
   check (60 s) and of the unpacking (120 s) are written above (f); the request's cookie, Referer, cache and redirect
   settings, a real https server's redirects (five followed, a sixth refused, http refused), cookies never sent back and
   the size cap, and `bsdtar`'s argument vector are tested.
+
+Opus review of step 2 here, at 0fe0c60 (integrator, 2026-10-27): FAIL, 1 MAJOR and 8 MINOR. Each finding and where it is
+answered:
+- **MAJOR**, LeakSanitizer failed the ASan suite on Qt 6.11.2 with ICU 78: `QString::localeAwareCompare` keeps a shared
+  default `QCollator` that is never freed. The two sorts that used it (the product page's languages, `storeview.cpp`;
+  Installed's names, `storebackend.cpp`) now use a `QCollator` of their own on the formats locale.
+- **Minors:** with a larger text size the hero's and the cards' title line heights and the gaps under them grow with the
+  fonts, and the title's distance from the eyebrow too (`textScale` tokens; `tst_storemain` test_largeText); the shared
+  `Toggle` has the disabled look of the other controls (dimmed, `materialDisabledOpacity`; three Settings callers no
+  longer set it themselves); `branding/LICENSES.md` counts 92 symbolic icons and has the Store icon's row; the screenshot
+  provider checks the backend's gate (screenshots on and online) right before each fetch, and the product page reads the
+  source again when the Store goes offline or comes back; the notice's rim, the generic icon's glyph and the "See All"
+  link's centring use tokens or the title's own height; the screenshots line says the addresses come from each app's
+  description, often another site; the spec lists `GRASSFIELD_STORE_QML`, the dev plumbing and `--page`, and
+  `StoreEnv.OfflineOnlyInADevSession` tests `GRASSFIELD_STORE_OFFLINE` (honoured in dev, ignored in a packaged session);
+  Tab (and any keyboard focus move) scrolls the focused item into view below the toolbar (`ScrollPage.reveal`;
+  test_focusScrollsIntoView).

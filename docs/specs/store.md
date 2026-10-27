@@ -222,7 +222,7 @@ Dev sessions (ADR-0019)
 | Ctrl+[ / Ctrl+] , Alt+Left / Alt+Right | back / forward |
 | Ctrl+, | the Store's settings |
 | Ctrl+W, Ctrl+Q | close the window, quit (a running operation goes on, ADR-0037 f) |
-| Tab / Shift+Tab | sidebar → content → toolbar; inside the content, the cards and buttons in reading order |
+| Tab / Shift+Tab | sidebar → content → toolbar; inside the content, the cards and buttons in reading order, each scrolled into view below the toolbar |
 | Arrows | inside a carousel or a grid, move between items; Up/Down in the sidebar |
 | Return / Space | open the focused item / press the focused button |
 | Esc | close a sheet or popover (Cancel); in the search field, clear then leave |
@@ -306,6 +306,11 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
   `omarchy-install-and-launch`, `omarchy-pkg-add`, `omarchy-pkg-aur-add`, `omarchy-pkg-drop`,
   `omarchy-launch-floating-terminal-with-presentation`, `omarchy-webapp-install`, `omarchy-webapp-remove`, the recipes the
   catalog names.
+- Environment: `GRASSFIELD_STORE_QML` (the QML directory, as the other apps' `_QML`; the installed one by default). Dev
+  plumbing, honoured only in a dev session and inert in a packaged one (ADR-0019, `apps/store/src/storeenv.h`):
+  `GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`, `GRASSFIELD_STORE_OFFLINE` (`1`:
+  offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession). Command line:
+  `--page` (`discover`, `section:<id>`, `categories`, `category:<id>`, `app:<id>`, `search:<words>`, `installed`, `updates`).
 
 ## Dependencies (versions seen in S3, S8 and S14; checked again at step 1)
 `grassfield-desktop` (same version), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`; AppStream is read by the Store's own reader, ADR-0037 SD5), polkit (`pkexec`,
