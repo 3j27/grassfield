@@ -293,8 +293,9 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   (interface `org.kde.KPasswdServer`: `checkAuthInfoAsync`, `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo`, the result
   signals), shows the server form ("Enter your name and password for the server “%1”.", name, password, Remember this
   password, Cancel / Connect), keeps answers for the session as kpasswdserver does, and stores remembered ones with libsecret
-  in the Secret Service (never KWallet); the sheet says when the keyring that receives them is not protected by a password
-  (Omarchy's default keyring is not); bridge down → D-Bus activation starts kiod6 (KDE's dialog, as today).
+  in the Secret Service (never through KWallet's API; which daemon holds the Secret Service is ADR-0035 Q17, open); the sheet
+  says when the keyring that receives them is not protected by a password (Omarchy's default keyring is not); bridge down →
+  D-Bus activation starts kiod6 (KDE's dialog, as today).
 
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
@@ -318,7 +319,8 @@ Name ownership is the only authorization (upstream design): a same-user process 
 gcr-prompter while the bridge is down; the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); VPN
-secrets are not asked (SC8).
+secrets are not asked (SC8); until Q17 is answered, KWallet's `ksecretd` can hold the Secret Service for a session when a
+KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's dialogs (inventory S12).
 
 ## 6. Toolkit appearance (category C; ADR-0035 D-8)
 

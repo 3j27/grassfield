@@ -1,10 +1,10 @@
 # ADR-0035: System dialogs in the Grassfield session
 Status: Proposed (cloud session, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »; step 0, docs
-only, no code before the opus PASS; the owner answered Q1–Q16 on 2026-10-27; revised after the opus review of PR #13:
-five MAJORs and the minors, each marked "review of PR #13" where it changed the text) · Date: 2026-10-27 · Decider: owner (the
-questions in "Owner decisions"), integrator (merge after the opus review) · Number: 0035 (0033 is Software Update, 0034 is
-the clipboard history, merged with #12; 0035 is free on main 642a9b6 and on every open pull request, #7 to #15; #14 and #15
-use 0036 and 0037)
+only, no code before the opus PASS; the owner answered Q1–Q16 on 2026-10-27, Q17 is open; revised after the opus review of
+PR #13: five MAJORs and the minors, each marked "review of PR #13" where it changed the text) · Date: 2026-10-27 · Decider:
+owner (the questions in "Owner decisions"), integrator (merge after the opus review) · Number: 0035 (0033 is Software
+Update, 0034 is the clipboard history, merged with #12; 0035 is free on main 642a9b6 and on every open pull request, #7 to
+#15; #14 and #15 use 0036 and 0037)
 
 ## Context
 Owner brief (2026-10-27): in a Grassfield session no system window or question may look like Omarchy, GNOME, Hyprland or
@@ -494,10 +494,11 @@ Options (asked 2026-10-27, recommended first):
   `org.kde.kpasswdserver6` (path `/modules/kpasswdserver`, interface `org.kde.KPasswdServer` with `checkAuthInfoAsync`,
   `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo` and their result signals, `src/core/org.kde.KPasswdServer.xml`) and
   shows the D-9 secret sheet ("Enter your name and password for the server “X”", Remember this password); remembered
-  passwords go to the Secret Service (libsecret, gnome-keyring), never to KWallet, so no KDE password dialog and no KWallet
-  wizard appear for KIO in a Grassfield session. Caveat shown in the spec: Omarchy's default keyring is unencrypted (probe
-  P12), so a remembered network password is stored in clear on disk until the user protects the keyring (macOS encrypts the
-  login keychain). Fallback: bridge down → D-Bus activation starts kiod6 (KDE's dialog, as today).
+  passwords go to the Secret Service through libsecret, never through KWallet's API, so no KDE password dialog and no KWallet
+  wizard appear for KIO in a Grassfield session; which daemon holds the Secret Service is Q17, below. Caveat shown in the
+  spec: Omarchy's default keyring is unencrypted (probe P12), so a remembered network password is stored in clear on disk
+  until the user protects the keyring (macOS encrypts the login keychain). Fallback: bridge down → D-Bus activation starts
+  kiod6 (KDE's dialog, as today).
 - K2. Grassfield delegates for Files' own dialogs only; KDE's password dialog stays (themed); KWallet disabled for the session
   by a session-only `kwalletrc` (`[Wallet] Enabled=false` in a Grassfield `XDG_CONFIG_DIRS` entry; the key is read by
   `KWalletDLauncher`, `src/api/KWallet/kwallet.cpp:872-884`; the user's own `kwalletrc` wins), passwords remembered for the
@@ -510,6 +511,28 @@ than Files keep their own delegates (inventory K8, themed); their network passwo
 Cost: (a) medium, (b) medium (five methods and two signals, the `KIO::AuthInfo` serialisation, the per-window cache rules of
 `kpasswdserver.cpp`, tests against a fake KIO worker client). Risk: (b) is a second protocol on the secret path: same queue,
 same identity rules, same opus review as D-9.
+
+**Who holds the Secret Service** (found by the checks of this pass, after the owner's answers; inventory S12, probe P16;
+owner question Q17, open). Nobody owns `org.freedesktop.secrets` at login in either session: Arch enables only
+gnome-keyring's control socket, its service stays disabled, and Omarchy starts nothing (P16); D-Bus activates gnome-keyring
+on first use (P4). KWallet's `ksecretd` requests the same name whenever it starts and the name is free
+(`src/runtime/ksecretd/kwalletfreedesktopservice.cpp:155-158`, on by default), and it starts with any KWallet client:
+today, Files opening an `sftp:` or `smb:` location that needs a password is enough (kpasswdserver → kwalletd6 → ksecretd,
+inventory S12). Neither daemon queues for or takes over the name (Qt's `registerService` defaults, qtbase
+`src/dbus/qdbusconnectioninterface.h:63-65`), so the first one keeps it for the session, and Chromium's saved passwords
+(Omarchy's `--password-store=gnome-libsecret`) and every libsecret client follow it, with KWallet's wizard and wallet
+password (K2) in place of the keyring prompts. Read in source, not run (UNVERIFIED in the inventory). With K1 (b) in step 9,
+Files no longer starts KWallet, but other KF6 apps (K8) and the fallback to kiod6 still can. Options (recommended first):
+- **Q17-a.** The Grassfield session starts gnome-keyring's Secret Service with the session (D-Bus `StartServiceByName` of
+  `org.freedesktop.secrets` from a Grassfield unit gated by `GRASSFIELD_SESSION=1`, before the shell), so gnome-keyring,
+  the keyring Omarchy sets up, always holds it; ksecretd keeps only its own compatibility name. No owner file is written.
+  Cost: one small unit and a test; gnome-keyring then runs for the whole session (it asks nothing until an app reads a
+  secret). Risk: none known.
+- Q17-b. A session-only `kwalletrc` with `[org.freedesktop.secrets] apiEnabled=false` in a Grassfield `XDG_CONFIG_DIRS`
+  entry (`src/kwalletsettings.kcfg:49-53`; the user's own `kwalletrc` wins): ksecretd never takes the name. A new
+  configuration directory for the session.
+- Q17-c. Kept as is: a known limitation.
+Delivery: with step 9 (the secret path), unless the owner places it earlier; it touches no shell code.
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
@@ -549,7 +572,8 @@ requests #8, #9 and #10 are merged (owner).
 8. **Screenshots re-wired** (D-10, Q4). After #8–#10 (bindings and a shell notice).
 9. **Password prompts** (D-9, Q1 = S2, Q10, Q11, Q12): the amendment of the security rule first (Q12's text, after the
    integrator's review and the owner's agreement), then the bridge, the socket protocol, the shell's one queue and secret
-   sheets, the udiskie helper, the NetworkManager secret agent, `org.kde.kpasswdserver6` (D-12 b); opus PASS. After #8–#10.
+   sheets, the udiskie helper, the NetworkManager secret agent, `org.kde.kpasswdserver6` (D-12 b), and Q17's answer; opus
+   PASS. After #8–#10.
 10. **Bluetooth pairing sheet** (D-11, Q9: "en plus des 8 étapes", Q13): the BlueZ agent in the bridge, the drop-in for
     Omarchy's `bt-agent`, the sheet's pairing forms; opus PASS. After step 9, whose bridge and queue it reuses.
 
@@ -558,9 +582,10 @@ dialogs (3, 4), the security-sensitive ones last, after the patterns they reuse 
 
 ## Owner decisions
 Asked on 2026-10-27 in the cloud session with the options above (recommended option first, in French): Q1–Q10 with step 0,
-Q11–Q16 after the opus review of PR #13. Every question is answered; the "Owner's words" column is the option the owner
-picked, verbatim. Q1 also accepts that a new secret prompt enters `shell/security/`; Q12 fixes the amendment's text, applied
-in step 9 after the integrator's review.
+Q11–Q16 after the opus review of PR #13; Q1–Q16 are answered, and the "Owner's words" column is the option the owner
+picked, verbatim. Q17 comes from a check made after those answers and is open: it is asked before step 9. Q1 also accepts
+that a new secret prompt enters `shell/security/`; Q12 fixes the amendment's text, applied in step 9 after the integrator's
+review.
 
 | | Question | Options (recommended first) | Owner's words | Answer |
 |---|---|---|---|---|
@@ -580,6 +605,7 @@ in step 9 after the integrator's review.
 | Q14 | "Remember this choice" in the screen-sharing picker | unticked every time / follow xdph's `--allow-token` | « Décoché toujours (Recommandé) » | unticked every time |
 | Q15 | Screen-sharing request while the session is locked | cancel / hold until the unlock | « Annuler (Recommandé) » | cancel |
 | Q16 | Rename Quit to "Force Quit" in the app menu of a hung app | no, macOS model / yes | « Non, modèle macOS (Recommandé) » | no |
+| Q17 | Which daemon holds the Secret Service in the Grassfield session (D-12) | Q17-a gnome-keyring started with the session / Q17-b KWallet's takeover off for the session / Q17-c as is | not asked yet | open |
 
 ## macOS reference
 One system draws every system question: open and save panels and the print sheet are AppKit's, shown as sheets of the app's
@@ -601,7 +627,8 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   exit 0 (Omarchy 4.0.4 stable mirror, 2026-10-27): package versions, the portal and D-Bus service files, Arch's pinentry
   wrapper, the helper names in Hyprland's and xdph's binaries, udiskie's default prompt, Omarchy's inherited settings, the
   packages that already pull libcups, BlueZ and NetworkManager (P14), kio's dependency on kwallet, the kpasswdserver and
-  kwalletd service files, and what pulls gcr and gcr-4 (P15).
+  kwalletd service files, and what pulls gcr and gcr-4 (P15), gnome-keyring's globally enabled units and Omarchy's
+  references to the keyrings (P16).
 - Source reading, every citation in the inventory: Hyprland v0.56.2 (efb5099), xdph v1.4.1 (cc8e5ef), hyprland-guiutils v0.2.2
   (a16ad89), hyprtoolkit v0.6.0, hyprutils v0.14.3, xdg-desktop-portal 1.22.1 (1d20fad), xdg-desktop-portal-gtk 1.15.3
   (337202d), gtk 3.24.52 (6a0b360) and 4.24.1, libadwaita 1.10.0, qtbase v6.11.2 and v6.12.0, gcr 3.41.2 and 4.4.1,
@@ -611,6 +638,7 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   marked UNVERIFIED in the inventory, and the live update of GTK 3 apps through `SettingChanged` (code-read only).
 
 ## Consequences
+- Q17 (open) decides which daemon holds the Secret Service in the Grassfield session; its answer lands with step 9.
 - New services: `grassfield-portal-settings` (always on, no window) and `grassfield-portal` (panels, D-Bus activated) from
   steps 2 and 4; `grassfield-prompter` from step 9 (gcr prompts, KIO network passwords, NetworkManager secrets, and in step 10
   the BlueZ agent). All gated by `GRASSFIELD_SESSION=1`, hardened, with budgets; §5.8 is answered per service in its step.
