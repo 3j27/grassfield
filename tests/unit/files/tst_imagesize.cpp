@@ -1,9 +1,9 @@
 // Unit tests for apps/files/src/imagesize.{h,cpp} (gtest): the preview pane's Dimensions never block the GUI thread
 // (docs/specs/files.md "Preview pane"): a FIFO or a link to /dev/zero named like a picture is never opened, a huge file is
-// read up to the budget only, a path on a network or FUSE mount is never looked at, a link swapped in after the check is
-// never followed, and the Reader answers later on the caller's thread. Built and run by scripts/dev/test.sh. The files
-// are made only under GRASSFIELD_TEST_TMP, a directory inside the repository's .dev/ (set by scripts/dev/test.sh); the
-// tests skip without it.
+// read up to the budget only (a header that never ends included), a path on a network or FUSE mount is never looked at, a
+// link swapped in after the check is never followed, and the Reader answers later on the caller's thread. Built and run by
+// scripts/dev/test.sh. The files are made only under GRASSFIELD_TEST_TMP, a directory inside the repository's .dev/ (set by
+// scripts/dev/test.sh); the tests skip without it.
 #include "imagerotate.h"
 #include "imagesize.h"
 
@@ -183,6 +183,33 @@ TEST(ImageSize, AHugeFileIsReadUpToTheBudget)
     EXPECT_TRUE(returnsWithin(5000, [&] { size = ImageSize::read(big, mounts); }));
     EXPECT_EQ(size, QSize(30, 20));
     std::printf("huge files: %lld ms for both reads\n", static_cast<long long>(clock.elapsed()));
+}
+
+// The budget is what ends a header that never ends: a PBM whose comment line runs on through 4 GiB of NUL bytes (sparse:
+// nothing is written to disk) has the PBM reader ask for one byte after another; at kReadBudget it gets no more and gives
+// up. Without the budget the read takes the whole file (over 30 s here). Everything the reading thread uses is its own: a
+// read that outlives the test (a failure) touches nothing of it.
+TEST(ImageSize, TheBudgetEndsAHeaderThatNeverEnds)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    const QString pbm = dir->path() + QStringLiteral("/endless.pbm");
+    {
+        QFile f(pbm);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        ASSERT_EQ(f.write("P1\n#", 4), 4);
+        ASSERT_TRUE(f.resize(qint64(4) * 1024 * 1024 * 1024));
+    }
+    ASSERT_EQ(ImageSize::check(pbm, mounts), ImageSize::Refusal::None);
+    const auto size = std::make_shared<QSize>(1, 1);
+    QElapsedTimer clock;
+    clock.start();
+    const bool returned = returnsWithin(5000, [size, pbm, mounts] { *size = ImageSize::read(pbm, mounts); });
+    std::printf("endless PBM header: %s after %lld ms\n", returned ? "refused" : "still reading", static_cast<long long>(clock.elapsed()));
+    ASSERT_TRUE(returned) << "the header was read past the budget";
+    EXPECT_FALSE(size->isValid());
 }
 
 // A link swapped in at the checked path after the check is never followed by the open, wherever it leads (a network share

@@ -183,7 +183,7 @@ selection").
 | Grouped icon view on a stand-in listing: a view made before its size makes the cells it shows, only the sections near the view are made (600 groups), Show All and reveal | `tests/unit/tst_filesgrouped.qml` (3 cases) | L0 |
 | Sidebar: Eject target and menu; Recents takes no drop and does not spring | `tests/unit/tst_filessidebar.qml` (5 cases) | L0 |
 | Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
-| Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a link swapped in after the check never followed, network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 7 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a header that never ends (a PBM comment running through 4 GiB) stopped by the budget, a link swapped in after the check never followed, network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Key window: Get Info (opened with Ctrl+I) and Customize Folder take the keys; Ctrl+W (Escape in Get Info) closes them alone and the browser window stays with its tab, with and without the global menu; none of the browser's Shortcuts or keyed global menu items is live meanwhile, all are again after | `tests/unit/tst_filesbrowser.qml` (5 cases: the real windows offscreen over a stand-in FilesApp) | L0 |
 | Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Per-folder views (F-3) with grouping and the new sort keys; hostile files and lock paths | `tests/unit/files/tst_folderviews.cpp` (gtest, 23 tests) | L0 |
@@ -652,8 +652,8 @@ PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Ga
 - Tests: `tests/unit/files/tst_imagerotate.cpp` (the EXIF table, the kinds, the minimal segment, little-endian tags,
   broken files, a JPEG without EXIF keeps its tags and mode and leaves no temporary file, an in-place change keeps the
   inode, a PNG turned pixel by pixel, links, other kinds, animated PNGs and hard-linked files refused; misnamed pictures
-  by their content; the size limit), `tests/unit/files/tst_imagesize.cpp` (Dimensions: special files, a huge file, a link
-  swapped in after the check, remote and FUSE mounts, the worker).
+  by their content; the size limit), `tests/unit/files/tst_imagesize.cpp` (Dimensions: special files, a huge file, a
+  header that never ends, a link swapped in after the check, remote and FUSE mounts, the worker).
 
 ## Views and selection
 PR 2 of the Finder parity brief (matrix rows FP-18, FP-19, FP-23, FP-39 to FP-43, FP-45, FP-46, FP-66). References:
