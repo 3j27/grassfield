@@ -15,9 +15,9 @@ TestCase {
     visible: true
     when: windowShown
 
-    readonly property string tokenA: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+    readonly property string tokenA: "00000000-1111-2222-3333-444444444444"
     // The portal's current tokens: base64 with + and / made _, so some begin with _.
-    readonly property string tokenB: "_fsassULUxs_Z2LjLZjJHA"
+    readonly property string tokenB: "_0000_fake_0000_0000_"
     readonly property var stateJson: ({
             location: [{app: "org.example.Maps", allowed: true}, {app: "org.example.Weather", allowed: false}, {app: "org.example.Studio", allowed: false},
                 {app: "org.example.Ghost", allowed: false}],
@@ -163,7 +163,7 @@ TestCase {
         compare(Privacy.forget("camera", "abc"), null);
         compare(Privacy.forget("screencast", "a b"), null);
         compare(Privacy.forget("screencast", "tok:1"), null, "only the portal's characters");
-        compare(Privacy.forget("screencast", "_fsassULUxs_Z2LjLZjJHA").token, "_fsassULUxs_Z2LjLZjJHA");
+        compare(Privacy.forget("screencast", "_0000_fake_0000_0000_").token, "_0000_fake_0000_0000_");
         compare(Privacy.forget("screencast", ""), null);
         compare(Privacy.entryFile("org.example.Meet"), "org.example.Meet.desktop");
         compare(Privacy.entryFile("../../x"), "");

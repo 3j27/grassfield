@@ -141,7 +141,7 @@ struct NmFixture {
         if (m == QLatin1String("GetSettings")) {
             ConnectionSettings s;
             if (c.path == QLatin1String("/conn/1")) {
-                s[QStringLiteral("connection")] = {{"type", QStringLiteral("802-11-wireless")}, {"uuid", QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")}};
+                s[QStringLiteral("connection")] = {{"type", QStringLiteral("802-11-wireless")}, {"uuid", QStringLiteral("00000000-1111-2222-3333-444444444444")}};
                 s[QStringLiteral("802-11-wireless")] = {{"ssid", QByteArray("Home")}};
             } else {
                 s[QStringLiteral("connection")] = {{"type", QStringLiteral("802-3-ethernet")}, {"uuid", QStringLiteral("11111111-2222-3333-4444-555555555555")}};
@@ -181,7 +181,7 @@ TEST(SystemBusWifi, StateListsRadioDeviceAccessPointsAndProfiles)
     EXPECT_EQ(aps[2]["hex"].toString(), QStringLiteral("43616665"));  // "Cafe"
     const QJsonArray profiles = j["profiles"].toArray();
     ASSERT_EQ(profiles.size(), 1); // the Ethernet profile is not a Wi-Fi one
-    EXPECT_EQ(profiles[0]["uuid"].toString(), QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"));
+    EXPECT_EQ(profiles[0]["uuid"].toString(), QStringLiteral("00000000-1111-2222-3333-444444444444"));
     EXPECT_EQ(profiles[0]["hex"].toString(), QStringLiteral("486F6D65"));
 }
 
@@ -431,7 +431,7 @@ TEST(SystemBusWifi, AFailedCallGivesTheServicesOwnShortReason)
             return err(QStringLiteral("org.freedesktop.NetworkManager.PermissionDenied: Not authorized to control networking."));
         return inner(c);
     };
-    const QString r = runAction(f.bus, {{"op", "wifi.connectKnown"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}});
+    const QString r = runAction(f.bus, {{"op", "wifi.connectKnown"}, {"uuid", "00000000-1111-2222-3333-444444444444"}});
     EXPECT_EQ(r, QStringLiteral("Connection activation failed: (3) the secrets were not provided"));
     EXPECT_EQ(runAction(f.bus, {{"op", "wifi.radio"}, {"on", true}}), QStringLiteral("not allowed: the system refused the request"));
 }
@@ -683,7 +683,7 @@ TEST(SystemBusGuard, ADevSessionSendsReadsAndNothingElse)
     EXPECT_TRUE(wifiState(dev).ok);
     const int reads = f.bus.calls.size();
     for (const QVariantMap &op : QList<QVariantMap>{{{"op", "wifi.radio"}, {"on", false}},
-                                                     {{"op", "wifi.connectKnown"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}},
+                                                     {{"op", "wifi.connectKnown"}, {"uuid", "00000000-1111-2222-3333-444444444444"}},
                                                      {{"op", "wifi.connectOpen"}, {"hex", "43616665"}},
                                                      {{"op", "wifi.disconnect"}},
                                                      {{"op", "wifi.scan"}}}) {
@@ -893,7 +893,7 @@ TEST(SystemBusGeneral, BadValuesNeverReachTheBus)
     // The older shapes are anchored as well: a final newline is not part of a MAC, an SSID or a UUID.
     EXPECT_FALSE(validAction({{"op", "bt.connect"}, {"mac", "AA:BB:CC:DD:EE:FF\n"}, {"connect", true}}));
     EXPECT_FALSE(validAction({{"op", "wifi.connectOpen"}, {"hex", "43616665\n"}}));
-    EXPECT_FALSE(validAction({{"op", "wifi.connectKnown"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0\n"}}));
+    EXPECT_FALSE(validAction({{"op", "wifi.connectKnown"}, {"uuid", "00000000-1111-2222-3333-444444444444\n"}}));
     EXPECT_TRUE(validAction({{"op", "bt.connect"}, {"mac", "AA:BB:CC:DD:EE:FF"}, {"connect", true}}));
 }
 
@@ -983,7 +983,7 @@ struct NetFixture {
                 return ok({QVariant::fromValue(QVariantMap{{"Frequency", u32(5180)}, {"Ssid", QByteArray("Home")}})});
             if (m == QLatin1String("GetAll") && target == QLatin1String("org.freedesktop.NetworkManager.Connection.Active")) {
                 if (c.path == QLatin1String("/active/1"))
-                    return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Home")}, {"Uuid", QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")}, {"State", u32(2)}})});
+                    return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Home")}, {"Uuid", QStringLiteral("00000000-1111-2222-3333-444444444444")}, {"State", u32(2)}})});
                 return ok({QVariant::fromValue(QVariantMap{{"Id", QStringLiteral("Office")}, {"Uuid", QStringLiteral("AAAAAAAA-0000-0000-0000-000000000001")}, {"State", u32(2)}})});
             }
             if (m == QLatin1String("Get") && c.args.value(1).toString() == QLatin1String("Speed"))
@@ -1001,7 +1001,7 @@ struct NetFixture {
             if (m == QLatin1String("GetSettings")) {
                 ConnectionSettings s;
                 if (c.path == QLatin1String("/conn/1"))
-                    s[QStringLiteral("connection")] = {{"type", QStringLiteral("802-11-wireless")}, {"uuid", QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")}, {"id", QStringLiteral("Home")}};
+                    s[QStringLiteral("connection")] = {{"type", QStringLiteral("802-11-wireless")}, {"uuid", QStringLiteral("00000000-1111-2222-3333-444444444444")}, {"id", QStringLiteral("Home")}};
                 else if (c.path == QLatin1String("/conn/2"))
                     s[QStringLiteral("connection")] = {{"type", QStringLiteral("wireguard")}, {"uuid", QStringLiteral("aaaaaaaa-0000-0000-0000-000000000001")}, {"id", QStringLiteral("Office")}};
                 else
@@ -1069,7 +1069,7 @@ TEST(SystemBusNetwork, ForgetAndVpnActionsMakeExactlyTheirCalls)
     f.bus.calls.clear();
     EXPECT_EQ(runAction(f.bus, {{"op", "wifi.forget"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}}), QStringLiteral("that network is no longer saved"));
     EXPECT_FALSE(f.bus.members().contains(QStringLiteral("Connection.Delete")));
-    EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}, {"on", true}}), QStringLiteral("that VPN is no longer saved"));
+    EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "00000000-1111-2222-3333-444444444444"}, {"on", true}}), QStringLiteral("that VPN is no longer saved"));
     EXPECT_EQ(runAction(f.bus, {{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", true}}), QString());
     EXPECT_EQ(f.bus.calls.last().member, QStringLiteral("ActivateConnection"));
     EXPECT_EQ(f.bus.calls.last().args.value(0).value<QDBusObjectPath>().path(), QStringLiteral("/conn/3"));
@@ -1086,7 +1086,7 @@ TEST(SystemBusNetwork, ForgetAndVpnActionsMakeExactlyTheirCalls)
 TEST(SystemBusNetwork, BadValuesNeverReachTheBusAndADevSessionOnlyReads)
 {
     NetFixture f;
-    for (const QVariantMap &op : {QVariantMap{{"op", "wifi.forget"}, {"uuid", "not-a-uuid"}}, QVariantMap{{"op", "wifi.forget"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0\n"}},
+    for (const QVariantMap &op : {QVariantMap{{"op", "wifi.forget"}, {"uuid", "not-a-uuid"}}, QVariantMap{{"op", "wifi.forget"}, {"uuid", "00000000-1111-2222-3333-444444444444\n"}},
                                   QVariantMap{{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", "yes"}},
                                   QVariantMap{{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}}}) {
         f.bus.calls.clear();
@@ -1096,7 +1096,7 @@ TEST(SystemBusNetwork, BadValuesNeverReachTheBusAndADevSessionOnlyReads)
     GuardedCaller dev(f.bus, true);
     f.bus.calls.clear();
     EXPECT_TRUE(networkState(dev).ok);
-    EXPECT_TRUE(runAction(dev, {{"op", "wifi.forget"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}}).startsWith(QStringLiteral("dev guard")));
+    EXPECT_TRUE(runAction(dev, {{"op", "wifi.forget"}, {"uuid", "00000000-1111-2222-3333-444444444444"}}).startsWith(QStringLiteral("dev guard")));
     EXPECT_TRUE(runAction(dev, {{"op", "vpn.connect"}, {"uuid", "bbbbbbbb-0000-0000-0000-000000000002"}, {"on", true}}).startsWith(QStringLiteral("dev guard")));
     for (const QString &m : f.bus.members())
         EXPECT_FALSE(m.endsWith(QLatin1String(".Delete")) || m.endsWith(QLatin1String("ActivateConnection"))) << qPrintable(m);
@@ -1354,15 +1354,15 @@ struct PrivacyFixture {
                 if (table == QLatin1String("devices") && id == QLatin1String("camera"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}, {"org.example.Photo", {"no"}}, {"org.example.Ask", {"ask"}}}),
                                variant(QVariant())});
-                if (table == QLatin1String("screencast") && id == QLatin1String("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"))
+                if (table == QLatin1String("screencast") && id == QLatin1String("00000000-1111-2222-3333-444444444444"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}}), variant(QVariant())});
-                if (table == QLatin1String("screencast") && id == QLatin1String("_fsassULUxs_Z2LjLZjJHA"))
+                if (table == QLatin1String("screencast") && id == QLatin1String("_0000_fake_0000_0000_"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Studio", {"yes"}}}), variant(QVariant())});
                 return err(kNotFound);
             }
             if (c.member == QLatin1String("List")) {
                 if (table == QLatin1String("screencast"))
-                    return ok({QStringList{"../not/a/token", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "_fsassULUxs_Z2LjLZjJHA"}});
+                    return ok({QStringList{"../not/a/token", "00000000-1111-2222-3333-444444444444", "_0000_fake_0000_0000_"}});
                 return err(kNotFound);
             }
             if (c.member == QLatin1String("SetPermission") || c.member == QLatin1String("Delete"))
@@ -1399,9 +1399,9 @@ TEST(SystemBusPrivacy, TheStoreIsReadAsThePortalsReadIt)
     const QJsonArray shared = r.json.value("screencast").toArray();
     ASSERT_EQ(shared.size(), 2);
     EXPECT_EQ(shared[0].toObject().value("app").toString(), QStringLiteral("org.example.Meet"));
-    EXPECT_EQ(shared[0].toObject().value("token").toString(), QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"));
+    EXPECT_EQ(shared[0].toObject().value("token").toString(), QStringLiteral("00000000-1111-2222-3333-444444444444"));
     EXPECT_EQ(shared[1].toObject().value("app").toString(), QStringLiteral("org.example.Studio"));
-    EXPECT_EQ(shared[1].toObject().value("token").toString(), QStringLiteral("_fsassULUxs_Z2LjLZjJHA"));
+    EXPECT_EQ(shared[1].toObject().value("token").toString(), QStringLiteral("_0000_fake_0000_0000_"));
     EXPECT_TRUE(r.json.value("remoteDesktop").toArray().isEmpty());
     // The portals: Background exported, RemoteDesktop not; both asked with a read the dev guard lets through.
     EXPECT_EQ(r.json.value("portals").toObject(), (QJsonObject{{"background", true}, {"remoteDesktop", false}}));
@@ -1496,13 +1496,13 @@ TEST(SystemBusPrivacy, ASwitchSetsExactlyThatAppsGrant)
     EXPECT_EQ(f.bus.calls[3].args, (QVariantList{"background", true, "background", "org.example.Sync", QStringList{"yes"}}));
     // Forgetting a saved selection deletes that entry only; one already gone is fine.
     f.bus.calls.clear();
-    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "00000000-1111-2222-3333-444444444444"}}), QString());
     EXPECT_EQ(f.bus.calls[0].member, QStringLiteral("Delete"));
-    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"screencast", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}));
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"screencast", "00000000-1111-2222-3333-444444444444"}));
     f.bus.handler = [](const Call &) { return err(kNotFound); };
     EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "remoteDesktop"}, {"token", "abc"}}), QString());
-    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "_fsassULUxs_Z2LjLZjJHA"}}), QString());
-    EXPECT_EQ(f.bus.calls.last().args, (QVariantList{"screencast", "_fsassULUxs_Z2LjLZjJHA"}));
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "_0000_fake_0000_0000_"}}), QString());
+    EXPECT_EQ(f.bus.calls.last().args, (QVariantList{"screencast", "_0000_fake_0000_0000_"}));
     EXPECT_EQ(f.bus.calls[1].args.value(0).toString(), QStringLiteral("remote-desktop"));
     EXPECT_TRUE(sessionAction({{"op", "privacy.allow"}}));
     EXPECT_FALSE(privilegedAction({{"op", "privacy.allow"}}));

@@ -207,7 +207,7 @@ st=$(probe wifi-state)
 check "the state is JSON of a Wi-Fi radio that is on, with the device wlan0 connected" py "$st" 'j["radio"] is True and j["device"] == {"name": "wlan0", "connected": True}'
 check "three access points: Home (active, strong), Home (weak), Cafe (open)" py "$st" 'len(j["aps"]) == 3 and [a["hex"] for a in j["aps"]].count("486F6D65") == 2 and sum(a["active"] for a in j["aps"]) == 1'
 check "the open network has no security flags, the others carry RSN flags" py "$st" '[a["rsn"] for a in j["aps"] if a["hex"] == "43616665"] == [0] and all(a["rsn"] == 0x188 for a in j["aps"] if a["hex"] == "486F6D65")'
-check "only the Wi-Fi profile is listed (the Ethernet one is not), with its SSID" py "$st" 'j["profiles"] == [{"uuid": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "hex": "486F6D65"}]'
+check "only the Wi-Fi profile is listed (the Ethernet one is not), with its SSID" py "$st" 'j["profiles"] == [{"uuid": "00000000-1111-2222-3333-444444444444", "hex": "486F6D65"}]'
 reads=$(calls nm)
 check "reading made only read calls (no Set, no Activate, no Disconnect, no scan)" bash -c '! grep -qE "\"member\": \"(Set|ActivateConnection|AddAndActivateConnection|Disconnect|RequestScan)\"" "$1"' _ "$work/nm.log"
 check "the fake saw the 7 method reads (GetDevices, GetAllAccessPoints, ListConnections, 4 x GetSettings; property reads are served by GDBus itself): $reads" test "$reads" -eq 7
@@ -272,7 +272,7 @@ say ""
 say "[6] failure feedback"
 stop_service nm
 start_service nm --fail 'ActivateConnection=org.freedesktop.NetworkManager.PermissionDenied|Not authorized to control networking'
-out=$(probe act '{"op":"wifi.connectKnown","uuid":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}')
+out=$(probe act '{"op":"wifi.connectKnown","uuid":"00000000-1111-2222-3333-444444444444"}')
 check "a refused activation gives the page a reason ($out)" test "$out" = "failed: not allowed: the system refused the request"
 stop_service nm
 start_service nm --fail 'Disconnect=org.freedesktop.NetworkManager.Device.NotActive|The device is not active'
@@ -295,7 +295,7 @@ out=$(probe --dev wifi-state)
 check "a dev session still reads the Wi-Fi state" py "$out" 'j["radio"] is True and len(j["aps"]) == 3'
 check "a dev session still reads the Bluetooth state" py "$(probe --dev bt-state)" 'len(j["devices"]) == 2'
 fine=1
-for op in '{"op":"wifi.radio","on":false}' '{"op":"wifi.connectKnown","uuid":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}' '{"op":"wifi.connectOpen","hex":"43616665"}' '{"op":"wifi.disconnect"}' '{"op":"wifi.scan"}' \
+for op in '{"op":"wifi.radio","on":false}' '{"op":"wifi.connectKnown","uuid":"00000000-1111-2222-3333-444444444444"}' '{"op":"wifi.connectOpen","hex":"43616665"}' '{"op":"wifi.disconnect"}' '{"op":"wifi.scan"}' \
   '{"op":"bt.power","on":false}' '{"op":"bt.connect","mac":"11:22:33:44:55:66","connect":true}'; do
   out=$(probe --dev act "$op")
   case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
@@ -397,7 +397,7 @@ out=$(probe act '{"op":"wifi.connectSecure","hex":"43616665","psk":"correct hors
 check "an open network takes no password ($out)" test "$out" = "failed: that network does not take a password"
 out=$(probe act '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"short"}')
 check "a password NetworkManager would refuse never reaches it ($out)" test "$out" = "failed: invalid request"
-out=$(probe act '{"op":"wifi.forget","uuid":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}')
+out=$(probe act '{"op":"wifi.forget","uuid":"00000000-1111-2222-3333-444444444444"}')
 check "Forget This Network: ok ($out)" test "$out" = ok
 check "... Delete reached Home's profile" logged nm Delete /Settings/1 ""
 check "... and Home is no longer a saved network" py "$(probe wifi-state)" 'j["profiles"] == []'
@@ -416,7 +416,7 @@ stop_service nm
 start_service nm
 before=$(calls nm)
 fine=1
-for op in '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"correct horse"}' '{"op":"wifi.forget","uuid":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}' \
+for op in '{"op":"wifi.connectSecure","hex":"486F6D65","psk":"correct horse"}' '{"op":"wifi.forget","uuid":"00000000-1111-2222-3333-444444444444"}' \
   '{"op":"vpn.connect","uuid":"5b6c7d8e-9f00-4a1b-8c2d-3e4f5a6b7c8e","on":true}'; do
   out=$(probe --dev act "$op")
   case $out in "failed: dev guard"*) ;; *) fine=0; say "    not refused: $op -> $out" ;; esac
@@ -537,8 +537,8 @@ say "[15] Privacy & Security (the portal permission store)"
 out=$(probe privacy-state)
 check "no permission store: the reason says the service is not running ($out)" test "$out" = "failed: the service is not running"
 start_service permstore
-token=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
-token2=_fsassULUxs_Z2LjLZjJHA
+token=00000000-1111-2222-3333-444444444444
+token2=_0000_fake_0000_0000_
 st=$(probe privacy-state)
 check "location: Maps allowed (EXACT), Weather not (NONE), the malformed id dropped" py "$st" 'j["location"] == [{"app": "org.example.Maps", "allowed": True}, {"app": "org.example.Weather", "allowed": False}]'
 check "camera: Meet allowed, Booth's \"ask\" is not" py "$st" 'j["camera"] == [{"app": "org.example.Booth", "allowed": False}, {"app": "org.example.Meet", "allowed": True}]'

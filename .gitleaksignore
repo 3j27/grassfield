@@ -1,0 +1,18 @@
+# Gate S1 (`just check-secrets`): findings gitleaks reports that are not secrets, by fingerprint (commit:file:rule:line, as
+# `gitleaks detect --report-format json` prints .Fingerprint). The history cannot be rewritten, so a false positive already
+# committed is listed here; a new one is fixed in the file instead, so this list stays closed.
+#
+# Made-up xdg-desktop-portal restore tokens (a test UUID and a base64-like token) in the Privacy & Security tests of PR #10;
+# the files now use low-entropy fakes that the generic-api-key rule does not match.
+4ca0246289777135651569ab1d85343ebf9f01d1:docs/audits/ui-finesse-2026-10-25/tools/settings.py:generic-api-key:76
+5223a69751a3e37b8d22bfab68973be977e46b42:tests/integration/settings_dbus.sh:generic-api-key:540
+5223a69751a3e37b8d22bfab68973be977e46b42:tests/unit/settings/tst_systembus.cpp:generic-api-key:1426
+bb4f3dd77988295f5c9611e5b97fcfce0f3f5db8:tests/integration/settings_dbus.sh:generic-api-key:541
+bb4f3dd77988295f5c9611e5b97fcfce0f3f5db8:tests/unit/settings/tst_systembus.cpp:generic-api-key:1357
+bb4f3dd77988295f5c9611e5b97fcfce0f3f5db8:tests/unit/settings/tst_systembus.cpp:generic-api-key:1436
+bb4f3dd77988295f5c9611e5b97fcfce0f3f5db8:tests/unit/tst_settingsprivacy.qml:generic-api-key:151
+bb4f3dd77988295f5c9611e5b97fcfce0f3f5db8:tests/unit/tst_settingsprivacy.qml:generic-api-key:20
+f8a6b65e19a295fc2b5f0b97dafa8d6ffceac7e8:docs/audits/ui-finesse-2026-10-25/tools/settings.py:generic-api-key:75
+f8a6b65e19a295fc2b5f0b97dafa8d6ffceac7e8:docs/audits/ui-finesse-2026-10-25/tools/settings.py:generic-api-key:76
+f8a6b65e19a295fc2b5f0b97dafa8d6ffceac7e8:tests/unit/tst_settingsprivacy.qml:generic-api-key:18
+f8a6b65e19a295fc2b5f0b97dafa8d6ffceac7e8:tests/unit/tst_settingsprivacy.qml:generic-api-key:19
