@@ -258,7 +258,7 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. 56 variants of visible English text in the table below plus one literal on the line after its call: each
+# Part (f): the Settings C++. 61 variants of visible English text in the table below plus one literal on the line after its call: each
 # must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
@@ -324,6 +324,11 @@ declare -A variants=(
   [shiftindex]='void a() { list[0].reasons << "Hello"; }'
   [shiftderef]='void a() { (*reasons) << "Text"; }'
   [shiftcast]='void a() { static_cast<QStringList &>(reasons) << "Text"; }'
+  [shiftassign]='void a() { reasons = QStringList() << "Failed"; }'
+  [shiftassignm]='void A::a() { m_errors = QStringList() << QStringLiteral("Failed"); }'
+  [shiftpluseq]='void a() { reasons += QStringList() << "Failed"; }'
+  [shiftconstdecl]='void a() { const QStringList reasons = QStringList() << "Failed"; }'
+  [shiftautodecl]='void a() { auto reasons = QStringList() << "Failed"; }'
   [shiftchain]='void a(Result &r) { r.errors << QStringLiteral("failed") << QStringLiteral("it broke"); }'
 )
 for name in "${!variants[@]}"; do

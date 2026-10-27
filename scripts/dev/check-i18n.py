@@ -374,8 +374,10 @@ def cpp_names_text(name, words, plural=False):
 
 
 def cpp_shift_receiver(before):
-    """The name `before` shifts into: the last member of its first `<<` operand (`a.b[0].c << x << y` is c)."""
+    """The name `before` shifts into: the last member of its first `<<` operand (`a.b[0].c << x << y` is c), taken from the left side
+    of an assignment when there is one (`const QStringList reasons = QStringList() << x` is reasons)."""
     operand = before.split("<<")[0]
+    operand = re.split(r"(?<![=!<>+\-*/|&^%])\+?=(?!=)", operand)[0]  # `reasons = QStringList() <<`: the left of the assignment
     while True:  # drop indexes and template arguments (casts)
         reduced = re.sub(r"\[[^\[\]]*\]|<[^<>]*>", "", operand)
         if reduced == operand:
