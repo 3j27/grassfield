@@ -5,7 +5,7 @@ off until turned on; the sheet alone for per-user installs; repository packages 
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
 icons in our catalog for apps without metadata.
-Decisions and evidence: `docs/decisions/ADR-0037-store.md` (probes S0 to S15). Parity and measures:
+Decisions and evidence: `docs/decisions/ADR-0037-store.md` (probes S0 to S18). Parity and measures:
 `docs/audits/store-2026-10-27/parity.md`. App id `org.grassfield.Store`, binary `grassfield-store`, package `grassfield-store`.
 Name: "Grassfield Store" in both languages (a product name). Never "App Store" or "Arcade" (§14). The name and the
 sidebar's structure need legal review (ADR-0037 e.10).
@@ -114,14 +114,18 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   script de construction s'exécute sur cet ordinateur, puis le paquet est installé avec les droits d'administrateur.
   N'installez que ce en quoi vous avez confiance. »
 - SR17. The authentication (owner, ST4 and ST3): repository packages, the polkit dialog of `grassfield-store-helper`
-  (Grassfield's polkit sheet; "Waiting for permission…" « En attente de l'autorisation… » meanwhile, 120 s at most); the AUR and
+  (Grassfield's polkit sheet; "Waiting for permission…" « En attente de l'autorisation… » meanwhile, 120 s at most), at every
+  operation, never kept (`auth_admin`: a queue of three operations asks three times), the sheet saying "Install" or "Remove"
+  and the package names polkit reports (ADR-0037 b.1, SD2; the line as polkit gives it when it does not match); the AUR and
   Omarchy setups, sudo's prompt in Omarchy's terminal; web apps and Flatpaks, the sheet alone, its default button being the
   consent.
 - SR18. One operation at a time, whatever its path; later ones wait in the queue (shown on their buttons and in a queue
   popover in the toolbar, where a waiting one can be removed). The next one starts only when the previous one has its exit
   code, Omarchy's update lock is free and `db.lck` is absent. The running one shows progress: indeterminate while
   downloading, then "n of N" from pacman's log; in Omarchy's terminal it also says so ("Installing in Terminal…"
-  « Installation dans le Terminal… »).
+  « Installation dans le Terminal… »). While an operation runs, the Store holds Omarchy's update lock: `omarchy update` cannot
+  start, and Software Update, which reads the same lock, shows "Update in progress" (ADR-0033 d.5, in its own words) until the
+  operation ends.
 - SR19. Every operation ends with an exit code the Store receives (ADR-0037 b): pkexec's (b.1), the `exit` file of
   `grassfield-store-run` (b.2), the child's (b.3). Success is that code being 0 **and** the system's state matching the plan
   (the packages present at the planned versions, the web app's entry present, the Flatpak listed). Then the button becomes
@@ -142,9 +146,15 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   icon, or the Flatpak (its data in `~/.var/app/<app-id>` stays, and the sheet says so). A package other installed packages
   need is not removable (S10: "removing glib2 breaks dependency … required by
   accountsservice"): the sheet says which ones need it, and nothing runs. Default button "Uninstall" (« Désinstaller »),
-  destructive style. Omarchy's own apps (its base package list, such as Chromium), Grassfield's packages and pacman's
-  `HoldPkg` have no "Uninstall…": their page says "Part of Omarchy" (« Fait partie d'Omarchy ») or "Part of Grassfield"
-  (« Fait partie de Grassfield »).
+  destructive style. "Uninstall…" exists only for an app the user installed (ADR-0037 a, b.1; S16): a package installed
+  explicitly that owns an application entry (an AUR package needs no entry), that the deny list does not name, and whose whole
+  removal plan names no denied package. Otherwise no "Uninstall…", and the page says why: "Part of Omarchy" (« Fait partie
+  d'Omarchy »: Omarchy's two package lists, such as Chromium), "Part of Grassfield" (« Fait partie de Grassfield »), "Part
+  of the system" (« Fait partie du système »: the kernels, firmware, boot tools, `base`, `sudo`, `systemd`, pacman,
+  `HoldPkg`), "Installed with another app" (« Installée avec une autre app »: a dependency), or, when the plan would take a
+  protected package with it, "Uninstalling it would also remove part of the system" (« La désinstaller retirerait aussi une
+  partie du système »). From the repositories, the Store offers only apps that own an application entry (SD1), so it can
+  remove whatever it installed from them.
 
 Installed (step 2 read-only, step 3 actions)
 - SR23. The apps installed from the Store's sources that have a launcher or a catalog entry: explicitly installed packages
@@ -175,8 +185,10 @@ Catalog and network (step 1)
 - SR27. Requests per ADR-0037 c: https only, no cookie, no referer, User-Agent `Grassfield-Store/1`, 15 s, size caps. No search
   query leaves for Grassfield's host. The Store's settings window lists what is fetched and from where, in plain words.
 - SR27b. Arch's AppStream (owner, ST5): the installed `archlinux-appstream-data` when there is one; otherwise the Store fetches
-  that package's file from pacman's own mirror (`pacman -Sp`), checks it against the SHA-256 of pacman's sync database (S15),
-  and keeps its XML and icons in its cache (64 MiB at most), replaced when pacman's database names another version. Used for
+  that package's file and its `.sig` from pacman's own mirror (`pacman -Sp`), checks the signature with `pacman-key
+  --verify` as the user (pacman's keyring and trust rule, S17, SD4; a failed check keeps nothing and says "Arch's app data
+  could not be verified" « Les données d'apps d'Arch n'ont pas pu être vérifiées » in the settings window), and keeps its XML
+  and icons in its cache (64 MiB at most), replaced when pacman's database names another version. Used for
   display only: a package it names must exist in pacman's database.
 
 Settings window (Ctrl+, ; step 2 reads, step 3 writes)
@@ -243,7 +255,8 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 | `db.lck` present, or Omarchy's update running (S11) | "Another installation or an update is running"; nothing queued |
 | An exit code 0 without the planned state, or the planned state without an exit code | "interrupted" (SR20), never "installed" |
 | Omarchy's terminal does not start the script within 60 s | "The terminal did not open"; the late script refuses to start |
-| "Uninstall" of Omarchy's base apps, Grassfield's packages, `HoldPkg` | not offered ("Part of Omarchy" / "Part of Grassfield") |
+| "Uninstall" of a package of Omarchy's two lists, Grassfield's packages, the system's (deny list, `HoldPkg`), a dependency, a package without an application entry (from a repository), or a package whose `-Rs --print` plan names a protected one | not offered, with the reason (SR22); the helper refuses them too (ADR-0037 b.1) |
+| A fetched AppStream package whose signature `pacman-key --verify` refuses | not used, not cached; "Arch's app data could not be verified" in the settings window; pacman's descriptions only |
 | A catalog whose `channel` is not the channel it was fetched from | not used, as a bad signature |
 | A stale `db.lck` with no pacman running | an explanation and Arch's recovery as text; the Store never removes it |
 | An uninstall that would break another installed package | the sheet names the packages that need it; nothing runs |
@@ -264,7 +277,7 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 | A4 | search ranking and the AUR section (fake RPC answers) | unit | L0 |
 | A5 | plan check: `pacman -Qu` non-empty (and "[ignored]" lines allowed), a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman | L0 |
 | A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs | L0 |
-| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`, protected packages), descriptors not on the caller's pipe, status files; `grassfield-store-run`: deadline, `flock -o` on Omarchy's lock file, re-check, exit file | container tests, fake pacman and the real one (step 3) | L1 (container) |
+| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`), the `remove` rule with S16's cases (system packages, a tool without an entry, a dependency, an Omarchy app, a plan taking a boot tool, Omarchy's lists missing, a plan that does not resolve), the policy's `auth_admin` and message, descriptors not on the caller's pipe, status files; `grassfield-store-run`: deadline, `flock -o` on Omarchy's lock file, re-check, exit file | container tests, fake pacman and the real one (step 3) | L1 (container) |
 | A7 | recovery: each start case of SR20 | unit with recorded `store.json` | L0 |
 | A8 | real install, open (`uwsm-app` argv; a web app by `omarchy-launch-webapp`), uninstall of a repository package (helper), a web app, a setup and an AUR package (terminal script), a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
@@ -326,6 +339,10 @@ installed on Omarchy), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's,
 - No pause or resume. The AUR and setups cancel only in Omarchy's terminal, which can leave a part of the packages installed
   (S6); the Store reports it. Repository installs cannot be cancelled once polkit has said yes.
 - Nothing installs from a repository, the AUR or a setup while the last system update is unfinished (`pacman -Qu`, S12).
+- Every repository install or removal asks for the password, with no grace period (`auth_admin`); a queue of several asks
+  for each.
+- "Uninstall…" only for apps the user installed: never for Omarchy's, Grassfield's or the system's packages, a dependency, or
+  an app whose removal would take one of them along (SR22); those stay removable outside the Store.
 - Apps outside AppStream and our catalog show pacman's one-line description and a generic icon.
 - Omarchy's recipes are Omarchy's: their effects are those of the installed Omarchy release; our catalog's text describes the
   release it was written against (4.0.4), and CI checks the names, not the behaviour.
