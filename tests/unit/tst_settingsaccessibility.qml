@@ -20,9 +20,13 @@ TestCase {
             property var values: Object.assign({}, SettingsContract.ALL_DEFAULTS)
             property var writes: []
             readonly property string path: "/nonexistent/grassfield.json"
+            // The Backend's file reads and watches, as the Display sub-pane's pointer status uses them: no file.
             readonly property QtObject backend: QtObject {
-                function readText(path: string): string {
-                    return "";
+                signal fileChanged(string path)
+                function readText(path: string): var {
+                    return {exists: false, ok: false, text: ""};
+                }
+                function watch(path: string): void {
                 }
             }
             function value(key: string): var {
