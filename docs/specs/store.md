@@ -1,6 +1,8 @@
 # Store spec · apps-engineer (app), platform-engineer (sources, install path) · owner brief 2026-10-27
-Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Nothing is
-built. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
+Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Step 1
+(the read-only backend) is merged; step 2 (the UI, read only: SR1 to SR13 shown, buttons disabled, Installed, the Updates
+list, the settings window without its switches; ADR-0037 SD6 to SD10) is built and measured
+(`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
@@ -225,7 +227,9 @@ Dev sessions (ADR-0019)
 | Return / Space | open the focused item / press the focused button |
 | Esc | close a sheet or popover (Cancel); in the search field, clear then leave |
 Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutstyle.h`). The menus are exported to the menu bar
-(T1, as the other apps): Store (About, Settings…, Quit), Edit, View (the sidebar items, Refresh), Window, Help.
+(T1, as the other apps), between the shell's app menu (About, Quit) and Window (T0, ADR-0008): File (Settings…, Close
+Window), Edit (for the search field, and Find), View (the sidebar items, Back, Forward, Refresh). "Settings…" is in File
+because the app menu is the shell's (ADR-0037 SD6); without a global menu bar the toolbar shows a gear for it.
 
 ## Accessibility
 - Every control reachable by keyboard with a visible focus ring (A1); `Accessible.name`, `role` and `description` on the
