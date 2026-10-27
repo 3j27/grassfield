@@ -560,8 +560,8 @@ out=$(probe autostart-get org.freedesktop.portal.Desktop)
 check "... the Backend's caller never starts the desktop portal ($out)" test ! -e "$work/started.org.freedesktop.portal.Desktop"
 rm -f "$work/services/"*.service
 start_service permstore
-token=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
-token2=_fsassULUxs_Z2LjLZjJHA
+token=00000000-1111-2222-3333-444444444444
+token2=_0000_fake_0000_0000_
 st=$(probe privacy-state)
 check "location: Maps allowed (EXACT), Weather not (NONE), the malformed id dropped" py "$st" 'j["location"] == [{"app": "org.example.Maps", "allowed": True}, {"app": "org.example.Weather", "allowed": False}]'
 check "camera: Meet allowed, Booth's \"ask\" is not" py "$st" 'j["camera"] == [{"app": "org.example.Booth", "allowed": False}, {"app": "org.example.Meet", "allowed": True}]'

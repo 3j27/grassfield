@@ -47,12 +47,16 @@ SettingsPage {
     readonly property var rates: root.monitor ? Displays.refreshRates(root.monitor) : []
     readonly property bool nameable: root.monitor !== null && Displays.descOf(root.monitor) !== ""
     readonly property bool settable: root.nameable && root.trialId === ""
-    readonly property var backlight: root.displayState ? root.displayState.backlight : null
+    // The backlight as last read. A drag in progress keeps its own value (as Sound's volume does): the reading taken meanwhile
+    // would move the knob back under the pointer; the next one follows.
+    property var backlight: null
 
     function refresh(): void {
         const path = root.backend.displaysStateFile;
         const r = path !== "" ? root.backend.readText(path) : {ok: false};
         root.displayState = r.ok ? Displays.parseState(r.text) : null;
+        if (!brightness.busy)
+            root.backlight = root.displayState ? root.displayState.backlight : null;
         root.answered = true;
         // The shell took the trial back (its deadline, or Revert): the sheet goes.
         const t = root.displayState ? root.displayState.trial : null;
@@ -222,6 +226,7 @@ SettingsPage {
         visible: root.monitor !== null && root.backlight !== null && Displays.isBuiltIn(root.monitor)
 
         LevelRow {
+            id: brightness
             system: root.system
             title: qsTr("Brightness")
             lowGlyph: "sun"

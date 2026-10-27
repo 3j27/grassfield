@@ -416,8 +416,8 @@ def permstore_world(svc):
     tables = {
         "location": {"location": {"org.example.Maps": ["EXACT", "1792800000"], "org.example.Weather": ["NONE", "0"], "../x": ["EXACT", "0"]}},
         "devices": {"camera": {"org.example.Meet": ["yes"], "org.example.Booth": ["ask"]}},
-        "screencast": {"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0": {"org.example.Meet": ["yes"]},
-                       "_fsassULUxs_Z2LjLZjJHA": {"org.example.Studio": ["yes"]}},
+        "screencast": {"00000000-1111-2222-3333-444444444444": {"org.example.Meet": ["yes"]},
+                       "_0000_fake_0000_0000_": {"org.example.Studio": ["yes"]}},
     }
     name = "org.freedesktop.impl.portal.PermissionStore"
 

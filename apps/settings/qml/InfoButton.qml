@@ -7,12 +7,17 @@ Item {
     id: root
 
     property string accessibleName: ""
+    // The ring shows for the keyboard's focus only, as a control's visualFocus: a click focuses the button without it.
+    property bool clickFocused: false
+    readonly property bool visualFocus: root.activeFocus && !root.clickFocused
 
     signal clicked
 
     implicitWidth: Tokens.settingsInfoSize
     implicitHeight: Tokens.settingsInfoSize
     activeFocusOnTab: true
+    onActiveFocusChanged: if (!root.activeFocus)
+        root.clickFocused = false
     Accessible.role: Accessible.Button
     Accessible.name: root.accessibleName
     Accessible.focusable: true
@@ -34,13 +39,14 @@ Item {
 
     FocusRing {
         shapeRadius: root.width / 2
-        visible: root.activeFocus
+        visible: root.visualFocus
     }
 
     MouseArea {
         id: mouse
         anchors.fill: parent
         onClicked: {
+            root.clickFocused = true;
             root.forceActiveFocus();
             root.clicked();
         }

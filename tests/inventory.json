@@ -151,6 +151,7 @@
  {"path": "tests/unit/tst_settingskeyboard.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingspower.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsprinters.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_settingsmain.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsappearance.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingswallpaper.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsdesktop.qml", "layer": "headless"},

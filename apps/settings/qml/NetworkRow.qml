@@ -25,10 +25,15 @@ Item {
     signal menuChosen(string id)
 
     readonly property real contentTop: root.Positioner.index > 0 ? 1 : 0
+    // The ring shows for the keyboard's focus only, as a control's visualFocus (PrinterRow): a click focuses the row without it.
+    property bool clickFocused: false
+    readonly property bool visualFocus: root.activeFocus && !root.clickFocused
 
     width: parent ? parent.width : implicitWidth
     implicitHeight: root.contentTop + root.rowHeight
     activeFocusOnTab: true
+    onActiveFocusChanged: if (!root.activeFocus)
+        root.clickFocused = false
     Accessible.role: Accessible.Button
     Accessible.name: root.title
     Accessible.description: root.subtitle
@@ -58,7 +63,7 @@ Item {
         y: root.contentTop + Tokens.controlFocusOutline / 2
         width: parent.width - Tokens.controlFocusOutline
         height: root.rowHeight - Tokens.controlFocusOutline
-        visible: root.activeFocus
+        visible: root.visualFocus
         radius: Tokens.radiusMenu
         color: "transparent"
         border.width: Tokens.controlFocusOutline
@@ -68,6 +73,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: {
+            root.clickFocused = true;
             root.forceActiveFocus();
             root.activated();
         }

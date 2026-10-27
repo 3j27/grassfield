@@ -132,12 +132,12 @@ SettingsPage {
     SettingsGroup {
         SettingsRow {
             title: qsTr("Shortcuts in menus")
-            subtitle: qsTr("Automatic shows the Mac symbols (⌘ for Super) on a Mac or with an Apple keyboard, and the key names on other computers.")
+            subtitle: qsTr("Automatic shows the symbols (⌘ for Super) when the computer or its keyboard has them on its keys, and the key names otherwise.")
 
             ComboBox {
                 inline: true
                 accessibleName: qsTr("Shortcuts in menus")
-                model: [{id: "automatic", text: qsTr("Automatic")}, {id: "mac", text: qsTr("Mac Symbols")}, {id: "pc", text: qsTr("Key Names")}]
+                model: [{id: "automatic", text: qsTr("Automatic")}, {id: "mac", text: qsTr("Symbols")}, {id: "pc", text: qsTr("Key Names")}]
                 value: root.store.value("keyboard.shortcutStyle")
                 onPicked: id => root.store.set("keyboard.shortcutStyle", id)
             }

@@ -76,7 +76,8 @@ SettingsPage {
                 required property string kind
                 required property string link
                 title: vpn.name
-                subtitle: (vpn.kind === "wireguard" ? qsTr("WireGuard") : qsTr("VPN")) + " · " + (root.pending === vpn.uuid ? qsTr("Changing…") : root.statusText(vpn.link))
+                readonly property string linkText: root.pending === vpn.uuid ? qsTr("Changing…") : root.statusText(vpn.link)
+                subtitle: vpn.kind === "wireguard" ? qsTr("WireGuard · %1", "the kind of VPN · its state").arg(vpn.linkText) : qsTr("VPN · %1", "the kind of VPN · its state").arg(vpn.linkText)
 
                 Toggle {
                     accessibleName: vpn.name

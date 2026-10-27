@@ -96,6 +96,53 @@ TestCase {
         compare(last(t.store), ["appearance", "auto"]);
     }
 
+    Component {
+        id: appearanceThumb
+        SettingsQml.AppearanceThumbnail {
+            width: Tokens.settingsAppearanceThumbWidth
+            height: Tokens.settingsAppearanceThumbHeight
+        }
+    }
+
+    Component {
+        id: saverThumb
+        SettingsQml.SaverThumbnail {
+            width: Tokens.settingsAppearanceThumbWidth
+            height: Tokens.settingsAppearanceThumbHeight
+        }
+    }
+
+    function all(item, out) {
+        for (const c of item.children) {
+            out.push(c);
+            all(c, out);
+        }
+        return out;
+    }
+
+    // The thumbnails are drawn from the settings.appearanceThumb* and settings.saverThumb* tokens.
+    function test_thumbnailsDrawFromTokens() {
+        const a = createTemporaryObject(appearanceThumb, testCase, {choice: "auto"});
+        const w = a.width;
+        const h = a.height;
+        const items = all(a, []);
+        // The menu, the window and the auto split where the tokens put them.
+        verify(items.some(i => i.x === Math.round(w * Tokens.settingsAppearanceThumbMenuX) && i.y === Math.round(h * Tokens.settingsAppearanceThumbMenuY)
+            && i.width === Math.round(w * Tokens.settingsAppearanceThumbMenuWidth)));
+        verify(items.some(i => i.x === Math.round(w * Tokens.settingsAppearanceThumbWindowX) && i.y === Math.round(h * Tokens.settingsAppearanceThumbWindowY)));
+        verify(items.some(i => i.clip && i.x === Math.round(w * Tokens.settingsAppearanceThumbAutoSplit)));
+        compare(Tokens.settingsAppearanceThumbLightX.length, 3);
+        const s = createTemporaryObject(saverThumb, testCase, {choice: "clock"});
+        const clock = all(s, []).find(i => i.font !== undefined && i.visible);
+        verify(clock);
+        compare(clock.font.pixelSize, Math.round(s.height * Tokens.settingsSaverThumbClockSize));
+        compare(clock.x, Math.round(s.width * Tokens.settingsSaverThumbClockOnlyX));
+        s.choice = "slideshow";
+        const photos = all(s, []).filter(i => i.rotation !== 0 && i.visible);
+        compare(photos.length, 1);
+        compare(photos[0].rotation, -Tokens.settingsSaverThumbPhotoTilt);
+    }
+
     function test_glassSliderRunsFromClearToTinted() {
         const t = make();
         const slider = named(t.page, "Transparency");

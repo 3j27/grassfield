@@ -21,11 +21,12 @@ SettingsPage {
     property string selectedApp: ""
     readonly property var selected: root.apps.find(a => a.app === root.selectedApp) ?? null
 
-    // What a category's switch or list means, under the list.
+    // What a category's switch or list means, under the list. Only what the portal enforces: a switch answers the requests made
+    // to the desktop portal, and an app that reaches the device or the service another way is not limited by it.
     readonly property string explanation: ({
-            location: qsTr("Apps you allow can find out where this computer is. An app you do not allow is refused without being asked; an app not listed asks the first time."),
-            background: qsTr("Apps you allow may run in the background when they ask. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks."),
-            camera: qsTr("Apps you allow can use the camera. An app you do not allow is refused without being asked; an app not listed asks the first time."),
+            location: qsTr("Apps you allow can find out where this computer is when they ask the desktop portal. When an app you do not allow asks, the portal refuses without a prompt; for an app not listed, you are asked the first time."),
+            background: qsTr("Apps you allow may run in the background when they ask the desktop portal. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks."),
+            camera: qsTr("Apps you allow can use the camera when they ask the desktop portal. When an app you do not allow asks, the portal refuses without a prompt; for an app not listed, you are asked the first time. An app that can open the camera itself does not ask, and its switch does not limit it."),
             remoteDesktop: qsTr("These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time; if it is in a session now, end the session first."),
             screencast: qsTr("These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time; if it is sharing now, stop sharing first.")
         })[root.key] ?? ""
@@ -60,12 +61,14 @@ SettingsPage {
                 // category whose portal this system does not have (the footnote says so).
                 readonly property bool unlimited: modelData.host && Privacy.HOST_READ.indexOf(root.key) < 0
                 readonly property string appId: modelData.name !== modelData.app ? modelData.app : ""
-                // The host's apps: not limited at all, or (the camera) limited only on the portal's way.
-                readonly property string hostNote: !modelData.host ? "" : unlimited ? qsTr("Not sandboxed: not limited") : qsTr("Not sandboxed: may use the camera directly")
+                // The host's apps: not limited at all, or (the camera) limited only on the portal's way; likewise a Flatpak
+                // given every device (its metadata), which can open the camera without the portal.
+                readonly property string accessNote: modelData.host ? (unlimited ? qsTr("Not sandboxed: not limited") : qsTr("Not sandboxed: may use the camera directly"))
+                    : root.key === "camera" && modelData.devices === true ? qsTr("All devices: may use the camera directly") : ""
                 icon: modelData.icon
                 title: modelData.name
                 // An id that differs from the name says which app it is (a Flatpak id).
-                subtitle: [appId, hostNote].filter(t => t !== "").join(" · ")
+                subtitle: [appId, accessNote].filter(t => t !== "").join(" · ")
                 showToggle: !unlimited && !Privacy.portalMissing(grants.state, root.key)
                 checked: modelData.allowed
                 toggleEnabled: !grants.busy

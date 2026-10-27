@@ -111,6 +111,65 @@ function hostCheckDirs(dirs) {
     return out;
 }
 
+// A Flatpak keyfile's [Context] devices= list applied to `all` (flatpak's --device=all: every device node, /dev/video* too):
+// true when it grants it, false when it takes it away (!all, in an override), `current` when it says neither.
+function devicesAll(text, current) {
+    let group = "";
+    let all = current;
+    for (const raw of String(text).split("\n")) {
+        const line = raw.trim();
+        const head = /^\[(.+)\]$/.exec(line);
+        if (head) {
+            group = head[1];
+            continue;
+        }
+        const m = group === "Context" ? /^devices\s*=(.*)$/.exec(line) : null;
+        if (m === null)
+            continue;
+        for (const d of m[1].split(";").map(s => s.trim())) {
+            if (d === "all")
+                all = true;
+            else if (d === "!all")
+                all = false;
+        }
+    }
+    return all;
+}
+
+// The Flatpak installations: the user's (beside the user's applications folder, as hostCheckDirs finds its exports) and the
+// system's.
+function flatpakInstalls(dirs) {
+    const out = [];
+    if (Array.isArray(dirs) && typeof dirs[0] === "string" && /\/applications$/.test(dirs[0]))
+        out.push({dir: dirs[0].replace(/\/applications$/, "/flatpak"), user: true});
+    out.push({dir: "/var/lib/flatpak", user: false});
+    return out;
+}
+
+// Whether an installed Flatpak may open device nodes itself (devices=all): the camera portal is then not its only way to the
+// camera, and the camera switch does not limit it. Its metadata in each installation that has it, then the overrides as
+// `flatpak run` merges them (the system's for a system installation only, then the user's; global before the app's own).
+// `read(path)` gives a file's text, "" when there is none. Any installation that grants it counts: in doubt, the note shows.
+// Not for a Snap (its camera plug is not read here; the hub's footnote says such apps are not limited).
+function flatpakDevices(app, installs, read) {
+    if (!validApp(app) || String(app).indexOf("snap.") === 0 || !Array.isArray(installs))
+        return false;
+    const user = installs.filter(i => i.user);
+    for (const inst of installs) {
+        const meta = read(inst.dir + "/app/" + app + "/current/active/metadata");
+        if (meta === "")
+            continue;
+        let all = devicesAll(meta, false);
+        for (const o of (inst.user ? [] : [inst]).concat(user)) {
+            all = devicesAll(read(o.dir + "/overrides/global"), all);
+            all = devicesAll(read(o.dir + "/overrides/" + app), all);
+        }
+        if (all)
+            return true;
+    }
+    return false;
+}
+
 // The tag of a category's actions: its failure shows under its own list only.
 function actTag(key) {
     return "privacy." + key + ".act";

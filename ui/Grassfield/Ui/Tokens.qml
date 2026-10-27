@@ -1749,6 +1749,52 @@ QtObject {
     readonly property real settingsAppearanceThumbRingGap: 0.5
     // macOS 27: a thumbnail's name, its baseline below the picture [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsAppearanceCaptionBaseline: 16
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu bar strip's height, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbBarHeight: 0.1
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's left edge, a fraction of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuX: 0.02
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's top, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuY: 0.17
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's width, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuWidth: 0.57
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's height, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuHeight: 0.3
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's corners, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuRadius: 0.06
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu bar and the menu: the appearance's material tint at this opacity [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuOpacity: 0.72
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's selection bar in from the menu's edges, a fraction of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbSelectionInset: 0.035
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's selection bar's height, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbSelectionHeight: 0.11
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window's left edge, a fraction of the picture's width (it runs off the right edge) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbWindowX: 0.26
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window's top, a fraction of the picture's height (it runs off the bottom edge) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbWindowY: 0.56
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window's corners, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbWindowRadius: 0.12
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window buttons' centres, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbLightY: 0.8
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): a window button's size, a fraction of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbLightSize: 0.09
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the three window buttons' centres, fractions of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property var settingsAppearanceThumbLightX: [0.42, 0.56, 0.7]
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Auto: the dark desktop from this fraction of the picture's width to its right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbAutoSplit: 0.49
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Dark: the artwork under the shadow colour at this opacity (the darker wallpaper) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbDarkWallpaper: 0.35
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock's size, a fraction of the picture's height
+    readonly property real settingsSaverThumbClockSize: 0.3
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock alone, its left edge, a fraction of the picture's width (off the centre: it moves every minute)
+    readonly property real settingsSaverThumbClockOnlyX: 0.18
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock alone, its top, a fraction of the picture's height
+    readonly property real settingsSaverThumbClockOnlyY: 0.3
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures in from the edges, a fraction of the picture's size
+    readonly property real settingsSaverThumbPhotoInset: 0.14
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's back picture tilted by this many degrees
+    readonly property int settingsSaverThumbPhotoTilt: 7
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures' white border, a fraction of the picture's height
+    readonly property real settingsSaverThumbPhotoBorder: 0.04
     // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsChoiceRingWidth: 3
     // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]

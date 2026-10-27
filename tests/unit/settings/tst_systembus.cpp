@@ -1411,15 +1411,15 @@ struct PrivacyFixture {
                 if (table == QLatin1String("devices") && id == QLatin1String("camera"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}, {"org.example.Photo", {"no"}}, {"org.example.Ask", {"ask"}}}),
                                variant(QVariant())});
-                if (table == QLatin1String("screencast") && id == QLatin1String("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"))
+                if (table == QLatin1String("screencast") && id == QLatin1String("00000000-1111-2222-3333-444444444444"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Meet", {"yes"}}}), variant(QVariant())});
-                if (table == QLatin1String("screencast") && id == QLatin1String("_fsassULUxs_Z2LjLZjJHA"))
+                if (table == QLatin1String("screencast") && id == QLatin1String("_0000_fake_0000_0000_"))
                     return ok({QVariant::fromValue(PermissionTable{{"org.example.Studio", {"yes"}}}), variant(QVariant())});
                 return err(kNotFound);
             }
             if (c.member == QLatin1String("List")) {
                 if (table == QLatin1String("screencast"))
-                    return ok({QStringList{"../not/a/token", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", "_fsassULUxs_Z2LjLZjJHA"}});
+                    return ok({QStringList{"../not/a/token", "00000000-1111-2222-3333-444444444444", "_0000_fake_0000_0000_"}});
                 return err(kNotFound);
             }
             if (c.member == QLatin1String("SetPermission") || c.member == QLatin1String("Delete"))
@@ -1456,9 +1456,9 @@ TEST(SystemBusPrivacy, TheStoreIsReadAsThePortalsReadIt)
     const QJsonArray shared = r.json.value("screencast").toArray();
     ASSERT_EQ(shared.size(), 2);
     EXPECT_EQ(shared[0].toObject().value("app").toString(), QStringLiteral("org.example.Meet"));
-    EXPECT_EQ(shared[0].toObject().value("token").toString(), QStringLiteral("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"));
+    EXPECT_EQ(shared[0].toObject().value("token").toString(), QStringLiteral("00000000-1111-2222-3333-444444444444"));
     EXPECT_EQ(shared[1].toObject().value("app").toString(), QStringLiteral("org.example.Studio"));
-    EXPECT_EQ(shared[1].toObject().value("token").toString(), QStringLiteral("_fsassULUxs_Z2LjLZjJHA"));
+    EXPECT_EQ(shared[1].toObject().value("token").toString(), QStringLiteral("_0000_fake_0000_0000_"));
     EXPECT_TRUE(r.json.value("remoteDesktop").toArray().isEmpty());
     // The portals: Background exported, RemoteDesktop not; both asked with a read the dev guard lets through.
     EXPECT_EQ(r.json.value("portals").toObject(), (QJsonObject{{"background", true}, {"remoteDesktop", false}}));
@@ -1553,13 +1553,13 @@ TEST(SystemBusPrivacy, ASwitchSetsExactlyThatAppsGrant)
     EXPECT_EQ(f.bus.calls[3].args, (QVariantList{"background", true, "background", "org.example.Sync", QStringList{"yes"}}));
     // Forgetting a saved selection deletes that entry only; one already gone is fine.
     f.bus.calls.clear();
-    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "00000000-1111-2222-3333-444444444444"}}), QString());
     EXPECT_EQ(f.bus.calls[0].member, QStringLiteral("Delete"));
-    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"screencast", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"}));
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{"screencast", "00000000-1111-2222-3333-444444444444"}));
     f.bus.handler = [](const Call &) { return err(kNotFound); };
     EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "remoteDesktop"}, {"token", "abc"}}), QString());
-    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "_fsassULUxs_Z2LjLZjJHA"}}), QString());
-    EXPECT_EQ(f.bus.calls.last().args, (QVariantList{"screencast", "_fsassULUxs_Z2LjLZjJHA"}));
+    EXPECT_EQ(runAction(f.bus, {{"op", "privacy.forget"}, {"kind", "screencast"}, {"token", "_0000_fake_0000_0000_"}}), QString());
+    EXPECT_EQ(f.bus.calls.last().args, (QVariantList{"screencast", "_0000_fake_0000_0000_"}));
     EXPECT_EQ(f.bus.calls[1].args.value(0).toString(), QStringLiteral("remote-desktop"));
     EXPECT_TRUE(sessionAction({{"op", "privacy.allow"}}));
     EXPECT_FALSE(privilegedAction({{"op", "privacy.allow"}}));

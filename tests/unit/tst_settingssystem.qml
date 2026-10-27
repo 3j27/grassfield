@@ -642,10 +642,13 @@ TestCase {
         compare(System.wifiForget("nope"), null);
         compare(System.vpnConnect(uuidA, true), {op: "vpn.connect", uuid: uuidA, on: true});
         compare(System.vpnConnect("nope", true), null);
-        compare(System.wifiBand(2437), "2.4 GHz");
-        compare(System.wifiBand(5180), "5 GHz");
-        compare(System.wifiBand(5955), "6 GHz");
-        compare(System.wifiBand(0), "");
+        const en = Qt.locale("en_US");
+        compare(System.wifiBand(2437, en), "2.4 GHz");
+        compare(System.wifiBand(5180, en), "5 GHz");
+        compare(System.wifiBand(5955, en), "6 GHz");
+        compare(System.wifiBand(0, en), "");
+        compare(System.wifiBand(2437, Qt.locale("fr_FR")), "2,4 GHz", "the language's decimal separator");
+        compare(System.wifiBand(2437), System.wifiBand(2437, Qt.locale()));
         compare(System.subnetMask(24), "255.255.255.0");
         compare(System.subnetMask(20), "255.255.240.0");
         compare(System.subnetMask(0), "0.0.0.0");
@@ -717,9 +720,13 @@ TestCase {
         compare(t.backend.busQueries[0], {what: "net.state", tag: "vpn.state"});
         t.backend.finished("vpn.state", true, netJson([], [{uuid: uuidA, name: "Office", kind: "vpn", state: "disconnected"}]));
         verify(page.available);
+        // The kind and the state in one translatable sentence.
+        const row = findChild(page, "", i => i.title === "Office" && i.subtitle !== undefined);
+        compare(row.subtitle, "VPN · Not connected");
         page.toggle(uuidA, true);
         compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "vpn.connect", uuid: uuidA, on: true});
         compare(page.pending, uuidA);
+        compare(row.subtitle, "VPN · Changing…");
         t.backend.finished("vpn.act", true, "");
         compare(page.pending, "");
         // NetworkManager not answering: the empty group says so.
@@ -959,5 +966,85 @@ TestCase {
         compare(t.backend.actions.length, 0);
         compare(page.pending, -1);
         verify(soundRow(page, "Built-in Audio Analog Stereo").selected);
+    }
+
+    // ---- the focus ring of the list rows and their buttons: the keyboard's focus only ----
+
+    Component {
+        id: ringHost
+        Column {
+            width: 600
+            property alias network: network
+            property alias device: device
+            property alias info: info
+            property alias more: more
+            SettingsQml.NetworkRow {
+                id: network
+                title: "Home"
+                menuItems: [{id: "forget", text: "Forget"}]
+            }
+            SettingsQml.BluetoothDeviceRow {
+                id: device
+                title: "Keyboard"
+            }
+            SettingsQml.InfoButton {
+                id: info
+            }
+            SettingsQml.MoreButton {
+                id: more
+                items: [{id: "forget", text: "Forget"}]
+            }
+        }
+    }
+
+    // The ring a row or a button draws for its focus (a FocusRing, or the row's own outline).
+    function ringOf(item) {
+        for (const c of item.children) {
+            if (c.border !== undefined && c.border.color === Appearance.focusRingColor && c.color.a === 0)
+                return c;
+            if (c.shapeRadius !== undefined)
+                return c;
+        }
+        return null;
+    }
+
+    function test_focusRingFollowsTheKeyboardOnly() {
+        const host = createTemporaryObject(ringHost, testCase);
+        for (const item of [host.network, host.device, host.info]) {
+            const ring = ringOf(item);
+            verify(ring, item.toString());
+            // A click focuses it without the ring (a control's visualFocus).
+            mouseClick(item, 5, item.height / 2);
+            verify(item.activeFocus, item.toString());
+            verify(!item.visualFocus, item.toString());
+            verify(!ring.visible, item.toString());
+            // Tab away and back: the keyboard's focus shows it.
+            item.focus = false;
+            testCase.forceActiveFocus();
+            verify(!item.activeFocus);
+            item.forceActiveFocus(Qt.TabFocusReason);
+            verify(item.visualFocus, item.toString());
+            verify(ring.visible, item.toString());
+            // A click on the focused item takes it away again.
+            mouseClick(item, 5, item.height / 2);
+            verify(!ring.visible, item.toString());
+            testCase.forceActiveFocus();
+        }
+        // The (…) button: its menu takes the keyboard and hands it back as the menu was opened.
+        const more = host.more;
+        const ring = ringOf(more);
+        mouseClick(more);
+        tryVerify(() => !more.activeFocus, 1000, "the menu holds the keyboard");
+        keyClick(Qt.Key_Escape);
+        tryVerify(() => more.activeFocus);
+        verify(!ring.visible, "opened by a click: no ring after the menu");
+        testCase.forceActiveFocus();
+        more.forceActiveFocus(Qt.TabFocusReason);
+        verify(ring.visible);
+        keyClick(Qt.Key_Space);
+        tryVerify(() => !more.activeFocus, 1000, "the menu holds the keyboard");
+        keyClick(Qt.Key_Escape);
+        tryVerify(() => more.activeFocus);
+        verify(ring.visible, "opened from the keyboard: the ring is back");
     }
 }

@@ -15,9 +15,9 @@ TestCase {
     visible: true
     when: windowShown
 
-    readonly property string tokenA: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+    readonly property string tokenA: "00000000-1111-2222-3333-444444444444"
     // The portal's current tokens: base64 with + and / made _, so some begin with _.
-    readonly property string tokenB: "_fsassULUxs_Z2LjLZjJHA"
+    readonly property string tokenB: "_0000_fake_0000_0000_"
     readonly property var stateJson: ({
             location: [{app: "org.example.Maps", allowed: true}, {app: "org.example.Weather", allowed: false}, {app: "org.example.Studio", allowed: false},
                 {app: "org.example.Ghost", allowed: false}],
@@ -42,7 +42,7 @@ TestCase {
             // user's own copy of its entry; Ghost only a hidden stub (not known to be the host's); the others are shown by
             // their id.
             property var files: ({
-                    "/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Photo Booth\nIcon=booth\n",
+                    "/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Booth Camera\nIcon=booth\n",
                     "/apps/org.example.Weather.desktop": "[Desktop Entry]\nType=Application\nName=Weather\n",
                     "/apps/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=My Studio\n",
                     "/apps/org.example.Ghost.desktop": "[Desktop Entry]\nType=Application\nName=Ghost\nHidden=true\n",
@@ -163,7 +163,7 @@ TestCase {
         compare(Privacy.forget("camera", "abc"), null);
         compare(Privacy.forget("screencast", "a b"), null);
         compare(Privacy.forget("screencast", "tok:1"), null, "only the portal's characters");
-        compare(Privacy.forget("screencast", "_fsassULUxs_Z2LjLZjJHA").token, "_fsassULUxs_Z2LjLZjJHA");
+        compare(Privacy.forget("screencast", "_0000_fake_0000_0000_").token, "_0000_fake_0000_0000_");
         compare(Privacy.forget("screencast", ""), null);
         compare(Privacy.entryFile("org.example.Meet"), "org.example.Meet.desktop");
         compare(Privacy.entryFile("../../x"), "");
@@ -204,9 +204,67 @@ TestCase {
         verify(find(t.page, i => i.title === "org.example.Ghost" && i.showToggle !== undefined).showToggle, "a hidden stub only: in doubt, the switch stays");
         const c = make(categoryComp, {key: "camera"});
         answer(c);
-        const booth = find(c.page, i => i.title === "Photo Booth" && i.showToggle !== undefined);
+        const booth = find(c.page, i => i.title === "Booth Camera" && i.showToggle !== undefined);
         verify(booth.showToggle, "the camera's grant is read for the host too");
         compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
+    }
+
+    // A Flatpak given every device (--device=all) opens /dev/video* itself: the metadata says so, an override may take it back.
+    function test_flatpakDevices() {
+        const meta = "[Application]\nname=org.example.Call\n\n[Context]\nshared=network;ipc;\ndevices=dri;all;\n";
+        compare(Privacy.devicesAll(meta, false), true);
+        compare(Privacy.devicesAll("[Context]\ndevices=dri;\n", false), false);
+        compare(Privacy.devicesAll("[Context]\ndevices=!all;\n", true), false, "an override takes it back");
+        compare(Privacy.devicesAll("[Context]\nshared=ipc;\n", true), true, "silent: unchanged");
+        compare(Privacy.devicesAll("[Session Bus Policy]\ndevices=all\n", false), false, "only the Context group");
+        compare(Privacy.flatpakInstalls(["/home/u/.local/share/applications", "/usr/share/applications"]),
+            [{dir: "/home/u/.local/share/flatpak", user: true}, {dir: "/var/lib/flatpak", user: false}]);
+        compare(Privacy.flatpakInstalls(["/apps"]), [{dir: "/var/lib/flatpak", user: false}]);
+        const installs = Privacy.flatpakInstalls(["/home/u/.local/share/applications"]);
+        const files = {};
+        const read = p => files[p] ?? "";
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), false, "not installed");
+        files["/var/lib/flatpak/app/org.example.Call/current/active/metadata"] = meta;
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), true);
+        // The user's override, then the system's global one: flatpak run applies the system's first, the user's last.
+        files["/home/u/.local/share/flatpak/overrides/org.example.Call"] = "[Context]\ndevices=!all;\n";
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), false);
+        files["/var/lib/flatpak/overrides/global"] = "[Context]\ndevices=all;\n";
+        compare(Privacy.flatpakDevices("org.example.Call", installs, read), false, "the user's own override comes last");
+        // A user installation does not read the system's overrides.
+        files["/home/u/.local/share/flatpak/app/org.example.Mic/current/active/metadata"] = "[Context]\ndevices=dri;\n";
+        compare(Privacy.flatpakDevices("org.example.Mic", installs, read), false);
+        files["/home/u/.local/share/flatpak/overrides/global"] = "[Context]\ndevices=all;\n";
+        compare(Privacy.flatpakDevices("org.example.Mic", installs, read), true);
+        compare(Privacy.flatpakDevices("../x", installs, () => meta), false);
+        compare(Privacy.flatpakDevices("snap.zoom", installs, () => meta), false);
+
+        // The camera list says so under the app (its switch stays: the portal still reads it); the location list does not.
+        const c = make(categoryComp, {key: "camera"});
+        c.backend.files = Object.assign({}, c.backend.files, {"/var/lib/flatpak/app/org.example.Meet/current/active/metadata": meta});
+        answer(c);
+        const meet = find(c.page, i => i.title === "org.example.Meet" && i.showToggle !== undefined);
+        verify(meet.showToggle);
+        compare(meet.subtitle, "All devices: may use the camera directly");
+        verify(find(c.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("its switch does not limit it") >= 0));
+        const l = make(categoryComp, {key: "location"});
+        l.backend.files = Object.assign({}, l.backend.files, {"/var/lib/flatpak/app/org.example.Maps/current/active/metadata": meta});
+        answer(l);
+        compare(find(l.page, i => i.title === "org.example.Maps" && i.showToggle !== undefined).subtitle, "");
+    }
+
+    // No pane claims more than the portal enforces: the hub's footnote names who is not limited.
+    function test_noClaimBeyondThePortal() {
+        const t = make(hubComp);
+        answer(t);
+        const note = find(t.page, i => i.footnote !== undefined && i.visible && i.footnote !== "");
+        verify(note.footnote.indexOf("They do not limit apps that are not sandboxed, nor sandboxed apps given direct access to devices.") >= 0, note.footnote);
+        for (const key of ["location", "camera"]) {
+            const c = make(categoryComp, {key: key});
+            answer(c);
+            verify(c.page.explanation.indexOf("when they ask the desktop portal") >= 0, key);
+            verify(c.page.explanation.indexOf("without being asked") < 0, key);
+        }
     }
 
     // An export entry that cannot be read still counts: the user's copy elsewhere does not make the app the host's.
@@ -242,7 +300,7 @@ TestCase {
         const system = createTemporaryObject(serviceComp, testCase, {backend: backend});
         const camera = createTemporaryObject(categoryComp, testCase, {backend: backend, system: system, key: "camera"});
         answer({backend: backend});
-        find(camera, i => i.title === "Photo Booth" && i.checked !== undefined).toggled(true);
+        find(camera, i => i.title === "Booth Camera" && i.checked !== undefined).toggled(true);
         backend.failed("privacy.camera.act", "Rejected");
         backend.finished("privacy.camera.act", false, "");
         verify(find(camera, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("Rejected") >= 0));
@@ -297,7 +355,7 @@ TestCase {
     function test_cameraSwitch() {
         const t = make(categoryComp, {key: "camera"});
         answer(t);
-        const booth = find(t.page, i => i.title === "Photo Booth" && i.checked !== undefined);
+        const booth = find(t.page, i => i.title === "Booth Camera" && i.checked !== undefined);
         verify(booth, "the name from org.example.Booth.desktop");
         compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
         compare(booth.checked, false);

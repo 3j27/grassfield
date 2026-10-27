@@ -51,7 +51,16 @@ TestCase {
     function test_layouts() {
         const l = Keyboard.parseLayouts("! model\n  pc105 Generic 105-key PC\n! layout\n  us              English (US)\n  fr              French\n"
             + "! variant\n  intl            us: English (US, intl., with dead keys)\n  bepo            fr: French (BEPO)\n! option\n  grp:ctrl_space_toggle Ctrl+Space\n");
-        compare(l.all.map(x => x.name), ["English (US)", "English (US, intl., with dead keys)", "French", "French (BEPO)"]);
+        // Sorted in the user's collation, as the UI lists them (macOS does): the order of "English (US)" and
+        // "English (US, intl., ...)" depends on the locale (")" before "," in C, after it in en_US), so the test checks
+        // what holds in every locale: the same entries, each one not after the next under that collation, the language
+        // groups apart and a name before the names it prefixes.
+        const names = l.all.map(x => x.name);
+        compare(names.slice().sort(), ["English (US)", "English (US, intl., with dead keys)", "French", "French (BEPO)"].sort());
+        for (let i = 1; i < names.length; ++i)
+            verify(names[i - 1].localeCompare(names[i]) <= 0, names[i - 1] + " sorts after " + names[i]);
+        compare(names.slice(2), ["French", "French (BEPO)"]);
+        verify(names.slice(0, 2).every(n => n.startsWith("English (US")));
         compare(Keyboard.sourceName({layout: "fr", variant: "bepo"}, l.names), "French (BEPO)");
         compare(Keyboard.sourceName({layout: "xx", variant: ""}, l.names), "xx");
     }

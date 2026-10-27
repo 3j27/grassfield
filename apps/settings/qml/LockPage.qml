@@ -46,7 +46,23 @@ SettingsPage {
 
     readonly property var displayOffSteps: [0, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
 
+    // A display turns off before the session locks (on battery by default: 2 minutes against 5): a dark display is not a locked
+    // one, so the note under the delays says when it comes back without the password (macOS notes the same in its Screen Saver
+    // sheet). 0 is Never.
+    readonly property int idleMinutes: root.store.value("lock.idleMinutes")
+    readonly property bool offFirst: {
+        const delays = [root.store.value("lock.displayOffPower")].concat(root.hasBattery ? [root.store.value("lock.displayOffBattery")] : []);
+        return delays.some(m => m > 0 && (root.idleMinutes === 0 || m < root.idleMinutes));
+    }
+    readonly property string lockNote: root.idleMinutes === 0
+        ? qsTr("The session does not lock by itself: a display that turned off comes back on with any input, without the password.")
+        : root.offFirst
+        ? qsTr("The session locks after this much time without keyboard or pointer input. A display that turns off earlier is not locked: until the session locks, any input turns it back on without the password.")
+        : qsTr("The session locks after this much time without keyboard or pointer input, whether the displays are on or off.")
+
     SettingsGroup {
+        footnote: root.lockNote
+
         SettingsRow {
             visible: root.hasBattery
             title: qsTr("Turn display off on battery when inactive")
