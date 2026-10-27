@@ -366,8 +366,9 @@ expect("lock ownership check: the grace is 500 ms and only restart() and `runnin
 # creates a monitor object, and one sent before Hyprland answered Quickshell's own first query (`j/status`) makes Quickshell
 # drop its start-up query: Hyprland.monitors then stays empty until a monitor event, and the stranded check, the ownership
 # check and verify() never get an answer (the re-lock after a foreign release was inert, the sleep delay ran out unconfirmed).
-#   queries  shell/security has one Hyprland.refreshMonitors() call, in Lock.qml requestMonitors() behind the guard on the
-#            live model's count (Machine.monitorQueryAllowed); every lock query goes through requestMonitors();
+#   queries  the shell (shell/ and ui/) has two Hyprland.refreshMonitors() calls: Lock.qml requestMonitors() behind the guard
+#            on the live model's count (Machine.monitorQueryAllowed), through which every lock query goes, and Displays.qml's
+#            Hyprland event handler (opus review of 94ab527, MINOR-2: the bug first came from a Displays start-up call);
 #   watcher  monitorAnswers follows the live model, its delegates hand every answer to checkOwnership, and a monitor added
 #            while holding asks for a fresh answer at once (monitorsAdded);
 #   stranded only Hyprland's answers decide; an empty model is "unknown" (LockMachine, unit-tested): no takeover and no stop
@@ -375,16 +376,29 @@ expect("lock ownership check: the grace is 500 ms and only restart() and `runnin
 #            Quickshell's first answer came later) runs again when monitors appear, before this shell locked (MINOR-1);
 #   log      the empty model is logged once: the flag is read before the warning, set after it, cleared only in monitorsAdded.
 refresh_hits = []
-for base, _, files in os.walk(f"{root}/shell/security"):
-    for name in sorted(files):
-        if name.endswith((".qml", ".js")):
-            rel = os.path.relpath(os.path.join(base, name), root)
-            refresh_hits += [rel for _ in re.finditer(r"\brefreshMonitors\s*\(", nocomments(read(rel)))]
+for top in ("shell", "ui"):
+    for base, _, files in os.walk(f"{root}/{top}"):
+        for name in sorted(files):
+            if name.endswith((".qml", ".js")):
+                rel = os.path.relpath(os.path.join(base, name), root)
+                refresh_hits += [rel for _ in re.finditer(r"\brefreshMonitors\s*\(", nocomments(read(rel)))]
 request = code(function(lock, "requestMonitors") or "")
 expect("lock monitor queries: one Hyprland.refreshMonitors() in shell/security, in requestMonitors() behind the empty-model guard (" + ", ".join(refresh_hits) + ")",
        refresh_hits.count("shell/security/lock/Lock.qml") == 1
        and not any(h.startswith("shell/security/") and h != "shell/security/lock/Lock.qml" for h in refresh_hits)
        and re.fullmatch(r"\s*if\s*\(!Machine\.monitorQueryAllowed\(Hyprland\.monitors\.values\.length\)\)\s*\{\s*if\s*\(!emptyModelLogged\)\s*console\.warn\(\"[^\"]*\"\);\s*emptyModelLogged\s*=\s*true;\s*return false;\s*\}\s*Hyprland\.refreshMonitors\(\);\s*return true;\s*", request) is not None)
+# The only other call: Displays.qml's handler of Hyprland events (monitors added or removed, configreloaded). Safe: Hyprland
+# events reach QML only once Hyprland answered Quickshell's first query (Quickshell connects its event socket in that answer's
+# callback, right before its own refreshMonitors(true)), so this call can never come before Quickshell's start-up query; on
+# configreloaded Quickshell's own refreshMonitors(true) is already sent (this one is dropped as a duplicate), and a monitor
+# added later is created by Quickshell's monitoraddedv2 handler itself, not by a monitors answer.
+displays = nocomments(read("shell/platform/Displays.qml"))
+handler_m = re.search(r"Connections\s*\{\s*target:\s*Hyprland\s+function onRawEvent\(event:\s*HyprlandEvent\):\s*void\s*\{", displays)
+handler = block_after(displays, handler_m.start()) if handler_m else ""
+expect("monitor queries outside the lock: only Displays.qml's Hyprland event handler (" + ", ".join(refresh_hits) + ")",
+       sorted(refresh_hits) == ["shell/platform/Displays.qml", "shell/security/lock/Lock.qml"]
+       and len(re.findall(r"\brefreshMonitors\s*\(", handler)) == 1
+       and re.search(r"if\s*\(event\.name\s*===\s*\"monitoradded\"[^{]*\"configreloaded\"\)\s*\{\s*Hyprland\.refreshMonitors\(\);", handler) is not None)
 monitors_added = code(function(lock, "monitorsAdded") or "")
 expect("lock monitor queries: verify(), the ownership confirmation, the stranded check, ownershipProbe and monitorsAdded go through requestMonitors()",
        re.search(r"verified\s*=\s*false;\s*requestMonitors\(\);\s*$", code(function(lock, "verify") or "")) is not None
@@ -461,7 +475,7 @@ mut=$tmp/mutant
 for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.qml shell/search/Search.qml shell/launchpad/AppsController.qml \
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
-  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml; do
+  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -573,7 +587,9 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#        else if (strandedUndecided)\n            checkStranded();\n#' \
   'shell/security/lock/Lock.qml#        else if (strandedUndecided)\n            checkStranded();#        else if (strandedUndecided)\n            release();' \
   'shell/security/lock/Lock.qml#            strandedUndecided = true;\n#' \
-  'shell/security/lock/Lock.qml#            strandedProbe.stop(); // still undecided#            strandedProbe.stop(); strandedUndecided = false; // still undecided'; do
+  'shell/security/lock/Lock.qml#            strandedProbe.stop(); // still undecided#            strandedProbe.stop(); strandedUndecided = false; // still undecided' \
+  'shell/platform/Displays.qml#    Component.onCompleted: {\n        publishDebounce.restart();#    Component.onCompleted: {\n        Hyprland.refreshMonitors();\n        publishDebounce.restart();' \
+  'shell/platform/Compositor.qml#        const all = Hyprland.monitors ? Hyprland.monitors.values : [];#        Hyprland.refreshMonitors();\n        const all = Hyprland.monitors ? Hyprland.monitors.values : [];'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'
