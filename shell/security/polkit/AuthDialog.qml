@@ -24,6 +24,7 @@ FocusScope {
     readonly property Item surface: material
     // Rendered line caps of untrusted text (elided past them) and visible identity rows.
     readonly property int messageLines: 4
+    readonly property int storeLines: 8
     readonly property int detailLines: 2
     readonly property int identityRows: 4
 
@@ -101,6 +102,7 @@ FocusScope {
         }
 
         Text {
+            objectName: "polkitMessage"
             width: parent.width
             textFormat: Text.PlainText
             text: root.model.message !== "" ? root.model.message : qsTr("An application wants to make changes.")
@@ -110,7 +112,8 @@ FocusScope {
             font.pixelSize: Tokens.typographyTitleSize
             font.weight: Tokens.typographyMenuBoldWeight
             wrapMode: Text.Wrap
-            maximumLineCount: root.messageLines
+            // Grassfield Store's request names its packages in plain words (SD2): more lines for a long list.
+            maximumLineCount: root.model.storeRequest ? root.storeLines : root.messageLines
             elide: Text.ElideRight
             Accessible.role: Accessible.StaticText
             Accessible.name: text
@@ -150,6 +153,25 @@ FocusScope {
             textFormat: Text.PlainText
             text: qsTr("Action: %1").arg(root.model.actionId)
             visible: root.model.actionId !== ""
+            horizontalAlignment: Text.AlignHCenter
+            color: Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            wrapMode: Text.WrapAnywhere
+            maximumLineCount: root.detailLines
+            elide: Text.ElideRight
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
+        // The program polkit will run, when the model reads it from the request (Grassfield Store's helper, SD2): the plain
+        // words above name what it does, this line what does it.
+        Text {
+            objectName: "polkitProgram"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: qsTr("Program: %1").arg(root.model.program)
+            visible: root.model.program !== ""
             horizontalAlignment: Text.AlignHCenter
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily

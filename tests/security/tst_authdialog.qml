@@ -309,6 +309,25 @@ TestCase {
         return null;
     }
 
+    // Grassfield Store's request (ADR-0037 SD2): the sheet says "Install" and the package names, then the action ID and the
+    // program's path; another request shows no program line.
+    function test_12_storeRequestNamesPackagesAndProgram() {
+        const message = flow.message;
+        const actionId = flow.actionId;
+        const text = findNamed(dialog, "polkitMessage");
+        const program = findNamed(dialog, "polkitProgram");
+        verify(text !== null && program !== null);
+        verify(!program.visible);
+        flow.actionId = "org.grassfield.store.manage-packages";
+        flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef xterm gimp";
+        compare(text.text, "Install xterm, gimp");
+        verify(program.visible);
+        compare(program.text, "Program: /usr/lib/grassfield/grassfield-store-helper");
+        flow.message = message;
+        flow.actionId = actionId;
+        verify(!program.visible);
+    }
+
     // D-4 (macOS style): with the action's icon the lock becomes a badge on it; without one
     // (no icon_name, or the theme lacks it) the sheet shows the lock alone, at full size.
     function test_10_programIconWithLockBadge() {
