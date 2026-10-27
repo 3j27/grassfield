@@ -13,7 +13,7 @@
 # environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it
 # starts, valid name or not (BASH_FUNC_x%% entries are not variables: compgen cannot see them, pacman-key, a bash script,
 # would import them). The variables bash exports itself (PWD, SHLVL) are removed last.
-if IFS= read -r -d '' _ </proc/$$/environ 2>/dev/null; then
+if IFS= read -r -d '' _ 2>/dev/null </proc/$$/environ; then   # stderr first: without /proc, no message
   exec /usr/bin/env -i /usr/bin/bash -p /usr/lib/grassfield/grassfield-channel-helper "$@"
 fi
 while read -r gf_var; do unset -v "$gf_var" 2>/dev/null; done < <(compgen -e)

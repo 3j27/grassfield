@@ -117,6 +117,7 @@ gf_require_unlocked() {
 
 # The number of [grassfield] sections of pacman.conf: lines that are [grassfield] once comments and blanks are removed.
 gf_sections() {
+  [[ -f $GF_PACMAN_CONF ]] || { echo 0; return; }
   awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") n++ } END { print n + 0 }' \
     "$GF_PACMAN_CONF"
 }
