@@ -74,11 +74,13 @@ Item {
             onStreamFinished: root.take(text)
         }
         // A reload while the last read ran: read once more.
+        // qmllint disable signal-handler-parameters
         onExited: exitCode => {
             if (root.readAgain) {
                 root.readAgain = false;
                 root.read();
             }
         }
+        // qmllint enable signal-handler-parameters
     }
 }
