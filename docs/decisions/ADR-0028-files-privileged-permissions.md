@@ -16,11 +16,12 @@ history") · Date: 2026-10-26 · Decider: integrator
 - KIO's own privilege path (the KAuth `file_helper` and the `org.kde.kio.file` polkit action) is not built into Arch's
   `kio` (verified 2026-10-26 on kio 6.31 from the Arch mirror: no helper and no policy file in the package), so it is not
   available on Omarchy.
-- Grassfield never writes code that runs as root (R12), except where the owner amended that rule for one named program
-  (ADR-0030's amendment for Software Update's channel helper, owner decision O1 of ADR-0033); Files has no such
-  amendment. The session's polkit agent is the shell's (Quickshell Polkit, `shell/security`, R12 PASS). `pkexec` and GNU
-  coreutils are installed on Omarchy: polkit 127 and coreutils 9.11 on the owner's machine (Omarchy 4.0.4); the probes
-  below ran with coreutils 9.12 (the cloud sysroot; its pkexec is 128 and could not run: no polkit daemon there).
+- Grassfield never writes code that runs as root (R12), except the root programs of ADR-0033 c.1
+  (`grassfield-channel-helper` and `grassfield-channel-scriptlet`, owner decision O1; ADR-0030's amendment for Settings'
+  path); Files has no such exception. The session's polkit agent is the shell's (Quickshell Polkit, `shell/security`,
+  R12 PASS). `pkexec` and GNU coreutils are installed on Omarchy: polkit 127 and coreutils 9.11 on the owner's machine
+  (Omarchy 4.0.4); the probes below ran with coreutils 9.12 (the cloud sysroot; its pkexec is 128 and could not run: no
+  polkit daemon there).
   pkexec's action is the generic `org.freedesktop.policykit.exec` (admin password every time: it keeps no
   authorization); its prompt says "Authentication is required to run a program as another user", whatever the program.
 - A descriptor's `/proc/self/fd/<n>` entry is a "magic link": a path walk through it lands on the opened inode itself,

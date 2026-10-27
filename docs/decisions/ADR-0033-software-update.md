@@ -283,8 +283,10 @@ a rotation done wrong, the only key revoked, an upload caught half way. The defe
    The owner creates the environment and the secret after M5.
 8. **The key leaves with Grassfield.** Grassfield takes back the trust it gave:
    - the helper's `off` deletes from pacman's keyring every key of `grassfield-trusted` and the pinned key (`pacman-key
-     --delete`), after removing the section; with the keyless keyring (no pinned key yet, U23) it skips the delete. Since the keyring lives in its private folder (b.2), a later plain `pacman-key
-     --populate` does not trust them again (R2);
+     --delete`), after removing the section; `off` and the scriptlet's `remove` skip `pacman-key --delete` for an empty
+     fingerprint (an empty pin in `repository.conf`, or an empty `grassfield-trusted` list, as with the keyless keyring of
+     U23). Since the keyring lives in its private folder (b.2), a later plain `pacman-key --populate` does not trust them
+     again (R2);
    - `grassfield-keyring`'s `pre_remove` deletes the keys of its own trusted list. omarchy-keyring has no such step; Grassfield
      adds one;
    - `grassfield-desktop`'s `pre_remove` runs `off`, so `pacman -Rns grassfield-desktop …` leaves no `[grassfield]` and no

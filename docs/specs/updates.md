@@ -136,7 +136,8 @@ Actions (never in a dev session)
     5. the two lines if missing (temporary file in `/etc`, rename, mode kept);
     6. drop pacman's synced `[grassfield]` files.
   - `off` and the scriptlet's `remove`: the two lines, then the file, then the synced files, then `pacman-key --delete` of every key
-    in `grassfield-trusted` and of the pinned key (ADR-0033 b.8, Q6).
+    in `grassfield-trusted` and of the pinned key (ADR-0033 b.8, Q6), skipping any empty fingerprint (an empty pin in
+    `repository.conf` or an empty trusted list, as with the keyless keyring of U23).
   - The scriptlet's `upgrade`: when the primary Server is `<previous base>/<channel>/$arch`, it rewrites the file for that channel
     and drops the synced files; otherwise it does nothing (ADR-0033 h.3).
   - A step that fails stops the helper and leaves `pacman.conf` valid: the `[grassfield]` lines are never present without
