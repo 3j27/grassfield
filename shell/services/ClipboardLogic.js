@@ -143,16 +143,32 @@ function removeId(items, id) {
 }
 
 // Whether the paste may be sent now (ADR-0034 §4). s: {locked, helperLocked, rememberedAddress, activeAddress, closedSinceOpen,
-// otherSurfaceOpen, elapsedMs}. closedSinceOpen: Hyprland reported `closewindow` for the remembered address since Search opened
-// (an address can be reused by a new window).
+// otherSurfaceOpen, expired}. closedSinceOpen: Hyprland reported `closewindow` for the remembered address since Search opened
+// (an address can be reused by a new window); expired: the PASTE_WAIT_MS since the helper owned the item have passed (the
+// service measures them with one Qt timer, monotonic, never by counting checks).
 function mayPaste(s) {
-    if (!s || s.locked !== false || s.helperLocked !== false || s.closedSinceOpen !== false || s.otherSurfaceOpen !== false)
+    if (!s || s.locked !== false || s.helperLocked !== false || s.closedSinceOpen !== false || s.otherSurfaceOpen !== false
+            || s.expired !== false)
         return false;
     const want = Minimized.normalizeAddress(s.rememberedAddress || "");
-    if (want === "" || Minimized.normalizeAddress(s.activeAddress || "") !== want)
-        return false;
-    const elapsed = Number(s.elapsedMs);
-    return isFinite(elapsed) && elapsed >= 0 && elapsed <= PASTE_WAIT_MS;
+    return want !== "" && Minimized.normalizeAddress(s.activeAddress || "") === want;
+}
+
+// One check of a paste waiting for its window (every PASTE_POLL_MS once the helper owns the item, and at the deadline): "send",
+// "wait", or why the paste is dropped. Search has closed by then and released the keyboard, so a full-attention surface open
+// at a check opened after the choice: the paste is dropped, as for a lock or the target closing.
+function pasteStep(s) {
+    if (mayPaste(s))
+        return "send";
+    if (!s || s.locked !== false || s.helperLocked !== false)
+        return "locked";
+    if (s.closedSinceOpen !== false)
+        return "the window closed";
+    if (s.otherSurfaceOpen !== false)
+        return "another surface opened";
+    if (s.expired !== false)
+        return "the window did not come back";
+    return "wait";
 }
 
 // A window address as Hyprland names it, with or without "0x" (Minimized.normalizeAddress, the platform's one validator).

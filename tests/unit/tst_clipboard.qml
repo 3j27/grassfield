@@ -137,7 +137,7 @@ TestCase {
             activeAddress: "0x55d0c0ffee",
             closedSinceOpen: false,
             otherSurfaceOpen: false,
-            elapsedMs: 200
+            expired: false
         };
         verify(Logic.mayPaste(ok));
         const refuse = {
@@ -146,7 +146,7 @@ TestCase {
             activeAddress: "0x1",
             closedSinceOpen: true,
             otherSurfaceOpen: true,
-            elapsedMs: 1001
+            expired: true
         };
         for (const k in refuse) {
             const s = Object.assign({}, ok);
@@ -156,6 +156,33 @@ TestCase {
         verify(!Logic.mayPaste(Object.assign({}, ok, {rememberedAddress: "", activeAddress: ""})), "no window was active at open");
         verify(Logic.mayPaste(Object.assign({}, ok, {rememberedAddress: "55d0c0ffee", activeAddress: "0x55D0C0FFEE"})),
             "the same window whichever form its address takes");
+        verify(!Logic.mayPaste(Object.assign({}, ok, {expired: undefined})), "no deadline state: no paste");
+    }
+
+    // Each check of a waiting paste: send only into the remembered window; a lock, the target closing or another surface
+    // opening drops it at once, whatever window is active; otherwise it waits until the deadline.
+    function test_pasteStep() {
+        const ok = {
+            locked: false,
+            helperLocked: false,
+            rememberedAddress: "55d0c0ffee",
+            activeAddress: "0x55d0c0ffee",
+            closedSinceOpen: false,
+            otherSurfaceOpen: false,
+            expired: false
+        };
+        compare(Logic.pasteStep(ok), "send");
+        const at = changes => Logic.pasteStep(Object.assign({}, ok, changes));
+        compare(at({locked: true}), "locked", "this shell's lock, the target active");
+        compare(at({helperLocked: true}), "locked", "another program's lock, the target active");
+        compare(at({closedSinceOpen: true}), "the window closed");
+        compare(at({otherSurfaceOpen: true}), "another surface opened", "the target active behind a surface");
+        compare(at({expired: true}), "the window did not come back", "the target came back too late");
+        compare(at({activeAddress: "0x1"}), "wait", "another window active: wait for the target");
+        compare(at({activeAddress: ""}), "wait");
+        compare(at({activeAddress: "0x1", expired: true}), "the window did not come back");
+        compare(at({locked: true, closedSinceOpen: true, otherSurfaceOpen: true}), "locked", "a lock is named first");
+        compare(Logic.pasteStep(null), "locked");
     }
 
     function test_pasteRequest() {

@@ -196,6 +196,8 @@ Scope {
 
     function hide(): void {
         open = false;
+        // A paste the helper has not confirmed yet ends with Search: a late confirmation pastes nothing (ADR-0034 §4).
+        Clipboard.searchClosed();
         closePreview();
         view = "";
         clipNotice = "";
@@ -668,13 +670,12 @@ Scope {
         Clipboard.paste(item.clip.id, plain && ClipView.hasPlainVariant(item.clip));
     }
 
-    // The copy button, Ctrl+C, the menu's Copy: copies only; Search stays open and the row says "Copied" (Apple's flow, CB-8).
+    // The copy button, Ctrl+C, the menu's Copy: copies only; Search stays open and the row says "Copied" once the helper owns
+    // the item (Apple's flow, CB-8), or the view says it could not be copied.
     function clipCopy(item: var): void {
         if (!item || !item.clip)
             return;
-        Clipboard.copy(item.clip.id, false);
-        clipCopiedKey = item.key;
-        copiedTimer.restart();
+        Clipboard.copyItem(item.clip.id);
     }
 
     function clipTogglePin(item: var): void {
@@ -786,6 +787,22 @@ Scope {
                 return;
             root.clipMatch = ids;
             root.compute();
+        }
+
+        function onCopyConfirmed(id: string): void {
+            if (!root.open || !root.clipboardView)
+                return;
+            root.clipCopiedKey = "clip:" + id;
+            copiedTimer.restart();
+        }
+
+        // The helper could not take the clipboard (locked by another program, the item gone, no answer): nothing was copied or
+        // pasted, and Search stays open to say so (ADR-0034 Q23).
+        function onCopyRefused(): void {
+            if (!root.open || !root.clipboardView)
+                return;
+            root.clipNotice = qsTr("The item could not be copied");
+            noticeTimer.restart();
         }
 
         function onPinFull(id: string): void {

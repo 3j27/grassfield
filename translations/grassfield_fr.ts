@@ -7285,6 +7285,10 @@
         <translation>Presse-papiers</translation>
     </message>
     <message>
+        <source>The item could not be copied</source>
+        <translation>L’élément n’a pas pu être copié</translation>
+    </message>
+    <message>
         <source>Pinned items are full</source>
         <translation>Le nombre maximal d’éléments épinglés est atteint</translation>
     </message>

@@ -278,65 +278,103 @@ Singleton {
     // since: a new window can take its address, so a closed target never gets the keys.
     property string pasteTarget: ""
     property bool pasteTargetClosed: false
-    // The item being pasted ({id, plain, copied}) while the helper takes the clipboard, then while the target comes back.
+    // The item being pasted while the helper takes the clipboard, then while the target comes back: {id, plain, copied, target,
+    // closed}. The target (hex, "" for a copy only: no window to paste into) and whether it closed are kept with the paste, so a
+    // later watchTarget never redirects it.
     property var pendingPaste: null
-    // How long the target has been awaited since the helper owned the item (counted by the timer: monotonic).
-    property int pasteWaitedMs: 0
+    // The PASTE_WAIT_MS after the helper owned the item have passed (pasteDeadline, a Qt timer: monotonic).
+    property bool pasteExpired: false
+    // The item Copy asked for (the copy button, Ctrl+C, the menu's Copy) until the helper confirms or refuses it, "" otherwise.
+    property string pendingCopy: ""
     // The last paste's outcome for the dev status ("" none, "sent", or why it was dropped).
     property string lastPaste: ""
 
     // The helper owns the item to paste: Search closes and FocusReturn gives the keyboard back to the target.
     signal pasteCopied
+    // The helper owns the item Copy asked for; or it could not take the clipboard for a copy or a paste (Search says so).
+    signal copyConfirmed(string id)
+    signal copyRefused
 
-    // Search opened over `address` (Compositor.activeWindow()): the paste may only ever go there.
+    // Search opened over `address` (Compositor.activeWindow()): a later paste may only ever go there. A paste still waiting
+    // from an earlier opening is dropped.
     function watchTarget(address: string): void {
-        root.cancelPaste("");
+        root.cancelPaste("Search opened again");
         root.pasteTarget = Logic.addressHex(address);
         root.pasteTargetClosed = false;
     }
 
-    // Copies the item (all its parts, or the plain text only), then pastes it into the target once it is active again.
+    // Copy: the item goes on the clipboard and nothing is pasted; copyConfirmed or copyRefused follows.
+    function copyItem(id: string): void {
+        root.pendingCopy = id;
+        root.copy(id, false);
+        root.copyWait.restart();
+    }
+
+    // Copies the item (all its parts, or the plain text only), then pastes it into the target once it is active again. With no
+    // target (Search opened over the desktop, or the window closed) the item is only copied. Either way Search closes only once
+    // the helper owns the item (pasteCopied); a refusal keeps it open (copyRefused).
     function paste(id: string, plain: bool): void {
         root.cancelPaste("");
-        if (root.pasteTarget === "" || root.pasteTargetClosed) {
-            // No window to paste into (Search opened over the desktop, or the window closed): the item is only copied, and
-            // Search closes as after any choice.
-            root.copy(id, plain);
-            root.lastPaste = "copied only";
-            root.pasteCopied();
-            return;
-        }
         root.pendingPaste = {
             id: id,
             plain: plain,
-            copied: false
+            copied: false,
+            target: root.pasteTargetClosed ? "" : root.pasteTarget,
+            closed: root.pasteTargetClosed
         };
         root.copy(id, plain);
-        root.pasteGiveUp.restart();
+        root.copyWait.restart();
     }
 
-    function pasteOwned(id: string): void {
+    // Search closed (Esc, a click outside, a lock, another surface): a paste the helper has not confirmed yet is dropped, so a
+    // late confirmation pastes nothing. A confirmed one (Search closed because of it) goes on.
+    function searchClosed(): void {
         const p = root.pendingPaste;
-        if (!p || p.copied)
-            return;
-        if (id !== p.id) {
-            // "A" with nothing (locked, or the helper could not set it): nothing is pasted, Search stays.
-            if (id === "")
-                root.cancelPaste("not copied");
-            return;
+        if (p !== null && !p.copied)
+            root.cancelPaste("Search closed");
+    }
+
+    // The helper's `A`: the item it now owns, "" when it could not take the clipboard or lost it.
+    function pasteOwned(id: string): void {
+        let refused = false;
+        if (root.pendingCopy !== "" && (id === root.pendingCopy || id === "")) {
+            const asked = root.pendingCopy;
+            root.pendingCopy = "";
+            if (id === asked)
+                root.copyConfirmed(id);
+            else
+                refused = true;
         }
-        root.pasteGiveUp.stop();
-        root.pendingPaste = Object.assign({}, p, {
-            copied: true
-        });
-        root.pasteWaitedMs = 0;
-        root.pasteCopied();
-        root.pasteWatch.restart();
+        const p = root.pendingPaste;
+        if (p !== null && !p.copied) {
+            if (id === p.id) {
+                if (p.target === "") {
+                    root.pendingPaste = null;
+                    root.lastPaste = "copied only";
+                    root.pasteCopied();
+                } else {
+                    root.pendingPaste = Object.assign({}, p, {
+                        copied: true
+                    });
+                    root.pasteExpired = false;
+                    root.pasteDeadline.restart();
+                    root.pasteCopied();
+                    root.pasteWatch.restart();
+                }
+            } else if (id === "") {
+                root.cancelPaste("not copied");
+                refused = true;
+            }
+        }
+        if (root.pendingCopy === "" && (root.pendingPaste === null || root.pendingPaste.copied))
+            root.copyWait.stop();
+        if (refused)
+            root.copyRefused();
     }
 
     function cancelPaste(why: string): void {
-        root.pasteGiveUp.stop();
         root.pasteWatch.stop();
+        root.pasteDeadline.stop();
         if (root.pendingPaste !== null && why !== "") {
             root.lastPaste = why;
             console.info("grassfield: clipboard paste dropped:", why);
@@ -345,37 +383,55 @@ Singleton {
     }
 
     function pasteTick(): void {
-        root.pasteWaitedMs += root.pasteWatch.interval;
-        const active = Compositor.activeWindow();
-        const state = {
-            locked: SessionState.locked,
-            helperLocked: root.helperLocked,
-            rememberedAddress: root.pasteTarget,
-            activeAddress: active ? active.address : "",
-            closedSinceOpen: root.pasteTargetClosed,
-            otherSurfaceOpen: FocusReturn.anyOpen(),
-            elapsedMs: root.pasteWaitedMs
-        };
-        if (Logic.mayPaste(state)) {
-            const sent = Compositor.dispatchRequest(Logic.pasteRequest(root.pasteTarget));
+        const p = root.pendingPaste;
+        if (p === null || !p.copied) {
             root.pasteWatch.stop();
-            root.pendingPaste = null;
-            root.lastPaste = sent ? "sent" : "not sent";
             return;
         }
-        if (state.locked || state.helperLocked)
-            root.cancelPaste("locked");
-        else if (state.closedSinceOpen)
-            root.cancelPaste("the window closed");
-        else if (root.pasteWaitedMs >= Logic.PASTE_WAIT_MS)
-            root.cancelPaste("the window did not come back");
+        const active = Compositor.activeWindow();
+        const step = Logic.pasteStep({
+            locked: SessionState.locked,
+            helperLocked: root.helperLocked,
+            rememberedAddress: p.target,
+            activeAddress: active ? active.address : "",
+            closedSinceOpen: p.closed,
+            otherSurfaceOpen: FocusReturn.anyOpen(),
+            expired: root.pasteExpired
+        });
+        if (step === "wait")
+            return;
+        if (step !== "send") {
+            root.cancelPaste(step);
+            return;
+        }
+        root.pasteWatch.stop();
+        root.pasteDeadline.stop();
+        root.pendingPaste = null;
+        root.lastPaste = Compositor.dispatchRequest(Logic.pasteRequest(p.target)) ? "sent" : "not sent";
     }
 
-    // The helper did not take the clipboard in time: nothing is pasted.
-    readonly property Timer pasteGiveUp: Timer {
+    // The helper did not answer a copy or a paste in time (not running, or busy): nothing is pasted, and Search says so.
+    readonly property Timer copyWait: Timer {
         interval: Logic.PASTE_WAIT_MS
         repeat: false
-        onTriggered: root.cancelPaste("not copied in time")
+        onTriggered: {
+            const p = root.pendingPaste;
+            const waiting = root.pendingCopy !== "" || (p !== null && !p.copied);
+            root.pendingCopy = "";
+            if (p !== null && !p.copied)
+                root.cancelPaste("not copied in time");
+            if (waiting)
+                root.copyRefused();
+        }
+    }
+    // The paste's 1 s, from the helper owning the item: then one last check drops it.
+    readonly property Timer pasteDeadline: Timer {
+        interval: Logic.PASTE_WAIT_MS
+        repeat: false
+        onTriggered: {
+            root.pasteExpired = true;
+            root.pasteTick();
+        }
     }
     // Checks every 50 ms whether the target is active again (FocusReturn's request lands after Search's surface is gone).
     readonly property Timer pasteWatch: Timer {
@@ -390,6 +446,11 @@ Singleton {
         function onWindowClosed(address: string): void {
             if (address === root.pasteTarget)
                 root.pasteTargetClosed = true;
+            const p = root.pendingPaste;
+            if (p !== null && p.target !== "" && address === p.target)
+                root.pendingPaste = Object.assign({}, p, {
+                    closed: true
+                });
         }
     }
 
@@ -409,6 +470,7 @@ Singleton {
                     target: root.pasteTarget,
                     closed: root.pasteTargetClosed,
                     pending: root.pendingPaste,
+                    copy: root.pendingCopy,
                     last: root.lastPaste
                 }
             });
