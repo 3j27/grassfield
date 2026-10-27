@@ -424,7 +424,8 @@ expect("lock stranded check: undecided from its start until Hyprland answers loc
        re.search(r"^\s*property bool strandedUndecided:\s*false\s*$", lock, re.M) is not None
        and re.search(r"if\s*\(!controller\.locked\s*&&\s*root\.hyprland\)\s*\{\s*strandedUndecided\s*=\s*true;\s*strandedProbe\.start\(\);\s*\}", lock) is not None
        and len(re.findall(r"\bstrandedUndecided\s*=\s*true;", lock)) == 1
-       and len(re.findall(r"\bstrandedUndecided\s*=\s*false;", lock)) == 3
+       and len(re.findall(r"\bstrandedUndecided\s*=\s*false;", lock)) == 4
+       and re.search(r"strandedProbe\.stop\(\);\s*strandedUndecided\s*=\s*false;\s*console\.info\(\"grassfield-lock: lock requested \(\"", code(function(lock, "lock") or "")) is not None
        and len(re.findall(r"\bstrandedUndecided\s*=\s*false;", stranded)) == 3
        and "strandedUndecided" not in unknown_branch
        and re.search(r"if\s*\(holding\)\s*requestMonitors\(\);\s*else if\s*\(strandedUndecided\)\s*checkStranded\(\);\s*$", monitors_added) is not None)
@@ -587,6 +588,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#        else if (strandedUndecided)\n            checkStranded();\n#' \
   'shell/security/lock/Lock.qml#        else if (strandedUndecided)\n            checkStranded();#        else if (strandedUndecided)\n            release();' \
   'shell/security/lock/Lock.qml#            strandedUndecided = true;\n#' \
+  'shell/security/lock/Lock.qml#        strandedUndecided = false;\n        console.info("grassfield-lock: lock requested (#        console.info("grassfield-lock: lock requested (' \
   'shell/security/lock/Lock.qml#            strandedProbe.stop(); // still undecided#            strandedProbe.stop(); strandedUndecided = false; // still undecided' \
   'shell/platform/Displays.qml#    Component.onCompleted: {\n        publishDebounce.restart();#    Component.onCompleted: {\n        Hyprland.refreshMonitors();\n        publishDebounce.restart();' \
   'shell/platform/Compositor.qml#        const all = Hyprland.monitors ? Hyprland.monitors.values : [];#        Hyprland.refreshMonitors();\n        const all = Hyprland.monitors ? Hyprland.monitors.values : [];'; do

@@ -672,7 +672,12 @@ A starting instance (session start, crash restart, soft reload) locks when ANY o
    (`strandedUndecided`: no `locked` or `unlocked` answer yet, this shell not locked) runs once more when the model
    fills (`monitorsAdded`), so a dead client's stranded lock is taken over as soon as Quickshell's first answer arrives,
    however late (opus review of 94ab527, MINOR-1; before, an answer after the 10 s left the session behind Hyprland's
-   "lockscreen app died" screen, locked but out of reach). That run only ever takes the lock over. The only other
+   "lockscreen app died" screen, locked but out of reach). That run only ever takes the lock over. Any lock of this
+   shell (`lock()`) ends the undecided state for good, so the check never reads cached answers that show this shell's
+   own lock (re-review of 1449bf3, MINOR-A: after an unlock, a stale LOCK read on a monitor plugged in would have
+   re-locked the session). Residual: before this shell first locks, an undecided check re-run on a monitor plugged in
+   reads the other monitors' cached answers; if a foreign locker's lock showed there and was released since, it is
+   "taken over" again, i.e. an unwanted lock, never an unlock. The only other
    `Hyprland.refreshMonitors()` in the shell is Displays' handler of Hyprland events, which cannot run before
    Quickshell's first answer (Quickshell connects its event socket in that answer's callback). Tests:
    `tst_lockmachine` `test_monitorQueryAllowed`, `tests/security/lock_surfaces.sh` (the guarded call, its callers, the

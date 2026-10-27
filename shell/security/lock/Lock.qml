@@ -163,6 +163,9 @@ Singleton {
             return "refused: missing-pam";
         }
         strandedProbe.stop();
+        // Never again after this shell locked: the cached answers would then show its own lock (a stale LOCK after the
+        // unlock would re-lock the session on the next monitor plugged in).
+        strandedUndecided = false;
         console.info("grassfield-lock: lock requested (" + reason + ")");
         inheritedLock = reason === "restore";
         Popups.close();
