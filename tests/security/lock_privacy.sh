@@ -20,16 +20,18 @@
 #                expire): the detectors work
 #   lock         `lock lid` (D-4: the nested outputs WAYLAND-1 and GF-REF are not external displays, so the lid locks)
 #   privacy      L4: while locked, two more notifications (one critical), and every surface IPC can open (Search, Apps,
-#                Notification Center, menu bar menu, Overview, Dock menu); captures of both outputs hold no marker
-#                and no green pixel (the twin is unprotected window content); Hyprland reports LOCK on every monitor
+#                Notification Center, menu bar menu, Overview, Dock menu); the capture of GF-REF (probe, twin, banners)
+#                holds no marker and no green pixel (the twin is unprotected window content), WAYLAND-1 shows neither
+#                when it gives a frame; Hyprland reports LOCK on every monitor
 #   display-off  D-4: with `idle devDisplayOff 4` set before the lock, the shell turns the displays off after 4 s
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion
 #   cleanup      close the foot windows (the session stays locked)
 # The fixture steps read GF-REF only (headless: it always draws). privacy also reads WAYLAND-1, the nested window on the
-# owner's screen, which gives grim a frame only while the owner's compositor draws it: keep it visible, or that output
-# FAILs as "not checked". Every wait is bounded (timeout(1), counted loops); nothing waits forever.
+# owner's screen, which gives grim a frame only while the owner's compositor draws it: without one it is reported
+# NOT VERIFIED (it carries no fixture; its lock is covered by LOCK on every monitor). Every wait is bounded
+# (timeout(1), counted loops); nothing waits forever.
 # Requires scripts/dev/nested-up.sh (GRASSFIELD_DEV=1 shell on a private bus: notify-send reaches only it).
-# Exit status: 0 when every requested step passed.
+# Exit status: 0 when every requested step passed; NOT VERIFIED items are counted on the last line and leave it unchanged.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -62,12 +64,15 @@ nested() { env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" "$@"; 
 # Every call that waits on another process is bounded (timeout(1)); its caller FAILs naming what it waited for. A
 # nested output the host does not draw never sends grim a frame (an integrator run hung 25 min on WAYLAND-1, the nested
 # window on the owner's screen), a stuck shell never answers IPC, a busy notification server never replies.
-hypr() { nested timeout 5 hyprctl "$@" 2>/dev/null; }
-ipc() { nested timeout 5 qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
-pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$@" >/dev/null 2>&1; }
+hypr() { nested timeout -k 2 5 hyprctl "$@" 2>/dev/null; }
+ipc() { nested timeout -k 2 5 qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
+pointer() { timeout -k 2 20 "$root/scripts/dev/pointer.sh" output "$@" >/dev/null 2>&1; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; status=1; }
-notify() { env -i PATH="$PATH" DBUS_SESSION_BUS_ADDRESS="$bus" timeout 5 notify-send "$@" >/dev/null 2>&1; }
+# Something this run could not observe and that no check depends on: reported and counted, the exit status unchanged.
+not_verified=0
+notverified() { echo "NOT VERIFIED $*"; not_verified=$((not_verified + 1)); }
+notify() { env -i PATH="$PATH" DBUS_SESSION_BUS_ADDRESS="$bus" timeout -k 2 5 notify-send "$@" >/dev/null 2>&1; }
 
 compositor_locked() {
   hypr -j monitors | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null
@@ -119,9 +124,9 @@ grab() { # <output> <png>
   grab_why=""
   start=$(date +%s)
   rm -f "$2"
-  nested timeout "$limit" grim -o "$1" "$2" 2>/dev/null
+  nested timeout -k 2 "$limit" grim -o "$1" "$2" 2>/dev/null
   rc=$?
-  if ((rc == 124)); then
+  if ((rc == 124 || rc == 137)); then # 137: killed after the 2 s grace (-k)
     grab_why="grim -o $1 got no frame within $limit s ($hint)"
   elif ((rc != 0)); then
     grab_why="grim -o $1 failed (exit $rc)"
@@ -250,7 +255,7 @@ apart() { # <address> <address>
 # config error, no window) before a window opens.
 foot_style=""
 foot_check() { # <foot options...>: prints foot's config errors and fails when foot rejects them
-  env -u WAYLAND_DISPLAY timeout 10 "$root/scripts/dev/isolated.sh" foot --check-config "$@" 2>&1 >/dev/null
+  env -u WAYLAND_DISPLAY timeout -k 2 10 "$root/scripts/dev/isolated.sh" foot --check-config "$@" 2>&1 >/dev/null
 }
 colour_opts() { # <rrggbb>: sets the array opts
   case $foot_style in
@@ -296,7 +301,7 @@ foot_window() { # <app id> <rrggbb> <x> <y>
   # The record must name the process that owns the window: the window's own pid when it is another foot.
   read -r _ _ _ _ _ cpid < <(client_info "$addr")
   [[ ${cpid:-} =~ ^[0-9]+$ && $cpid != "$pid" && $(cat "/proc/$cpid/comm" 2>/dev/null) == foot ]] && dev_record_pid "$dev/privacy-$1.pid" "$cpid"
-  timeout 5 "$root/scripts/nestctl" dispatch "hl.dsp.window.move({ x = $tx, y = $ty, window = 'address:$addr' })" >/dev/null 2>&1
+  timeout -k 2 5 "$root/scripts/nestctl" dispatch "hl.dsp.window.move({ x = $tx, y = $ty, window = 'address:$addr' })" >/dev/null 2>&1
   for _ in $(seq 1 20); do
     read -r x y _ < <(client_info "$addr")
     near "$x" "$y" "$tx" "$ty" && break
@@ -308,7 +313,7 @@ foot_window() { # <app id> <rrggbb> <x> <y>
 }
 
 step_setup() {
-  local gap y x0 x1 x2 probe twin protected i m="" g="" cerr="" pm="error" pc="none" gm="error" gc="none" ok=1 bx by bw bh
+  local gap y x0 x1 x2 probe twin protected i m="" g="" cerr="" pm="error" pc="none" gm="error" gc="none" ok=1 bx by bw bh tw th
   rm -f "$fixture"
   echo "instance=$sig" >>"$fixture"
   magick -size 64x64 xc:"#ff00ff" "$marker" || { fail "setup: cannot draw the marker image"; return; }
@@ -346,11 +351,14 @@ step_setup() {
   foot_window Bitwarden 00ff00 "$x2" "$y" || { fail "setup: protected window: $why"; return; }
   protected=$win_addr
   read -r bx by bw bh _ < <(client_info "$protected")
+  read -r _ _ tw th _ < <(client_info "$twin")
+  near "${bw:-}" "${bh:-}" "${tw:-}" "${th:-}" \
+    || { fail "setup: the Bitwarden window (${bw:-?}x${bh:-?}) is not the twin's size (${tw:-?}x${th:-?})"; return; }
   apart "$probe" "$protected" && apart "$twin" "$protected" \
     || { fail "setup: the Bitwarden window overlaps the probe or the twin: $(client_info "$protected")"; return; }
   echo "protected=$protected" >>"$fixture"
   echo "proven=1" >>"$fixture"
-  pass "setup: protected window (app id Bitwarden, the twin's options and size) at ($((bx - mon_x)),$((by - mon_y))) of $out, ${bw}x${bh}"
+  pass "setup: protected window (app id Bitwarden) at ($((bx - mon_x)),$((by - mon_y))) of $out, ${bw}x${bh}, the twin's size (${tw}x${th})"
 
   for i in 1 2 3; do
     notify -i "$marker" -h "string:image-path:$marker" "L4 privacy $i" "token-$RANDOM$RANDOM"
@@ -400,7 +408,7 @@ step_screenshare() {
     || fail "screenshare: the green twin is not captured green ($gm of its region, centre $gc): the green check would prove nothing"
   at_least "$bk" 0.9 && pass "screenshare: the Bitwarden window is black in the capture ($bk of its region)" \
     || fail "screenshare: the Bitwarden window's region is not black ($bk, centre $bc) (SEC-01)"
-  [[ $bg == 0 ]] && pass "screenshare: no green pixel of the Bitwarden window is captured (its twin, same options, is)" \
+  [[ $bg == 0 ]] && pass "screenshare: no green pixel of the Bitwarden window is captured (the green twin is, in the same frame)" \
     || fail "screenshare: ${bg} green px of the Bitwarden window were captured (SEC-01)"
 }
 
@@ -447,15 +455,28 @@ step_privacy() {
   ipc overview open >/dev/null
   ipc dock menu 0 "" >/dev/null
   sleep 1.5
-  # Each output on its own: one that gives no frame (WAYLAND-1 when the host does not draw the nested window) is a FAIL
-  # naming it, and the other is still checked.
+  # GF-REF carries the probe, the twin and the banners: fully fail-closed. WAYLAND-1 carries none of them, so its 0 px
+  # proves nothing: any marker or green pixel on it FAILs, no frame is NOT VERIFIED (exit status unchanged), and its
+  # lock is covered by "LOCK on every monitor" below.
   for output in GF-REF WAYLAND-1; do
     read -r m g cerr < <(capture privacy "$output")
     if [[ ! $m =~ ^[0-9]+$ || ! $g =~ ^[0-9]+$ ]]; then
-      fail "privacy: $output not checked: $cerr"
+      if [[ $output == "$out" ]]; then
+        fail "privacy: $output not checked: $cerr"
+      else
+        notverified "privacy: $output lock screen not captured: $cerr"
+      fi
       continue
     fi
     echo "privacy capture $output: magenta $m, green $g ($work/privacy-$output.png)"
+    if [[ $output != "$out" ]]; then
+      if ((m != 0 || g != 0)); then
+        fail "privacy: $output: $m marker px and $g green px on the lock screen (notification or window content visible, L4)"
+      else
+        echo "INFO privacy: $output: 0 marker px, 0 green px (it carries no fixture, so this proves nothing more)"
+      fi
+      continue
+    fi
     if ((m != 0)); then
       fail "privacy: $output: $m marker pixels on the lock screen (notification or window content visible, L4)"
     elif ((!proven)); then
@@ -519,4 +540,5 @@ for s in "${steps[@]}"; do
   declare -F "step_${s//-/_}" >/dev/null || { echo "lock_privacy: unknown step $s" >&2; exit 2; }
   "step_${s//-/_}"
 done
+echo "lock_privacy: $not_verified NOT VERIFIED item(s); exit status $status"
 exit $status
