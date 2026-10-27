@@ -7791,8 +7791,8 @@
         <translation>Les données d’apps d’Arch, depuis votre miroir de paquets, quand elles ne sont pas installées.</translation>
     </message>
     <message>
-        <source>Screenshots, from each app&apos;s website, when its page opens.</source>
-        <translation>Les captures d’écran, depuis le site de chaque app, quand sa page s’ouvre.</translation>
+        <source>Screenshots, from the addresses in each app&apos;s description, when its page opens.</source>
+        <translation>Les captures d’écran, aux adresses de la description de chaque app, quand sa page s’ouvre.</translation>
     </message>
     <message>
         <source>Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.</source>

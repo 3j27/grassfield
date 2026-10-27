@@ -148,7 +148,7 @@ Window {
                 }
 
                 SettingsLine {
-                    text: qsTr("Screenshots, from each app's website, when its page opens.")
+                    text: qsTr("Screenshots, from the addresses in each app's description, when its page opens.")
                 }
 
                 SettingsLine {
