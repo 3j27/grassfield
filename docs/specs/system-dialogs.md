@@ -269,7 +269,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   exchange.
 - SC2 one queue in the shell for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
   request never takes the keyboard from the sheet on screen (the polkit sheet's `WlrKeyboardFocus.Exclusive` stays where it is,
-  `shell/security/polkit/AuthAgent.qml:122`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
+  `shell/security/polkit/AuthAgent.qml:241`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
   its caller (`StopPrompting`, `CancelGetSecrets`, BlueZ `Cancel`, the KIO client gone) leaves the queue unseen; at most 8
   secret requests wait, the 9th secret request is answered "cancelled"; a polkit request always queues, whatever the count.
 - SC3 look and identity: a secret sheet is not the authorization sheet: no lock-and-shield glyph, never the title
