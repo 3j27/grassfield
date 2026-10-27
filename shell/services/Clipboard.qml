@@ -225,7 +225,10 @@ Singleton {
             onRead: line => root.handle(line)
         }
         onStarted: root.send([SessionState.locked ? "P" : "R"])
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
         onExited: code => {
+            // qmllint enable signal-handler-parameters
             root.stopping = false;
             root.helperLocked = false;
             root.ownedId = "";
