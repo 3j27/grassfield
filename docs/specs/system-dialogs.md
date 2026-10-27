@@ -269,7 +269,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   exchange.
 - SC2 one queue in the shell for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
   request never takes the keyboard from the sheet on screen (the polkit sheet's `WlrKeyboardFocus.Exclusive` stays where it is,
-  `shell/security/polkit/AuthAgent.qml:122`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
+  `shell/security/polkit/AuthAgent.qml:241`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
   its caller (`StopPrompting`, `CancelGetSecrets`, BlueZ `Cancel`, the KIO client gone) leaves the queue unseen; at most 8
   secret requests wait, the 9th secret request is answered "cancelled"; a polkit request always queues, whatever the count.
 - SC3 look and identity: a secret sheet is not the authorization sheet: no lock-and-shield glyph, never the title
@@ -351,9 +351,16 @@ gcr-prompter while the bridge is down; the requester shown is the D-Bus caller (
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
-secrets are not asked (SC8); until step 2 ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
+secrets are not asked (SC8); until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
 the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
-dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins.
+dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins. Until step 2c (ADR-0035 D-12, the handover)
+ships, two cases remain after 2a. (1) Secrets that libsecret clients saved while KWallet held the name stay in KWallet:
+the user sees Chromium without its saved passwords and signed out of sites, because Chromium creates a new key in the
+keychain when it cannot find its "Chrome Safe Storage" key there; nothing is deleted, and step 2c moves the items into the
+keychain once, at the session's start, before Chromium runs, with no step from the user (a Chromium that already made a new
+key keeps it, and what it saved under the old key stays unreadable). (2) A ksecretd left over from an earlier session or
+from the Omarchy session keeps the name until that user manager stops: the session then behaves as before 2a; step 2c makes
+it quit at the session's start, with nothing shown.
 
 ## 6. Toolkit appearance (category C; ADR-0035 D-8)
 

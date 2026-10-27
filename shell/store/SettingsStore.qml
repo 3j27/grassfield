@@ -192,6 +192,13 @@ Scope {
     readonly property bool dockMinimizeIntoApp: read("dock.minimizeIntoApp")
     readonly property bool dockAnimateOpening: read("dock.animateOpening")
     readonly property bool dockShowIndicators: read("dock.showIndicators")
+    // The clipboard history in Search (ADR-0034): off until allowed; retention of unpinned items; the opt-in history store; the
+    // Clear Clipboard History marks the Settings app writes (milliseconds since the epoch; a change clears).
+    readonly property bool clipboardEnabled: read("search.clipboard.enabled")
+    readonly property string clipboardRetention: read("search.clipboard.retention")
+    readonly property bool clipboardKeepOnDisk: read("search.clipboard.keepOnDisk")
+    readonly property real clipboardClearedAt: read("search.clipboard.clearedAt")
+    readonly property real clipboardPinnedClearedAt: read("search.clipboard.pinnedClearedAt")
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
     // user's own, is returned as it is. Nothing is written back. The Dock owns this key and its recent list and stack options.

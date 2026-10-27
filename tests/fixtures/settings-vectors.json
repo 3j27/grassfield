@@ -155,6 +155,16 @@
     {"name": "screen saver slideshow", "path": "screensaver.kind", "stored": "slideshow", "read": "slideshow", "valid": true},
     {"name": "screen saver of an unknown kind is the default", "path": "screensaver.kind", "stored": "aerial", "default": true, "valid": false},
     {"name": "screen saver folder absolute", "path": "screensaver.folder", "stored": "/home/u/Photos", "read": "/home/u/Photos", "valid": true},
-    {"name": "screen saver folder relative is the default", "path": "screensaver.folder", "stored": "Photos", "default": true, "valid": false}
+    {"name": "screen saver folder relative is the default", "path": "screensaver.folder", "stored": "Photos", "default": true, "valid": false},
+    {"name": "clipboard history on", "path": "search.clipboard.enabled", "stored": true, "read": true, "valid": true},
+    {"name": "clipboard history of the wrong type is the default (off)", "path": "search.clipboard.enabled", "stored": "true", "default": true, "valid": false},
+    {"name": "clipboard retention 7 days", "path": "search.clipboard.retention", "stored": "7d", "read": "7d", "valid": true},
+    {"name": "clipboard retention of an unknown value is the default", "path": "search.clipboard.retention", "stored": "forever", "default": true, "valid": false},
+    {"name": "clipboard history store on", "path": "search.clipboard.keepOnDisk", "stored": true, "read": true, "valid": true},
+    {"name": "clipboard history store of the wrong type is the default (off)", "path": "search.clipboard.keepOnDisk", "stored": 1, "default": true, "valid": false},
+    {"name": "clipboard cleared at a time", "path": "search.clipboard.clearedAt", "stored": 1793077980134, "read": 1793077980134, "valid": true},
+    {"name": "clipboard cleared at a negative time is clamped", "path": "search.clipboard.clearedAt", "stored": -5, "read": 0, "valid": false},
+    {"name": "clipboard cleared at of the wrong type is the default", "path": "search.clipboard.clearedAt", "stored": "now", "default": true, "valid": false},
+    {"name": "pinned items cleared at a time", "path": "search.clipboard.pinnedClearedAt", "stored": 1793077980134, "read": 1793077980134, "valid": true}
   ]
 }

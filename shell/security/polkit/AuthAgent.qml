@@ -20,6 +20,9 @@ Scope {
     id: root
 
     readonly property bool registered: agent.isRegistered
+    // A request is open: its sheet shown, or held (behind the lock or the screen saver, or queued). Read only by shell.qml for
+    // SessionState.authorizing (the clipboard history records nothing while it is true and 2 s after, ADR-0034 Q11).
+    readonly property bool requestActive: dialogModel.active
 
     PolkitAgent {
         id: agent

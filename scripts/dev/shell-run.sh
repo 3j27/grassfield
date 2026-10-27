@@ -189,6 +189,18 @@ if [[ ! -x $stack_helper || -n $(find "$root/apps/stack-helper/src" "$root/apps/
   fi
 fi
 
+# grassfield-clipboard-helper (ADR-0034, the clipboard history): built the same way, in the background, when missing or older
+# than its sources. The dev shell gives it the nested compositor's socket only (GRASSFIELD_CLIPBOARD_DISPLAY below, an absolute
+# path): it never watches the owner's display, and the shell starts no helper without that variable.
+clipboard_helper=$dev/build/grassfield-clipboard-helper
+if [[ ! -x $clipboard_helper || -n $(find "$root/apps/clipboard-helper/src" "$root/apps/clipboard-helper/protocols" "$root/apps/clipboard-helper/build-direct.sh" -newer "$clipboard_helper" -print -quit 2>/dev/null) ]]; then
+  (
+    "$root/apps/clipboard-helper/build-direct.sh" >"$dev/clipboard-helper-build.log" 2>&1 ||
+      echo "shell-run: the clipboard helper did not build (see $dev/clipboard-helper-build.log): no clipboard history" >>"$dev/clipboard-helper-build.log"
+  ) </dev/null >/dev/null 2>&1 &
+fi
+if [[ $sock == /* ]]; then clipboard_display=$sock; else clipboard_display=${XDG_RUNTIME_DIR:?}/$sock; fi
+
 # The isolated trash of the dev session (shell/services/Trash.qml watches it; ADR-0011): the shell's "Move to Trash"
 # and the Dock's Trash drop put files here, never in the owner's ~/.local/share/Trash.
 mkdir -p "$dev/apps-home/data/Trash/files" "$dev/apps-home/data/Trash/info" "$dev/apps-home/home"
@@ -225,7 +237,7 @@ env "${unit_unset[@]}" "${timing[@]}" "${bus_env[@]}" PATH="$root/scripts/dev/op
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
   GRASSFIELD_FILES_CMD="$files_cmd" GRASSFIELD_OPEN_POLICY="$open_policy" GRASSFIELD_OPEN_LOG="$open_log" \
   GRASSFIELD_SEARCH_PLOCATE_DB="$plocate_db" GRASSFIELD_CURSORS_BUILD="$root/branding/cursors/build.sh" \
-  GRASSFIELD_CURSORS_ICONS="$dev/share/icons" \
+  GRASSFIELD_CURSORS_ICONS="$dev/share/icons" GRASSFIELD_CLIPBOARD_DISPLAY="$clipboard_display" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui:$dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 shell_pid=$!

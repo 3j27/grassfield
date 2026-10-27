@@ -67,6 +67,13 @@ ShellRoot {
         value: saver.shown
     }
 
+    // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
+    Binding {
+        target: SessionState
+        property: "authorizing"
+        value: authAgent.requestActive
+    }
+
     Connections {
         target: SessionState
 
@@ -374,7 +381,9 @@ ShellRoot {
     Search {
         id: searchSurface
     }
-    AuthAgent {}
+    AuthAgent {
+        id: authAgent
+    }
     Idle {
         id: idle
         // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
@@ -416,5 +425,5 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max)
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state)
 }

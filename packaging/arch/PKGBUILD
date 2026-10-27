@@ -108,6 +108,10 @@ build() {
   cmake -S "$(_root)/apps/stack-helper" -B "$srcdir/stack-helper-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/stack-helper-build"
+  # grassfield-clipboard-helper (ADR-0034): the clipboard history's capture and store (ext-data-control-v1, lock notifier).
+  cmake -S "$(_root)/apps/clipboard-helper" -B "$srcdir/clipboard-helper-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/clipboard-helper-build"
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
@@ -152,9 +156,13 @@ package_grassfield-desktop() {
   # as omarchy declares them. grassfield-keyring (O12) is held back until grassfieldhq/grassfield-packages builds it (owner
   # decision O21, 2026-10-27): a follow-up adds it here, so that a local `makepkg -si` never asks for a package that does
   # not exist yet.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot)
-  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
-  license=(MIT CC-BY-SA-4.0 Unicode-3.0)
+  # gnome-keyring is the session's only Secret Service (ADR-0035 D-12, Q17-b: packaging/xdg-config/kwalletrc keeps KWallet's
+  # ksecretd off org.freedesktop.secrets), so libsecret clients such as Chromium keep a keychain instead of plain-text storage:
+  # declared, not assumed to come with Omarchy.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot gnome-keyring)
+  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0; the
+  # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
+  license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
@@ -254,6 +262,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/wallpaper-build"
   # grassfield-stack-helper: /usr/lib/grassfield/grassfield-stack-helper (run by the Dock and the stack popup).
   DESTDIR="$pkgdir" cmake --install "$srcdir/stack-helper-build"
+  # grassfield-clipboard-helper: /usr/lib/grassfield/grassfield-clipboard-helper (run by the shell while the history is on).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/clipboard-helper-build"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).
@@ -271,11 +281,13 @@ package_grassfield-desktop() {
 
   # The session icon theme grassfield-icons (ADR-0017) is its own package (a dependency): it also carries Grassfield's own
   # generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).
-  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
+  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile, the fontconfig file and
+  # the session's kwalletrc (read through XDG_CONFIG_DIRS; ADR-0035 Q17-b).
   install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
   install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"
   install -Dm644 "$root/packaging/dconf/profile-local" "$pkgdir/usr/share/grassfield/dconf/profile-local"
   install -Dm644 "$root/packaging/fontconfig/fonts.conf" "$pkgdir/usr/share/grassfield/fontconfig/fonts.conf"
+  install -Dm644 "$root/packaging/xdg-config/kwalletrc" "$pkgdir/usr/share/grassfield/xdg-config/kwalletrc"
   dconf compile "$srcdir/grassfield.db" "$root/packaging/dconf/grassfield.d"
   install -Dm644 "$srcdir/grassfield.db" "$pkgdir/usr/share/grassfield/dconf/grassfield.db"
 
@@ -289,6 +301,7 @@ package_grassfield-desktop() {
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-desktop/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/omarchy-MIT.txt" "$pkgdir/usr/share/licenses/grassfield-desktop/omarchy-MIT.txt"
   install -Dm644 "$root/packaging/licenses/unicode-license-v3.txt" "$pkgdir/usr/share/licenses/grassfield-desktop/unicode-license-v3.txt"
+  install -Dm644 "$root/packaging/licenses/clipboard-protocols-notices.txt" "$pkgdir/usr/share/licenses/grassfield-desktop/clipboard-protocols-notices.txt"
 }
 
 package_grassfield-compositor() {

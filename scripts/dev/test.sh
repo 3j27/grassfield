@@ -224,6 +224,11 @@ gtest_suite tests/unit/wallpaper-tool "apps/wallpaper-tool/build-direct.sh --tes
 # here, then again with ASan and UBSan. The process itself is tests/shell/stack_helper.sh.
 gtest_suite tests/unit/stack-helper "apps/stack-helper/build-direct.sh --tests >/dev/null && apps/stack-helper/build-direct.sh --tests --asan" \
   ".dev/build/stack-helper-unit-tests --gtest_brief=1" ".dev/build/stack-helper-unit-tests-asan --gtest_brief=1"
+# grassfield-clipboard-helper (ADR-0034) logic: the offer types and the hint refusal, the reads' caps, the history and the pins
+# with their limits and retention, the stores' modes and bounds, the image decoding with the format given: built here, then again
+# with ASan and UBSan. The process, against a fake compositor, is tests/shell/clipboard_helper.sh.
+gtest_suite tests/unit/clipboard-helper "apps/clipboard-helper/build-direct.sh --tests >/dev/null && apps/clipboard-helper/build-direct.sh --tests --asan" \
+  "QT_QPA_PLATFORM=offscreen .dev/build/clipboard-helper-unit-tests --gtest_brief=1" "QT_QPA_PLATFORM=offscreen .dev/build/clipboard-helper-unit-tests-asan --gtest_brief=1"
 # grassfield-settings dev guard, the wallpaper helper door (exact tool path, exact argument vectors) and the Backend's glue
 # (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
