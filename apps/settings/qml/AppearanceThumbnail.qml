@@ -6,31 +6,11 @@ import Grassfield.Ui
 // One appearance thumbnail of Settings > Appearance (macOS 27 draws a small desktop: docs/audits/settings-parity-2026-10-26.md
 // § Appearance): the Grassfield artwork with a menu bar strip, a menu at the top left whose selection is a bar in the accent,
 // and a window at the bottom right with its three window buttons, running off the edges. `choice`: "light", "dark" or
-// "auto" (light on the left half, dark on the right). The proportions below are the drawing's, not UI metrics.
+// "auto" (light on the left half, dark on the right). The drawing's proportions are tokens (settings.appearanceThumb*).
 Item {
     id: root
 
     property string choice: "light"
-
-    readonly property var art: ({
-            barHeight: 0.1,
-            menuX: 0.02,
-            menuY: 0.17,
-            menuWidth: 0.57,
-            menuHeight: 0.3,
-            menuRadius: 0.06,
-            selectionInset: 0.035,
-            selectionHeight: 0.11,
-            windowX: 0.26,
-            windowY: 0.56,
-            windowRadius: 0.12,
-            lightY: 0.8,
-            lightSize: 0.09,
-            lightX: [0.42, 0.56, 0.7],
-            autoSplit: 0.49,
-            darkWallpaper: 0.35,
-            menuOpacity: 0.72
-        })
 
     component Desktop: Item {
         id: desktop
@@ -46,30 +26,30 @@ Item {
         Rectangle {
             anchors.fill: parent
             visible: desktop.dark
-            color: Appearance.withAlpha(Tokens.colorDark.shadow, root.art.darkWallpaper)
+            color: Appearance.withAlpha(Tokens.colorDark.shadow, Tokens.settingsAppearanceThumbDarkWallpaper)
         }
 
         // The menu bar.
         Rectangle {
             width: parent.width
-            height: Math.round(parent.height * root.art.barHeight)
-            color: Appearance.withAlpha(desktop.colors.materialTint, root.art.menuOpacity)
+            height: Math.round(parent.height * Tokens.settingsAppearanceThumbBarHeight)
+            color: Appearance.withAlpha(desktop.colors.materialTint, Tokens.settingsAppearanceThumbMenuOpacity)
         }
 
         // A menu, its selected item a bar in the accent.
         Rectangle {
-            x: Math.round(parent.width * root.art.menuX)
-            y: Math.round(parent.height * root.art.menuY)
-            width: Math.round(parent.width * root.art.menuWidth)
-            height: Math.round(parent.height * root.art.menuHeight)
-            radius: Math.round(parent.height * root.art.menuRadius)
-            color: Appearance.withAlpha(desktop.colors.materialTint, root.art.menuOpacity)
+            x: Math.round(parent.width * Tokens.settingsAppearanceThumbMenuX)
+            y: Math.round(parent.height * Tokens.settingsAppearanceThumbMenuY)
+            width: Math.round(parent.width * Tokens.settingsAppearanceThumbMenuWidth)
+            height: Math.round(parent.height * Tokens.settingsAppearanceThumbMenuHeight)
+            radius: Math.round(parent.height * Tokens.settingsAppearanceThumbMenuRadius)
+            color: Appearance.withAlpha(desktop.colors.materialTint, Tokens.settingsAppearanceThumbMenuOpacity)
 
             Rectangle {
-                x: Math.round(parent.parent.width * root.art.selectionInset)
+                x: Math.round(parent.parent.width * Tokens.settingsAppearanceThumbSelectionInset)
                 y: x
                 width: parent.width - 2 * x
-                height: Math.max(1, Math.round(parent.parent.height * root.art.selectionHeight))
+                height: Math.max(1, Math.round(parent.parent.height * Tokens.settingsAppearanceThumbSelectionHeight))
                 radius: height / 2
                 color: Appearance.colors.accent
             }
@@ -77,11 +57,11 @@ Item {
 
         // A window, running off the right and bottom edges, with its three buttons.
         Rectangle {
-            x: Math.round(parent.width * root.art.windowX)
-            y: Math.round(parent.height * root.art.windowY)
+            x: Math.round(parent.width * Tokens.settingsAppearanceThumbWindowX)
+            y: Math.round(parent.height * Tokens.settingsAppearanceThumbWindowY)
             width: parent.width - x + radius
             height: parent.height - y + radius
-            radius: Math.round(parent.height * root.art.windowRadius)
+            radius: Math.round(parent.height * Tokens.settingsAppearanceThumbWindowRadius)
             color: desktop.colors.windowBackground
         }
 
@@ -92,11 +72,11 @@ Item {
                 required property color modelData
                 required property int index
 
-                width: Math.max(2, Math.round(desktop.width * root.art.lightSize))
+                width: Math.max(2, Math.round(desktop.width * Tokens.settingsAppearanceThumbLightSize))
                 height: width
                 radius: width / 2
-                x: Math.round(desktop.width * root.art.lightX[index] - width / 2)
-                y: Math.round(desktop.height * root.art.lightY - height / 2)
+                x: Math.round(desktop.width * Tokens.settingsAppearanceThumbLightX[index] - width / 2)
+                y: Math.round(desktop.height * Tokens.settingsAppearanceThumbLightY - height / 2)
                 color: modelData
             }
         }
@@ -119,7 +99,7 @@ Item {
         // Auto: the dark desktop on the right part.
         Item {
             visible: root.choice === "auto"
-            x: Math.round(parent.width * root.art.autoSplit)
+            x: Math.round(parent.width * Tokens.settingsAppearanceThumbAutoSplit)
             width: parent.width - x
             height: parent.height
             clip: true

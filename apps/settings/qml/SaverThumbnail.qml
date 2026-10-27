@@ -5,21 +5,13 @@ import Grassfield.Ui
 
 // One screen saver's picture in Settings > Wallpaper > Screen Saver (ADR-0032), drawn the way the shell draws it
 // (shell/saver/SaverView.qml): `choice` "artwork" (the Grassfield artwork), "wallpaperClock" (the artwork dimmed under the
-// time), "slideshow" (a stack of pictures) or "clock" (the time on black). The proportions below are the drawing's, not UI
-// metrics.
+// time), "slideshow" (a stack of pictures) or "clock" (the time on black). The drawing's proportions are tokens
+// (settings.saverThumb*).
 Item {
     id: root
 
     property string choice: "artwork"
 
-    readonly property var art: ({
-            clockSize: 0.3,
-            clockOnlyX: 0.18,
-            clockOnlyY: 0.3,
-            photoInset: 0.14,
-            photoTilt: 7,
-            photoBorder: 0.04
-        })
     readonly property string time: Qt.formatTime(new Date(), /a/i.test(Qt.locale().timeFormat(Locale.ShortFormat)) ? "h:mm" : "H:mm")
 
     component Time: Text {
@@ -27,7 +19,7 @@ Item {
         text: root.time
         color: Tokens.colorDark.text
         font.family: Appearance.fontFamily
-        font.pixelSize: Math.max(1, Math.round(root.height * root.art.clockSize))
+        font.pixelSize: Math.max(1, Math.round(root.height * Tokens.settingsSaverThumbClockSize))
         font.weight: Tokens.saverClockWeight
     }
 
@@ -66,28 +58,28 @@ Item {
         // The clock alone on black, off the centre (it moves every minute).
         Time {
             visible: root.choice === "clock"
-            x: Math.round(parent.width * root.art.clockOnlyX)
-            y: Math.round(parent.height * root.art.clockOnlyY)
+            x: Math.round(parent.width * Tokens.settingsSaverThumbClockOnlyX)
+            y: Math.round(parent.height * Tokens.settingsSaverThumbClockOnlyY)
             opacity: Tokens.saverClockOnlyOpacity
         }
 
         // The slideshow: two pictures, the back one tilted.
         Repeater {
-            model: root.choice === "slideshow" ? [-root.art.photoTilt, 0] : []
+            model: root.choice === "slideshow" ? [-Tokens.settingsSaverThumbPhotoTilt, 0] : []
 
             delegate: Rectangle {
                 required property real modelData
 
                 anchors.centerIn: parent
-                width: Math.round(parent.width * (1 - 2 * root.art.photoInset))
-                height: Math.round(parent.height * (1 - 2 * root.art.photoInset))
+                width: Math.round(parent.width * (1 - 2 * Tokens.settingsSaverThumbPhotoInset))
+                height: Math.round(parent.height * (1 - 2 * Tokens.settingsSaverThumbPhotoInset))
                 rotation: modelData
                 color: Tokens.colorDark.text
                 antialiasing: true
 
                 GrassfieldArtwork {
                     anchors.fill: parent
-                    anchors.margins: Math.max(1, Math.round(root.height * root.art.photoBorder))
+                    anchors.margins: Math.max(1, Math.round(root.height * Tokens.settingsSaverThumbPhotoBorder))
                 }
             }
         }
