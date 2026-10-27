@@ -193,6 +193,7 @@ does not check its gate.
 | search | toggle | action | SUPER+SPACE |
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
 | search | filter | fixtures | visual tests |
+| clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |

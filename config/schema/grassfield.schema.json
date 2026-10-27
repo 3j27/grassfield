@@ -674,6 +674,54 @@
         }
       }
     },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Search (Settings > Search; macOS 27 Spotlight).",
+      "properties": {
+        "clipboard": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The clipboard history in Search (ADR-0034): captured by grassfield-clipboard-helper while it is on.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Results from Clipboard (Settings > Search; macOS 27). Off until the user allows it (the Clipboard view's prompt). Turning it off deletes the unpinned items; pinned items stay on disk, unread."
+            },
+            "retention": {
+              "type": "string",
+              "enum": [
+                "30m",
+                "8h",
+                "7d"
+              ],
+              "default": "8h",
+              "description": "How long an unpinned item stays in the history: 30 minutes, 8 hours or 7 days (macOS 27's three choices). Pinned items never expire."
+            },
+            "keepOnDisk": {
+              "type": "boolean",
+              "default": false,
+              "description": "Keep clipboard history after logging out (a Grassfield addition): the unpinned items are also written to $XDG_STATE_HOME/grassfield/clipboard/history (0600). Turning it off deletes that store."
+            },
+            "clearedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999999999999,
+              "default": 0,
+              "description": "Milliseconds since the epoch of the last Clear Clipboard History (Settings > Search): the shell deletes every unpinned item when it changes. 0 = never cleared."
+            },
+            "pinnedClearedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999999999999,
+              "default": 0,
+              "description": "Milliseconds since the epoch of the last Clear Clipboard History with \"Also delete pinned items\": the shell deletes the pinned items too when it changes. 0 = never."
+            }
+          }
+        }
+      }
+    },
     "wallpaper": {
       "type": "object",
       "additionalProperties": false,

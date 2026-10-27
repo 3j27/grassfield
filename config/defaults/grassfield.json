@@ -101,6 +101,15 @@
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
   },
+  "search": {
+    "clipboard": {
+      "enabled": false,
+      "retention": "8h",
+      "keepOnDisk": false,
+      "clearedAt": 0,
+      "pinnedClearedAt": 0
+    }
+  },
   "wallpaper": {
     "source": "builtin",
     "path": "",
