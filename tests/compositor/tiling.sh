@@ -28,12 +28,22 @@
 #                  from before (TL10)
 #   locked         while the foreign locker fixture holds the session lock (tests/security/foreign_locker, released over
 #                  its IPC, nothing typed), tile and arrange move nothing and leave the records unchanged (TL34, D4)
-# Gate C1 (integrator re-review of 439e1f2; always run): a window closed while the plugin's titlebar drag holds it must not
-# crash Hyprland (its Desktop and layout space are gone at unmap while the window object lives on):
-#   closed-moving    closed mid-drag while focused, the pointer moving on, then released
-#   closed-unfocused closed mid-drag after another window took the focus (its unmap then keeps the held button), moving on
-#   closed-still     closed between the press and a release without motion
-#   Hyprland stays alive after each, and coredumpctl lists no new Hyprland core dump.
+# Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
+# drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
+# no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
+# tests/tools/xdgact, which on SIGUSR2 attaches a null buffer (what an app that closes to the tray does). Each case starts a
+# drag past the threshold, unmaps the victim, and then:
+#   moving-focused     the pointer moves on, then the release (the victim kept the focus: its unmap releases the held buttons)
+#   moving-unfocused   the other window took the focus first (the unmap keeps the held button: the plugin's drag goes on)
+#   still-focused      no motion after the unmap, then the release
+#   still-unfocused    the focus moved first, no motion after the unmap, then the release
+# Hyprland must answer after each, the plugin must log its guarded path ("closed or unmapped"), and coredumpctl must list no
+# new Hyprland core dump. A/B against an older build (the integrator's proof that the cases reach the crash):
+#   tests/compositor/tiling.sh --c1 --plugin /path/to/439e1f2/grassfield-compositor.so   (expected: FAIL, Hyprland gone)
+#   tests/compositor/tiling.sh --c1                                                     (this tree's build: PASS)
+# --c1 runs only the gate C1 cases; --plugin PATH unloads compositor/build/grassfield-compositor.so, loads PATH for the run
+# and loads the tree's build again at the end (a different path is a different library even if the first stays mapped,
+# FR23). Use a fresh nested session for each side of the A/B: a crash ends the session.
 # Expected boxes come from the output's reserved area read right before each placement (the plugin reads it at placement,
 # TL1: the shell's menu bar and Dock may claim their zones after the run starts). A failed check prints the plugin's
 # [grassfield] WARN and ERR lines logged since the previous check. The plugin verbs are called directly (they return a
@@ -43,6 +53,16 @@
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+c1_only=0 plugin_path=""
+default_plugin=$root/compositor/build/grassfield-compositor.so
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --c1) c1_only=1 ;;
+    --plugin) plugin_path=${2:?--plugin needs a path}; shift ;;
+    *) echo "usage: tests/compositor/tiling.sh [--c1] [--plugin PATH]" >&2; exit 2 ;;
+  esac
+  shift
+done
 dev=$root/.dev
 out=GF-REF
 # shellcheck source=../../scripts/dev/pidfile.sh
@@ -74,7 +94,27 @@ check() {
   log_mark=$(log_lines)
 }
 
-nestctl -j grassfield 2>/dev/null | jq -e '.features | index("window-tiling")' >/dev/null 2>&1 || { say "SKIP: the plugin does not advertise window-tiling (load this tree's plugin)"; exit 2; }
+swapped=0
+restore_plugin() {
+  ((swapped)) || return 0
+  nestctl plugin unload "$plugin_path" >>"$log" 2>&1
+  nestctl plugin load "$default_plugin" >>"$log" 2>&1
+  swapped=0
+}
+if [[ -n $plugin_path ]]; then
+  [[ -f $plugin_path ]] || { say "setup error: no plugin at $plugin_path"; exit 2; }
+  nestctl plugin unload "$default_plugin" >>"$log" 2>&1
+  nestctl plugin load "$plugin_path" >>"$log" 2>&1 || { say "setup error: could not load $plugin_path"; nestctl plugin load "$default_plugin" >>"$log" 2>&1; exit 2; }
+  swapped=1
+  trap restore_plugin EXIT
+  say "plugin for this run: $plugin_path"
+  sleep 1
+fi
+if ((c1_only)); then
+  nestctl -j grassfield >/dev/null 2>&1 || say "note: no grassfield plugin answers: the C1 cases then exercise Hyprland alone"
+else
+  nestctl -j grassfield 2>/dev/null | jq -e '.features | index("window-tiling")' >/dev/null 2>&1 || { say "SKIP: the plugin does not advertise window-tiling (load this tree's plugin)"; exit 2; }
+fi
 
 # A settled session before the first case (at most 20 s): the shell's menu bar mapped on GF-REF, and GF-REF's reserved
 # area and active Desktop unchanged for 1 s. Started right after nested-up, the run read the free area before the shell
@@ -114,8 +154,82 @@ cleanup() {
     kill "$locker_pid" 2>/dev/null
   fi
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
+  restore_plugin
 }
 trap cleanup EXIT
+
+alive() { nestctl version -j >/dev/null 2>&1; }
+
+# ---- gate C1: a window that unmaps (alive) during the plugin's titlebar drag (see the header) ----
+dumps() { coredumpctl --no-legend --no-pager list 2>/dev/null | grep -ci hyprland || true; }
+xdg_addr="" xdg_pid=""
+open_xdg() { # app id: an xdgact window on GF-REF; its address in xdg_addr, its pid in xdg_pid
+  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/xdgact/xdgact.sh" "$1" >>"$run/xdgact.out" 2>&1 </dev/null &
+  pids+=("$!")
+  xdg_addr="" xdg_pid=""
+  for _ in $(seq 1 50); do
+    read -r xdg_addr xdg_pid < <(nestctl clients -j | jq -r --arg c "$1" '[.[] | select(.class == $c)][0] | select(. != null) | "\(.address) \(.pid)"')
+    [[ -n $xdg_addr ]] && break
+    sleep 0.2
+  done
+  [[ -n $xdg_addr ]] && nestctl dispatch "hl.dsp.window.move({ x = $((mx + 400)), y = $((my + 300)), window = 'address:$xdg_addr' })" >>"$log" 2>&1
+  sleep 0.8
+}
+grip_of() { # address: the middle of its titlebar relative to GF-REF, "px py"
+  nestctl clients -j | jq -r --arg a "$1" --argjson mx "$mx" --argjson my "$my" --argjson mid "$GF_TB_MID" \
+    '.[] | select(.address == $a) | "\((.at[0] + .size[0] / 2 - $mx) | floor) \((.at[1] - $mid - $my) | floor)"'
+}
+c1_other=""
+run_c1() { # name focused|unfocused moving|still
+  local name=$1 focus=$2 motion=$3 px py p mark
+  open_xdg "gf-c1-$name"
+  if [[ -z $xdg_addr ]] || ! read -r px py < <(grip_of "$xdg_addr"); then
+    check "C1 $name: the victim window opened" false
+    return
+  fi
+  mark=$(log_lines)
+  if [[ $motion == moving ]]; then
+    pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 2200 drag $((px + 120)) $((py + 30)) sleep 150 drag $((px + 160)) $((py + 40)) sleep 300 up &
+  else
+    pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 2200 up &
+  fi
+  p=$!
+  sleep 0.8
+  if [[ $focus == unfocused ]]; then
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$c1_other' })" >>"$log" 2>&1
+    sleep 0.3
+  fi
+  kill -USR2 "$xdg_pid" 2>/dev/null
+  wait "$p"
+  sleep 0.8
+  check "C1 $name: the dragged window unmapped (alive) during the drag ($focus, $motion): Hyprland alive" alive
+  c1_guarded() { tail -n +"$((mark + 1))" "$hyprlog" 2>/dev/null | grep -aq 'closed or unmapped'; }
+  check "C1 $name: the plugin reached its guarded path (a \"closed or unmapped\" line) and moved nothing" c1_guarded
+  kill "$xdg_pid" 2>/dev/null
+  sleep 0.3
+}
+c1_cases() {
+  "$root/tests/tools/xdgact/xdgact.sh" --build >>"$log" 2>&1 || { check "C1: tests/tools/xdgact builds" false; return; }
+  local dumps0 dumps1
+  dumps0=$(dumps)
+  open_xdg gf-c1-other
+  c1_other=$xdg_addr
+  run_c1 moving-focused focused moving
+  run_c1 moving-unfocused unfocused moving
+  run_c1 still-focused focused still
+  run_c1 still-unfocused unfocused still
+  if command -v coredumpctl >/dev/null 2>&1; then
+    dumps1=$(dumps)
+    check "C1: no new Hyprland core dump (coredumpctl: $dumps0 before, $dumps1 after)" test "$dumps1" -le "$dumps0"
+  else
+    say "SKIP: coredumpctl is not available: the core dump check is left to the integrator"
+  fi
+}
+if ((c1_only)); then
+  c1_cases
+  check "Hyprland alive" alive
+  exit $fail
+fi
 env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
   foot -T tiling-foot -w 800x500 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
 pids+=("$!")
@@ -420,80 +534,7 @@ else
   say "SKIP: step 1 cases (the plugin does not advertise tiling-arrange)"
 fi
 
-alive() { nestctl version -j >/dev/null 2>&1; }
-
-# ---- gate C1: a window closed during the plugin's titlebar drag ----
-dumps() { coredumpctl --no-legend --no-pager list 2>/dev/null | grep -ci hyprland || true; }
-have_coredumpctl=0
-command -v coredumpctl >/dev/null 2>&1 && have_coredumpctl=1
-dumps0=$(dumps)
-victim_addr=""
-open_victim() { # title: a foot window on GF-REF; its address in victim_addr
-  env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
-    foot -T "$1" -w 600x400 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
-  pids+=("$!")
-  victim_addr=""
-  for _ in $(seq 1 50); do
-    victim_addr=$(nestctl clients -j | jq -r --arg t "$1" '[.[] | select(.title == $t)][0].address // ""')
-    [[ -n $victim_addr ]] && break
-    sleep 0.2
-  done
-  [[ -n $victim_addr ]] && nestctl dispatch "hl.dsp.window.move({ x = $((mx + 400)), y = $((my + 300)), window = 'address:$victim_addr' })" >>"$log" 2>&1
-  sleep 0.8
-}
-victim_grip() { # the titlebar's middle of the victim, relative to GF-REF: "px py"
-  nestctl clients -j | jq -r --arg a "$victim_addr" --argjson mx "$mx" --argjson my "$my" --argjson mid "$GF_TB_MID" \
-    '.[] | select(.address == $a) | "\((.at[0] + .size[0] / 2 - $mx) | floor) \((.at[1] - $mid - $my) | floor)"'
-}
-close_victim() { nestctl dispatch "hl.dsp.window.close({ window = 'address:$victim_addr' })" >>"$log" 2>&1; }
-# closed-moving: focused (the press focuses it); its unmap releases the held buttons, the next motion cancels the gesture.
-open_victim tiling-victim-a
-if [[ -n $victim_addr ]] && read -r px py < <(victim_grip); then
-  pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 1800 drag $((px + 120)) $((py + 30)) sleep 150 drag $((px + 160)) $((py + 40)) sleep 300 up &
-  p=$!
-  sleep 1
-  close_victim
-  wait "$p"
-  sleep 0.8
-  check "C1 closed-moving: a window closed mid-drag, pointer moving on, released: Hyprland alive" alive
-else
-  check "C1 closed-moving: the victim window opened" false
-fi
-# closed-unfocused: another window takes the focus mid-drag, then the dragged one closes; its unmap keeps the held button,
-# so the plugin's drag goes on over a window with no Desktop.
-open_victim tiling-victim-b
-if [[ -n $victim_addr ]] && read -r px py < <(victim_grip); then
-  pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 2200 drag $((px + 120)) $((py + 30)) sleep 150 drag $((px + 160)) $((py + 40)) sleep 300 up &
-  p=$!
-  sleep 0.8
-  nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
-  sleep 0.3
-  close_victim
-  wait "$p"
-  sleep 0.8
-  check "C1 closed-unfocused: a window closed mid-drag after losing the focus, pointer moving on: Hyprland alive" alive
-else
-  check "C1 closed-unfocused: the victim window opened" false
-fi
-# closed-still: the press, the window closes, the release without any motion.
-open_victim tiling-victim-c
-if [[ -n $victim_addr ]] && read -r px py < <(victim_grip); then
-  pointer abs "$px" "$py" down sleep 1500 up &
-  p=$!
-  sleep 0.6
-  close_victim
-  wait "$p"
-  sleep 0.8
-  check "C1 closed-still: a window closed between the press and a release without motion: Hyprland alive" alive
-else
-  check "C1 closed-still: the victim window opened" false
-fi
-if ((have_coredumpctl)); then
-  dumps1=$(dumps)
-  check "C1: no new Hyprland core dump (coredumpctl: $dumps0 before, $dumps1 after)" test "$dumps1" -le "$dumps0"
-else
-  say "SKIP: coredumpctl is not available: the core dump check is left to the integrator"
-fi
+c1_cases
 
 check "Hyprland alive" alive
 exit $fail

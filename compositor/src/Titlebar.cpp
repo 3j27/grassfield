@@ -74,6 +74,7 @@ namespace {
         CBox                      startBox; // window layout box at press
         CBox                      pressBox; // the same, never changed by an un-zoom or un-tile (a drop on the Stages strip gives it back)
         bool                      plainPress = false; // pressed on a window that was neither zoomed nor tiled
+        bool                      unmovable  = false; // the window closed or unmapped during the drag (logged once, gate C1)
         std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
 
@@ -284,8 +285,14 @@ namespace {
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
         const auto target = w->layoutTarget();
-        if (!target || !gf::tiler::movable(w))
-            return; // closed or unmapped during the drag: no Desktop, no layout space (gate C1)
+        if (!target || !gf::tiler::movable(w)) {
+            // Closed or unmapped during the drag: no Desktop, no layout space (gate C1). The line is what tiling.sh's C1 cases
+            // look for: the risky state was reached and nothing was moved.
+            if (!std::exchange(grab.unmovable, true))
+                gf::logRequest(Log::INFO, "titlebar drag: window {:x} closed or unmapped during the drag: not moved (gate C1)",
+                               reinterpret_cast<uintptr_t>(w.get()));
+            return;
+        }
         const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
         if (!grab.moved && !tb::exceedsDragThreshold(pointer.x - grab.pressPos.x, pointer.y - grab.pressPos.y))
             return;

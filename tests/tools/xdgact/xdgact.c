@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
-// xdgact: a window that activates ITSELF through xdg-activation-v1, for the NESTED dev compositor (tests/shell/show_desktop_nested.sh).
+// xdgact: a window that activates ITSELF through xdg-activation-v1, for the NESTED dev compositor (tests/shell/show_desktop_nested.sh),
+// and that unmaps itself without being destroyed (tests/compositor/tiling.sh, gate C1).
 // Never run it against the owner's session: use tests/tools/xdgact/xdgact.sh, which targets only the verified nested socket.
 //
 // Usage: xdgact APP_ID
 // Opens a small toplevel with the app id, prints "mapped" once it is shown, and waits. On SIGUSR1 it asks the compositor for an
 // activation token and activates its own surface with it: what an app does to bring its window forward (a real client request,
 // handled by Hyprland's CWindow::activate with misc.focus_on_activate), as opposed to the focus dispatcher. Prints "activated" when
-// the request is sent. Ends on SIGTERM/SIGINT or when the window is closed.
+// the request is sent. On SIGUSR2 it attaches a null buffer and commits: the toplevel unmaps while every object stays alive (what an
+// app that closes to the tray does), and prints "unmapped". Ends on SIGTERM/SIGINT or when the window is closed.
 #define _GNU_SOURCE
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -31,6 +33,7 @@ static struct xdg_activation_v1*   activation;
 static struct wl_surface*          surface;
 static struct wl_display*          display;
 static volatile sig_atomic_t       want_activate;
+static volatile sig_atomic_t       want_unmap;
 static volatile sig_atomic_t       want_exit;
 static int                         closed;
 static int                         mapped;
@@ -38,6 +41,8 @@ static int                         mapped;
 static void on_signal(int sig) {
     if (sig == SIGUSR1)
         want_activate = 1;
+    else if (sig == SIGUSR2)
+        want_unmap = 1;
     else
         want_exit = 1;
 }
@@ -156,6 +161,7 @@ int main(int argc, char** argv) {
     }
     struct sigaction sa = {.sa_handler = on_signal};
     sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
     struct wl_registry* reg = wl_display_get_registry(display);
@@ -180,6 +186,14 @@ int main(int argc, char** argv) {
         if (want_activate) {
             want_activate = 0;
             request_activation(argv[1]);
+            continue;
+        }
+        if (want_unmap) {
+            want_unmap = 0;
+            wl_surface_attach(surface, NULL, 0, 0);
+            wl_surface_commit(surface);
+            printf("unmapped\n");
+            fflush(stdout);
             continue;
         }
         struct pollfd pfd = {.fd = wl_display_get_fd(display), .events = POLLIN};

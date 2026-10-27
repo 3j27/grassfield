@@ -740,8 +740,13 @@ namespace gf::tiler {
 
     void followOutput(const PHLWINDOW& w) {
         const auto facts = factsOf(w);
-        if (!tiling::movable(facts) || !g_layoutManager)
-            return; // closed or unmapped (during a drag): no Desktop, no space (gate C1)
+        if (!g_layoutManager || !w)
+            return;
+        if (!tiling::movable(facts)) {
+            // Closed or unmapped (during a drag): no Desktop, no space (gate C1); tiling.sh's C1 cases look for this line.
+            logRequest(Log::INFO, "window {:x} closed or unmapped: its Desktop not changed (gate C1)", idOf(w));
+            return;
+        }
         const auto                target = w->layoutTarget();
         const CBox                box    = target->position();
         const auto                all = monitors();
