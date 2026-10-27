@@ -22,8 +22,10 @@ black; and the waking key or click consumed, as on macOS.
 ## Decision
 - **A feature module `qs.saver`** (`shell/saver/`, ADR-0021 features layer): `Saver.qml` (a Scope instantiated in
   `shell.qml`), `SaverModel.js` (pure: arming, the slideshow's order, the clock's drift) and `SaverView.qml` (the four
-  drawings). It is not a security module and does not import one for anything but reading `Lock.locked`; nothing under
-  `shell/security/` changes.
+  drawings). It is not a security module and does not import one for anything but reading `Lock.locked`. Under
+  `shell/security/` only the polkit agent changes, and only to hold a request while the saver shows (Consequences:
+  `SessionState.saverShown`, which can hold a request, never release one; opus-reviewed); the lock, the idle module and
+  their timers are untouched.
 - **New keys** (their own schema commit): `screensaver.idleMinutes` (integer 0-240, 0 = never, default 0: a session that
   never set it behaves as today), `screensaver.kind` (`artwork` | `wallpaperClock` | `slideshow` | `clock`, default
   `artwork`), `screensaver.folder` (the slideshow's folder: rule `wallpaperPath`, "" = the user's Pictures folder).
