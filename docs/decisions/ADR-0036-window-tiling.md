@@ -1,7 +1,8 @@
 # ADR-0036: Window tiling: tiles of floating windows placed by the plugin, chrome drawn by the shell
-Status: Proposed (owner brief 2026-10-27, step 0: docs only; the open choices are the owner decisions listed in
-`docs/audits/tiling-2026-10-27/decisions.md`) · Date: 2026-10-27 · Decider: owner · Number: 0036 (0033 Software Update,
-0034 clipboard, 0035 dialogs are taken by open work)
+Status: Proposed (owner brief 2026-10-27, step 0: docs only; the owner answered the decisions T1-T6 of
+`docs/audits/tiling-2026-10-27/decisions.md` on 2026-10-27, the recommended option each time; opus review pending) ·
+Date: 2026-10-27 · Decider: owner · Number: 0036 (0033 Software Update, 0034 clipboard, 0035 dialogs are taken by open
+work)
 
 Amends ADR-0002 (window behaviour): windows stay floating-first, and Grassfield now arranges them in tiles, layouts and
 tile groups. Removes "tiled windows" from the non-goals of `docs/specs/compositor.md`. Spec: `docs/specs/tiling.md`.
@@ -102,8 +103,8 @@ navigation.
 ### Plugin (`compositor/`)
 - **Geometry engine** (pure, `core/Tiling.*` grown into a small module, unit-tested): the layout catalogue, the work area
   of an output, margins, the titlebar band (32 px for plugin chrome, 0 for client chrome), minimum and maximum sizes,
-  arrangements of 1 to 4 windows, shared edges inside a group, drag zones (edges, corners, menu bar, Option-drag, the
-  top-centre zone if the owner takes it), keyboard moves (next zone, next output), the box from before.
+  arrangements of 1 to 4 windows, shared edges inside a group, drag zones (edges, corners, menu bar, Option-drag),
+  keyboard moves (next zone, next output), the box from before.
 - **Placement and state** (glue): per window its zone, its group and its box from before; applied with `setTargetGeom`
   (animated by Hyprland's `windowsMove`); forgotten when the window closes, unmaps, is moved or resized by other means,
   goes full screen or zoomed (kept to come back to after full screen), or the plugin unloads.
@@ -119,12 +120,14 @@ navigation.
   Third-party client chrome gets no popover (known limitation).
 
 ### Shell (`shell/`)
-- **Popover** on the green light (macOS: Move & Resize, Fill & Arrange, Full Screen ›, plus the layout grid if the owner
-  takes it): an overlay popup kind like the menus (`qs.overlay`), keyboard-reachable, glass per ADR-0024.
+- **Popover** on the green light (macOS: Move & Resize, Fill & Arrange, Full Screen ›, plus the Layouts section, owner
+  decision T1a): an overlay popup kind like the menus (`qs.overlay`), keyboard-reachable, glass per ADR-0024.
 - **Window menu** (T0, `AppMenuModel.qml`): the full macOS 27 Move & Resize submenu (Halves, Quarters, Arrange, Return to
   Previous Size), Fill, Center, Full Screen Tile › (decision T4), Move to <display>.
-- **Fill suggestions, layout bar, groups in the Dock and the switcher**: only the features the owner takes, each its own
-  overlay surface or model change.
+- **Windows features taken by the owner (T1)**: the Layouts section of the popover (a catalogue per output class), the
+  suggestions overlay (after a layout or an arrangement, not after a plain edge drag), tile groups in the Dock's app menu,
+  the app switcher and the Overview, the shared-edge handle (always on). The layout bar at the top of the screen is not
+  taken: the menu bar keeps its macOS role.
 - **Settings > Desktop & Dock > Windows**: the macOS 27 switches and the switches of the Windows features taken.
 - Everything reaches the plugin through `shell/platform/Compositor.qml` and `Minimized.js` (`isPluginVerb`), never through
   raw `hyprctl`.
@@ -162,8 +165,9 @@ and `Tokens.qml` by `ui/tools/gen-tokens.py` (`--check` in `just check-shell` al
   to the backup output; the plugin then re-places the tiled ones into the same zone of the output they landed on and keeps
   their groups. An output added: nothing moves (macOS 27's return of windows on reconnect is not reproduced in step 1).
 - A tiled window entering full screen or zoom leaves its tile visually and finds it again when it exits.
-- Full Screen tile (two windows sharing a full-screen Desktop, macOS Split View): owner decision; if taken, its own step
-  after the others (new Desktop, the menu bar hidden, two tiles and a separator).
+- Full Screen tile (two windows sharing a full-screen Desktop, macOS Split View): its own step 6 after the others (owner
+  decision T4: a new Desktop, the menu bar hidden, two tiles and a separator). The green light keeps ADR-0002's click
+  (Zoom) until then (T5).
 - Stages: tiled windows are floating, so they belong to stages; tiling uses the active stage's windows only and the work
   area beside the strip; a stage swap changes no geometry (ADR-0013). The rule "tiling at the screen edge wins over a drop
   on the strip" stays.
@@ -181,14 +185,17 @@ shell drops the tiling items, the popover, the overlays and the tiling switches'
 existing "needs the Grassfield compositor extension" footnote); the keys do nothing; Hyprland's own drags move windows as
 usual. The unload posts empty capabilities after removing every listener and closing the preview (ADR-0007).
 
-### Order of the steps (one pull request each, after the PASS of step 0; the owner validates the order)
+### Order of the steps (one pull request each, after the PASS of step 0; confirmed by the owner, T6)
 1. Geometry engine and placement (compositor only): catalogue, `arrange`, state reply and notice, sizes, work area with
    the Stages strip, output removal, unit tests, nested `tiling.sh` extended, C1 soak, C2.
-2. Drags: client-chrome drags through Hyprland's move, Option-drag, the preview per ADR-0024, the macOS 26/27 drag rules.
-3. Popover on the green light and the full Window menu (shell + the plugin's hover event), keyboard and mouse.
-4. The Windows 11 features the owner takes (layout grid, fill suggestions, groups, shared edge, layout bar).
+2. Drags: client-chrome drags through Hyprland's move, Option-drag, edge double-clicks, the preview per ADR-0024, the
+   macOS 26/27 drag rules.
+3. Popover on the green light and the full Window menu (shell + the plugin's hover event), keyboard (T2 option A) and
+   mouse.
+4. The Windows 11 features taken (Layouts section, suggestions, tile groups, shared edge).
 5. Settings > Desktop & Dock > Windows.
-Step 1 touches only `compositor/` and `ui/tokens/`; steps 3 to 5 touch the shell, Settings or `config/hypr` and wait until
+6. Full Screen tile (T4).
+Step 1 touches only `compositor/` and `ui/tokens/`; steps 3 to 6 touch the shell, Settings or `config/hypr` and wait until
 the integrator has merged the open Settings pull requests (#8, #9, #10), as the owner asked.
 
 ## Evidence

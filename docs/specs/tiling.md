@@ -1,8 +1,8 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
 Status: step 0, documentation only (ADR-0036, Proposed). Nothing below is built except what "Today" names. A requirement
-marked (T<n>) waits for the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`; it is written with the
-recommended option and changes with the answer. The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
+marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
+(the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
 feature name.
 
@@ -40,7 +40,7 @@ spec extends them and takes precedence where it is more precise.
   tile; tiling works inside the current Stage Manager set and on every Space and display; the tile area leaves out the
   visible menu bar and Dock.
 
-## Windows 11 reference (features proposed in T1; described in words)
+## Windows 11 reference (described in words; T1 takes all but the top bar)
 - A flyout of layouts (miniature screens) on the Maximize button and on Win+Z, more layouts on large screens (thirds,
   1/4-1/2-1/4) and stacked ones on portrait screens; after a zone is chosen, the other windows are offered as live
   thumbnails in each empty zone (keyboard: arrows, Enter, Esc); windows placed together form a group recalled from the
@@ -142,7 +142,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   outside both the light and the popover for `tiling.hoverDelay`.
 - **TL23** Popover content (M19-M21, M23): "Move & Resize" (Left, Right, Top, Bottom), "Fill & Arrange" (Fill, Left &
   Right, Left & Quarters, Quarters), "Layouts" (T1a, the output's class, T1f), one "Move to <output name>" row per other
-  output, then "Full Screen ›" (Entire Screen; Left of Screen and Right of Screen only with T4). With Alt held: Center
+  output, then "Full Screen ›" (Entire Screen; Left of Screen and Right of Screen from step 6, T4). With Alt held: Center
   instead of Fill, the quarters instead of the halves, Right & Left and Right & Quarters. In full screen: Exit Full Screen
   only. Glyphs not available for the window (TL9) are greyed.
 - **TL24** Client chrome (M25): on windows tagged `grassfield-client-chrome` whose app is a Grassfield app, the plugin
@@ -159,7 +159,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   opens the popover on the focused window with keyboard focus (arrows between glyphs and rows, Return, Esc; with Layouts,
   a number picks a layout and a second number a zone).
 
-### Windows features (step 4, each only if the owner takes it)
+### Windows features (step 4; T1 takes TL27-TL30, refuses TL31)
 - **TL27** Layouts (T1a, T1f): the popover's Layouts section shows the catalogue of the window's output class as miniature
   screens; hovering a zone highlights it; a click places the window in that zone and, with suggestions on, opens TL28 for
   the other zones; the layout's windows form a group.
@@ -179,10 +179,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`CWindow::m_events.resize` or the motion listener, then `setTargetGeom` and a warp), measured for configure storms and
   P3; if live following proves too slow, the neighbours follow at the release and show their app icon on the glass during
   the drag (Windows' placeholder).
-- **TL31** Layout bar (T1b): not built with the recommended option. With option 2: during a move, the pointer in the
-  top-centre third of the menu bar for `tiling.previewDelay` shows a glass bar of the layouts below the menu bar; the
-  plugin hit-tests the zones the shell published for it (as the Stages strip does) and posts the hovered zone; the release
-  on a zone places the window and opens TL28.
+- **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
+  TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
+  (as the Stages strip does) and post the hovered zone.
 
 ### Settings (step 5, waits for the merge of PRs #8-#10)
 - **TL32** Desktop & Dock > Windows, in this order: "Drag windows to left or right edge of screen to tile"
@@ -195,7 +194,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   without the plugin the rows show the existing footnote and do nothing. The settings contract (ADR-0020) and the schema
   in `config/schema/` gain the keys in the same commit.
 
-### Full Screen tile (step 6, only with T4)
+### Full Screen tile (step 6, T4)
 - **TL33** Full Screen › Left of Screen / Right of Screen: a new Desktop right after the current one, the menu bar and the
   Dock hidden on it, the window in that half and suggestions (TL28) for the other half; a separator between the two that
   resizes both (double-click resets); dragging a window by its title bar to the other side swaps them; the menu bar and
@@ -298,7 +297,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - W22 stretch to full height, W24 minimize others: covered by macOS gestures (⌥-double-click, Hide Others).
 - M32 tiling dialogs and panels: they belong to their window (Hyprland centres them on it).
 - M41 a Quick Settings tiling control: not verified on Apple's pages.
-- T1b layout bar: refused with the recommended option (the menu bar keeps its macOS role).
+- T1b layout bar at the top of the screen: refused by the owner (the menu bar keeps its macOS role).
 
 ## Known limitations (honest, user-visible gaps vs macOS)
 - Third-party apps that draw their own title bar (Chromium, GTK header bars, Electron) get no popover on their green
@@ -309,7 +308,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - No per-move animation curve: every tile move uses the `windowsMove` animation.
 - Windows do not return to an output when it is connected again (macOS 27 does).
 - Windows tiled the Hyprland way (SUPER+T) are outside Grassfield's tiles, groups and popover.
-- Full Screen tile only if T4 takes it; until then Full Screen is one window per Desktop.
+- Full Screen tile comes in step 6 (T4); until then Full Screen is one window per Desktop.
 - Without the plugin there is no tiling at all.
 - Timings not published by Apple or Microsoft (hover delay, preview delay, animation curve) are estimates until measured
   in nested against the owner's material.

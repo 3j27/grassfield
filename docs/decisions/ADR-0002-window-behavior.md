@@ -38,8 +38,8 @@ Option 1 for M1, revisit option 2 when Stages (M5) needs placement control.
 
 ## Amendment proposed 2026-10-27 (ADR-0036, owner brief: window tiling)
 Windows stay floating-first and keep this placement, focus and zoom; Grassfield also arranges them in tiles, layouts and
-tile groups placed by the plugin (ADR-0036, Proposed; `docs/specs/tiling.md`). The green-light click stays Zoom until the
-owner decides otherwise (decision T5 in `docs/audits/tiling-2026-10-27/decisions.md`).
+tile groups placed by the plugin (ADR-0036, Proposed; `docs/specs/tiling.md`). The green-light click stays Zoom (owner
+decision T5 of 2026-10-27 in `docs/audits/tiling-2026-10-27/decisions.md`, to revisit with the Full Screen tile, T4).
 
 ## Consequences
 - Some tiling users lose their habits in the Grassfield session (Omarchy session unchanged).
