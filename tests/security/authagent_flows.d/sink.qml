@@ -513,6 +513,8 @@ Item {
             if (d.how === "send") {
                 keyClick(Qt.Key_Return);
                 compare(a.submits, ["pw"]);
+                // The usual end of a sent password: polkit says it succeeded, then the request ends (no linger either way).
+                a.authenticationSucceeded();
             } else if (d.how === "escape") {
                 keyClick(Qt.Key_Escape);
                 compare(a.cancels, 0, "the first Esc empties the field (PasswordField)");
