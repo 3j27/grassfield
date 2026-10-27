@@ -1,9 +1,9 @@
 # ADR-0037: Grassfield Store: an app that installs, opens and uninstalls apps through pacman and Omarchy, with a signed catalog
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no code in either repository before the opus
 PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. Later questions follow the
-owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD4),
+owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD5),
 checked by the integrator. The first opus review (FAIL, 3 MAJOR) and the counter-review (FAIL, 1 MAJOR) are answered in
-"Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), delegated (SD1 to SD4), integrator (merge after the
+"Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), delegated (SD1 to SD5), integrator (merge after the
 opus PASS) · Number: 0037 (0033 Software Update, 0034 clipboard, 0035 dialogs and 0036 tiling are merged)
 
 This ADR is also part of the contract between this repository (the app, `apps/store`, packaged as `grassfield-store`) and
@@ -364,8 +364,8 @@ nothing ever signals pacman.
   with its ETag, catalog icons (32 MiB, least recently used first), screenshots (128 MiB, 30 days), AUR answers (4 MiB, 1 h),
   the fetched AppStream (one version, at most 64 MiB). `$XDG_STATE_HOME/grassfield/store.json` (state, `version: 1`): the last
   accepted catalog serial per channel, the operation in flight (f), the last fetch time. The Store's preferences (sources,
-  screenshots) are keys of `grassfield.json` written through the settings contract (ADR-0020 item 4). The rows land in
-  `docs/specs/persisted-files.md` with the code (step 1).
+  screenshots) are keys of `grassfield.json` written through the settings contract (ADR-0020 item 4). The rows are in
+  ADR-0020's table of persisted files (step 1; `docs/specs/persisted-files.md` does not exist yet).
 
 ### d. Updates and the one badge (owner, ST8)
 - **No partial upgrade, ever.** The Store never runs `pacman -Sy`, `-Syu` or `yay -Sua` itself, and never offers "Update"
@@ -432,7 +432,8 @@ nothing ever signals pacman.
 7. **The AUR warning** before every AUR install, and the AUR's facts on the product page: maintainer (or "orphaned"), votes,
    popularity, last change, out-of-date flag.
 8. **Dev sessions (ADR-0019)** never install, uninstall or start Omarchy's commands, pkexec or flatpak operations: the queue
-   runs fake programs only (dev plumbing `GRASSFIELD_STORE_INSTALLER` for b.2 and b.3, `GRASSFIELD_STORE_PKEXEC` for b.1);
+   runs fake programs only (dev plumbing `GRASSFIELD_STORE_INSTALLER` for b.2 and b.3, `GRASSFIELD_STORE_PKEXEC` for b.1;
+   both come with step 3);
    catalogs and keys come from fixtures (`GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`,
    `GRASSFIELD_STORE_FIXTURE` for fake pacman, AppStream and flatpak roots); "Open" follows ADR-0011's dev open policy. The
    five names join ADR-0019's dev plumbing table with the code (step 1).
@@ -450,13 +451,15 @@ nothing ever signals pacman.
   remove it. No new language (C++, QML and a shell script for b.2), no new service or daemon (the Store runs only while open;
   background checks are ADR-0033's), no new design components before the shared ones (`ui/Grassfield/Ui`). The package also
   ships `grassfield-store-helper`, its polkit policy and `grassfield-store-run`. New runtime dependencies of
-  `grassfield-store` only: `appstream-qt` and `kimageformats` (the JPEG XL icons, S3), `gnupg` (`gpgv`, already pulled by
-  pacman, declared); `archlinux-appstream-data` and `flatpak` as `optdepends` (ST5, ST2). PackageKit, GNOME Software and KDE
+  `grassfield-store` only: `kimageformats` (the JPEG XL icons, S3), `gnupg` (`gpgv`, already pulled by pacman, declared);
+  `archlinux-appstream-data` and `flatpak` as `optdepends` (ST5, ST2). AppStream is read by the Store's own reader
+  (`QXmlStreamReader` and zlib, both already linked by Qt), not by `appstream-qt` (SD5). PackageKit, GNOME Software and KDE
   Discover are not used: they need PackageKit's root daemon (§5.8, not installed) and bypass Omarchy's commands (D1).
 - **Build.** A CMake target in `apps/store/CMakeLists.txt` with the same wrapper as the other apps (ADR-0023), and
   `package_grassfield-store()` in `packaging/arch/PKGBUILD`, depending on `grassfield-desktop=$pkgver-$pkgrel` (design system,
   translations, menu bridge).
-- **Child processes the Store owns for reading** (pacman queries, `gpgv`, `appstreamcli` if used, `flatpak` queries): an
+- **Child processes the Store owns for reading** (pacman queries, `gpgv`, `pacman-key --verify`, `bsdtar`, `flatpak`
+  queries; `apps/store/src/childprocess.cpp`): an
   argument vector, `LC_ALL=C`, stdin from `/dev/null`, output capped (8 MiB), each in its own process group, stopped after
   20 s with SIGTERM then SIGKILL 5 s later, and all stopped the same way when the Store quits. None of them writes.
 - **Operations** follow b: pkexec is waited for (b.1); the terminal is followed through its files (b.2); web apps and
@@ -632,6 +635,7 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD2 | How the polkit sheet names the packages (counter-review) | the sheet shows "Install" or "Remove" and the names, read by a strict pattern from the line polkit expands for this action id only, else the line as is · the line as polkit expands it (the helper's path, the operation id, the names) · no names (refused by the review) | the verb and the names; the raw line when it does not match | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet is plain words, no path; (b) the user reads what they authorize. The names still come from polkit (pkexec's argument vector), not from the Store; the sheet is a security module (step 3, opus review); no polkit rule changes |
 | SD3 | Which step adds the list of other updates to the checker, and what goes first at its 256 KiB cap (counter-review, PR #16) | Software Update's step 2 adds it (`otherPackages`, PR #16's plan after its own review), the list cut before the notes · Store step 4 adds it · the notes cut first | Software Update's step 2, as PR #16 writes it; the list first | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's Software Update always shows its release notes, while the per-app list is an addition; one checker, one list, one name for both PRs |
 | SD4 | How the Store checks a fetched AppStream package (counter-review) | its own `.sig` with `pacman-key --verify` as the user (pacman's keyring and trust rule) · `gpgv` with pacman's public keyring (no trust check) · the sync database's SHA-256 (unsigned; refused by the review) | `pacman-key --verify` | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing to set up; the Store trusts exactly what pacman trusts (S17) |
+| SD5 | How the Store reads Arch's AppStream (step 1) | its own reader of the catalog XML (`QXmlStreamReader`, zlib; the fields the Store shows, every text made plain) · `appstream-qt` (libappstream's pool, a new runtime dependency; it reads the system's data locations, so the fetched copy would need its extra-location API) | its own reader | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing for the user to install or set up, and one reader for the installed and the fetched copy; CLAUDE.md "no new dependency without need": f's list loses `appstream-qt` |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
@@ -669,7 +673,9 @@ irreversible action on the owner's machine. The integrator checks each row in th
 - **Step 1, here:** `apps/store` backend read-only: fetch, `gpgv` verification, validation, cache, AppStream (package or
   fetched) and pacman readers, the merged model and search, all tested with fake catalogs, a throwaway keyring and fake
   pacman/AppStream roots; ADR-0019 dev plumbing rows; ADR-0020 persisted-file rows; opus security review of the
-  verification.
+  verification. Delivered as a static library and its gtest suite (`apps/store/src`, `tests/unit/store`, 45 tests, plain
+  and ASan) plus `tests/integration/store_catalog.sh` (the real gpgv against throwaway keys in a throwaway container); no
+  app binary and no package yet (step 2).
 - **Step 2:** the UI (Discover, sections, Categories, product page, search, Installed, the Updates list read-only), measured
   F1 against the captures, en and fr, light and dark, keyboard; offscreen captures with the fake backend; the nested shot by
   the integrator. The legal items of e.10 go to `docs/legal/visual-review.md`.

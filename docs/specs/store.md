@@ -303,7 +303,7 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
   catalog names.
 
 ## Dependencies (versions seen in S3, S8 and S14; checked again at step 1)
-`grassfield-desktop` (same version), `appstream-qt` (of `appstream` 1.2.1, S3), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`), polkit (`pkexec`,
+`grassfield-desktop` (same version), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`; AppStream is read by the Store's own reader, ADR-0037 SD5), polkit (`pkexec`,
 installed on Omarchy), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's, only for the AUR); as `optdepends` only:
 `archlinux-appstream-data` 20261017-1 (ST5) and `flatpak` (ST2; neither is installed on the owner's machine).
 
