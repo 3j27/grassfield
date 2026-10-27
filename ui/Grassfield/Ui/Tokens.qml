@@ -924,6 +924,8 @@ QtObject {
     readonly property int searchClipPageTextSize: Math.round(5 * Appearance.textScale)
     // estimate: the excerpt's margin inside the text thumbnail's page [ref: docs/specs/clipboard.md; ADR-0034]
     readonly property int searchClipPageInset: 3
+    // estimate: the text thumbnail page's edge, one hairline as a document thumbnail's border [ref: docs/specs/clipboard.md; ADR-0034]
+    readonly property int searchClipPageBorder: 1
     // the round copy button: macOS 26.0 disc 26.5 pt (W-38); the pin button is the same disc [ref: docs/specs/clipboard.md; ADR-0034]
     readonly property int searchClipButtonSize: 26
     // the pin button 8 left of the copy button (Grassfield: macOS has no pin) [ref: docs/specs/clipboard.md; ADR-0034]

@@ -863,7 +863,7 @@ Variants {
                             visible: row.entry !== null && row.entry.kind === "text"
                             radius: Tokens.radiusControl / 2
                             color: Appearance.colors.windowBackground
-                            border.width: 1
+                            border.width: Tokens.searchClipPageBorder
                             border.color: Appearance.withAlpha(Appearance.colors.text, Tokens.materialFillOpacity)
                             clip: true
 

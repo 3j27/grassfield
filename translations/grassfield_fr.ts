@@ -7471,7 +7471,7 @@
     </message>
     <message>
         <source>Allow results from the clipboard in Search?</source>
-        <translation>Autoriser les résultats du presse-papiers dans la Recherche ?</translation>
+        <translation>Autoriser les résultats du presse-papiers dans la Recherche&#xa0;?</translation>
     </message>
     <message>
         <source>Personal and sensitive information may appear in the results. You can change this at any time in Search settings.</source>
