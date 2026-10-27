@@ -9,10 +9,10 @@
   {"id": "play", "title": {"en": "Play", "fr": "Jouer"}, "symbol": "play", "blocks": [
     {"kind": "row", "title": {"en": "Games"}, "apps": ["com.valvesoftware.Steam.desktop", "aur-game"]}]}],
  "categories": [
-  {"id": "graphics", "title": {"en": "Graphics & Design", "fr": "Graphisme et design"}, "symbol": "category-graphics",
+  {"id": "graphics", "title": {"en": "Graphics", "fr": "Graphisme"}, "symbol": "category-graphics",
    "freedesktop": ["Graphics", "2DGraphics", "RasterGraphics"]},
   {"id": "games", "title": {"en": "Games", "fr": "Jeux"}, "symbol": "category-games", "freedesktop": ["Game"]},
-  {"id": "music-audio", "title": {"en": "Music & Audio"}, "symbol": "category-music-audio", "freedesktop": ["Audio", "Music"]}],
+  {"id": "music-audio", "title": {"en": "Music and Audio"}, "symbol": "category-music-audio", "freedesktop": ["Audio", "Music"]}],
  "apps": [
   {"id": "org.gimp.GIMP", "source": {"kind": "repo", "repo": "extra", "package": "gimp"}, "categories": ["graphics"]},
   {"id": "com.valvesoftware.Steam.desktop", "source": {"kind": "omarchy-setup", "install": "omarchy-install-gaming-steam",

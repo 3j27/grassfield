@@ -33,7 +33,8 @@ QSet<QString> readFingerprints(const QByteArray &content)
         const QString line = QString::fromLatin1(raw).trimmed();
         if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
             continue;
-        const QString fpr = line.section(QLatin1Char(':'), 0, 0);
+        // Hand-written lists: a lower-case or space-padded entry still counts (a revoked key must never slip through).
+        const QString fpr = line.section(QLatin1Char(':'), 0, 0).trimmed().toUpper();
         if (fingerprintRe().match(fpr).hasMatch())
             out.insert(fpr);
     }
@@ -46,7 +47,7 @@ QString validSigner(const QByteArray &status)
     for (const QByteArray &raw : status.split('\n')) {
         const QList<QByteArray> f = raw.trimmed().split(' ');
         if (f.size() >= 12 && f.at(0) == "[GNUPG:]" && f.at(1) == "VALIDSIG") {
-            const QString primary = QString::fromLatin1(f.at(11));
+            const QString primary = QString::fromLatin1(f.at(11)).toUpper();
             if (!fingerprintRe().match(primary).hasMatch() || (!signer.isEmpty() && signer != primary))
                 return {};
             signer = primary;

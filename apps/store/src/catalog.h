@@ -105,8 +105,9 @@ struct CatalogParse {
 // expectedChannel: the channel the file was fetched for (stable or beta); another value refuses the file.
 CatalogParse parseCatalog(const QByteArray &json, const QString &expectedChannel);
 
-// The text rule (ADR-0037 g): not empty, no space at an end, at most `limit` code points, Unicode NFC, no control
-// character (line feeds only when allowed) and no bidirectional formatting character. "" when the text passes.
+// The text rule (ADR-0037 g): not empty, no space at an end, at most `limit` code points, Unicode NFC, no control,
+// format (bidirectional, zero-width, BOM, soft hyphen) or line/paragraph separator character (line feeds only when
+// allowed), and no markup (`<`, `>`, `&entity;`). "" when the text passes.
 QString plainTextProblem(const QString &text, int limit, bool lineFeeds);
 
 // Third-party text made plain (ADR-0037 c "Display"): control and format characters removed (line feeds kept when
@@ -118,6 +119,9 @@ bool isPackageName(const QString &name);
 bool isAppId(const QString &id);
 bool isDesktopId(const QString &id);
 bool isFlatpakId(const QString &id);
+// https://, no whitespace, control or format character, at most 2048 bytes, a host name, no user information.
 bool isHttpsUrl(const QString &url);
+// A web app's name, which Omarchy's installer makes a file of: plain text of 1 to 64 characters, no '/', no leading '.'.
+bool isWebAppName(const QString &name);
 
 } // namespace grassfield::store

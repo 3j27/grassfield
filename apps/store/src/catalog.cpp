@@ -207,6 +207,11 @@ std::optional<CatalogApp> parseApp(const QJsonValue &value, const QSet<QString> 
     const bool webApp = app.source.kind == CatalogSource::Kind::WebApp;
     if (webApp ? !requiredText(o, "name", kLenTitle, false, &app.name, problem) : !optionalText(o, "name", kLenTitle, false, &app.name, problem))
         return std::nullopt;
+    // Omarchy's installer makes a file of a web app's name (e.5, S9): every language's name must be one.
+    if (webApp && (!isWebAppName(app.name.en) || (!app.name.fr.isEmpty() && !isWebAppName(app.name.fr)))) {
+        *problem = QStringLiteral("name: not a web app name (1 to 64 characters, no '/', not starting with '.')");
+        return std::nullopt;
+    }
     if (!optionalText(o, "summary", kLenText, false, &app.summary, problem)
         || !optionalText(o, "description", kLenDescription, true, &app.description, problem)
         || !optionalText(o, "developer", kLenTitle, false, &app.developer, problem))
@@ -280,9 +285,15 @@ QString plainTextProblem(const QString &text, int limit, bool lineFeeds)
     for (const uint c : codePoints) {
         if (c == '\n' && lineFeeds)
             continue;
-        if (QChar::category(char32_t(c)) == QChar::Other_Control || isBidiControl(char32_t(c)))
-            return QStringLiteral("control or bidirectional character U+%1").arg(c, 4, 16, QLatin1Char('0')).toUpper();
+        // Cc: controls; Cf: format characters (bidirectional controls, zero-width characters, the BOM, soft hyphens);
+        // Zl, Zp: line and paragraph separators, line breaks a one-line title must not hide.
+        const QChar::Category category = QChar::category(char32_t(c));
+        if (category == QChar::Other_Control || category == QChar::Other_Format || category == QChar::Separator_Line
+            || category == QChar::Separator_Paragraph || isBidiControl(char32_t(c)))
+            return QStringLiteral("control, format or separator character U+%1").arg(QString::number(c, 16).toUpper().rightJustified(4, u'0'));
     }
+    if (text.contains(u'<') || text.contains(u'>') || matches(text, R"(&(#[0-9]+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);)"))
+        return QStringLiteral("markup (< > or an &entity;): plain text only");
     if (text.normalized(QString::NormalizationForm_C) != text)
         return QStringLiteral("not in Unicode NFC form");
     return {};
@@ -342,13 +353,33 @@ bool isFlatpakId(const QString &id)
 
 bool isHttpsUrl(const QString &url)
 {
-    if (url.toUtf8().size() > 2048 || !url.startsWith(QLatin1String("https://")) || url.size() <= 8)
+    if (url.toUtf8().size() > 2048 || !url.startsWith(QLatin1String("https://")))
         return false;
     for (const QChar c : url) {
-        if (c.isSpace() || c.category() == QChar::Other_Control)
+        if (c.isSpace() || c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
             return false;
     }
-    return true;
+    // The authority: no user information, a host name (any case, compared in lower case), an optional port.
+    const QString rest = url.mid(8);
+    const qsizetype end = rest.indexOf(QRegularExpression(QStringLiteral("[/?#]")));
+    const QString authority = end < 0 ? rest : rest.left(end);
+    if (authority.contains(u'@'))
+        return false;
+    const qsizetype colon = authority.lastIndexOf(u':');
+    if (colon >= 0) {
+        const QString port = authority.mid(colon + 1);
+        if (!port.isEmpty() && (!matches(port, R"(\A[0-9]{1,5}\z)") || port.toInt() > 65535))
+            return false;
+    }
+    const QString host = (colon < 0 ? authority : authority.left(colon)).toLower();
+    return matches(host, R"(\A[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\z)");
+}
+
+bool isWebAppName(const QString &name)
+{
+    const qsizetype length = name.toUcs4().size();
+    return length >= 1 && length <= 64 && !name.startsWith(u'.') && !name.contains(u'/')
+        && plainTextProblem(name, 64, false).isEmpty();
 }
 
 CatalogParse parseCatalog(const QByteArray &json, const QString &expectedChannel)

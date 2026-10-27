@@ -41,9 +41,14 @@ struct Keyring {
 
 TEST(Signature, Fingerprints)
 {
-    const QSet<QString> f = readFingerprints(("# comment\n" + kGood + ":4:\n" + kOld + ":4:\n\nnot-a-key:4:\n" + kRogue.toLower() + ":4:\n").toLatin1());
+    const QSet<QString> f = readFingerprints(("# comment\n" + kGood + ":4:\n" + kOld + ":4:\n\nnot-a-key:4:\n" + kSub.left(39) + ":4:\n").toLatin1());
     EXPECT_EQ(f, (QSet<QString>{kGood, kOld}));
     EXPECT_EQ(readFingerprints((kOld + "\n").toLatin1()), QSet<QString>{kOld});
+    // Hand-written lists: a lower-case or space-padded entry still counts, so a revoked key never slips through.
+    EXPECT_EQ(readFingerprints(("  " + kRogue.toLower() + "  :4:\n" + kOld.toLower() + " \n").toLatin1()), (QSet<QString>{kRogue, kOld}));
+    const QSet<QString> trusted{kGood, kOld};
+    EXPECT_EQ(judge(0, validsig(kOld), trusted, readFingerprints((kOld.toLower() + "  \n").toLatin1())).verdict, SignatureVerdict::Revoked);
+    EXPECT_EQ(validSigner(validsig(kGood.toLower())), kGood);
 }
 
 TEST(Signature, ValidSignerIsArgumentTen)

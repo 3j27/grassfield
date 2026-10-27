@@ -194,6 +194,13 @@ TEST(Catalog, EntryRules)
         {"a package name starting with -", appChange(5, "source", QJsonObject{{QStringLiteral("kind"), QStringLiteral("aur")}, {QStringLiteral("package"), QStringLiteral("-rf")}})},
         {"a Flatpak of another remote", appChange(4, "source", QJsonObject{{QStringLiteral("kind"), QStringLiteral("flatpak")}, {QStringLiteral("remote"), QStringLiteral("other")}, {QStringLiteral("app"), QStringLiteral("org.example.Flat")}})},
         {"an icon of 300 KiB", appChange(2, "icon", QJsonObject{{QStringLiteral("sha256"), QString(64, u'a')}, {QStringLiteral("bytes"), 300 * 1024}, {QStringLiteral("license"), QStringLiteral("MIT")}, {QStringLiteral("origin"), QStringLiteral("https://e.com/i.png")}})},
+        {"a homepage with user information", appChange(2, "homepage", QStringLiteral("https://a.com@evil.example/"))},
+        {"a summary with markup", appChange(2, "summary", QJsonObject{{QStringLiteral("en"), QStringLiteral("<b>Music</b>")}})},
+        // A web app's name in any language is a file name for Omarchy's installer (e.5).
+        {"a web app named with a path", appChange(3, "name", QJsonObject{{QStringLiteral("en"), QStringLiteral("../../.config/autostart/x")}})},
+        {"a web app hidden in French", appChange(3, "name", QJsonObject{{QStringLiteral("en"), QStringLiteral("Example Mail")}, {QStringLiteral("fr"), QStringLiteral(".hidden")}})},
+        {"a web app named with 70 characters", appChange(3, "name", QJsonObject{{QStringLiteral("en"), QString(70, u'x')}})},
+        {"a web app named with a slash", appChange(3, "name", QJsonObject{{QStringLiteral("en"), QStringLiteral("Mail/Calendar")}})},
     };
     for (const auto &k : cases) {
         const CatalogParse p = parseCatalog(k.second, QStringLiteral("stable"));
@@ -213,6 +220,15 @@ TEST(Catalog, TextRule)
     EXPECT_FALSE(plainTextProblem(QStringLiteral("tab\there"), 40, false).isEmpty());
     EXPECT_FALSE(plainTextProblem(QStringLiteral("rtl") + QChar(0x2067) + QStringLiteral("here"), 40, false).isEmpty());
     EXPECT_FALSE(plainTextProblem(QStringLiteral("é"), 40, false).isEmpty()); // not NFC
+    // Format and separator characters: zero-width space, BOM, soft hyphen, line and paragraph separators.
+    for (const char16_t c : {u'\x200B', u'\xFEFF', u'\x00AD', u'\x2028', u'\x2029'}) {
+        const QString problem = plainTextProblem(QStringLiteral("one") + QChar(c) + QStringLiteral("two"), 40, false);
+        EXPECT_EQ(problem, QStringLiteral("control, format or separator character U+%1").arg(QString::number(c, 16).toUpper().rightJustified(4, u'0')));
+    }
+    // Markup: plain text only.
+    for (const char *markup : {"<b>bold</b>", "a > b", "Tom &amp; Jerry", "&#x202e;", "&#8238;"})
+        EXPECT_EQ(plainTextProblem(QString::fromLatin1(markup), 40, false), QStringLiteral("markup (< > or an &entity;): plain text only")) << markup;
+    EXPECT_TRUE(plainTextProblem(QStringLiteral("Tom & Jerry; 100% free & open"), 40, false).isEmpty());
     // Lengths count code points, not UTF-16 units: forty emoji fit a 40 limit.
     EXPECT_TRUE(plainTextProblem(QString::fromUtf8(QByteArray("\xF0\x9F\x8E\xA8").repeated(40)), 40, false).isEmpty());
     EXPECT_FALSE(plainTextProblem(QString::fromUtf8(QByteArray("\xF0\x9F\x8E\xA8").repeated(41)), 40, false).isEmpty());
@@ -241,4 +257,18 @@ TEST(Catalog, Patterns)
     EXPECT_FALSE(isHttpsUrl(QStringLiteral("http://www.gimp.org/")));
     EXPECT_FALSE(isHttpsUrl(QStringLiteral("https://a b/")));
     EXPECT_FALSE(isHttpsUrl(QStringLiteral("https://")));
+    // A host is required, user information refused (the same cases as tools/catalog.py).
+    for (const char *url : {"https://@", "https://a.com@evil.example/", "https://user:pw@example.com/", "https:///x",
+                            "https://-bad.example/", "https://example.com:99999/", "https://example.com:8a/",
+                            "HTTPS://example.com/", "https://[::1]/", "https://exa_mple.com/"})
+        EXPECT_FALSE(isHttpsUrl(QString::fromLatin1(url))) << url;
+    EXPECT_FALSE(isHttpsUrl(QStringLiteral("https://example.com/") + QChar(0x200B)));
+    for (const char *url : {"https://example.com", "https://www.example.com/path?q=1#top", "https://example.com:8443/",
+                            "https://WWW.GIMP.org/", "https://example.com?q=a@b"})
+        EXPECT_TRUE(isHttpsUrl(QString::fromLatin1(url))) << url;
+    EXPECT_TRUE(isWebAppName(QStringLiteral("Example Mail")));
+    for (const QString &name : {QString(), QStringLiteral(".hidden"), QStringLiteral("a/b"), QString(65, u'x'),
+                                QStringLiteral("tab\there"), QString(QStringLiteral("rtl") + QChar(0x202E))})
+        EXPECT_FALSE(isWebAppName(name)) << name.toStdString();
+    EXPECT_TRUE(isWebAppName(QString(64, u'x')));
 }
