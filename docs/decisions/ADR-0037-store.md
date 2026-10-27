@@ -455,6 +455,11 @@ nothing ever signals pacman.
     application (Discover, Create, Work, Play, Develop, Categories, Updates); the name "Grassfield Store"; publishers' icons in
     our catalog (ST10); screenshots and AppStream texts shown as the apps' metadata gives them; the AUR's and Flathub's data
     shown in the Store.
+    **Owner decisions of 2026-10-27** (legal review with the integrator; the full list is in grassfield's legal dossier):
+    - the section names stay as they are (Discover, Create, Work, Play, Develop): a risk the owner accepts;
+    - the category names stay the neutral ones;
+    - publishers' icons, screenshots and AppStream texts are shown as provided, with their source;
+    - the app name "Grassfield Store" and "Get" / "Open" stay, with the macOS command labels (the owner: labels kept).
 
 ### f. The app and its processes
 - **A new app, `apps/store`, packaged as `grassfield-store`.** `apps/` is where Grassfield's apps live (master-prompt §5.2,
@@ -675,6 +680,11 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD3 | Which step adds the list of other updates to the checker, and what goes first at its 256 KiB cap (counter-review, PR #16) | Software Update's step 2 adds it (`otherPackages`, PR #16's plan after its own review), the list cut before the notes · Store step 4 adds it · the notes cut first | Software Update's step 2, as PR #16 writes it; the list first | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's Software Update always shows its release notes, while the per-app list is an addition; one checker, one list, one name for both PRs |
 | SD4 | How the Store checks a fetched AppStream package (counter-review) | its own `.sig` with `pacman-key --verify` as the user (pacman's keyring and trust rule) · `gpgv` with pacman's public keyring (no trust check) · the sync database's SHA-256 (unsigned; refused by the review) | `pacman-key --verify`; **amended after the step-1 review**: gpg against a private copy of pacman's keyring, pacman's rule read from gpg's status lines and the key listing (c), since `pacman-key --verify`'s exit code passes any key of the keyring and a disabled one (S19) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing to set up; the Store trusts exactly what pacman trusts (S17, S19) |
 | SD5 | How the Store reads Arch's AppStream (step 1) | its own reader of the catalog XML (`QXmlStreamReader`, zlib; the fields the Store shows, every text made plain) · `appstream-qt` (libappstream's pool, a new runtime dependency; it reads the system's data locations, so the fetched copy would need its extra-location API) | its own reader | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) nothing for the user to install or set up, and one reader for the installed and the fetched copy; CLAUDE.md "no new dependency without need": f's list loses `appstream-qt` |
+| SD6 | Where "Settings…" goes in the menu bar (step 2) | File · a menu of the Store's own named after the app, beside the shell's · the toolbar's gear only | File, with Ctrl+, as on macOS; the gear in the toolbar only when there is no global menu bar | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS has the command and its shortcut in the app menu, which Grassfield's shell owns with Window (T0, ADR-0008), so the command keeps macOS's name and shortcut in the first menu the app fills (File, the first menu of Files and Preview too); the spec's "Store" menu becomes File |
+| SD7 | What the local user's row at the bottom of the sidebar opens (step 2) | Installed · nothing (a label) · an "Installed" sidebar row | Installed | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS 27's account row opens the account page with the apps bought; Installed is the closest real list, in the same place, with no sign-in |
+| SD8 | The app's button before step 3 can install or open (step 2) | shown with its state ("Get", "Open", "Installed"), disabled, a tooltip saying installing comes in a later version · hidden until step 3 | shown, disabled, with the tooltip | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) every macOS page has the button in its place, so the measured layout is the one step 3 fills; (b) the tooltip says why nothing happens, with no step to take |
+| SD9 | When the Store is packaged and shows in Apps (step 2) | with step 3, when it can install · now, read only | with step 3 (the CMake install rules, the desktop entry and the icon are ready) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) a Store whose every button is disabled would send the user elsewhere to install; step 2 runs in dev sessions and captures only |
+| SD10 | The AUR and Flathub in the UI, and the Sources switches (step 2) | with step 3, with their install paths and the AUR warning · the switches now, without effect | with step 3; the settings window shows the switches' state, read only | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) a switch that changes nothing would be a step for nothing; macOS has no such sources, so nothing is lost against the reference meanwhile |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
@@ -720,6 +730,18 @@ irreversible action on the owner's machine. The integrator checks each row in th
 - **Step 2:** the UI (Discover, sections, Categories, product page, search, Installed, the Updates list read-only), measured
   F1 against the captures, en and fr, light and dark, keyboard; offscreen captures with the fake backend; the nested shot by
   the integrator. The legal items of e.10 go to `docs/legal/visual-review.md`.
+  Delivered (2026-10-27): the app `grassfield-store` (`apps/store/src/main.cpp`, `storebackend`, `storeview`, the screenshot
+  provider; `apps/store/qml`), its desktop entry and icon, 138 `store.*` tokens, the Store's strings in French; the
+  backend loads in a worker after the window's first frame and gives the QML immutable snapshots; screenshots only over
+  https, at most 8 MiB, 15 s, 8192 px a side, every decoder bounded to 128 MiB; links open only over https, never in a dev
+  session. Captures and F1 measures in `docs/audits/store-2026-10-27/step2.md` (every item within 1 pt but the card text's
+  ink, which follows the words); E36 and question 12 in `docs/legal/visual-review.md`; decisions SD6 to SD10. Two
+  corrections to step 1's code: the AppStream reader takes only a component's own children (a `<provides>`, `<suggests>` or
+  `<extends>` id, or a release's or an agreement's name and description, no longer overwrite the app's), and it now reads
+  releases, languages, the content rating, the bug tracker and screenshot captions for the product page.
+  `RimmedCapsule` moved from Settings to `Grassfield.Ui` (shared with the Store; `docs/specs/ui-api.md`). `--page` opens a
+  page first (discover, `section:<id>`, categories, `category:<id>`, `app:<id>`, `search:<words>`, installed, updates);
+  `GRASSFIELD_STORE_OFFLINE` is ADR-0019 dev plumbing.
 - **Step 3:** install, open, uninstall: `grassfield-store-helper` and its policy (b.1: `auth_admin`, the remove rule with
   S16's cases as tests, the plan check), the polkit sheet's names for this action (SD2), `grassfield-store-run` (b.2), web
   apps and Flatpaks (b.3); container tests with real pacman installs, a real recipe, a real `flatpak install --user` of a
@@ -809,3 +831,45 @@ Opus review of step 1 here, at 17567e8 (integrator, 2026-10-27): FAIL, 1 MAJOR. 
   check (60 s) and of the unpacking (120 s) are written above (f); the request's cookie, Referer, cache and redirect
   settings, a real https server's redirects (five followed, a sixth refused, http refused), cookies never sent back and
   the size cap, and `bsdtar`'s argument vector are tested.
+
+Opus review of step 2 here, at 0fe0c60 (integrator, 2026-10-27): FAIL, 1 MAJOR and 8 MINOR. Each finding and where it is
+answered:
+- **MAJOR**, LeakSanitizer failed the ASan suite on Qt 6.11.2 with ICU 78: `QString::localeAwareCompare` keeps a shared
+  default `QCollator` that is never freed. The two sorts that used it (the product page's languages, `storeview.cpp`;
+  Installed's names, `storebackend.cpp`) now use a `QCollator` of their own on the formats locale.
+- **Minors:** with a larger text size the hero's and the cards' title line heights and the gaps under them grow with the
+  fonts, and the title's distance from the eyebrow too (`textScale` tokens; `tst_storemain` test_largeText); the shared
+  `Toggle` has the disabled look of the other controls (dimmed, `materialDisabledOpacity`; three Settings callers no
+  longer set it themselves); `branding/LICENSES.md` counts every symbolic icon (96 with main's clipboard glyphs) and has
+  the Store icon's row; the screenshot
+  provider checks the backend's gate (screenshots on and online) right before each fetch, and the product page reads the
+  source again when the Store goes offline or comes back; the notice's rim, the generic icon's glyph and the "See All"
+  link's centring use tokens or the title's own height; the screenshots line says the addresses come from each app's
+  description, often another site; the spec lists `GRASSFIELD_STORE_QML`, the dev plumbing and `--page`, and
+  `StoreEnv.OfflineOnlyInADevSession` tests `GRASSFIELD_STORE_OFFLINE` (honoured in dev, ignored in a packaged session);
+  Tab (and any keyboard focus move) scrolls the focused item into view below the toolbar (`ScrollPage.reveal`;
+  test_focusScrollsIntoView).
+
+Counter-review of f978601 (integrator, 2026-10-27): PASS; the integrator's nested pass found three gaps, answered here:
+- **The menu bar showed "org.grassfield.Store" and Window only.** The name: the Store is not packaged before step 3 (SD9),
+  so `apps/store/build-direct.sh` now puts its desktop entry (Exec on the dev build) and icon under `.dev/share`, which
+  `scripts/dev/devenv.sh` puts first in `XDG_DATA_DIRS`. The window rules: `config/hypr/grassfield/windows.lua` now
+  counts `org.grassfield.Store` among the apps that draw their own chrome (`gf-client-chrome`, and the maximize exemption),
+  as Files, Settings and Preview. Qt's export was probed under KWin's virtual backend (it serves `org_kde_kwin_appmenu`)
+  with a stand-in registrar on a private bus: the Store calls `org_kde_kwin_appmenu.set_address(<its bus name>,
+  "/MenuBar/1")` as Settings does, and `GetLayout` returns File (Settings…, Close Window), Edit and View in 21 ms. The T1 menus are then the
+  bridge's and the shell's to show; if they still do not, the bridge's log line for the window (opened, or refused with
+  its reason) and the plugin's `appmenu: set_address` line tell which step drops them.
+- **Ctrl+, opened nothing.** With the global menu, the window's shortcut and the menu item carry the same key: on Qt 6.11.2
+  (Arch Linux Archive), `tst_storemain` test_keysWithTheGlobalMenu opens the settings window with Ctrl+, and picks the
+  second sidebar item with Ctrl+2, and test_globalMenuAndSettingsBuild builds the menu (File, Edit, View) and the window.
+  Not reproduced in a real session here (no nested Hyprland): the nested pass checks it again.
+- **No catalog and no app data: an empty page.** Discover now says "The Store Isn't Available Right Now" with the reason
+  (spec "Degraded behavior") and Try Again; with Arch's apps but no catalog, a notice says the catalog isn't available
+  (this ADR's "Offline").
+- **Also from the counter-review:** a disabled `Toggle` keeps its track (an off switch stays visible on white) and fades its
+  knob (`controlToggleDisabledKnobOpacity`), and its accent when on; it does not dim again inside a disabled container
+  that dims itself (Settings' blocked page); `tst_controlsbuttons` test_disabledToggleLook. be35a43 does not build on its
+  own (two lines of fcc9a30's screenshot gate went into it); the history is not rewritten (CLAUDE.md), so a bisect skips
+  it (`git bisect skip be35a43`): be35a43 and fcc9a30 build together.
+

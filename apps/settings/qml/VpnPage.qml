@@ -82,7 +82,6 @@ SettingsPage {
                 Toggle {
                     accessibleName: vpn.name
                     enabled: root.pending === ""
-                    opacity: enabled ? 1 : Tokens.materialDisabledOpacity
                     checked: vpn.link === "connected" || vpn.link === "connecting"
                     onToggled: c => root.toggle(vpn.uuid, c)
                 }

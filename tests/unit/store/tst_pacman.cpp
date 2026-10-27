@@ -90,3 +90,16 @@ TEST(Pacman, QueriesRunPacmanAsTheUserWithAnArgumentVector)
     ASSERT_TRUE(f.open(QIODevice::ReadOnly));
     EXPECT_EQ(QString::fromUtf8(f.readAll()), QStringLiteral("-Sl|\n-Qqe|\n-Qqm|\n-Si|--|gimp|\n"));
 }
+
+// The build day of pacman -Si (C locale's %c), shown as What's New's date when AppStream has no release.
+TEST(Pacman, BuildDate)
+{
+    EXPECT_EQ(parseBuildDate(QStringLiteral("Thu Oct 15 08:27:03 2026")), QDate(2026, 10, 15));
+    EXPECT_EQ(parseBuildDate(QStringLiteral("Sun Oct  4 00:00:00 2026")), QDate(2026, 10, 4));
+    EXPECT_FALSE(parseBuildDate(QStringLiteral("jeu. 15 oct. 2026 08:27:03")).isValid());
+    EXPECT_FALSE(parseBuildDate(QString()).isValid());
+    const auto info = parsePackageInfo("Repository      : core\nName            : pacman\nVersion         : 7.1.0-3\n"
+                                       "Build Date      : Thu Oct 15 08:27:03 2026\n");
+    ASSERT_TRUE(info);
+    EXPECT_EQ(info->buildDate, QDate(2026, 10, 15));
+}

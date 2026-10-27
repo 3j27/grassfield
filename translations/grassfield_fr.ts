@@ -2244,6 +2244,46 @@
     </message>
 </context>
 <context>
+    <name>CardShelf</name>
+    <message>
+        <source>Stories</source>
+        <translation>Articles</translation>
+    </message>
+</context>
+<context>
+    <name>CarouselArrow</name>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
+    </message>
+</context>
+<context>
+    <name>CategoriesPage</name>
+    <message>
+        <source>Categories</source>
+        <translation>Catégories</translation>
+    </message>
+    <message>
+        <source>%1, apps: %2</source>
+        <translation>%1, apps&#xa0;: %2</translation>
+    </message>
+</context>
+<context>
+    <name>CategoryPage</name>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>All</source>
+        <translation>Toutes</translation>
+    </message>
+</context>
+<context>
     <name>CityField</name>
     <message>
         <source>%1 - %2</source>
@@ -4237,6 +4277,21 @@
         <source>Find</source>
         <translation>Rechercher</translation>
     </message>
+    <message>
+        <source>Settings…</source>
+        <translation>Réglages…</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Actualiser</translation>
+    </message>
+</context>
+<context>
+    <name>HeroCarousel</name>
+    <message>
+        <source>Featured</source>
+        <translation>À la une</translation>
+    </message>
 </context>
 <context>
     <name>IconMenu</name>
@@ -4589,6 +4644,17 @@
     <message>
         <source>Remove the selected input source</source>
         <translation>Supprimer la méthode de saisie sélectionnée</translation>
+    </message>
+</context>
+<context>
+    <name>InstalledPage</name>
+    <message>
+        <source>Installed</source>
+        <translation>Installées</translation>
+    </message>
+    <message>
+        <source>No apps from the Store&apos;s sources are installed.</source>
+        <translation>Aucune app des sources du Store n’est installée.</translation>
     </message>
 </context>
 <context>
@@ -5330,6 +5396,46 @@
     <message>
         <source>Forward</source>
         <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Grassfield Store</source>
+        <translation>Grassfield Store</translation>
+    </message>
+    <message>
+        <source>Discover</source>
+        <translation>Découvrir</translation>
+    </message>
+    <message>
+        <source>Categories</source>
+        <translation>Catégories</translation>
+    </message>
+    <message>
+        <source>Updates</source>
+        <translation>Mises à jour</translation>
+    </message>
+    <message>
+        <source>Loading apps…</source>
+        <translation>Chargement des apps…</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline. The catalog is from %1.</source>
+        <translation>Vous êtes hors ligne. Le catalogue date du %1.</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline.</source>
+        <translation>Vous êtes hors ligne.</translation>
+    </message>
+    <message>
+        <source>The catalog is from %1 and may be out of date.</source>
+        <translation>Le catalogue date du %1 et n’est peut-être plus à jour.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog isn&apos;t available: Arch&apos;s apps are shown.</source>
+        <translation>Le catalogue Grassfield n’est pas disponible : les apps d’Arch sont affichées.</translation>
+    </message>
+    <message>
+        <source>Store Settings</source>
+        <translation>Réglages du Store</translation>
     </message>
 </context>
 <context>
@@ -6550,6 +6656,121 @@
     </message>
 </context>
 <context>
+    <name>ProductPage</name>
+    <message>
+        <source>Licence: %1</source>
+        <translation>Licence&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Licence not stated</source>
+        <translation>Licence non indiquée</translation>
+    </message>
+    <message>
+        <source>This app has no window of its own: it runs in a terminal.</source>
+        <translation>Cette app n’a pas de fenêtre à elle&#xa0;: elle s’utilise dans un terminal.</translation>
+    </message>
+    <message>
+        <source>Screenshot %1 of %2 of %3</source>
+        <translation>Capture d’écran %1 sur %2 de %3</translation>
+    </message>
+    <message>
+        <source>Screenshots are turned off.</source>
+        <translation>Les captures d’écran sont désactivées.</translation>
+    </message>
+    <message>
+        <source>Screenshots are not loaded while you&apos;re offline.</source>
+        <translation>Les captures d’écran ne sont pas chargées hors ligne.</translation>
+    </message>
+    <message>
+        <source>This screenshot could not be loaded.</source>
+        <translation>Cette capture d’écran n’a pas pu être chargée.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Nouveautés</translation>
+    </message>
+    <message>
+        <source>Version %1 · %2</source>
+        <translation>Version %1 · %2</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>Version %1</translation>
+    </message>
+    <message>
+        <source>Information</source>
+        <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Developer</source>
+        <translation>Développeur</translation>
+    </message>
+    <message>
+        <source>Packages</source>
+        <translation>Paquets</translation>
+    </message>
+    <message>
+        <source>Package</source>
+        <translation>Paquet</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>Version</translation>
+    </message>
+    <message>
+        <source>Download Size</source>
+        <translation>Taille du téléchargement</translation>
+    </message>
+    <message>
+        <source>Installed Size</source>
+        <translation>Taille une fois installée</translation>
+    </message>
+    <message>
+        <source>Category</source>
+        <translation>Catégorie</translation>
+    </message>
+    <message>
+        <source>Languages</source>
+        <translation>Langues</translation>
+    </message>
+    <message>
+        <source>Content Rating</source>
+        <translation>Classification du contenu</translation>
+    </message>
+    <message>
+        <source>Licence</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Not stated</source>
+        <translation>Non indiquée</translation>
+    </message>
+    <message>
+        <source>What This Setup Changes</source>
+        <translation>Ce que change cette configuration</translation>
+    </message>
+    <message>
+        <source>Setup</source>
+        <translation>Configuration</translation>
+    </message>
+    <message>
+        <source>Address</source>
+        <translation>Adresse</translation>
+    </message>
+    <message>
+        <source>Homepage</source>
+        <translation>Site web</translation>
+    </message>
+    <message>
+        <source>Bug Tracker</source>
+        <translation>Signaler un problème</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Files</source>
@@ -6582,6 +6803,14 @@
     <message>
         <source>Local files or file: URLs.</source>
         <translation>Fichiers locaux ou URL file:.</translation>
+    </message>
+    <message>
+        <source>Find, read about and open apps for Grassfield.</source>
+        <translation>Trouver des apps pour Grassfield, les découvrir et les ouvrir.</translation>
+    </message>
+    <message>
+        <source>Open this page first: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;words&gt;, installed or updates.</source>
+        <translation>Ouvrir d’abord cette page&#xa0;: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;mots&gt;, installed ou updates.</translation>
     </message>
 </context>
 <context>
@@ -7358,6 +7587,14 @@
         <source>System Commands</source>
         <translation>Commandes système</translation>
     </message>
+    <message>
+        <source>Results for “%1”</source>
+        <translation>Résultats pour «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>No Results for “%1”</source>
+        <translation>Aucun résultat pour «&#xa0;%1&#xa0;»</translation>
+    </message>
 </context>
 <context>
     <name>SearchPanel</name>
@@ -7518,6 +7755,25 @@
     </message>
 </context>
 <context>
+    <name>SectionPage</name>
+    <message>
+        <source>Discover</source>
+        <translation>Découvrir</translation>
+    </message>
+    <message>
+        <source>See All</source>
+        <translation>Tout voir</translation>
+    </message>
+    <message>
+        <source>The Store Isn&apos;t Available Right Now</source>
+        <translation>Le Store n’est pas disponible pour le moment</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+</context>
+<context>
     <name>SetDateTimeSheet</name>
     <message>
         <source>Set the date and time</source>
@@ -7558,6 +7814,137 @@
     <message>
         <source>Second</source>
         <translation>Secondes</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsWindow</name>
+    <message>
+        <source>Grassfield Store Settings</source>
+        <translation>Réglages de Grassfield Store</translation>
+    </message>
+    <message>
+        <source>No catalog yet: this version of Grassfield has no catalog host.</source>
+        <translation>Pas encore de catalogue&#xa0;: cette version de Grassfield n’a pas d’hôte pour le catalogue.</translation>
+    </message>
+    <message>
+        <source>The catalog could not be verified: no trusted Grassfield key is installed yet.</source>
+        <translation>Le catalogue n’a pas pu être vérifié&#xa0;: aucune clé Grassfield de confiance n’est encore installée.</translation>
+    </message>
+    <message>
+        <source>The catalog could not be verified.</source>
+        <translation>Le catalogue n’a pas pu être vérifié.</translation>
+    </message>
+    <message>
+        <source>The catalog could not be fetched; the copy from %1 is in use.</source>
+        <translation>Le catalogue n’a pas pu être récupéré&#xa0;; la copie du %1 est utilisée.</translation>
+    </message>
+    <message>
+        <source>The catalog could not be fetched.</source>
+        <translation>Le catalogue n’a pas pu être récupéré.</translation>
+    </message>
+    <message>
+        <source>The catalog from %1, verified.</source>
+        <translation>Le catalogue du %1, vérifié.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data could not be verified.</source>
+        <translation>Les données d’apps d’Arch n’ont pas pu être vérifiées.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data: installed on this computer.</source>
+        <translation>Données d’apps d’Arch&#xa0;: installées sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data: fetched from your package mirror and verified.</source>
+        <translation>Données d’apps d’Arch&#xa0;: récupérées depuis votre miroir de paquets et vérifiées.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data is not available yet: apps show their package&apos;s description.</source>
+        <translation>Les données d’apps d’Arch ne sont pas encore disponibles&#xa0;: les apps affichent la description de leur paquet.</translation>
+    </message>
+    <message>
+        <source>Sources</source>
+        <translation>Sources</translation>
+    </message>
+    <message>
+        <source>AUR</source>
+        <translation>AUR</translation>
+    </message>
+    <message>
+        <source>Packages made by users and reviewed by no one. Their build script runs on this computer.</source>
+        <translation>Des paquets faits par des utilisateurs et vérifiés par personne. Leur script de construction s’exécute sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Flathub</source>
+        <translation>Flathub</translation>
+    </message>
+    <message>
+        <source>Apps from Flathub, installed in your own folder, without administrator rights.</source>
+        <translation>Des apps de Flathub, installées dans votre propre dossier, sans droits d’administrateur.</translation>
+    </message>
+    <message>
+        <source>Flathub needs the flatpak package.</source>
+        <translation>Flathub a besoin du paquet flatpak.</translation>
+    </message>
+    <message>
+        <source>Screenshots</source>
+        <translation>Captures d’écran</translation>
+    </message>
+    <message>
+        <source>Show screenshots</source>
+        <translation>Afficher les captures d’écran</translation>
+    </message>
+    <message>
+        <source>Fetched when an app&apos;s page opens, from the addresses its description gives, often another site.</source>
+        <translation>Récupérées à l’ouverture de la page d’une app, aux adresses que donne sa description, souvent sur un autre site.</translation>
+    </message>
+    <message>
+        <source>Catalog</source>
+        <translation>Catalogue</translation>
+    </message>
+    <message>
+        <source>Channel: %1</source>
+        <translation>Canal&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Beta</source>
+        <translation>Bêta</translation>
+    </message>
+    <message>
+        <source>Stable</source>
+        <translation>Stable</translation>
+    </message>
+    <message>
+        <source>Refreshing…</source>
+        <translation>Actualisation…</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Actualiser</translation>
+    </message>
+    <message>
+        <source>What the Store Fetches</source>
+        <translation>Ce que le Store récupère</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog, from Grassfield&apos;s package host: when the Store opens, at most every 6 hours, and on Refresh.</source>
+        <translation>Le catalogue Grassfield, depuis l’hôte des paquets de Grassfield&#xa0;: à l’ouverture du Store, au plus toutes les 6&#xa0;heures, et avec Actualiser.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data, from your package mirror, when it is not installed.</source>
+        <translation>Les données d’apps d’Arch, depuis votre miroir de paquets, quand elles ne sont pas installées.</translation>
+    </message>
+    <message>
+        <source>Screenshots, from the addresses in each app&apos;s description, when its page opens.</source>
+        <translation>Les captures d’écran, aux adresses de la description de chaque app, quand sa page s’ouvre.</translation>
+    </message>
+    <message>
+        <source>Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.</source>
+        <translation>Rien sur une connexion limitée, sauf si vous choisissez Actualiser. Ce que vous recherchez reste sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Turning the sources and the screenshots on and off comes in a later version.</source>
+        <translation>L’activation des sources et des captures d’écran arrive dans une prochaine version.</translation>
     </message>
 </context>
 <context>
@@ -7608,6 +7995,18 @@
     <message>
         <source>Remove from Sidebar</source>
         <translation>Retirer de la barre latérale</translation>
+    </message>
+    <message>
+        <source>Search apps</source>
+        <translation>Rechercher des apps</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>%1: Installed apps</source>
+        <translation>%1&#xa0;: apps installées</translation>
     </message>
 </context>
 <context>
@@ -7766,6 +8165,13 @@
     </message>
 </context>
 <context>
+    <name>SourceBadge</name>
+    <message>
+        <source>Source: %1</source>
+        <translation>Source&#xa0;: %1</translation>
+    </message>
+</context>
+<context>
     <name>Spinner</name>
     <message>
         <source>In progress</source>
@@ -7897,6 +8303,201 @@
     <message>
         <source>unsupported contract version: %1</source>
         <translation>version de contrat non prise en charge&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Omarchy</source>
+        <translation>Omarchy</translation>
+    </message>
+    <message>
+        <source>Arch Linux · %1</source>
+        <translation>Arch Linux · %1</translation>
+    </message>
+    <message>
+        <source>Omarchy setup</source>
+        <translation>Configuration Omarchy</translation>
+    </message>
+    <message>
+        <source>Web app</source>
+        <translation>App web</translation>
+    </message>
+    <message>
+        <source>AUR</source>
+        <translation>AUR</translation>
+    </message>
+    <message>
+        <source>Flathub</source>
+        <translation>Flathub</translation>
+    </message>
+    <message>
+        <source>Not from a repository</source>
+        <translation>Hors dépôts</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Installed</source>
+        <translation>Installée</translation>
+    </message>
+    <message>
+        <source>Get</source>
+        <translation>Obtenir</translation>
+    </message>
+    <message>
+        <source>Not rated</source>
+        <translation>Non classé</translation>
+    </message>
+    <message>
+        <source>Violence</source>
+        <translation>Violence</translation>
+    </message>
+    <message>
+        <source>Drugs, alcohol or tobacco</source>
+        <translation>Drogues, alcool ou tabac</translation>
+    </message>
+    <message>
+        <source>Sexual content</source>
+        <translation>Contenu sexuel</translation>
+    </message>
+    <message>
+        <source>Strong language</source>
+        <translation>Langage grossier</translation>
+    </message>
+    <message>
+        <source>Online interaction</source>
+        <translation>Échanges en ligne</translation>
+    </message>
+    <message>
+        <source>Purchases or gambling</source>
+        <translation>Achats ou jeux d’argent</translation>
+    </message>
+    <message>
+        <source>mild</source>
+        <translation>léger</translation>
+    </message>
+    <message>
+        <source>moderate</source>
+        <translation>modéré</translation>
+    </message>
+    <message>
+        <source>intense</source>
+        <translation>intense</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1&#xa0;: %2</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucun</translation>
+    </message>
+    <message>
+        <source>%1, %2 and %3 more</source>
+        <translation>%1, %2 et %3 de plus</translation>
+    </message>
+    <message>
+        <source>Repositories</source>
+        <translation>Dépôts</translation>
+    </message>
+    <message>
+        <source>Omarchy Setups</source>
+        <translation>Configurations Omarchy</translation>
+    </message>
+    <message>
+        <source>Web Apps</source>
+        <translation>Apps web</translation>
+    </message>
+    <message>
+        <source>Arch Linux</source>
+        <translation>Arch Linux</translation>
+    </message>
+    <message>
+        <source>Not from a Repository</source>
+        <translation>Hors dépôts</translation>
+    </message>
+    <message>
+        <source>Your apps are up to date. Last checked %1.</source>
+        <translation>Vos apps sont à jour. Dernière vérification&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Your apps are up to date.</source>
+        <translation>Vos apps sont à jour.</translation>
+    </message>
+    <message>
+        <source>Last checked %1.</source>
+        <translation>Dernière vérification&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Update in progress</source>
+        <translation>Mise à jour en cours</translation>
+    </message>
+    <message>
+        <source>Updates could not be checked: you&apos;re offline.</source>
+        <translation>Les mises à jour n’ont pas pu être vérifiées&#xa0;: vous êtes hors ligne.</translation>
+    </message>
+    <message>
+        <source>Updates could not be checked.</source>
+        <translation>Les mises à jour n’ont pas pu être vérifiées.</translation>
+    </message>
+    <message>
+        <source>System updates are blocked. Software Update in Settings says why.</source>
+        <translation>Les mises à jour du système sont bloquées. Mise à jour de logiciels, dans les Réglages, dit pourquoi.</translation>
+    </message>
+    <message>
+        <source>Software Update is not set up. Settings can set it up.</source>
+        <translation>Mise à jour de logiciels n’est pas configurée. Les Réglages peuvent la configurer.</translation>
+    </message>
+    <message>
+        <source>Software Update has not checked for updates yet.</source>
+        <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour.</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline, and this computer has no saved catalog or app data yet.</source>
+        <translation>Vous êtes hors ligne et cet ordinateur n’a encore ni catalogue ni données d’apps enregistrés.</translation>
+    </message>
+    <message>
+        <source>This version of Grassfield has no catalog host yet.</source>
+        <translation>Cette version de Grassfield n’a pas encore d’hébergement pour le catalogue.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog can&apos;t be verified: no trusted Grassfield key is installed yet.</source>
+        <translation>Le catalogue Grassfield ne peut pas être vérifié : aucune clé Grassfield de confiance n’est encore installée.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog could not be verified.</source>
+        <translation>Le catalogue Grassfield n’a pas pu être vérifié.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog could not be fetched.</source>
+        <translation>Le catalogue Grassfield n’a pas pu être récupéré.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data could not be verified.</source>
+        <translation>Les données d’apps d’Arch n’ont pas pu être vérifiées.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data isn&apos;t installed and could not be fetched.</source>
+        <translation>Les données d’apps d’Arch ne sont pas installées et n’ont pas pu être récupérées.</translation>
+    </message>
+</context>
+<context>
+    <name>StoreButton</name>
+    <message>
+        <source>Open %1</source>
+        <translation>Ouvrir %1</translation>
+    </message>
+    <message>
+        <source>%1 is installed</source>
+        <translation>%1 est installée</translation>
+    </message>
+    <message>
+        <source>Get %1</source>
+        <translation>Obtenir %1</translation>
+    </message>
+    <message>
+        <source>Installing and opening apps from the Store come in a later version.</source>
+        <translation>L’installation et l’ouverture des apps depuis le Store arrivent dans une prochaine version.</translation>
     </message>
 </context>
 <context>
@@ -8332,6 +8933,45 @@
     <message>
         <source>Toolbar</source>
         <translation>Barre d’outils</translation>
+    </message>
+</context>
+<context>
+    <name>UpdatesPage</name>
+    <message>
+        <source>Updates</source>
+        <translation>Mises à jour</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Omarchy</source>
+        <translation>Omarchy</translation>
+    </message>
+    <message>
+        <source>%1 %2 is available (installed: %3).</source>
+        <translation>%1 %2 est disponible (installée&#xa0;: %3).</translation>
+    </message>
+    <message>
+        <source>Updates with the system</source>
+        <translation>Mise à jour avec le système</translation>
+    </message>
+    <message>
+        <source>%1 → %2</source>
+        <translation>%1 → %2</translation>
+    </message>
+    <message>
+        <source>Other system packages: %1</source>
+        <translation>Autres paquets du système&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>System packages: %1</source>
+        <translation>Paquets du système&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Apps from the repositories update with the whole system, in Software Update (Settings &gt; General).</source>
+        <translation>Les apps des dépôts se mettent à jour avec tout le système, dans Mise à jour de logiciels (Réglages &gt; Général).</translation>
     </message>
 </context>
 <context>

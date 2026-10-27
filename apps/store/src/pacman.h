@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QDate>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -26,6 +27,7 @@ struct PackageInfo {
     QStringList licenses;
     qint64 downloadSize = -1; // bytes
     qint64 installedSize = -1;
+    QDate buildDate; // invalid when pacman gives none that parses
 };
 
 bool isStoreRepository(const QString &repo);
@@ -34,6 +36,8 @@ QSet<QString> parseNameList(const QByteArray &out);
 std::optional<PackageInfo> parsePackageInfo(const QByteArray &pacmanSi);
 // "21.56 MiB" → bytes; -1 when it is not a size.
 qint64 parseSize(const QString &text);
+// pacman's "Build Date" in the C locale ("Thu Oct 15 08:27:03 2026") → its day; invalid when it does not parse.
+QDate parseBuildDate(const QString &text);
 
 class Pacman
 {
