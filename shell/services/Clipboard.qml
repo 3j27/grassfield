@@ -63,19 +63,21 @@ Singleton {
     property int retryMs: 2000
     property bool waiting: false
     // Nothing is decided on values grassfield.json did not give. Before its first read every key reads its default (the history
-    // off, no clear asked); a malformed, unreadable or unsafe file reads the defaults or the last good values, a missing one the
-    // defaults. Acting on those would delete a kept history (review of f7cd664) or skip a clear, and an unreadable file must
-    // never delete anything (review of c1fc254). So the service takes the file's values only while Settings.validRead holds,
-    // once the read is complete (the store sets validRead before it takes the new values), and keeps the last usable ones
-    // otherwise. The first usable read makes the first decision (init); with no usable file (a missing one included) nothing
-    // runs and nothing is deleted until Settings or Search's Allow writes one.
+    // off, no clear asked); a malformed, unreadable or unsafe file reads the defaults or the last good values, a missing or an
+    // empty one (what a cut write leaves) the defaults. Acting on those would delete a kept history (review of f7cd664) or skip
+    // a clear, and an unreadable file must never delete anything (reviews of c1fc254 and 3f924d9). So the service takes the
+    // file's values only from a usable read (valid and not empty), once the read is complete (the store sets validRead before
+    // it takes the new values), and keeps the last usable ones otherwise. The first usable read makes the first decision
+    // (init); with no usable file (a missing one included) nothing runs and nothing is deleted until Settings or Search's
+    // Allow writes one.
     property bool initialized: false
-    readonly property string settingsRead: JSON.stringify([Settings.validRead, Settings.clipboardEnabled, Settings.clipboardRetention,
+    readonly property bool settingsUsable: Settings.validRead && !Settings.emptyFile
+    readonly property string settingsRead: JSON.stringify([root.settingsUsable, Settings.clipboardEnabled, Settings.clipboardRetention,
         Settings.clipboardKeepOnDisk, Settings.clipboardClearedAt, Settings.clipboardPinnedClearedAt])
     onSettingsReadChanged: Qt.callLater(root.takeSettings)
 
     function takeSettings(): void {
-        if (!Settings.validRead)
+        if (!root.settingsUsable)
             return;
         root.retention = Logic.retentionMs(Settings.clipboardRetention);
         root.keepOnDisk = Settings.clipboardKeepOnDisk;
