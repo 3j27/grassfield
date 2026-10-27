@@ -185,7 +185,7 @@ selection").
 | Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
 | Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 6 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
-| Per-folder views (F-3) with grouping and the new sort keys | `tests/unit/files/tst_folderviews.cpp` (gtest, 12 tests) | L0 |
+| Per-folder views (F-3) with grouping and the new sort keys; hostile files and lock paths | `tests/unit/files/tst_folderviews.cpp` (gtest, 23 tests) | L0 |
 | Global menu: bar items (Path Bar, Status Bar, Sidebar, Preview), Group By follows the tab | `tests/unit/tst_filesglobalmenu.qml` (6 cases) | L0 |
 | F16 tag parse/serialize, colour keys, selection states, search locations; byte-for-byte edits (`applyTag`, the reviewer's foreign value), sidebar hiding, `user.xdg.tags` write/read/remove, raw round trip, foreign tags, long values, links, FIFOs, read-only files, the probe cache, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest) | L0 |
 | F16 a superseded search's queued batches and done never arrive (switch, stop); done once | `tests/unit/files/tst_tagsearch.cpp` (gtest, 3 tests) | L0 |
@@ -589,12 +589,14 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   screen) or closed is kept (`window/width`, `window/height`) and every new window opens at it.
 - Tests: `tests/unit/tst_filestabs.qml` (bar visibility, close index, slots while reordering, for an incoming and an
   outgoing tab, moves, the closed-tab stack, the drag payload, a file drop on a tab and every file drop answering Copy,
-  tab drops and tear-offs applied after the drag with `Main.qml` and stand-in windows), `tst_filesnav.qml` (view and sort
-  of a folder, Cmd-double-click in the column view), `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar,
+  tab drops and tear-offs applied after the drag with `Main.qml` and stand-in windows, a real tab bar's drag reporting its
+  start to the manager before the platform drag runs), `tst_filesnav.qml` (view and sort of a folder),
+  `tst_filescolumns.qml` (a real column view: a double-click opens a file, a folder only with Cmd), `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar,
   Merge All Windows, Close Window, Sort By from the tab), `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields,
   merge, round trip and order, the oldest goes when full, an unreadable or newer file is never overwritten, a missing
   version, another process's entries kept; hostile files: a FIFO, a symlink to a device, one byte over the limit,
-  malformed and newer files with the choice waiting, 0600 under umask 000, a stale and a taken lock, four processes
+  malformed and newer files with the choice waiting, 0600 under umask 000, a stale and a taken lock, a lock path that is a
+  directory, a FIFO or a link refused at once, four processes
   writing at once, 68,000 entries under a time budget, changes that keep the mtime). Headless run of the real app (sway,
   virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1. The tab drag between
   two windows after the deferral is verified in the nested session by the integrator (not here).
