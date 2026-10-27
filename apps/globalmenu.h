@@ -19,8 +19,11 @@ namespace grassfield::apps {
 // back: not when it is disabled (the key still triggers it), not when its key changes, not when it is destroyed. Once
 // that item is gone (its window closed, or the registrar went away), the next press of its key in the app reads the
 // deleted item: SIGSEGV in QQuickShortcutContext::matcher, called from QShortcutMap::find. Each app calls this right
-// after creating its application object, before any QML exists: a disabled key that never matches takes id -1, so no
-// menu item can get it, whatever order the QML registers its keys in (tests/unit/files/tst_menushortcuts.cpp).
+// after creating its application object, before any QML exists: registering a disabled key that never matches moves
+// QShortcutMap's id counter past -1 (ids are never reused), so no menu item can get -1, whatever registered during the
+// application's construction and whatever order the QML registers its keys in (tests/unit/files/tst_menushortcuts.cpp).
+// Drop this workaround once the installed Qt's labs MenuItem no longer treats -1 as "no key": tst_menushortcuts, run
+// with this function emptied, then passes (with Qt 6.11.2 it fails 3/3: the disabled item acts, the other two crash).
 inline void reserveFirstShortcutId(QGuiApplication &app)
 {
     // Never acts: a window shortcut owned by no window does not match, and it is disabled.
