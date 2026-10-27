@@ -835,7 +835,7 @@ answered:
 - **Minors:** with a larger text size the hero's and the cards' title line heights and the gaps under them grow with the
   fonts, and the title's distance from the eyebrow too (`textScale` tokens; `tst_storemain` test_largeText); the shared
   `Toggle` has the disabled look of the other controls (dimmed, `materialDisabledOpacity`; three Settings callers no
-  longer set it themselves); `branding/LICENSES.md` counts 92 symbolic icons and has the Store icon's row; the screenshot
+  longer set it themselves); `branding/LICENSES.md` counts every symbolic icon (96 with main's clipboard glyphs) and has the Store icon's row; the screenshot
   provider checks the backend's gate (screenshots on and online) right before each fetch, and the product page reads the
   source again when the Store goes offline or comes back; the notice's rim, the generic icon's glyph and the "See All"
   link's centring use tokens or the title's own height; the screenshots line says the addresses come from each app's

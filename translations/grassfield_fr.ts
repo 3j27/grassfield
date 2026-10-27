@@ -1484,6 +1484,10 @@
         <translation>Redimensionner la fenêtre</translation>
     </message>
     <message>
+        <source>Clipboard history</source>
+        <translation>Historique du presse-papiers</translation>
+    </message>
+    <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
@@ -7501,6 +7505,18 @@
         <source>Are you sure you want to quit all applications and log out %1?</source>
         <translation>Voulez-vous vraiment quitter toutes les applications et fermer la session de %1&#xa0;?</translation>
     </message>
+    <message>
+        <source>Clipboard</source>
+        <translation>Presse-papiers</translation>
+    </message>
+    <message>
+        <source>The item could not be copied</source>
+        <translation>L’élément n’a pas pu être copié</translation>
+    </message>
+    <message>
+        <source>Pinned items are full</source>
+        <translation>Le nombre maximal d’éléments épinglés est atteint</translation>
+    </message>
 </context>
 <context>
     <name>SearchField</name>
@@ -7583,16 +7599,136 @@
 <context>
     <name>SearchPanel</name>
     <message>
+        <source>Paste</source>
+        <translation>Coller</translation>
+    </message>
+    <message>
+        <source>Paste as Plain Text</source>
+        <translation>Coller en texte brut</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Copier</translation>
+    </message>
+    <message>
+        <source>Pin</source>
+        <translation>Épingler</translation>
+    </message>
+    <message>
+        <source>Unpin</source>
+        <translation>Désépingler</translation>
+    </message>
+    <message>
+        <source>Delete Item</source>
+        <translation>Supprimer l’élément</translation>
+    </message>
+    <message>
+        <source>Clear History</source>
+        <translation>Effacer l’historique</translation>
+    </message>
+    <message>
+        <source>Settings…</source>
+        <translation>Réglages…</translation>
+    </message>
+    <message>
+        <source>Copied</source>
+        <translation>Copié</translation>
+    </message>
+    <message>
+        <source>Formatted Text</source>
+        <translation>Texte mis en forme</translation>
+    </message>
+    <message>
+        <source>%1 image</source>
+        <translation>Image %1</translation>
+    </message>
+    <message>
+        <source>Image</source>
+        <translation>Image</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>%1 Items</source>
+        <translation>%1 éléments</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>Texte</translation>
+    </message>
+    <message>
+        <source>Copied %1</source>
+        <translation>Copié à %1</translation>
+    </message>
+    <message>
+        <source>Copied on %1</source>
+        <translation>Copié le %1</translation>
+    </message>
+    <message>
+        <source>Clipboard history needs a compositor with ext-data-control and lock notifications</source>
+        <translation>L’historique du presse-papiers nécessite un compositeur compatible ext-data-control et notifications de verrouillage</translation>
+    </message>
+    <message>
+        <source>Clipboard history is off in development (set GRASSFIELD_CLIPBOARD_DISPLAY)</source>
+        <translation>L’historique du presse-papiers est désactivé en développement (définir GRASSFIELD_CLIPBOARD_DISPLAY)</translation>
+    </message>
+    <message>
+        <source>No Items</source>
+        <translation>Aucun élément</translation>
+    </message>
+    <message>
         <source>Search</source>
         <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Clipboard</source>
+        <translation>Presse-papiers</translation>
     </message>
     <message>
         <source>Type to search applications, files, calculations and commands</source>
         <translation>Saisissez pour rechercher des applications, des fichiers, des calculs et des commandes</translation>
     </message>
     <message>
+        <source>Type to search the clipboard history</source>
+        <translation>Saisissez pour rechercher dans l’historique du presse-papiers</translation>
+    </message>
+    <message>
+        <source>More</source>
+        <translation>Plus</translation>
+    </message>
+    <message>
         <source>Filters</source>
         <translation>Filtres</translation>
+    </message>
+    <message>
+        <source>Allow results from the clipboard in Search?</source>
+        <translation>Autoriser les résultats du presse-papiers dans la Recherche&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Personal and sensitive information may appear in the results. You can change this at any time in Search settings.</source>
+        <translation>Des informations personnelles et sensibles peuvent apparaître dans les résultats. Vous pouvez modifier ce choix à tout moment dans les réglages de la Recherche.</translation>
+    </message>
+    <message>
+        <source>Not Now</source>
+        <translation>Plus tard</translation>
+    </message>
+    <message>
+        <source>Allow</source>
+        <translation>Autoriser</translation>
+    </message>
+    <message>
+        <source>Pinned</source>
+        <translation>Épinglé</translation>
+    </message>
+    <message>
+        <source>Preview</source>
+        <translation>Aperçu</translation>
+    </message>
+    <message>
+        <source>Clipboard item</source>
+        <translation>Élément du presse-papiers</translation>
     </message>
     <message>
         <source>No Results for “%1”</source>

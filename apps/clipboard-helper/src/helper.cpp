@@ -2,6 +2,7 @@
 #include "thumbnail.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QRandomGenerator>
 #include <QSaveFile>
@@ -23,8 +24,6 @@ namespace
 constexpr int kReadDeadlineMs = 2000;
 constexpr int kExpiryMs = 60 * 1000;
 constexpr int kMaxWriters = 16;
-// A reader that takes nothing for this long loses its answer; one that keeps reading, however slowly, gets all of it.
-constexpr int kWriterIdleMs = 2000;
 constexpr int kPreviewTextChars = 64 * 1024;
 // New copies' images waiting for the worker (each up to 16 MiB in memory): past this, a new image is not recorded.
 constexpr int kMaxWaitingImages = 4;
@@ -65,13 +64,14 @@ struct Helper::Pending {
 };
 
 // One answer to a `send` of our source: the bytes go out as the reader takes them, never blocking the helper; closed when the
-// reader takes nothing for 2 s.
+// reader takes nothing for 2 s, and after 60 s in all (writerWaitMs).
 struct Helper::Writer {
     int fd = -1;
     QByteArray bytes;
     qint64 written = 0;
     QSocketNotifier *notifier = nullptr;
     QTimer *deadline = nullptr;
+    QElapsedTimer age;
 };
 
 Helper::Helper(Options options, Output output, Quit quit, QObject *parent)
@@ -481,7 +481,16 @@ void Helper::queueNewImage(const Item &item)
     }
     // A new copy goes before every stored thumbnail (up to 150 of them at start), after the new copies already waiting.
     const auto firstStored = std::find_if(m_imageQueue.begin(), m_imageQueue.end(), [](const ImageJob &job) { return !job.fresh; });
-    m_imageQueue.insert(firstStored, ImageJob{item.id, true, item});
+    const auto at = m_imageQueue.insert(firstStored, ImageJob{item.id, true, item});
+    // Counts only (PV-6): where it waits, for tests/shell/clipboard_helper.sh.
+    const auto pos = std::distance(m_imageQueue.begin(), at);
+    qsizetype storedAhead = 0;
+    for (qsizetype i = 0; i < pos; ++i)
+        storedAhead += m_imageQueue.at(i).fresh ? 0 : 1;
+    const qsizetype storedBehind = std::count_if(m_imageQueue.begin(), m_imageQueue.end(), [](const ImageJob &job) { return !job.fresh; }) - storedAhead;
+    const QByteArray line = "a new image waits for the worker: " + QByteArray::number(qint64(pos - storedAhead)) + " new and "
+        + QByteArray::number(qint64(storedAhead)) + " stored ahead, " + QByteArray::number(qint64(storedBehind)) + " stored behind";
+    log(line.constData());
     nextThumbnail();
 }
 
@@ -780,7 +789,7 @@ void Helper::send(const QByteArray &mime, int fd)
     w->deadline = new QTimer(this);
     w->deadline->setSingleShot(true);
     m_writers << w;
-    // A reader that stops reading never holds a writer (one of kMaxWriters): 2 s without progress closes it.
+    // A reader that stops reading never holds a writer (one of kMaxWriters): 2 s without progress, or 60 s in all, closes it.
     connect(w->deadline, &QTimer::timeout, this, [this, w] { closeWriter(w); });
     connect(w->notifier, &QSocketNotifier::activated, this, [this, w] {
         bool progressed = false;
@@ -795,14 +804,15 @@ void Helper::send(const QByteArray &mime, int fd)
                 continue;
             if (n < 0 && errno == EAGAIN) {
                 if (progressed)
-                    w->deadline->start(kWriterIdleMs);
+                    w->deadline->start(int(writerWaitMs(w->age.elapsed())));
                 return;
             }
             break; // the reader went away
         }
         closeWriter(w);
     });
-    w->deadline->start(kWriterIdleMs);
+    w->age.start();
+    w->deadline->start(int(writerWaitMs(0)));
 }
 
 void Helper::closeWriter(Writer *w)
