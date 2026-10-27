@@ -2,8 +2,10 @@
 # The polkit agent's behaviour, offscreen (reviews of f513b3b, b5d7657 and 38dbfe8): the real shell/security/polkit/AuthAgent.qml
 # with its Quickshell types replaced by plain QML (authagent_flows.d/make_harness.py; the logic untouched), beside the real
 # sheet and model, driven by authagent_flows.d/flows.qml and sink.qml with real key and mouse events through the request orders
-# Quickshell 0.3.1 produces: a request replacing the open one, back-to-back requests, the lock, the screen saver. Nothing typed
-# for one request may reach another one's field or the window underneath. window.qml runs the same agent in FakePanel.qml
+# Quickshell 0.3.1 produces: a request replacing the open one, back-to-back requests, one ending under the user's typing, the
+# lock, the screen saver. Nothing typed for one request may reach another one's field or the window underneath (security
+# counter-review of f9e24e1: nor the rest of a password typed into a request that ends unanswered). window.qml runs the
+# same agent in FakePanel.qml
 # (make_harness.py --panel): a window made again each time it is shown and given the keyboard only once mapped, as
 # Quickshell's PanelWindow and a compositor do, beside a window underneath (check of c1ca44f). No compositor, no polkit, no
 # PAM.
@@ -76,7 +78,11 @@ fi
 # Each mutant brings back a defect a review found: its name, then triples of a file, a text that must occur in it once and what
 # replaces it ('#'-separated, \n a newline). The tests must fail on every one. focusField doing nothing while the input is
 # disabled is a second guard behind the sheet handing the focus back: it is removed with it. The sheet focusing its field at
-# another moment (the check of 38dbfe8's M3) is no longer one (lock_surfaces.sh pins those call sites).
+# another moment (the check of 38dbfe8's M3) is no longer one (lock_surfaces.sh pins those call sites). Two orders of the
+# f9e24e1 fix are pinned by lock_surfaces.sh only, the tests here cannot tell them apart (measured): the window's `visible` and
+# `takesKeys` reading the model's `active` instead of `requestOpen` (here the agent's handler runs before the window's bindings
+# see a request's end), and the hold changed before `requestOpen` goes false at an end (a flicker inside one function; the
+# panel, as a compositor, takes the keyboard request at the next frame).
 status=0
 while IFS= read -r line; do
   [[ -n $line ]] || continue
@@ -101,12 +107,12 @@ PY
 done <<'EOF_MUTANTS'
 no-focus-taken-back (38dbfe8 MEDIUM-A, c1ca44f M2)#AuthAgent.qml#                onActiveFocusChanged: if (activeFocus && root.sinkingKeys)#                onActiveFocusChanged: if (false)
 no-focus-taken-back, field focused while disabled (c1ca44f M2)#AuthAgent.qml#                onActiveFocusChanged: if (activeFocus && root.sinkingKeys)#                onActiveFocusChanged: if (false)#AuthDialog.qml#        if (root.inputEnabled)\n            field.forceActiveFocus();#        field.forceActiveFocus();
-typing-read-late (38dbfe8 LOW-2 M1)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys;#let typing = false;#AuthAgent.qml#        root.userFocused = false;\n        root.sinkingKeys = typing;#        root.userFocused = false;\n        typing = (follows && win.takesKeys) || root.sinkingKeys;\n        root.sinkingKeys = typing;
+typing-read-late (38dbfe8 LOW-2 M1)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#let typing = false;#AuthAgent.qml#        root.userFocused = false;\n        if (dialogModel.active)\n            root.requestOpen = true;#        root.userFocused = false;\n        typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);\n        root.sinkingKeys = typing;\n        if (dialogModel.active)\n            root.requestOpen = true;
 lock-keeps-sink (38dbfe8 LOW-2 M2)#AuthAgent.qml#            root.sinkingKeys = false;\n            if (dialogModel.active) {#            if (dialogModel.active) {
-no-linger (38dbfe8 MEDIUM-B)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys;#const typing = follows && win.takesKeys;
-unmapped-linger (38dbfe8 MEDIUM-B)#AuthAgent.qml#visible: !SessionState.locked && (dialogModel.active || root.sinkingKeys)#visible: shown
-visible-through-lingering (c1ca44f M1)#AuthAgent.qml#visible: !SessionState.locked && (dialogModel.active || root.sinkingKeys)#visible: shown || root.lingering
-keys-through-lingering (c1ca44f M1)#AuthAgent.qml#readonly property bool takesKeys: !SessionState.locked && ((dialogModel.active && (!root.heldByLock || root.userFocused)) || root.sinkingKeys)#readonly property bool takesKeys: (shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)) || root.lingering
+no-linger (38dbfe8 MEDIUM-B)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = (follows && win.takesKeys) || (!dialogModel.active && win.takesKeys && !dialogModel.answered);
+unmapped-linger (38dbfe8 MEDIUM-B)#AuthAgent.qml#visible: !SessionState.locked && (root.requestOpen || root.sinkingKeys)#visible: shown
+visible-through-lingering (c1ca44f M1)#AuthAgent.qml#visible: !SessionState.locked && (root.requestOpen || root.sinkingKeys)#visible: shown || root.lingering
+keys-through-lingering (c1ca44f M1)#AuthAgent.qml#readonly property bool takesKeys: !SessionState.locked && ((root.requestOpen && (!root.heldByLock || root.userFocused)) || root.sinkingKeys)#readonly property bool takesKeys: (shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)) || root.lingering
 input-enabled-while-sinking (c1ca44f M2)#AuthAgent.qml#                inputEnabled: !root.sinkingKeys#                inputEnabled: true
 linger-start-read-stale (c1ca44f)#AuthAgent.qml#        if (typing && !dialogModel.active && !SessionState.locked) {#        if (root.lingering) {
 cap-never-started (c1ca44f L1)#AuthAgent.qml#            sinkIdle.restart();\n            sinkCap.restart();#            sinkIdle.restart();
@@ -114,7 +120,15 @@ cap-ends-request-sink (c1ca44f L1)#AuthAgent.qml#        interval: dialogModel.s
 linger-ends-request-sink#AuthAgent.qml#        interval: dialogModel.heldAfterUnlockMs\n        onTriggered: if (root.lingering)#        interval: dialogModel.heldAfterUnlockMs\n        onTriggered: if (true)
 no-escape (38dbfe8 LOW-1)#AuthAgent.qml#                else if (event.key === Qt.Key_Escape)\n                    dialogModel.cancel();#                else if (event.key === Qt.Key_Escape)\n                    ;
 linger-arrival-unheld#AuthAgent.qml#(follows || typing || dialogModel.arrivesHeld(#(follows || dialogModel.arrivesHeld(
-no-sink (b5d7657 MEDIUM-2)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys;#const typing = false;
+no-sink (b5d7657 MEDIUM-2)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = false;
+no-linger-own-field (f9e24e1 LOW-1)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = (follows && win.takesKeys) || root.sinkingKeys;
+linger-ignores-the-window (f9e24e1 LOW-1)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && !dialogModel.answered);
+linger-after-an-answer (f9e24e1 LOW-1)#AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys);
+answer-not-noted-on-send (f9e24e1 LOW-1)#AuthDialogModel.qml#        priv.submitted = true;\n        priv.answered = true;#        priv.submitted = true;
+answer-not-noted-on-cancel (f9e24e1 LOW-1)#AuthDialogModel.qml#        priv.submitted = false;\n        priv.answered = true;#        priv.submitted = false;
+answer-kept-after-failure (f9e24e1 LOW-1)#AuthDialogModel.qml#            root.priv.submitted = false;\n            root.priv.answered = false;\n            root.priv.error#            root.priv.submitted = false;\n            root.priv.error
+answer-cleared-at-the-end (f9e24e1 LOW-1)#AuthDialogModel.qml#        if (flow)\n            priv.answered = false;#        priv.answered = false;
+window-unmapped-before-the-sink (f9e24e1 LOW-1)#AuthAgent.qml#        root.sinkingKeys = typing;\n        if (!dialogModel.active)\n            root.requestOpen = false;#        if (!dialogModel.active)\n            root.requestOpen = false;\n        root.sinkingKeys = typing;
 EOF_MUTANTS
 ((status == 0)) && echo "PASS: authagent_flows (and every mutant caught)" || echo "FAIL: authagent_flows mutants"
 exit "$status"

@@ -101,8 +101,14 @@ Item {
                 keyClick(c);
         }
 
+        // A first request, then its end. Answered (sent or cancelled) it leaves nothing mapped; ended by its requester while
+        // the sheet has the keyboard, the sink keeps it a moment (the user may be typing its password; security
+        // counter-review of f9e24e1, LOW-1).
         function test_00_firstArrival_data() {
-            return [{tag: "isActive first", first: true}, {tag: "flow first", first: false}];
+            return [{tag: "isActive first, sent", first: true, answer: "send"}, {tag: "flow first, sent", first: false, answer: "send"},
+                    {tag: "isActive first, cancelled", first: true, answer: "cancel"},
+                    {tag: "isActive first, requester gave up", first: true, answer: ""},
+                    {tag: "flow first, requester gave up", first: false, answer: ""}];
         }
         function test_00_firstArrival(d) {
             const a = mkflow("A");
@@ -111,13 +117,24 @@ Item {
             compare(ag.shownFlow, a);
             compare(ag.heldByLock, false);
             compare(ag.sheet.takesKeys, true);
+            tryVerify(() => field() && field().activeFocus);
+            if (d.answer === "send") {
+                typeText("pw");
+                keyClick(Qt.Key_Return);
+                compare(a.submits, ["pw"]);
+            } else if (d.answer === "cancel") {
+                keyClick(Qt.Key_Escape);
+                compare(a.cancels, 1);
+            }
             endAll(d.first);
             compare(ag.model.active, false);
             compare(ag.shownFlow, null);
             compare(ag.heldByLock, false);
             compare(ag.requestStartedAt, null);
-            compare(ag.sheet.visible, false, "a request answered as usual leaves nothing mapped");
-            compare(ag.sheet.takesKeys, false);
+            const lingers = d.answer === "";
+            compare(ag.lingering, lingers, lingers ? "ended unanswered with the keyboard: the sink lingers" : "answered: no linger");
+            compare(ag.sheet.visible, lingers, lingers ? "still mapped for the linger" : "a request answered as usual leaves nothing mapped");
+            compare(ag.sheet.takesKeys, lingers);
         }
 
         // B replaces A while the user types A's password: held, emptied, the keys on the sink, the guard started over.
@@ -151,9 +168,11 @@ Item {
         }
 
         // Should Quickshell destroy the flow it abandons before it hands over the next one (0.3.1 overwrites it without deleting
-        // it), the model's reference to it reads null and notifies: the open request ends there, and B, handed over next, is
-        // held as one right after another (afterRequest), its field empty, without the keyboard, as in test_03 (review of
-        // 9ad4307..b38618f). The agent's own state for a request in the sheet is a flag, never the destroyed flow read back.
+        // it), the model's reference to it reads null and notifies: the open request ends there, under the user's typing, so
+        // the sink lingers (security counter-review of f9e24e1, LOW-1: before, the rest of the password went to the window
+        // underneath); B, handed over next, is held as one right after another, its field empty, and keeps the sink, as one
+        // that arrives during a linger (sink.qml test_18). The agent's own state for a request in the sheet is a flag, never
+        // the destroyed flow read back (review of 9ad4307..b38618f).
         function test_01b_oldFlowDestroyedBeforeTheNext() {
             const a = flowC.createObject(top, {message: "A"}), b = mkflow("B");
             arriveFlow(a, true);
@@ -165,13 +184,21 @@ Item {
             compare(ag.model.active, false, "the destroyed flow ends the open request");
             compare(ag.flowShown, false);
             compare(ag.shownFlow, null);
+            compare(ag.lingering, true, "it ended under the typing: the sink keeps the keys");
+            verify(ag.sink.activeFocus);
+            typeText("et");
             switchTo(b);
             compare(ag.model.message, "B");
             compare(ag.flowShown, true);
             compare(ag.heldByLock, true, "B held");
             compare(ag.heldWhy, "queued");
-            compare(ag.sheet.takesKeys, false, "B does not take the keyboard (the window does not ask for it)");
+            compare(ag.sinkingKeys, true, "B keeps the sink");
+            compare(ag.sheet.takesKeys, true, "the keyboard stays on the sink, not B's field");
+            tryVerify(() => field() !== null);
             compare(field().empty, true, "B's field starts empty");
+            typeText("x");
+            keyClick(Qt.Key_Return);
+            verify(field().empty, "keys typed after B came reach no field");
             compare(b.submits.length, 0);
             compare(b.cancels, 0);
         }
@@ -198,11 +225,16 @@ Item {
             compare(ag.model.heldClickAccepted(), false);
         }
 
-        // `pkexec a; pkexec b`: B comes right after A ended, through no request: held, without the keyboard.
+        // `pkexec a; pkexec b`: A answered, B comes right after A ended, through no request: held, without the keyboard.
         function test_03_endThenQuickNext() {
             const a = mkflow("A"), b = mkflow("B");
             arriveFlow(a, true);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("pw");
+            keyClick(Qt.Key_Return);
+            compare(a.submits, ["pw"]);
             endAll(true);
+            compare(ag.lingering, false, "answered: no linger");
             arriveFlow(b, true);
             compare(ag.heldByLock, true);
             compare(ag.heldWhy, "queued");

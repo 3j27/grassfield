@@ -237,5 +237,36 @@ TestCase {
         model.flow = other;
         verify(!model.submitted);
         compare(model.feedback, "");
+        verify(!model.answered);
+    }
+
+    // Security counter-review of f9e24e1 (LOW-1): `answered` says the user sent or cancelled since polkit last asked. It
+    // stays set when the request ends (the agent reads it then), and a refused submit (not asked, empty) is no answer.
+    function test_answeredUntilAskedAgain() {
+        verify(!model.answered);
+        verify(!model.submit("pw"));
+        verify(!model.answered, "a submit polkit did not ask for is no answer");
+        flow.isResponseRequired = true;
+        verify(!model.submit(""));
+        verify(!model.answered, "nor an empty one");
+        verify(model.submit("pw"));
+        verify(model.answered);
+        flow.isResponseRequired = false;
+        verify(model.answered);
+        flow.authenticationFailed();
+        verify(!model.answered, "a failure asks again");
+        flow.isResponseRequired = true;
+        verify(model.submit("pw2"));
+        verify(model.answered);
+        flow.isResponseRequired = false;
+        verify(model.answered);
+        flow.isResponseRequired = true;
+        verify(!model.answered, "a new prompt asks again");
+        model.cancel();
+        verify(model.answered);
+        model.flow = null;
+        verify(model.answered, "kept when the request ends");
+        model.flow = createTemporaryObject(flowComponent, test);
+        verify(!model.answered, "cleared for the next request");
     }
 }

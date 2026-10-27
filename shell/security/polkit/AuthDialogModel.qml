@@ -44,6 +44,11 @@ QtObject {
     // An answer was sent and polkit has not asked again yet.
     readonly property bool submitted: priv.submitted
     readonly property bool canSubmit: responseRequired && !priv.submitted
+    // The user answered the request in the sheet (sent a password or cancelled it) and polkit has not asked again since: a
+    // request that ends now ends on the user's answer, not under the user's typing (AuthAgent lingers only for the latter;
+    // security counter-review of f9e24e1, LOW-1). Set by submit() and cancel(), cleared when polkit asks again (a failure, a
+    // new prompt) and when another request comes; never when the request ends, so it still reads true when the agent asks.
+    readonly property bool answered: priv.answered
 
     // A request held behind the lock (review of 1d2c856, macOS model: the authorization sheet appears once the user is
     // back, and nothing typed before the user turns to it reaches it). After the unlock the sheet is shown WITHOUT the
@@ -133,6 +138,7 @@ QtObject {
         property bool submitted: false
         property string error: ""
         property bool shown: false
+        property bool answered: false
     }
 
     readonly property Private priv: Private {}
@@ -168,6 +174,7 @@ QtObject {
             return false;
         }
         priv.submitted = true;
+        priv.answered = true;
         priv.error = "";
         clearRequested();
         flow.submit(password);
@@ -177,6 +184,7 @@ QtObject {
     function cancel(): void {
         clearRequested();
         priv.submitted = false;
+        priv.answered = true;
         priv.error = "";
         if (active)
             flow.cancelAuthenticationRequest();
@@ -187,9 +195,13 @@ QtObject {
             flow.selectedIdentity = identity;
     }
 
+    // `answered` is cleared only for a new request, never when the flow goes (the agent reads it at the end, in whichever order
+    // the end reaches this handler and the agent).
     onFlowChanged: {
         priv.submitted = false;
         priv.error = "";
+        if (flow)
+            priv.answered = false;
         clearRequested();
     }
 
@@ -198,12 +210,15 @@ QtObject {
         ignoreUnknownSignals: true
 
         function onIsResponseRequiredChanged(): void {
-            if (root.flow && root.flow.isResponseRequired)
+            if (root.flow && root.flow.isResponseRequired) {
                 root.priv.submitted = false;
+                root.priv.answered = false;
+            }
         }
 
         function onAuthenticationFailed(): void {
             root.priv.submitted = false;
+            root.priv.answered = false;
             root.priv.error = qsTr("Incorrect password. Try again.");
             root.clearRequested();
             root.failed();
