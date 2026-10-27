@@ -9,7 +9,7 @@ Grassfield's own code is MIT (root `LICENSE`, ADR-0005 accepted by the owner 202
 
 | Package | `license=` | Why |
 |---|---|---|
-| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`); the Unicode-derived grapheme tables (section 5a) |
+| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0`, `BSD-3-Clause` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`); the Unicode-derived grapheme tables (section 5a); the clipboard helper's code generated from `hyprland-lock-notify-v1.xml` (section 2a) |
 | `grassfield-compositor` | `MIT`, `LGPL-2.1-or-later`, `BSD-3-Clause` | own code; server code generated from the KDE appmenu protocol XML; Hyprland headers compiled in |
 | `grassfield-icons` | `MIT`, `GPL-3.0-only` | own glyphs; the third-party icon pack (risk accepted by the owner, decision D-9, 2026-10-23) |
 
@@ -23,6 +23,7 @@ Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 | `BRANDING.md` | grassfield-desktop | `branding/LICENSES.md`, provenance of icons and wallpaper |
 | `omarchy-MIT.txt` | grassfield-desktop | Omarchy's LICENSE, verbatim (v4.0.4: "Copyright (c) David Heinemeier Hansson"), for Omarchy-derived QML |
 | `unicode-license-v3.txt` | grassfield-desktop | Unicode License v3 notice for the derived grapheme tables (section 5a) |
+| `clipboard-protocols-notices.txt` | grassfield-desktop | the `<copyright>` blocks of `ext-data-control-v1.xml` (MIT) and `hyprland-lock-notify-v1.xml` (BSD-3-Clause), whose generated code is in `grassfield-clipboard-helper` (section 2a) |
 
 ## 1. Built against, linked or generated from (grassfield-compositor)
 
@@ -77,6 +78,16 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 
 Grassfield patches none of these. **Needs legal review:** obligations for MIT code and plugins running inside or
 linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview and, through QtMultimedia, by the shell (video wallpapers).
+
+## 2a. Protocol definitions vendored for the clipboard helper (grassfield-desktop, ADR-0034)
+
+| File | Source | Licence per the file | Use |
+|---|---|---|---|
+| `apps/clipboard-helper/protocols/ext-data-control-v1.xml` | wayland-protocols 1.49, `staging/ext-data-control/` (copied from the Arch package's `/usr/share/wayland-protocols`) | MIT (its `<copyright>`: Simon Ser, Ivan Molodetskikh, Neal Gompa) | `wayland-scanner` client code compiled into `grassfield-clipboard-helper` |
+| `apps/clipboard-helper/protocols/hyprland-lock-notify-v1.xml` | hyprwm/hyprland-protocols (copied from the Arch package's `/usr/share/hyprland-protocols`) | BSD-3-Clause (its `<copyright>`: Maximilian Seidler; the project's LICENSE: Hypr Development) | the same |
+
+Both notices ship as `clipboard-protocols-notices.txt`. Test only, never shipped: `tests/fixtures/fake-clipboard-server` compiles their
+server code.
 
 ## 3. Omarchy-derived code (MIT)
 
