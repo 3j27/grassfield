@@ -35,8 +35,10 @@ end
 -- its own bin directory first, so this has to run after the include; packaging/uwsm/env-grassfield does the same for the
 -- systemd user manager (applications started by the Dock or by D-Bus). No Omarchy file is touched.
 -- Defined before the include's early returns: session.lua calls it whatever the include did, and a failed include must
--- leave a working session (ADR-0001); before, a missing Omarchy or a failing envs.lua made `omarchy.guard_path` nil and
--- Hyprland rejected the whole session config (found by tests/shell/hyprland_screens.sh).
+-- leave a working session (ADR-0001); before, a missing Omarchy made `omarchy.guard_path` nil and Hyprland rejected the
+-- whole session config (found by tests/shell/hyprland_screens.sh). An error inside Omarchy's envs.lua does not reach the
+-- early return below: Hyprland's own `require` turns it into a config error and returns an empty table (Hyprland 0.56.2
+-- src/config/lua/ConfigManager.cpp:312-377); only a module that cannot be found is raised to `pcall`.
 function M.guard_path(shim_dir)
   if not exists(shim_dir .. "/omarchy-restart-shell") then return false end
   local bin = omarchy_path .. "/bin"
