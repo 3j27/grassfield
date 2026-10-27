@@ -2880,6 +2880,9 @@ QtObject {
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property int titlebarPreviewRimWidth: 2
 
+    // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
+    readonly property int gtkTabIndicatorWidth: 4
+
     // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
     readonly property int tilingEdge: 4
     // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]
