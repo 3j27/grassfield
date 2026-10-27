@@ -144,18 +144,30 @@ TestCase {
         compare(t.page.paperChoices, ["Letter", "A4"]);
         compare(t.page.statusOf(t.page.printers[0]), "Idle, Default");
         compare(t.page.statusOf(t.page.printers[2]), "Stopped");
-        // A4 goes to the queues that have it, not to the label printer nor to the one that did not answer.
+        // A4 goes to the queues that have it, not to the label printer nor to the one that did not answer, one queue after
+        // another: each `lpoptions` rewrites the whole ~/.cups/lpoptions, so two at once would lose a change.
         t.page.choosePaper("A4");
-        compare(t.backend.actions, [["lpoptions", "-p", "GF_Office", "-o", "PageSize=A4"], ["lpoptions", "-p", "Old", "-o", "PageSize=A4"]]);
+        compare(t.backend.actions, [["lpoptions", "-p", "GF_Office", "-o", "PageSize=A4"]]);
+        // A choice made meanwhile waits its turn too.
         t.page.chooseDefault("Old");
-        compare(t.backend.actions[2], ["lpoptions", "-d", "Old"]);
-        t.page.remove("Old");
-        compare(t.backend.busActions, [{op: "printer.delete", name: "Old"}]);
-        // After an action: the state and every queue's sizes are read again.
+        compare(t.backend.actions.length, 1);
         const before = t.backend.queries.length;
         t.backend.finished("printers.act", true, "");
+        compare(t.backend.actions, [["lpoptions", "-p", "GF_Office", "-o", "PageSize=A4"], ["lpoptions", "-p", "Old", "-o", "PageSize=A4"]]);
+        // Nothing is read again while actions are still to run.
+        compare(t.backend.queries.length, before);
+        t.backend.finished("printers.act", true, "");
+        compare(t.backend.actions[2], ["lpoptions", "-d", "Old"]);
+        compare(t.backend.actions.length, 3);
+        verify(t.page.acting);
+        // After the last action: the state and every queue's sizes are read again.
+        t.backend.finished("printers.act", true, "");
+        verify(!t.page.acting);
         compare(t.backend.queries.slice(before).map(q => q.tag), ["printers.list", "printers.default", "printers.devices", "printers.accepting"]);
         compare(t.page.papers, {});
+        t.page.remove("Old");
+        compare(t.backend.busActions, [{op: "printer.delete", name: "Old"}]);
+        t.backend.finished("printers.act", true, "");
         // Add Printer…: found while searching only, without the queues there already.
         t.page.startSearching();
         compare(t.backend.queries[t.backend.queries.length - 1].argv, ["lpstat", "-l", "-e"]);
@@ -164,6 +176,7 @@ TestCase {
         verify(t.page.foundAnswered);
         t.page.add(t.page.found[0]);
         compare(t.backend.busActions[1], {op: "printer.add", name: "New_One", uri: "ipp://192.0.2.8/ipp/print", info: "New One"});
+        t.backend.finished("printers.act", true, "");
         t.page.stopSearching();
         t.backend.finished("printers.found", true, "Late network none ipp://192.0.2.9/ipp/print\n");
         compare(t.page.found.length, 1);
@@ -176,6 +189,28 @@ TestCase {
         verify(t.page.details(t.page.printers[2]).needsResume);
         t.page.resume("GF_Office");
         compare(t.backend.busActions[2], {op: "printer.resume", name: "GF_Office"});
+    }
+
+    function test_failedPaperStopsTheRest() {
+        const t = makePage(false);
+        t.backend.finished("printers.list", true, testCase.listing);
+        t.backend.finished("printers.default", true, "system default destination: GF_Office\n");
+        t.backend.finished("printers.paper:GF_Office", true, "PageSize/Media Size: Letter *A4\n");
+        t.backend.finished("printers.paper:Old", true, "PageSize/Media Size: *Letter A4\n");
+        t.backend.finished("printers.paper:Hold", true, "PageSize/Media Size: *Letter A4\n");
+        t.page.choosePaper("Letter");
+        compare(t.backend.actions.length, 1);
+        // The first write fails: the others are dropped, the reason stays shown, the state is read again.
+        t.backend.failed("printers.act", "lpoptions: Unable to save");
+        t.backend.finished("printers.act", false, "");
+        compare(t.backend.actions.length, 1);
+        verify(!t.page.acting);
+        compare(t.page.pending, []);
+        compare(t.page.system.errors["printers.act"], "lpoptions: Unable to save");
+        // The next choice starts at once.
+        t.backend.finished("printers.paper:GF_Office", true, "PageSize/Media Size: Letter *A4\n");
+        t.page.choosePaper("A4");
+        compare(t.backend.actions.length, 2);
     }
 
     function test_cupsNotAnsweringAndDevSession() {

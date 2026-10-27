@@ -33,6 +33,10 @@ SettingsPage {
     property bool searching: false
     property bool foundAnswered: false
     property var found: []
+    // The pane's actions run one after another: each `lpoptions` call rewrites the whole ~/.cups/lpoptions, so two at once
+    // lose a change (BatteryPage runs its profiles the same way). An action is running, and {what, spec} of those after it.
+    property bool acting: false
+    property var pending: []
 
     readonly property var paper: root.papers[root.defaultName] ?? {choices: [], current: ""}
     readonly property var paperChoices: Printers.paperChoices(root.paper)
@@ -120,30 +124,40 @@ SettingsPage {
         }
     }
 
-    function chooseDefault(name: string): void {
-        root.system.act("default printer", Printers.setDefault(name), "printers.act");
+    // Starts an action, or queues it behind the one running.
+    function run(what: string, spec: var): void {
+        if (spec === null || spec === undefined)
+            return;
+        if (root.acting)
+            root.pending = root.pending.concat([{what: what, spec: spec}]);
+        else
+            root.acting = root.system.act(what, spec, "printers.act");
     }
 
-    // The size for every queue that has it (macOS: one default for all printers).
+    function chooseDefault(name: string): void {
+        root.run("default printer", Printers.setDefault(name));
+    }
+
+    // The size for every queue that has it (macOS: one default for all printers), one queue after another.
     function choosePaper(keyword: string): void {
         for (const p of root.printers) {
             const own = root.papers[p.name];
             if (own !== undefined && own.choices.indexOf(keyword) >= 0)
-                root.system.act("paper size", Printers.setPaper(p.name, keyword), "printers.act");
+                root.run("paper size", Printers.setPaper(p.name, keyword));
         }
     }
 
     // Add Printer…'s answer, and the confirmation of Remove Printer….
     function add(printer: var): void {
-        root.system.act("add printer", Printers.addOp(printer), "printers.act");
+        root.run("add printer", Printers.addOp(printer));
     }
 
     function remove(name: string): void {
-        root.system.act("remove printer", Printers.deleteOp(name), "printers.act");
+        root.run("remove printer", Printers.deleteOp(name));
     }
 
     function resume(name: string): void {
-        root.system.act("resume printer", Printers.resumeOp(name), "printers.act");
+        root.run("resume printer", Printers.resumeOp(name));
     }
 
     function startSearching(): void {
@@ -190,6 +204,15 @@ SettingsPage {
                 }
                 break;
             case "printers.act":
+                // The next one once this one has succeeded; a failure drops the rest (its reason stays on the page).
+                if (ok && root.pending.length > 0) {
+                    const next = root.pending[0];
+                    root.pending = root.pending.slice(1);
+                    if (root.system.act(next.what, next.spec, "printers.act"))
+                        break;
+                }
+                root.acting = false;
+                root.pending = [];
                 root.papers = ({});
                 root.refresh();
                 break;
