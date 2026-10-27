@@ -38,9 +38,12 @@ url="https://grassfield.invalid"
 # the icon pack GPL-3.0-only, ...): THIRD_PARTY.md has the table, scripts/dev/check-licenses.sh checks it.
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
-# hyprwayland-scanner: the plugin's protocol code (compositor/CMakeLists.txt find_program); found missing by the first build
-# in a clean container (grassfield-packages, ADR-0033 f).
-makedepends=(cmake ninja pkgconf hyprland hyprwayland-scanner gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf git wayland)
+# Everything the build compiles against or runs is here: `makepkg -s` installs the global depends and makedepends only,
+# not the depends of the package functions below. Found by the first builds in a clean container (grassfield-packages,
+# ADR-0033 f): hyprwayland-scanner (the plugin's protocol code, compositor/CMakeLists.txt), kio, solid, kcoreaddons and
+# kservice (apps/files), qt6-webengine (QtPdf) and qt6-multimedia (apps/preview).
+makedepends=(cmake ninja pkgconf hyprland hyprwayland-scanner gtest lua extra-cmake-modules qt6-declarative qt6-tools
+             hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia)
 options=(!debug)
 # grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
