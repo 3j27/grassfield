@@ -272,10 +272,12 @@ say "layout the clients are given"
 gs=$(client_query layout gsettings get org.gnome.desktop.wm.preferences button-layout)
 [[ $gs == "$want_layout" ]]
 check "GSettings in a client's environment (dev profile ${DCONF_PROFILE:-of devenv.sh})" $? "$gs"
+# The desktop portal never starts on the private bus (ADR-0011 amendment 2026-10-26: it would start the document portal, which
+# unmounts the owner's $XDG_RUNTIME_DIR/doc): GTK4 and Chromium read the layout from GSettings instead, checked above.
 portal=$(client_query layout gdbus call --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop \
   --method org.freedesktop.portal.Settings.Read org.gnome.desktop.wm.preferences button-layout 2>&1)
-[[ $portal == *"$want_layout"* ]]
-check "the settings portal on the private bus (GTK4, Chromium)" $? "$portal"
+[[ $portal == *Error* && $portal != *"$want_layout"* ]]
+check "the desktop portal is refused on the private bus (GTK4 and Chromium fall back to GSettings)" $? "$portal"
 
 say "foot (no frame of its own): the plugin's titlebar"
 p=$(client_run foot foot --window-size-pixels=640x300); pids+=("$p")

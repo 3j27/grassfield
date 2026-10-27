@@ -83,7 +83,9 @@ session, with the owner's real trash in its sidebar. Any D-Bus activatable handl
   folders again (`ReloadConfig`: it watches only the folders that existed when it started), and warns when either portal
   already runs on it. A file in `$XDG_RUNTIME_DIR/dbus-1/services` would win over the block: `shell-run.sh` refuses to
   start the bus when that folder names either portal. Cost: no portal in a dev session (no portal file chooser or screen
-  sharing for the apps started there). Rejected: a runtime directory of the bus's own (activated services would lose the
+  sharing for the apps started there; GTK4 and Chromium read their settings, the window-button layout among them, from
+  GSettings instead of the settings portal: `tests/compositor/third_party_chrome.sh` now checks that the portal is refused
+  and the layout comes through GSettings). Rejected: a runtime directory of the bus's own (activated services would lose the
   nested Wayland socket, named relative to it, and PipeWire), and only clearing `QT_QPA_PLATFORMTHEME` (another client could
   still start the portal). Checked on a dbus-daemon 1.14 bus started as `shell-run.sh` starts it, with portal services
   planted in `XDG_DATA_DIRS`: neither starts, also on a bus started before the block and reloaded; without the block both
