@@ -163,17 +163,18 @@ package_grassfield-desktop() {
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
   # with Omarchy.
-  # Software Update (ADR-0033): pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync), declared
-  # as omarchy declares them. grassfield-keyring (O12) is held back until grassfieldhq/grassfield-packages builds it (owner
-  # decision O21, 2026-10-27): a follow-up adds it here, so that a local `makepkg -si` never asks for a package that does
-  # not exist yet.
+  # Software Update (ADR-0033): grassfield-keyring (O12: the keys pacman trusts for [grassfield], built and published beside
+  # these packages by grassfieldhq/grassfield-packages, as omarchy depends on omarchy-keyring; added once that repository
+  # built it, owner decision O21), pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync),
+  # declared as omarchy declares them. Until [grassfield] is published, a local `makepkg -si` needs grassfield-keyring
+  # installed first (docs/owner-setup/real-session.md, section 3).
   # gnome-keyring is the session's only Secret Service (ADR-0035 D-12, Q17-b: packaging/xdg-config/kwalletrc keeps KWallet's
   # ksecretd off org.freedesktop.secrets), so libsecret clients such as Chromium keep a keychain instead of plain-text storage:
   # declared, not assumed to come with Omarchy.
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
   license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause)

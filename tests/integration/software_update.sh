@@ -93,7 +93,10 @@ quiet pacman -S --noconfirm --needed pacman-contrib sudo fakeroot binutils pytho
 pacman -Q pacman pacman-contrib gnupg polkit | tr '\n' ' '; echo
 useradd -m builder && useradd -m alice && useradd -m bob
 for u in alice bob; do d=/run/user/$(id -u $u); mkdir -p "$d" && chown $u: "$d" && chmod 700 "$d"; done
-echo 'alice ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/90-alice && chmod 440 /etc/sudoers.d/90-alice
+# sudo keeps the proxy variables passed in, so that Omarchy's `sudo pacman` (A5, A7b) reaches the network the way root's
+# pacman does; without a proxy they are unset and this changes nothing.
+printf '%s\n' 'Defaults env_keep += "HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy"' 'alice ALL=(ALL) NOPASSWD: ALL' \
+  >/etc/sudoers.d/90-alice && chmod 440 /etc/sudoers.d/90-alice
 mkdir -p /run/dbus && dbus-daemon --system --fork
 /usr/lib/polkit-1/polkitd --no-debug >"$W/polkitd.log" 2>&1 &
 cat >/etc/polkit-1/rules.d/50-grassfield-test.rules <<'EOF'
@@ -140,8 +143,9 @@ DEST=(usr/lib/grassfield/grassfield-channel-helper usr/lib/grassfield/grassfield
 missing=""
 for d in "${DEST[@]}"; do grep -qF "\$pkgdir/$d" /src/packaging/arch/PKGBUILD || grep -qF "\$pkgdir/${d%/*}/" /src/packaging/arch/PKGBUILD || missing+=" $d"; done
 grep -q 'grassfield-channel-set; do' /src/packaging/arch/PKGBUILD || missing+=" usr/bin/grassfield-channel-set"
-grep -q 'wl-clipboard pacman-contrib fakeroot)' /src/packaging/arch/PKGBUILD || missing+=" depends"
-expect "the PKGBUILD installs every path used here and depends on pacman-contrib and fakeroot (grassfield-keyring held back, O21)${missing:+ (missing:$missing)}" test -z "$missing"
+deps=" $(sed -n '/^package_grassfield-desktop()/,/^}/s/^  depends=(\(.*\))$/\1/p' /src/packaging/arch/PKGBUILD) "
+for p in grassfield-keyring pacman-contrib fakeroot; do [[ $deps == *" $p "* ]] || missing+=" depends:$p"; done
+expect "the PKGBUILD installs every path used here and grassfield-desktop depends on grassfield-keyring, pacman-contrib and fakeroot${missing:+ (missing:$missing)}" test -z "$missing"
 
 say "packages (makepkg as builder) and repositories"
 B=/home/builder/build
