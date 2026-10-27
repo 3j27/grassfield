@@ -350,11 +350,18 @@ namespace gf::tiler {
                 g_layoutManager->setTargetGeom(surface, target);
         }
 
-        // Places Tiled windows again from their placement on the work area now: every one (TL2, the margins changed) or
-        // those marked when their output went away (TL11, on the output Hyprland moved them to). Groups of an arrangement
-        // are fitted together; halves come last (TL7 reads the others' new frames). Suspended windows are marked: they
-        // are placed from their zone when they come back.
-        void relayout(bool all) {
+        // Why tiled windows are placed again.
+        enum class ERelayout : uint8_t {
+            Margins,    // TL2: every Tiled window; one that cannot be placed now (an inactive stage) is deferred, Suspended
+                        // ones are marked
+            OutputGone, // TL11: the windows of a removed output, on the output Hyprland moved them to; one that cannot be
+                        // placed is Free
+            CatchUp,    // the deferred ones that can be placed now; the others keep waiting
+        };
+
+        // Places Tiled windows again from their placement on the work area now. Groups of an arrangement are fitted
+        // together; halves come last (TL7 reads the others' new frames).
+        void relayout(ERelayout why) {
             auto& s = st();
             if (!g_layoutManager)
                 return;
@@ -368,32 +375,40 @@ namespace gf::tiler {
                 int64_t           workspace = 0;
                 bool              done      = false;
             };
+            const bool            margins = why == ERelayout::Margins;
             std::vector<SItem>    items;
             std::vector<uint64_t> suspended;
-            std::vector<uint64_t> lost; // cannot be placed again (not tileable any more, on no output): Free
+            std::vector<uint64_t> waiting; // cannot be placed now (an inactive stage): placed once it can be, still checked
+            std::vector<uint64_t> lost;    // its output went away and it cannot be placed: Free
             for (const auto& r : s.book.records()) {
                 if (r.state == tiling::TileState::Suspended) {
-                    if (all)
+                    if (margins)
                         suspended.push_back(r.id);
                     continue;
                 }
-                if (r.state != tiling::TileState::Tiled || (!all && !r.relayout))
+                const bool selected = margins || (why == ERelayout::OutputGone ? r.relayout : r.deferred);
+                if (r.state != tiling::TileState::Tiled || !selected)
                     continue;
                 const auto w  = windowById(r.id);
                 const bool ok = placeable(w);
-                PHLMONITOR m  = ok && all ? monitorByName(r.output) : nullptr;
+                PHLMONITOR m  = ok && margins ? monitorByName(r.output) : nullptr;
                 if (!m && ok)
                     m = monitorOf(w);
                 if (!m) {
-                    lost.push_back(r.id);
+                    if (why == ERelayout::OutputGone)
+                        lost.push_back(r.id); // never left with relayout set: it would never be checked again
+                    else if (margins)
+                        waiting.push_back(r.id);
                     continue;
                 }
                 items.push_back(SItem{.id = r.id, .w = w, .m = m, .where = r.where, .group = r.group, .workspace = w->m_workspace->m_id});
             }
             for (const auto id : suspended)
                 s.book.markRelayout(id, true);
+            for (const auto id : waiting)
+                s.book.markDeferred(id, true);
             for (const auto id : lost)
-                s.book.forget(id); // never left with relayout set: it would never be checked again
+                s.book.forget(id);
             const auto place = [&s](SItem& item, const tiling::Rect& frame) {
                 const CBox surface = toCBox(tiling::surfaceOf(frame, gf::chrome::bandOf(item.w)));
                 applySurface(item.w, surface);
@@ -435,6 +450,15 @@ namespace gf::tiler {
                 }
             }
             notify(tiling::Reason::Relaid);
+        }
+
+        // Reconciles the records, then places the deferred windows that can be placed now (TL2: the margins changed while
+        // they were in an inactive stage): at the next placement or state read once they can be.
+        void catchUp() {
+            reconcile();
+            const auto records = st().book.records();
+            if (std::ranges::any_of(records, [](const tiling::TileRecord& r) { return r.state == tiling::TileState::Tiled && r.deferred; }))
+                relayout(ERelayout::CatchUp);
         }
 
         // Return to Previous Size and a window coming back to a taken zone: `before`, centred in the free area of the
@@ -548,7 +572,7 @@ namespace gf::tiler {
             if (s.resizing.lock() && !hyprlandDragging())
                 finishResize();
             if (std::exchange(s.relayoutPending, false))
-                relayout(false);
+                relayout(ERelayout::OutputGone);
             for (const auto& resume : std::exchange(s.resuming, {}))
                 resumeNow(resume);
         }
@@ -680,7 +704,7 @@ namespace gf::tiler {
         if (!placeable(w) || !g_layoutManager)
             return false;
         auto& s = st();
-        reconcile();
+        catchUp();
         const auto m = monitor && monitor->m_enabled ? monitor : monitorOf(w);
         if (!m)
             return false;
@@ -806,7 +830,7 @@ namespace gf::tiler {
                 return;
             }
         }
-        reconcile();
+        catchUp();
         const auto*               layout = tiling::layoutById(request->layout); // parseArrange checked the id
         std::vector<int>          zoneIndex;
         std::vector<tiling::Zone> zones;
@@ -848,12 +872,12 @@ namespace gf::tiler {
     }
 
     void marginsChanged() {
-        relayout(true);
+        relayout(ERelayout::Margins);
     }
 
     std::string stateReply() {
         auto& s = st();
-        reconcile();
+        catchUp();
         const auto                       all = monitors();
         std::vector<tiling::StateOutput> outputs;
         outputs.reserve(all.size());

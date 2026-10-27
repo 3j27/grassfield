@@ -87,7 +87,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Monitor.cpp:1399, MonitorRuleManager.cpp:204.) Tiles never extend outside the work area they were placed in.
 - **TL2** Margins: with "Tiled windows have margins" on, `tiling.margin` (8) between the work area's edge and each frame,
   and between frames; off, frames touch each other and the work area edges. Changing the setting re-places every tiled
-  window on every output (M39).
+  window on every output (M39). A tiled window that cannot be placed at that moment (in an inactive stage, drawn in the
+  strip) keeps its record and is placed again at the next placement or state read once it can be; if the user moves it
+  meanwhile it is Free (ADR-0036 D8).
 - **TL3** Frames, not surfaces, fill zones: the surface box is the zone minus the titlebar band. Rounding (review of
   14e807c: Hyprland configures an xdg window with its size truncated to whole logical pixels, `sendConfigure` of
   `realToReportSize`, Window.cpp:1752-1753, so a fractional size loses up to one logical pixel and two neighbours would

@@ -562,6 +562,25 @@ TEST(TilingRecord, MoveToDesktopAndALostOutput) {
     EXPECT_FALSE(book.check(1, Rect{2000, 64, 948, 926})) << "checked again once placed";
 }
 
+TEST(TilingRecord, ADeferredRecordIsStillChecked) {
+    // The margins changed while the window could not be placed (an inactive stage): it waits to be placed again, but a
+    // window the user moved meanwhile is Free (its box is still the one the plugin gave it).
+    CTileBook  book;
+    const Rect half{8, 64, 948, 926};
+    book.placed(1, Rect{100, 100, 800, 500}, half, 32, at(Place::Left), "A", 1, 0);
+    book.markDeferred(1, true);
+    EXPECT_TRUE(book.find(1)->deferred);
+    EXPECT_TRUE(book.check(1, half));
+    book.setBox(1, Rect{0, 56, 960, 942}, "A");
+    EXPECT_FALSE(book.find(1)->deferred) << "placed again";
+    book.markDeferred(1, true);
+    book.placed(1, half, half, 32, at(Place::Left), "A", 1, 0);
+    EXPECT_FALSE(book.find(1)->deferred) << "tiled again";
+    book.markDeferred(1, true);
+    EXPECT_FALSE(book.check(1, Rect{300, 300, 948, 926})) << "moved by the user meanwhile: Free";
+    EXPECT_EQ(book.find(1), nullptr);
+}
+
 TEST(TilingRecord, ASuspendedMemberKeepsItsGroupAlive) {
     CTileBook  book;
     const auto group = book.newGroup();

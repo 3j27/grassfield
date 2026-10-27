@@ -210,6 +210,8 @@ namespace gf::tiling {
         std::string output;
         int64_t     workspace = 0;
         bool        relayout  = false; // placed again from its zone when it comes back (margins changed, output gone)
+        bool        deferred  = false; // placed again from its zone once it can be (TL2: the margins changed while it could not
+                                       // be placed, e.g. in an inactive stage); its box is still the plugin's, so it is checked
     };
 
     // The tile records of every window (TL10). A group lives while two of its members are Tiled, Resizing or Suspended.
@@ -247,6 +249,9 @@ namespace gf::tiling {
         void setBox(uint64_t id, const Rect& box, std::string output);
         // Marks a record to be placed again from its zone when it comes back (Suspended) or now (Tiled).
         void markRelayout(uint64_t id, bool on);
+        // Marks a Tiled record to be placed again once its window can be (see TileRecord::deferred). Unlike markRelayout
+        // the record is still checked against the window's box: a window the user moves meanwhile becomes Free.
+        void markDeferred(uint64_t id, bool on);
         // Move to Desktop: the record keeps its state and box on the window's new Desktop.
         void setWorkspace(uint64_t id, int64_t workspace);
 

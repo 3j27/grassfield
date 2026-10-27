@@ -546,6 +546,7 @@ namespace gf::tiling {
         r->output    = std::move(output);
         r->workspace = workspace;
         r->relayout  = false;
+        r->deferred  = false;
         if (r->group != group) {
             leaveGroup(*r);
             r->group = group;
@@ -650,12 +651,18 @@ namespace gf::tiling {
         r->box      = box;
         r->output   = std::move(output);
         r->relayout = false;
+        r->deferred = false;
         changed();
     }
 
     void CTileBook::markRelayout(uint64_t id, bool on) {
         if (TileRecord* r = get(id))
             r->relayout = on;
+    }
+
+    void CTileBook::markDeferred(uint64_t id, bool on) {
+        if (TileRecord* r = get(id))
+            r->deferred = on;
     }
 
     void CTileBook::setWorkspace(uint64_t id, int64_t workspace) {
