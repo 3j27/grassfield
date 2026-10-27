@@ -150,6 +150,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
+    def handle_error(self, request, client_address):
+        pass  # the Store aborting an over-cap body resets the connection: expected
+
 
 server = Server(("127.0.0.1", 8443), Handler)
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
