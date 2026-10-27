@@ -66,7 +66,7 @@ Singleton {
         if (what === "apply") {
             root.running = trial.id;
             root.trialState = {id: trial.id, state: "applying"};
-            deadline.interval = Math.max(0, trial.until * 1000 - Date.now());
+            deadline.interval = DisplaysFile.countdownMs(trial.until, Date.now());
             deadline.restart();
             console.info("grassfield-shell: displays: trial " + trial.id + " applying");
             root.applying = root.reload();

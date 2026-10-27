@@ -20,6 +20,9 @@
 // gone at logout). "" when the directory is not known.
 
 var VERSION = 1;
+// The longest trial: Settings writes a deadline at most this many seconds ahead (apps/settings/src/backend.cpp kMaxTrialSeconds),
+// config/hypr/grassfield/displays.lua applies none further ahead. A farther deadline is not a trial Settings wrote: taken back.
+var MAX_TRIAL_SECONDS = 60;
 
 function statePath(dev, stateHome, runtimeDir) {
     if (dev)
@@ -77,14 +80,21 @@ function action(trial, running, starting, now) {
     if (trial === null)
         return running !== "" ? "revert" : "";
     if (trial.state === "trial") {
-        // A trial found when the shell starts was left by a shell that stopped: its countdown is gone, take it back.
-        if (starting || trial.until <= now)
+        // A trial found when the shell starts was left by a shell that stopped: its countdown is gone, take it back. So is one
+        // past its deadline, or with a deadline further ahead than any trial Settings writes.
+        if (starting || trial.until <= now || trial.until > now + MAX_TRIAL_SECONDS)
             return "revert";
         return trial.id === running ? "" : "apply";
     }
     if (trial.id !== running)
         return "";
     return trial.state === "kept" ? "keep" : "revert";
+}
+
+// The countdown of the trial being applied, in ms: never below 0, never longer than the longest trial (action() takes back a
+// farther deadline; a Timer's interval is an int).
+function countdownMs(until, nowMs) {
+    return Math.max(0, Math.min(MAX_TRIAL_SECONDS * 1000, until * 1000 - nowMs));
 }
 
 // The trial's state once Hyprland answered a reload (SessionConfig's ticket, and whether it said "ok": it answers once it has

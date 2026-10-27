@@ -63,6 +63,19 @@ TestCase {
         compare(DisplaysFile.action(null, "", false, now), "");
         compare(DisplaysFile.action(null, "", true, now), "");
         compare(DisplaysFile.action(null, "a", false, now), "revert");
+        // A deadline further ahead than the longest trial Settings writes (60 s) is taken back, as displays.lua refuses it.
+        compare(DisplaysFile.MAX_TRIAL_SECONDS, 60);
+        compare(DisplaysFile.action(trial("a", now + 60), "", false, now), "apply");
+        compare(DisplaysFile.action(trial("a", now + 61), "", false, now), "revert");
+        compare(DisplaysFile.action(trial("a", 999999999999), "a", false, now), "revert");
+    }
+
+    function test_countdown() {
+        // The deadline Timer's interval: the time left, never below 0, never above 60 s (a far deadline cannot overflow its int).
+        compare(DisplaysFile.countdownMs(1015, 1000000), 15000);
+        compare(DisplaysFile.countdownMs(1000, 1000500), 0);
+        compare(DisplaysFile.countdownMs(999999999999, 1000000), 60000);
+        verify(DisplaysFile.countdownMs(999999999999, 1000000) <= 2147483647);
     }
 
     function test_answered() {

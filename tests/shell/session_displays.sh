@@ -2,7 +2,8 @@
 # ADR-0031: config/hypr/grassfield/displays.lua turns Settings > Displays' data files into hl.monitor rules. Run by a plain
 # Lua interpreter against a stub of Hyprland's `hl` table: the kept choices, a running trial in their place, a trial past its
 # deadline or with a bad first line ignored, every malformed field refused line by line (the others still apply), the paths
-# of a real and of a nested dev session, a rule Hyprland refuses, and text that looks like Lua staying text. Needs `lua`.
+# of a real and of a nested dev session, a rule Hyprland refuses, text that looks like Lua staying text, and the bounds (a trial
+# at most 60 s ahead, at most 16 displays, at most 8 KiB read of a file). Needs `lua`.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 if ! command -v lua >/dev/null; then echo "SKIP: no Lua interpreter"; exit 0; fi
@@ -137,5 +138,34 @@ check "a refused rule is reported, the next one applies" "$(grep -c '^rule' <<<"
 printf '%s\n' "v1${T}desc:x\"); os.execute(\"touch $tmp/pwned\") --${T}1920x1080@60${T}0x0${T}1${T}0" >"$tmp/home/.config/grassfield/displays.conf"
 out=$(run 0)
 check "Lua-looking text stays a display name and runs nothing" "$(head -1 <<<"$out") $([[ -e $tmp/pwned ]] && echo ran || echo inert)" "rule desc:x\"); os.execute(\"touch $tmp/pwned\") --|1920x1080@60|0x0|1|0 inert"
+
+# Bounds, as Settings writes the files: a trial at most 60 s ahead, at most 16 displays, at most 8 KiB read of either file.
+reset
+echo "$good1" >"$tmp/home/.config/grassfield/displays.conf"
+printf '%s\n' "trial a60 until $((now + 60))" "$good2" >"$tmp/run/grassfield-display-trial.conf"
+check "a trial 60 s ahead applies" "$(run 0 | grep '^trial')" "trial a60"
+for until in $((now + 120)) 999999999999 99999999999999999999999999999999; do
+  printf '%s\n' "trial far until $until" "$good2" >"$tmp/run/grassfield-display-trial.conf"
+  check "a trial ending more than 60 s ahead ($until) is not applied, the kept choices are" "$(run 0)" "rule desc:BOE 0x0BCA|2880x1800@120.00|0x0|1.6|0
+trial nil
+problem display trial far ends more than 60 seconds ahead: not applied"
+done
+rm "$tmp/run/grassfield-display-trial.conf"
+for i in $(seq 1 20); do echo "v1${T}desc:Panel $i${T}1920x1080@60${T}$((i * 1920))x0${T}1${T}0"; done >"$tmp/home/.config/grassfield/displays.conf"
+out=$(run 0)
+check "at most 16 displays apply, the 17th line on is reported" "$(grep -c '^rule' <<<"$out") $(grep '^problem' <<<"$out")" \
+  "16 problem displays.conf line 17: more than 16 displays: the rest is not applied"
+{ echo "$good1"; printf '#%.0s' $(seq 1 9000); echo; echo "$good2"; } >"$tmp/home/.config/grassfield/displays.conf"
+out=$(run 0)
+check "a displays.conf longer than 8 KiB: its first 8 KiB are read, the cut line dropped, reported" "$out" "rule desc:BOE 0x0BCA|2880x1800@120.00|0x0|1.6|0
+trial nil
+problem displays.conf is longer than 8192 bytes: the rest is not read"
+head -c 5000000 /dev/zero | tr '\0' 'a' >"$tmp/home/.config/grassfield/displays.conf"
+printf '%s\n' "trial big until $((now + 15))" "$good2" >"$tmp/run/grassfield-display-trial.conf"
+head -c 5000000 /dev/zero | tr '\0' '\n' >>"$tmp/run/grassfield-display-trial.conf"
+start=$EPOCHREALTIME
+out=$(run 0)
+elapsed=$(awk -v a="$start" -v b="$EPOCHREALTIME" 'BEGIN { print (b - a < 2) ? "bounded" : "slow " (b - a) " s" }')
+check "files of 5 MB are read in a bounded time (only their first 8 KiB)" "$elapsed $(grep -c '^rule' <<<"$out") $(grep -c 'longer than 8192 bytes' <<<"$out")" "bounded 1 1"
 
 exit $fail

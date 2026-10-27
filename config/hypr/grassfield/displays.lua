@@ -74,24 +74,42 @@ function M.parse_line(line)
   return { output = "desc:" .. desc, mode = fields[3], position = fields[4], scale = scale, transform = tonumber(fields[6]) }
 end
 
-local function lines_of(path)
+-- Bounds, as Settings writes the files (apps/settings/src/backend.cpp): at most 16 displays, a line well under 512 bytes, a
+-- trial at most 60 seconds ahead. A file of any size or content costs the compositor a bounded read while it parses its
+-- configuration (as input.lua's 64 KiB).
+M.MAX_BYTES = 8192
+M.MAX_DISPLAYS = 16
+M.MAX_TRIAL_SECONDS = 60
+
+-- The lines of a file, at most M.MAX_BYTES of it (a line the bound cuts is dropped), or nil when it cannot be opened.
+local function lines_of(path, name)
   local f = path and io.open(path, "r")
   if not f then
     return nil
   end
+  local text = f:read(M.MAX_BYTES) or ""
+  local more = f:read(1) ~= nil
+  f:close()
+  if more then
+    problem(name .. " is longer than " .. M.MAX_BYTES .. " bytes: the rest is not read")
+    text = text:match("^(.*\n)") or ""
+  end
   local out = {}
-  for line in f:lines() do
+  for line in text:gmatch("([^\n]*)\n?") do
     out[#out + 1] = line
   end
-  f:close()
   return out
 end
 
--- The rules of a list of lines; `first` is the line number of lines[1] in its file (for the journal).
+-- The rules of a list of lines (at most M.MAX_DISPLAYS); `first` is the line number of lines[1] in its file (for the journal).
 local function rules_of(lines, first, name)
   local rules = {}
   for i, line in ipairs(lines) do
     if line ~= "" and line:sub(1, 1) ~= "#" then
+      if #rules == M.MAX_DISPLAYS then
+        problem(name .. " line " .. (first + i - 1) .. ": more than " .. M.MAX_DISPLAYS .. " displays: the rest is not applied")
+        break
+      end
       local rule, why = M.parse_line(line)
       if rule then
         rules[#rules + 1] = rule
@@ -105,7 +123,7 @@ end
 
 -- The trial's rules while it runs, else nil.
 function M.trial_rules(path, now)
-  local lines = lines_of(path)
+  local lines = lines_of(path, "display trial")
   if not lines or #lines == 0 then
     return nil
   end
@@ -113,9 +131,14 @@ function M.trial_rules(path, now)
   if not id then
     return nil
   end
-  -- At its deadline second the trial is over (the shell's countdown ends then too, DisplaysFile.action).
+  -- At its deadline second the trial is over (the shell's countdown ends then too, DisplaysFile.action). A deadline further
+  -- ahead than any trial Settings writes is not one of its trials (the shell takes it back too).
   if tonumber(deadline) <= now then
     problem("display trial " .. id .. " is past its deadline: not applied")
+    return nil
+  end
+  if tonumber(deadline) > now + M.MAX_TRIAL_SECONDS then
+    problem("display trial " .. id .. " ends more than " .. M.MAX_TRIAL_SECONDS .. " seconds ahead: not applied")
     return nil
   end
   M.trial = id
@@ -129,7 +152,7 @@ end
 function M.apply(dev, now)
   local rules = M.trial_rules(M.trial_path(dev), now)
   if not rules then
-    local lines = lines_of(M.conf_path())
+    local lines = lines_of(M.conf_path(), "displays.conf")
     rules = lines and rules_of(lines, 1, "displays.conf") or {}
   end
   for _, rule in ipairs(rules) do
