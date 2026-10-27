@@ -215,8 +215,8 @@ TEST_F(BackendTest, AnActionWithoutAPasswordIsNotHeldBack)
     Backend backend;
     seen.listen(backend);
     const QString tag = QStringLiteral("audio.act");
-    EXPECT_TRUE(backend.act(QStringLiteral("volume"), {QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.4")}, tag));
-    EXPECT_TRUE(backend.act(QStringLiteral("volume"), {QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.5")}, tag));
+    EXPECT_TRUE(backend.act(QStringLiteral("volume"), {QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.40")}, tag));
+    EXPECT_TRUE(backend.act(QStringLiteral("volume"), {QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.50")}, tag));
     EXPECT_TRUE(backend.pendingActions().isEmpty());
     ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) == 2; }));
     EXPECT_EQ(seen.pendingChanges, 0);

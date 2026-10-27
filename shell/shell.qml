@@ -13,6 +13,7 @@ import qs.osd
 import qs.overview
 import qs.overlay
 import qs.platform
+import qs.saver
 import qs.search
 import qs.security.idle
 import qs.security.lock
@@ -36,6 +37,10 @@ ShellRoot {
     // locale) before the surfaces below evaluate their qsTr() strings.
     readonly property string language: Translator.language
 
+    // The session configuration's watchers (keyboard.lua and mouse-trackpad.lua, SessionConfig, ADR-0031 amendment) start with
+    // the shell: Quickshell makes a singleton only when it is first used, and nothing else uses it before a display trial.
+    readonly property int sessionConfigReloads: SessionConfig.reloads
+
     // The formats of dates, times and numbers (region.formats, Settings > General > Language & Region): the Translator makes
     // them the default locale, so every Qt.locale() of the shell (menu bar clock, widgets, lock screen) follows.
     Binding {
@@ -55,6 +60,11 @@ ShellRoot {
         target: SessionState
         property: "locked"
         value: Lock.locked
+    }
+    Binding {
+        target: SessionState
+        property: "saverShown"
+        value: saver.shown
     }
 
     Connections {
@@ -101,6 +111,12 @@ ShellRoot {
         value: Settings.accentColor
     }
 
+    Binding {
+        target: Appearance
+        property: "highlightSetting"
+        value: Settings.accentHighlight
+    }
+
     // Adaptive glass: what lies behind it on each output, when known (ADR-0024 G-3).
     Binding {
         target: Appearance
@@ -138,6 +154,13 @@ ShellRoot {
         target: Zoom
         property: "ready"
         value: Settings.validRead
+    }
+
+    // Settings > Displays (ADR-0031): the backlight goes into the displays state the Settings app reads.
+    Binding {
+        target: Displays
+        property: "backlight"
+        value: Brightness.deviceAvailable ? {device: Brightness.device, level: Brightness.deviceLevel} : null
     }
 
     // Pointer size (Settings > Accessibility > Pointer): the compositor is asked for the new size live.
@@ -353,8 +376,15 @@ ShellRoot {
     }
     AuthAgent {}
     Idle {
+        id: idle
         // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
         busInhibited: MenuBridge.screenSaverInhibited
+    }
+    // The screen saver (ADR-0032): the same inhibitors keep it off; its slideshow stops while the displays are off.
+    Saver {
+        id: saver
+        busInhibited: MenuBridge.screenSaverInhibited
+        displaysOff: idle.displayOff
     }
     Overview {
         id: overviewSurface

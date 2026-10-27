@@ -270,6 +270,11 @@ void FilesApp::readAppearance()
     if (!QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                      QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(accent))
         accent = QStringLiteral("multicolor");
+    // Text highlight colour: "automatic" or one of the same names (ui/Grassfield/Ui/Accent.js highlight).
+    QString highlight = root.value(QStringLiteral("accent")).toObject().value(QStringLiteral("highlight")).toString();
+    if (!QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
+                     QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(highlight))
+        highlight = QStringLiteral("automatic");
     const QString shortcuts = grassfield::apps::shortcutStyle(root.value(QStringLiteral("keyboard")).toObject().value(QStringLiteral("shortcutStyle")).toString(), m_macDevice);
     // Same rule as the compositor plugin: anything but "minimize" and "none" is the default, "zoom".
     QString doubleClick = root.value(QStringLiteral("windows")).toObject().value(QStringLiteral("titlebarDoubleClick")).toString();
@@ -282,8 +287,9 @@ void FilesApp::readAppearance()
         emit appearanceChanged();
     }
     if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor || accent != m_accentColor
-        || shortcuts != m_shortcutStyle) {
+        || highlight != m_accentHighlight || shortcuts != m_shortcutStyle) {
         m_accentColor = accent;
+        m_accentHighlight = highlight;
         m_shortcutStyle = shortcuts;
         m_folderColor = folderColor;
         m_dark = dark;

@@ -30,6 +30,9 @@ public:
         }
         QDBusMessage message = QDBusMessage::createMethodCall(service, path, iface, member);
         message.setArguments(args);
+        // The desktop portal is never started from here (systembus.cpp, kDBusName): starting it on a dev session's private bus
+        // would start the document portal, which remounts the owner's $XDG_RUNTIME_DIR/doc.
+        message.setAutoStartService(service != QLatin1String("org.freedesktop.portal.Desktop"));
         const QDBusMessage reply = m_connection.call(message, QDBus::Block, timeoutMs);
         if (reply.type() == QDBusMessage::ErrorMessage) {
             out.error = reply.errorName() + QStringLiteral(": ") + reply.errorMessage();

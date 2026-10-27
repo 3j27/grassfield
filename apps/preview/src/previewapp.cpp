@@ -163,6 +163,7 @@ void PreviewApp::readAppearance()
     bool dark = true;
     bool reduce = false;
     QString accent = QStringLiteral("multicolor");
+    QString highlight = QStringLiteral("automatic");
     QString doubleClick = QStringLiteral("zoom");
     QString shortcutSetting;
     QFile f(configFile());
@@ -181,12 +182,18 @@ void PreviewApp::readAppearance()
         if (QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                         QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(a))
             accent = a;
+        // Text highlight colour: "automatic" or one of the same names (ui/Grassfield/Ui/Accent.js highlight).
+        const QString h = root.value(QStringLiteral("accent")).toObject().value(QStringLiteral("highlight")).toString();
+        if (QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
+                        QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(h))
+            highlight = h;
         shortcutSetting = root.value(QStringLiteral("keyboard")).toObject().value(QStringLiteral("shortcutStyle")).toString();
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
-    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize
-        || shortcuts != m_shortcutStyle) {
+    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || highlight != m_accentHighlight || doubleClick != m_titlebarDoubleClick
+        || canMinimize != m_canMinimize || shortcuts != m_shortcutStyle) {
+        m_accentHighlight = highlight;
         m_shortcutStyle = shortcuts;
         m_canMinimize = canMinimize;
         m_titlebarDoubleClick = doubleClick;

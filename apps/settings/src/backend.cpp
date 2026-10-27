@@ -17,6 +17,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QScreen>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTimeZone>
@@ -39,7 +40,7 @@ constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
-constexpr int kPrivilegedJobMs = 250000; // two calls that each wait for the polkit dialog (kPrivilegedMs, 120 s), ADR-0030
+constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0030
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -279,7 +280,8 @@ void Backend::busQuery(const QString &what, const QString &tag)
 {
     using namespace grassfield::settings;
     static const QStringList known{QStringLiteral("wifi.state"), QStringLiteral("bt.state"), QStringLiteral("host.state"), QStringLiteral("time.state"),
-                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units")};
+                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units"), QStringLiteral("net.state"),
+                                   QStringLiteral("power.state"), QStringLiteral("privacy.state")};
     if (!known.contains(what)) {
         qWarning().noquote() << "refused a bus query that is not known:" << what;
         emit finished(tag, false, QString());
@@ -293,12 +295,15 @@ void Backend::busQuery(const QString &what, const QString &tag)
             : what == QLatin1String("time.state")                ? timeState(bus)
             : what == QLatin1String("time.zones")                ? timeZones(bus)
             : what == QLatin1String("locale.state")              ? localeState(bus)
+            : what == QLatin1String("net.state")                 ? networkState(bus)
+            : what == QLatin1String("power.state")               ? powerState(bus)
+            : what == QLatin1String("privacy.state")             ? privacyState(bus)
                                                                  : userUnits(bus, own);
         if (!r.ok)
             return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
         *output = QString::fromUtf8(QJsonDocument(r.json).toJson(QJsonDocument::Compact));
         return QString();
-    }, kQueryJobMs, what == QLatin1String("user.units"));
+    }, kQueryJobMs, what == QLatin1String("user.units") || what == QLatin1String("privacy.state"));
 }
 
 QStringList Backend::userUnitDirs() const
@@ -554,6 +559,114 @@ QString Backend::writeText(const QString &path, const QString &text) const
     if (!f.commit())
         return f.errorString();
     return QString();
+}
+
+namespace {
+// An absolute directory from the environment, cleaned; "" otherwise.
+QString envDir(const char *name)
+{
+    const QString v = qEnvironmentVariable(name);
+    return v.startsWith(QLatin1Char('/')) ? QDir::cleanPath(v) : QString();
+}
+
+constexpr int kMaxDisplayLines = 16;
+constexpr qint64 kMaxTrialSeconds = 60;
+} // namespace
+
+QString Backend::displaysStateFile() const
+{
+    if (m_dev) {
+        const QString state = envDir("GRASSFIELD_STATE_HOME");
+        return state.isEmpty() ? QString() : state + QStringLiteral("/displays.json");
+    }
+    const QString run = envDir("XDG_RUNTIME_DIR");
+    return run.isEmpty() ? QString() : run + QStringLiteral("/grassfield-displays.json");
+}
+
+QString Backend::displaysConfFile() const
+{
+    if (m_dev) {
+        const QString config = envDir("GRASSFIELD_CONFIG_HOME");
+        return config.isEmpty() ? QString() : config + QStringLiteral("/displays.conf");
+    }
+    return QFileInfo(m_configFile).absolutePath() + QStringLiteral("/displays.conf");
+}
+
+QString Backend::displayTrialFile() const
+{
+    if (m_dev) {
+        const QString state = envDir("GRASSFIELD_STATE_HOME");
+        return state.isEmpty() ? QString() : state + QStringLiteral("/display-trial.conf");
+    }
+    const QString run = envDir("XDG_RUNTIME_DIR");
+    return run.isEmpty() ? QString() : run + QStringLiteral("/grassfield-display-trial.conf");
+}
+
+QString Backend::displayLinesProblem(const QStringList &lines) const
+{
+    if (lines.size() > kMaxDisplayLines)
+        return QCoreApplication::translate("SystemBus", "too many displays");
+    QSet<QString> seen;
+    for (const QString &line : lines) {
+        if (!grassfield::settings::isDisplayLine(line))
+            return QCoreApplication::translate("SystemBus", "a display line is not well formed");
+        const QString desc = line.section(QLatin1Char('\t'), 1, 1);
+        if (seen.contains(desc))
+            return QCoreApplication::translate("SystemBus", "a display appears twice");
+        seen.insert(desc);
+    }
+    return QString();
+}
+
+QStringList Backend::displaysConf() const
+{
+    const QString path = displaysConfFile();
+    QStringList out;
+    if (path.isEmpty())
+        return out;
+    const QVariantMap r = readText(path);
+    for (const QString &line : r.value(QStringLiteral("text")).toString().split(QLatin1Char('\n'))) {
+        if (grassfield::settings::isDisplayLine(line) && out.size() < kMaxDisplayLines)
+            out.append(line);
+    }
+    return out;
+}
+
+QString Backend::writeDisplaysConf(const QStringList &lines) const
+{
+    const QString path = displaysConfFile();
+    if (path.isEmpty())
+        return QCoreApplication::translate("SystemBus", "no folder for the display settings in this session");
+    const QString problem = displayLinesProblem(lines);
+    if (!problem.isEmpty())
+        return problem;
+    const QString head = QStringLiteral("# Grassfield displays (Settings > Displays, ADR-0031): one display per line.\n"); // i18n-ignore: a file comment
+    return writeText(path, head + lines.join(QLatin1Char('\n')) + (lines.isEmpty() ? QString() : QStringLiteral("\n")));
+}
+
+QString Backend::writeDisplayTrial(const QString &id, qint64 until, const QStringList &lines) const
+{
+    const QString path = displayTrialFile();
+    if (path.isEmpty())
+        return QCoreApplication::translate("SystemBus", "no folder for a display trial in this session");
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    if (!grassfield::settings::isDisplayTrialId(id) || until <= now || until > now + kMaxTrialSeconds)
+        return QCoreApplication::translate("SystemBus", "the trial is not well formed");
+    const QString problem = displayLinesProblem(lines);
+    if (!problem.isEmpty())
+        return problem;
+    return writeText(path, QStringLiteral("trial %1 until %2\n").arg(id).arg(until) + lines.join(QLatin1Char('\n'))
+                               + (lines.isEmpty() ? QString() : QStringLiteral("\n")));
+}
+
+QString Backend::markDisplayTrial(const QString &state, const QString &id) const
+{
+    const QString path = displayTrialFile();
+    if (path.isEmpty())
+        return QCoreApplication::translate("SystemBus", "no folder for a display trial in this session");
+    if ((state != QLatin1String("kept") && state != QLatin1String("revert")) || !grassfield::settings::isDisplayTrialId(id))
+        return QCoreApplication::translate("SystemBus", "the trial is not well formed");
+    return writeText(path, state + QLatin1Char(' ') + id + QLatin1Char('\n'));
 }
 
 QString Backend::run(const QStringList &argv) const
