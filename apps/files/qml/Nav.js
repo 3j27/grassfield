@@ -85,6 +85,12 @@ function viewModeForShortcut(number) {
     return number >= 1 && number <= viewModes.length ? viewModes[number - 1] : "";
 }
 
+// A double-click in the column view opens what it hits: a file always; a folder only with Cmd (Ctrl here), which opens
+// it in a new tab as in the other views (a plain click already shows a folder's contents in the next column).
+function columnDoubleClickOpens(isDir, command) {
+    return isDir !== true || command === true;
+}
+
 // The view a tab shows when it opens a folder (docs/specs/files.md F-3): column view sticks while browsing; otherwise the
 // folder's own view when one was chosen for it (`stored`), else the view the tab already shows (`current`; "" for a new
 // tab), else the default view (`fallback`).

@@ -447,7 +447,7 @@ FocusScope {
                         root.userSelected(col.index);
                     }
                     onDoubleClicked: event => {
-                        if (event.button === Qt.LeftButton && !entry.isDir)
+                        if (event.button === Qt.LeftButton && Nav.columnDoubleClickOpens(entry.isDir, (event.modifiers & Qt.ControlModifier) !== 0))
                             root.tab.activate(entry.index, col.model, event.modifiers);
                     }
                 }

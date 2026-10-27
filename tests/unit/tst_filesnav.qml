@@ -162,4 +162,13 @@ TestCase {
         compare(Nav.sortFor({sortDescending: true}, 1, false, descendingOf), {key: 1, descending: true}, "an order alone");
         compare(Nav.sortFor(null, 1, true, descendingOf), {key: 1, descending: true});
     }
+
+    // Column view (ColumnView.qml): Cmd-double-click on a folder opens it in a new tab like the other views; a plain
+    // double-click on a folder does nothing more than its click (the next column); a file opens either way.
+    function test_columnDoubleClick() {
+        compare(Nav.columnDoubleClickOpens(true, true), true, "Cmd-double-click on a folder: a new tab");
+        compare(Nav.columnDoubleClickOpens(true, false), false, "a plain double-click on a folder: the column only");
+        compare(Nav.columnDoubleClickOpens(false, false), true, "a file opens");
+        compare(Nav.columnDoubleClickOpens(false, true), true, "a file opens with Cmd too");
+    }
 }
