@@ -398,6 +398,7 @@
  {"path": "tests/ci/inventory.py", "layer": "logic"},
  {"path": "tests/ci/qml_warnings.py", "layer": "logic"},
  {"path": "tests/ci/qmldir_types.py", "layer": "logic"},
+ {"path": "tests/ci/ui_names.py", "layer": "logic"},
  {"path": "tests/ci/import_graph.py", "layer": "logic"},
  {"path": "tests/ci/run_mode.py", "layer": "logic"},
  {"path": "tests/ci/gtk_themes.py", "layer": "logic"},
