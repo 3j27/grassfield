@@ -25,6 +25,9 @@
 #   display-off  D-4: with `idle devDisplayOff 4` set before the lock, the shell turns the displays off after 4 s
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion
 #   cleanup      close the foot windows (the session stays locked)
+# The fixture steps read GF-REF only (headless: it always draws). privacy also reads WAYLAND-1, the nested window on the
+# owner's screen, which gives grim a frame only while the owner's compositor draws it: keep it visible, or that output
+# FAILs as "not checked". Every wait is bounded (timeout(1), counted loops); nothing waits forever.
 # Requires scripts/dev/nested-up.sh (GRASSFIELD_DEV=1 shell on a private bus: notify-send reaches only it).
 # Exit status: 0 when every requested step passed.
 set -uo pipefail
@@ -42,7 +45,7 @@ bus=$(cat "$dev/bus.address" 2>/dev/null || true)
 # Testing rule after the review of 423766f (a probe once reached the owner's session bus): only the nested shell's
 # private bus, never the caller's own, and notify-send runs under `env -i` with that address alone.
 [[ $bus != *"/run/user/"* && ( -z ${DBUS_SESSION_BUS_ADDRESS:-} || $bus != "$DBUS_SESSION_BUS_ADDRESS" ) ]] || { echo "lock_privacy: refusing the caller's own session bus ($bus)" >&2; exit 2; }
-for tool in grim magick notify-send foot jq awk; do
+for tool in grim magick notify-send foot jq awk timeout; do
   command -v "$tool" >/dev/null || { echo "lock_privacy: $tool is not installed" >&2; exit 2; }
 done
 
@@ -56,13 +59,18 @@ inset=16              # a region check skips this border of a window (rounded co
 status=0
 why="" # reason of the last helper failure
 nested() { env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" "$@"; }
-ipc() { nested qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
+# Every call that waits on another process is bounded (timeout(1)); its caller FAILs naming what it waited for. A
+# nested output the host does not draw never sends grim a frame (an integrator run hung 25 min on WAYLAND-1, the nested
+# window on the owner's screen), a stuck shell never answers IPC, a busy notification server never replies.
+hypr() { nested timeout 5 hyprctl "$@" 2>/dev/null; }
+ipc() { nested timeout 5 qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
+pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$@" >/dev/null 2>&1; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; status=1; }
-notify() { env -i PATH="$PATH" DBUS_SESSION_BUS_ADDRESS="$bus" notify-send "$@" >/dev/null 2>&1; }
+notify() { env -i PATH="$PATH" DBUS_SESSION_BUS_ADDRESS="$bus" timeout 5 notify-send "$@" >/dev/null 2>&1; }
 
 compositor_locked() {
-  nested hyprctl -j monitors 2>/dev/null | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null
+  hypr -j monitors | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null
 }
 
 wait_status() { # <expected> <seconds>
@@ -101,26 +109,40 @@ near() { # <a> <b> <a0> <b0>: four integers, a within 2 of a0 and b within 2 of 
 
 # Grabs one output to <png>, never leaving an older file in its place: the captures stay in $work between runs and
 # the fixture windows open at the same places every run, so a stale image would pass every check. The file is deleted
-# first and must exist, be non-empty and be no older than the grab's start; a failure is reported on stderr.
+# first and must exist, be non-empty and be no older than the grab's start. grim waits for the output's next frame:
+# GF-REF (headless) draws on its own, WAYLAND-1 only when the owner's compositor draws the nested window (seen at 27 s),
+# so each grab has a deadline. Sets grab_why on failure (also printed on stderr).
+grab_why=""
 grab() { # <output> <png>
-  local start t
+  local start t rc limit=10 hint="the nested compositor drew no frame"
+  [[ $1 == WAYLAND-1 ]] && limit=30 hint="is the nested window shown on the owner's screen?"
+  grab_why=""
   start=$(date +%s)
   rm -f "$2"
-  nested grim -o "$1" "$2" 2>/dev/null || { echo "lock_privacy: grim -o $1 failed ($2)" >&2; return 1; }
-  t=$(stat -c %Y "$2" 2>/dev/null) && [[ -s $2 && $t =~ ^[0-9]+$ ]] && ((t >= start)) \
-    || { echo "lock_privacy: grim -o $1 left no fresh $2" >&2; return 1; }
+  nested timeout "$limit" grim -o "$1" "$2" 2>/dev/null
+  rc=$?
+  if ((rc == 124)); then
+    grab_why="grim -o $1 got no frame within $limit s ($hint)"
+  elif ((rc != 0)); then
+    grab_why="grim -o $1 failed (exit $rc)"
+  elif ! { t=$(stat -c %Y "$2" 2>/dev/null) && [[ -s $2 && $t =~ ^[0-9]+$ ]] && ((t >= start)); }; then
+    grab_why="grim -o $1 left no fresh $2"
+  fi
+  [[ -z $grab_why ]] || { echo "lock_privacy: $grab_why" >&2; return 1; }
 }
 
-# Captures both nested outputs (GF-REF headless reference, WAYLAND-1 window) to $work/<name>-<output>.png: prints
-# "<magenta> <green>" summed, or "error error" when a grab or a count fails (the callers then FAIL).
-capture() { # <name>
-  local output png m=0 g=0 c
-  for output in GF-REF WAYLAND-1; do
-    png=$work/$1-$output.png
-    grab "$output" "$png" || { echo "error error"; return; }
-    c=$(count_colour "$png" "#ff00ff"); [[ $c =~ ^[0-9]+$ ]] || { echo "error error"; return; }
+# Captures nested outputs (default $out, the fixture's) to $work/<name>-<output>.png: prints "<magenta> <green>"
+# summed, or "error error <reason>" when a grab or a count fails (the callers then FAIL with the reason).
+capture() { # <name> [<output>...]
+  local name=$1 output png m=0 g=0 c
+  shift
+  [[ $# -gt 0 ]] || set -- "$out"
+  for output in "$@"; do
+    png=$work/$name-$output.png
+    grab "$output" "$png" 2>/dev/null || { echo "error error $grab_why"; return; }
+    c=$(count_colour "$png" "#ff00ff"); [[ $c =~ ^[0-9]+$ ]] || { echo "error error cannot count colours in $png"; return; }
     m=$((m + c))
-    c=$(count_colour "$png" "#00ff00"); [[ $c =~ ^[0-9]+$ ]] || { echo "error error"; return; }
+    c=$(count_colour "$png" "#00ff00"); [[ $c =~ ^[0-9]+$ ]] || { echo "error error cannot count colours in $png"; return; }
     g=$((g + c))
   done
   echo "$m $g"
@@ -128,19 +150,19 @@ capture() { # <name>
 
 mon_x="" mon_y="" mon_w="" mon_h="" mon_scale=""
 monitor_load() { # position and logical size of $out (layout px) and its scale; sets why on failure
-  read -r mon_x mon_y mon_w mon_h mon_scale < <(nested hyprctl -j monitors 2>/dev/null | jq -r --arg o "$out" \
+  read -r mon_x mon_y mon_w mon_h mon_scale < <(hypr -j monitors | jq -r --arg o "$out" \
     '.[] | select(.name == $o) | "\(.x) \(.y) \(.width / .scale | floor) \(.height / .scale | floor) \(.scale)"')
   [[ ${mon_w:-} =~ ^[0-9]+$ && ${mon_h:-} =~ ^[0-9]+$ ]] || { why="Hyprland lists no monitor $out"; return 1; }
 }
 
 client_info() { # <address> -> "<x> <y> <w> <h> <class> <pid>" (layout px); nothing when that window is gone
   [[ -n $1 ]] || return 0
-  nested hyprctl -j clients 2>/dev/null | jq -r --arg a "$1" \
+  hypr -j clients | jq -r --arg a "$1" \
     '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.class) \(.pid)"' | head -n 1
 }
 
 class_present() { # <class>
-  nested hyprctl -j clients 2>/dev/null | jq -e --arg c "$1" 'any(.[]; .class == $c)' >/dev/null
+  hypr -j clients | jq -e --arg c "$1" 'any(.[]; .class == $c)' >/dev/null
 }
 
 fixture_get() { # <key>: the last value setup wrote
@@ -228,7 +250,7 @@ apart() { # <address> <address>
 # config error, no window) before a window opens.
 foot_style=""
 foot_check() { # <foot options...>: prints foot's config errors and fails when foot rejects them
-  env -u WAYLAND_DISPLAY "$root/scripts/dev/isolated.sh" foot --check-config "$@" 2>&1 >/dev/null
+  env -u WAYLAND_DISPLAY timeout 10 "$root/scripts/dev/isolated.sh" foot --check-config "$@" 2>&1 >/dev/null
 }
 colour_opts() { # <rrggbb>: sets the array opts
   case $foot_style in
@@ -266,7 +288,7 @@ foot_window() { # <app id> <rrggbb> <x> <y>
   pid=$!
   dev_record_pid "$dev/privacy-$1.pid" "$pid"
   for _ in $(seq 1 40); do
-    addr=$(nested hyprctl -j clients 2>/dev/null | jq -r --arg c "$1" '[.[] | select(.class == $c)] | first | .address // empty')
+    addr=$(hypr -j clients | jq -r --arg c "$1" '[.[] | select(.class == $c)] | first | .address // empty')
     [[ -n $addr ]] && break
     sleep 0.25
   done
@@ -274,7 +296,7 @@ foot_window() { # <app id> <rrggbb> <x> <y>
   # The record must name the process that owns the window: the window's own pid when it is another foot.
   read -r _ _ _ _ _ cpid < <(client_info "$addr")
   [[ ${cpid:-} =~ ^[0-9]+$ && $cpid != "$pid" && $(cat "/proc/$cpid/comm" 2>/dev/null) == foot ]] && dev_record_pid "$dev/privacy-$1.pid" "$cpid"
-  "$root/scripts/nestctl" dispatch "hl.dsp.window.move({ x = $tx, y = $ty, window = 'address:$addr' })" >/dev/null 2>&1
+  timeout 5 "$root/scripts/nestctl" dispatch "hl.dsp.window.move({ x = $tx, y = $ty, window = 'address:$addr' })" >/dev/null 2>&1
   for _ in $(seq 1 20); do
     read -r x y _ < <(client_info "$addr")
     near "$x" "$y" "$tx" "$ty" && break
@@ -286,7 +308,7 @@ foot_window() { # <app id> <rrggbb> <x> <y>
 }
 
 step_setup() {
-  local gap y x0 x1 x2 probe twin protected i m="" g="" pm="error" pc="none" gm="error" gc="none" ok=1 bx by bw bh
+  local gap y x0 x1 x2 probe twin protected i m="" g="" cerr="" pm="error" pc="none" gm="error" gc="none" ok=1 bx by bw bh
   rm -f "$fixture"
   echo "instance=$sig" >>"$fixture"
   magick -size 64x64 xc:"#ff00ff" "$marker" || { fail "setup: cannot draw the marker image"; return; }
@@ -297,7 +319,7 @@ step_setup() {
   ((gap >= 32 && mon_h >= win_h + 200)) \
     || { fail "setup: $out (${mon_w}x${mon_h}) has no room for three ${win_w}x${win_h} windows side by side"; return; }
   # New windows open on the output under the pointer; it rests on bare desktop below the row (not on the Dock).
-  "$root/scripts/dev/pointer.sh" output "$out" abs $((mon_w / 2)) $((y + win_h + 80)) >/dev/null
+  pointer "$out" abs $((mon_w / 2)) $((y + win_h + 80)) >/dev/null
   foot_window gf-privacy-probe ff00ff "$x0" "$y" || { fail "setup: marker window: $why"; return; }
   probe=$win_addr
   echo "probe=$probe" >>"$fixture"
@@ -309,11 +331,11 @@ step_setup() {
 
   # Self-check: each fixture colour renders, read in the windows' own regions (not the banners).
   settle selfcheck "$probe" "#ff00ff" "$twin" "#00ff00" || true
-  read -r m g < <(capture selfcheck)
-  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "setup: self-check: the capture failed (no fresh $work/selfcheck-*.png), nothing is proven"; return; }
+  read -r m g cerr < <(capture selfcheck)
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "setup: self-check: the capture failed ($cerr), nothing is proven"; return; }
   read -r pm pc < <(region "$work/selfcheck-$out.png" "$probe" selfcheck-probe "#ff00ff")
   read -r gm gc < <(region "$work/selfcheck-$out.png" "$twin" selfcheck-twin "#00ff00")
-  echo "self-check capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc); both outputs: magenta $m px, green $g px ($work/selfcheck-*.png)"
+  echo "self-check capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc); whole $out: magenta $m px, green $g px ($work/selfcheck-$out.png)"
   at_least "$pm" 0.9 || { fail "setup: self-check: the probe window is not magenta ($pm of its region, centre $pc): every marker check would prove nothing"; ok=0; }
   at_least "$gm" 0.9 || { fail "setup: self-check: the unprotected twin is not green ($gm of its region, centre $gc): every green check would pass vacuously"; ok=0; }
   ((ok)) || return
@@ -336,19 +358,19 @@ step_setup() {
   sleep 1
   echo "notifications: $(ipc notifications status)"
   # The notification image renders before the lock: magenta outside the probe window can only be the banners' marker,
-  # so "0 marker px" on the lock screen covers notification images too (each banner shows it at about 32x32 px).
-  local bm="" wm=""
+  # so "0 marker px" on the lock screen covers notification images too (each banner shows it at about 32x32 px). The
+  # banners show on $out (the pointer's output, where the windows opened); WAYLAND-1 is not read here (see grab).
+  local bm=""
   for i in $(seq 1 6); do
-    bm=error
-    if grab "$out" "$work/banners-$out.png" && grab WAYLAND-1 "$work/banners-WAYLAND-1.png"; then
+    if grab "$out" "$work/banners-$out.png" 2>/dev/null; then
       bm=$(count_outside "$work/banners-$out.png" "$probe" "#ff00ff")
-      wm=$(count_colour "$work/banners-WAYLAND-1.png" "#ff00ff")
-      [[ $bm =~ ^[0-9]+$ && $wm =~ ^[0-9]+$ ]] && bm=$((bm + wm)) || bm=error
+    else
+      bm="error ($grab_why)"
     fi
     [[ $bm =~ ^[0-9]+$ ]] && ((bm >= 500)) && break
     sleep 0.5
   done
-  echo "banners capture: marker px outside the probe window: $bm ($work/banners-*.png)"
+  echo "banners capture: marker px outside the probe window: $bm ($work/banners-$out.png)"
   if [[ $bm =~ ^[0-9]+$ ]] && ((bm >= 500)); then
     echo "banners=1" >>"$fixture"
     pass "setup: the notification banners show the marker image before the lock ($bm px outside the probe window)"
@@ -358,20 +380,20 @@ step_setup() {
 }
 
 step_screenshare() {
-  local m="" g="" pm pc gm gc bk bc bg probe twin protected
+  local m="" g="" cerr="" pm pc gm gc bk bc bg probe twin protected
   fixture_proven || { fail "screenshare: $why: the screen-share checks would prove nothing"; return; }
   monitor_load || { fail "screenshare: $why"; return; }
   probe=$(fixture_get probe) twin=$(fixture_get twin) protected=$(fixture_get protected)
   settle screenshare "$probe" "#ff00ff" "$twin" "#00ff00" "$protected" "#000000" || true
-  read -r m g < <(capture screenshare)
-  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "screenshare: the capture failed (no fresh $work/screenshare-*.png)"; return; }
+  read -r m g cerr < <(capture screenshare)
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "screenshare: the capture failed ($cerr)"; return; }
   read -r pm pc < <(region "$work/screenshare-$out.png" "$probe" screenshare-probe "#ff00ff")
   read -r gm gc < <(region "$work/screenshare-$out.png" "$twin" screenshare-twin "#00ff00")
   read -r bk bc < <(region "$work/screenshare-$out.png" "$protected" screenshare-bitwarden "#000000")
   # Green anywhere in the Bitwarden window's whole box (no inset): its own pixels leaking.
   read -r _ _ < <(region "$work/screenshare-$out.png" "$protected" screenshare-bitwarden-box "#00ff00" 0)
   bg=$(count_colour "$work/screenshare-bitwarden-box.png" "#00ff00")
-  echo "screenshare capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc), Bitwarden region black $bk (centre $bc), green px in the Bitwarden box $bg; both outputs: magenta $m px, green $g px ($work/screenshare-*.png)"
+  echo "screenshare capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc), Bitwarden region black $bk (centre $bc), green px in the Bitwarden box $bg; whole $out: magenta $m px, green $g px ($work/screenshare-$out.png)"
   at_least "$pm" 0.9 && pass "screenshare: the unprotected probe window is captured (control: $pm of its region magenta)" \
     || fail "screenshare: the probe window is not captured ($pm of its region magenta, centre $pc)"
   at_least "$gm" 0.9 && pass "screenshare: the unprotected green twin is captured green (control: $gm of its region)" \
@@ -383,18 +405,18 @@ step_screenshare() {
 }
 
 step_control() {
-  local m="" g="" pm pc gm gc probe twin
+  local m="" g="" cerr="" pm pc gm gc probe twin
   monitor_load || { fail "control: $why"; return; }
   fixture_ours || { fail "control: $why"; return; }
   probe=$(fixture_get probe) twin=$(fixture_get twin)
   [[ $(client_info "$probe") == *" gf-privacy-probe "* ]] || { fail "control: no probe window (run the setup step first)"; return; }
   [[ $(client_info "$twin") == *" gf-privacy-twin "* ]] || { fail "control: no green twin window (run the setup step first)"; return; }
   settle control "$probe" "#ff00ff" "$twin" "#00ff00" || true
-  read -r m g < <(capture control)
-  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "control: the capture failed (no fresh $work/control-*.png)"; return; }
+  read -r m g cerr < <(capture control)
+  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "control: the capture failed ($cerr)"; return; }
   read -r pm pc < <(region "$work/control-$out.png" "$probe" control-probe "#ff00ff")
   read -r gm gc < <(region "$work/control-$out.png" "$twin" control-twin "#00ff00")
-  echo "control capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc); both outputs, banners included: magenta $m px, green $g px ($work/control-*.png)"
+  echo "control capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc); whole $out, banners included: magenta $m px, green $g px ($work/control-$out.png)"
   at_least "$pm" 0.9 && pass "control: the probe window shows the marker colour before the lock ($pm of its region): the detector works" \
     || fail "control: the probe window is not magenta before the lock ($pm of its region, centre $pc): the privacy check would prove nothing"
   at_least "$gm" 0.9 && pass "control: the unprotected green twin shows green before the lock ($gm of its region)" \
@@ -413,7 +435,7 @@ step_lock() {
 }
 
 step_privacy() {
-  local m g proven=1
+  local m g cerr output proven=1
   fixture_proven || proven=0
   notify -i "$marker" -h "string:image-path:$marker" "L4 privacy while locked" "token-$RANDOM"
   notify -u critical -i "$marker" -h "string:image-path:$marker" "L4 privacy critical" "token-$RANDOM"
@@ -425,30 +447,37 @@ step_privacy() {
   ipc overview open >/dev/null
   ipc dock menu 0 "" >/dev/null
   sleep 1.5
-  read -r m g < <(capture privacy)
-  echo "privacy capture: magenta $m, green $g ($work/privacy-*.png)"
-  [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "privacy: the capture failed (no fresh $work/privacy-*.png)"; return; }
-  if ((m != 0)); then
-    fail "privacy: $m marker pixels on the lock screen (notification or window content visible, L4)"
-  elif ((!proven)); then
-    fail "privacy: 0 marker px proves nothing: $why"
-  elif [[ $(fixture_get banners) != 1 ]]; then
-    fail "privacy: 0 marker px does not cover notification images: the banners never showed the marker before the lock (setup step)"
-  else
-    pass "privacy: no notification image, banner or window content on the lock screen (0 marker px; the banners and the probe showed it before the lock)"
-  fi
-  if ((g != 0)); then
-    fail "privacy: $g green px on the lock screen (the unprotected twin's content is visible, L4)"
-  elif ((proven)); then
-    pass "privacy: no window content: the unprotected green twin is hidden (0 green px)"
-  else
-    fail "privacy: 0 green px proves nothing: $why"
-  fi
+  # Each output on its own: one that gives no frame (WAYLAND-1 when the host does not draw the nested window) is a FAIL
+  # naming it, and the other is still checked.
+  for output in GF-REF WAYLAND-1; do
+    read -r m g cerr < <(capture privacy "$output")
+    if [[ ! $m =~ ^[0-9]+$ || ! $g =~ ^[0-9]+$ ]]; then
+      fail "privacy: $output not checked: $cerr"
+      continue
+    fi
+    echo "privacy capture $output: magenta $m, green $g ($work/privacy-$output.png)"
+    if ((m != 0)); then
+      fail "privacy: $output: $m marker pixels on the lock screen (notification or window content visible, L4)"
+    elif ((!proven)); then
+      fail "privacy: $output: 0 marker px proves nothing: $why"
+    elif [[ $(fixture_get banners) != 1 ]]; then
+      fail "privacy: $output: 0 marker px does not cover notification images: the banners never showed the marker before the lock (setup step)"
+    else
+      pass "privacy: $output: no notification image, banner or window content on the lock screen (0 marker px; the banners and the probe showed it before the lock)"
+    fi
+    if ((g != 0)); then
+      fail "privacy: $output: $g green px on the lock screen (the unprotected twin's content is visible, L4)"
+    elif ((proven)); then
+      pass "privacy: $output: no window content, the unprotected green twin is hidden (0 green px)"
+    else
+      fail "privacy: $output: 0 green px proves nothing: $why"
+    fi
+  done
   compositor_locked && pass "privacy: still locked (LOCK on every monitor)" || fail "privacy: Hyprland no longer reports LOCK"
 }
 
 dpms_all() { # <true|false>: every monitor's dpmsStatus
-  nested hyprctl -j monitors 2>/dev/null | jq -e --argjson v "$1" 'length > 0 and all(.[]; .dpmsStatus == $v)' >/dev/null
+  hypr -j monitors | jq -e --argjson v "$1" 'length > 0 and all(.[]; .dpmsStatus == $v)' >/dev/null
 }
 
 step_display_off() {
@@ -459,8 +488,8 @@ step_display_off() {
     sleep 0.25
   done
   [[ -n $off ]] && pass "display-off: displays turned off after 4 s without input on the lock screen" || fail "display-off: idle status $st"
-  dpms_all false && pass "display-off: Hyprland reports every display off (dpmsStatus false)" || echo "display-off: dpmsStatus $(nested hyprctl -j monitors | jq -c '[.[] | {name, dpmsStatus}]') (informational on nested outputs)"
-  "$root/scripts/dev/pointer.sh" output GF-REF abs 800 500 sleep 100 abs 820 520 >/dev/null
+  dpms_all false && pass "display-off: Hyprland reports every display off (dpmsStatus false)" || echo "display-off: dpmsStatus $(hypr -j monitors | jq -c '[.[] | {name, dpmsStatus}]') (informational on nested outputs)"
+  pointer GF-REF abs 800 500 sleep 100 abs 820 520 >/dev/null
   off=""
   for _ in $(seq 1 20); do
     st=$(ipc idle status)
@@ -468,7 +497,7 @@ step_display_off() {
     sleep 0.25
   done
   [[ -n $off ]] && pass "display-off: pointer motion turns the displays on again" || fail "display-off: still off after input: $st"
-  dpms_all true && pass "display-off: Hyprland reports every display on" || fail "display-off: dpmsStatus $(nested hyprctl -j monitors | jq -c '[.[] | {name, dpmsStatus}]')"
+  dpms_all true && pass "display-off: Hyprland reports every display on" || fail "display-off: dpmsStatus $(hypr -j monitors | jq -c '[.[] | {name, dpmsStatus}]')"
   compositor_locked && pass "display-off: still locked" || fail "display-off: Hyprland no longer reports LOCK"
 }
 
