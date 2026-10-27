@@ -122,9 +122,9 @@ Scope {
     onSinkingKeysChanged: if (sinkingKeys)
         keySink.forceActiveFocus()
     // The request ended while the sink had the keys, or unanswered while the sheet had them (its requester gave up, or the
-    // request it replaced completed): the window stays mapped, clear, with the keyboard on the sink, until no key came for
-    // heldAfterUnlockMs (sinkIdle), at most sinkLingerMaxMs (sinkCap), or a click, the lock or the screen saver ends it (check
-    // of 38dbfe8, MEDIUM-B; security counter-review of f9e24e1, LOW-1).
+    // request it replaced completed): the window stays mapped, with the keyboard on the sink and a notice where the sheet was
+    // (endedNotice), until no key came for heldAfterUnlockMs (sinkIdle), at most sinkLingerMaxMs (sinkCap), or a click, the
+    // lock or the screen saver ends it (check of 38dbfe8, MEDIUM-B; security counter-review of f9e24e1, LOW-1 and LOW-3).
     readonly property bool lingering: root.sinkingKeys && !dialogModel.active && !SessionState.locked
     property bool userFocused: false
     property var requestStartedAt: null
@@ -211,7 +211,7 @@ Scope {
         // never unmaps the window before the sink holds the keys (security counter-review of f9e24e1, LOW-1).
         readonly property bool takesKeys: !SessionState.locked && ((root.requestOpen && (!root.heldByLock || root.userFocused)) || root.sinkingKeys)
 
-        // Mapped with the sheet, and while the sink lingers (clear then: no sheet, no dimming, no blur).
+        // Mapped with the sheet, and while the sink lingers (no sheet then, no dimming: the notice below says why).
         visible: !SessionState.locked && (root.requestOpen || root.sinkingKeys)
         // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: a request that was not
         // held takes the keys at once; a held one waits for a click (takesKeys) with an empty field.
@@ -238,12 +238,12 @@ Scope {
         WlrLayershell.keyboardFocus: win.takesKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-polkit"
         // qmllint disable missing-type
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blurRegion : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && (win.shown || root.lingering) ? blurRegion : null
         // qmllint enable missing-type
 
         Region {
             id: blurRegion
-            item: holder
+            item: root.lingering ? endedNotice : holder
             radius: Tokens.radiusDialog
         }
 
@@ -295,6 +295,57 @@ Scope {
                 // given while the window has no keyboard arrives here when the window gets it.
                 onActiveFocusChanged: if (activeFocus && root.sinkingKeys)
                     keySink.forceActiveFocus()
+            }
+        }
+
+        // The linger made visible (security counter-review of f9e24e1, LOW-3): while the window keeps the keyboard after a
+        // request ended, a card where the sheet was says the request is gone and typing goes nowhere, so the user stops typing
+        // and knows why keys do nothing for a moment (macOS removes the sheet at once; it has no linger to explain). Fixed
+        // text, nothing of the requester's; no control and no focus: a press on it goes through to the backdrop, which ends
+        // the linger, and the keys stay on the sink.
+        Material {
+            id: endedNotice
+            objectName: "polkitEndedNotice"
+            visible: root.lingering
+            anchors.centerIn: parent
+            width: Tokens.panelDialogWidth
+            height: endedColumn.implicitHeight + 2 * Tokens.spacingLg
+            radius: Tokens.radiusDialog
+
+            Column {
+                id: endedColumn
+                x: Tokens.spacingLg
+                y: Tokens.spacingLg
+                width: endedNotice.width - 2 * Tokens.spacingLg
+                spacing: Tokens.spacingSm
+
+                Text {
+                    width: parent.width
+                    textFormat: Text.PlainText
+                    text: qsTr("Request cancelled")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyTitleSize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                    wrapMode: Text.Wrap
+                    Accessible.role: Accessible.AlertMessage
+                    Accessible.name: text
+                }
+
+                Text {
+                    width: parent.width
+                    textFormat: Text.PlainText
+                    text: qsTr("What you type is ignored for a moment.")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Appearance.colors.textSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                    font.weight: Tokens.typographySmallWeight
+                    wrapMode: Text.Wrap
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
             }
         }
 

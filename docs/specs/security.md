@@ -420,7 +420,10 @@ shell no longer relies on that alone:
   "Unanswered": the user neither sent a password nor cancelled since polkit last asked (`AuthDialogModel.answered`: set by
   `submit` and `cancel`, cleared by a failure, a new prompt or a new request, never when the request ends, so the agent
   still reads it then); a request the user answered gives the keyboard back at once, as on macOS (a first Esc in a field with
-  text only empties it: not an answer). The window's `visible`
+  text only empties it: not an answer). The linger is perceivable (LOW-3): where the sheet was, a card of the sheet's
+  material says "Request cancelled" and "What you type is ignored for a moment." (fixed, translated text, nothing of the
+  requester's; no control, no focus: a press on it reaches the backdrop, which ends the linger, and the keys stay on the
+  sink; blurred like the sheet), only while the sink lingers (not over a held request's sheet). The window's `visible`
   and `takesKeys` read the base state only (`requestOpen`, `locked`, the hold, `sinkingKeys`), and `arrive` starts the
   linger from it too: through an intermediate binding (`shown`, `lingering`) a change could be read before that binding saw
   it, so the window went unmapped for a moment (a hidden PanelWindow is destroyed and made again, the compositor giving the
@@ -443,14 +446,15 @@ shell no longer relies on that alone:
   only once mapped, beside a window underneath, the end of a request under the user's typing in every order, the flow
   destroyed included (`window.qml` test_04: nothing typed after it reaches the window underneath, the window is never made
   again, the keys go there again after the linger; it fails on f9e24e1); `--mutants` brings back each defect the reviews
-  found and checks it is caught: 24 mutants);
+  found and checks it is caught: 26 mutants);
   `tests/security/lock_surfaces.sh` (wiring, the saver's Binding and that it is the only writer of `saverShown`, one place
   that gives the keyboard and three that take it
   back, three that set the hold, the stacking of the sheet and its two guards, each hold Timer used only in its own
   functions, the key sink, `typing` read first (with the end under the user's typing), the six places that release the sink,
   the places that focus the field and the sheet's disabled input, the linger's timers and its start, `visible` and
   `takesKeys` from the base state (`requestOpen`, written only by `arrive`, in its order), `answered` set and cleared only
-  where it may be, no `Date` in the hold functions, 54 polkit mutations). Seen on screen: NOT VERIFIED (L5).
+  where it may be, the ended notice (only while lingering, fixed plain text, no input or focus), no `Date` in the hold
+  functions, 57 polkit mutations). Seen on screen: NOT VERIFIED (L5; the ended notice too).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").

@@ -154,12 +154,15 @@ expect("polkit sheet: shown only while active and unlocked", re.search(r"propert
 # Security counter-review of f9e24e1 (LOW-1): they read the agent's `requestOpen`, which only arrive writes (after the sink at
 # an end), never the model's `active`: a request that ends unanswered under the user's typing never unmaps the window before
 # the sink holds the keys.
+notice_m = re.search(r"\bMaterial\s*\{\s*id:\s*endedNotice\b", agent)
+notice = block_after(agent, notice_m.start()) if notice_m else ""
+window_props = agent.replace(notice, "") if notice else agent
 expect("polkit sheet: mapped only when a request is open, or while the sink lingers (never while locked), from the base state",
        re.search(r"\bvisible:\s*!SessionState\.locked\s*&&\s*\(root\.requestOpen\s*\|\|\s*root\.sinkingKeys\)\s*\n", agent) is not None
        and re.search(r"property bool lingering:\s*root\.sinkingKeys\s*&&\s*!dialogModel\.active\s*&&\s*!SessionState\.locked\s*\n", agent) is not None)
 expect("polkit sheet: takes the keyboard only when a request is open and not held, or for the sink, from the base state", re.search(r"keyboardFocus:\s*win\.takesKeys\s*\?\s*WlrKeyboardFocus\.Exclusive", agent) is not None
        and re.search(r"property bool takesKeys:\s*!SessionState\.locked\s*&&\s*\(\(root\.requestOpen\s*&&\s*\(!root\.heldByLock\s*\|\|\s*root\.userFocused\)\)\s*\|\|\s*root\.sinkingKeys\)\s*\n", agent) is not None
-       and not re.search(r"\b(?:visible|takesKeys):[^\n]*\b(?:shown|lingering|dialogModel\.active)\b", agent))
+       and notice != "" and not re.search(r"\b(?:visible|takesKeys):[^\n]*\b(?:shown|lingering|dialogModel\.active)\b", window_props))
 expect("polkit sheet: requestOpen is written only by arrive, after the sink, false before the hold changes at an end and true after it at an arrival",
        len(re.findall(r"\brequestOpen\s*=(?!=)", agent)) == 2 and len(re.findall(r"\brequestOpen\s*=(?!=)", arrive)) == 2
        and re.search(r"^\s*property bool requestOpen:\s*false\s*$", agent, re.M) is not None
@@ -274,6 +277,13 @@ expect("polkit sheet: `answered` is set by submit and cancel only, cleared on a 
        and re.search(r"if\s*\(root\.flow\s*&&\s*root\.flow\.isResponseRequired\)\s*\{\s*root\.priv\.submitted\s*=\s*false;\s*root\.priv\.answered\s*=\s*false;\s*\}", model) is not None
        and re.search(r"function onAuthenticationFailed\(\):\s*void\s*\{\s*root\.priv\.submitted\s*=\s*false;\s*root\.priv\.answered\s*=\s*false;", model) is not None
        and not re.search(r"\banswered\s*=(?!=)", agent))
+# LOW-3: the linger is shown by a card of fixed text where the sheet was, only while the sink lingers; it takes no input and no
+# focus (a press goes through to the backdrop, which ends the linger) and shows nothing of the requester's.
+expect("polkit sheet: the ended notice shows only while the sink lingers, fixed text, no input, no focus, nothing of the request",
+       re.match(r"\s*id:\s*endedNotice\s*objectName:\s*\"polkitEndedNotice\"\s*visible:\s*root\.lingering\s*\n", notice) is not None
+       and not re.search(r"MouseArea|TapHandler|Handler\s*\{|\bfocus\s*:|activeFocusOnTab|Keys\.|TextInput|TextEdit|Button|forceActiveFocus|dialogModel|model\.|\bflow\b", notice)
+       and re.findall(r"\btext:\s*([^\n]*)", notice) == ['qsTr("Request cancelled")', 'qsTr("What you type is ignored for a moment.")']
+       and re.findall(r"textFormat:\s*(\S+)", notice) == ["Text.PlainText", "Text.PlainText"])
 dialog_src = code(read("shell/security/polkit/AuthDialog.qml"))
 backdrop = re.search(r"MouseArea\s*\{\s*anchors\.fill:\s*parent\s*onPressed:\s*\{\s*if\s*\(root\.lingering\)\s*\{\s*root\.sinkingKeys\s*=\s*false;\s*return;\s*\}\s*"
                      r"const dialog\s*=\s*holder\.item as AuthDialog;\s*if\s*\(dialog\s*&&\s*win\.takesKeys\s*&&\s*!root\.sinkingKeys\)\s*dialog\.focusField\(\);\s*\}\s*\}", agent)
@@ -463,6 +473,9 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthDialogModel.qml#        if (flow)\n            priv.answered = false;#        priv.answered = false;' \
   'shell/security/polkit/AuthDialogModel.qml#        priv.submitted = false;\n        priv.answered = true;#        priv.submitted = false;' \
   'shell/security/polkit/AuthDialogModel.qml#            root.priv.submitted = false;\n            root.priv.answered = false;\n            root.priv.error#            root.priv.submitted = false;\n            root.priv.error' \
+  'shell/security/polkit/AuthAgent.qml#            visible: root.lingering#            visible: root.sinkingKeys' \
+  'shell/security/polkit/AuthAgent.qml#            radius: Tokens.radiusDialog\n\n            Column {#            radius: Tokens.radiusDialog\n            MouseArea { anchors.fill: parent }\n\n            Column {' \
+  'shell/security/polkit/AuthAgent.qml#                    text: qsTr("Request cancelled")#                    text: dialogModel.message' \
   'shell/security/lock/Lock.qml#secureGrace.restart();#root.securedAt = Date.now();' \
   'shell/security/lock/Lock.qml#if (!holding || secureGrace.running) {#if (!holding || Date.now() - root.securedAt < 500) {' \
   'shell/security/lock/Lock.qml#if (!holding || !hyprland || secureGrace.running)#if (!holding || !hyprland)' \

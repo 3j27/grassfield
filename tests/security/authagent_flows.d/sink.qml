@@ -91,6 +91,10 @@ Item {
         function button(label) {
             return find(dialog(), i => i.text === label && i.clicked !== undefined);
         }
+        // The card that says a request ended while the sink lingers (security counter-review of f9e24e1, LOW-3).
+        function notice() {
+            return find(ag.sheet, i => i.objectName === "polkitEndedNotice");
+        }
         function typeText(t) {
             for (const c of t)
                 keyClick(c);
@@ -528,14 +532,17 @@ Item {
 
         // Security counter-review of f9e24e1 (LOW-1): A ends unanswered while the user types into its own field (its requester
         // gave up): the window stays mapped and keeps the keyboard on the sink, A's field is gone, nothing typed reaches
-        // anything; the linger ends as any other: no key for a second, a click, the lock, the screen saver.
+        // anything, and a notice says the request ended (LOW-3); the linger ends as any other: no key for a second, a click, the
+        // lock, the screen saver.
         function test_25_endWhileTypingOwnField_data() {
-            return [{tag: "no key", how: "idle"}, {tag: "click", how: "click"}, {tag: "lock", how: "lock"}, {tag: "saver", how: "saver"}];
+            return [{tag: "no key", how: "idle"}, {tag: "click", how: "click"}, {tag: "click on the notice", how: "noticeClick"},
+                    {tag: "lock", how: "lock"}, {tag: "saver", how: "saver"}];
         }
         function test_25_endWhileTypingOwnField(d) {
             const a = mkflow("A");
             arriveFlow(a);
             tryVerify(() => field() && field().activeFocus);
+            compare(notice().visible, false, "no notice while the sheet shows");
             typeText("sec");
             endAll();
             compare(ag.lingering, true, "the sink lingers");
@@ -543,6 +550,10 @@ Item {
             compare(ag.sheet.takesKeys, true, "the keyboard kept");
             verify(ag.sink.activeFocus, "the sink has the keys");
             compare(dialog(), null, "A's sheet is gone");
+            compare(notice().visible, true, "the notice shows");
+            verify(find(notice(), i => i.text === "Request cancelled") !== null, "it says the request is gone");
+            verify(find(notice(), i => i.text === "What you type is ignored for a moment.") !== null, "and that typing goes nowhere");
+            verify(find(notice(), i => i.activeFocusOnTab === true || i.focus === true) === null, "it takes no focus");
             typeText("ret");
             keyClick(Qt.Key_Return);
             keyClick(Qt.Key_Escape);
@@ -553,6 +564,8 @@ Item {
                 tryCompare(ag, "lingering", false, ag.model.heldAfterUnlockMs + 500);
             } else if (d.how === "click") {
                 mouseClick(ag.sheet, 5, 5);
+            } else if (d.how === "noticeClick") {
+                mouseClick(notice());
             } else if (d.how === "lock") {
                 SessionState.locked = true;
             } else {
@@ -560,6 +573,7 @@ Item {
             }
             compare(ag.lingering, false, "the linger ended");
             compare(ag.sheet.takesKeys, false);
+            compare(notice().visible, false, "the notice goes with it");
             SessionState.locked = false;
             SessionState.saverShown = false;
             compare(ag.sheet.visible, false, "nothing mapped after it");
@@ -621,6 +635,19 @@ Item {
             endAll();
             compare(ag.lingering, false);
             compare(ag.sheet.visible, false);
+        }
+
+        // The notice shows only while the sink lingers: not with a held request's sink, not once the next request came.
+        function test_28_noticeOnlyWhileLingering() {
+            const [a, b] = sinkB();
+            compare(notice().visible, false, "a held request's sink shows the sheet, no notice");
+            endAll();
+            compare(notice().visible, true);
+            const c = mkflow("C");
+            arriveFlow(c);
+            compare(ag.sinkingKeys, true);
+            compare(notice().visible, false, "C's sheet replaces the notice");
+            tryVerify(() => field() !== null);
         }
     }
 }

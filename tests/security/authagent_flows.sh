@@ -4,8 +4,8 @@
 # sheet and model, driven by authagent_flows.d/flows.qml and sink.qml with real key and mouse events through the request orders
 # Quickshell 0.3.1 produces: a request replacing the open one, back-to-back requests, one ending under the user's typing, the
 # lock, the screen saver. Nothing typed for one request may reach another one's field or the window underneath (security
-# counter-review of f9e24e1: nor the rest of a password typed into a request that ends unanswered). window.qml runs the
-# same agent in FakePanel.qml
+# counter-review of f9e24e1: nor the rest of a password typed into a request that ends unanswered; the notice that says
+# so while the keys go nowhere). window.qml runs the same agent in FakePanel.qml
 # (make_harness.py --panel): a window made again each time it is shown and given the keyboard only once mapped, as
 # Quickshell's PanelWindow and a compositor do, beside a window underneath (check of c1ca44f). No compositor, no polkit, no
 # PAM.
@@ -129,6 +129,8 @@ answer-not-noted-on-cancel (f9e24e1 LOW-1)#AuthDialogModel.qml#        priv.subm
 answer-kept-after-failure (f9e24e1 LOW-1)#AuthDialogModel.qml#            root.priv.submitted = false;\n            root.priv.answered = false;\n            root.priv.error#            root.priv.submitted = false;\n            root.priv.error
 answer-cleared-at-the-end (f9e24e1 LOW-1)#AuthDialogModel.qml#        if (flow)\n            priv.answered = false;#        priv.answered = false;
 window-unmapped-before-the-sink (f9e24e1 LOW-1)#AuthAgent.qml#        root.sinkingKeys = typing;\n        if (!dialogModel.active)\n            root.requestOpen = false;#        if (!dialogModel.active)\n            root.requestOpen = false;\n        root.sinkingKeys = typing;
+no-ended-notice (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingering#            visible: false
+ended-notice-over-a-sheet (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingering#            visible: root.sinkingKeys
 EOF_MUTANTS
 ((status == 0)) && echo "PASS: authagent_flows (and every mutant caught)" || echo "FAIL: authagent_flows mutants"
 exit "$status"
