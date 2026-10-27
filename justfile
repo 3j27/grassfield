@@ -40,7 +40,7 @@ check-config:
       cfg=${run%%:*}; omarchy=; [[ $run == *:* ]] && omarchy=${run#*:}; \
       out=$(env ${omarchy:+OMARCHY_PATH=$omarchy} XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
         GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
-        | sed -n '/Config parsing result/,$p'); \
+        | sed -n '/Config parsing result/,$p' || true); \
       printf '%s\n' "$out"; \
       printf '%s\n' "$out" | grep -qx 'config ok' || { echo "check-config: $cfg.lua${omarchy:+ with OMARCHY_PATH=$omarchy}: no 'config ok'" >&2; exit 1; }; \
     done; \
