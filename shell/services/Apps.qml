@@ -548,6 +548,12 @@ Singleton {
         return AppLaunch.mergeEnvironment(base, Pointer.launchEnvironment());
     }
 
+    // Environment of Grassfield's own apps (Settings, Glance): launchEnvironment() without the dev isolation, which they
+    // apply themselves.
+    function ownAppEnvironment(): var {
+        return AppLaunch.mergeEnvironment(portalEnvironment, Pointer.launchEnvironment());
+    }
+
     // Open With (desktop menu): the shown apps that can open every one of `paths` (`resolved`: path -> real type, from
     // dock/file-types.sh), by name, with `first` (the default handler's entry id) leading. One row per app name.
     function appsFor(paths: var, resolved: var, first: string): var {
