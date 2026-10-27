@@ -2,7 +2,7 @@
 Status: Proposed (cloud session, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »; step 0, docs
 only, no code before the opus PASS; the owner answered Q1–Q10 on 2026-10-27) · Date: 2026-10-27 · Decider: owner (the
 questions in "Owner decisions"), integrator (merge after the opus review) · Number: 0035 (0033 is Software Update, 0034 is
-reserved for the clipboard history; 0035 is free on main 68ee009 and on every open pull request, #7 to #11)
+the clipboard history, pull request #12; 0035 is free on main 68ee009 and on every open pull request, #7 to #12)
 
 ## Context
 Owner brief (2026-10-27): in a Grassfield session no system window or question may look like Omarchy, GNOME, Hyprland or
