@@ -110,7 +110,7 @@ System Settings > General > About > Name and Date & Time change machine-wide set
   counter-review #2 PASS on the whole scope. Not verified by it: the real polkit dialog, real hostname1/timedate1/systemd,
   the installed omarchy-language, a nested session (owner checks above).
 
-## Amendment (ADR-0033, Software Update, 2026-10-27, Proposed)
+## Amendment (ADR-0033, Software Update, 2026-10-27; opus PASS with ADR-0033 step 0, merged 609017f; Proposed until the owner accepts it)
 Software Update in Settings (General > Software Update, step 2 of ADR-0033) is an exception to "No Grassfield code runs as
 root: no helper, no `pkexec`, no new polkit policy". No system service owns pacman's configuration, so there is no service
 polkit action to call. By the owner's decision O1 (2026-10-27), changing the `[grassfield]` channel goes through a Grassfield
@@ -121,7 +121,7 @@ Settings starts it through the user command `grassfield-channel-set` as a child 
 the argument checked in QML and in C++, "Waiting for permission…", one action at a time, up to 120 s, a refusal or a cancel
 shown on one line, nothing in a dev session. The helper:
 - takes only fixed verbs (`set stable|beta`, `restore`, `off`);
-- reads no environment variable;
+- reads no environment variable (it runs itself again under `env -i`);
 - writes only `/etc/pacman.d/grassfield.conf`, two lines of `/etc/pacman.conf`, pacman's synced `[grassfield]` files and
   pacman's keyring entries for Grassfield's keys;
 - installs no package.

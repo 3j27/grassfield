@@ -49,7 +49,8 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
   - Every child runs with stdin from `/dev/null`.
 - U2. States:
   - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf`;
-  - `repair`: the file is there, the `[grassfield]` lines are not;
+  - `repair`: the file is there, the `[grassfield]` lines are not; or the lines are there twice, or without their file
+    (every pacman command fails then);
   - `blocking`: two `[grassfield]`-only syncs in a row (15 minutes apart) failed while the network works, so every
     `omarchy update` fails (U22);
   - `up-to-date`, `available`;
@@ -230,6 +231,7 @@ Pane (step 2)
 - ADR-0033 § g (the repository contract; `grassfield-notes.json` version 1).
 - `grassfield-update-check` output, version 1: `{"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":…,
   "error":…,"grassfield":{"installed":…,"available":…,"notes":[…]},"omarchy":{"installed":…,"available":…},"others":N}`.
+  Step 2 adds `otherPackages` (the list behind `others`), cut first when the output would pass 256 KiB (ADR-0033 d.3).
 - `software-update.json`, version 1: the last output plus `announced` (versions already notified). State class, ADR-0020.
 - `grassfield.json`: `updates.automaticCheck` (boolean, default true), schema-generated (ADR-0020).
 - Shell IPC: `update check` (Settings → shell). The `omarchy-shell` shim forwards `omarchy.system-update refresh|clear` to it.
@@ -237,8 +239,9 @@ Pane (step 2)
 ## Dependencies (verified versions)
 On Omarchy 4.0.4 (its `install/omarchy-base.packages`): `pacman-contrib` (`checkupdates`; P0: 1.13.1-1), `fakeroot`, `jq`,
 `gum`, `uwsm`, `xdg-terminal-exec`; pacman 7.1 (P0); gnupg 2.4 (`gpgv`); curl; python; polkit (`pkexec`). `omarchy` 4.0.6
-itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `grassfield-keyring` are added to
-`grassfield-desktop`'s `depends` in step 1, with `fakeroot` (declared, not assumed). Omarchy's commands used:
+itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `fakeroot` are in
+`grassfield-desktop`'s `depends` since step 1 (declared, not assumed); `grassfield-keyring` joins once grassfield-packages
+builds it (owner decision O21). Omarchy's commands used:
 `omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself).
 
 ## Degraded behavior
