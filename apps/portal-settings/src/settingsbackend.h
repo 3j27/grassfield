@@ -9,7 +9,6 @@
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusContext>
-#include <QDBusMessage>
 #include <QDBusVariant>
 #include <QFileSystemWatcher>
 #include <QMap>
@@ -56,7 +55,8 @@ public:
     void announceAll();
     // The frontend passes every backend's SettingChanged on to the apps, so a dconf change that x-d-p-gtk signals (a theme
     // tool writing gtk-theme or color-scheme) would switch them away from Grassfield's values until they restart. For a key
-    // this backend owns, it answers such a signal with its own value, which the apps then receive last.
+    // this backend owns and a value that differs from its own, it answers x-d-p-gtk's signal with its own value, which the
+    // apps then receive last.
     void answerOtherBackends(const QDBusConnection &bus);
 
 public Q_SLOTS:
@@ -67,15 +67,14 @@ Q_SIGNALS:
     void SettingChanged(const QString &ns, const QString &key, const QDBusVariant &value);
 
 private Q_SLOTS:
-    void otherBackendChanged(const QString &ns, const QString &key, const QDBusVariant &value, const QDBusMessage &message);
+    void otherBackendChanged(const QString &ns, const QString &key, const QDBusVariant &value);
 
 private:
     void watch();
     void reread();
 
     Options m_options;
-    QString m_self; // this backend's unique name on the bus
-    Input m_input;  // the last good settings of the file
+    Input m_input; // the last good settings of the file
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
     QTimer m_recheck;

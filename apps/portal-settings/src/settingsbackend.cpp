@@ -46,13 +46,21 @@ struct FileRead {
     Input input;
 };
 
-// One read of the settings file, never without a bound (ADR-0020 §2): opened without blocking and checked on the descriptor,
-// so a FIFO, a device (also through a symlink) or a directory is never read; at most 1 MiB, read whole and exactly. A missing
+// One read of the settings file, never without a bound (ADR-0020 §2): only a regular file is opened, without blocking, and
+// checked again on the descriptor, so a FIFO, a device (also through a symlink) or a directory is never read; at most 1 MiB,
+// read whole and exactly. A missing
 // file is a fresh start (the schema's defaults); anything else that is not a JSON object, or that cannot be opened (chmod
 // 000), is malformed.
 FileRead readFile(const QString &path)
 {
     const QByteArray native = QFile::encodeName(path);
+    // Looked at before it is opened, so that a device is never opened at all; checked again on the descriptor (a swap in
+    // between).
+    struct stat before {};
+    if (::stat(native.constData(), &before) != 0)
+        return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}};
+    if (!S_ISREG(before.st_mode) || before.st_size > kMaxFileBytes)
+        return {FileState::Malformed, {}};
     const int fd = ::open(native.constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOCTTY);
     if (fd < 0)
         return {errno == ENOENT || errno == ENOTDIR ? FileState::Missing : FileState::Malformed, {}};
@@ -155,19 +163,23 @@ void SettingsBackend::announceAll()
 
 void SettingsBackend::answerOtherBackends(const QDBusConnection &bus)
 {
-    m_self = bus.baseService();
-    QDBusConnection(bus).connect(QString(), QStringLiteral("/org/freedesktop/portal/desktop"),
+    // Only the backend the session's routing lists after this one (x-d-p-gtk), by its name: Qt delivers only what that name's
+    // owner sends, so no other client can make this backend signal, and x-d-p-gtk never answers back (no loop).
+    QDBusConnection(bus).connect(QStringLiteral("org.freedesktop.impl.portal.desktop.gtk"), QStringLiteral("/org/freedesktop/portal/desktop"),
                                  QStringLiteral("org.freedesktop.impl.portal.Settings"), QStringLiteral("SettingChanged"), this,
-                                 SLOT(otherBackendChanged(QString, QString, QDBusVariant, QDBusMessage)));
+                                 SLOT(otherBackendChanged(QString, QString, QDBusVariant)));
 }
 
-void SettingsBackend::otherBackendChanged(const QString &ns, const QString &key, const QDBusVariant &, const QDBusMessage &message)
+void SettingsBackend::otherBackendChanged(const QString &ns, const QString &key, const QDBusVariant &value)
 {
-    if (message.service() == m_self)
-        return;
     const auto group = m_map.constFind(ns);
-    if (group != m_map.cend() && group->contains(key))
-        Q_EMIT SettingChanged(ns, key, QDBusVariant(group->value(key)));
+    if (group == m_map.cend() || !group->contains(key))
+        return;
+    // The same value as Grassfield's: the apps already end with it.
+    const QVariant own = group->value(key);
+    if (value.variant() == own)
+        return;
+    Q_EMIT SettingChanged(ns, key, QDBusVariant(own));
 }
 
 void SettingsBackend::watch()

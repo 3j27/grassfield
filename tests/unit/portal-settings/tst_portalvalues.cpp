@@ -276,8 +276,8 @@ TEST(SettingsBackend, NeverReadsWithoutABound)
         spin([] { return false; }, 300);
         EXPECT_TRUE(changed.isEmpty()) << c.what << ": " << changed.join(QLatin1Char(',')).toStdString();
         EXPECT_EQ(theme(), QStringLiteral("Grassfield-green")) << c.what;
-        ::unlink(native.constData());
     }
+    ::unlink(native.constData());
     // A directory in its place: the same.
     ASSERT_EQ(::mkdir(native.constData(), 0700), 0);
     spin([] { return false; }, 300);
