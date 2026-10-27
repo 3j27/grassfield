@@ -140,8 +140,8 @@ DEST=(usr/lib/grassfield/grassfield-channel-helper usr/lib/grassfield/grassfield
 missing=""
 for d in "${DEST[@]}"; do grep -qF "\$pkgdir/$d" /src/packaging/arch/PKGBUILD || grep -qF "\$pkgdir/${d%/*}/" /src/packaging/arch/PKGBUILD || missing+=" $d"; done
 grep -q 'grassfield-channel-set; do' /src/packaging/arch/PKGBUILD || missing+=" usr/bin/grassfield-channel-set"
-grep -q 'depends=(.*grassfield-keyring pacman-contrib fakeroot)' /src/packaging/arch/PKGBUILD || missing+=" depends"
-expect "the PKGBUILD installs every path used here and depends on grassfield-keyring, pacman-contrib, fakeroot${missing:+ (missing:$missing)}" test -z "$missing"
+grep -q 'wl-clipboard pacman-contrib fakeroot)' /src/packaging/arch/PKGBUILD || missing+=" depends"
+expect "the PKGBUILD installs every path used here and depends on pacman-contrib and fakeroot (grassfield-keyring held back, O21)${missing:+ (missing:$missing)}" test -z "$missing"
 
 say "packages (makepkg as builder) and repositories"
 B=/home/builder/build
@@ -292,15 +292,37 @@ as builder gpg --homedir /home/builder/kr --armor --export "$KR" >/usr/share/gra
 expect "the shipped key file is not the pinned fingerprint -> refused before pacman-key, KR not added" \
   test "$rc:$(validity "$KR"):$(grep -c 'is not the pinned key' "$W/err")" == "1::1"
 cp "$W/key.bak" /usr/share/grassfield/pacman/grassfield-signing-key.asc
-flock /run/grassfield-channel.lock sleep 3 &
+L=/run/grassfield/channel.lock
+expect "the channel lock is root's own: /run/grassfield 0700, channel.lock 0600" test "$(stat -c %U:%a /run/grassfield $L | tr '\n' ' ')" == "root:700 root:600 "
+out=$(runuser -u bob -- flock -n "$L" true 2>&1); rc=$?
+expect "another user cannot open the lock, so cannot hold it (review of 0338116, MAJOR 1: '$out')" test "$rc" != 0
+flock "$L" sleep 3 &
 holder=$!
 sleep 0.5
 "$H" set stable >/dev/null 2>"$W/err"; rc=$?
 wait "$holder"
 expect "another change holds the channel lock -> the helper refuses at once, exit 1" test "$rc:$(grep -c 'another change' "$W/err")" == 1:1
-(flock /run/grassfield-channel.lock sleep 2 &) ; sleep 0.5
+(flock "$L" sleep 2 &) ; sleep 0.5
 start=$(date +%s); "$SC" upgrade >/dev/null 2>&1; rc=$?
 expect "... the scriptlet program waits for it instead (pacman's transaction must not fail)" test "$rc:$(( $(date +%s) - start >= 1 ))" == 0:1
+chmod 0644 "$L"
+"$H" restore >/dev/null 2>"$W/err"; rc=$?
+chmod 0600 "$L"
+expect "a lock that is not root's 0600 -> refused" test "$rc:$(grep -c "is not root's own" "$W/err")" == 1:1
+touch /etc/.pacman.conf.grassfield.stale /etc/pacman.d/.grassfield.conf.stale
+"$SC" upgrade >/dev/null 2>&1
+expect "temporary files a killed run left in /etc are removed under the lock" bash -c '! ls /etc/.pacman.conf.grassfield.* /etc/pacman.d/.grassfield.conf.* 2>/dev/null'
+# The environment of a running root program is empty: it runs itself again under env -i (review of 0338116, minor 2).
+flock "$L" sleep 3 &
+holder=$!
+sleep 0.5
+env 'BASH_FUNC_gpg%%=() { touch /work/pwned-child; }' FOO=bar "$SC" upgrade >/dev/null 2>&1 &
+prog=$!
+sleep 1
+envbytes=$(wc -c </proc/$prog/environ)
+cmd=$(tr '\0' ' ' </proc/$prog/cmdline)
+wait "$holder"; wait "$prog"
+expect "a root program waiting on the lock has an empty environment ($envbytes bytes; $cmd)" test "$envbytes" == 0
 expect "nothing changed by the refusals (pacman.conf, /etc and /etc/pacman.d listings)" test "$(sha /etc/pacman.conf; ls -a /etc /etc/pacman.d | sha256sum)" == "$state0"
 # The environment is not an input: BASH_ENV, an exported function shadowing awk, a PATH with a rogue pacman-conf.
 mkdir -p "$W/evil" && printf '#!/bin/sh\ntouch %s/pwned-path\nexec /usr/bin/pacman-conf "$@"\n' "$W" >"$W/evil/pacman-conf" && chmod 755 "$W/evil/pacman-conf"
@@ -437,6 +459,12 @@ expect "grassfield-channel-set and the checker say repair" test "$(chset alice) 
 expect "grassfield-channel-set repair -> exit 0: the lines back, the hook linked again" bash -c \
   "runuser -u alice -- env HOME=/home/alice XDG_RUNTIME_DIR=/run/user/$(id -u alice) grassfield-channel-set repair >/dev/null && [[ \$(tail -n 2 /etc/pacman.conf | tr '\n' '|') == '$LINES' && -L /home/alice/.config/omarchy/hooks/pre-refresh-pacman.d/50-grassfield ]]"
 expect "the checker: up-to-date on stable" test "$(check_as alice state channel)" == "up-to-date stable"
+printf '\n[grassfield]\nInclude = /etc/pacman.d/grassfield.conf\n' >>/etc/pacman.conf
+dup=$(pacman -Qq pacman 2>&1 | grep -m1 -iE 'error|warning' || true)
+expect "[grassfield] twice (the hook racing the helper; pacman: '$dup'): the command and the checker say repair" \
+  test "$(chset alice) $(check_as alice state)" == "repair repair"
+expect "grassfield-channel-set repair leaves exactly one section, last; pacman works" bash -c \
+  "runuser -u alice -- env HOME=/home/alice XDG_RUNTIME_DIR=/run/user/$(id -u alice) grassfield-channel-set repair >/dev/null && [[ \$(grep -c '^\[grassfield\]' /etc/pacman.conf) == 1 && \$(tail -n 2 /etc/pacman.conf | tr '\n' '|') == '$LINES' ]] && pacman -Qq pacman >/dev/null"
 mkdir -p "$W/dangle" && ln -s /nonexistent/pre-refresh-pacman "$W/dangle/50-x"
 cp -a "$W/dangle/50-x" /home/alice/.config/omarchy/hooks/pre-refresh-pacman.d/ && chown -h alice: /home/alice/.config/omarchy/hooks/pre-refresh-pacman.d/50-x
 refresh; rc=$?

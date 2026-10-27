@@ -100,12 +100,16 @@ def rm(name):
     try: os.unlink(os.path.join(S, name))
     except FileNotFoundError: pass
 
-def setup(base="file://" + SRV, server=None, listed=True, conf=True):
+def setup(base="file://" + SRV, server=None, listed=True, conf=True, sections=None):
     shutil.rmtree(S, ignore_errors=True); os.makedirs(S)
     shutil.rmtree(tmp + "/cache", ignore_errors=True)
     os.makedirs(tmp + "/keyring", exist_ok=True)
     m.REPOSITORY_CONF = tmp + "/repository.conf"
     m.GRASSFIELD_CONF = tmp + "/grassfield.conf"
+    m.PACMAN_CONF = tmp + "/pacman.conf"
+    n = (1 if listed else 0) if sections is None else sections
+    with open(m.PACMAN_CONF, "w") as f:
+        f.write("[options]\n[core]\nInclude = /etc/pacman.d/mirrorlist\n" + "\n[grassfield]  # Software Update\nInclude = x\n" * n)
     m.KEYRING_DIR = tmp + "/keyring"
     with open(m.REPOSITORY_CONF, "w") as f:
         f.write("GRASSFIELD_REPO_BASE=%s\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_REPO_BASE_PREVIOUS=\n"
@@ -147,6 +151,10 @@ setup(listed=False); r = run()
 check("the file without the [grassfield] lines -> repair (channel read from the file)", r["state"] == "repair" and r["channel"] == "stable", r)
 setup(); put("conf-broken", ""); r = run()
 check("pacman's configuration unreadable -> failed/unavailable, no crash", r["state"] == "failed" and r["error"] == "unavailable", r)
+setup(conf=False); put("conf-broken", ""); r = run()
+check("the [grassfield] lines without their file (every pacman command fails) -> repair, not failed", r["state"] == "repair", r)
+setup(sections=2); put("conf-broken", ""); r = run()
+check("[grassfield] twice (pacman: already registered) -> repair", r["state"] == "repair" and r["channel"] == "stable", r)
 setup(server="https://elsewhere.example/grassfield/$arch"); r = run()
 check("a Server that is not <base>/<channel>/$arch -> channel custom", r["channel"] == "custom", r)
 setup(server="file://" + SRV + "/beta/$arch"); r = run()
