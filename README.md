@@ -29,7 +29,9 @@ the plugin is built against the Hyprland you have and is rebuilt after a Hyprlan
 cd packaging/arch && makepkg -si
 ```
 
-This builds and installs `grassfield-desktop`, `grassfield-compositor` and `grassfield-icons`. Then log out and choose
+This builds and installs `grassfield-desktop`, `grassfield-compositor` and `grassfield-icons`. `grassfield-desktop` depends
+on `grassfield-keyring` (the keys of Grassfield's package repository, ADR-0033), built by `grassfieldhq/grassfield-packages`:
+until that repository is published, install it first from there (`cd keyring && makepkg -si`). Then log out and choose
 Grassfield (the login drop-in starts it; `grassfield-login set omarchy` goes back). The step-by-step guide with
 checks and recovery is [`docs/owner-setup/real-session.md`](docs/owner-setup/real-session.md); take a snapshot first.
 Nothing runs as root, no service starts by itself, no file is written under `$HOME` by the install.

@@ -1,9 +1,11 @@
 # ADR-0033: Software Update: a signed [grassfield] pacman repository in two channels, installed through Omarchy
 Status: Proposed, applied provisionally until the owner accepts it (cloud session, owner brief 2026-10-27). Step 0 (this
 ADR and the spec) passed the opus review on its third round and was merged in 609017f (PR #11); step 1 is grassfield PR
-#16 (the client) and the step 1b PR of grassfield-packages. The owner's answers O1-O21 are recorded below; the opus
-reviews are in "Review history". ·
-Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator (merge after the opus PASS)
+#16 (the client) and grassfield-packages PR #3 (step 1b, the infrastructure), both merged; O21's follow-up adds
+`grassfield-keyring` to grassfield-desktop's `depends`. The owner's answers O1-O21 and the decision delegated by the
+owner (UD1) are recorded below; the opus reviews are in "Review history". ·
+Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), delegated (UD1), integrator (merge after the opus
+PASS)
 
 This ADR is the contract between this repository (the desktop, its `PKGBUILD` and the Software Update client) and
 `grassfieldhq/grassfield-packages` (building, signing and, later, serving the repository). Its README and CLAUDE.md cite it
@@ -547,10 +549,19 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | O18 | A `[grassfield]` that blocks every update (review 1, MAJOR 1) | pane + notification offering "Turn Off…" (recommended) · pane only · automatic removal | **pane + notification**, never automatic |
 | O19 | Change of host (review 1, MAJOR 5) | `post_upgrade` migration + old host serving and redirecting ≥ 90 days (recommended) · redirect only · manual "Repair…" | **migration + redirect** |
 | O20 | Keyring before the owner's key exists (review 2, MAJOR) | a keyring with no key until O11 (recommended) · withhold the dependency until O11 | **no key until O11** (b.2) |
-| O21 | `grassfield-keyring` dependency until grassfield-packages builds the package (step 1 review, minor 5) | hold it back; a follow-up adds it once grassfield-packages' step 1b is merged (recommended) · keep it, the owner builds the keyring once · a keyless keyring from this repository's PKGBUILD | **hold it back** |
+| O21 | `grassfield-keyring` dependency until grassfield-packages builds the package (step 1 review, minor 5) | hold it back; a follow-up adds it once grassfield-packages' step 1b is merged (recommended) · keep it, the owner builds the keyring once · a keyless keyring from this repository's PKGBUILD | **hold it back**; added once grassfield-packages PR #3 was merged (follow-up, UD1) |
 
 The owner gave every answer in this Claude Code session on 2026-10-27, through its question tool. The answers to O1-O16
 were recorded in `fd49abc` and confirmed again after the first review; O21 was asked after the step 1 review.
+
+## Decisions delegated by the owner (2026-10-27)
+Asked of no one: « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour
+l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that rule and is checked in the integrator's
+review.
+
+| Id | Question | Options | Choice | Rule applied |
+|---|---|---|---|---|
+| UD1 | O21's follow-up: until `[grassfield]` is published (after M5), a machine that builds Grassfield from source has no repository that serves `grassfield-keyring`, so the install half of `makepkg -si` (its `pacman -U`) refuses grassfield-desktop for the missing dependency | add the dependency now; such a machine builds grassfield-packages' `keyring/` once (`makepkg -si`: keyless until O11, it installs and trusts nothing) · hold the dependency back again until the repository is published · a keyless keyring built by this repository's PKGBUILD (O21's third option) | add it now; `keyring/` built once (`docs/owner-setup/real-session.md` section 3) | macOS first: the keys come with the system, as macOS's trust store does and as omarchy depends on omarchy-keyring, so a user of the repository installs grassfield-desktop and gets the keyring with nothing to do (`docs/audits/software-update-2026-10-27/o21-dependency-probe.sh` step 5, output beside it); the one build belongs to the source build, which only the owner runs by hand. Holding it back again only moves the change to the first published release, where a miss would ship a desktop without the keyring that carries its key (b.2, b.3a). A second recipe for the same package would split its source: the channel's keyring must be grassfield-packages' `keyring/`, the whole package (its `keyring-check.sh`). |
 
 ## Amendments
 - **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the Store reads the list of other updates that
@@ -627,9 +638,9 @@ Landed in this repository:
 - the Omarchy pins of `docs/upstream/omarchy.lock`;
 - `tests/shell/update_check.sh` (the checker, logic layer) and `tests/integration/software_update.sh` (the container test).
 
-`grassfield-keyring` is not yet in grassfield-desktop's `depends` (owner decision O21): it joins in a follow-up once
-grassfield-packages' step 1b, which builds it, is merged, so that a local `makepkg -si` never asks for a package that does
-not exist. `makedepends` now holds everything the build compiles against (`makepkg -s` installs the global depends and
+`grassfield-keyring` was held back from grassfield-desktop's `depends` (owner decision O21) until grassfield-packages' step 1b,
+which builds it, was merged (its PR #3); the follow-up adds it, and a machine that builds from source builds the keyring
+once until the repository is published (UD1). `makedepends` now holds everything the build compiles against (`makepkg -s` installs the global depends and
 makedepends only): `hyprwayland-scanner`, `kio`, `solid`, `kcoreaddons`, `kservice`, `qt6-webengine`, `qt6-multimedia`,
 found by the first builds in a clean container.
 
@@ -663,6 +674,20 @@ Choices made within this ADR:
 - A notes file whose `channel` is not the client's channel is refused, like any other invalid notes.
 - `grassfield-channel-set` honours `GRASSFIELD_UPDATE_PKEXEC` only in a dev session (ADR-0019's predicate) and never makes
   or removes the hook link there; without the stand-in, a dev session refuses the change.
+
+## Step 1b as built (grassfield-packages PR #3, merged 2026-10-27)
+grassfield-packages builds what g lists; its README has the details and `docs/evidence/step1b-2026-10-27/` the runs.
+Where it goes further than this ADR's text:
+- Each tag is built once into a release build per channel (its packages, a database of that release alone and its notes);
+  the channel's one publisher (h.2 as amended by ADR-0037) makes each snapshot from the newest release build.
+- Signing with the project's key (b.7) is split over three containers, so that the key never meets a program that reads
+  package contents (`repo-add` evaluates `.PKGINFO` lines): the database is made without the key, the key's container
+  runs gpg only on an allowlist of file names, and the result is checked as a client would, without the key.
+- `grassfield-keyring` is built once per version, and each release build's copy must be `keyring/` in grassfield-packages,
+  the whole package (paths, file types, contents, install script, `.PKGINFO` fields), before it is signed.
+- A deliberate rollback (h.2) also withdraws the newer release builds from what the publisher reads, and puts them back if
+  the publisher refuses it.
+- Nothing is published: publishing jobs are written and disabled, and every key in its tests is a throwaway one.
 
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:
