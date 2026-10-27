@@ -25,10 +25,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -170,6 +174,8 @@ Outcome runScenario(Scenario scenario)
     return Ok;
 }
 
+// How long a child may run before it is killed (it takes about a second, more on a loaded machine).
+constexpr std::chrono::seconds kChildTimeout{20};
 // Set in the child's environment: which application and scenario it runs ("gui:1", "widgets:2").
 constexpr char kChildVariable[] = "GF_MENU_SHORTCUTS_CHILD";
 // Set in the child's environment: its scratch directory, which holds its HOME and every XDG directory.
@@ -265,9 +271,23 @@ std::string runInChild(bool widgets, Scenario scenario)
     posix_spawn_file_actions_destroy(&actions);
     if (spawned != 0)
         return std::string("not started: ") + std::strerror(spawned);
+    // A child normally ends within a second or two; one that hangs is killed, so it fails this test instead of the run.
+    const auto deadline = std::chrono::steady_clock::now() + kChildTimeout;
     int status = 0;
-    if (waitpid(pid, &status, 0) != pid)
-        return "not waited for";
+    for (;;) {
+        const pid_t done = waitpid(pid, &status, WNOHANG);
+        if (done == pid)
+            break;
+        if (done == -1 && errno != EINTR)
+            return std::string("not waited for: ") + std::strerror(errno);
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(pid, SIGKILL);
+            while (waitpid(pid, &status, 0) == -1 && errno == EINTR) {
+            }
+            return "hung: killed after " + std::to_string(kChildTimeout.count()) + " s";
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
     if (WIFSIGNALED(status))
         return std::string("killed by ") + strsignal(WTERMSIG(status));
     return WIFEXITED(status) ? outcomeName(WEXITSTATUS(status)) : "stopped";
