@@ -50,7 +50,10 @@ macOS-like titlebars on floating windows, and that the shell can discover the pl
 IPC under Hyprland's Lua config (input for ADR-0007). M2: real minimize with an animation toward the Dock
 tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
-Non-goals: the pressed-button state, appearance switching, tiled windows, CSD negotiation; for the overview: the
+Window tiling (FR47-FR50 here) grows into layouts, arrangements, tile groups and the green-light popover:
+`docs/specs/tiling.md`, ADR-0036 (Proposed, owner brief 2026-10-27, which takes tiled windows out of the non-goals).
+
+Non-goals: the pressed-button state, appearance switching, CSD negotiation; for the overview: the
 layout, labels, Desktops bar and input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
 `com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
