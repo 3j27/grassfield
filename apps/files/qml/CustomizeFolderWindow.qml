@@ -46,6 +46,12 @@ Window {
 
     onClosing: Qt.callLater(root.destroy)
 
+    // Cmd+W closes the key window (macOS): like Cancel (Escape, below).
+    Shortcut {
+        sequences: [StandardKey.Close]
+        onActivated: root.close()
+    }
+
     Component.onCompleted: {
         const first = root.urls.length > 0 ? root.app.folderStyleOf(root.urls[0]) : {color: "", glyph: ""};
         root.pickedColor = first.color;
