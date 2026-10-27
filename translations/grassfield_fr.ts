@@ -7367,6 +7367,17 @@
     </message>
 </context>
 <context>
+    <name>SecretsHandover</name>
+    <message>
+        <source>Saved passwords moved</source>
+        <translation>Mots de passe enregistrés déplacés</translation>
+    </message>
+    <message>
+        <source>Passwords that apps had saved elsewhere on this computer are now kept with your other saved passwords.</source>
+        <translation>Les mots de passe que des apps avaient enregistrés ailleurs sur cet ordinateur sont désormais rangés avec vos autres mots de passe enregistrés.</translation>
+    </message>
+</context>
+<context>
     <name>SetDateTimeSheet</name>
     <message>
         <source>Set the date and time</source>
