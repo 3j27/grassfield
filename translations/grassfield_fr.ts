@@ -4283,12 +4283,12 @@
         <translation>Méthodes de saisie</translation>
     </message>
     <message>
-        <source>Press Control-Space to select the next input source.</source>
-        <translation>Appuyez sur Contrôle-Espace pour sélectionner la méthode de saisie suivante.</translation>
-    </message>
-    <message>
         <source>Add an input source to type in another layout.</source>
         <translation>Ajoutez une méthode de saisie pour écrire avec une autre disposition.</translation>
+    </message>
+    <message>
+        <source>Drag an input source to change the order: the first one is used at login. Press Control-Space to select the next input source.</source>
+        <translation>Faites glisser une méthode de saisie pour changer l’ordre&#xa0;: la première est utilisée à l’ouverture de session. Appuyez sur Contrôle-Espace pour sélectionner la méthode de saisie suivante.</translation>
     </message>
     <message>
         <source>Done</source>

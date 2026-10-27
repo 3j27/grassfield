@@ -25,6 +25,7 @@
 --   repeat_delay         integer 100..3000  milliseconds before a held key repeats
 --   kb_layout            "us" or "us,fr"    1 to 4 xkb layouts
 --   kb_variant           ",bepo"            one field per layout, each empty or an xkb variant
+-- A Latin layout always comes first (M.latin_first, Omarchy's guard: the bindings resolve against the first layout).
 -- With two layouts or more, Ctrl+Space selects the next one (xkb grp:ctrl_space_toggle, added to Omarchy's own options).
 -- The shell reads the configuration again when either file changes (shell/platform/SessionConfig.qml), so a choice applies
 -- at once.
@@ -118,6 +119,40 @@ local function read_table(path)
   return out
 end
 
+-- Layouts that cannot type Latin letters: the list of Omarchy's default/hypr/input.lua (Omarchy 4.0.4; omarchy.lua's
+-- fallback and Settings' Keyboard.js keep the same one, tests/shell/session_input.sh compares them). Hyprland resolves the
+-- key bindings against the first layout of kb_layout, not the one in use, so with a non-Latin layout first the Super
+-- bindings stop working, and a session that starts in it cannot type a Latin password at the lock screen.
+M.non_latin = " af am ara bd bg by et ge gr il in iq ir kg kh kz la lk mk mm mn mv np rs ru sy th tj ua "
+
+function M.latin(layout)
+  return not M.non_latin:find(" " .. layout .. " ", 1, true)
+end
+
+-- The layouts (and their variants, one field each) with a Latin one first, as Settings' Input Sources keeps them (macOS
+-- always keeps a Latin input source): the first Latin layout of the list moves to the front, else U.S. is added before the
+-- others, as Omarchy does (at most four: xkb has four groups). Returns kb_layout, kb_variant and the number of layouts.
+function M.latin_first(kb_layout, kb_variant)
+  local layouts, variants = {}, {}
+  for field in (kb_layout .. ","):gmatch("([^,]*),") do layouts[#layouts + 1] = field end
+  for field in (kb_variant .. ","):gmatch("([^,]*),") do variants[#variants + 1] = field end
+  if not M.latin(layouts[1]) then
+    local at
+    for i, layout in ipairs(layouts) do
+      if M.latin(layout) then at = i break end
+    end
+    if at then
+      table.insert(layouts, 1, table.remove(layouts, at))
+      table.insert(variants, 1, table.remove(variants, at))
+    else
+      table.insert(layouts, 1, "us")
+      table.insert(variants, 1, "")
+      layouts[5], variants[5] = nil, nil
+    end
+  end
+  return table.concat(layouts, ","), table.concat(variants, ","), #layouts
+end
+
 local function whole(v, lo, hi)
   return type(v) == "number" and v == math.floor(v) and v >= lo and v <= hi
 end
@@ -148,6 +183,9 @@ function M.keyboard(path)
   end
   if out.kb_layout and not out.kb_variant then
     out.kb_variant = string.rep(",", layouts - 1)
+  end
+  if out.kb_layout then
+    out.kb_layout, out.kb_variant, layouts = M.latin_first(out.kb_layout, out.kb_variant)
   end
   if layouts >= 2 then
     out.kb_options = M.kb_options .. ",grp:ctrl_space_toggle"

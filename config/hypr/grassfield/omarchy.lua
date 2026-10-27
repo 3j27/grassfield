@@ -71,11 +71,19 @@ else
     end
     f:close()
   end
+  -- Omarchy's guard: Hyprland resolves the bindings against the first layout, so a layout that cannot type Latin letters
+  -- gets U.S. before it, the original one reached with Left Alt + Right Alt (the list is input.lua's M.non_latin).
+  local options = "compose:caps,shift:both_capslock_cancel"
+  local non_latin = " af am ara bd bg by et ge gr il in iq ir kg kh kz la lk mk mm mn mv np rs ru sy th tj ua "
+  if non_latin:find(" " .. layout:match("^[^,]*") .. " ", 1, true) then
+    layout, variant = "us," .. layout, "," .. variant
+    options = options .. ",grp:alts_toggle"
+  end
   hl.config({
     input = {
       kb_layout = layout,
       kb_variant = variant,
-      kb_options = "compose:caps,shift:both_capslock_cancel",
+      kb_options = options,
       repeat_rate = 40,
       repeat_delay = 250,
       numlock_by_default = true,

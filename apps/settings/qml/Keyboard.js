@@ -134,3 +134,26 @@ function sourceName(source, names) {
     const key = source.variant ? source.layout + ":" + source.variant : source.layout;
     return (names && names[key]) || key;
 }
+
+// Layouts that cannot type Latin letters: the list of Omarchy's default/hypr/input.lua, as config/hypr/grassfield/input.lua
+// keeps it (tests/shell/session_input.sh compares the three). Hyprland resolves the key bindings against the first layout, and
+// a session starts in it (a Latin password at the lock screen), so a Latin one is always first (macOS keeps a Latin input
+// source too).
+var NON_LATIN = ["af", "am", "ara", "bd", "bg", "by", "et", "ge", "gr", "il", "in", "iq", "ir", "kg", "kh", "kz", "la", "lk", "mk",
+    "mm", "mn", "mv", "np", "rs", "ru", "sy", "th", "tj", "ua"];
+
+function latin(layout) {
+    return NON_LATIN.indexOf(layout) < 0;
+}
+
+// The sources with a Latin one first, as input.lua applies them: the first Latin source moves to the front, else U.S. is added
+// before the others (at most MAX_LAYOUTS).
+function latinFirst(sources) {
+    const list = Array.isArray(sources) ? sources.slice() : [];
+    if (list.length > 0 && latin(list[0].layout))
+        return list;
+    const at = list.findIndex(s => latin(s.layout));
+    if (at > 0)
+        return [list[at]].concat(list.filter((s, i) => i !== at));
+    return [{layout: "us", variant: ""}].concat(list).slice(0, MAX_LAYOUTS);
+}

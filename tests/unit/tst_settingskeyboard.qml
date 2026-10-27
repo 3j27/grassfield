@@ -134,4 +134,90 @@ TestCase {
         compare(changedSpy.count, 4);
         compare(changedSpy.signalArguments[3][0].length, 4);
     }
+
+    // A Latin layout always leads (Omarchy's list, the rule of input.lua's latin_first): the bindings resolve against the first
+    // layout and a Latin password has to be typeable at the lock screen.
+    function test_latinFirst() {
+        verify(Keyboard.latin("us"));
+        verify(Keyboard.latin("fr"));
+        verify(!Keyboard.latin("ru"));
+        verify(!Keyboard.latin("ara"));
+        compare(Keyboard.NON_LATIN.length, 29);
+        compare(Keyboard.latinFirst([{layout: "ru", variant: ""}]), [{layout: "us", variant: ""}, {layout: "ru", variant: ""}]);
+        compare(Keyboard.latinFirst([{layout: "ru", variant: "phonetic"}, {layout: "ua", variant: ""}, {layout: "fr", variant: "bepo"}]),
+            [{layout: "fr", variant: "bepo"}, {layout: "ru", variant: "phonetic"}, {layout: "ua", variant: ""}]);
+        const kept = [{layout: "de", variant: ""}, {layout: "ru", variant: ""}];
+        compare(Keyboard.latinFirst(kept), kept);
+        const four = Keyboard.latinFirst(["ru", "ua", "by", "gr"].map(l => ({layout: l, variant: ""})));
+        compare(four.map(s => s.layout), ["us", "ru", "ua", "by"]);
+        compare(Keyboard.latinFirst([]), [{layout: "us", variant: ""}]);
+    }
+
+    function test_inputSourcesSheetKeepsLatinFirst() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/InputSourcesSheet.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const sheet = createTemporaryObject(comp, testCase, {width: 700, height: 900});
+        changedSpy.target = sheet;
+        changedSpy.clear();
+        // A single non-Latin layout (/etc/vconsole.conf): shown as the session applies it, U.S. first; nothing is written.
+        sheet.openWith([{layout: "ru", variant: ""}], {names: {}, all: []});
+        compare(sheet.sources, [{layout: "us", variant: ""}, {layout: "ru", variant: ""}]);
+        compare(changedSpy.count, 0);
+        // The last Latin source cannot be removed; another one can.
+        sheet.selected = 0;
+        verify(!sheet.canRemove);
+        sheet.remove();
+        compare(sheet.sources.length, 2);
+        sheet.selected = 1;
+        verify(sheet.canRemove);
+        // A non-Latin layout never moves first, by key or by drag.
+        sheet.move(-1);
+        compare(sheet.sources[0].layout, "us");
+        compare(changedSpy.count, 0);
+        sheet.add({layout: "fr", variant: "bepo"});
+        compare(changedSpy.count, 1);
+        sheet.moveTo(0);
+        compare(sheet.sources.map(s => s.layout), ["fr", "us", "ru"]);
+        // Removing the first Latin source brings the next Latin one first.
+        sheet.selected = 0;
+        sheet.moveTo(2);
+        compare(sheet.sources.map(s => s.layout), ["us", "ru", "fr"]);
+        sheet.selected = 0;
+        verify(sheet.canRemove);
+        sheet.remove();
+        compare(sheet.sources, [{layout: "fr", variant: "bepo"}, {layout: "ru", variant: ""}]);
+        compare(changedSpy.signalArguments[changedSpy.count - 1][0], sheet.sources);
+    }
+
+    function test_inputSourcesDrag() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/InputSourcesSheet.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const sheet = createTemporaryObject(comp, testCase, {width: 700, height: 900});
+        changedSpy.target = sheet;
+        changedSpy.clear();
+        sheet.openWith([{layout: "us", variant: ""}, {layout: "ru", variant: ""}, {layout: "fr", variant: ""}], {names: {}, all: []});
+        const list = findChild(sheet, "inputSourceList");
+        verify(list);
+        const row = list.height / sheet.sources.length;
+        waitForRendering(sheet);
+        // A press selects; a drag moves the pressed source row by row (here the third to the first).
+        mousePress(list, list.width / 2, row * 2.5);
+        compare(sheet.selected, 2);
+        mouseMove(list, list.width / 2, row * 1.5);
+        mouseMove(list, list.width / 2, row * 0.5);
+        mouseRelease(list, list.width / 2, row * 0.5);
+        compare(sheet.sources.map(s => s.layout), ["fr", "us", "ru"]);
+        compare(sheet.selected, 0);
+        // Dragging the non-Latin source to the top is refused.
+        mousePress(list, list.width / 2, row * 2.5);
+        mouseMove(list, list.width / 2, row * 1.5);
+        mouseMove(list, list.width / 2, row * 0.5);
+        mouseRelease(list, list.width / 2, row * 0.5);
+        compare(sheet.sources.map(s => s.layout), ["fr", "ru", "us"]);
+        // A plain click selects and moves nothing.
+        const before = changedSpy.count;
+        mouseClick(list, list.width / 2, row * 0.5);
+        compare(sheet.selected, 0);
+        compare(changedSpy.count, before);
+    }
 }

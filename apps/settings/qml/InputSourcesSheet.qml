@@ -4,8 +4,10 @@ import Grassfield.Ui
 import "Keyboard.js" as Keyboard
 
 // Keyboard > Input Sources > Edit…: the layouts in use, the first one at login; + adds one (LayoutPickerSheet, through Main.qml),
-// − removes the selected one (the last one stays), the arrows move it up or down. Each change goes back to the page at once
-// (`changed`), which writes keyboard.lua; with two or more, Ctrl+Space selects the next (input.lua).
+// − removes the selected one, a drag (or Alt+Up/Down) moves it. Each change goes back to the page at once (`changed`), which
+// writes keyboard.lua; with two or more, Ctrl+Space selects the next (input.lua). A Latin layout always comes first, as
+// input.lua applies them (Keyboard.latinFirst: the bindings resolve against the first layout, and a Latin password must be
+// typeable at the lock screen); macOS keeps a Latin input source the same way: the last one cannot be removed.
 Sheet {
     id: root
 
@@ -17,12 +19,15 @@ Sheet {
     signal addRequested(var layouts, var sources)
 
     title: qsTr("Input Sources")
-    message: root.sources.length > 1 ? qsTr("Press Control-Space to select the next input source.") : qsTr("Add an input source to type in another layout.")
+    message: root.sources.length > 1 ? qsTr("Drag an input source to change the order: the first one is used at login. Press Control-Space to select the next input source.") : qsTr("Add an input source to type in another layout.")
     confirmText: qsTr("Done")
     showCancel: false
 
+    // − is off for the last Latin source (another one has to stay).
+    readonly property bool canRemove: root.sources.length > 1 && root.sources.some((s, i) => i !== root.selected && Keyboard.latin(s.layout))
+
     function openWith(list: var, layouts: var): void {
-        root.sources = list;
+        root.sources = Keyboard.latinFirst(list);
         root.layouts = layouts;
         root.selected = 0;
         root.open();
@@ -42,21 +47,36 @@ Sheet {
         root.selected = root.sources.length - 1;
     }
 
-    function move(by: int): void {
-        const i = root.selected, j = i + by;
-        if (j < 0 || j >= root.sources.length)
+    // The selected source to position j; refused when a layout that cannot type Latin letters would come first.
+    function moveTo(j: int): void {
+        const i = root.selected;
+        if (j < 0 || j >= root.sources.length || j === i)
             return;
         const list = root.sources.slice();
-        const s = list[i];
-        list[i] = list[j];
-        list[j] = s;
+        list.splice(j, 0, list.splice(i, 1)[0]);
+        if (!Keyboard.latin(list[0].layout))
+            return;
         root.selected = j;
         root.set(list);
+    }
+
+    function move(by: int): void {
+        root.moveTo(root.selected + by);
+    }
+
+    function remove(): void {
+        if (root.canRemove)
+            root.set(Keyboard.latinFirst(root.sources.filter((s, i) => i !== root.selected)));
+    }
+
+    function indexAt(y: real): int {
+        return Math.max(0, Math.min(root.sources.length - 1, Math.floor(y / Tokens.settingsRowHeight)));
     }
 
     SettingsGroup {
         Item {
             id: list
+            objectName: "inputSourceList"
             width: parent.width
             height: Math.max(1, root.sources.length) * Tokens.settingsRowHeight
             activeFocusOnTab: true
@@ -72,6 +92,31 @@ Sheet {
                         root.selected = Math.max(0, Math.min(root.sources.length - 1, root.selected + by));
                     event.accepted = true;
                 }
+            }
+
+            // A press selects; dragged further than the platform's drag distance, the source follows the pointer row by row.
+            MouseArea {
+                id: dragArea
+
+                property bool dragging: false
+                property real startY: 0
+
+                anchors.fill: parent
+                cursorShape: dragArea.dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                onPressed: mouse => {
+                    root.selected = root.indexAt(mouse.y);
+                    dragArea.startY = mouse.y;
+                    dragArea.dragging = false;
+                    list.forceActiveFocus(Qt.MouseFocusReason);
+                }
+                onPositionChanged: mouse => {
+                    if (!dragArea.dragging && Math.abs(mouse.y - dragArea.startY) < Application.styleHints.startDragDistance)
+                        return;
+                    dragArea.dragging = true;
+                    root.moveTo(root.indexAt(mouse.y));
+                }
+                onReleased: dragArea.dragging = false
+                onCanceled: dragArea.dragging = false
             }
 
             Repeater {
@@ -110,25 +155,17 @@ Sheet {
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            root.selected = entry.index;
-                            list.forceActiveFocus(Qt.MouseFocusReason);
-                        }
-                    }
                 }
             }
         }
 
         ListFooter {
             canAdd: root.sources.length < Keyboard.MAX_LAYOUTS
-            canRemove: root.sources.length > 1
+            canRemove: root.canRemove
             addName: qsTr("Add an input source")
             removeName: qsTr("Remove the selected input source")
             onAddClicked: root.addRequested(root.layouts, root.sources)
-            onRemoveClicked: root.set(root.sources.filter((s, i) => i !== root.selected))
+            onRemoveClicked: root.remove()
         }
     }
 }
