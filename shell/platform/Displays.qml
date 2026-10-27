@@ -175,8 +175,10 @@ Singleton {
         onLoadFailed: root.handle("")
     }
 
+    // No refreshMonitors() here: Quickshell already asks Hyprland for `monitors` when its IPC starts, and a second request
+    // while that one is in flight leaves the monitor model empty (Quickshell 0.3.1; found with tests/shell/displays_publish.sh).
+    // The Instantiator above publishes when the answer arrives.
     Component.onCompleted: {
-        Hyprland.refreshMonitors();
         publishDebounce.restart();
     }
 }
