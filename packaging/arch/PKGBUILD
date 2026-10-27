@@ -116,6 +116,13 @@ build() {
   cmake -S "$(_root)/apps/secrets-handover" -B "$srcdir/secrets-handover-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/secrets-handover-build"
+  # grassfield-portal-settings (ADR-0035 D-8): the Settings portal backend (appearance and accent for other toolkits).
+  cmake -S "$(_root)/apps/portal-settings" -B "$srcdir/portal-settings-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/portal-settings-build"
+  # The 36 Grassfield GTK themes (ADR-0035 D-8, owner decision Q7, decision 2b-2), generated from the tokens.
+  rm -rf "$srcdir/gtk-themes"
+  python3 -I "$(_root)/ui/tools/gen-gtk-themes.py" "$srcdir/gtk-themes"
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
@@ -164,7 +171,10 @@ package_grassfield-desktop() {
   # gnome-keyring is the session's only Secret Service (ADR-0035 D-12, Q17-b: packaging/xdg-config/kwalletrc keeps KWallet's
   # ksecretd off org.freedesktop.secrets), so libsecret clients such as Chromium keep a keychain instead of plain-text storage:
   # declared, not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring)
+  # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
+  # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
+  # not assumed to come with Omarchy.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
   license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause)
@@ -250,7 +260,7 @@ package_grassfield-desktop() {
   find "$root/packaging/shims" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/omarchy-shims/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount secrets-handover; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
@@ -271,6 +281,21 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/clipboard-helper-build"
   # grassfield-secrets-handover: /usr/lib/grassfield/grassfield-secrets-handover (run by its user unit, above).
   DESTDIR="$pkgdir" cmake --install "$srcdir/secrets-handover-build"
+  # grassfield-portal-settings: /usr/lib/grassfield/grassfield-portal-settings (its user unit, above, and D-Bus activation),
+  # the session's portal routing and .portal file (read through env-grassfield's XDG_DATA_DIRS), and its D-Bus service file.
+  DESTDIR="$pkgdir" cmake --install "$srcdir/portal-settings-build"
+  install -Dm644 "$root/packaging/xdg/xdg-desktop-portal/hyprland-portals.conf" \
+    "$pkgdir/usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf"
+  install -Dm644 "$root/packaging/xdg/xdg-desktop-portal/portals/grassfield-settings.portal" \
+    "$pkgdir/usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield-settings.portal"
+  # The portal frontend starts after the Settings backend in the Grassfield session (its proxy is made once, at its start).
+  install -Dm644 "$root/packaging/systemd/xdg-desktop-portal.service.d/10-grassfield.conf" \
+    "$pkgdir/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf"
+  install -Dm644 "$root/packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield_settings.service" \
+    "$pkgdir/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.grassfield_settings.service"
+  # The GTK themes: /usr/share/themes/Grassfield-<accent>[-hc][-dark] (named by the portal backend for GTK 3 and GTK 4).
+  install -dm755 "$pkgdir/usr/share/themes"
+  cp -r --no-preserve=ownership "$srcdir/gtk-themes/." "$pkgdir/usr/share/themes/"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).

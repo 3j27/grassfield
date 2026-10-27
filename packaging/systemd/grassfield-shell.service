@@ -38,6 +38,10 @@ Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
 # Omarchy; docs/specs/security.md). tests/security/shell_unit_env.sh holds the list (and derives the qs options from
 # `qs --help`); scripts/dev/shell-run.sh --unit-env applies it.
 UnsetEnvironment=QML_IMPORT_PATH QML2_IMPORT_PATH QML_PLUGIN_PATH QML_DISK_CACHE_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GTK_MODULES GTK3_MODULES GTK_PATH GIO_EXTRA_MODULES QT_VULKAN_LIB QSG_RHI_BACKEND
+# Gate P5, ADR-0035 D-4: with GTK_USE_PORTAL=1 (env-grassfield) the gtk3 platform theme's gtk_init asks the portal for its
+# settings synchronously, so the shell's start would wait on xdg-desktop-portal. The shell takes its appearance from
+# grassfield.json itself.
+UnsetEnvironment=GTK_USE_PORTAL
 # While this shell runs it locks before sleep itself (shell/security/idle/SleepInhibitor.qml). An Omarchy sleep-lock unit
 # that happens to run as well is never stopped from here: it may be in the middle of a sleep it is delaying, and with the
 # stand-in it only ever asks this shell to lock (a second, harmless path).
