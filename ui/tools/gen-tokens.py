@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate ui/Grassfield/Ui/Tokens.qml, and the compositor plugin's token header, from ui/tokens/tokens.json (stdlib only).
+"""Generate ui/Grassfield/Ui/Tokens.qml, the compositor plugin's token header and the Settings portal backend's accent
+palette, from ui/tokens/tokens.json (stdlib only).
 
 Usage: gen-tokens.py [--check]
   --check  do not write; exit 1 if a generated file is stale.
@@ -7,6 +8,9 @@ Usage: gen-tokens.py [--check]
 The compositor plugin draws with its own renderer: the groups in PLUGIN_GROUPS are also written as C++ constants to
 compositor/src/core/ThemeTokens.hpp (numbers, and colours as 0xRRGGBB), read by compositor/src/core/Theme.hpp (ADR-0003:
 one source of values for both renderers; ADR-0015).
+The Settings portal backend (ADR-0035 D-8) publishes the accent colour to other toolkits: the accents of
+ui/Grassfield/Ui/Accent.js (multicolor = the palettes' own `accent`, then `color.accentLight` / `color.accentDark`) are
+written to apps/portal-settings/src/PaletteTokens.hpp.
 """
 import json
 import pathlib
@@ -17,7 +21,8 @@ UI = pathlib.Path(__file__).resolve().parent.parent
 SRC = UI / "tokens" / "tokens.json"
 DST = UI / "Grassfield" / "Ui" / "Tokens.qml"
 PLUGIN_DST = UI.parent / "compositor" / "src" / "core" / "ThemeTokens.hpp"
-PLUGIN_GROUPS = ("titlebar", "window")  # window: the lights the apps draw (ADR-0015 P7, one token source)
+PLUGIN_GROUPS = ("titlebar", "window", "tiling")  # window: the lights the apps draw (ADR-0015 P7); tiling: ADR-0036
+PORTAL_DST = UI.parent / "apps" / "portal-settings" / "src" / "PaletteTokens.hpp"
 
 
 def is_leaf(node):
@@ -94,8 +99,18 @@ def generate(data):
 
 
 def cpp_constant(group, name, value):
-    """One C++ constant of a plugin token: kGroupName, int / double / 0xRRGGBB colour."""
+    """One C++ constant of a plugin token: kGroupName, int / double / 0xRRGGBB colour, a list of equal-length integer lists
+    (the tiling zones, `int k[][N]`) or a list of strings (`std::string_view k[]`)."""
     ident = "k" + camel(group, name)[:1].upper() + camel(group, name)[1:]
+    if isinstance(value, list) and value and all(isinstance(row, list) and row and all(type(n) is int for n in row) for row in value):
+        width = len(value[0])
+        if any(len(row) != width for row in value):
+            raise SystemExit(f"tokens.json: {group}.{name}: the integer lists of a plugin token have one length")
+        rows = ", ".join("{" + ", ".join(str(n) for n in row) + "}" for row in value)
+        return f"inline constexpr int {ident}[][{width}] = {{{rows}}};"
+    if isinstance(value, list) and value and all(isinstance(text, str) and re.fullmatch(r"[a-z0-9-]+", text) for text in value):
+        items = ", ".join(json.dumps(text) for text in value)
+        return f"inline constexpr std::string_view {ident}[] = {{{items}}};"
     if isinstance(value, bool):
         return f"inline constexpr bool {ident} = {'true' if value else 'false'};"
     if isinstance(value, int):
@@ -104,7 +119,7 @@ def cpp_constant(group, name, value):
         return f"inline constexpr double {ident} = {value!r};"
     if isinstance(value, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
         return f"inline constexpr uint32_t {ident} = 0x{value[1:].upper()};"
-    raise SystemExit(f"tokens.json: {group}.{name}: a plugin token is a number or a #rrggbb colour")
+    raise SystemExit(f"tokens.json: {group}.{name}: a plugin token is a number, a #rrggbb colour, a list of integer lists or a list of ids")
 
 
 def generate_plugin(data):
@@ -115,6 +130,7 @@ def generate_plugin(data):
         "// The design tokens the compositor plugin draws with (read by core/Theme.hpp; no Hyprland include).",
         "",
         "#include <cstdint>",
+        "#include <string_view>",
         "",
         "namespace gf::theme::tokens {",
     ]
@@ -128,6 +144,53 @@ def generate_plugin(data):
             out.append(f"    // {leaf['source']}")
             out.append(f"    {cpp_constant(group, name, leaf['value'])}")
     out.append("} // namespace gf::theme::tokens")
+    return "\n".join(out) + "\n"
+
+
+def accent_names(data):
+    """The accent names in Accent.js order: multicolor, then the roles of color.accentLight without a "Text" suffix."""
+    light = data["color"]["accentLight"]
+    dark = data["color"]["accentDark"]
+    names = [n for n in light if not n.endswith("Text")]
+    if [n for n in dark if not n.endswith("Text")] != names:
+        raise SystemExit("tokens.json: color.accentLight and color.accentDark name different accents")
+    return ["multicolor"] + names
+
+
+def generate_portal(data):
+    color = data["color"]
+    rows = []
+    for name in accent_names(data):
+        if name == "multicolor":
+            light, dark = color["light"]["accent"], color["dark"]["accent"]
+        else:
+            light, dark = color["accentLight"][name], color["accentDark"][name]
+        for leaf in (light, dark):
+            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", str(leaf["value"])):
+                raise SystemExit(f"tokens.json: accent {name}: a portal accent is a #rrggbb colour")
+        rows.append(f'    {{"{name}", 0x{light["value"][1:].upper()}, 0x{dark["value"][1:].upper()}}},  // {light["source"]}')
+    out = [
+        "#pragma once",
+        "",
+        "// GENERATED by ui/tools/gen-tokens.py from ui/tokens/tokens.json. Do not edit.",
+        "// The accent colours the Settings portal backend publishes (ADR-0035 D-8): name, light and dark appearance, 0xRRGGBB.",
+        "",
+        "#include <cstdint>",
+        "",
+        "namespace grassfield::portal::tokens {",
+        "",
+        "struct Accent {",
+        "    const char *name;",
+        "    uint32_t light;",
+        "    uint32_t dark;",
+        "};",
+        "",
+        "inline constexpr Accent kAccents[] = {",
+        *rows,
+        "};",
+        "",
+        "} // namespace grassfield::portal::tokens",
+    ]
     return "\n".join(out) + "\n"
 
 
@@ -276,7 +339,8 @@ def main():
     if unsourced:
         print("gen-tokens: token sources that are not followable pointers:\n  " + "\n  ".join(unsourced), file=sys.stderr)
         return 1
-    outputs = ((DST, generate(data), "ui/Grassfield/Ui/Tokens.qml"), (PLUGIN_DST, generate_plugin(data), "compositor/src/core/ThemeTokens.hpp"))
+    outputs = ((DST, generate(data), "ui/Grassfield/Ui/Tokens.qml"), (PLUGIN_DST, generate_plugin(data), "compositor/src/core/ThemeTokens.hpp"),
+               (PORTAL_DST, generate_portal(data), "apps/portal-settings/src/PaletteTokens.hpp"))
     if "--check" in sys.argv[1:]:
         stale = [label for path, text, label in outputs if not path.exists() or path.read_text() != text]
         for label in stale:

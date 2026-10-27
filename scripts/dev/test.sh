@@ -233,6 +233,11 @@ gtest_suite tests/unit/clipboard-helper "apps/clipboard-helper/build-direct.sh -
 # then again with ASan and UBSan. The process against fake peers on a private bus is tests/integration/secrets_handover.sh.
 gtest_suite tests/unit/secrets-handover "apps/secrets-handover/build-direct.sh --tests >/dev/null && apps/secrets-handover/build-direct.sh --tests --asan" \
   ".dev/build/secrets-handover-unit-tests --gtest_brief=1" ".dev/build/secrets-handover-unit-tests-asan --gtest_brief=1"
+# grassfield-portal-settings (ADR-0035 D-8): the values it publishes, the namespace filter, the backend on a scratch settings
+# file (changes, atomic replace, the auto schedule, the announcement at start): built here, then again with ASan and UBSan. With the real portal frontend
+# on a private bus: tests/integration/portal_settings.sh.
+gtest_suite tests/unit/portal-settings "apps/portal-settings/build-direct.sh --tests >/dev/null && apps/portal-settings/build-direct.sh --tests --asan" \
+  ".dev/build/portal-settings-unit-tests --gtest_brief=1" ".dev/build/portal-settings-unit-tests-asan --gtest_brief=1"
 # grassfield-settings dev guard, the wallpaper helper door (exact tool path, exact argument vectors) and the Backend's glue
 # (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
@@ -291,6 +296,12 @@ if want logic; then
   python3 -I tests/ci/run_mode.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/run_mode.py "$rc" PASS
+  # The generated GTK themes (ADR-0035 D-8): 36, each importing GTK's own theme, no colour function, the pairs' contrast. Their
+  # rendering under Xvfb is tests/integration/gtk_themes.sh.
+  rc=0
+  python3 -I tests/ci/gtk_themes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/gtk_themes.py "$rc" PASS
   # Symbolic glyph stroke width (ADR-0003, audit GF-124): the scanner on samples, then every shipped glyph.
   rc=0
   python3 -I tests/ci/icon_strokes.py --selftest || rc=1

@@ -330,6 +330,8 @@ check bash -c '[[ $(grep -c "\"method\": \"quit\"" "$1/calls.log") == 0 && $(gre
 WALLET=yes KWALLET="--locked" KEYCHAIN="" LEFTOVER=none KEYRING=/usr/bin/env run strangerkeychain
 desc="11 a genuine KWallet and a Secret Service that is not gnome-keyring: nothing asked, read or written, no marker [$(cat "$tmp/strangerkeychain/out")]"
 check bash -c '[[ $(grep -c "\"method\": \"Unlock\"" "$1/calls.log") == 0 && $(grep -c "\"method\": \"GetSecret\"" "$1/calls.log") == 0 && $(grep -c "\"method\": \"CreateItem\"" "$1/calls.log") == 0 && ! -s $1/store.log && ! -s $1/marker ]] && grep -q "^grassfield-secrets-handover: deferred" "$1/out" && grep -q "not held by gnome-keyring" "$1/err"' _ "$tmp/strangerkeychain"
+desc="11 ... and not one call reaches that Secret Service: no search either, nothing of KWallet's is shown to it [$(grep -c '"role": "keychain"' "$tmp/strangerkeychain/calls.log")]"
+check test "$(grep -c '"role": "keychain"' "$tmp/strangerkeychain/calls.log")" = 0
 
 # 12 -------------------------------------------------------------------------------------------------------------------
 out=$(env -i PATH="$PATH" HOME="$tmp" "$helper" 2>&1); rc=$?

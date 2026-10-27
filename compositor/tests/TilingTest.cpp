@@ -2,6 +2,12 @@
 
 #include "core/Tiling.hpp"
 
+#include <array>
+#include <cmath>
+#include <limits>
+#include <string>
+#include <vector>
+
 using namespace gf::tiling;
 
 namespace {
@@ -111,4 +117,561 @@ TEST(TilingNames, PlacesAndOptionsParseStrictly) {
     EXPECT_EQ(parseBool("false"), false);
     EXPECT_FALSE(parseBool("1").has_value());
     EXPECT_FALSE(parseBool("True").has_value());
+}
+
+// ---- ADR-0036 step 1: the geometry engine (docs/specs/tiling.md TL1-TL15) ----
+
+namespace {
+    // An output of `px` device pixels at `scale` (Hyprland keeps its logical size whole), at the layout origin, with a
+    // 24-px menu bar and an 82-px Dock: the work area tiles use.
+    Area areaFor(double pxW, double pxH, double scale, double margin) {
+        const double w = pxW / scale, h = pxH / scale;
+        return Area{Rect{0, 24, w, h - 24 - 82}, margin, Grid{0, 0, gridStep(scale)}};
+    }
+
+    bool whole(double v) {
+        return std::abs(v - std::round(v)) < 1e-9;
+    }
+
+    Placement at(Place place) {
+        Placement p;
+        p.place = place;
+        return p;
+    }
+
+    Placement inLayout(std::string_view layout, int zone) {
+        Placement p;
+        p.layout = std::string{layout};
+        p.zone   = zone;
+        return p;
+    }
+
+    std::vector<Rect> framesOf(std::string_view layoutId, const Area& area) {
+        std::vector<Rect> out;
+        for (const auto& z : layoutById(layoutId)->zones)
+            out.push_back(zoneFrame(z, area));
+        return out;
+    }
+}
+
+TEST(TilingOutputs, AMovedWindowBelongsToTheOutputUnderItsMiddle) {
+    // WAYLAND-1 (1440 wide) left of GF-REF (1920 wide), as in the nested session.
+    const std::array<Rect, 2> outputs{Rect{0, 0, 1440, 900}, Rect{1440, 0, 1920, 1080}};
+    EXPECT_EQ(outputUnder(Rect{1300, 100, 800, 500}, outputs), 1U) << "its middle (1700) is on GF-REF, its top-left is not";
+    EXPECT_EQ(outputUnder(Rect{900, 100, 800, 500}, outputs), 0U) << "its middle (1300) is on WAYLAND-1";
+    EXPECT_EQ(outputUnder(Rect{1040, 100, 800, 500}, outputs), 1U) << "a middle on the shared edge belongs to the right-hand output";
+    EXPECT_FALSE(outputUnder(Rect{300, 900, 800, 400}, outputs).has_value()) << "its middle is below WAYLAND-1: it keeps its Desktop";
+    EXPECT_FALSE(outputUnder(Rect{0, 0, 10, 10}, std::span<const Rect>{}).has_value());
+}
+
+TEST(TilingOutputs, AnUnmappedWindowIsNeverMoved) {
+    // Gate C1: a window that closed or unmapped during a titlebar drag is still alive (its fade-out, or an app that only
+    // unmapped it) but has no Desktop and its target no space: the plugin moves nothing (Hyprland would dereference null).
+    const WindowFacts live{.mapped = true, .onDesktop = true, .inSpace = true, .floating = true};
+    EXPECT_TRUE(movable(live));
+    EXPECT_FALSE(movable(WindowFacts{.mapped = false, .onDesktop = true, .inSpace = true, .floating = true}));
+    EXPECT_FALSE(movable(WindowFacts{.mapped = true, .onDesktop = false, .inSpace = true, .floating = true})) << "unmapping cleared its Desktop";
+    EXPECT_FALSE(movable(WindowFacts{.mapped = true, .onDesktop = true, .inSpace = false, .floating = true})) << "its target left the space";
+    EXPECT_TRUE(shouldFollow(live, 1, false));
+    EXPECT_FALSE(shouldFollow(live, 1, true)) << "already on that Desktop";
+    EXPECT_FALSE(shouldFollow(live, std::nullopt, false)) << "over no output: it keeps its Desktop";
+    EXPECT_FALSE(shouldFollow(WindowFacts{.mapped = true, .onDesktop = true, .inSpace = true, .floating = false}, 1, false)) << "tiled by Hyprland's layout";
+    EXPECT_FALSE(shouldFollow(WindowFacts{.mapped = false, .onDesktop = false, .inSpace = false, .floating = true}, 1, false)) << "closed during the drag";
+}
+
+TEST(TilingGrid, TheStepIsWholeInLogicalAndDevicePixels) {
+    EXPECT_EQ(gridStep(1.0), 1);
+    EXPECT_EQ(gridStep(2.0), 1);
+    EXPECT_EQ(gridStep(1.5), 2);
+    EXPECT_EQ(gridStep(2.5), 2);
+    EXPECT_EQ(gridStep(160.0 / 120.0), 3);
+    EXPECT_EQ(gridStep(1.25), 4);
+    EXPECT_EQ(gridStep(1.75), 4);
+    EXPECT_EQ(gridStep(1.2), 1) << "step 5: above kMaxGridStep, whole logical px only";
+    EXPECT_EQ(gridStep(1.6), 1);
+    EXPECT_EQ(gridStep(1.125), 1);
+    EXPECT_EQ(gridStep(0.0), 1);
+    EXPECT_EQ(gridStep(std::numeric_limits<double>::quiet_NaN()), 1);
+    for (double scale : {1.0, 1.25, 160.0 / 120.0, 1.5, 1.75, 2.0}) {
+        const int g = gridStep(scale);
+        EXPECT_TRUE(whole(g * scale)) << scale;
+    }
+}
+
+TEST(TilingGrid, NeighboursShareOneEdgeOnWholePixelsAtEveryScale) {
+    // Hyprland truncates an xdg window's configured size to whole logical px (Window.cpp:1752-1753): every edge is whole,
+    // so no slit opens between neighbours; where the scale has a grid, the edges are whole device px too.
+    for (double scale : {1.0, 1.25, 160.0 / 120.0, 1.5, 1.6, 2.0}) {
+        const Area a = areaFor(2560, 1440, scale, 0);
+        for (std::string_view id : {"left-right", "thirds", "wide-center", "four-columns", "quarters", "stacked-thirds", "wide-left"}) {
+            const auto frames = framesOf(id, a);
+            for (const auto& f : frames) {
+                EXPECT_TRUE(whole(f.x) && whole(f.y) && whole(f.w) && whole(f.h)) << id << " at " << scale;
+                if (a.grid.step > 1) {
+                    for (double e : {f.x, f.x + f.w}) {
+                        if (std::abs(e - a.box.x) > 0.5 && std::abs(e - (a.box.x + a.box.w)) > 0.5) {
+                            EXPECT_TRUE(whole(e * scale)) << id << " edge " << e << " at " << scale;
+                        }
+                    }
+                }
+            }
+            // Without margins the zones meet exactly: the sum of a row's widths is the snapped span.
+            for (size_t i = 0; i < frames.size(); ++i) {
+                for (size_t j = 0; j < frames.size(); ++j) {
+                    const auto& zi = layoutById(id)->zones[i];
+                    const auto& zj = layoutById(id)->zones[j];
+                    if (zi.x + zi.w == zj.x && zi.y < zj.y + zj.h && zj.y < zi.y + zi.h) {
+                        EXPECT_DOUBLE_EQ(frames[i].x + frames[i].w, frames[j].x) << id << " at " << scale;
+                    }
+                    if (zi.y + zi.h == zj.y && zi.x < zj.x + zj.w && zj.x < zi.x + zi.w) {
+                        EXPECT_DOUBLE_EQ(frames[i].y + frames[i].h, frames[j].y) << id << " at " << scale;
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST(TilingGrid, MarginsAreExactWhenTheStepDividesThem) {
+    for (double scale : {1.0, 1.25, 1.5, 2.0}) {
+        const Area a      = areaFor(2560, 1440, scale, 8);
+        const auto frames = framesOf("thirds", a);
+        EXPECT_DOUBLE_EQ(frames[1].x - (frames[0].x + frames[0].w), 8) << scale;
+        EXPECT_DOUBLE_EQ(frames[2].x - (frames[1].x + frames[1].w), 8) << scale;
+        EXPECT_GE(frames[0].x - a.box.x, 8) << "outer margin " << scale;
+        EXPECT_LT(frames[0].x - a.box.x, 8 + a.grid.step) << scale;
+        EXPECT_GE(a.box.y + a.box.h - (frames[0].y + frames[0].h), 8) << scale;
+        EXPECT_LT(a.box.y + a.box.h - (frames[0].y + frames[0].h), 8 + a.grid.step) << "the Dock ends off the grid at " << scale;
+    }
+    const Area third = areaFor(2560, 1440, 160.0 / 120.0, 8);
+    const auto f     = framesOf("left-right", third);
+    const double gap = f[1].x - (f[0].x + f[0].w);
+    EXPECT_GE(gap, 8 - 3) << "within one step of the margin at step 3";
+    EXPECT_LE(gap, 8 + 3);
+}
+
+TEST(TilingFit, AMinimumTakesRoomFromItsNeighbourAsFarAsItsMinimumAllows) {
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    const auto& zones  = layoutById("left-right")->zones;
+    const auto  frames = framesOf("left-right", a);
+    // The first window needs 1200: its neighbour (minimum 300) gives 240 and the shared edge moves for both.
+    std::vector<Constraints> cons{Constraints{.minW = 1200}, Constraints{.minW = 300}};
+    auto fit = fitFrames(zones, frames, cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].w, 1200);
+    EXPECT_DOUBLE_EQ(fit[1].x, 1200);
+    EXPECT_DOUBLE_EQ(fit[1].w, 720);
+    // The neighbour can give only 60: the first window grows alone over it, from its edge on the border.
+    cons[1].minW = 900;
+    fit          = fitFrames(zones, frames, cons, a);
+    EXPECT_DOUBLE_EQ(fit[1].x, 1020);
+    EXPECT_DOUBLE_EQ(fit[1].w, 900);
+    EXPECT_DOUBLE_EQ(fit[0].x, 0);
+    EXPECT_DOUBLE_EQ(fit[0].w, 1200) << "it overlaps its neighbour";
+    // A right-hand window that must grow alone grows leftwards and stays inside the work area.
+    std::vector<Constraints> right{Constraints{.minW = 900}, Constraints{.minW = 1500}};
+    fit = fitFrames(zones, frames, right, a);
+    EXPECT_DOUBLE_EQ(fit[1].x + fit[1].w, 1920);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1500);
+    // A minimum larger than the work area: the window starts at the work area's edge.
+    const std::array<Zone, 1> fill{Zone{0, 0, 12, 12}};
+    const std::array<Rect, 1> fillFrame{zoneFrame(fill[0], a)};
+    const std::array<Constraints, 1> huge{Constraints{.minW = 2500, .minH = 400}};
+    const auto big = fitFrames(fill, fillFrame, huge, a);
+    EXPECT_DOUBLE_EQ(big[0].x, 0);
+    EXPECT_DOUBLE_EQ(big[0].w, 2500);
+}
+
+TEST(TilingGrid, OuterEdgesSnapInsideTheWorkArea) {
+    // A work area that starts and ends off the grid (step 4 from the output's origin): the outer edges go inside it.
+    const Area a{Rect{1, 25, 1917, 973}, 0, Grid{0, 0, 4}};
+    EXPECT_EQ(zoneFrame(Zone{}, a), (Rect{4, 28, 1912, 968}));
+    const Area m{Rect{1, 25, 1917, 973}, 6, Grid{0, 0, 4}};
+    EXPECT_EQ(zoneFrame(Zone{}, m), (Rect{8, 32, 1904, 960})) << "the margin first, then the grid line inside";
+}
+
+TEST(TilingGrid, InnerEdgesGoToTheNearestLine) {
+    // Thirds of 1000 px: the boundaries 333.3 and 666.7 go to 333 and 667 (nearest, not down).
+    const Area a{Rect{0, 0, 1000, 1000}, 0, Grid{0, 0, 1}};
+    const auto thirds = framesOf("thirds", a);
+    EXPECT_DOUBLE_EQ(thirds[1].x, 333);
+    EXPECT_DOUBLE_EQ(thirds[2].x, 667);
+    EXPECT_DOUBLE_EQ(thirds[0].w, 333);
+    EXPECT_DOUBLE_EQ(thirds[2].w, 333);
+}
+
+TEST(TilingFit, ARightWindowTakesRoomFromItsLeftNeighbour) {
+    // Left & Right, the right window needs 1200: the left one gives 240 across their shared edge (no overlap).
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    const auto& zones = layoutById("left-right")->zones;
+    const std::vector<Constraints> cons{Constraints{}, Constraints{.minW = 1200}};
+    const auto fit = fitFrames(zones, framesOf("left-right", a), cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].x, 0);
+    EXPECT_DOUBLE_EQ(fit[0].w, 720);
+    EXPECT_DOUBLE_EQ(fit[1].x, 720);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1200);
+}
+
+TEST(TilingFit, AWindowGrowingAloneStaysInsideTheWorkArea) {
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    // The middle third alone (no neighbour placed) needs 1800: it grows to the right, then moves back inside.
+    const std::array<Zone, 1> middle{Zone{4, 0, 4, 12}};
+    const std::array<Rect, 1> middleFrame{zoneFrame(middle[0], a)};
+    const std::array<Constraints, 1> wide{Constraints{.minW = 1800}};
+    const auto m = fitFrames(middle, middleFrame, wide, a);
+    EXPECT_DOUBLE_EQ(m[0].x, 120);
+    EXPECT_DOUBLE_EQ(m[0].x + m[0].w, 1920);
+    // The right third alone with a minimum larger than the work area: aligned to its start.
+    const std::array<Zone, 1> right{Zone{8, 0, 4, 12}};
+    const std::array<Rect, 1> rightFrame{zoneFrame(right[0], a)};
+    const std::array<Constraints, 1> huge{Constraints{.minW = 2000}};
+    const auto r = fitFrames(right, rightFrame, huge, a);
+    EXPECT_DOUBLE_EQ(r[0].x, 0);
+    EXPECT_DOUBLE_EQ(r[0].w, 2000);
+    // With margins: a right window that must grow alone keeps its margin to the work area's right edge.
+    const Area margins{Rect{0, 0, 1920, 1000}, 8, Grid{0, 0, 1}};
+    const auto& zones = layoutById("left-right")->zones;
+    const std::vector<Constraints> cons{Constraints{.minW = 900}, Constraints{.minW = 1500}};
+    const auto fit = fitFrames(zones, framesOf("left-right", margins), cons, margins);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1500);
+    EXPECT_DOUBLE_EQ(fit[1].x + fit[1].w, 1912) << "the margin stays";
+}
+
+TEST(TilingFit, TheOtherQuarterFollowsTheSharedEdge) {
+    // Left & Quarters, the top-right window needs 1200: the left half gives 240 and the bottom-right quarter follows the
+    // shared edge, so no hole opens beside it (review of 3831dc0).
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    const auto& zones = layoutById("left-quarters")->zones;
+    const std::vector<Constraints> cons{Constraints{}, Constraints{.minW = 1200}, Constraints{}};
+    const auto fit = fitFrames(zones, framesOf("left-quarters", a), cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].w, 720);
+    EXPECT_DOUBLE_EQ(fit[1].x, 720);
+    EXPECT_DOUBLE_EQ(fit[1].w, 1200);
+    EXPECT_DOUBLE_EQ(fit[2].x, 720) << "no hole between the left half and the bottom-right quarter";
+    EXPECT_DOUBLE_EQ(fit[2].w, 1200);
+    // Quarters: the top-left window's need moves only the top row's shared edge; the bottom row keeps its own.
+    const auto& quarters = layoutById("quarters")->zones;
+    const std::vector<Constraints> topLeft{Constraints{.minW = 1200}, Constraints{}, Constraints{}, Constraints{}};
+    const auto q = fitFrames(quarters, framesOf("quarters", a), topLeft, a);
+    EXPECT_DOUBLE_EQ(q[1].x, 1200);
+    EXPECT_DOUBLE_EQ(q[2].w, 960);
+    EXPECT_DOUBLE_EQ(q[3].x, 960);
+}
+
+TEST(TilingFit, AMaximumIsCentredOnTheGrid) {
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 2}};
+    const auto& zones = layoutById("left-right")->zones;
+    const std::vector<Constraints> cons{Constraints{.maxW = 901}, Constraints{}};
+    const auto fit = fitFrames(zones, framesOf("left-right", a), cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].w, 901);
+    EXPECT_DOUBLE_EQ(fit[0].x, 28) << "29.5 px to centre it, 28 on the grid";
+}
+
+TEST(TilingFit, MaximaCentreAndIncrementsRoundDown) {
+    const Area a{Rect{0, 0, 1920, 1000}, 0, Grid{0, 0, 1}};
+    const auto& zones  = layoutById("left-right")->zones;
+    const auto  frames = framesOf("left-right", a);
+    std::vector<Constraints> cons{Constraints{.maxW = 500, .maxH = 300, .band = 32}, Constraints{.incW = 10, .incH = 7, .baseW = 2, .baseH = 1, .band = 0}};
+    const auto fit = fitFrames(zones, frames, cons, a);
+    EXPECT_DOUBLE_EQ(fit[0].w, 500);
+    EXPECT_DOUBLE_EQ(fit[0].x, 230) << "centred in its 960-px zone";
+    EXPECT_DOUBLE_EQ(fit[0].h, 332) << "the band is added to the surface maximum";
+    EXPECT_DOUBLE_EQ(fit[1].x, 960) << "top-left kept";
+    EXPECT_DOUBLE_EQ(fit[1].w, 952) << "2 + 95 x 10";
+    EXPECT_DOUBLE_EQ(fit[1].h, 995) << "1 + 142 x 7";
+}
+
+TEST(TilingNeighbour, AHalfBesideATiledWindowTakesTheRest) {
+    const Area a{Rect{0, 24, 1920, 974}, 8, Grid{0, 0, 1}};
+    // A window holding the right two thirds (full height): Left takes the rest, one margin before it.
+    const Rect twoThirds = zoneFrame(zoneOf(Place::RightTwoThirds).value_or(Zone{}), a);
+    const std::array<Rect, 1> neighbours{twoThirds};
+    const auto left = halfBesideNeighbour(Place::Left, a, neighbours);
+    ASSERT_TRUE(left.has_value());
+    const Rect l = left.value_or(Rect{});
+    EXPECT_DOUBLE_EQ(l.x, 8);
+    EXPECT_DOUBLE_EQ(l.x + l.w + 8, twoThirds.x);
+    EXPECT_DOUBLE_EQ(l.h, twoThirds.h);
+    // Not full height, or leaving less than a quarter: an exact half.
+    const std::array<Rect, 1> quarter{zoneFrame(zoneOf(Place::TopRight).value_or(Zone{}), a)};
+    EXPECT_FALSE(halfBesideNeighbour(Place::Left, a, quarter).has_value());
+    const std::array<Rect, 1> fill{zoneFrame(zoneOf(Place::Fill).value_or(Zone{}), a)};
+    EXPECT_FALSE(halfBesideNeighbour(Place::Left, a, fill).has_value());
+    const std::array<Rect, 1> wide{Rect{300, 32, 1612, 958}};
+    EXPECT_FALSE(halfBesideNeighbour(Place::Left, a, wide).has_value()) << "it leaves less than a quarter: an exact half";
+    // The other sides.
+    const std::array<Rect, 1> leftThird{zoneFrame(zoneOf(Place::LeftThird).value_or(Zone{}), a)};
+    const auto right = halfBesideNeighbour(Place::Right, a, leftThird);
+    ASSERT_TRUE(right.has_value());
+    EXPECT_DOUBLE_EQ(right.value_or(Rect{}).x, leftThird[0].x + leftThird[0].w + 8);
+    const std::array<Rect, 1> bottom{zoneFrame(zoneOf(Place::Bottom).value_or(Zone{}), a)};
+    const auto top = halfBesideNeighbour(Place::Top, a, bottom);
+    ASSERT_TRUE(top.has_value());
+    const Rect t = top.value_or(Rect{});
+    EXPECT_DOUBLE_EQ(t.y + t.h + 8, bottom[0].y);
+    EXPECT_FALSE(halfBesideNeighbour(Place::Fill, a, bottom).has_value()) << "halves only";
+}
+
+TEST(TilingNeighbour, TheNearestNeighbourWins) {
+    const Area a{Rect{0, 24, 1920, 974}, 8, Grid{0, 0, 1}};
+    // Two windows hold the right side, the nearer one first: Left stops one margin before the nearer one.
+    const std::array<Rect, 2> right{Rect{1100, 32, 812, 958}, Rect{1300, 32, 612, 958}};
+    const auto left = halfBesideNeighbour(Place::Left, a, right);
+    ASSERT_TRUE(left.has_value());
+    EXPECT_DOUBLE_EQ(left.value_or(Rect{}).x + left.value_or(Rect{}).w, 1092);
+    const std::array<Rect, 2> leftSide{Rect{8, 32, 800, 958}, Rect{8, 32, 600, 958}};
+    const auto rightHalf = halfBesideNeighbour(Place::Right, a, leftSide);
+    ASSERT_TRUE(rightHalf.has_value());
+    EXPECT_DOUBLE_EQ(rightHalf.value_or(Rect{}).x, 816);
+    const std::array<Rect, 2> below{Rect{8, 600, 1904, 390}, Rect{8, 700, 1904, 290}};
+    const auto top = halfBesideNeighbour(Place::Top, a, below);
+    ASSERT_TRUE(top.has_value());
+    EXPECT_DOUBLE_EQ(top.value_or(Rect{}).y + top.value_or(Rect{}).h, 592);
+    const std::array<Rect, 2> above{Rect{8, 32, 1904, 400}, Rect{8, 32, 1904, 300}};
+    const auto bottom = halfBesideNeighbour(Place::Bottom, a, above);
+    ASSERT_TRUE(bottom.has_value());
+    EXPECT_DOUBLE_EQ(bottom.value_or(Rect{}).y, 440);
+}
+
+TEST(TilingCenter, KeepsTheSizeOnTheGrid) {
+    const Area a{Rect{0, 24, 2048, 1046}, 8, Grid{0, 0, 4}};
+    const auto c = centerFrame(Rect{100, 100, 801, 500}, 32, a);
+    EXPECT_DOUBLE_EQ(c.w, 801);
+    EXPECT_DOUBLE_EQ(c.h, 532);
+    EXPECT_EQ(static_cast<long>(c.x) % 4, 0);
+    EXPECT_EQ(static_cast<long>(c.y) % 4, 0);
+}
+
+TEST(TilingCatalogue, ClassesNameLayoutsThatTileTheWholeArea) {
+    EXPECT_EQ(classify(1920, 1080), OutputClass::Large);
+    EXPECT_EQ(classify(1366, 768), OutputClass::Small);
+    EXPECT_EQ(classify(1728, 1117), OutputClass::Small);
+    EXPECT_EQ(classify(3440, 1440), OutputClass::UltraWide);
+    EXPECT_EQ(classify(2560, 1080), OutputClass::UltraWide);
+    EXPECT_EQ(classify(1080, 1920), OutputClass::Portrait);
+    EXPECT_EQ(classify(0, 0), OutputClass::Small);
+    // The ultra-wide boundary is the 21:9 aspect itself, whatever the width.
+    EXPECT_EQ(classify(2520, 1080), OutputClass::UltraWide) << "exactly 21:9";
+    EXPECT_EQ(classify(2510, 1080), OutputClass::Large) << "just under 21:9";
+    EXPECT_EQ(classify(1800, 760), OutputClass::UltraWide) << "narrower than the large class, still 21:9";
+    EXPECT_EQ(classify(1919, 1080), OutputClass::Small);
+    EXPECT_EQ(classify(1000, 1000), OutputClass::Small) << "square is not portrait";
+    for (OutputClass c : {OutputClass::Small, OutputClass::Large, OutputClass::UltraWide, OutputClass::Portrait}) {
+        EXPECT_FALSE(layoutsFor(c).empty()) << nameOf(c);
+        for (std::string_view id : layoutsFor(c))
+            EXPECT_NE(layoutById(id), nullptr) << id;
+    }
+    for (const auto& l : catalogue()) {
+        ASSERT_GE(l.zones.size(), 1U) << l.id;
+        ASSERT_LE(l.zones.size(), kMaxZones) << l.id;
+        int cells = 0;
+        for (size_t i = 0; i < l.zones.size(); ++i) {
+            const auto& z = l.zones[i];
+            EXPECT_TRUE(z.x >= 0 && z.y >= 0 && z.w > 0 && z.h > 0 && z.x + z.w <= kZoneGrid && z.y + z.h <= kZoneGrid) << l.id;
+            cells += z.w * z.h;
+            for (size_t j = i + 1; j < l.zones.size(); ++j) {
+                const auto& o = l.zones[j];
+                EXPECT_FALSE(z.x < o.x + o.w && o.x < z.x + z.w && z.y < o.y + o.h && o.y < z.y + z.h) << l.id << " zones overlap";
+            }
+        }
+        EXPECT_EQ(cells, kZoneGrid * kZoneGrid) << l.id << " leaves a hole";
+    }
+    EXPECT_EQ(layoutById("nope"), nullptr);
+}
+
+TEST(TilingNames, TheThirdsArePlaces) {
+    for (const char* name : {"left-third", "middle-third", "right-third", "left-two-thirds", "right-two-thirds"}) {
+        const auto p = parsePlace(name);
+        ASSERT_TRUE(p.has_value()) << name;
+        EXPECT_EQ(nameOf(p.value_or(Place::Center)), name);
+        EXPECT_TRUE(zoneOf(p.value_or(Place::Center)).has_value());
+    }
+    EXPECT_EQ(zoneOf(Place::RightTwoThirds), (Zone{4, 0, 8, 12}));
+    EXPECT_FALSE(zoneOf(Place::Center).has_value());
+}
+
+TEST(TilingRecord, TheStateMachineKeepsTheBoxFromBefore) {
+    CTileBook book;
+    const Rect before{100, 100, 800, 500}, half{0, 56, 960, 942}, quarter{0, 56, 960, 455};
+    const auto g0 = book.generation();
+    const auto& r = book.placed(1, before, half, 32, at(Place::Left), "A", 1, 0);
+    EXPECT_EQ(r.state, TileState::Tiled);
+    EXPECT_EQ(r.before, before);
+    EXPECT_GT(book.generation(), g0);
+    // A later tiling keeps the box from before the first.
+    book.placed(1, half, quarter, 32, at(Place::TopLeft), "A", 1, 0);
+    EXPECT_EQ(book.find(1)->before, before);
+    EXPECT_TRUE(book.check(1, quarter));
+    // A drag away: Moving with the box from before; a release elsewhere forgets it.
+    EXPECT_EQ(book.beginMove(1), before);
+    EXPECT_EQ(book.find(1)->state, TileState::Moving);
+    EXPECT_TRUE(book.check(1, Rect{5, 5, 800, 500})) << "a moving window is not checked";
+    book.endMove(1);
+    EXPECT_EQ(book.find(1), nullptr);
+    // A release in a zone after a move keeps the box from before.
+    book.placed(2, before, half, 32, at(Place::Left), "A", 1, 0);
+    book.beginMove(2);
+    book.placed(2, Rect{300, 300, 800, 500}, quarter, 32, at(Place::TopLeft), "A", 1, 0);
+    EXPECT_EQ(book.find(2)->before, before);
+    EXPECT_EQ(book.find(2)->state, TileState::Tiled);
+    // A user resize keeps the record and updates the box.
+    EXPECT_TRUE(book.beginResize(2));
+    EXPECT_TRUE(book.check(2, Rect{0, 0, 1, 1})) << "a resizing window is not checked";
+    book.endResize(2, Rect{0, 56, 1000, 455});
+    EXPECT_EQ(book.find(2)->state, TileState::Tiled);
+    EXPECT_EQ(book.find(2)->before, before);
+    EXPECT_TRUE(book.check(2, Rect{0.5, 56, 1000, 455})) << "1 px slack";
+    // Something else moved it: Free.
+    EXPECT_FALSE(book.check(2, Rect{50, 56, 1000, 455}));
+    EXPECT_EQ(book.find(2), nullptr);
+    EXPECT_FALSE(book.check(99, before)) << "no record";
+    // Suspended windows keep their record; Return to Previous Size gives the box from before and frees it.
+    book.placed(3, before, half, 32, at(Place::Left), "A", 1, 0);
+    EXPECT_TRUE(book.suspend(3));
+    EXPECT_TRUE(book.check(3, Rect{-5000, 0, 10, 10}));
+    EXPECT_FALSE(book.suspend(3));
+    ASSERT_NE(book.resume(3), nullptr);
+    EXPECT_EQ(book.resume(3), nullptr) << "not Suspended any more";
+    EXPECT_EQ(book.takeBefore(3), before);
+    EXPECT_EQ(book.find(3), nullptr);
+    EXPECT_FALSE(book.beginMove(42).has_value());
+}
+
+TEST(TilingRecord, GroupsAndFreeZones) {
+    CTileBook book;
+    const auto group = book.newGroup();
+    const Rect left{8, 64, 948, 926}, right{964, 64, 948, 926};
+    book.placed(1, Rect{0, 0, 10, 10}, left, 32, inLayout("left-right", 0), "A", 1, group);
+    book.placed(2, Rect{0, 0, 10, 10}, right, 32, inLayout("left-right", 1), "A", 1, group);
+    EXPECT_EQ(book.find(1)->group, group);
+    EXPECT_EQ(book.find(2)->group, group);
+    // A resize keeps both in the group; a drag away dissolves a group of one.
+    book.beginResize(1);
+    book.endResize(1, Rect{8, 64, 900, 926});
+    EXPECT_EQ(book.find(2)->group, group);
+    book.beginMove(1);
+    EXPECT_EQ(book.find(1)->group, 0U);
+    EXPECT_EQ(book.find(2)->group, 0U) << "a group of one dissolves";
+    // Free zones: only Tiled and Resizing windows of that output and Desktop count, with more than 1 px of overlap.
+    const Rect rightFrame = frameOf(right, 32);
+    EXPECT_FALSE(book.zoneFree(rightFrame, "A", 1, 0));
+    EXPECT_TRUE(book.zoneFree(rightFrame, "A", 1, 2)) << "itself excepted";
+    EXPECT_TRUE(book.zoneFree(rightFrame, "B", 1, 0));
+    EXPECT_TRUE(book.zoneFree(rightFrame, "A", 2, 0));
+    EXPECT_TRUE(book.zoneFree(Rect{rightFrame.x + rightFrame.w - 1, rightFrame.y, 100, 100}, "A", 1, 0)) << "1 px is not an overlap";
+    const std::array<uint64_t, 1> inStrip{2};
+    EXPECT_TRUE(book.zoneFree(rightFrame, "A", 1, 0, inStrip)) << "an inactive stage's window does not hold its zone";
+    book.suspend(2);
+    EXPECT_TRUE(book.zoneFree(rightFrame, "A", 1, 0)) << "a suspended window does not hold its zone";
+    book.clear();
+    EXPECT_TRUE(book.records().empty());
+}
+
+TEST(TilingRecord, MoveToDesktopAndALostOutput) {
+    CTileBook book;
+    const Rect before{100, 100, 800, 500}, half{8, 64, 948, 926};
+    book.placed(1, before, half, 32, at(Place::Left), "A", 1, 0);
+    // Move to Desktop: the state and the box stay, the zone now counts on the new Desktop.
+    const auto g = book.generation();
+    book.setWorkspace(1, 4);
+    EXPECT_GT(book.generation(), g);
+    EXPECT_EQ(book.find(1)->workspace, 4);
+    EXPECT_EQ(book.find(1)->state, TileState::Tiled);
+    EXPECT_FALSE(book.zoneFree(frameOf(half, 32), "A", 4, 0));
+    EXPECT_TRUE(book.zoneFree(frameOf(half, 32), "A", 1, 0));
+    // Its output went away and Hyprland moved it: not checked until it is placed again.
+    book.markRelayout(1, true);
+    EXPECT_TRUE(book.check(1, Rect{2000, 64, 948, 926}));
+    book.setBox(1, Rect{1928, 64, 948, 926}, "B");
+    EXPECT_FALSE(book.find(1)->relayout);
+    EXPECT_EQ(book.find(1)->output, "B");
+    EXPECT_FALSE(book.check(1, Rect{2000, 64, 948, 926})) << "checked again once placed";
+}
+
+TEST(TilingRecord, ADeferredRecordIsStillChecked) {
+    // The margins changed while the window could not be placed (an inactive stage): it waits to be placed again, but a
+    // window the user moved meanwhile is Free (its box is still the one the plugin gave it).
+    CTileBook  book;
+    const Rect half{8, 64, 948, 926};
+    book.placed(1, Rect{100, 100, 800, 500}, half, 32, at(Place::Left), "A", 1, 0);
+    book.markDeferred(1, true);
+    EXPECT_TRUE(book.find(1)->deferred);
+    EXPECT_TRUE(book.check(1, half));
+    book.setBox(1, Rect{0, 56, 960, 942}, "A");
+    EXPECT_FALSE(book.find(1)->deferred) << "placed again";
+    book.markDeferred(1, true);
+    book.placed(1, half, half, 32, at(Place::Left), "A", 1, 0);
+    EXPECT_FALSE(book.find(1)->deferred) << "tiled again";
+    book.markDeferred(1, true);
+    EXPECT_FALSE(book.check(1, Rect{300, 300, 948, 926})) << "moved by the user meanwhile: Free";
+    EXPECT_EQ(book.find(1), nullptr);
+}
+
+TEST(TilingRecord, ASuspendedMemberKeepsItsGroupAlive) {
+    CTileBook  book;
+    const auto group = book.newGroup();
+    const Rect any{0, 0, 10, 10};
+    book.placed(1, any, any, 0, inLayout("thirds", 0), "A", 1, group);
+    book.placed(2, any, any, 0, inLayout("thirds", 1), "A", 1, group);
+    book.placed(3, any, any, 0, inLayout("thirds", 2), "A", 1, group);
+    book.suspend(3);
+    book.beginMove(1);
+    EXPECT_EQ(book.find(2)->group, group) << "one Tiled and one Suspended member: the group lives";
+    EXPECT_EQ(book.find(3)->group, group);
+    book.forget(2);
+    EXPECT_EQ(book.find(3)->group, 0U) << "a Suspended member alone: dissolved";
+}
+
+TEST(TilingArrange, TheSizeLimitIsExact) {
+    const std::string body = R"("layout":"quarters","windows":["1"]})";
+    const auto padded = [&body](size_t total) { return "{" + std::string(total - 1 - body.size(), ' ') + body; };
+    ASSERT_EQ(padded(kMaxArrangeBytes).size(), kMaxArrangeBytes);
+    EXPECT_TRUE(parseArrange(padded(kMaxArrangeBytes)).has_value());
+    EXPECT_FALSE(parseArrange(padded(kMaxArrangeBytes + 1)).has_value());
+}
+
+TEST(TilingArrange, RequestsAreStrict) {
+    const auto ok = parseArrange(R"({"layout":"left-quarters","windows":["0x1a2b","3c"],"output":"GF-REF"})");
+    ASSERT_TRUE(ok.has_value()) << ok.error();
+    EXPECT_EQ(ok->layout, "left-quarters");
+    EXPECT_EQ(ok->windows, (std::vector<uint64_t>{0x1a2b, 0x3c}));
+    EXPECT_TRUE(ok->fill);
+    EXPECT_EQ(ok->output, "GF-REF");
+    const auto zone = parseArrange(R"({"layout":"thirds","zone":2,"windows":["0x9"]})");
+    ASSERT_TRUE(zone.has_value()) << zone.error();
+    EXPECT_EQ(zone->zone, 2);
+    EXPECT_FALSE(zone->fill);
+    const auto noFill = parseArrange(R"({ "layout" : "quarters", "windows" : ["1"], "fill" : false, "unknown": {"a":[1]} })");
+    ASSERT_TRUE(noFill.has_value()) << noFill.error();
+    EXPECT_FALSE(noFill->fill);
+    for (const char* bad : {
+             "", "[]", "{}", R"({"layout":"nope","windows":["1"]})", R"({"layout":"left-right"})", R"({"layout":"left-right","windows":[]})",
+             R"({"layout":"left-right","windows":["1","2","3"]})", R"({"layout":"quarters","windows":["1","1"]})", R"({"layout":"quarters","windows":["0"]})",
+             R"({"layout":"quarters","windows":["xyz"]})", R"({"layout":"quarters","windows":["1","2","3","4","5"]})", R"({"layout":"thirds","zone":3,"windows":["1"]})",
+             R"({"layout":"thirds","zone":1,"windows":["1","2"]})", R"({"layout":"thirds","zone":1,"fill":true,"windows":["1"]})", R"({"layout":"thirds","zone":1.5,"windows":["1"]})",
+             R"({"layout":"thirds","zone":-1,"windows":["1"]})", R"({"layout":"thirds","windows":["1"],"output":"bad name"})", R"({"layout":"thirds","windows":["1"],"output":""})",
+             R"({"layout":"thirds","windows":["1"]} x)", R"({"layout":"thirds","layout":"thirds","windows":["1"]})", R"({"layout":"thirds","windows":["1"],"fill":1})"}) {
+        EXPECT_FALSE(parseArrange(bad).has_value()) << bad;
+    }
+    EXPECT_FALSE(parseArrange(std::string(kMaxArrangeBytes + 1, ' ')).has_value());
+}
+
+TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
+    EXPECT_EQ(noticeJson(7, Reason::Placed), R"({"v":"gfc/1","type":"tiling","gen":7,"reason":"placed"})");
+    EXPECT_EQ(noticeJson(0, Reason::None), R"({"v":"gfc/1","type":"tiling","gen":0})");
+    CTileBook book;
+    book.placed(0xabc, Rect{1, 2, 3, 4}, Rect{8, 64, 948, 926}, 32, at(Place::Left), "GF-REF", 2, 0);
+    book.placed(0xdef, Rect{1, 2, 3, 4}, Rect{964, 64, 948, 926}, 0, inLayout("left-right", 1), "GF-REF", 2, 0);
+    StateOutput o{.name = "GF-REF", .area = Rect{0, 24, 1920, 974}, .outputClass = OutputClass::Large, .grid = 1, .windows = {}};
+    for (const auto& r : book.records())
+        o.windows.push_back(&r);
+    const std::array<StateOutput, 1> outputs{o};
+    EXPECT_EQ(stateJson(3, outputs),
+              R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
+              R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"group":0,"x":8,"y":64,"w":948,"h":926},)"
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"group":0,"x":964,"y":64,"w":948,"h":926}]}]})");
+    for (Reason r : {Reason::Placed, Reason::Moved, Reason::Resized, Reason::Suspended, Reason::Restored, Reason::Forgotten, Reason::Relaid, Reason::Invalid,
+                     Reason::Locked, Reason::Unavailable})
+        EXPECT_FALSE(reasonName(r).empty());
+    EXPECT_EQ(noticeJson(9, Reason::Locked), R"({"v":"gfc/1","type":"tiling","gen":9,"reason":"locked"})");
+    EXPECT_EQ(noticeJson(std::numeric_limits<uint64_t>::max(), Reason::Unavailable).size(), 79U) << "the bound ADR-0007 states";
 }

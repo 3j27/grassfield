@@ -4,6 +4,7 @@
 // The design tokens the compositor plugin draws with (read by core/Theme.hpp; no Hyprland include).
 
 #include <cstdint>
+#include <string_view>
 
 namespace gf::theme::tokens {
     // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -76,4 +77,48 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsGap = 8;
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     inline constexpr int kWindowItemsInset = 8;
+    // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
+    inline constexpr int kTilingEdge = 4;
+    // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingCornerBand = 96;
+    // logical px around and between tiled windows while Tiled windows have margins is on (macOS 8 ± 1) [ref: docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingMargin = 8;
+    // Center keeps the window's size, at most this fraction of the work area (kCenterMaxFraction before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr double kTilingCenterMaxFraction = 0.9;
+    // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutLeftRight[][4] = {{0, 0, 6, 12}, {6, 0, 6, 12}};
+    // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutRightLeft[][4] = {{6, 0, 6, 12}, {0, 0, 6, 12}};
+    // Top & Bottom (macOS Arrange; the stacked halves of portrait outputs): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutTopBottom[][4] = {{0, 0, 12, 6}, {0, 6, 12, 6}};
+    // Bottom & Top (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutBottomTop[][4] = {{0, 6, 12, 6}, {0, 0, 12, 6}};
+    // Quarters (macOS Arrange and the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutQuarters[][4] = {{0, 0, 6, 6}, {6, 0, 6, 6}, {0, 6, 6, 6}, {6, 6, 6, 6}};
+    // Left & Quarters (macOS Fill & Arrange, Arrange with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutLeftQuarters[][4] = {{0, 0, 6, 12}, {6, 0, 6, 6}, {6, 6, 6, 6}};
+    // Right & Quarters (macOS, with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutRightQuarters[][4] = {{6, 0, 6, 12}, {0, 0, 6, 6}, {0, 6, 6, 6}};
+    // Top & Quarters (macOS Arrange with Option; the 2 + 1 of portrait outputs): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutTopQuarters[][4] = {{0, 0, 12, 6}, {0, 6, 6, 6}, {6, 6, 6, 6}};
+    // Bottom & Quarters (macOS Arrange with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutBottomQuarters[][4] = {{0, 6, 12, 6}, {0, 0, 6, 6}, {6, 0, 6, 6}};
+    // two thirds and one third (Layouts section, owner decision T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutWideLeft[][4] = {{0, 0, 8, 12}, {8, 0, 4, 12}};
+    // three equal columns (Layouts section of large outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutThirds[][4] = {{0, 0, 4, 12}, {4, 0, 4, 12}, {8, 0, 4, 12}};
+    // a quarter, a half and a quarter (Layouts section of large outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutWideCenter[][4] = {{0, 0, 3, 12}, {3, 0, 6, 12}, {9, 0, 3, 12}};
+    // four equal columns (Layouts section of ultra-wide outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutFourColumns[][4] = {{0, 0, 3, 12}, {3, 0, 3, 12}, {6, 0, 3, 12}, {9, 0, 3, 12}};
+    // three stacked rows (Layouts section of portrait outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutStackedThirds[][4] = {{0, 0, 12, 4}, {0, 4, 12, 4}, {0, 8, 12, 4}};
+    // the Layouts section of an output under 1920 logical px wide (owner decision T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassSmall[] = {"left-right", "wide-left", "left-quarters", "quarters"};
+    // the Layouts section of an output 1920 logical px wide or more (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassLarge[] = {"left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center"};
+    // the Layouts section of an output of aspect 21:9 or wider (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassUltraWide[] = {"left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center", "four-columns"};
+    // the Layouts section of an output taller than wide (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassPortrait[] = {"top-bottom", "stacked-thirds", "top-quarters"};
 } // namespace gf::theme::tokens

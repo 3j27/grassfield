@@ -3168,4 +3168,52 @@ QtObject {
     readonly property int storeSettingsGroupGap: 20
     // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSettingsLineGap: 8
+
+    // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
+    readonly property int gtkTabIndicatorWidth: 4
+
+    // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
+    readonly property int tilingEdge: 4
+    // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property int tilingCornerBand: 96
+    // logical px around and between tiled windows while Tiled windows have margins is on (macOS 8 ± 1) [ref: docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/tiling.md § Functional requirements]
+    readonly property int tilingMargin: 8
+    // Center keeps the window's size, at most this fraction of the work area (kCenterMaxFraction before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property real tilingCenterMaxFraction: 0.9
+    // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutLeftRight: [[0, 0, 6, 12], [6, 0, 6, 12]]
+    // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutRightLeft: [[6, 0, 6, 12], [0, 0, 6, 12]]
+    // Top & Bottom (macOS Arrange; the stacked halves of portrait outputs): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutTopBottom: [[0, 0, 12, 6], [0, 6, 12, 6]]
+    // Bottom & Top (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutBottomTop: [[0, 6, 12, 6], [0, 0, 12, 6]]
+    // Quarters (macOS Arrange and the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutQuarters: [[0, 0, 6, 6], [6, 0, 6, 6], [0, 6, 6, 6], [6, 6, 6, 6]]
+    // Left & Quarters (macOS Fill & Arrange, Arrange with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutLeftQuarters: [[0, 0, 6, 12], [6, 0, 6, 6], [6, 6, 6, 6]]
+    // Right & Quarters (macOS, with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutRightQuarters: [[6, 0, 6, 12], [0, 0, 6, 6], [0, 6, 6, 6]]
+    // Top & Quarters (macOS Arrange with Option; the 2 + 1 of portrait outputs): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutTopQuarters: [[0, 0, 12, 6], [0, 6, 6, 6], [6, 6, 6, 6]]
+    // Bottom & Quarters (macOS Arrange with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutBottomQuarters: [[0, 6, 12, 6], [0, 0, 6, 6], [6, 0, 6, 6]]
+    // two thirds and one third (Layouts section, owner decision T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutWideLeft: [[0, 0, 8, 12], [8, 0, 4, 12]]
+    // three equal columns (Layouts section of large outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutThirds: [[0, 0, 4, 12], [4, 0, 4, 12], [8, 0, 4, 12]]
+    // a quarter, a half and a quarter (Layouts section of large outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutWideCenter: [[0, 0, 3, 12], [3, 0, 6, 12], [9, 0, 3, 12]]
+    // four equal columns (Layouts section of ultra-wide outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutFourColumns: [[0, 0, 3, 12], [3, 0, 3, 12], [6, 0, 3, 12], [9, 0, 3, 12]]
+    // three stacked rows (Layouts section of portrait outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    readonly property var tilingLayoutStackedThirds: [[0, 0, 12, 4], [0, 4, 12, 4], [0, 8, 12, 4]]
+    // the Layouts section of an output under 1920 logical px wide (owner decision T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    readonly property var tilingClassSmall: ["left-right", "wide-left", "left-quarters", "quarters"]
+    // the Layouts section of an output 1920 logical px wide or more (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    readonly property var tilingClassLarge: ["left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center"]
+    // the Layouts section of an output of aspect 21:9 or wider (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    readonly property var tilingClassUltraWide: ["left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center", "four-columns"]
+    // the Layouts section of an output taller than wide (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    readonly property var tilingClassPortrait: ["top-bottom", "stacked-thirds", "top-quarters"]
 }

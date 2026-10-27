@@ -17,7 +17,8 @@
   "stateDir": ["string", "RunMode.stateDir(%(STATE_HOME)s, %(XDG_STATE_HOME)s, %(HOME)s)"],
   "shellDir": ["string", "Quickshell.shellDir"],
   "stateHome": ["string", "RunMode.homeOverride(%(STATE_HOME)s)"],
-  "appsTrace": ["bool", "RunMode.appsTrace(%(APPS_TRACE)s)"]
+  "appsTrace": ["bool", "RunMode.appsTrace(%(APPS_TRACE)s)"],
+  "appsGtkPortal": ["bool", "RunMode.appsGtkPortal(%(APPS_GTK_USE_PORTAL)s)"]
  },
  "functions": {
   "devValue": [["name"], "return RunMode.devPlumbing(%(DEV)s, %(SESSION)s, Quickshell.env((\"GRASSFIELD_\" op0 name)))"]
@@ -32,7 +33,8 @@
   "XDG_CONFIG_HOME": "Quickshell.env(\"XDG_CONFIG_HOME\")",
   "XDG_STATE_HOME": "Quickshell.env(\"XDG_STATE_HOME\")",
   "HOME": "Quickshell.env(\"HOME\")",
-  "APPS_TRACE": "Quickshell.env(\"GRASSFIELD_APPS_TRACE\")"
+  "APPS_TRACE": "Quickshell.env(\"GRASSFIELD_APPS_TRACE\")",
+  "APPS_GTK_USE_PORTAL": "Quickshell.env(\"GRASSFIELD_APPS_GTK_USE_PORTAL\")"
  }
 },
 "runmode": {
@@ -47,6 +49,7 @@
   "configDir": [["configHome", "xdgConfigHome", "home"], "if (configHome) return configHome ; return (((xdgConfigHome ? xdgConfigHome : (home op0 \"/.config\"))) op0 \"/grassfield\")"],
   "stateDir": [["stateHome", "xdgStateHome", "home"], "if (stateHome) return stateHome ; return (((xdgStateHome ? xdgStateHome : (home op0 \"/.local/state\"))) op0 \"/grassfield\")"],
   "appsTrace": [["value"], "return (value op1f \"1\")"],
+  "appsGtkPortal": [["value"], "return (value op1f \"1\")"],
   "homeOverride": [["value"], "return (value ? value : \"\")"]
  },
  "vars": {"REFUSED": "\"refused\""}
@@ -93,6 +96,13 @@
  {"name": "1 in a packaged session", "env": {"GRASSFIELD_SESSION": "1", "GRASSFIELD_APPS_TRACE": "1"}, "appsTrace": true},
  {"name": "true is not 1", "env": {"GRASSFIELD_APPS_TRACE": "true"}, "appsTrace": false},
  {"name": "0", "env": {"GRASSFIELD_APPS_TRACE": "0"}, "appsTrace": false}
+],
+"portal": [
+ {"name": "unset", "env": {}, "appsGtkPortal": false},
+ {"name": "1 (env-grassfield in a packaged session)", "env": {"GRASSFIELD_SESSION": "1", "GRASSFIELD_APPS_GTK_USE_PORTAL": "1"}, "appsGtkPortal": true},
+ {"name": "1 in a dev session", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_APPS_GTK_USE_PORTAL": "1"}, "appsGtkPortal": true},
+ {"name": "true is not 1", "env": {"GRASSFIELD_APPS_GTK_USE_PORTAL": "true"}, "appsGtkPortal": false},
+ {"name": "0", "env": {"GRASSFIELD_APPS_GTK_USE_PORTAL": "0"}, "appsGtkPortal": false}
 ],
 "plumbing": [
  {"name": "dev: value honoured", "env": {"GRASSFIELD_DEV": "1", "GRASSFIELD_FIXED_TIME": "12:00"}, "variable": "GRASSFIELD_FIXED_TIME", "value": "12:00"},
