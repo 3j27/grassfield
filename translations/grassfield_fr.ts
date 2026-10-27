@@ -1788,18 +1788,6 @@
         <translation>Recherche</translation>
     </message>
     <message>
-        <source>Tabs</source>
-        <translation>Onglets</translation>
-    </message>
-    <message>
-        <source>Close Tab</source>
-        <translation>Fermer l’onglet</translation>
-    </message>
-    <message>
-        <source>New Tab</source>
-        <translation>Nouvel onglet</translation>
-    </message>
-    <message>
         <source>Dismiss</source>
         <translation>Ignorer</translation>
     </message>
@@ -3183,6 +3171,25 @@
     </message>
 </context>
 <context>
+    <name>FolderViews</name>
+    <message>
+        <source>another Files window is saving its view settings</source>
+        <translation>une autre fenêtre de Fichiers enregistre ses réglages de présentation</translation>
+    </message>
+    <message>
+        <source>the view settings lock file can&apos;t be created</source>
+        <translation>le fichier de verrou des réglages de présentation ne peut pas être créé</translation>
+    </message>
+    <message>
+        <source>the view settings file can&apos;t be read, so it is left as it is</source>
+        <translation>le fichier des réglages de présentation est illisible, il est laissé tel quel</translation>
+    </message>
+    <message>
+        <source>the view settings file would be too large</source>
+        <translation>le fichier des réglages de présentation serait trop volumineux</translation>
+    </message>
+</context>
+<context>
     <name>ForceQuitPanel</name>
     <message>
         <source>Force Quit Applications</source>
@@ -3337,6 +3344,10 @@
         <translation>Nouvel onglet</translation>
     </message>
     <message>
+        <source>Reopen Closed Tab</source>
+        <translation>Rouvrir le dernier onglet fermé</translation>
+    </message>
+    <message>
         <source>Open</source>
         <translation>Ouvrir</translation>
     </message>
@@ -3351,6 +3362,10 @@
     <message>
         <source>Close Tab</source>
         <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Close All</source>
+        <translation>Tout fermer</translation>
     </message>
     <message>
         <source>Eject</source>
@@ -3481,12 +3496,28 @@
         <translation>Afficher les fichiers cachés</translation>
     </message>
     <message>
+        <source>Hide Tab Bar</source>
+        <translation>Masquer la barre d’onglets</translation>
+    </message>
+    <message>
+        <source>Show Tab Bar</source>
+        <translation>Afficher la barre d’onglets</translation>
+    </message>
+    <message>
         <source>Show Previous Tab</source>
         <translation>Afficher l’onglet précédent</translation>
     </message>
     <message>
         <source>Show Next Tab</source>
         <translation>Afficher l’onglet suivant</translation>
+    </message>
+    <message>
+        <source>Move Tab to New Window</source>
+        <translation>Placer l’onglet dans une nouvelle fenêtre</translation>
+    </message>
+    <message>
+        <source>Merge All Windows</source>
+        <translation>Fusionner toutes les fenêtres</translation>
     </message>
     <message>
         <source>Reload</source>
@@ -6153,6 +6184,29 @@
     <message>
         <source>Log Out</source>
         <translation>Fermer la session</translation>
+    </message>
+</context>
+<context>
+    <name>TabBar</name>
+    <message>
+        <source>Tabs</source>
+        <translation>Onglets</translation>
+    </message>
+    <message>
+        <source>Close Tab</source>
+        <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Close Other Tabs</source>
+        <translation>Fermer les autres onglets</translation>
+    </message>
+    <message>
+        <source>Move Tab to New Window</source>
+        <translation>Placer l’onglet dans une nouvelle fenêtre</translation>
+    </message>
+    <message>
+        <source>New Tab</source>
+        <translation>Nouvel onglet</translation>
     </message>
 </context>
 <context>

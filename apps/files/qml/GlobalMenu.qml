@@ -60,7 +60,10 @@ Platform.MenuBar {
         return f.selectedRows().every(r => f.isDirAt(r)) && bar.app.folderStyleUnavailable(f.selectedUrls()) === "";
     }
 
-        // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
+    // View > Sort By (its check marks follow the shown folder's arrangement; tst_filesglobalmenu reads it).
+    readonly property var sortMenu: sortByMenu
+
+    // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
     // mnemonic in Qt menus).
     function label(text: string): string {
         return DisplayName.text(text).replace(/&/g, "&&");
@@ -72,7 +75,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("New Window")
             shortcut: "Ctrl+N"
-            onTriggered: bar.win.manager.newWindow(bar.tab ? bar.tab.url : bar.win.startUrl)
+            onTriggered: bar.win.manager.newWindow(bar.app.newWindowUrl, null)
         }
         Platform.MenuItem {
             text: qsTr("New Folder")
@@ -83,8 +86,13 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("New Tab")
             shortcut: "Ctrl+T"
-            enabled: bar.tab !== null
-            onTriggered: bar.win.newTab(bar.tab.url)
+            onTriggered: bar.win.newTab(bar.app.newWindowUrl, null)
+        }
+        Platform.MenuItem {
+            text: qsTr("Reopen Closed Tab")
+            shortcut: "Ctrl+Alt+Shift+T"
+            enabled: bar.win.manager.closedTabs.length > 0
+            onTriggered: bar.win.manager.reopenClosedTab(bar.win)
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
@@ -116,6 +124,19 @@ Platform.MenuBar {
             text: bar.win.tabs.length > 1 ? qsTr("Close Tab") : qsTr("Close Window")
             shortcut: "Ctrl+W"
             onTriggered: bar.win.closeTab(bar.win.currentIndex)
+        }
+        // With tabs, the window closes with Shift (Finder).
+        Platform.MenuItem {
+            text: qsTr("Close Window")
+            shortcut: "Ctrl+Shift+W"
+            visible: bar.win.tabs.length > 1
+            onTriggered: bar.win.close()
+        }
+        Platform.MenuItem {
+            text: qsTr("Close All")
+            shortcut: "Ctrl+Alt+W"
+            visible: bar.win.manager.windows.length > 1
+            onTriggered: bar.win.manager.closeAllWindows()
         }
         Platform.MenuItem {
             text: qsTr("Eject")
@@ -281,33 +302,34 @@ Platform.MenuBar {
         }
         Platform.MenuSeparator {}
         Platform.Menu {
+            id: sortByMenu
             title: qsTr("Sort By")
 
             MenuCheckItem {
                 text: qsTr("Name")
-                on: bar.app.sortKey === 0
+                on: bar.tab !== null && bar.tab.sortKey === 0
                 onChosen: bar.tab.sortBy(0, false)
             }
             MenuCheckItem {
                 text: qsTr("Kind")
-                on: bar.app.sortKey === 1
+                on: bar.tab !== null && bar.tab.sortKey === 1
                 onChosen: bar.tab.sortBy(1, false)
             }
             MenuCheckItem {
                 text: qsTr("Date Modified")
-                on: bar.app.sortKey === 2
+                on: bar.tab !== null && bar.tab.sortKey === 2
                 onChosen: bar.tab.sortBy(2, false)
             }
             MenuCheckItem {
                 text: qsTr("Size")
-                on: bar.app.sortKey === 3
+                on: bar.tab !== null && bar.tab.sortKey === 3
                 onChosen: bar.tab.sortBy(3, false)
             }
             Platform.MenuSeparator {}
             MenuCheckItem {
                 text: qsTr("Descending")
-                on: bar.app.sortDescending
-                onChosen: bar.app.sortDescending = !bar.app.sortDescending
+                on: bar.tab !== null && bar.tab.sortDescending
+                onChosen: bar.tab.setSortDescending(!bar.tab.sortDescending)
             }
             MenuCheckItem {
                 text: qsTr("Keep Folders on Top")
@@ -322,6 +344,13 @@ Platform.MenuBar {
             onChosen: bar.app.showHidden = !bar.app.showHidden
         }
         Platform.MenuSeparator {}
+        // Finder's View > Show/Hide Tab Bar: with more than one tab the bar stays.
+        Platform.MenuItem {
+            text: bar.win.tabBarVisible ? qsTr("Hide Tab Bar") : qsTr("Show Tab Bar")
+            shortcut: "Ctrl+Shift+T"
+            enabled: bar.win.tabs.length <= 1
+            onTriggered: bar.app.tabBarShown = !bar.app.tabBarShown
+        }
         Platform.MenuItem {
             text: qsTr("Show Previous Tab")
             shortcut: "Ctrl+Shift+Tab"
@@ -333,6 +362,17 @@ Platform.MenuBar {
             shortcut: "Ctrl+Tab"
             enabled: bar.win.tabs.length > 1
             onTriggered: bar.win.selectTab(bar.win.currentIndex + 1)
+        }
+        // Finder's Window menu items for tabs (the Window menu is the shell's T0 menu: docs/specs/files.md F-10).
+        Platform.MenuItem {
+            text: qsTr("Move Tab to New Window")
+            enabled: bar.win.tabs.length > 1
+            onTriggered: bar.win.manager.moveTabToNewWindow(bar.tab)
+        }
+        Platform.MenuItem {
+            text: qsTr("Merge All Windows")
+            enabled: bar.win.manager.windows.length > 1
+            onTriggered: bar.win.manager.mergeAllWindows(bar.win)
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
