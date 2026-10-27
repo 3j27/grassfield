@@ -233,6 +233,11 @@ gtest_suite tests/unit/clipboard-helper "apps/clipboard-helper/build-direct.sh -
 # (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
   ".dev/build/settings-unit-tests --gtest_brief=1" ".dev/build/settings-unit-tests-asan --gtest_brief=1"
+# Grassfield Store's read-only backend (ADR-0037 step 1): the catalog's rules, its signature (a fake gpgv here; the real one in
+# tests/integration/store_catalog.sh), cache and serial, the channel and its URLs, AppStream and pacman readers (fakes on
+# scratch paths), the merged model and search, the child-process limits. Built twice: plain, then with ASan and UBSan.
+gtest_suite tests/unit/store "apps/store/build-direct.sh --tests >/dev/null && apps/store/build-direct.sh --tests --asan" \
+  ".dev/build/store-unit-tests --gtest_brief=1" ".dev/build/store-unit-tests-asan --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
 # Built twice: plain, then with ASan and UBSan.
