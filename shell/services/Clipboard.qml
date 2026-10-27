@@ -15,7 +15,8 @@ import "ClipboardLogic.js" as Logic
 Singleton {
     id: root
 
-    readonly property bool enabled: Settings.clipboardEnabled
+    // Settings > Search > Results from Clipboard, as of grassfield.json's last usable read (takeSettings).
+    property bool enabled: false
     // "off" (history off), "dev-off" (a dev session without GRASSFIELD_CLIPBOARD_DISPLAY), "starting", "ok", "unsupported" (no
     // ext-data-control-v1 or lock notifier: the view says so), "error" (retried with a growing pause)
     property string state: "off"
@@ -61,14 +62,28 @@ Singleton {
     property bool stopping: false
     property int retryMs: 2000
     property bool waiting: false
-    // Nothing runs on the settings' defaults: before grassfield.json's first read every key reads its default (the history off,
-    // no clear asked), and acting on them would delete a kept history or skip a clear asked while the shell was stopped
-    // (review of f7cd664). A missing file is never read: after settingsWait the defaults are taken as they are.
+    // Nothing is decided on values grassfield.json did not give. Before its first read every key reads its default (the history
+    // off, no clear asked); a malformed, unreadable or unsafe file reads the defaults or the last good values, a missing one the
+    // defaults. Acting on those would delete a kept history (review of f7cd664) or skip a clear, and an unreadable file must
+    // never delete anything (review of c1fc254). So the service takes the file's values only while Settings.validRead holds,
+    // once the read is complete (the store sets validRead before it takes the new values), and keeps the last usable ones
+    // otherwise. The first usable read makes the first decision (init); with no usable file (a missing one included) nothing
+    // runs and nothing is deleted until Settings or Search's Allow writes one.
     property bool initialized: false
-    readonly property bool settingsLoaded: Settings.loaded
-    onSettingsLoadedChanged: {
-        if (root.settingsLoaded)
-            Qt.callLater(root.init);
+    readonly property string settingsRead: JSON.stringify([Settings.validRead, Settings.clipboardEnabled, Settings.clipboardRetention,
+        Settings.clipboardKeepOnDisk, Settings.clipboardClearedAt, Settings.clipboardPinnedClearedAt])
+    onSettingsReadChanged: Qt.callLater(root.takeSettings)
+
+    function takeSettings(): void {
+        if (!Settings.validRead)
+            return;
+        root.retention = Logic.retentionMs(Settings.clipboardRetention);
+        root.keepOnDisk = Settings.clipboardKeepOnDisk;
+        root.clearedAt = Settings.clipboardClearedAt;
+        root.pinnedClearedAt = Settings.clipboardPinnedClearedAt;
+        // Last: a helper it starts is given the values above.
+        root.enabled = Settings.clipboardEnabled;
+        root.init();
     }
 
     function send(fields: var): void {
@@ -94,7 +109,7 @@ Singleton {
         if (root.helper.running)
             root.send(["CH"]);
         else
-            root.historyClear.running = true;
+            root.clearHistoryStore();
     }
     function search(seq: int, query: string): void {
         root.send(["Q", String(seq), query]);
@@ -195,21 +210,22 @@ Singleton {
             root.send(["D", "0"]);
             root.send(["QUIT"]);
         } else {
-            root.historyClear.running = true;
+            root.clearHistoryStore();
         }
         root.wanted = false;
     }
 
-    readonly property real retention: Logic.retentionMs(Settings.clipboardRetention)
+    // The other settings, as of the last usable read (takeSettings).
+    property real retention: Logic.retentionMs("")
     onRetentionChanged: root.send(["T", String(root.retention)])
-    readonly property bool keepOnDisk: Settings.clipboardKeepOnDisk
+    property bool keepOnDisk: false
     onKeepOnDiskChanged: root.send(["D", root.keepOnDisk ? "1" : "0"])
     // Settings' clears (Clear Clipboard History…, with or without the pinned items): the running helper clears and records the
     // setting's time; with the history off, --apply-clears carries them out now; a helper about to start is given them. The
     // helper records what it carried out, so a clear written while the shell was stopped is carried out at the next start.
-    readonly property real clearedAt: Settings.clipboardClearedAt
+    property real clearedAt: 0
     onClearedAtChanged: root.clearAsked(false)
-    readonly property real pinnedClearedAt: Settings.clipboardPinnedClearedAt
+    property real pinnedClearedAt: 0
     onPinnedClearedAtChanged: root.clearAsked(true)
 
     function clearAsked(pinned: bool): void {
@@ -221,12 +237,40 @@ Singleton {
             root.applyClears();
     }
 
+    // The store jobs run without a helper (--clear-history, --apply-clears), one after the other: a job asked while one runs
+    // waits for it. Each Process is started before its flag is dropped, so the helper (which waits for both) never starts
+    // between two of them.
+    function clearHistoryStore(): void {
+        if (root.historyClear.running || root.clearsApply.running)
+            root.historyAgain = true;
+        else
+            root.historyClear.running = true;
+    }
     function applyClears(): void {
-        if (root.clearsApply.running)
+        if (root.historyClear.running || root.clearsApply.running)
             root.clearsAgain = true;
         else
-            root.clearsApply.running = true;
+            root.startClearsApply();
     }
+    // The times are read when it starts: a binding on them may not be updated yet inside onClearedAtChanged, which would carry
+    // out the previous clear.
+    function startClearsApply(): void {
+        root.clearsApply.command = [root.tool, "--apply-clears", "--state", root.storeDir, "--cleared-at",
+            Logic.clearTimeArg(root.clearedAt), "--pinned-cleared-at", Logic.clearTimeArg(root.pinnedClearedAt)];
+        root.clearsApply.running = true;
+    }
+    function storeJobEnded(): void {
+        if (root.historyClear.running || root.clearsApply.running)
+            return;
+        if (root.historyAgain) {
+            root.historyClear.running = true;
+            root.historyAgain = false;
+        } else if (root.clearsAgain) {
+            root.startClearsApply();
+            root.clearsAgain = false;
+        }
+    }
+    property bool historyAgain: false
     property bool clearsAgain: false
 
     // Capture follows the shell's own lock as well (SessionState.locked covers its "locking" phase).
@@ -236,6 +280,7 @@ Singleton {
     readonly property Process helper: Process {
         // Never while a store is being cleared without it (it would load what is being deleted).
         running: (root.wanted || root.stopping) && !root.waiting && !root.historyClear.running && !root.clearsApply.running
+            && !root.historyAgain && !root.clearsAgain
         command: [root.tool, "--display", root.display, "--state", root.storeDir, "--runtime", root.runtimeDir,
             "--retention", String(root.retention), "--history-store", root.keepOnDisk ? "1" : "0",
             "--cleared-at", Logic.clearTimeArg(root.clearedAt), "--pinned-cleared-at", Logic.clearTimeArg(root.pinnedClearedAt)]
@@ -278,43 +323,36 @@ Singleton {
     // disk), and Settings' clears not carried out yet ("Also delete pinned items" deletes the pinned store).
     readonly property Process historyClear: Process {
         command: [root.tool, "--clear-history", "--state", root.storeDir]
+        onRunningChanged: {
+            if (!running)
+                root.storeJobEnded();
+        }
     }
     readonly property Process clearsApply: Process {
-        command: [root.tool, "--apply-clears", "--state", root.storeDir, "--cleared-at", Logic.clearTimeArg(root.clearedAt),
-            "--pinned-cleared-at", Logic.clearTimeArg(root.pinnedClearedAt)]
+        // Set by startClearsApply.
+        command: []
         onRunningChanged: {
-            if (!running && root.clearsAgain) {
-                root.clearsAgain = false;
-                running = true;
-            }
+            if (!running)
+                root.storeJobEnded();
         }
     }
 
-    // The first decision, once the settings are read: run the helper (it carries out the clears asked before anything is
-    // shown), or, with the history off, delete the history store and carry out the clears.
+    // The first decision, on the first usable read: run the helper (it carries out the clears asked before anything is shown),
+    // or, with the history off, delete the history store, then carry out the clears.
     function init(): void {
         if (root.initialized)
             return;
         root.initialized = true;
-        root.settingsWait.stop();
         if (root.enabled) {
             root.start();
         } else {
-            root.historyClear.running = true;
+            root.clearHistoryStore();
             root.applyClears();
         }
     }
 
-    readonly property Timer settingsWait: Timer {
-        interval: 10000
-        running: true
-        onTriggered: root.init()
-    }
-
-    Component.onCompleted: {
-        if (root.settingsLoaded)
-            Qt.callLater(root.init);
-    }
+    // The settings may have been read before this service was created.
+    Component.onCompleted: Qt.callLater(root.takeSettings)
 
     // ---- Paste on choice (ADR-0034 §4, Q9) ----
 
