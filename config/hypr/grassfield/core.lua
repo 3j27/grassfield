@@ -19,5 +19,15 @@ require("grassfield.windows")
 require("grassfield.privacy")
 require("grassfield.placement")
 require("grassfield.stacking")
-require("grassfield.bindings")
+-- Hyprland's require answers `true` for a module that ran to its end (bindings.lua returns nothing) and an empty table for
+-- one that failed, after recording the error (Hyprland 0.56.2 src/config/lua/ConfigManager.cpp:315-356).
+local bindings_loaded = require("grassfield.bindings") == true
 require("grassfield.forwarding")
+
+-- ADR-0035 D-2: Hyprland's red config-error bar gives way to the shell's notice, "Some settings could not be applied"
+-- (shell/platform/ConfigErrors.qml). Only once the bindings are in: an error that leaves no binding trips Hyprland's
+-- emergency mode, whose banner the same switch would hide (ConfigManager.cpp:773-801), and a parse that stops before
+-- this line keeps Hyprland's bar.
+if bindings_loaded then
+  hl.config({ debug = { suppress_errors = true } })
+end

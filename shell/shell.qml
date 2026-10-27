@@ -334,6 +334,25 @@ ShellRoot {
         }
     }
 
+    // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar is off, config/hypr/grassfield/core.lua).
+    // The lines are the details (no terminal: decision 3-6); the notice goes once they are gone.
+    ConfigErrors {
+        property string noticeKey: ""
+        onAppeared: (lines, more) => {
+            if (noticeKey !== "")
+                Notifications.clear(noticeKey);
+            // Singular/plural pair (the catalogs carry no numerus forms).
+            const rest = more === 1 ? qsTr("and 1 more") : qsTr("and %1 more").arg(more);
+            const body = more > 0 ? lines.concat([rest]) : lines;
+            noticeKey = Notifications.postInternal(qsTr("Some settings could not be applied"), body.join("\n"));
+        }
+        onCleared: {
+            if (noticeKey !== "")
+                Notifications.clear(noticeKey);
+            noticeKey = "";
+        }
+    }
+
     Connections {
         target: SettingsApp
 
@@ -424,6 +443,7 @@ ShellRoot {
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
-    // every launch from the start (it would otherwise exist only once the Grassfield menu opened).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state)
+    // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length)
 }
