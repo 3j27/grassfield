@@ -164,6 +164,21 @@ TEST(TilingOutputs, AMovedWindowBelongsToTheOutputUnderItsMiddle) {
     EXPECT_FALSE(outputUnder(Rect{0, 0, 10, 10}, std::span<const Rect>{}).has_value());
 }
 
+TEST(TilingOutputs, AnUnmappedWindowIsNeverMoved) {
+    // Gate C1: a window that closed or unmapped during a titlebar drag is still alive (its fade-out, or an app that only
+    // unmapped it) but has no Desktop and its target no space: the plugin moves nothing (Hyprland would dereference null).
+    const WindowFacts live{.mapped = true, .onDesktop = true, .inSpace = true, .floating = true};
+    EXPECT_TRUE(movable(live));
+    EXPECT_FALSE(movable(WindowFacts{.mapped = false, .onDesktop = true, .inSpace = true, .floating = true}));
+    EXPECT_FALSE(movable(WindowFacts{.mapped = true, .onDesktop = false, .inSpace = true, .floating = true})) << "unmapping cleared its Desktop";
+    EXPECT_FALSE(movable(WindowFacts{.mapped = true, .onDesktop = true, .inSpace = false, .floating = true})) << "its target left the space";
+    EXPECT_TRUE(shouldFollow(live, 1, false));
+    EXPECT_FALSE(shouldFollow(live, 1, true)) << "already on that Desktop";
+    EXPECT_FALSE(shouldFollow(live, std::nullopt, false)) << "over no output: it keeps its Desktop";
+    EXPECT_FALSE(shouldFollow(WindowFacts{.mapped = true, .onDesktop = true, .inSpace = true, .floating = false}, 1, false)) << "tiled by Hyprland's layout";
+    EXPECT_FALSE(shouldFollow(WindowFacts{.mapped = false, .onDesktop = false, .inSpace = false, .floating = true}, 1, false)) << "closed during the drag";
+}
+
 TEST(TilingGrid, TheStepIsWholeInLogicalAndDevicePixels) {
     EXPECT_EQ(gridStep(1.0), 1);
     EXPECT_EQ(gridStep(2.0), 1);

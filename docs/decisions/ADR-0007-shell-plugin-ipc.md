@@ -99,7 +99,8 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   stacking order on that output and Desktop (and active stage) fill the rest; the windows placed form a tile group.
   Event `tiling`, a change notice `{"v":"gfc/1","type":"tiling","gen":N}` plus `reason` (at most 79 bytes: a 20-digit
   `gen` and `unavailable`); the state is the reply of `hyprctl grassfield-tiling` (per output: work area, class, grid
-  step, tiled windows with state, place or layout and zone, group, box). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
+  step, tiled windows with state, place or layout and zone, group, box). The reply moves no window (it only drops the
+  records of closed windows and of windows moved by other means). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
   and the tiling listeners registered. `config("titlebarDoubleClick", "fill")` joins the allowlist (the shell sends it in
   step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing; `tile` and `arrange` are
   refused while the session is locked (`reason:"locked"`, TL34).

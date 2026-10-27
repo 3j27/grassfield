@@ -284,8 +284,8 @@ namespace {
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
         const auto target = w->layoutTarget();
-        if (!target)
-            return;
+        if (!target || !gf::tiler::movable(w))
+            return; // closed or unmapped during the drag: no Desktop, no layout space (gate C1)
         const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
         if (!grab.moved && !tb::exceedsDragThreshold(pointer.x - grab.pressPos.x, pointer.y - grab.pressPos.y))
             return;

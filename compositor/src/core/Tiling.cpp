@@ -72,6 +72,14 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
+    bool movable(const WindowFacts& w) {
+        return w.mapped && w.onDesktop && w.inSpace;
+    }
+
+    bool shouldFollow(const WindowFacts& w, std::optional<size_t> output, bool sameSpace) {
+        return movable(w) && w.floating && output.has_value() && !sameSpace;
+    }
+
     int gridStep(double scale) {
         if (!std::isfinite(scale) || scale <= 0)
             return 1;

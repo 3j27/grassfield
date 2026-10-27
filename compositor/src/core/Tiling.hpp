@@ -80,6 +80,23 @@ namespace gf::tiling {
     // Desktop). `outputs`: the outputs' logical boxes.
     std::optional<size_t> outputUnder(const Rect& box, std::span<const Rect> outputs);
 
+    // What the plugin knows of a window before it moves it.
+    struct WindowFacts {
+        bool mapped    = false; // CWindow::m_isMapped
+        bool onDesktop = false; // CWindow::m_workspace is set (unmapping clears it, Window.cpp:750)
+        bool inSpace   = false; // its layout target is in a layout space (unmapping takes it out, Window.cpp:2639)
+        bool floating  = false;
+    };
+
+    // The plugin may set the window's box: CLayoutManager::setTargetGeom reaches the target's space and
+    // CWindow::moveToWorkspace reads its old Desktop, both without a null check. A window that closed or unmapped during a
+    // titlebar drag fails it (integrator re-review of 439e1f2, gate C1).
+    bool movable(const WindowFacts& w);
+
+    // followOutput: give the window the Desktop of the output under its middle (`output`, outputUnder) when it is movable
+    // and floating, there is such an output, and that Desktop's space is not already the window's (`sameSpace`).
+    bool shouldFollow(const WindowFacts& w, std::optional<size_t> output, bool sameSpace);
+
     // ---- geometry (TL1-TL8) ----
 
     // A zone of the work area on a 12 x 12 grid: halves, thirds and quarters are exact twelfths.

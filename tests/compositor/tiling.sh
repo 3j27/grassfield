@@ -28,6 +28,12 @@
 #                  from before (TL10)
 #   locked         while the foreign locker fixture holds the session lock (tests/security/foreign_locker, released over
 #                  its IPC, nothing typed), tile and arrange move nothing and leave the records unchanged (TL34, D4)
+# Gate C1 (integrator re-review of 439e1f2; always run): a window closed while the plugin's titlebar drag holds it must not
+# crash Hyprland (its Desktop and layout space are gone at unmap while the window object lives on):
+#   closed-moving    closed mid-drag while focused, the pointer moving on, then released
+#   closed-unfocused closed mid-drag after another window took the focus (its unmap then keeps the held button), moving on
+#   closed-still     closed between the press and a release without motion
+#   Hyprland stays alive after each, and coredumpctl lists no new Hyprland core dump.
 # Expected boxes come from the output's reserved area read right before each placement (the plugin reads it at placement,
 # TL1: the shell's menu bar and Dock may claim their zones after the run starts). A failed check prints the plugin's
 # [grassfield] WARN and ERR lines logged since the previous check. The plugin verbs are called directly (they return a
@@ -415,5 +421,79 @@ else
 fi
 
 alive() { nestctl version -j >/dev/null 2>&1; }
+
+# ---- gate C1: a window closed during the plugin's titlebar drag ----
+dumps() { coredumpctl --no-legend --no-pager list 2>/dev/null | grep -ci hyprland || true; }
+have_coredumpctl=0
+command -v coredumpctl >/dev/null 2>&1 && have_coredumpctl=1
+dumps0=$(dumps)
+victim_addr=""
+open_victim() { # title: a foot window on GF-REF; its address in victim_addr
+  env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
+    foot -T "$1" -w 600x400 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
+  pids+=("$!")
+  victim_addr=""
+  for _ in $(seq 1 50); do
+    victim_addr=$(nestctl clients -j | jq -r --arg t "$1" '[.[] | select(.title == $t)][0].address // ""')
+    [[ -n $victim_addr ]] && break
+    sleep 0.2
+  done
+  [[ -n $victim_addr ]] && nestctl dispatch "hl.dsp.window.move({ x = $((mx + 400)), y = $((my + 300)), window = 'address:$victim_addr' })" >>"$log" 2>&1
+  sleep 0.8
+}
+victim_grip() { # the titlebar's middle of the victim, relative to GF-REF: "px py"
+  nestctl clients -j | jq -r --arg a "$victim_addr" --argjson mx "$mx" --argjson my "$my" --argjson mid "$GF_TB_MID" \
+    '.[] | select(.address == $a) | "\((.at[0] + .size[0] / 2 - $mx) | floor) \((.at[1] - $mid - $my) | floor)"'
+}
+close_victim() { nestctl dispatch "hl.dsp.window.close({ window = 'address:$victim_addr' })" >>"$log" 2>&1; }
+# closed-moving: focused (the press focuses it); its unmap releases the held buttons, the next motion cancels the gesture.
+open_victim tiling-victim-a
+if [[ -n $victim_addr ]] && read -r px py < <(victim_grip); then
+  pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 1800 drag $((px + 120)) $((py + 30)) sleep 150 drag $((px + 160)) $((py + 40)) sleep 300 up &
+  p=$!
+  sleep 1
+  close_victim
+  wait "$p"
+  sleep 0.8
+  check "C1 closed-moving: a window closed mid-drag, pointer moving on, released: Hyprland alive" alive
+else
+  check "C1 closed-moving: the victim window opened" false
+fi
+# closed-unfocused: another window takes the focus mid-drag, then the dragged one closes; its unmap keeps the held button,
+# so the plugin's drag goes on over a window with no Desktop.
+open_victim tiling-victim-b
+if [[ -n $victim_addr ]] && read -r px py < <(victim_grip); then
+  pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 2200 drag $((px + 120)) $((py + 30)) sleep 150 drag $((px + 160)) $((py + 40)) sleep 300 up &
+  p=$!
+  sleep 0.8
+  nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+  sleep 0.3
+  close_victim
+  wait "$p"
+  sleep 0.8
+  check "C1 closed-unfocused: a window closed mid-drag after losing the focus, pointer moving on: Hyprland alive" alive
+else
+  check "C1 closed-unfocused: the victim window opened" false
+fi
+# closed-still: the press, the window closes, the release without any motion.
+open_victim tiling-victim-c
+if [[ -n $victim_addr ]] && read -r px py < <(victim_grip); then
+  pointer abs "$px" "$py" down sleep 1500 up &
+  p=$!
+  sleep 0.6
+  close_victim
+  wait "$p"
+  sleep 0.8
+  check "C1 closed-still: a window closed between the press and a release without motion: Hyprland alive" alive
+else
+  check "C1 closed-still: the victim window opened" false
+fi
+if ((have_coredumpctl)); then
+  dumps1=$(dumps)
+  check "C1: no new Hyprland core dump (coredumpctl: $dumps0 before, $dumps1 after)" test "$dumps1" -le "$dumps0"
+else
+  say "SKIP: coredumpctl is not available: the core dump check is left to the integrator"
+fi
+
 check "Hyprland alive" alive
 exit $fail

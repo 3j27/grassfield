@@ -225,9 +225,22 @@ namespace gf::tiler {
             return c;
         }
 
+        tiling::WindowFacts factsOf(const PHLWINDOW& w) {
+            const auto target = w ? w->layoutTarget() : nullptr;
+            return tiling::WindowFacts{.mapped    = w && w->m_isMapped,
+                                       .onDesktop = w && w->m_workspace,
+                                       .inSpace   = target && target->space(),
+                                       .floating  = target && target->floating()};
+        }
+
+        // An output showing an open special workspace (a scratchpad): nothing tiles there (TL9), a drop only moves.
+        bool showsSpecial(const PHLMONITOR& m) {
+            return m && m->m_activeSpecialWorkspace;
+        }
+
         // TL9 (no drag preview, refused by tile and arrange).
         bool placeable(const PHLWINDOW& w) {
-            if (!w || !w->m_isMapped || w->isHidden() || !w->m_isFloating || w->m_pinned || !w->layoutTarget())
+            if (!w || !tiling::movable(factsOf(w)) || w->isHidden() || !w->m_isFloating || w->m_pinned)
                 return false;
             if (!w->m_workspace || w->m_workspace->m_isSpecialWorkspace || fullscreenNow(w))
                 return false; // minimized and hidden windows live on special workspaces
@@ -690,7 +703,7 @@ namespace gf::tiler {
         if (!placeable(w) || (!options.edges && !options.menuBar))
             return std::nullopt;
         const auto m = monitorAt(pointer);
-        if (!m)
+        if (!m || showsSpecial(m))
             return std::nullopt;
         const CBox box = m->logicalBox();
         const tiling::Output output{toRect(box), box.y + m->m_reservedArea.top(), edgeFree(m, true), edgeFree(m, false)};
@@ -706,8 +719,8 @@ namespace gf::tiler {
         auto& s = st();
         catchUp();
         const auto m = monitor && monitor->m_enabled ? monitor : monitorOf(w);
-        if (!m)
-            return false;
+        if (!m || showsSpecial(m))
+            return false; // over an open special workspace the drop only moves the window (followOutput)
         const auto target  = w->layoutTarget();
         const CBox current = target->position();
         const auto band    = gf::chrome::bandOf(w);
@@ -721,11 +734,16 @@ namespace gf::tiler {
         return true;
     }
 
+    bool movable(const PHLWINDOW& w) {
+        return tiling::movable(factsOf(w));
+    }
+
     void followOutput(const PHLWINDOW& w) {
-        const auto target = w ? w->layoutTarget() : nullptr;
-        if (!target || !target->floating() || !g_layoutManager)
-            return;
-        const CBox                box = target->position();
+        const auto facts = factsOf(w);
+        if (!tiling::movable(facts) || !g_layoutManager)
+            return; // closed or unmapped (during a drag): no Desktop, no space (gate C1)
+        const auto                target = w->layoutTarget();
+        const CBox                box    = target->position();
         const auto                all = monitors();
         std::vector<tiling::Rect> boxes;
         boxes.reserve(all.size());
@@ -736,7 +754,7 @@ namespace gf::tiler {
             return; // off every output: it keeps its Desktop
         const auto& m  = all[*i];
         const auto  ws = m->m_activeSpecialWorkspace ? m->m_activeSpecialWorkspace : m->m_activeWorkspace;
-        if (!ws || !ws->m_space || ws->m_space == target->space())
+        if (!ws || !ws->m_space || !tiling::shouldFollow(facts, i, ws->m_space == target->space()))
             return;
         target->assignToSpace(ws->m_space);
         g_layoutManager->setTargetGeom(box, target);
@@ -840,25 +858,37 @@ namespace gf::tiler {
             }
             windows.push_back(w);
         }
-        // A window belongs to the Desktop of the output it is on (macOS), whatever moved it there: the plugin's titlebar
-        // drag before this fix, or a move Hyprland's own action makes without changing its Desktop (Actions::move).
-        for (const auto& w : windows)
-            followOutput(w);
-        const auto first     = windows.front();
-        const auto workspace = first->m_workspace;
-        const auto m         = request->output.empty() ? monitorOf(first) : monitorByName(request->output);
+        // Every check before anything moves (ADR-0007: a refusal changes nothing). The output is the one the windows are on
+        // (under their middle), whatever Desktop Hyprland still records for them.
+        const auto first = windows.front();
+        const auto here  = monitorOf(first);
+        const auto m     = request->output.empty() ? here : monitorByName(request->output);
         if (!m) {
             refuse("the output is unknown");
             return;
         }
-        if (m->m_activeWorkspace != workspace) {
-            refuse(std::format("{} shows Desktop {}, the first window is on Desktop {}", m->m_name, m->m_activeWorkspace ? m->m_activeWorkspace->m_name : "none",
-                               workspace ? workspace->m_name : "none"));
+        if (here != m) {
+            refuse(std::format("the first window is on {}, not on {} (D3)", here ? here->m_name : "no output", m->m_name));
+            return;
+        }
+        if (showsSpecial(m) || !m->m_activeWorkspace) {
+            refuse(std::format("{} shows a special workspace or no Desktop (TL9)", m->m_name));
             return;
         }
         for (const auto& w : windows) {
-            if (w->m_workspace != workspace) {
-                refuse("the windows are not on one Desktop");
+            if (monitorOf(w) != m) {
+                refuse(std::format("the windows are not all on {}", m->m_name));
+                return;
+            }
+        }
+        // Then each window takes the Desktop of the output it is on (D9), whatever moved it there: the plugin's titlebar
+        // drag, or a move Hyprland's own action makes without changing the Desktop (Actions::move).
+        for (const auto& w : windows)
+            followOutput(w);
+        const auto workspace = m->m_activeWorkspace;
+        for (const auto& w : windows) {
+            if (w->m_workspace != workspace) { // followOutput gives every placeable window that Desktop: never expected
+                refuse(std::format("{} shows Desktop {}, a window stayed on Desktop {}", m->m_name, workspace->m_name, w->m_workspace ? w->m_workspace->m_name : "none"));
                 return;
             }
         }
@@ -909,7 +939,7 @@ namespace gf::tiler {
 
     std::string stateReply() {
         auto& s = st();
-        catchUp();
+        reconcile(); // records only: the reply never moves a window (deferred ones are placed at the next tiling action)
         const auto                       all = monitors();
         std::vector<tiling::StateOutput> outputs;
         outputs.reserve(all.size());

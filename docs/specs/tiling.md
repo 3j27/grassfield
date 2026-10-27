@@ -88,8 +88,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **TL2** Margins: with "Tiled windows have margins" on, `tiling.margin` (8) between the work area's edge and each frame,
   and between frames; off, frames touch each other and the work area edges. Changing the setting re-places every tiled
   window on every output (M39). A tiled window that cannot be placed at that moment (in an inactive stage, drawn in the
-  strip) keeps its record and is placed again at the next placement or state read once it can be; if the user moves it
-  meanwhile it is Free (ADR-0036 D8).
+  strip) keeps its record and is placed again at the next tiling action (`tile`, `arrange`, a drop in a zone) once it
+  can be; if the user moves it meanwhile it is Free (ADR-0036 D8). `hyprctl grassfield-tiling` never moves a window.
 - **TL3** Frames, not surfaces, fill zones: the surface box is the zone minus the titlebar band. Rounding (review of
   14e807c: Hyprland configures an xdg window with its size truncated to whole logical pixels, `sendConfigure` of
   `realToReportSize`, Window.cpp:1752-1753, so a fractional size loses up to one logical pixel and two neighbours would
@@ -132,7 +132,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
   (XWaylandManager.cpp:110-131), X11 override-redirect, Glance (`org.grassfield.Preview.Glance`, the quick look panel),
-  pinned, full screen or zoomed, on a special workspace, minimized, in an inactive stage (drawn in the Stages strip).
+  pinned, full screen or zoomed, on a special workspace, minimized, in an inactive stage (drawn in the Stages strip),
+  closed or unmapped (during a titlebar drag: the plugin then moves it no more, gate C1). Nothing tiles onto an output
+  that shows an open special workspace: a drop there only moves the window (TL21, D9).
   The X11 test reads what `shouldBeFloated` reads (the window's type atoms against Hyprland's atom table `HYPRATOMS`,
   looked up by name and never written; modal, transient, parent, role, override-redirect) without calling it: that
   function also sets focus flags on the window.

@@ -61,6 +61,10 @@ namespace gf::tiler {
     // another space lets the floating algorithm fit it in the new work area, DefaultFloatingAlgorithm::movedTarget).
     void followOutput(const PHLWINDOW& w);
 
+    // The plugin may set `w`'s box (core movable: mapped, on a Desktop, its target in a layout space). A window that
+    // closed or unmapped during a titlebar drag fails it: Hyprland would dereference null (gate C1).
+    bool movable(const PHLWINDOW& w);
+
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.
     std::optional<CBox> beginMove(const PHLWINDOW& w);
@@ -84,7 +88,8 @@ namespace gf::tiler {
     // The margins setting changed: every tiled window is placed again from its zone (TL2).
     void marginsChanged();
 
-    // The reply of `hyprctl grassfield-tiling` (core stateJson).
+    // The reply of `hyprctl grassfield-tiling` (core stateJson). It moves no window: it only drops the records of closed
+    // windows and of windows moved by other means.
     std::string stateReply();
 
     // From the plugin's pointer motion listener: one of Hyprland's resizes of a tiled window began (Resizing), or a move
