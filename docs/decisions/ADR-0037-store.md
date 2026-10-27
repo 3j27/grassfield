@@ -209,7 +209,7 @@ Every app in the Store comes from one source, shown on its button row, its produ
 |---|---|---|---|
 | Arch repositories | `[core]`, `[extra]`, `[multilib]` through Omarchy's mirror | the Store's helper (b.1) | on |
 | `[omarchy]` | Omarchy's own repository (prebuilt Chrome, Spotify, VS Code, 1Password, …) | the Store's helper (b.1) | on |
-| Omarchy setups | Omarchy's `omarchy-install-*` recipes our catalog lists, each with what it changes, written after reading it | the recipe, in Omarchy's terminal (b.2) | on, except the recipes that download and run code outside pacman (GeForce NOW, Battle.net, dev environments) |
+| Omarchy setups | Omarchy's `omarchy-install-*` recipes our catalog lists, each with what it changes, written after reading it | the recipe, in Omarchy's terminal (b.2) | on, except the recipes that download and run code outside pacman (GeForce NOW, Battle.net, dev environments, and those that install through mise or a language installer, such as Hermes) |
 | Omarchy web apps | sites our catalog lists | `omarchy-webapp-install`, as the user (b.3) | on |
 | AUR | user packages, not reviewed by anyone | `omarchy-pkg-aur-add` (yay), in Omarchy's terminal (b.2) | **off until turned on** in the Store's settings; the warning on every install |
 | Flathub | Flatpak apps, sandboxed, per-user installs without root | `flatpak --user`, as the user (b.3) | **off until turned on**, and offered only when the user has installed `flatpak` (an `optdepends`, no dependency added) |
@@ -526,7 +526,8 @@ published after a release B would point the channel back to A's `grassfield.db`:
    when it differs from the snapshot's, else the snapshot's own. The catalog is used only once it passes the Store's own
    checks for that channel (the signature by a trusted key, the rules, the icons); "differs" compares a hash of its content
    with the serial and the build time left out (recorded in the manifest), and a changed catalog also needs a higher
-   serial; only the icons the signed file lists are uploaded. The job checks out `main` when it runs, never the commit that
+   serial; only the icons the signed file lists are uploaded. Every file a new release brings (both databases, the notes,
+   every package) must be signed the same way, checked with gpgv against the keyring before anything is uploaded. The job checks out `main` when it runs, never the commit that
    started it, so a re-run of an old run publishes nothing old. It lives in a workflow of its own that no pull request
    starts, with a protected environment per channel (ADR-0033 b.7).
 3. **Never backwards.** The job refuses a snapshot whose `grassfield.db` names an older version of any package than the
@@ -599,16 +600,22 @@ and refuses the whole file when its top level is invalid):
 - CI also refuses: a `repo` package absent from the build container's Omarchy stable package set (ADR-0033 f), or one that
   owns no application entry (its file list, `pacman -Fl`; SD1); a recipe name
   absent from the pinned Omarchy release, or whose text, or anything it calls or sources, syncs (any `-y` cluster,
-  `--refresh` or `--sysupgrade` on pacman, yay or paru, and a `yay` with no operation, which is `-Syu`; e.4), downloads code
-  (`curl`, `wget`, `git clone`, `makepkg`, `yay -G` or `-B`; a) or builds from the AUR (a name no repository serves, or one
-  known only at run time); a `flatpak` id absent from Flathub's AppStream in the build container; a URL that is not https.
+  `--refresh` or `--sysupgrade` on pacman, yay or paru, and a `yay` or `paru` with no operation, which is `-Syu`; e.4),
+  downloads code (`curl`, `wget`, `makepkg`, `git clone`, `pull` or `fetch`, `yay -G` or `-B`, and the language installers:
+  mise except its read-only commands, npm, npx, pipx, pip, cargo, uv, go, gem; a) or builds from the AUR (a name no
+  repository serves, or one known only at run time). The text is read as shell, failing closed: line continuations
+  joined, quotes removed, each command found after the wrappers that run it (`sudo -u`, `env`, `command`, `exec`,
+  `timeout`...), quoted text and a shell's `-c` argument read as commands too. Also refused: a `flatpak` id absent from
+  Flathub's AppStream in the build container; a URL that is not https.
 
 **Signature and verification.** `grassfield-catalog.v1.json.sig` is a detached binary OpenPGP signature by the repository's
 key (ADR-0033 b, O6: the same key, in CI; tests use throwaway keys). The Store verifies it before parsing, exactly as
 ADR-0033 d.8 verifies the release notes: `gpgv --keyring /usr/share/grassfield/pacman-keyring/grassfield.gpg --status-fd 1`
 (the keyring's private folder, ADR-0033 b.2), the signer is VALIDSIG's argument 10 (the primary key's fingerprint), listed in
 `grassfield-trusted` and absent from `grassfield-revoked` of that folder (their entries compared in upper case, spaces
-around them ignored, so a hand-written revoked entry always counts). The check reads those files, not pacman's keyring,
+around them ignored, so a hand-written revoked entry always counts; a list with any other line, such as a grouped
+fingerprint, a `0x` prefix or a trailing comment, is not used at all, and then no catalog is; a signature file with two
+signers is refused). The check reads those files, not pacman's keyring,
 so it works whether or not Grassfield updates are on. A catalog that fails is not used and not cached; the previous one
 stays. While `grassfield-keyring` holds no key (until the owner's key exists, ADR-0033 O20) or is not installed, no catalog is
 used and the Store says why.
@@ -755,3 +762,9 @@ where it is answered, in both halves (tools/catalog.py and the Store's `catalog.
   signer absent from the keyring and an oversize file; the category names made neutral ("Graphics", "Photos and Video",
   "Music and Audio", "Development"), whether the Mac App Store's own list may be followed being the owner's legal question
   (e.10, not settled here).
+- **Merged with PASS** (grassfield-packages b76bebe), with items before publishing is ever enabled, taken in
+  grassfield-packages PR #4 and, for the Store's half, here: keyring lists fail closed on a line that does not parse (both
+  sides); two signers refused (both sides); recipes read as shell, catching wrapped, quoted and continued commands, `git -C
+  d clone` and the language installers (11 of Omarchy v4.0.4's 63 recipes refused, the catalog's three setups still pass);
+  every release file's signature checked before upload; deep JSON a one-line problem (Qt's parser stops at its nesting
+  limit); the owner creates and protects the `publish-<channel>` environments before the job is enabled.
