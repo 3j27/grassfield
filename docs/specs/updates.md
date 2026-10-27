@@ -1,10 +1,10 @@
 # Software Update spec · platform-engineer (client, channel), shell-engineer (pane, badge, menu, banner) · owner brief 2026-10-27
-Status: step 0 (this spec and ADR-0033), awaiting the opus review; every owner decision of 2026-10-27 (ADR-0033 O1-O16)
-is included. Nothing is built yet. Step 1 builds the checker, the channel
-command, the persistence and the container test. Step 2 builds the pane, the badge, the menu count and the notification,
+Status: step 0 (this spec and ADR-0033), revised after the first opus review (FAIL, 5 MAJOR); every owner decision of
+2026-10-27 (ADR-0033 O1-O19) is included. Nothing is built yet. Step 1 builds the checker, the channel command, the
+persistence and the container test. Step 2 builds the pane, the badge, the menu count and the notification,
 after the Settings PRs (#6, #8, #9, #10) merge.
 Decisions and evidence: `docs/decisions/ADR-0033-software-update.md` (the contract with grassfieldhq/grassfield-packages,
-probes P0–P13). UI names: "Software Update" (fr « Mise à jour de logiciels »), "Beta Updates" (fr « Mises à jour bêta »),
+probes P0–P13 and Q0–Q8). UI names: "Software Update" (fr « Mise à jour de logiciels »), "Beta Updates" (fr « Mises à jour bêta »),
 "Update Now" (fr « Mettre à jour maintenant »).
 
 ## macOS reference behavior (described in words; no Apple image committed)
@@ -36,25 +36,42 @@ Non-goals:
 
 ## Functional requirements
 Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
-- U1. Runs as the user, never as root. It writes only its database folder (`$XDG_CACHE_HOME/grassfield/checkup-db`) and
-  returns one JSON object on stdout (at most 256 KiB, `version: 1`). The shell writes it to
-  `$XDG_STATE_HOME/grassfield/software-update.json` (0600, atomic, ADR-0020).
-- U2. States: `not-set-up` (no `[grassfield]`, no `/etc/pacman.d/grassfield.conf`), `repair` (the file is there, the Include
-  line is not), `up-to-date`, `available`, `failed` (with `offline` or `unavailable` and the time of the last success).
+- U1. Runs as the user, never as root.
+  - It writes only under `$XDG_CACHE_HOME/grassfield/`: `checkup-db/`, `health-db/` and `checkup.lock`.
+  - It returns one JSON object on stdout (at most 256 KiB, `version: 1`). The shell writes it to
+    `$XDG_STATE_HOME/grassfield/software-update.json` (0600, atomic, ADR-0020).
+  - It holds `flock -n` on `checkup.lock`, and a second run answers `busy`. Under that lock, a `db.lck` left in its own
+    database folders is stale and is removed first (Q8).
+  - It is stopped after 180 s: SIGTERM, then SIGKILL 5 s later.
+  - Every child runs with stdin from `/dev/null`.
+- U2. States:
+  - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf`;
+  - `repair`: the file is there, the `[grassfield]` lines are not;
+  - `blocking`: `[grassfield]` is configured but its database cannot be synced or verified while the network works, so every
+    `omarchy update` fails (U22);
+  - `up-to-date`, `available`;
+  - `failed`, with `offline` or `unavailable` and the time of the last success;
+  - `update-running`: Omarchy's update lock is held (U4).
   `checking` is the shell's state while the child runs. Every result carries the channel: `stable`, `beta`, or `custom` when
-  the Server is not `<base>/<channel>/$arch`.
-- U3. `available` lists, from one `checkupdates` run:
+  the primary Server is not `<base>/<channel>/$arch` for the current base.
+- U3. Before `checkupdates`, the checker syncs `[grassfield]` alone: its own minimal configuration (`[options]` plus the
+  `Include`), its own `health-db/`, under `fakeroot` (ADR-0033 a2, Q3). A failure there with the network up is `blocking`.
+  `available` lists, from one `checkupdates` run:
   - the Grassfield release (`grassfield-desktop` installed → candidate, pkgver-pkgrel) with its notes;
   - Omarchy's release (`omarchy` or `omarchy-dev`) as `omarchy-update-available` reports it;
   - the number of other package updates.
   Other `grassfield-*` packages are not listed on their own.
-- U4. One check at a time, stopped after 180 s. A request while one runs joins it. None runs while `omarchy update` holds
-  `$XDG_RUNTIME_DIR/omarchy-update.lock`; the state then says an update is in progress.
+- U4. One check at a time. A request while one runs joins it.
+  - A request while `omarchy update` holds `$XDG_RUNTIME_DIR/omarchy-update.lock` (tested with `flock -n`, released at
+    once) is handed to one waiter. The waiter blocks on `flock -x -w 7200` on that file, releases it at once, then checks.
+  - This covers the shim's request, which comes from inside `omarchy update` (ADR-0033 d.5, Q8).
+  - The state is `update-running` meanwhile.
 - U5. When the Server differs from the one it last synced, the checker deletes its own `[grassfield]` database files first
   (ADR-0033 c, P7).
 - U6. Notes: fetched only for an available Grassfield release; https only (`file` in the container test); at most 64 KiB,
-  15 s; signature checked with `gpgv` against `/usr/share/pacman/keyrings/grassfield.gpg`; a signer listed in
-  `grassfield-revoked` is refused; JSON validated (`version` 1, at most 20 releases, `en` required, at most 8000 characters a
+  15 s; signature checked with `gpgv` against `/usr/share/pacman/keyrings/grassfield.gpg`. The signer is VALIDSIG's argument
+  10, the primary key (argument 1 is a signing subkey, Q7). It must be in `grassfield-trusted` and not in
+  `grassfield-revoked`; JSON validated (`version` 1, at most 20 releases, `en` required, at most 8000 characters a
   text, UTF-8). The notes of every release newer than the installed one are shown, newest first, `fr` when the session is
   French and present, else `en`. Anything invalid: no notes, "Release notes are not available" (fr « Les notes de version ne
   sont pas disponibles »).
@@ -64,8 +81,10 @@ When it runs (shell)
   6 h, skipped while the shell's connectivity says offline or metered.
 - U8. The pane checks when it opens (unless a check finished less than 60 s ago or one is running) and on "Check Now"
   (fr « Vérifier maintenant »), whatever U7 says.
-- U9. `omarchy-shell -q omarchy.system-update refresh|clear` (called by `omarchy update`) reaches Grassfield's shim, which
-  asks the shell for a check (no other new IPC verb of the shim; everything else keeps failing quietly).
+- U9. `omarchy-shell -q omarchy.system-update refresh|clear` (called by `omarchy update`, under its lock) reaches
+  Grassfield's shim. The shim only sends the shell a check request, which U4 hands to the waiter. It starts no process
+  itself, since a child inheriting Omarchy's lock descriptor would keep the lock. No other IPC verb of the shim is new;
+  everything else keeps failing quietly.
 - U10. Settings reads `software-update.json` (bounded read) and asks the shell to check over IPC. Without a shell it runs the
   checker itself and keeps the result in memory.
 
@@ -78,8 +97,9 @@ Actions (never in a dev session)
   permission…" meanwhile, up to 120 s. A refusal or a cancel shows one line ("Beta updates were not changed: not allowed"),
   and nothing is retried. The shown value is read from `/etc/pacman.d/grassfield.conf` (watched), never stored per user; the
   switch shows the old value until the file changes. Switching installs nothing (O2); the pane then checks.
-- U13. "Set Up…" (`not-set-up`) runs `grassfield-channel-set stable`; "Repair…" (`repair`) runs `grassfield-channel-set
-  repair`. Both work as U12 does.
+- U13. "Set Up…" (`not-set-up`) runs `grassfield-channel-set stable`; "Repair…" (`repair`, `custom`) runs
+  `grassfield-channel-set repair`; "Turn Off Grassfield Updates…" (`blocking`, and in the Beta Updates info sheet) runs
+  `grassfield-channel-set off`. All work as U12 does.
 - U14. After a Grassfield update in this session (GF-083's `updatePending`), the pane shows "Log out to finish updating
   Grassfield" with "Log Out…". When Omarchy's `~/.local/state/omarchy/reboot-required` exists or the running kernel's modules
   are gone, it shows "Restart to finish updating" with "Restart…" instead. Both use the existing session-end path.
@@ -91,17 +111,39 @@ Actions (never in a dev session)
   - `repair` runs the helper's `restore`, then the hook link;
   - `off` runs the helper's `off`, then removes the hook link.
   Exit 0 on success; 1 on a refusal, a cancelled or refused authentication, or a failed step (the message names it).
-- U16. `grassfield-channel-helper` (root, through pkexec only; opus security review) accepts exactly `set stable`, `set beta`,
-  `restore`, `off`.
-  - Order of `set`: validate; bootstrap the trust if needed (pinned fingerprint, the shipped key file checked against it,
-    `pacman-key --add`, `--lsign-key`); write the section from the packaged template (to `.new`, then a rename); append the
-    Include line if missing (temporary file in `/etc`, rename, mode kept); drop pacman's synced `[grassfield]` files.
-  - A step that fails stops the helper and leaves `pacman.conf` valid: the Include line is never present without its file.
+- U16. `grassfield-channel-helper` (root; opus security review).
+  - Through pkexec it accepts exactly `set stable`, `set beta`, `restore` and `off`, refused while pacman's `db.lck` exists.
+  - From `grassfield-desktop`'s install script it accepts `scriptlet-remove` (`pre_remove`) and `scriptlet-upgrade`
+    (`post_upgrade`); both are refused when `PKEXEC_UID` is set.
+  - Layout written: two lines at the end of `pacman.conf`, `[grassfield]` and `Include = /etc/pacman.d/grassfield.conf`. The
+    file holds `SigLevel = Required` and the `Server` lines, the primary then the mirrors (ADR-0033 a.1, Q4, Q5).
+  - Order of `set`:
+    1. validate;
+    2. the trust bootstrap when the pinned key's validity in pacman's keyring is not full or ultimate (trust, not presence):
+       the shipped key file is checked against the pinned fingerprint, then `pacman-key --add` and `--lsign-key`;
+    3. the file from the packaged template (to `.new`, then a rename);
+    4. the two lines if missing (temporary file in `/etc`, rename, mode kept);
+    5. drop pacman's synced `[grassfield]` files.
+  - `off` and `scriptlet-remove`: the two lines, then the file, then the synced files, then `pacman-key --delete` of every key
+    in `grassfield-trusted` and of the pinned key (ADR-0033 b.8, Q6).
+  - `scriptlet-upgrade`: when the primary Server is `<previous base>/<channel>/$arch`, it rewrites the file for that channel
+    and drops the synced files; otherwise it does nothing (ADR-0033 h.3).
+  - A step that fails stops the helper and leaves `pacman.conf` valid: the `[grassfield]` lines are never present without
+    their file.
   - It installs no package (`grassfield-keyring` comes as a dependency of `grassfield-desktop`), uses no network, reads no
     environment variable and writes nothing in a user's home.
-- U17. The hook `pre-refresh-pacman` (linked by `grassfield-channel-set`, owner decision O4) adds the Include line with `sudo
-  sed` (Omarchy's warm sudo cache) when the file exists and the line is missing; otherwise it does nothing. It never writes
-  the section itself.
+- U17. The hook `pre-refresh-pacman` (linked by `grassfield-channel-set`, owner decision O4) adds the two lines with `sudo tee
+  -a` (Omarchy's warm sudo cache) when the file exists and `pacman.conf` has no `[grassfield]` line; otherwise it does
+  nothing. It never writes the file.
+- U22. `blocking` (owner decision O18):
+  - the pane says that Grassfield's repository cannot be used and that this stops every system update, and offers "Turn Off
+    Grassfield Updates…" (U13);
+  - one notification per episode says the same, and its action opens the pane;
+  - nothing is turned off without the user;
+  - after "Turn Off…", `omarchy update` works again (ADR-0033 a2, Q1).
+- U23. `grassfield-keyring`'s `pre_remove` deletes the keys of its trusted list from pacman's keyring (ADR-0033 b.8). After
+  `pacman -Rns grassfield-desktop grassfield-keyring …` no `[grassfield]` line and no Grassfield key remain, and pacman works
+  (Q6).
 
 Badge, menu, notification (step 2)
 - U18. The Dock's Settings tile shows the number of available releases (0, 1 or 2: Grassfield, Omarchy), set by the shell as
@@ -126,16 +168,18 @@ Pane (step 2)
 | Case | Behaviour |
 |---|---|
 | `grassfield-channel-set` run as root (`sudo grassfield-channel-set …`) | refused: "run it as your user; it asks for permission itself" |
-| The helper started without root, with another verb or more arguments, or while pacman's `db.lck` exists | refused, nothing changed |
+| The helper started without root, with another verb or more arguments, or (pkexec verbs) while pacman's `db.lck` exists | refused, nothing changed |
+| A scriptlet verb (`scriptlet-remove`, `scriptlet-upgrade`) through pkexec (`PKEXEC_UID` set) | refused, nothing changed |
 | The polkit dialog cancelled, the password wrong, or no agent | the helper does not run; one line under the row; nothing changed |
 | Unknown channel argument | refused, usage printed, nothing changed |
 | A build without the pinned signing key, or whose `GRASSFIELD_REPO_BASE` is the `.invalid` placeholder (both the case until the owner provides a key and hosting) | refused: "no signing key in this build" / "no package repository in this build"; the pane hides "Set Up…" and says Software Update is not available in this build (the container tests build their own `repository.conf` with a `file://` base and a throwaway key) |
 | The shipped key file is not the pinned fingerprint | refused before `pacman-key` runs |
-| `omarchy update` running (its lock held) | `grassfield-channel-set` refuses (and the helper while pacman runs); "Update Now" disabled; no check starts |
+| `omarchy update` running (its lock held) | `grassfield-channel-set` refuses (and the helper while pacman runs); "Update Now" disabled; checks wait for the release (U4) |
 | A package unsigned, signed by an unknown or disabled key, or changed after signing | pacman refuses it in Omarchy's terminal, nothing is upgraded (P8, P13); the next check still lists the update |
-| A `[grassfield]` database unsigned, badly signed or signed by a revoked key | pacman refuses the database (P5, P7, P8, P13); the checker reports `failed`/`unavailable` |
+| A `[grassfield]` database unsigned, badly signed or signed by a revoked key, or a server offline with no mirror answering | pacman refuses the database (P5, P7, P8, P13, Q1) and every `omarchy update` fails; the checker reports `blocking` and offers "Turn Off…" (U22) |
 | Notes unsigned, badly signed, revoked signer, over 64 KiB, not UTF-8, invalid JSON, not https | not shown (U6); the update is still offered |
-| A dev session | "Update Now", "Set Up…", "Repair…" and the beta switch log `dev guard: … suppressed` and do nothing; `GRASSFIELD_UPDATE_LAUNCHER` and `GRASSFIELD_UPDATE_PKEXEC` may record the commands |
+| A first installation from downloaded files (`pacman -U ./…`) | not verified by pacman (`LocalFileSigLevel = Optional`, Q0); not a documented procedure. The verified one is ADR-0033 b.3a (out-of-band fingerprint, `--lsign-key`, install from the repository). The owner accepted the residual risk of the helper's bootstrap (O17). |
+| A dev session | "Update Now", "Set Up…", "Repair…", "Turn Off…" and the beta switch log `dev guard: … suppressed` and do nothing; `GRASSFIELD_UPDATE_LAUNCHER` and `GRASSFIELD_UPDATE_PKEXEC` may record the commands |
 | A second check while one runs | joins the running one |
 
 ## Acceptance criteria (each mapped to a test; level)
@@ -149,11 +193,16 @@ Pane (step 2)
 | A6 | `grassfield-channel-set off` leaves a working pacman (no Include without its file) | container test | L0 |
 | A6b | the helper, run as root in the container: every verb, the refusals (verb, `db.lck`, missing or mismatching key file), atomic writes; `grassfield-channel-set` on a recording pkexec stand-in | container test | L0 |
 | A7 | channel switch drops the synced database (P7 case passes) | container test | L0 |
+| A7b | layout against Omarchy's rewrites: the 3.x→4 awk, migrations 1787589206, 1788112314 (4.0.4) and 1791403252 (4.0.6) keep `[grassfield]` last (Q4, Q5) | container test | L0 |
+| A7c | `blocking`: an offline or badly signed `[grassfield]` is detected by the `[grassfield]`-only sync; "Turn Off" (`off`) makes `pacman -Syu` work again; a mirror covers an offline primary (Q1, Q3) | container test | L0 |
+| A7d | `off` and `pacman -Rns`: no `[grassfield]` line, no Grassfield key left, pacman works (Q6) | container test | L0 |
+| A7e | host change: `scriptlet-upgrade` rewrites a config on a previous base, leaves a custom one alone | container test | L0 |
+| A7f | update lock: a request under the lock waits and checks after the release; a stale `db.lck` is removed (Q8) | checker tests | L0 |
 | A8 | notes: good, rogue, changed, revoked signer, oversize, bad JSON | checker unit tests (Python, fixtures) | L0 |
 | A9 | checker output parsing, states, announced versions, schedule (fake clock), dev guard of the actions | `tests/unit/tst_softwareupdate.qml` with `GRASSFIELD_UPDATE_FIXTURE` | L0 |
 | A10 | grassfield-packages' real packages: stable install, update, beta and back, bad signature, the client sees each update | grassfield-packages end-to-end (step 1b) | L0 |
 | A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | offscreen tests and captures with the fake backend (step 2) | L0/L1 |
-| A12 | real flows: the polkit dialog of Set Up… and Beta Updates (cancel once, a wrong password once, then accept), Update Now in Omarchy's floating terminal | owner, real session | L2 |
+| A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update Now in Omarchy's floating terminal | owner, real session | L2 |
 
 ## Interfaces / contracts (versions)
 - ADR-0033 § g (the repository contract; `grassfield-notes.json` version 1).
@@ -167,7 +216,7 @@ Pane (step 2)
 On Omarchy 4.0.4 (its `install/omarchy-base.packages`): `pacman-contrib` (`checkupdates`; P0: 1.13.1-1), `fakeroot`, `jq`,
 `gum`, `uwsm`, `xdg-terminal-exec`; pacman 7.1 (P0); gnupg 2.4 (`gpgv`); curl; python; polkit (`pkexec`). `omarchy` 4.0.6
 itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `grassfield-keyring` are added to
-`grassfield-desktop`'s `depends` in step 1 (declared, not assumed). Omarchy's commands used:
+`grassfield-desktop`'s `depends` in step 1, with `fakeroot` (declared, not assumed). Omarchy's commands used:
 `omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself).
 
 ## Degraded behavior
@@ -191,6 +240,13 @@ itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-co
 - Every string is in `qsTr` (en, fr). The release notes come in en and fr from the channel.
 
 ## Known limitations
+- A `[grassfield]` that cannot sync (server down with no mirror answering, a wrong signature, a revoked key) makes every
+  `omarchy update` fail, security fixes included, until it is fixed or turned off (U22). Mirrors cover outages, not a bad
+  publication (Q1).
+- A client whose two requests straddle a publication's pointer write gets a mismatched pair once; that `omarchy update` fails,
+  the next one works (ADR-0033 h.2).
+- The update-lock waiter and the quick test hold Omarchy's lock for microseconds. An `omarchy update` started at that very
+  instant reports "already running".
 - Omarchy's own channel change (`omarchy-channel-set`, through `omarchy-refresh-pacman`'s `pacman -Syyuu`) and
   `omarchy-reinstall-pkgs` (`pacman -Suu`) allow downgrades. After leaving the Grassfield beta, they replace the beta with
   the stable version at once (P11), instead of waiting for a newer stable. Omarchy's own packages behave the same way.
@@ -201,8 +257,10 @@ itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-co
 - "Update Now" updates the whole system (Omarchy's update), not Grassfield alone.
 - The update runs in Omarchy's terminal; the pane shows no progress.
 - A host can replay an old, validly signed database and hold back updates; pacman has no database expiry.
-- One signing key (owner decision O6): if it is ever compromised, a signed revocation cannot reach users; each machine must
-  disable the key by hand, with the command the owner publishes (ADR-0033 b.5).
+- One signing key (owner decision O6): if it is ever compromised, revoking it stops every client's `[grassfield]` (`blocking`)
+  until the user turns it off or trusts a new key through the verified first-installation steps (ADR-0033 b.3a, b.5).
+- The first `grassfield-desktop` installed is the trust anchor of the helper's bootstrap (owner decision O17). A package
+  installed from a file with `pacman -U` is not verified.
 - Omarchy can ship a new Hyprland before the matching plugin is published: the session runs degraded (ADR-0009) until then.
 - The channel is per machine. Another user's Omarchy channel change, without their own hook, puts this machine in `repair`
   until someone runs "Repair…".
