@@ -189,10 +189,11 @@ Item {
                     Item {
                         id: smallFrame
                         anchors.centerIn: parent
-                        readonly property real scale: smallImage.implicitWidth > 0 && smallImage.implicitHeight > 0 ? Math.min(1, Tokens.filesPreviewThumb / Math.max(smallImage.implicitWidth, smallImage.implicitHeight)) : 0
-                        width: smallImage.implicitWidth * scale
-                        height: smallImage.implicitHeight * scale
-                        visible: smallImage.status === Image.Ready && scale > 0
+                        // The factor that fits the picture in the box (never enlarged); not `scale`, which is the item's own.
+                        readonly property real fit: smallImage.implicitWidth > 0 && smallImage.implicitHeight > 0 ? Math.min(1, Tokens.filesPreviewThumb / Math.max(smallImage.implicitWidth, smallImage.implicitHeight)) : 0
+                        width: smallImage.implicitWidth * smallFrame.fit
+                        height: smallImage.implicitHeight * smallFrame.fit
+                        visible: smallImage.status === Image.Ready && smallFrame.fit > 0
 
                         RectangularShadow {
                             anchors.fill: parent
