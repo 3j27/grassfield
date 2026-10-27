@@ -7,6 +7,11 @@
 # the texts are pinned against the installed Hyprland when there is one.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+# The caller's session must not reach the runs: from a Grassfield session the environment holds GRASSFIELD_SESSION=1 and
+# Quickshell's QS_* variables (integrator review of e6ee4fb). Each run sets the ones it tests.
+for v in $(compgen -e); do
+  case $v in GRASSFIELD_* | QS_*) unset "$v" ;; esac
+done
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/hyprland-dialog.XXXXXX")
 pids=()
 cleanup() {
@@ -43,7 +48,7 @@ EOF
 cat >"$tmp/fake/qs" <<'EOF'
 #!/bin/sh
 printf '%s\0' "$@" >"$FAKE_DIR/qs.args"
-env | grep '^QS_' >"$FAKE_DIR/qs.env" || true
+env | grep -E '^QS_(CONFIG_PATH|CONFIG_NAME|MANIFEST)=' >"$FAKE_DIR/qs.env" || true
 case "$FAKE_QS" in
   hang) exec sleep 5 ;;
   fail) echo "no running instance" >&2; exit 1 ;;
@@ -110,7 +115,7 @@ desc="en ANR for one process: the stand-in stays alive with its pid, prints noth
 check waits_silently
 desc="it reported its own pid, the app's pid and the prefixed class, title and instance to the shell's anr target"
 check bash -c '[[ $(tr "\0" "|" <"$1/qs.args") == "ipc|-p|/usr/share/grassfield/shell|call|anr|report|$2|4242|c:foot|t:~|i:sig_1_2|" ]]' _ "$tmp" "$run_pid"
-desc="Quickshell's option variables were cleared before qs ipc"
+desc="Quickshell's option variables (QS_CONFIG_PATH, QS_CONFIG_NAME, QS_MANIFEST) were cleared before qs ipc"
 check bash -c '[[ -f "$1/qs.env" && ! -s "$1/qs.env" ]]' _ "$tmp"
 stop
 

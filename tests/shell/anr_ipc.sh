@@ -14,6 +14,11 @@
 # XDG_RUNTIME_DIR point at the test's own directory. Prints PASS/FAIL, exits non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+# The caller's session must not reach the runs: from a Grassfield session the environment holds GRASSFIELD_SESSION=1 and
+# Quickshell's QS_* variables (integrator review of e6ee4fb). Each run sets the ones it tests.
+for v in $(compgen -e); do
+  case $v in GRASSFIELD_* | QS_*) unset "$v" ;; esac
+done
 cd "$root"
 unset QT_QPA_PLATFORMTHEME
 command -v qs >/dev/null || { echo "SKIP: anr_ipc: Quickshell (qs) is not installed"; exit 0; }
