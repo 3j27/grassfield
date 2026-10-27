@@ -26,9 +26,17 @@ TestCase {
     QtObject {
         id: fakeManager
         property int tabDragAreas: 0
+        // The drag bracket the bar reports (Main.qml tabDragStarted / tabDragFinished), in order.
+        property var dragCalls: []
         function moveTabToNewWindow(tab: var): void {
         }
         function dropTab(id: int, target: var, slot: int): void {
+        }
+        function tabDragStarted(tab: var): void {
+            fakeManager.dragCalls = fakeManager.dragCalls.concat(["started " + tab.tabId]);
+        }
+        function tabDragFinished(tornOff: bool): void {
+            fakeManager.dragCalls = fakeManager.dragCalls.concat(["finished"]);
         }
     }
 
@@ -74,6 +82,8 @@ TestCase {
         property int windowHeight: 0
         property url newWindowUrl: "file:///sandbox"
         property var initialUrls: []
+        // FilesApp's: a drag from another application left a window (Main.qml outsideDrags).
+        signal outsideDragEnded(var window, bool dropped)
     }
 
     // A tab (an object, as BrowserTab is: it moves between windows by reference).
@@ -236,6 +246,34 @@ TestCase {
         mainApp.windowHeight = 0;
         w = main.newWindow("file:///sandbox", null);
         compare(w.width, 0, "no kept size: the window keeps its default (Tokens.filesWindowWidth in BrowserWindow)");
+    }
+
+    // The bar's own drag reports its start to the manager before the platform drag runs (opus counter-review of PR #5:
+    // without TabBar's tabDragStarted call, Main.qml would move a dropped tab inside the drag's nested event loop and every
+    // other test still passed). Offscreen, the platform drag ends at once, without a drop.
+    function test_aTabDragTellsTheManagerBeforeItRuns() {
+        // In the window's own content item: this TestCase is not shown, and pointer events reach shown items only.
+        const bar = createTemporaryObject(tabBarComponent, test.parent);
+        verify(bar);
+        waitForRendering(bar);
+        fakeManager.dragCalls = [];
+        let tab = null;
+        const stack = [bar];
+        while (stack.length && !tab) {
+            const it = stack.pop();
+            if (it.modelData !== undefined && it.modelData.title === "Downloads" && it.dragImage !== undefined)
+                tab = it;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        verify(tab !== null, "the Downloads tab");
+        const y = tab.height / 2;
+        mousePress(tab, 20, y);
+        for (let i = 1; i <= 6; i++)
+            mouseMove(tab, 20 + i * 8, y);
+        mouseRelease(tab, 68, y);
+        tryVerify(() => fakeManager.dragCalls.indexOf("finished") >= 0, 2000, "the drag ended");
+        compare(fakeManager.dragCalls, ["started 2", "finished"], "started before the platform drag, finished after it");
     }
 
     // A file drop as another application makes it: it proposes a move (a file manager does on the same volume).

@@ -1501,8 +1501,54 @@ QtObject {
     readonly property int filesGalleryPreviewSize: 512
     // estimate: type icon in the gallery preview when no thumbnail exists [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryIconSize: 160
-    // estimate: gallery view info panel [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property int filesGalleryInfoWidth: 260
+    // macOS 27 Finder gallery: the preview pane 250 wide (Finder-Gallery at 2 px/pt) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewPaneWidth: 250
+    // macOS 27 Finder: the pane content 10 from both pane edges (Finder-Gallery at 2 px/pt) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewInset: 10
+    // macOS 27 Finder: the name's first line box 14 under the top of the content (ink 70 under the window top) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTop: 14
+    // own value: the large preview (icon and list views) takes at most this share of the pane height (no capture of that layout) [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewLargeShare: 0.4
+    // macOS 27 Finder gallery: the small preview beside the name, 42 wide [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumb: 42
+    // macOS 27 Finder gallery: the small preview centred in a 48 box at the content edge (the picture 13 from the pane edge) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbBox: 48
+    // macOS 27 Finder gallery: the small preview's corners, about 3 [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbRadius: 3
+    // macOS 27 Finder gallery: a soft shadow about 2 around the small preview [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbShadowBlur: 2
+    // macOS 27 Finder gallery: the shadow 0.5 lower than the picture [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewThumbShadowY: 0.5
+    // macOS 27 Finder gallery: the shadow darkens the pane fill by about 11% at the picture edge (236 to 209) [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewThumbShadowOpacity: 0.2
+    // macOS 27 Finder gallery: the name 11 after the small preview's box (69 from the pane edge) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewThumbGap: 11
+    // macOS 27 Finder: the kind and size line right under the name's last line box [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewNameGap: 0
+    // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
+    readonly property real filesPreviewNameLineHeight: 21.5
+    // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewNameLines: 3
+    // macOS 27 Finder: 10 between the name block and Information [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewSectionGap: 10
+    // macOS 27 Finder: Information rows every 23, a hairline at the top of every row but the first [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewRowHeight: 23
+    // macOS 27 Finder: 9 between the last Information row and the Tags heading row [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTagsGap: 9
+    // macOS 27 Finder: the tags field 2 under the Tags heading row [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTagsFieldGap: 2
+    // macOS 27 Finder: the tags field 33 high, the full content width, on the window background [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewTagsFieldHeight: 33
+    // macOS 27 Finder: the quick actions bar, 70 at the bottom on the window background [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionsHeight: 70
+    // macOS 27 Finder: the action glyphs 16 under the top of the bar (own symbols in an 18 box from 15) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionTop: 15
+    // macOS 27 Finder: the action label 44 under the top of the bar (9 under the glyph box) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionGap: 9
+    // macOS 27 Finder: action glyphs about 15 tall (own symbols, 15 tall in an 18 box) [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionIcon: 18
+    // macOS 27 Finder: the bar's inner width shared by three action slots (Rotate Left, Markup, More), centred whatever is offered [ref: docs/specs/files.md § Preview pane]
+    readonly property int filesPreviewActionSlots: 3
     // estimate: colour tag dot next to a file name [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTagDotSize: 10
     // estimate: overlap of stacked tag dots [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
@@ -1529,10 +1575,94 @@ QtObject {
     readonly property int filesColumnRowHeight: 22
     // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
+    // estimate: the header row above each group of the list view (no capture of the Finder's grouped list) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesListGroupHeight: 28
+    // estimate: the header above each group of the icon view, its title and Show All (no capture of the Finder's grouped icon view) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesIconGroupHeight: 32
     // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesToolbarCapsule: 36
     // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesToolbarGroupButton: 34
+    // macOS 27 Finder: the Group By capsule 46.5 wide, 36 high (Finder-Home at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupButtonWidth: 46.5
+    // macOS 27 Finder: the groups glyph 8 from the capsule's left end [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupButtonInset: 8
+    // macOS 27 Finder: the groups glyph 18 wide, 17.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupGlyphWidth: 18
+    // macOS 27 Finder: the glyph's rules 1.5 thick [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupGlyphRule: 1.5
+    // macOS 27 Finder: the glyph's squares 5, three to a row [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupGlyphSquare: 5
+    // macOS 27 Finder: the squares' outline 1 [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupGlyphStroke: 1
+    // macOS 27 Finder: 1.5 between a rule and its squares, and between the two groups [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupGlyphGap: 1.5
+    // macOS 27 Finder: the chevron's mark 6 after the glyph (its 12.5 box from 3 after; the 7-wide mark 7.5 from the right end) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesGroupChevronGap: 3
+    // macOS 27 Finder: the chevron 7 x 4 (own chevron-down symbol, its mark 0.56 of the box) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesGroupChevronSize: 12.5
+    // macOS 27 Finder: the view switcher's four segments 39.5 apart (glyph centres 21.25, 60.5, 101, 139.75 from the capsule's left end; Finder-Home at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewSegmentWidth: 39.5
+    // macOS 27 Finder: 1.5 between the capsule's ends and the first and last segments (the capsule 161 wide) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGroupPadding: 1.5
+    // macOS 27 Finder: the selected view's pill 34 wide, 4.5 inside the capsule [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPillWidth: 34
+    // macOS 27 Finder: the selected view's pill 28 high, 4.5 under the capsule's top and above its bottom [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPillHeight: 28
+    // macOS 27 Finder: the selected view's pill darker than the capsule (230 on 252: the fill colour at 0.09) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewPillOpacity: 0.09
+    // macOS 27 Finder: a 1-wide, 20-high rule between two views that are not selected [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewSeparatorHeight: 20
+    // macOS 27 Finder: the rule 196 on the 252 capsule (the fill colour at 0.22) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewSeparatorOpacity: 0.22
+    // macOS 27 Finder: the view glyphs' outlines 1.5 thick [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGlyphStroke: 1.5
+    // macOS 27 Finder: the icon glyph's squares rounded 2 [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewGlyphRadius: 2
+    // macOS 27 Finder: the column and gallery glyphs' frames rounded 2.5 [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGlyphFrameRadius: 2.5
+    // macOS 27 Finder: the icon glyph four 7 squares, the glyph 15 x 15 [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewIconsSquare: 7
+    // macOS 27 Finder: 1 between the icon glyph's squares [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewIconsGap: 1
+    // macOS 27 Finder: the list glyph's bullets 2 across [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListBullet: 2
+    // macOS 27 Finder: 2 between a bullet and its line [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListGap: 2
+    // macOS 27 Finder: the list glyph's lines 13 long (the glyph 17 x 12) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListLine: 13
+    // macOS 27 Finder: the list glyph's lines 1.25 thick [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewListThickness: 1.25
+    // macOS 27 Finder: the list glyph's rows 5 apart [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewListPitch: 5
+    // macOS 27 Finder: the column glyph a 19.5 x 15 frame in three panes [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewColumnsWidth: 19.5
+    // macOS 27 Finder: the column glyph 15 high [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewColumnsHeight: 15
+    // macOS 27 Finder: the gallery glyph 19 wide, 14.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewGalleryWidth: 19
+    // macOS 27 Finder: the gallery glyph's frame 10.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryFrameHeight: 10.5
+    // macOS 27 Finder: 1.5 between the gallery glyph's frame and its strip [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryGap: 1.5
+    // macOS 27 Finder: five cells in the gallery glyph's strip [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewGalleryCells: 5
+    // macOS 27 Finder: the strip's cells 2.75 x 2.5, spread across the frame's width [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryCellWidth: 2.75
+    // macOS 27 Finder: the strip's cells 2.5 high [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewGalleryCellHeight: 2.5
+    // macOS 27 Finder: the view switcher as one pop-up button, 46 x 36, while the search field is open (Finder-Search at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPopupWidth: 46
+    // macOS 27 Finder: the current view's glyph 10.5 from the pop-up's left end [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewPopupInset: 10.5
+    // macOS 27 Finder: the up and down chevrons' marks 6.5 after the glyph (their 12 box from 3.75 after; the marks end 8 from the right end) [ref: docs/specs/files.md § Views and selection]
+    readonly property real filesViewPopupChevronGap: 3.75
+    // macOS 27 Finder: each chevron mark 6.5 wide (own chevron-down symbol, its mark 0.54 of the box) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPopupChevronSize: 12
+    // estimate: the room the folder title keeps before the view switcher folds into its pop-up (no capture of a narrow Finder window) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesToolbarTitleMinWidth: 120
+    // macOS 27 Finder: the up and down chevrons' marks centred 3 above and below the middle [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesViewPopupChevronOffset: 3
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150
