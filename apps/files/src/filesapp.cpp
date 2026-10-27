@@ -123,6 +123,12 @@ constexpr int kMaxGlanceFiles = 50;
 constexpr int kMaxKnownTags = 64;
 constexpr int kMaxHiddenTags = 256;
 
+// View settings that found another Files process writing (FolderViews Busy): the first retry, the longest pause, and the
+// one bounded wait, at exit.
+constexpr int kFolderViewsRetryFirstMs = 50;
+constexpr int kFolderViewsRetryMaxMs = 5000;
+constexpr int kFolderViewsExitWaitMs = 500;
+
 // Singular/plural pair (no translation catalogs with numerus forms yet, like the Settings app).
 QString countText(const QString &one, const QString &many, qsizetype n)
 {
@@ -204,6 +210,22 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     m_knownTags = TagLogic::displayOrder(m_settings.value(QStringLiteral("tags/known")).toStringList()).mid(0, kMaxKnownTags);
     m_hiddenTags = m_settings.value(QStringLiteral("tags/hidden")).toStringList().mid(0, kMaxHiddenTags);
     publishKnownTags();
+
+    m_folderViewsRetry.setSingleShot(true);
+    connect(&m_folderViewsRetry, &QTimer::timeout, this, [this] {
+        QString error;
+        const FolderViews::WriteResult result = m_folderViews.flush(&error);
+        folderViewsWritten(result, error);
+    });
+}
+
+FilesApp::~FilesApp()
+{
+    if (!m_folderViews.hasPending())
+        return;
+    QString error;
+    if (m_folderViews.flush(&error, kFolderViewsExitWaitMs) != FolderViews::WriteResult::Written && !error.isEmpty())
+        qWarning("grassfield-files: view settings not kept: %s", qUtf8Printable(error));
 }
 
 QString FilesApp::configFile() const
@@ -462,9 +484,33 @@ void FilesApp::setFolderView(const QUrl &url, const QVariantMap &fields)
     if (fields.contains(QStringLiteral("sortDescending")))
         e.descending = fields.value(QStringLiteral("sortDescending")).toBool() ? 1 : 0;
     QString error;
-    // A failure only loses the memory of this choice; the view itself already changed. It is logged, not shown.
-    if (!m_folderViews.set(FolderViews::keyFor(url), e, &error) && !error.isEmpty())
-        qWarning("grassfield-files: view settings not kept: %s", qUtf8Printable(error));
+    const FolderViews::WriteResult result = m_folderViews.set(FolderViews::keyFor(url), e, &error);
+    folderViewsWritten(result, error);
+}
+
+void FilesApp::folderViewsWritten(FolderViews::WriteResult result, const QString &error)
+{
+    switch (result) {
+    case FolderViews::WriteResult::Written:
+        m_folderViewsRetryMs = 0;
+        m_folderViewsRetry.stop();
+        return;
+    case FolderViews::WriteResult::Busy:
+        // Another Files process is writing (a few ms): try again shortly, then less and less often (a lock held by a
+        // stopped process is taken over by QLockFile after 30 s).
+        m_folderViewsRetryMs = qBound(kFolderViewsRetryFirstMs, m_folderViewsRetryMs * 2, kFolderViewsRetryMaxMs);
+        m_folderViewsRetry.start(m_folderViewsRetryMs);
+        return;
+    case FolderViews::WriteResult::Refused:
+        // The file can't be written (not a regular file, too large, unreadable, a newer version's): the choice holds in
+        // this process and is written with the next one once the file is usable. The view itself already changed; the
+        // failure is logged, not shown.
+        m_folderViewsRetryMs = 0;
+        m_folderViewsRetry.stop();
+        if (!error.isEmpty())
+            qWarning("grassfield-files: view settings not kept: %s", qUtf8Printable(error));
+        return;
+    }
 }
 
 void FilesApp::reparent(QObject *object, QObject *parent)

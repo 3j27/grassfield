@@ -193,8 +193,15 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
   (`GRASSFIELD_CONFIG_HOME` → `$XDG_CONFIG_HOME/grassfield` → `~/.config/grassfield`).
 - `files-views.json` in the Grassfield state directory (`GRASSFIELD_STATE_HOME`, else `$XDG_STATE_HOME/grassfield`), 0600,
   written atomically: `{"version":1,"folders":[{"url":…,"mode":…,"sortKey":0-3,"descending":bool}, …]}`, the folders in the
-  order they were last set (at most 2000; the first goes when full); a missing version reads as 1; an unreadable file, a
-  file over 2 MiB or a newer version is left as it is and nothing is remembered for the session (`folderviews.h`).
+  order they were last set (at most 2000; the first goes when full); a missing version reads as 1. It is read like
+  `grassfield.json` by the shell's store: never opened unless the path leads to a regular file (a FIFO, a device, a
+  directory is refused without blocking), at most 2 MiB + 1 bytes read and used only when the read returned the file's
+  whole size; a change is noticed by device, inode, size, mode and modification time. A file it cannot use (not a
+  regular file, over 2 MiB, unreadable, malformed, a newer version) is left exactly as it is; the views chosen meanwhile
+  hold in the running Files and are written with the next choice once the file is usable again. Writes take
+  `files-views.json.lock` without waiting: when another Files process holds it, the write stays pending and is tried
+  again on a timer (50 ms doubling up to 5 s; a lock left by a dead process is taken over at once), and at exit Files
+  waits at most 0.5 s for it (`folderviews.h`).
 - QSettings `~/.config/Grassfield/Files.conf`: `view/tabBar` (Show Tab Bar), `window/width` and `window/height` (the
   last browser window's normal size, 200-16384, ADR-0026 part 1), `view/mode` (the default view: icons|list|columns|gallery, anything else reads as icons),
   `view/sortKey` (0 name, 1 kind, 2 date, 3 size), `view/sortDescending`, `view/foldersFirst`, `view/showHidden`,
@@ -257,6 +264,12 @@ installed (not built here).
   off the GUI thread (one `readdir` per folder, one `lgetxattr` per entry, one `lstat` per subfolder) and hands
   matches over in batches (64 items or 100 ms). Gallery previews: at most 8 gallery-size thumbnails are kept (up to
   4 MB each at 1024 px). Not measured on the reference hardware (L2).
+- Per-folder view settings (`files-views.json`, F-3): opening a folder costs one `stat` of the store when nothing changed;
+  the load is linear (68,000 short entries in a 2 MiB file: about 0.2 s, `FolderViews.ManyShortEntriesLoadInLinearTime`;
+  it was 41 s). A view or sort choice writes the whole store on the UI thread (serialised, synced, renamed) and reads
+  it again first only when another process changed it; the bound is the 2 MiB limit: about 50 ms per choice at the
+  limit (`FolderViews.OldFoldersMakeRoomUnderTheSizeLimit`, 50 choices in 2.6 s on the dev machine, was 7.9 s), a few ms
+  for a store of a few hundred folders. A store reaches the limit only with about 2000 folders of 1 KB paths.
 - Names with line breaks show on one line with `⏎` in place of each break (display only).
 - Accessibility: `Accessible.role/name` on every control, list item, header, banner and dialog; full keyboard
   operation; untrusted text (file names, KIO messages) is `Text.PlainText`.
