@@ -258,7 +258,7 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. 61 variants of visible English text in the table below plus one literal on the line after its call: each
+# Part (f): the Settings C++. 71 variants of visible English text in the table below plus one literal on the line after its call: each
 # must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
@@ -329,6 +329,16 @@ declare -A variants=(
   [shiftpluseq]='void a() { reasons += QStringList() << "Failed"; }'
   [shiftconstdecl]='void a() { const QStringList reasons = QStringList() << "Failed"; }'
   [shiftautodecl]='void a() { auto reasons = QStringList() << "Failed"; }'
+  [keysubtitle]='void a(QJsonObject &o) { o.insert("subtitle", "Charging"); }'
+  [keydetails]='QJsonObject a() { return QJsonObject{{"details", "Failed"}}; }'
+  [keynotes]='QJsonObject a() { return QJsonObject{{"notes", "Failed"}}; }'
+  [keyerrormsg]='QJsonObject a() { return QJsonObject{{"errormsg", "Failed"}}; }'
+  [keylasterror]='QJsonObject a() { return QJsonObject{{"lasterror", "Failed"}}; }'
+  [keyinformation]='QJsonObject a() { return QJsonObject{{"information", "Failed"}}; }'
+  [keyshortdesc]='QJsonObject a() { return QJsonObject{{"short_description", "Failed"}}; }'
+  [shiftsubtitles]='void a() { subtitles << "Failed"; }'
+  [shiftstatuses]='void a() { statuses << "Failed"; }'
+  [shifterrorlist]='void a() { errorlist << "Failed"; }'
   [shiftchain]='void a(Result &r) { r.errors << QStringLiteral("failed") << QStringLiteral("it broke"); }'
 )
 for name in "${!variants[@]}"; do
@@ -371,6 +381,7 @@ void u(QTextStream &err) { err << "grassfield-preview: " << "failed"; }
 void v() { QJsonObject o{{"set_toplevel_description", "os"}, {"titles", "File:"}}; }
 void w(QStringList &args, bool x) { args << reasonFlag << "status"; args << QStringLiteral("status") << "failed"; }
 void y(QTextStream &o) { o.insert("titles", "File:"); o.insert(QStringLiteral("set_toplevel_description"), QStringLiteral("os")); }
+void z(QStringList &statusFlags, QJsonObject &o) { statusFlags << "active"; o.insert("errorCode", "ENOENT"); QJsonObject{{"statusIcon", "network-wireless"}, {"statusType", "wifi"}}; }
 void x(QTextStream &cerr, QString &outline, QString &context, QString &hinting) { cerr << "failed"; outline << "failed"; context << "failed"; hinting << "failed"; }
 CPP
 desc="part (f): translated text, tokens, comparisons, log lines, comments and i18n-ignore pass"

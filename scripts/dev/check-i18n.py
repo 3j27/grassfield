@@ -352,11 +352,17 @@ CPP_SINK = re.compile(r"fail|error|reason|text|message|title|label|status|note|h
 # insert(KEY, VALUE): the VALUE is text that can reach the screen when the KEY says so (reason, error, message, text, title...)
 CPP_STORES = {"insert", "insertMulti"}
 # A name says text when one of its camelCase / snake_case SEGMENTS is a text word (errorMessage, statusText, m_lastError, last_error,
-# kReasonKey); outline, context, cerr, hinting, titles (as a key) are not. Receivers also take a plural s (errorLines, statusMessages).
-# In a snake_case name `description` is not a segment of its own (a protocol request: set_toplevel_description).
+# kReasonKey); outline, context, cerr, hinting are not. Plurals count (errorLines, statusMessages, statuses, details) except the key
+# "titles" (a Wikipedia API parameter). Lower-case run-ons count when a qualifier meets a text word (lasterror, errormsg, errorlist).
+# Trade-offs, kept on purpose: a text word followed by Code/Icon/Id/Flags/Type/Kind is a token (statusIcon, errorCode, statusFlags);
+# in a snake_case name `description` is no segment of its own when the name has 3+ segments or starts with set/get (the protocol
+# request set_toplevel_description), but short_description is text.
 CPP_KEY_WORDS = {"reason", "error", "message", "text", "title", "label", "status", "note", "hint", "description", "summary", "failure", "msg", "err",
-                 "detail", "body", "caption", "tooltip", "info", "warning"}
-CPP_LIST_WORDS = {"reason", "error", "message", "text", "title", "label", "status", "note", "hint", "warning", "detail", "line"}
+                 "detail", "body", "caption", "tooltip", "info", "warning", "subtitle", "information"}
+CPP_LIST_WORDS = {"reason", "error", "message", "text", "title", "label", "status", "note", "hint", "warning", "detail", "line", "subtitle", "information"}
+CPP_TOKEN_FOLLOWERS = {"code", "icon", "id", "ids", "flag", "flags", "type", "kind"}
+CPP_RUN_ON_QUALIFIERS = ("last", "first", "current", "short", "error", "status", "user", "sub")
+CPP_RUN_ON_TAILS = {"msg", "message", "error", "reason", "status", "list", "text", "note", "line", "lines"}
 # list-building calls and `<<`: the text goes in when the receiver names text; args/argv/cmd lists stay clean. The receiver of append()
 # & co is the word before . or ->; of `<<` the FIRST operand of the statement, reduced to its last member (index, cast, parentheses,
 # * and this->/d-> dropped: list[0].reasons, (*reasons), static_cast<QStringList &>(reasons)), so `args << reasonFlag << "status"` is
@@ -366,11 +372,24 @@ CPP_LIST_CALLS = re.compile(r"(\w+)\s*(?:\.|->)\s*(?:" + "|".join(sorted(CPP_LIS
 CPP_NOT_A_RECEIVER = {"static_cast", "const_cast", "reinterpret_cast", "dynamic_cast", "this", "d", "const", "auto"}
 
 
-def cpp_names_text(name, words, plural=False):
+def cpp_names_text(name, words, exempt=frozenset()):
     bare = re.sub(r"^m_", "", name)
     segments = [seg.lower() for part in bare.split("_") for seg in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", part)]
     snake = "_" in bare and len(segments) > 1
-    return any((seg in words or plural and seg.endswith("s") and seg[:-1] in words) and not (seg == "description" and snake) for seg in segments)
+    for k, seg in enumerate(segments):
+        if k + 1 < len(segments) and segments[k + 1] in CPP_TOKEN_FOLLOWERS:
+            continue
+        if seg in exempt:
+            continue
+        stems = [seg] + ([seg[:-1]] if seg.endswith("s") else []) + ([seg[:-2]] if seg.endswith("es") else [])
+        hit = any(stem in words for stem in stems)
+        if not hit and seg.isalpha():
+            hit = any(seg.startswith(q) and seg[len(q):] in CPP_RUN_ON_TAILS for q in CPP_RUN_ON_QUALIFIERS)
+        if hit and seg == "description" and snake and (len(segments) > 2 or segments[0] in ("set", "get")):
+            hit = False
+        if hit:
+            return True
+    return False
 
 
 def cpp_shift_receiver(before):
@@ -558,7 +577,7 @@ def scan_cpp_text(rel, text):
         identifier_key = CPP_INSERT_KEY.search(tail)
         if identifier_key:
             key_name = identifier_key.group(1)
-        stored = pos >= 0 and argument_indexes[pos] >= 1 and cpp_names_text(re.split(r"::|\.|->", key_name)[-1], CPP_KEY_WORDS) and (name in CPP_STORES or (argument_of == "" and pos >= 0))
+        stored = pos >= 0 and argument_indexes[pos] >= 1 and cpp_names_text(re.split(r"::|\.|->", key_name)[-1], CPP_KEY_WORDS, exempt={"titles"}) and (name in CPP_STORES or (argument_of == "" and pos >= 0))
         # list.append(TEXT), list.push_back(TEXT), list << TEXT when the list is named for text (reasons, m_errors, lines)
         list_call = CPP_LIST_CALLS.findall(before)
         receiver = list_call[-1] if list_call and name in CPP_LIST_METHODS else ""
@@ -567,7 +586,7 @@ def scan_cpp_text(rel, text):
             list_words = CPP_LIST_WORDS
         else:
             list_words = CPP_LIST_WORDS | {"msg", "err"}
-        listed = bool(receiver) and cpp_names_text(receiver, list_words, plural=True) and not CPP_ARGV_RECEIVER.search(receiver)
+        listed = bool(receiver) and cpp_names_text(receiver, list_words) and not CPP_ARGV_RECEIVER.search(receiver)
         visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
                    or bool(argument_of and CPP_SINK.search(name)) or stored or listed)
         wordlike = bool(CPP_WORDLIKE.match(literal))
