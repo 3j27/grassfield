@@ -54,13 +54,14 @@ Option 1 now, option 2 behind the review, with these rules:
   - One item: `pkexec /usr/bin/chown -- USER:GROUP /proc/self/fd/0` (probes 2, 7) and
     `pkexec /usr/bin/chmod -- MODE /proc/self/fd/0` (probe 6), MODE four octal digits built from the popups and the
     item's current special bits (kept as they are: the editor never adds setuid or setgid). USER and GROUP are looked
-    up from the system databases and passed as names that exist.
-  - "Apply to enclosed items…" (confirmed), owner and group: two calls, the folder itself then its contents (the
-    reviewer's plan): `chown -- USER:GROUP /proc/self/fd/0` (probe 2), then `chown -R -H -h -- USER:GROUP
-    /proc/self/fd/0` (probe 5: `-H` enters the folder through the link, `-h` changes the symbolic links found inside
-    themselves, never their targets; on its own it leaves the folder unchanged, hence the first call). Two prompts, as
-    the action keeps no authorization. `-R -H` without `-h` is never used: it changed a file outside the folder through
-    a link (probe 4).
+    up from the system databases and passed as names that exist. An item that is not a folder and has more than one
+    hard link (`st_nlink` > 1) is refused before any prompt: the change would reach a name outside what was chosen.
+  - "Apply to enclosed items…" (confirmed), owner and group: two calls, the contents first, then the folder itself:
+    `chown -R -H -h -- USER:GROUP /proc/self/fd/0` (probe 5: `-H` enters the folder through the link, `-h` changes the
+    symbolic links found inside themselves, never their targets; on its own it leaves the folder unchanged), then
+    `chown -- USER:GROUP /proc/self/fd/0` (probe 2). The folder changes owner last, so the new owner cannot add, remove
+    or swap entries in it while the root walk is still running. Two prompts, as the action keeps no authorization.
+    `-R -H` without `-h` is never used: it changed a file outside the folder through a link (probe 4).
   - "Apply to enclosed items…", privileges: one `chmod -R -H -- OPS /proc/self/fd/0`, OPS the popups as `+` and `-`
     operators per class (Read & Write `+rwX`, Read only `+rX,-w`, Write only `+wX,-r`, No Access `-rwx`; for example
     `u+rwX,g+rX,g-w,o-rwx`). chmod never follows the links it meets in the walk (probes 10, 12); `+`/`-` keep the

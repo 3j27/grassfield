@@ -40,6 +40,16 @@ Item {
         root.hoverSlot = TabsLogic.slotAt(x - track.x, TabsLogic.tabWidth(track.width, s), s);
     }
 
+    // Files dropped on `tab`: copied or moved into its folder by Files itself (FilesApp.drop). The source is told "copy",
+    // as at every other drop point of Files: a "move" answer would let it delete its files while a copy to another
+    // volume still runs.
+    function dropFiles(drop: var, tab: var): void {
+        if (!drop.hasUrls)
+            return;
+        root.app.drop(drop.urls, tab.folder.url, tab.folder);
+        drop.accept(Qt.CopyAction);
+    }
+
     function tabMenu(index: int, x: real, y: real): void {
         const items = [
             {id: "close", text: qsTr("Close Tab")},
@@ -71,6 +81,8 @@ Item {
         Drag.imageSourceSize: Qt.size(-1, -1)
         Drag.supportedActions: Qt.MoveAction
         Drag.proposedAction: Qt.MoveAction
+        // A drop on a Files window was only recorded (Main.qml draggedTab): the manager moves the tab now that the
+        // drag is over, from the event loop.
         Drag.onDragFinished: dropAction => {
             const tab = dragProxy.tab;
             const outside = root.win.manager.tabDragAreas <= 0;
@@ -78,11 +90,9 @@ Item {
             dragProxy.tab = null;
             root.dragFrom = -1;
             root.hoverSlot = -1;
-            root.win.manager.tabDragAreas = 0;
             // Dropped outside every Files window (nothing took it): the tab becomes a window (Finder). A cancelled drag
             // that ended outside the windows does the same (the platform reports no difference).
-            if (dropAction === Qt.IgnoreAction && outside && tab)
-                root.win.manager.moveTabToNewWindow(tab);
+            root.win.manager.tabDragFinished(dropAction === Qt.IgnoreAction && outside && tab !== null);
         }
     }
 
@@ -186,6 +196,9 @@ Item {
                         dragProxy.Drag.imageSource = tabItem.dragImage;
                         root.dragFrom = tabItem.index;
                         root.hoverSlot = tabItem.index;
+                        root.win.manager.tabDragStarted(tabItem.modelData);
+                        // The platform drag runs a nested event loop until it ends: nothing may destroy this tab bar or
+                        // its tabs meanwhile (Main.qml draggedTab).
                         dragProxy.Drag.active = true;
                     }
                 }
@@ -205,10 +218,7 @@ Item {
                     onExited: spring.stop()
                     onDropped: drop => {
                         spring.stop();
-                        if (!drop.hasUrls)
-                            return;
-                        root.app.drop(drop.urls, tabItem.modelData.folder.url, tabItem.modelData.folder);
-                        drop.accept(drop.proposedAction);
+                        root.dropFiles(drop, tabItem.modelData);
                     }
                 }
 

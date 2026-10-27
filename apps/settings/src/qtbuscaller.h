@@ -44,11 +44,18 @@ private:
     QDBusConnection m_connection;
 };
 
-// The ONE connection to the system bus of the Settings app (made lazily, on a worker thread, never on the GUI thread: a bus that
-// stalls during the connect blocks that worker only), shared by every job and made again when the bus went away.
+// The ONE connection to one bus of the Settings app (made lazily, on a worker thread, never on the GUI thread: a bus that
+// stalls during the connect blocks that worker only), shared by every job on that bus and made again when the bus went away. The
+// system bus serves Wi-Fi, Bluetooth and the General pane's services; the session bus, the user's own service manager.
 class SystemBusConnection
 {
 public:
+    explicit SystemBusConnection(QDBusConnection::BusType type = QDBusConnection::SystemBus,
+                                 const QString &name = QStringLiteral("gf-settings-system-bus")) // i18n-ignore: a connection name
+        : m_type(type)
+        , m_name(name)
+    {
+    }
     ~SystemBusConnection()
     {
         if (m_made)
@@ -64,14 +71,15 @@ public:
             QDBusConnection::disconnectFromBus(m_name);
             m_made = false;
         }
-        const QDBusConnection fresh = QDBusConnection::connectToBus(QDBusConnection::SystemBus, m_name);
+        const QDBusConnection fresh = QDBusConnection::connectToBus(m_type, m_name);
         m_made = true;
         return std::make_shared<QtBusCaller>(fresh);
     }
 
 private:
     std::mutex m_mutex;
-    const QString m_name = QStringLiteral("gf-settings-system-bus"); // i18n-ignore: a connection name
+    const QDBusConnection::BusType m_type;
+    const QString m_name;
     bool m_made = false;
 };
 

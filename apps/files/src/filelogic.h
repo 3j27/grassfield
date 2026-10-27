@@ -5,6 +5,7 @@
 #include <QLocale>
 #include <QString>
 #include <QUrl>
+#include <QVariant>
 
 #include <functional>
 
@@ -126,5 +127,15 @@ QString duplicateName(const QString &name, bool isDir, const QString &copyWord, 
 // Entries of KIO's Network place (remote:/) that Files does not show: the kio-extras "afc:" link to Apple mobile
 // devices (an Apple trademark in its name, master-prompt §14). `item` is the entry's URL, `target` its link target.
 bool hiddenNetworkEntry(const QUrl &item, const QUrl &target);
+
+// The browser window size kept for the next window (ADR-0026 part 1, QSettings window/width and window/height): a side
+// outside kMinKeptWindowSide..kMaxKeptWindowSide is never kept nor used, so a corrupt value never opens a giant or an
+// invisible window (the window minimum then applies in QML, Main.qml newWindow).
+constexpr int kMinKeptWindowSide = 200;
+constexpr int kMaxKeptWindowSide = 16384;
+// A stored side (any QSettings value): the side when it is an integer in bounds, else 0 (none kept).
+int keptWindowSide(const QVariant &value);
+// Whether a window of this size is kept (both sides in bounds).
+bool keepsWindowSize(int width, int height);
 
 } // namespace FileLogic

@@ -13,3 +13,5 @@ spikes/**/out/
 # Python bytecode
 __pycache__/
 *.pyc
+# Package downloads of the Finder parity audit's sysroot builder (docs/audits/finder-parity-2026-10-26/tools/mkroot.py)
+docs/audits/finder-parity-2026-10-26/tools/cache/

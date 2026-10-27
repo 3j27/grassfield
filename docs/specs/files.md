@@ -207,8 +207,15 @@ selection").
 - `files-views.json` in the Grassfield state directory (`GRASSFIELD_STATE_HOME`, else `$XDG_STATE_HOME/grassfield`), 0600,
   written atomically: `{"version":1,"folders":[{"url":…,"mode":…,"sortKey":0-7,"descending":bool,"groupBy":0-8}, …]}`
   (`FileLogic::SortKey` and `FileLogic::GroupBy`; an out-of-range value reads as unset), the folders in the
-  order they were last set (at most 2000; the first goes when full); a missing version reads as 1; an unreadable file, a
-  file over 2 MiB or a newer version is left as it is and nothing is remembered for the session (`folderviews.h`).
+  order they were last set (at most 2000; the first goes when full); a missing version reads as 1. It is read like
+  `grassfield.json` by the shell's store: never opened unless the path leads to a regular file (a FIFO, a device, a
+  directory is refused without blocking), at most 2 MiB + 1 bytes read and used only when the read returned the file's
+  whole size; a change is noticed by device, inode, size, mode and modification time. A file it cannot use (not a
+  regular file, over 2 MiB, unreadable, malformed, a newer version) is left exactly as it is; the views chosen meanwhile
+  hold in the running Files and are written with the next choice once the file is usable again. Writes take
+  `files-views.json.lock` without waiting: when another Files process holds it, the write stays pending and is tried
+  again on a timer (50 ms doubling up to 5 s; a lock left by a dead process is taken over at once), and at exit Files
+  waits at most 0.5 s for it (`folderviews.h`).
 - QSettings `~/.config/Grassfield/Files.conf`: `view/tabBar` (Show Tab Bar), `window/width` and `window/height` (the
   last browser window's normal size, 200-16384, ADR-0026 part 1), `view/mode` (the default view: icons|list|columns|gallery, anything else reads as icons),
   `view/sortKey` (0 name, 1 kind, 2 date modified, 3 size, 4 date created, 5 date last opened, 6 tags, 7 application),
@@ -276,6 +283,12 @@ installed (not built here).
   off the GUI thread (one `readdir` per folder, one `lgetxattr` per entry, one `lstat` per subfolder) and hands
   matches over in batches (64 items or 100 ms). Gallery previews: at most 8 gallery-size thumbnails are kept (up to
   4 MB each at 1024 px). Not measured on the reference hardware (L2).
+- Per-folder view settings (`files-views.json`, F-3): opening a folder costs one `stat` of the store when nothing changed;
+  the load is linear (68,000 short entries in a 2 MiB file: about 0.2 s, `FolderViews.ManyShortEntriesLoadInLinearTime`;
+  it was 41 s). A view or sort choice writes the whole store on the UI thread (serialised, synced, renamed) and reads
+  it again first only when another process changed it; the bound is the 2 MiB limit: about 50 ms per choice at the
+  limit (`FolderViews.OldFoldersMakeRoomUnderTheSizeLimit`, 50 choices in 2.6 s on the dev machine, was 7.9 s), a few ms
+  for a store of a few hundred folders. A store reaches the limit only with about 2000 folders of 1 KB paths.
 - Names with line breaks show on one line with `⏎` in place of each break (display only).
 - Accessibility: `Accessible.role/name` on every control, list item, header, banner and dialog; full keyboard
   operation; untrusted text (file names, KIO messages) is `Text.PlainText`.
@@ -319,8 +332,10 @@ installed (not built here).
 - Window position: a Wayland client cannot place its window, so a new window (New Window, a dragged-out tab) opens
   where the compositor puts it, today exactly over the previous one (centred); the size is remembered. Position memory and
   cascading belong to the compositor's placement rules (ADR-0026 part 2, not done: it needs the nested session).
-- View Options (Cmd+J) do not exist yet: the default view and sort of folders without their own are the last values of
-  `view/mode`, `view/sortKey`, `view/sortDescending` (matrix FP-47, later).
+- View Options (Cmd+J) do not exist yet, so the defaults cannot be changed: the view and sort of folders without their own
+  are `view/mode`, `view/sortKey`, `view/sortDescending` as written before PR 1 (else icons by name), and a choice made
+  in a folder is that folder's only (F-3). "Use as Defaults" comes with View Options, which PR 2 moved to later (FP-47,
+  FP-86, open).
 - A tab dragged out and dropped while the pointer is outside every Files window becomes a window, also when the drag was
   cancelled there with Esc (the platform reports a cancel and a drop nobody took the same way).
 - Reopen Closed Tab remembers the tabs closed in this session only (not across launches), at most 10.
@@ -377,7 +392,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-11 | Reopen the last closed tab | done (PR 1, this session's tabs) | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
 | FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | done (PR 1) | none | — | — | 1 |
 | FP-13 | The window remembers its size and position; new windows cascade | partial (PR 1: the size; position and cascade wait for ADR-0026 part 2) | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0026) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
-| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | partial (PR 1: view and sort per folder; PR 2: grouping; View Options later, FP-47) | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (grouping), later (View Options) |
+| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | partial (PR 1: view and sort per folder; PR 2: grouping; View Options later, FP-47; the defaults cannot be changed until then: FP-86) | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (grouping), later (View Options) |
 | FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md); the tab items in View (PR 1) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
 | FP-16 | Windows and tabs restored at the next launch | missing | none | QSettings | — | later |
 
@@ -419,6 +434,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-45 | Quick Look: Space, ⌘Y, ⌥Space full screen, arrows walk the selection | partial: Space and ⌘Y (PR 2) start Glance (Preview) | Finder-Quick-Look, Finder-Quick-Look-Markup | `grassfield-preview --glance` | — | 2 (⌘Y), Preview spec (the rest) |
 | FP-46 | Recents (Go ⇧⌘F, sidebar) | done (PR 2) | Finder-Home, Go-Menu | `$XDG_DATA_HOME/recently-used.xbel` (decision F-5) | KIO's `recentlyused:/` needs the activity manager daemon, absent on Omarchy | 2 |
 | FP-47 | View Options ⌘J (always open in, browse in, group/sort, icon size, grid spacing, text size, label position, show item info, show icon preview, calculate all sizes, list columns, Use as Defaults) | missing (PR 2 moved it: no reference capture of the panel, and most of its options need FP-34's columns) | none | per-folder store (F-3) | — | later |
+| FP-86 | View Options "Use as Defaults": the shown folder's view and arrangement become those of every folder without its own | missing, **open since PR 1**: since a view or sort chosen in a folder is that folder's (F-3), nothing changes the defaults (`view/mode`, `view/sortKey`, `view/sortDescending` keep the values written before PR 1, else icons by name); the Finder sets them only with this button, so no menu item stands in for it (opus review of PR #5) | none | QSettings `view/*` | — | later (with FP-47) |
 | FP-48 | Icon view free arrangement, Clean Up, Clean Up By, Snap to Grid | missing: always a sorted grid | none | — | free positions need a per-folder position store; not planned | later |
 
 ### File operations
@@ -557,20 +573,29 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   `motionFast`) and the drop reorders; over another window's tab bar a slot opens there and the drop moves the tab there
   (an emptied window closes); anywhere else over another window it joins that window last; over its own window outside the
   bar nothing happens; dropped outside every Files window it becomes a window (a window's only tab stays). The drag image
-  is the tab itself.
+  is the tab itself. The platform drag runs a nested event loop inside the source tab's mouse handler and the drop arrives
+  inside it, so a drop is only recorded (`Main.qml` `draggedTab`): the tab moves, and an emptied source window closes,
+  once the drag has ended and its handlers have returned (`Qt.callLater` from the drag's end; a target window closed
+  meanwhile is not used). A torn-off tab's window opens the same way.
 - **Files dropped on a tab** are moved or copied into its folder like a drop on a folder (FilesApp.drop: same file system
-  moves, else copies); a tab hovered for `files.springDelay` (500 ms) during a file drag comes to the front, so the drop can
-  also land in its view. Search results take no drop.
+  moves, else copies); the source application is told "copy" (as at every drop point of Files), so it never deletes its
+  files while Files still copies them. A tab hovered for `files.springDelay` (500 ms) during a file drag comes to the
+  front, so the drop can also land in its view. Search results take no drop.
 - **Title menu**: a right click or Cmd-click on the window title lists the enclosing folders, the shown one first; a plain
   press still moves the window.
 - **Window size** (ADR-0026 part 1): the size of the last browser window resized (in its normal state, not zoomed or full
   screen) or closed is kept (`window/width`, `window/height`) and every new window opens at it.
 - Tests: `tests/unit/tst_filestabs.qml` (bar visibility, close index, slots while reordering, for an incoming and an
-  outgoing tab, moves, the closed-tab stack, the drag payload), `tst_filesnav.qml` (view and sort of a folder),
-  `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar, Merge All Windows, Close Window, Sort By from the tab),
-  `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields, merge, round trip and order, the oldest goes when full, an
-  unreadable or newer file is never overwritten, a missing version, another process's entries kept). Headless run of the
-  real app (sway, virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1.
+  outgoing tab, moves, the closed-tab stack, the drag payload, a file drop on a tab and every file drop answering Copy,
+  tab drops and tear-offs applied after the drag with `Main.qml` and stand-in windows), `tst_filesnav.qml` (view and sort
+  of a folder, Cmd-double-click in the column view), `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar,
+  Merge All Windows, Close Window, Sort By from the tab), `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields,
+  merge, round trip and order, the oldest goes when full, an unreadable or newer file is never overwritten, a missing
+  version, another process's entries kept; hostile files: a FIFO, a symlink to a device, one byte over the limit,
+  malformed and newer files with the choice waiting, 0600 under umask 000, a stale and a taken lock, four processes
+  writing at once, 68,000 entries under a time budget, changes that keep the mtime). Headless run of the real app (sway,
+  virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1. The tab drag between
+  two windows after the deferral is verified in the nested session by the integrator (not here).
 
 ## Preview pane
 PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Gallery (macOS 27, 2 px per pt).

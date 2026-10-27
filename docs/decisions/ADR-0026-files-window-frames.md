@@ -42,7 +42,9 @@ The Finder reopens a window at its last frame and cascades new windows down and 
 dragged out becomes a window where it is dropped.
 
 ## Consequences
-- Part 1 ships with Files PR 1 (size, a unit test of the clamp, QSettings keys in `docs/specs/files.md` Interfaces).
+- Part 1 ships with Files PR 1 (size, a unit test of the clamp, QSettings keys in `docs/specs/files.md` Interfaces). The
+  clamp: `FileLogic::keptWindowSide` / `keepsWindowSize` (200..16384, `tests/unit/files/tst_filelogic.cpp` `WindowSize.*`)
+  and the window minimum in `Main.qml` `newWindow` (`tests/unit/tst_filestabs.qml` `test_newWindowSizeIsClampedToTheMinimum`).
 - Part 2 needs the nested session (`placement.lua` tests in `tests/shell/` or `tests/compositor/`, `just check-config`);
   until it lands, FP-13 stays "partial" and the limitation "a new window opens over the previous one" stays listed.
 - Without the plugin nothing changes: the rules are Hyprland Lua.

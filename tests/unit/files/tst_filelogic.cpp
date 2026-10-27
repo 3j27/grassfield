@@ -413,3 +413,32 @@ TEST(NetworkPlace, HidesTheAppleDevicesEntry)
     // Only the Network place: a local file of that name stays visible.
     EXPECT_FALSE(hiddenNetworkEntry(QUrl::fromLocalFile("/tmp/afc-network.desktop"), QUrl::fromLocalFile("/tmp/afc-network.desktop")));
 }
+
+// ADR-0026 part 1: the kept window size. QSettings returns what Files.conf holds (a string from the INI file, an int
+// once written in this process); anything but an integer side in 200..16384 reads as none kept.
+TEST(WindowSize, AKeptSideIsAnIntegerInBounds)
+{
+    EXPECT_EQ(keptWindowSide(QVariant(1000)), 1000);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("640"))), 640);
+    EXPECT_EQ(keptWindowSide(QVariant(kMinKeptWindowSide)), kMinKeptWindowSide);
+    EXPECT_EQ(keptWindowSide(QVariant(kMaxKeptWindowSide)), kMaxKeptWindowSide);
+    EXPECT_EQ(keptWindowSide(QVariant(kMinKeptWindowSide - 1)), 0) << "too small: an invisible window";
+    EXPECT_EQ(keptWindowSide(QVariant(kMaxKeptWindowSide + 1)), 0) << "too large: a giant window";
+    EXPECT_EQ(keptWindowSide(QVariant(-800)), 0);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("99999999999"))), 0) << "past int";
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("wide"))), 0);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral(""))), 0);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("640px"))), 0);
+    EXPECT_EQ(keptWindowSide(QVariant()), 0) << "never kept";
+}
+
+TEST(WindowSize, OnlyASizeInBoundsIsKept)
+{
+    EXPECT_TRUE(keepsWindowSize(920, 560));
+    EXPECT_TRUE(keepsWindowSize(kMinKeptWindowSide, kMaxKeptWindowSide));
+    EXPECT_FALSE(keepsWindowSize(kMinKeptWindowSide - 1, 560));
+    EXPECT_FALSE(keepsWindowSize(920, kMinKeptWindowSide - 1));
+    EXPECT_FALSE(keepsWindowSize(kMaxKeptWindowSide + 1, 560));
+    EXPECT_FALSE(keepsWindowSize(920, kMaxKeptWindowSide + 1));
+    EXPECT_FALSE(keepsWindowSize(0, 0));
+}

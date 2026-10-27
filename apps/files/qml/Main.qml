@@ -28,6 +28,12 @@ QtObject {
     // A count, not a flag: Qt may enter the next area before it leaves the previous one.
     property int tabDragAreas: 0
     property int lastTabId: 0
+    // The tab being dragged (TabBar), null when none. The platform drag runs a nested event loop inside the source tab's
+    // mouse handler, and the drop is delivered inside that loop: moving the tab then would rebuild the source bar's tabs
+    // and, for a window's only tab, close and destroy the window, under the running drag. A drop is therefore only
+    // recorded here, and applied once the drag has ended and its handlers have returned (tabDragFinished).
+    property var draggedTab: null
+    property var pendingTabDrop: null
 
     property list<QtObject> resources: [
         Binding {
@@ -190,10 +196,41 @@ QtObject {
         root.newWindow(tab.url, tab);
     }
 
-    // A dragged tab dropped on `target` at `slot` (-1: anywhere but its tab bar, or past the last tab).
+    // A tab bar starts dragging `tab`.
+    function tabDragStarted(tab: var): void {
+        root.draggedTab = tab;
+        root.pendingTabDrop = null;
+    }
+
+    // The drag of the tab bar's tab ended (TabBar's Drag.onDragFinished, after the platform's drag loop returned).
+    // `tornOff`: nothing took it and it ended outside every Files window, so the tab becomes a window (Finder). The move
+    // waits for the event loop (Qt.callLater), when no handler of the drag is on the stack any more.
+    function tabDragFinished(tornOff: bool): void {
+        const tab = root.draggedTab;
+        const drop = root.pendingTabDrop;
+        root.draggedTab = null;
+        root.pendingTabDrop = null;
+        root.tabDragAreas = 0;
+        if (drop)
+            Qt.callLater(() => root.moveDroppedTab(drop.id, drop.target, drop.slot));
+        else if (tornOff && tab)
+            Qt.callLater(() => root.moveTabToNewWindow(tab));
+    }
+
+    // A dragged tab dropped on `target` at `slot` (-1: anywhere but its tab bar, or past the last tab): recorded while the
+    // drag runs (see draggedTab), else moved at once.
     function dropTab(id: int, target: var, slot: int): void {
+        if (root.draggedTab !== null) {
+            root.pendingTabDrop = {id: id, target: target, slot: slot};
+            return;
+        }
+        root.moveDroppedTab(id, target, slot);
+    }
+
+    function moveDroppedTab(id: int, target: var, slot: int): void {
         const tab = root.tabById(id);
-        if (!tab || !target)
+        // The target window may have closed since the drop.
+        if (!tab || !target || root.windows.indexOf(target) < 0)
             return;
         if (tab.win === target) {
             if (slot >= 0)

@@ -1028,8 +1028,8 @@ QtObject {
 
     // macOS 27 System Settings window 740 pt wide (three release captures) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsWindowWidth: 740
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsWindowHeight: 640
+    // every macOS 27 System Settings capture is 740 x 690 pt [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property int settingsWindowHeight: 690
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowMinWidth: 560
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
@@ -1134,6 +1134,152 @@ QtObject {
     readonly property string settingsColorSquareBlackClear: "#00000000"
     // estimate: Sound pane, width of the percentage next to a slider [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsVolumeValueWidth: 44
+    // gap between the sidebar's groups: the row pitch is 45 across a group boundary instead of 32 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property int settingsSidebarGroupGap: 13
+    // General's header card: a 48-pt tile, centred [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroIconSize: 48
+    // the header tile 26 below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroIconTop: 26
+    // estimate: the header tile's corner, the sidebar tiles' proportion (5 on 20) on 48 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroIconRadius: 11
+    // header title, bold: cap height 16.5 (SF about 23 pt); Inter's cap height 0.727 gives 22 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTitleSize: 22
+    // the header title's baseline below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property real settingsHeroTitleBaseline: 107.5
+    // header text 12 pt (cap 8.5) in the window's secondary grey [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextSize: 12
+    // header text line pitch [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextLineHeight: 17
+    // the header text's first baseline below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextBaseline: 124
+    // the header text's last baseline to the card bottom [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroBottom: 23
+    // the header text 11.5 from the card sides [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextInset: 12
+    // a navigation row (tile, label, chevron) is 48 tall; with its 1-pt separator the pitch is 49 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavRowHeight: 48
+    // the navigation row's tile, 24 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavTileSize: 24
+    // the navigation row's tile 12 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavTileInset: 12
+    // estimate: the row tile's corner, the sidebar tiles' proportion (5 on 20) on 24 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavTileRadius: 6
+    // estimate: the glyph inside a 24-pt row tile, the sidebar's 14 on 20 scaled [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavGlyphSize: 15
+    // the navigation row's label 48 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavLabelInset: 48
+    // the row chevron's ink is 4.5 x 8.5: the chevron-right glyph (ink 15 of its 24 units tall) drawn at 14 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavChevronSize: 14
+    // the row chevron's ink right edge 11 from the group edge; the glyph's own margin (4.1 at 14: its ink ends at 17 of 24) taken off [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsNavChevronInset: 7
+    // the row chevron #B7B7B7 on #F7F7F7: the text colour (#262626) at 0.3 [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property real settingsNavChevronOpacity: 0.3
+    // a pop-up button in a row: a 20-pt disc after its value [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsPopupIndicatorSize: 20
+    // the pop-up value's right end 12.5 before the disc [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsPopupIndicatorGap: 12
+    // the pop-up disc #E4E4E4 on #F7F7F7: the text colour at 0.08 [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property real settingsPopupIndicatorOpacity: 0.08
+    // the disc's two-chevron glyph, ink 7 x 10.5: the chevron-up-down glyph (ink 15 of its 24 units tall) at 16 [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsPopupGlyphSize: 16
+    // the pop-up disc's right edge 13.5 from the group edge, 3.5 more than the row inset [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property real settingsPopupInset: 3.5
+    // the header tile's glyph nearly fills it (the gear's ink about 36 on 48: our gear is 18.4 of its 24 units) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroGlyphSize: 46
+    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsFieldFillOpacity: 0.012
+    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsToolbarFillOpacity: 0.02
+    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsRimOpacity: 0.2
+    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsRimOpacityDark: 0.5
+    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsInnerRimOpacity: 0.7
+    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsInnerRimOpacityDark: 0.08
+    // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real settingsToolbarDividerOpacity: 0.2
+    // the hairline between back and forward is 19.5 tall, centred [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property int settingsToolbarDividerHeight: 20
+    // About's header (the device picture and its name) above the first group: the macOS 15 capture's 52 to 233 below the toolbar, less the group gap [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutHeaderHeight: 169
+    // the device picture 40 below the header's top (macOS 15 capture: 104 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutPictureTop: 40
+    // the device picture 101 x 61.5 (macOS 15 capture) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutPictureWidth: 101
+    // the device picture 101 x 61.5 (macOS 15 capture) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutPictureHeight: 62
+    // the model name below the picture, bold: its ascenders 20 tall (macOS 15 capture; SF about 27) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property int settingsAboutNameSize: 26
+    // the model name's baseline below the header's top (macOS 15 capture: 217.5 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property real settingsAboutNameBaseline: 153.5
+    // estimate: the screen bezel of About's device picture (Grassfield's own drawing; the macOS picture is Apple artwork) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property string settingsDeviceBezel: "#1D1D1F"
+    // estimate: the aluminium of About's device picture (Grassfield's own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property string settingsDeviceBody: "#C9C9CE"
+    // estimate: the shaded edge of the base and the stand of About's device picture [ref: docs/audits/settings-parity-2026-10-26.md § About]
+    readonly property string settingsDeviceBodyShade: "#9D9DA3"
+    // a section title at the top of a pane: its baseline 13 below the content top (Desktop & Dock, Sound: 77 for a 64 top) [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsCaptionFirstBaseline: 13
+    // a section title after a group: its baseline 43 below that group's end (Lock Screen, Keyboard, Sound) [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsCaptionGap: 43
+    // a section title's baseline 13 above its group [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int settingsCaptionToGroup: 13
+    // behaviour: Date & Time > Closest city lists at most 8 matching cities under the field [ref: docs/audits/settings-parity-2026-10-26.md § Date & Time]
+    readonly property int settingsCityMatches: 8
+    // Language & Region's preview of the formats: a 49.5-tall first row, on the 1-pt grid [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewRowHeight: 50
+    // the preview's first line: its baseline 21 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewFirstBaseline: 21
+    // the preview's second line: its baseline 16 below the first [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewLineGap: 16
+    // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsCaptionDetailSize: 12
+    // the explanation's baseline 16.5 below the section title's [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property real settingsCaptionDetailGap: 16.5
+    // a list's + / − footer: 23.5 tall with its top line [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsFooterHeight: 24
+    // the footer's fill: 226 on the 233 list in macOS 15, the text colour at 0.034 over the group fill [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property real settingsFooterFillOpacity: 0.034
+    // the footer's + and − buttons: 24 wide each, a 1-pt divider after each [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsFooterButtonWidth: 24
+    // the footer's + and −: ink 9 x 9 (our plus spans 16 of its 24 units) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsFooterGlyphSize: 14
+    // estimate: Login Items' application list shows eight 38-tall rows in its sheet [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsPickerListHeight: 312
+    // Storage's volume card: 87.5 tall, on the 1-pt grid [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageCardHeight: 88
+    // the volume's name: its baseline 25.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property real settingsStorageNameBaseline: 25.5
+    // All Volumes…: a push button centred 21.5 below the card's top, beside the name [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property real settingsStorageButtonTop: 9.5
+    // the bar: 40 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageBarTop: 40
+    // the bar: 21 tall [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageBarHeight: 21
+    // the bar's corners: radius 3 [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageBarRadius: 3
+    // the bar: 1 between two segments, in the separator colour [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageSegmentGap: 1
+    // the bar: a category of a few bytes still shows 1 wide (macOS: the 1-wide orange Applications) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageSegmentMin: 1
+    // the bar's free space: 202 on the 233 group in macOS 15, the same step on our group fill as the text colour at 0.14 [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property real settingsStorageFreeOpacity: 0.14
+    // the legend: its baseline 78 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendBaseline: 78
+    // the legend: 10-pt text (caps 7 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendSize: 10
+    // the legend: an 8-pt dot in the category's colour [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendDot: 8
+    // the legend: 5 from the dot to its name [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendDotGap: 5
+    // the legend: 11 from a name to the next dot [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendItemGap: 11
+    // behaviour: du and pacman -Qi may take long on a large home; the counts run in the background for up to 2 minutes [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageCountMs: 120000
+    // the preview's second line: 18 to 18.5 between the inks of the date, the amount and the number, 17 between the text boxes [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
+    readonly property int settingsPreviewItemGap: 17
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

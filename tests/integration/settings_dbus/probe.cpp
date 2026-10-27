@@ -1,8 +1,11 @@
 // The Settings app's Wi-Fi and Bluetooth code (apps/settings/src/systembus.cpp) on a REAL D-Bus connection, for the
 // integration test tests/integration/settings_dbus.sh. It talks to the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test
 // sets to a PRIVATE dbus-daemon with fake services, and REFUSES to run on anything else (exit 2), before it connects:
-//   probe [--dev] wifi-state | bt-state | act '<json of an action map>'
-// Prints the state JSON, or for an action "ok" / "failed: <reason>". Exit 0 ok, 1 failed, 2 refused to run.
+//   probe [--dev] wifi-state | bt-state | host-state | time-state | time-zones | locale-state | units-state | act '<json of an action map>'
+// Prints the state JSON, or for an action "ok" / "failed: <reason>". Exit 0 ok, 1 failed, 2 refused to run. The user's own
+// services (units-state, user.* actions) are on the session bus, as in the app (Backend: a second connection): the test points
+// DBUS_SESSION_BUS_ADDRESS at the same private bus, and the probe refuses any other session bus too. Their own folder is
+// GF_TEST_BUS_DIR/units.
 #include "busjobs.h"
 #include "qtbuscaller.h"
 
@@ -111,13 +114,32 @@ int main(int argc, char **argv)
         std::fflush(nullptr);
         std::_Exit(ok ? 0 : 1);
     }
-    // QDBusConnection::systemBus() takes DBUS_SYSTEM_BUS_ADDRESS, as the app does.
-    const QDBusConnection system = QDBusConnection::systemBus();
-    if (!system.isConnected())
-        std::fprintf(stderr, "probe: not connected to %s: %s: %s\n", qPrintable(address), qPrintable(system.lastError().name()), qPrintable(system.lastError().message()));
-    QtBusCaller real(system);
-    GuardedCaller bus(real, dev);
     const QString verb = args.first();
+    const QVariantMap op = verb == QLatin1String("act") && args.size() == 2 ? QJsonDocument::fromJson(args.at(1).toUtf8()).object().toVariantMap() : QVariantMap();
+    const bool session = verb == QLatin1String("units-state") || sessionAction(op);
+    const QString sessionAddress = qEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS");
+    if (session && !isPrivateTestBus(sessionAddress, qEnvironmentVariable("GF_TEST_BUS_DIR"))) {
+        std::fprintf(stderr, "probe: refusing the session bus '%s': only a private test bus\n", qPrintable(sessionAddress));
+        return 2;
+    }
+    const QStringList ownDirs{QDir::cleanPath(qEnvironmentVariable("GF_TEST_BUS_DIR") + QStringLiteral("/units"))};
+    // QDBusConnection::systemBus() takes DBUS_SYSTEM_BUS_ADDRESS, as the app does; sessionBus() DBUS_SESSION_BUS_ADDRESS.
+    const QDBusConnection connection = session ? QDBusConnection::sessionBus() : QDBusConnection::systemBus();
+    if (!connection.isConnected())
+        std::fprintf(stderr, "probe: not connected to %s: %s: %s\n", qPrintable(session ? sessionAddress : address), qPrintable(connection.lastError().name()), qPrintable(connection.lastError().message()));
+    QtBusCaller real(connection);
+    GuardedCaller bus(real, dev);
+    const QMap<QString, StateResult (*)(BusCaller &)> states{{QStringLiteral("host-state"), hostState}, {QStringLiteral("time-state"), timeState},
+                                                             {QStringLiteral("time-zones"), timeZones}, {QStringLiteral("locale-state"), localeState}};
+    if (states.contains(verb) || verb == QLatin1String("units-state")) {
+        const StateResult r = verb == QLatin1String("units-state") ? userUnits(bus, ownDirs) : states.value(verb)(bus);
+        if (!r.ok) {
+            std::printf("failed: %s\n", qPrintable(r.error));
+            return 1;
+        }
+        std::printf("%s\n", QJsonDocument(r.json).toJson(QJsonDocument::Compact).constData());
+        return 0;
+    }
     if (verb == QLatin1String("wifi-state") || verb == QLatin1String("bt-state")) {
         const StateResult r = verb == QLatin1String("wifi-state") ? wifiState(bus) : bluetoothState(bus);
         if (!r.ok) {
@@ -128,8 +150,7 @@ int main(int argc, char **argv)
         return 0;
     }
     if (verb == QLatin1String("act") && args.size() == 2) {
-        const QVariantMap op = QJsonDocument::fromJson(args.at(1).toUtf8()).object().toVariantMap();
-        const QString reason = runAction(bus, op);
+        const QString reason = runAction(bus, op, ownDirs);
         if (!reason.isEmpty()) {
             std::printf("failed: %s\n", qPrintable(reason));
             return 1;

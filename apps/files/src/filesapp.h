@@ -97,6 +97,8 @@ class FilesApp : public QObject
 
 public:
     explicit FilesApp(const QList<QUrl> &initialUrls, QObject *parent = nullptr);
+    // Writes the view settings still pending (the only wait for another process's lock, bounded), and waits for the
+    // pictures being turned.
     ~FilesApp() override;
 
     QObject *places() const;
@@ -321,6 +323,8 @@ private:
     // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
     void noteTags(const QStringList &tags);
     void publishKnownTags();
+    // After a FolderViews write: Busy schedules another try (growing pause), Refused is logged.
+    void folderViewsWritten(FolderViews::WriteResult result, const QString &error);
 
     QList<QUrl> m_initialUrls;
     PlacesModel *m_places = nullptr;
@@ -364,4 +368,8 @@ private:
     QHash<QObject *, DragState> m_drags;
     // Pictures are turned here, one batch at a time and in order (two turns of one picture never overlap).
     QThreadPool m_rotations;
+    // A view setting that found the lock taken by another Files process is written again by this timer, never waited for
+    // on the UI thread; the pause doubles from kFolderViewsRetryFirstMs up to kFolderViewsRetryMaxMs.
+    QTimer m_folderViewsRetry;
+    int m_folderViewsRetryMs = 0;
 };
