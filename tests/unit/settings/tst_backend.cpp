@@ -158,3 +158,67 @@ TEST_F(BackendTest, ASharedQueryStillRunningIsReused)
     EXPECT_EQ(seen.finished.value(tag), 3);
     EXPECT_EQ(runs(QStringLiteral("gf-fake-query")), 3);
 }
+
+// ---- actions: one per tag while it may wait for a password ----
+
+// Language & Region shown again while Omarchy's prompt is up (omarchy-language may wait for pkexec) cannot start a second
+// prompt: the waiting state is the Backend's (pendingActions), not the page's, which every visit creates anew.
+TEST_F(BackendTest, AnActionThatMayAskForAPasswordIsRefusedWhileOneOfItsTagRuns)
+{
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    const QString tag = QStringLiteral("language.act");
+    const QString what = QStringLiteral("language");
+    ASSERT_TRUE(backend.act(what, {QStringLiteral("omarchy-language"), QStringLiteral("fr")}, tag));
+    EXPECT_EQ(backend.pendingActions(), (QVariantMap{{tag, what}}));
+    EXPECT_EQ(seen.pendingChanges, 1);
+
+    // Refused, whatever it asks: nothing starts, no answer comes for it, the first one stays pending.
+    EXPECT_FALSE(backend.act(what, {QStringLiteral("omarchy-language"), QStringLiteral("fr")}, tag));
+    EXPECT_FALSE(backend.act(QStringLiteral("other"), {QStringLiteral("omarchy-language"), QStringLiteral("de")}, tag));
+    EXPECT_EQ(backend.pendingActions(), (QVariantMap{{tag, what}}));
+    EXPECT_EQ(seen.pendingChanges, 1);
+
+    // It ends: the tag is free again, and its one answer came.
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) >= 1; }));
+    EXPECT_TRUE(backend.pendingActions().isEmpty());
+    EXPECT_EQ(seen.pendingChanges, 2);
+    spinUntil([] { return false; }, 200);
+    EXPECT_EQ(seen.finished.value(tag), 1);
+    EXPECT_EQ(runs(QStringLiteral("omarchy-language")), 1);
+
+    // The next change of that tag runs.
+    EXPECT_TRUE(backend.act(what, {QStringLiteral("omarchy-language"), QStringLiteral("de")}, tag));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) >= 2; }));
+    EXPECT_TRUE(backend.pendingActions().isEmpty());
+    EXPECT_EQ(runs(QStringLiteral("omarchy-language")), 2);
+}
+
+TEST_F(BackendTest, AnotherTagIsAnotherAction)
+{
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    EXPECT_TRUE(backend.act(QStringLiteral("language"), {QStringLiteral("omarchy-language"), QStringLiteral("fr")}, QStringLiteral("language.act")));
+    EXPECT_TRUE(backend.act(QStringLiteral("language"), {QStringLiteral("omarchy-language"), QStringLiteral("de")}, QStringLiteral("other.act")));
+    EXPECT_EQ(backend.pendingActions().size(), 2);
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("language.act")) == 1 && seen.finished.value(QStringLiteral("other.act")) == 1; }));
+    EXPECT_TRUE(backend.pendingActions().isEmpty());
+    EXPECT_EQ(runs(QStringLiteral("omarchy-language")), 2);
+}
+
+// An action that never asks for a password is not held back (the volume slider sends one wpctl per step) and is never pending.
+TEST_F(BackendTest, AnActionWithoutAPasswordIsNotHeldBack)
+{
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    const QString tag = QStringLiteral("audio.act");
+    EXPECT_TRUE(backend.act(QStringLiteral("volume"), {QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.4")}, tag));
+    EXPECT_TRUE(backend.act(QStringLiteral("volume"), {QStringLiteral("wpctl"), QStringLiteral("set-volume"), QStringLiteral("52"), QStringLiteral("0.5")}, tag));
+    EXPECT_TRUE(backend.pendingActions().isEmpty());
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) == 2; }));
+    EXPECT_EQ(seen.pendingChanges, 0);
+    EXPECT_EQ(runs(QStringLiteral("wpctl")), 2);
+}
