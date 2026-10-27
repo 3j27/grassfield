@@ -299,7 +299,8 @@ FocusScope {
                 // The page in view, in this section's coordinates, widened by the margin the flat grid makes cells ahead in.
                 readonly property real viewTop: groupedView.contentY - section.y - grid.cacheBuffer
                 readonly property real viewBottom: groupedView.contentY - section.y + groupedView.height + grid.cacheBuffer
-                readonly property bool near: section.viewBottom > 0 && section.viewTop < section.height
+                // Not before the view has its size: a line laid out at a zero cell width makes every cell of its group.
+                readonly property bool near: root.cellWidth > 0 && section.viewBottom > 0 && section.viewTop < section.height
                 // How far the one line is scrolled sideways.
                 property real scroll: 0
 
@@ -315,11 +316,12 @@ FocusScope {
                     section.place();
                 }
 
-                // The inner views at the place this section says: a view given its model again, or whose model was reset (a
-                // new sort), starts at its beginning.
+                // Asks the section's views (while they exist: `content`) to take the place this section says, or its rows again.
+                signal placeRequested
+                signal syncRequested
+
                 function place(): void {
-                    sectionRow.contentX = sectionRow.originX + section.scroll;
-                    sectionGrid.contentY = sectionGrid.originY + sectionGrid.shownTop - Tokens.filesIconGroupHeight;
+                    section.placeRequested();
                 }
 
                 function revealX(x: real): void {
@@ -329,16 +331,8 @@ FocusScope {
                         section.setScroll(x + root.cellWidth - groupedView.width);
                 }
 
-                // The range group holds this group's rows of the listing; it is set again only when it no longer holds exactly
-                // those rows (a group that kept its place keeps its cells).
                 function syncRange(): void {
-                    const n = rangeGroup.count;
-                    if (n === section.itemCount && (n === 0 || (rangeGroup.get(0).itemsIndex === section.first && rangeGroup.get(n - 1).itemsIndex === section.first + n - 1)))
-                        return;
-                    if (n > 0)
-                        rangeGroup.remove(0, n);
-                    if (section.first + section.itemCount <= range.items.count)
-                        range.items.addGroups(section.first, section.itemCount, ["range"]);
+                    section.syncRequested();
                 }
 
                 // The title shown when the scroll was last placed: a group that moved to this place brings its own scroll.
@@ -358,122 +352,170 @@ FocusScope {
                 onWidthChanged: section.setScroll(section.scroll)
                 Component.onCompleted: section.refresh()
 
-                Text {
-                    textFormat: Text.PlainText
-                    x: Tokens.spacingSm
-                    anchors.verticalCenter: header.verticalCenter
-                    width: showAll.x - x - Tokens.spacingSm
-                    text: section.title
-                    elide: Text.ElideRight
-                    color: Appearance.colors.text
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyBodySize
-                    font.weight: Tokens.typographyMenuBoldWeight
-                    Accessible.role: Accessible.Heading
-                    Accessible.name: text
-                }
+                // The header, the DelegateModel of the group's rows and its views exist only while the section is near the
+                // view: a folder grouped by name can have thousands of groups, and every DelegateModel follows every change
+                // of the listing (a thumbnail, a selection). Measured offscreen with 5,000 items in 2,500 groups: making the
+                // view 6.1 s and 3.6 ms per changed row with one per group (docs/specs/files.md "Views and selection").
+                Loader {
+                    id: content
+                    width: section.width
+                    height: section.height
+                    active: section.near
+                    sourceComponent: Item {
+                        id: body
 
-                Item {
-                    id: header
-                    width: parent.width
-                    height: Tokens.filesIconGroupHeight
-                }
-
-                Text {
-                    id: showAll
-                    textFormat: Text.PlainText
-                    anchors.right: parent.right
-                    anchors.rightMargin: Tokens.spacingSm
-                    anchors.verticalCenter: header.verticalCenter
-                    visible: section.overflows || section.full
-                    text: section.full ? qsTr("Show Less") : qsTr("Show All")
-                    color: Appearance.colors.accent
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyBodySize
-                    Accessible.role: Accessible.Button
-                    Accessible.name: text
-                    Accessible.onPressAction: root.setExpanded(section.title, !section.full)
-
-                    MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -Tokens.spacingXs
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.setExpanded(section.title, !section.full)
-                    }
-                }
-
-                DelegateModel {
-                    id: range
-                    model: root.model
-                    groups: [
-                        DelegateModelGroup {
-                            id: rangeGroup
-                            name: "range"
-                            includeByDefault: false
-                            // A reset of the listing (every new sort) empties it: filled again at once (the groups keep their
-                            // rows across a sort), and the views put back where they were.
-                            onCountChanged: {
-                                if (rangeGroup.count === 0 && section.itemCount > 0)
-                                    Qt.callLater(() => section?.syncRange());
-                                Qt.callLater(() => section?.place());
-                            }
+                        // The inner views at the place the section says: a view given its model again, or whose model was
+                        // reset (a new sort), starts at its beginning.
+                        function place(): void {
+                            sectionRow.contentX = sectionRow.originX + section.scroll;
+                            sectionGrid.contentY = sectionGrid.originY + sectionGrid.shownTop - Tokens.filesIconGroupHeight;
                         }
-                    ]
-                    filterOnGroup: "range"
-                    delegate: IconCell {
-                        row: DelegateModel.itemsIndex
-                    }
-                }
 
-                ListView {
-                    id: sectionRow
-                    y: Tokens.filesIconGroupHeight
-                    width: parent.width
-                    height: Tokens.filesIconCellHeight
-                    visible: !section.full
-                    orientation: ListView.Horizontal
-                    model: !section.full && section.near ? range : null
-                    clip: true
-                    interactive: false
-                    acceptedButtons: Qt.NoButton
-                    boundsBehavior: Flickable.StopAtBounds
-                    onModelChanged: Qt.callLater(() => section?.place())
-
-                    // A sideways wheel or trackpad swipe scrolls the line; a vertical one is left to the page.
-                    WheelHandler {
-                        orientation: Qt.Horizontal
-                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                        onWheel: event => {
-                            // A wheel notch is 120 eighths of a degree (Qt): one item per notch.
-                            const dx = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.angleDelta.x / 120 * root.cellWidth;
-                            if (dx === 0) {
-                                event.accepted = false;
+                        // The range group holds this group's rows of the listing; it is set again only when it no longer holds
+                        // exactly those rows (a group that kept its place keeps its cells).
+                        function syncRange(): void {
+                            const n = rangeGroup.count;
+                            if (n === section.itemCount && (n === 0 || (rangeGroup.get(0).itemsIndex === section.first && rangeGroup.get(n - 1).itemsIndex === section.first + n - 1)))
                                 return;
+                            if (n > 0)
+                                rangeGroup.remove(0, n);
+                            if (section.first + section.itemCount <= range.items.count)
+                                range.items.addGroups(section.first, section.itemCount, ["range"]);
+                        }
+
+                        Connections {
+                            target: section
+                            function onPlaceRequested(): void {
+                                body.place();
                             }
-                            section.setScroll(section.scroll - dx);
+                            function onSyncRequested(): void {
+                                body.syncRange();
+                            }
+                        }
+
+                        Component.onCompleted: {
+                            body.syncRange();
+                            body.place();
+                        }
+
+                        Text {
+                            textFormat: Text.PlainText
+                            x: Tokens.spacingSm
+                            anchors.verticalCenter: header.verticalCenter
+                            width: showAll.x - x - Tokens.spacingSm
+                            text: section.title
+                            elide: Text.ElideRight
+                            color: Appearance.colors.text
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyBodySize
+                            font.weight: Tokens.typographyMenuBoldWeight
+                            Accessible.role: Accessible.Heading
+                            Accessible.name: text
+                        }
+
+                        Item {
+                            id: header
+                            width: parent.width
+                            height: Tokens.filesIconGroupHeight
+                        }
+
+                        Text {
+                            id: showAll
+                            textFormat: Text.PlainText
+                            anchors.right: parent.right
+                            anchors.rightMargin: Tokens.spacingSm
+                            anchors.verticalCenter: header.verticalCenter
+                            visible: section.overflows || section.full
+                            text: section.full ? qsTr("Show Less") : qsTr("Show All")
+                            color: Appearance.colors.accent
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyBodySize
+                            Accessible.role: Accessible.Button
+                            Accessible.name: text
+                            Accessible.onPressAction: root.setExpanded(section.title, !section.full)
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -Tokens.spacingXs
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.setExpanded(section.title, !section.full)
+                            }
+                        }
+
+                        DelegateModel {
+                            id: range
+                            model: root.model
+                            groups: [
+                                DelegateModelGroup {
+                                    id: rangeGroup
+                                    name: "range"
+                                    includeByDefault: false
+                                    // A reset of the listing (every new sort) empties it: filled again at once (the groups keep their
+                                    // rows across a sort), and the views put back where they were.
+                                    onCountChanged: {
+                                        if (rangeGroup.count === 0 && section.itemCount > 0)
+                                            Qt.callLater(() => section?.syncRange());
+                                        Qt.callLater(() => section?.place());
+                                    }
+                                }
+                            ]
+                            filterOnGroup: "range"
+                            delegate: IconCell {
+                                row: DelegateModel.itemsIndex
+                            }
+                        }
+
+                        ListView {
+                            id: sectionRow
+                            y: Tokens.filesIconGroupHeight
+                            width: parent.width
+                            height: Tokens.filesIconCellHeight
+                            visible: !section.full
+                            orientation: ListView.Horizontal
+                            model: !section.full && section.near ? range : null
+                            clip: true
+                            interactive: false
+                            acceptedButtons: Qt.NoButton
+                            boundsBehavior: Flickable.StopAtBounds
+                            onModelChanged: Qt.callLater(() => section?.place())
+
+                            // A sideways wheel or trackpad swipe scrolls the line; a vertical one is left to the page.
+                            WheelHandler {
+                                orientation: Qt.Horizontal
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: event => {
+                                    // A wheel notch is 120 eighths of a degree (Qt): one item per notch.
+                                    const dx = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.angleDelta.x / 120 * root.cellWidth;
+                                    if (dx === 0) {
+                                        event.accepted = false;
+                                        return;
+                                    }
+                                    section.setScroll(section.scroll - dx);
+                                }
+                            }
+                        }
+
+                        // Shown in full: only the lines near the view are a part of the grid (a group of thousands makes the cells of
+                        // one page).
+                        GridView {
+                            id: sectionGrid
+                            readonly property real shownTop: Math.max(Tokens.filesIconGroupHeight, Math.min(section.height, section.viewTop))
+                            readonly property real shownBottom: Math.max(sectionGrid.shownTop, Math.min(section.height, section.viewBottom))
+                            y: sectionGrid.shownTop
+                            width: parent.width
+                            height: sectionGrid.shownBottom - sectionGrid.shownTop
+                            visible: section.full
+                            cellWidth: root.cellWidth
+                            cellHeight: Tokens.filesIconCellHeight
+                            model: section.full && section.near ? range : null
+                            interactive: false
+                            acceptedButtons: Qt.NoButton
+                            cacheBuffer: 0
+                            // Placed by section.place (a binding would be left behind when the view moves itself on a new model).
+                            onShownTopChanged: section.place()
+                            onModelChanged: Qt.callLater(() => section?.place())
                         }
                     }
-                }
-
-                // Shown in full: only the lines near the view are a part of the grid (a group of thousands makes the cells of
-                // one page).
-                GridView {
-                    id: sectionGrid
-                    readonly property real shownTop: Math.max(Tokens.filesIconGroupHeight, Math.min(section.height, section.viewTop))
-                    readonly property real shownBottom: Math.max(sectionGrid.shownTop, Math.min(section.height, section.viewBottom))
-                    y: sectionGrid.shownTop
-                    width: parent.width
-                    height: sectionGrid.shownBottom - sectionGrid.shownTop
-                    visible: section.full
-                    cellWidth: root.cellWidth
-                    cellHeight: Tokens.filesIconCellHeight
-                    model: section.full && section.near ? range : null
-                    interactive: false
-                    acceptedButtons: Qt.NoButton
-                    cacheBuffer: 0
-                    // Placed by section.place (a binding would be left behind when the view moves itself on a new model).
-                    onShownTopChanged: section.place()
-                    onModelChanged: Qt.callLater(() => section?.place())
                 }
             }
         }
