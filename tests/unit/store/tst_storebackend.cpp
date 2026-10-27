@@ -2,6 +2,7 @@
 // (GRASSFIELD_STORE_FIXTURE/bin/pacman), Arch's AppStream from the fixture, a catalog URL on disk, a keyring folder without
 // a key, and every XDG folder in a scratch directory. Nothing reads the system's package manager, keys or home.
 #include "storebackend.h"
+#include "storeenv.h"
 #include "storetest.h"
 
 #include <QDir>
@@ -42,12 +43,6 @@ public:
         }
     }
 
-private:
-    void save(const char *name)
-    {
-        if (!m_saved.contains(name))
-            m_saved.insert(name, qEnvironmentVariableIsSet(name) ? std::optional<QByteArray>(qgetenv(name)) : std::nullopt);
-    }
     void set(const char *name, const QString &value)
     {
         save(name);
@@ -57,6 +52,13 @@ private:
     {
         save(name);
         qunsetenv(name);
+    }
+
+private:
+    void save(const char *name)
+    {
+        if (!m_saved.contains(name))
+            m_saved.insert(name, qEnvironmentVariableIsSet(name) ? std::optional<QByteArray>(qgetenv(name)) : std::nullopt);
     }
     QMap<QByteArray, std::optional<QByteArray>> m_saved;
 };
@@ -251,6 +253,26 @@ TEST(StoreBackend, WithoutACatalog)
 }
 
 // French: the catalog's words come in French where the built-in categories have them.
+// GRASSFIELD_STORE_OFFLINE is dev plumbing (ADR-0019): in a dev session the Store counts as offline, so screenshotSource
+// gives nothing and the screenshot provider's gate is shut; a packaged session (GRASSFIELD_SESSION=1) ignores it.
+TEST(StoreEnv, OfflineOnlyInADevSession)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("1"));
+    {
+        StoreBackend backend;
+        EXPECT_TRUE(env::offlineForced());
+        EXPECT_FALSE(backend.online());
+        EXPECT_FALSE(backend.screenshotGate()->load());
+        EXPECT_TRUE(backend.screenshotSource(QStringLiteral("https://example.org/shot.png")).isEmpty());
+    }
+    s.env->set("GRASSFIELD_SESSION", QStringLiteral("1"));
+    EXPECT_FALSE(env::offlineForced());
+    s.env->unset("GRASSFIELD_SESSION");
+    s.env->unset("GRASSFIELD_DEV");
+    EXPECT_FALSE(env::offlineForced());
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;

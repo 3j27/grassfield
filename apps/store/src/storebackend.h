@@ -133,8 +133,10 @@ public:
     // The first load; the window calls it once its first frame is up.
     void start();
 
-    // The screenshot provider asks this before any fetch.
+    // Screenshots on and the Store online: screenshotSource's answer, and the provider's gate (kept current for it, since
+    // it fetches off the GUI thread and a page may still ask after the Store went offline).
     bool screenshotsAllowed() const { return m_screenshots && m_online; }
+    std::shared_ptr<const std::atomic_bool> screenshotGate() const { return m_screenshotGate; }
 
 signals:
     void appearanceChanged();
@@ -183,6 +185,7 @@ private:
     bool m_jobRunning = false;
     std::optional<Job> m_pendingJob;
     std::shared_ptr<std::atomic_bool> m_cancel;
+    std::shared_ptr<std::atomic_bool> m_screenshotGate = std::make_shared<std::atomic_bool>(true);
     QThreadPool m_pool; // last member: waits for the jobs while the rest is still there
 };
 

@@ -8,6 +8,8 @@
 #include <QRunnable>
 #include <QUrl>
 
+#include <utility>
+
 namespace grassfield::store {
 
 namespace {
@@ -19,9 +21,10 @@ constexpr int kMaxSide = 8192;
 class ScreenshotResponse : public QQuickImageResponse, public QRunnable
 {
 public:
-    ScreenshotResponse(const QString &url, const QSize &requested)
+    ScreenshotResponse(const QString &url, const QSize &requested, std::shared_ptr<const std::atomic_bool> allowed)
         : m_url(url)
         , m_requested(requested)
+        , m_allowed(std::move(allowed))
     {
         setAutoDelete(false); // the engine deletes the response once it has `finished`
     }
@@ -38,6 +41,10 @@ public:
 private:
     void load()
     {
+        if (!m_allowed || !m_allowed->load()) {
+            m_error = QStringLiteral("screenshots are off or the Store is offline");
+            return;
+        }
         if (!isHttpsUrl(m_url)) {
             m_error = QStringLiteral("not an https address");
             return;
@@ -66,20 +73,22 @@ private:
 
     QString m_url;
     QSize m_requested;
+    std::shared_ptr<const std::atomic_bool> m_allowed;
     QImage m_image;
     QString m_error;
 };
 
 } // namespace
 
-ScreenshotProvider::ScreenshotProvider()
+ScreenshotProvider::ScreenshotProvider(std::shared_ptr<const std::atomic_bool> allowed)
+    : m_allowed(std::move(allowed))
 {
     m_pool.setMaxThreadCount(2);
 }
 
 QQuickImageResponse *ScreenshotProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
 {
-    auto *response = new ScreenshotResponse(QUrl::fromPercentEncoding(id.toLatin1()), requestedSize);
+    auto *response = new ScreenshotResponse(QUrl::fromPercentEncoding(id.toLatin1()), requestedSize, m_allowed);
     m_pool.start(response);
     return response;
 }

@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
     const QStringList devPaths = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
     for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
         engine.addImportPath(*it);
-    engine.addImageProvider(QStringLiteral("screenshot"), new grassfield::store::ScreenshotProvider);
+    engine.addImageProvider(QStringLiteral("screenshot"), new grassfield::store::ScreenshotProvider(backend.screenshotGate()));
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_STORE_QML");
     if (qmlDir.isEmpty())
