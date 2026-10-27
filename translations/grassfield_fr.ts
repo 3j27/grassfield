@@ -5430,6 +5430,10 @@
         <translation>Le catalogue date du %1 et n’est peut-être plus à jour.</translation>
     </message>
     <message>
+        <source>The Grassfield catalog isn&apos;t available: Arch&apos;s apps are shown.</source>
+        <translation>Le catalogue Grassfield n’est pas disponible : les apps d’Arch sont affichées.</translation>
+    </message>
+    <message>
         <source>Store Settings</source>
         <translation>Réglages du Store</translation>
     </message>
@@ -7764,6 +7768,14 @@
         <source>See All</source>
         <translation>Tout voir</translation>
     </message>
+    <message>
+        <source>The Store Isn&apos;t Available Right Now</source>
+        <translation>Le Store n’est pas disponible pour le moment</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
 </context>
 <context>
     <name>SetDateTimeSheet</name>
@@ -8443,6 +8455,34 @@
     <message>
         <source>Software Update has not checked for updates yet.</source>
         <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour.</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline, and this computer has no saved catalog or app data yet.</source>
+        <translation>Vous êtes hors ligne et cet ordinateur n’a encore ni catalogue ni données d’apps enregistrés.</translation>
+    </message>
+    <message>
+        <source>This version of Grassfield has no catalog host yet.</source>
+        <translation>Cette version de Grassfield n’a pas encore d’hébergement pour le catalogue.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog can&apos;t be verified: no trusted Grassfield key is installed yet.</source>
+        <translation>Le catalogue Grassfield ne peut pas être vérifié : aucune clé Grassfield de confiance n’est encore installée.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog could not be verified.</source>
+        <translation>Le catalogue Grassfield n’a pas pu être vérifié.</translation>
+    </message>
+    <message>
+        <source>The Grassfield catalog could not be fetched.</source>
+        <translation>Le catalogue Grassfield n’a pas pu être récupéré.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data could not be verified.</source>
+        <translation>Les données d’apps d’Arch n’ont pas pu être vérifiées.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data isn&apos;t installed and could not be fetched.</source>
+        <translation>Les données d’apps d’Arch ne sont pas installées et n’ont pas pu être récupérées.</translation>
     </message>
 </context>
 <context>

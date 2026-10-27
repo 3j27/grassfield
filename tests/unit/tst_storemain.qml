@@ -304,6 +304,68 @@ TestCase {
         verify(row);
     }
 
+    // The global menu (made only while a registrar is on the bus, so no other test builds it) and the settings window
+    // build on this Qt: an error in either leaves the menu bar without File, Edit and View, and Ctrl+, without a window.
+    function test_globalMenuAndSettingsBuild() {
+        const t = make();
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/store/qml/GlobalMenu.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const menu = comp.createObject(testCase, {win: t.win});
+        verify(menu, "the menu bar is created");
+        const titles = [];
+        for (let i = 0; i < menu.menus.length; i++)
+            titles.push(menu.menus[i].title);
+        compare(titles, ["File", "Edit", "View"]);
+        menu.destroy();
+        t.win.openSettings();
+        verify(t.win.settingsWindow, "the settings window is created");
+        tryVerify(() => t.win.settingsWindow.visible);
+        t.win.settingsWindow.close();
+    }
+
+    // With the global menu (a registrar on the bus), its items and the window's shortcuts carry the same keys: each press
+    // still acts once (Ctrl+, opens the settings window, Ctrl+2 picks the second sidebar item).
+    function test_keysWithTheGlobalMenu() {
+        const t = make({globalMenu: true});
+        keyClick(Qt.Key_Comma, Qt.ControlModifier);
+        tryVerify(() => t.win.settingsWindow && t.win.settingsWindow.visible, 2000, "Ctrl+, opened the settings window");
+        t.win.settingsWindow.close();
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        keyClick(Qt.Key_2, Qt.ControlModifier);
+        compare(t.win.current.tab, t.win.sidebarItems[1].key);
+    }
+
+    // Nothing to show (no catalog in use, no app data from Arch): the page says why and offers Try Again, never a blank
+    // page; with Arch's apps but no catalog, a notice says the catalog isn't available.
+    function test_unavailable() {
+        const t = make();
+        t.backend.catalog = {inUse: false, problem: "untrusted", channel: "stable", date: "", old: false};
+        t.backend.appData = {origin: "none", problem: ""};
+        t.backend.sectionList = [{id: "discover", builtIn: true, blocks: []}];
+        t.backend.dataChanged();
+        tryVerify(() => find(t.win.page, i => i.text === "The Store Isn't Available Right Now" && i.visible) !== null);
+        const reason = find(t.win.page, i => typeof i.text === "string" && i.text.indexOf("no trusted Grassfield key") >= 0);
+        verify(reason && reason.visible);
+        verify(reason.text.indexOf("Arch's app data isn't installed") >= 0, reason.text);
+        const again = find(t.win.page, i => i.text === "Try Again" && i.visible);
+        verify(again);
+        const before = t.backend.calls.filter(c => c === "refresh").length;
+        mouseClick(again);
+        compare(t.backend.calls.filter(c => c === "refresh").length, before + 1);
+        // Offline: the reason says so.
+        t.backend.online = false;
+        tryVerify(() => reason.text.indexOf("You're offline") === 0);
+        t.backend.online = true;
+        // Arch's apps without the catalog: Discover shows them, with the notice.
+        t.backend.appData = {origin: "installed", problem: ""};
+        t.backend.sectionList = [{id: "discover", builtIn: true, blocks: [{kind: "row", title: "Graphics", category: "graphics",
+                                                                            apps: [t.backend.apps[0]]}]}];
+        t.backend.dataChanged();
+        tryVerify(() => find(t.win.contentItem, i => i.text === "The Grassfield catalog isn't available: Arch's apps are shown.") !== null);
+        verify(!find(t.win.page, i => i.text === "The Store Isn't Available Right Now" && i.visible));
+    }
+
     // Larger text (Settings > Accessibility > Display, 1.3): the hero's and the cards' titles keep a line height for their
     // size and their room under the eyebrow.
     function test_largeText() {

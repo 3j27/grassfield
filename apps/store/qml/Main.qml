@@ -366,6 +366,9 @@ Window {
                     return c.inUse ? qsTr("You're offline. The catalog is from %1.").arg(c.date) : qsTr("You're offline.");
                 if (c.inUse && c.old)
                     return qsTr("The catalog is from %1 and may be out of date.").arg(c.date);
+                // No catalog, Discover from Arch's app data alone (ADR-0037 "Offline"); an empty page says it itself.
+                if (!c.inUse && root.sections.length > 0 && (root.sections[0].blocks || []).length > 0)
+                    return qsTr("The Grassfield catalog isn't available: Arch's apps are shown.");
                 return "";
             }
         }
@@ -435,8 +438,13 @@ Window {
         id: sectionPage
         SectionPage {
             section: root.sections.find(s => s.id === pageLoader.entry.id) || root.sections[0] || ({id: "discover", builtIn: true, blocks: []})
+            loading: root.backend.loading
+            catalog: root.backend.catalog
+            appData: root.backend.appData
+            online: root.backend.online
             onOpened: id => root.openApp(id)
             onCategoryRequested: id => root.openCategory(id)
+            onRetry: root.backend.refresh()
         }
     }
 

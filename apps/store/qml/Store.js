@@ -148,3 +148,30 @@ function hostOf(url) {
     const m = /^https:\/\/([^/?#]+)/.exec(url || "");
     return m ? m[1] : "";
 }
+
+// Why the Store has nothing to show (no catalog in use and no app data from Arch), in plain words: what is missing first,
+// then what would bring it.
+function unavailableReason(catalog, appData, online) {
+    if (!online)
+        return qsTr("You're offline, and this computer has no saved catalog or app data yet.");
+    const parts = [];
+    switch (catalog ? catalog.problem : "") {
+    case "unconfigured":
+        parts.push(qsTr("This version of Grassfield has no catalog host yet."));
+        break;
+    case "untrusted":
+        parts.push(qsTr("The Grassfield catalog can't be verified: no trusted Grassfield key is installed yet."));
+        break;
+    case "refused":
+        parts.push(qsTr("The Grassfield catalog could not be verified."));
+        break;
+    case "unavailable":
+        parts.push(qsTr("The Grassfield catalog could not be fetched."));
+        break;
+    }
+    if (appData && appData.problem === "unverified")
+        parts.push(qsTr("Arch's app data could not be verified."));
+    else if (!appData || appData.origin === "none")
+        parts.push(qsTr("Arch's app data isn't installed and could not be fetched."));
+    return parts.join(" ");
+}

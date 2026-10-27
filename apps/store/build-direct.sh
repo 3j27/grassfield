@@ -51,3 +51,13 @@ g++ "${cxxflags[@]}" "${defs[@]}" \
   $(pkg-config --libs Qt6Gui Qt6Network Qt6Qml Qt6Quick Qt6DBus zlib) -lwayland-client \
   -o "$out/grassfield-store"
 echo "built $out/grassfield-store"
+
+# The Store is not packaged before step 3 (ADR-0037 SD9): a dev session (scripts/dev/devenv.sh puts .dev/share first in
+# XDG_DATA_DIRS) finds its desktop entry and icon here, so the menu bar and Apps name it "Grassfield Store", and Apps starts
+# this build. Only under .dev/share, never in the owner's data directories.
+if [[ ${1:-} != "--install-paths" ]]; then
+  share=$root/.dev/share
+  mkdir -p "$share/applications" "$share/icons/hicolor/scalable/apps"
+  sed "s|^Exec=grassfield-store$|Exec=$out/grassfield-store|" "$here/org.grassfield.Store.desktop" >"$share/applications/org.grassfield.Store.desktop"
+  cp "$root/branding/icons/apps/org.grassfield.Store.svg" "$share/icons/hicolor/scalable/apps/"
+fi
