@@ -60,6 +60,164 @@ TestCase {
         }
     }
 
+    // What Main.qml (the window and tab manager) reads of FilesApp.
+    QtObject {
+        id: mainApp
+        property bool dark: false
+        property bool reduceMotion: false
+        property string accentColor: "multicolor"
+        property string shortcutStyle: "pc"
+        property string iconMode: "default"
+        property string iconTint: "accent"
+        property string folderColor: "theme"
+        property int windowWidth: 0
+        property int windowHeight: 0
+        property url newWindowUrl: "file:///sandbox"
+        property var initialUrls: []
+    }
+
+    // A tab (an object, as BrowserTab is: it moves between windows by reference).
+    Component {
+        id: fakeTabComponent
+        QtObject {
+            property int tabId: 0
+            property var win: null
+            property url url
+        }
+    }
+
+    // A browser window as Main.qml drives it: BrowserWindow.qml's tab functions, without a window. It records the calls.
+    Component {
+        id: fakeWindowComponent
+        QtObject {
+            id: w
+            required property var app
+            required property var manager
+            required property url startUrl
+            property var adoptTab: null
+            property int width: 0
+            property int height: 0
+            property var tabs: []
+            property var calls: []
+            property bool closed: false
+            function adopt(tab: var, index: int): void {
+                w.calls = w.calls.concat(["adopt"]);
+                const list = w.tabs.filter(t => t !== tab);
+                list.splice(index < 0 || index > list.length ? list.length : index, 0, tab);
+                tab.win = w;
+                w.tabs = list;
+            }
+            // The last tab gone, the window closes (BrowserWindow.detach).
+            function detach(tab: var): void {
+                w.calls = w.calls.concat(["detach"]);
+                w.tabs = w.tabs.filter(t => t !== tab);
+                if (w.tabs.length === 0) {
+                    w.closed = true;
+                    w.manager.forgetWindow(w);
+                }
+            }
+            function moveTab(from: int, to: int): void {
+                w.calls = w.calls.concat(["move " + from + " " + to]);
+                w.tabs = TabsLogic.moved(w.tabs, from, to);
+            }
+            function requestActivate(): void {
+            }
+            function addTab(): var {
+                const tab = fakeTabComponent.createObject(w, {tabId: w.manager.nextTabId(), win: w, url: w.startUrl});
+                w.tabs = w.tabs.concat([tab]);
+                return tab;
+            }
+            Component.onCompleted: {
+                w.manager.registerWindow(w);
+                if (w.adoptTab)
+                    w.adopt(w.adoptTab, 0);
+                else
+                    w.addTab();
+            }
+        }
+    }
+
+    Component {
+        id: mainComponent
+        Main {
+            app: mainApp
+            globalMenu: false
+            windowComponent: fakeWindowComponent
+        }
+    }
+
+    // The two windows of a tab drag: `a` (the source, with one tab) and `b`.
+    function twoWindows(): var {
+        const main = createTemporaryObject(mainComponent, test);
+        verify(main);
+        compare(main.windows.length, 1, "the first window");
+        const b = main.newWindow("file:///sandbox/b", null);
+        verify(b);
+        return {main: main, a: main.windows[0], b: b};
+    }
+
+    // Opus review of PR #5: dropping a window's only tab on another window closed and destroyed the source window inside
+    // the platform drag's nested event loop, under the source tab's running drag handler. The drop is now recorded and
+    // the tab moves once the drag has ended and its handlers have returned.
+    function test_aTabDropWaitsForTheDragToEnd() {
+        const s = test.twoWindows();
+        const tab = s.a.tabs[0];
+        s.main.tabDragStarted(tab);
+        s.main.dropTab(tab.tabId, s.b, 1);
+        compare(s.a.calls, [], "nothing moves while the drag runs");
+        compare(s.b.calls, []);
+        compare(s.main.windows.length, 2);
+        s.main.tabDragFinished(false);
+        compare(s.a.calls, [], "nor inside the drag's finished handler");
+        tryCompare(s.b, "calls", ["adopt"]);
+        compare(s.a.calls, ["detach"]);
+        verify(s.b.tabs[1] === tab, "the tab joined window b at slot 1");
+        verify(s.a.closed, "window a, left without a tab, closes");
+        compare(s.main.windows.length, 1);
+        compare(s.main.draggedTab, null);
+    }
+
+    function test_aTabDropOnItsOwnBarReordersAfterTheDrag() {
+        const s = test.twoWindows();
+        const second = s.a.addTab();
+        s.main.tabDragStarted(second);
+        s.main.dropTab(second.tabId, s.a, 0);
+        compare(s.a.calls, []);
+        s.main.tabDragFinished(false);
+        tryCompare(s.a, "calls", ["move 1 0"]);
+        verify(s.a.tabs[0] === second);
+    }
+
+    // Without a drag of this process (nothing to protect), a drop moves the tab at once.
+    function test_aTabDropWithoutADragMovesAtOnce() {
+        const s = test.twoWindows();
+        const tab = s.a.tabs[0];
+        s.main.dropTab(tab.tabId, s.b, -1);
+        compare(s.b.calls, ["adopt"]);
+        verify(s.b.tabs[1] === tab);
+    }
+
+    // A tab dragged out of every window becomes a window after the drag, not inside it; a window that closed before the
+    // deferred move is not used.
+    function test_aTornOffTabWaitsForTheDragToEnd() {
+        const s = test.twoWindows();
+        const second = s.a.addTab();
+        s.main.tabDragStarted(second);
+        s.main.tabDragFinished(true);
+        compare(s.main.windows.length, 2, "no window inside the drag's finished handler");
+        tryVerify(() => s.main.windows.length === 3, 1000, "the torn-off tab's window");
+        verify(s.main.windows[2].tabs[0] === second);
+        compare(s.a.tabs.length, 1);
+
+        const tab = s.b.tabs[0];
+        s.main.tabDragStarted(tab);
+        s.main.dropTab(tab.tabId, s.a, -1);
+        s.main.forgetWindow(s.a);
+        s.main.tabDragFinished(false);
+        wait(50);
+        compare(s.b.calls, [], "the target window closed meanwhile: the tab stays");
+    }
+
     // A file drop as another application makes it: it proposes a move (a file manager does on the same volume).
     function fileDrop(hasUrls: bool): var {
         return {

@@ -547,20 +547,29 @@ PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
   `motionFast`) and the drop reorders; over another window's tab bar a slot opens there and the drop moves the tab there
   (an emptied window closes); anywhere else over another window it joins that window last; over its own window outside the
   bar nothing happens; dropped outside every Files window it becomes a window (a window's only tab stays). The drag image
-  is the tab itself.
+  is the tab itself. The platform drag runs a nested event loop inside the source tab's mouse handler and the drop arrives
+  inside it, so a drop is only recorded (`Main.qml` `draggedTab`): the tab moves, and an emptied source window closes,
+  once the drag has ended and its handlers have returned (`Qt.callLater` from the drag's end; a target window closed
+  meanwhile is not used). A torn-off tab's window opens the same way.
 - **Files dropped on a tab** are moved or copied into its folder like a drop on a folder (FilesApp.drop: same file system
-  moves, else copies); a tab hovered for `files.springDelay` (500 ms) during a file drag comes to the front, so the drop can
-  also land in its view. Search results take no drop.
+  moves, else copies); the source application is told "copy" (as at every drop point of Files), so it never deletes its
+  files while Files still copies them. A tab hovered for `files.springDelay` (500 ms) during a file drag comes to the
+  front, so the drop can also land in its view. Search results take no drop.
 - **Title menu**: a right click or Cmd-click on the window title lists the enclosing folders, the shown one first; a plain
   press still moves the window.
 - **Window size** (ADR-0026 part 1): the size of the last browser window resized (in its normal state, not zoomed or full
   screen) or closed is kept (`window/width`, `window/height`) and every new window opens at it.
 - Tests: `tests/unit/tst_filestabs.qml` (bar visibility, close index, slots while reordering, for an incoming and an
-  outgoing tab, moves, the closed-tab stack, the drag payload), `tst_filesnav.qml` (view and sort of a folder),
-  `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar, Merge All Windows, Close Window, Sort By from the tab),
-  `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields, merge, round trip and order, the oldest goes when full, an
-  unreadable or newer file is never overwritten, a missing version, another process's entries kept). Headless run of the
-  real app (sway, virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1.
+  outgoing tab, moves, the closed-tab stack, the drag payload, a file drop on a tab and every file drop answering Copy,
+  tab drops and tear-offs applied after the drag with `Main.qml` and stand-in windows), `tst_filesnav.qml` (view and sort
+  of a folder, Cmd-double-click in the column view), `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar,
+  Merge All Windows, Close Window, Sort By from the tab), `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields,
+  merge, round trip and order, the oldest goes when full, an unreadable or newer file is never overwritten, a missing
+  version, another process's entries kept; hostile files: a FIFO, a symlink to a device, one byte over the limit,
+  malformed and newer files with the choice waiting, 0600 under umask 000, a stale and a taken lock, four processes
+  writing at once, 68,000 entries under a time budget, changes that keep the mtime). Headless run of the real app (sway,
+  virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1. The tab drag between
+  two windows after the deferral is verified in the nested session by the integrator (not here).
 
 ## Folder colours and Customize Folder (owner request 2026-10-19; macOS 26 model)
 macOS 26 colours folders (System Settings > Appearance > Folder Color: the accent or a colour) and "Customize Folder…" gives one folder its own colour and an optional symbol or emoji drawn on it; a folder follows the global colour until it has its own. Grassfield copies that model.

@@ -81,6 +81,8 @@ Item {
         Drag.imageSourceSize: Qt.size(-1, -1)
         Drag.supportedActions: Qt.MoveAction
         Drag.proposedAction: Qt.MoveAction
+        // A drop on a Files window was only recorded (Main.qml draggedTab): the manager moves the tab now that the
+        // drag is over, from the event loop.
         Drag.onDragFinished: dropAction => {
             const tab = dragProxy.tab;
             const outside = root.win.manager.tabDragAreas <= 0;
@@ -88,11 +90,9 @@ Item {
             dragProxy.tab = null;
             root.dragFrom = -1;
             root.hoverSlot = -1;
-            root.win.manager.tabDragAreas = 0;
             // Dropped outside every Files window (nothing took it): the tab becomes a window (Finder). A cancelled drag
             // that ended outside the windows does the same (the platform reports no difference).
-            if (dropAction === Qt.IgnoreAction && outside && tab)
-                root.win.manager.moveTabToNewWindow(tab);
+            root.win.manager.tabDragFinished(dropAction === Qt.IgnoreAction && outside && tab !== null);
         }
     }
 
@@ -196,6 +196,9 @@ Item {
                         dragProxy.Drag.imageSource = tabItem.dragImage;
                         root.dragFrom = tabItem.index;
                         root.hoverSlot = tabItem.index;
+                        root.win.manager.tabDragStarted(tabItem.modelData);
+                        // The platform drag runs a nested event loop until it ends: nothing may destroy this tab bar or
+                        // its tabs meanwhile (Main.qml draggedTab).
                         dragProxy.Drag.active = true;
                     }
                 }
