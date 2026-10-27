@@ -1,11 +1,123 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtTest
+import Grassfield.Ui
+import "../../apps/files/qml"
 import "../../apps/files/qml/TabsLogic.js" as TabsLogic
 
 // grassfield-files tab logic (apps/files/qml/TabsLogic.js, docs/specs/files.md "Tabs and windows"): when the tab bar
-// shows, where a dragged tab lands, how the other tabs make room, list moves, the closed-tab stack and the drag payload.
+// shows, where a dragged tab lands, how the other tabs make room, list moves, the closed-tab stack and the drag payload;
+// and the tab bar's file drop (TabBar.qml), which tells the source app "copy" like every other drop point of Files.
 TestCase {
+    id: test
     name: "FilesTabs"
+    when: windowShown
+
+    QtObject {
+        id: fakeApp
+        property int processId: 4242
+        property url newWindowUrl: "file:///sandbox"
+        property var dropped: []
+        function drop(urls: var, destination: url, folder: var): void {
+            fakeApp.dropped = fakeApp.dropped.concat([String(destination)]);
+        }
+    }
+
+    QtObject {
+        id: fakeManager
+        property int tabDragAreas: 0
+        function moveTabToNewWindow(tab: var): void {
+        }
+        function dropTab(id: int, target: var, slot: int): void {
+        }
+    }
+
+    QtObject {
+        id: fakeWin
+        property var app: fakeApp
+        property var manager: fakeManager
+        property var menuLayer: null
+        property int currentIndex: 0
+        property var tabs: [
+            {title: "Documents", tabId: 1, folder: {url: "file:///sandbox/Documents", writable: true, isSearch: false}},
+            {title: "Downloads", tabId: 2, folder: {url: "file:///sandbox/Downloads", writable: true, isSearch: false}}
+        ]
+        property var tab: fakeWin.tabs[0]
+        function selectTab(index: int): void {
+            fakeWin.currentIndex = index;
+        }
+        function closeTab(index: int): void {
+        }
+        function newTab(target: url, restore: var): void {
+        }
+    }
+
+    Component {
+        id: tabBarComponent
+        TabBar {
+            win: fakeWin
+            width: 600
+        }
+    }
+
+    // A file drop as another application makes it: it proposes a move (a file manager does on the same volume).
+    function fileDrop(hasUrls: bool): var {
+        return {
+            hasUrls: hasUrls,
+            urls: hasUrls ? ["file:///elsewhere/note.txt"] : [],
+            proposedAction: Qt.MoveAction,
+            answer: -1,
+            accept: function (action) {
+                this.answer = action;
+            }
+        };
+    }
+
+    // Files runs the copy or move itself (FilesApp.drop); a Move answered to the source would let it delete its files
+    // while a copy to another volume is still running (Wayland), so the tab answers Copy, like the views and the sidebar.
+    function test_fileDropOnATabAnswersCopy() {
+        fakeApp.dropped = [];
+        const bar = createTemporaryObject(tabBarComponent, test);
+        verify(bar);
+        const drop = test.fileDrop(true);
+        bar.dropFiles(drop, fakeWin.tabs[1]);
+        compare(drop.answer, Qt.CopyAction, "the source app is told the files were copied, whatever it proposed");
+        compare(fakeApp.dropped, ["file:///sandbox/Downloads"], "the files go to the tab's folder");
+        const empty = test.fileDrop(false);
+        bar.dropFiles(empty, fakeWin.tabs[1]);
+        compare(empty.answer, -1, "a drop without files is not taken");
+        compare(fakeApp.dropped.length, 1);
+    }
+
+    // Every drop point of Files that takes files answers Copy (the views, the sidebar, the path bar, the tabs); only a
+    // dragged tab's own drop areas answer Move (the tab moves between Files windows of this process). A new drop point is
+    // held to the same rule here.
+    function test_everyFileDropAnswersCopy() {
+        const files = ["TabBar.qml", "BrowserWindow.qml", "FileList.qml", "IconView.qml", "GalleryView.qml", "ColumnView.qml", "PathBar.qml",
+            "Sidebar.qml", "Main.qml", "BrowserTab.qml"];
+        let checked = 0;
+        for (const name of files) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../../apps/files/qml/" + name), false);
+            xhr.send();
+            const text = xhr.responseText;
+            verify(text.length > 0, name + " read");
+            const accept = /\.accept\(([^)]*)\)/g;
+            let m;
+            while ((m = accept.exec(text)) !== null) {
+                const before = text.slice(0, m.index);
+                const keys = before.lastIndexOf("keys:");
+                const tabDrop = keys >= 0 && text.slice(keys, text.indexOf("\n", keys)).indexOf("TabsLogic.tabMimeType") >= 0;
+                const line = before.split("\n").length;
+                if (tabDrop)
+                    compare(m[1], "Qt.MoveAction", name + ":" + line + " a tab drop");
+                else
+                    compare(m[1], "Qt.CopyAction", name + ":" + line + " a file drop answers Copy");
+                checked++;
+            }
+        }
+        verify(checked >= 10, "drop answers checked: " + checked);
+    }
 
     function test_barVisibility() {
         verify(!TabsLogic.barVisible(false, 1), "one tab: no bar");

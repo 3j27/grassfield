@@ -40,6 +40,16 @@ Item {
         root.hoverSlot = TabsLogic.slotAt(x - track.x, TabsLogic.tabWidth(track.width, s), s);
     }
 
+    // Files dropped on `tab`: copied or moved into its folder by Files itself (FilesApp.drop). The source is told "copy",
+    // as at every other drop point of Files: a "move" answer would let it delete its files while a copy to another
+    // volume still runs.
+    function dropFiles(drop: var, tab: var): void {
+        if (!drop.hasUrls)
+            return;
+        root.app.drop(drop.urls, tab.folder.url, tab.folder);
+        drop.accept(Qt.CopyAction);
+    }
+
     function tabMenu(index: int, x: real, y: real): void {
         const items = [
             {id: "close", text: qsTr("Close Tab")},
@@ -205,10 +215,7 @@ Item {
                     onExited: spring.stop()
                     onDropped: drop => {
                         spring.stop();
-                        if (!drop.hasUrls)
-                            return;
-                        root.app.drop(drop.urls, tabItem.modelData.folder.url, tabItem.modelData.folder);
-                        drop.accept(drop.proposedAction);
+                        root.dropFiles(drop, tabItem.modelData);
                     }
                 }
 
