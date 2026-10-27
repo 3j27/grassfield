@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
@@ -71,11 +72,44 @@ struct StateResult {
 StateResult wifiState(BusCaller &bus);
 StateResult bluetoothState(BusCaller &bus);
 
+// The General pane's system services (PR #6, ADR-0030), on the system bus:
+//   hostState: hostname1  {"pretty", "static", "hostname", "chassis", "vendor", "model"}       (About)
+//   timeState: timedate1 and timesync1  {"zone", "ntp", "canNtp", "synced", "usec" (microseconds since the epoch, as a string),
+//              "localRtc", "server" (the server in use, "" when none), "servers": [the configured ones, link then system then fallback]}
+//   timeZones: timedate1  {"zones": [...]}   (ListTimezones)
+//   localeState: locale1  {"locale": ["LANG=...", ...]}
+// and on the SESSION bus (the user's own service manager, no privilege):
+//   userUnits: systemd  {"units": [{"unit", "path", "state"}]}: the user's own services (unit files under the user's config or data
+//              directory, given as `ownDirs`), enabled or disabled; nothing of the system's or a package's
+StateResult hostState(BusCaller &bus);
+StateResult timeState(BusCaller &bus);
+StateResult timeZones(BusCaller &bus);
+StateResult localeState(BusCaller &bus);
+StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
+
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
 //   wifi.radio {on}, wifi.connectKnown {uuid}, wifi.connectOpen {hex}, wifi.disconnect {}, wifi.scan {},
 //   bt.power {on}, bt.connect {mac, connect}
-QString runAction(BusCaller &bus, const QVariantMap &op);
+// and the General pane's (ADR-0030): the system service asks the session's polkit agent itself (interactive), so these calls wait
+// for the user's answer (kPrivilegedMs):
+//   host.setName {name}         hostname1 SetPrettyHostname, then SetStaticHostname with the name made a valid host name
+//   time.ntp {on}               timedate1 SetNTP
+//   time.zone {zone}            timedate1 SetTimezone
+//   time.set {usec}             timedate1 SetTime (absolute, microseconds since the epoch as a string)
+//   user.enable {unit, on}      systemd (session bus) EnableUnitFiles / DisableUnitFiles, then Reload: no privilege
+// `ownDirs`: the user's unit directories (user.enable acts only on a unit listed there, userUnits).
+QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs = {});
+
+// Whether an op goes to the session bus (user.*) rather than the system bus.
+bool sessionAction(const QVariantMap &op);
+
+// Whether an op asks for the user's authorization (it may wait for the polkit dialog).
+bool privilegedAction(const QVariantMap &op);
+
+// The host name derived from a computer name (hostname1's rules: lower case ASCII letters, digits and '-', at most 63, no
+// leading or trailing '-'); "" when nothing usable is left.
+QString hostNameFor(const QString &name);
 
 // Whether an action map is well formed (what runAction checks first, without touching the bus).
 bool validAction(const QVariantMap &op);

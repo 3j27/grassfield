@@ -5,7 +5,7 @@
     <name>AboutPage</name>
     <message>
         <source>About</source>
-        <translation>À propos</translation>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>%1 (1 thread)</source>
@@ -16,8 +16,40 @@
         <translation>%1 (%2 processeurs logiques)</translation>
     </message>
     <message>
+        <source>%1 GB</source>
+        <translation>%1 Go</translation>
+    </message>
+    <message>
+        <source>%1 × %2</source>
+        <translation>%1 × %2</translation>
+    </message>
+    <message>
+        <source>%1-inch (%2)</source>
+        <translation>%1 pouces (%2)</translation>
+    </message>
+    <message>
         <source>Unknown</source>
         <translation>Inconnu</translation>
+    </message>
+    <message>
+        <source>Computer</source>
+        <translation>Ordinateur</translation>
+    </message>
+    <message>
+        <source>The name could not be changed: %1.</source>
+        <translation>Le nom n’a pas pu être modifié : %1.</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Computer name</source>
+        <translation>Nom de l’ordinateur</translation>
     </message>
     <message>
         <source>Software</source>
@@ -26,6 +58,10 @@
     <message>
         <source>Grassfield</source>
         <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>Version %1</translation>
     </message>
     <message>
         <source>Omarchy</source>
@@ -44,8 +80,20 @@
         <translation>Qt</translation>
     </message>
     <message>
-        <source>Hardware</source>
-        <translation>Matériel</translation>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>Startup Disk</source>
+        <translation>Disque de démarrage</translation>
+    </message>
+    <message>
+        <source>%1 available of %2</source>
+        <translation>%1 disponibles sur %2</translation>
     </message>
     <message>
         <source>Processor</source>
@@ -497,6 +545,37 @@
     <message>
         <source>%1 (minimized)</source>
         <translation>%1 (réduite)</translation>
+    </message>
+</context>
+<context>
+    <name>AppPickerSheet</name>
+    <message>
+        <source>Add a Login Item</source>
+        <translation>Ajouter un élément de connexion</translation>
+    </message>
+    <message>
+        <source>Choose an application to open when you log in.</source>
+        <translation>Choisissez une application à ouvrir lors de la connexion.</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Choose an application.</source>
+        <translation>Choisissez une application.</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>No applications</source>
+        <translation>Aucune application</translation>
     </message>
 </context>
 <context>
@@ -1709,18 +1788,6 @@
         <translation>Recherche</translation>
     </message>
     <message>
-        <source>Tabs</source>
-        <translation>Onglets</translation>
-    </message>
-    <message>
-        <source>Close Tab</source>
-        <translation>Fermer l’onglet</translation>
-    </message>
-    <message>
-        <source>New Tab</source>
-        <translation>Nouvel onglet</translation>
-    </message>
-    <message>
         <source>Dismiss</source>
         <translation>Ignorer</translation>
     </message>
@@ -1782,6 +1849,21 @@
     <message>
         <source>Calendar, %1</source>
         <translation>Calendrier, %1</translation>
+    </message>
+</context>
+<context>
+    <name>CityField</name>
+    <message>
+        <source>%1 - %2</source>
+        <translation>%1 - %2</translation>
+    </message>
+    <message>
+        <source>Closest city</source>
+        <translation>Ville la plus proche</translation>
+    </message>
+    <message>
+        <source>Cities</source>
+        <translation>Villes</translation>
     </message>
 </context>
 <context>
@@ -2140,6 +2222,73 @@
     <message>
         <source>Done</source>
         <translation>Terminé</translation>
+    </message>
+</context>
+<context>
+    <name>DateTimePage</name>
+    <message>
+        <source>Date &amp; Time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>The change could not be made: %1.</source>
+        <translation>La modification n’a pas pu être faite : %1.</translation>
+    </message>
+    <message>
+        <source>MMM d, yyyy</source>
+        <translation>d MMM yyyy</translation>
+    </message>
+    <message>
+        <source>h:mm:ss AP</source>
+        <translation>h:mm:ss AP</translation>
+    </message>
+    <message>
+        <source>%1 at %2</source>
+        <translation>%1 à %2</translation>
+    </message>
+    <message>
+        <source>Set time and date automatically</source>
+        <translation>Régler la date et l’heure automatiquement</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Date and time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>Set…</source>
+        <translation>Régler…</translation>
+    </message>
+    <message>
+        <source>Set the date and time</source>
+        <translation>Régler la date et l’heure</translation>
+    </message>
+    <message>
+        <source>24-hour time</source>
+        <translation>Heure au format 24 heures</translation>
+    </message>
+    <message>
+        <source>Time zone</source>
+        <translation>Fuseau horaire</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnu</translation>
+    </message>
+    <message>
+        <source>Closest city</source>
+        <translation>Ville la plus proche</translation>
     </message>
 </context>
 <context>
@@ -3022,6 +3171,25 @@
     </message>
 </context>
 <context>
+    <name>FolderViews</name>
+    <message>
+        <source>another Files window is saving its view settings</source>
+        <translation>une autre fenêtre de Fichiers enregistre ses réglages de présentation</translation>
+    </message>
+    <message>
+        <source>the view settings lock file can&apos;t be created</source>
+        <translation>le fichier de verrou des réglages de présentation ne peut pas être créé</translation>
+    </message>
+    <message>
+        <source>the view settings file can&apos;t be read, so it is left as it is</source>
+        <translation>le fichier des réglages de présentation est illisible, il est laissé tel quel</translation>
+    </message>
+    <message>
+        <source>the view settings file would be too large</source>
+        <translation>le fichier des réglages de présentation serait trop volumineux</translation>
+    </message>
+</context>
+<context>
     <name>ForceQuitPanel</name>
     <message>
         <source>Force Quit Applications</source>
@@ -3100,6 +3268,37 @@
     </message>
 </context>
 <context>
+    <name>GeneralPage</name>
+    <message>
+        <source>General</source>
+        <translation>Général</translation>
+    </message>
+    <message>
+        <source>Manage your overall setup and preferences for this computer, such as storage, language, the date and time, and more.</source>
+        <translation>Gérez la configuration générale et les préférences de cet ordinateur, comme le stockage, la langue, la date et l’heure, et plus encore.</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>Date &amp; Time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>Language &amp; Region</source>
+        <translation>Langue et région</translation>
+    </message>
+    <message>
+        <source>Login Items</source>
+        <translation>Ouverture</translation>
+    </message>
+</context>
+<context>
     <name>Glance</name>
     <message>
         <source>Glance</source>
@@ -3145,6 +3344,10 @@
         <translation>Nouvel onglet</translation>
     </message>
     <message>
+        <source>Reopen Closed Tab</source>
+        <translation>Rouvrir le dernier onglet fermé</translation>
+    </message>
+    <message>
         <source>Open</source>
         <translation>Ouvrir</translation>
     </message>
@@ -3159,6 +3362,10 @@
     <message>
         <source>Close Tab</source>
         <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Close All</source>
+        <translation>Tout fermer</translation>
     </message>
     <message>
         <source>Eject</source>
@@ -3289,12 +3496,28 @@
         <translation>Afficher les fichiers cachés</translation>
     </message>
     <message>
+        <source>Hide Tab Bar</source>
+        <translation>Masquer la barre d’onglets</translation>
+    </message>
+    <message>
+        <source>Show Tab Bar</source>
+        <translation>Afficher la barre d’onglets</translation>
+    </message>
+    <message>
         <source>Show Previous Tab</source>
         <translation>Afficher l’onglet précédent</translation>
     </message>
     <message>
         <source>Show Next Tab</source>
         <translation>Afficher l’onglet suivant</translation>
+    </message>
+    <message>
+        <source>Move Tab to New Window</source>
+        <translation>Placer l’onglet dans une nouvelle fenêtre</translation>
+    </message>
+    <message>
+        <source>Merge All Windows</source>
+        <translation>Fusionner toutes les fenêtres</translation>
     </message>
     <message>
         <source>Reload</source>
@@ -3720,6 +3943,69 @@
     </message>
 </context>
 <context>
+    <name>LanguagePage</name>
+    <message>
+        <source>Language &amp; Region</source>
+        <translation>Langue et région</translation>
+    </message>
+    <message>
+        <source>Preferred Languages</source>
+        <translation>Langues préférées</translation>
+    </message>
+    <message>
+        <source>Changing the language needs a newer version of Omarchy.</source>
+        <translation>Pour changer de langue, il faut une version plus récente d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Omarchy did not give its list of languages.</source>
+        <translation>Omarchy n’a pas donné sa liste de langues.</translation>
+    </message>
+    <message>
+        <source>The language could not be changed: %1.</source>
+        <translation>La langue n’a pas pu être modifiée : %1.</translation>
+    </message>
+    <message>
+        <source>Log out and back in to use %1 everywhere.</source>
+        <translation>Langue choisie : %1. Fermez la session puis rouvrez-la pour l’utiliser partout.</translation>
+    </message>
+    <message>
+        <source>Primary language</source>
+        <translation>Langue principale</translation>
+    </message>
+    <message>
+        <source>Changing the language…</source>
+        <translation>Changement de langue…</translation>
+    </message>
+    <message>
+        <source>%1 — %2</source>
+        <translation>%1 — %2</translation>
+    </message>
+    <message>
+        <source>%1 at %2</source>
+        <translation>%1 à %2</translation>
+    </message>
+    <message>
+        <source>Region</source>
+        <translation>Région</translation>
+    </message>
+    <message>
+        <source>First day of week</source>
+        <translation>Premier jour de la semaine</translation>
+    </message>
+    <message>
+        <source>Automatic (%1)</source>
+        <translation>Automatique (%1)</translation>
+    </message>
+    <message>
+        <source>Date format</source>
+        <translation>Format de date</translation>
+    </message>
+    <message>
+        <source>Number format</source>
+        <translation>Format des nombres</translation>
+    </message>
+</context>
+<context>
     <name>Lock</name>
     <message>
         <source>Authentication service unavailable. The session stays locked.</source>
@@ -3804,6 +4090,61 @@
     </message>
 </context>
 <context>
+    <name>LoginItemsPage</name>
+    <message>
+        <source>Login Items</source>
+        <translation>Ouverture</translation>
+    </message>
+    <message>
+        <source>Open at Login</source>
+        <translation>Ouvrir à la connexion</translation>
+    </message>
+    <message>
+        <source>These items open automatically when you log in.</source>
+        <translation>Ces éléments s’ouvrent automatiquement lorsque vous vous connectez.</translation>
+    </message>
+    <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>La modification n’a pas pu être enregistrée : %1.</translation>
+    </message>
+    <message>
+        <source>Added by you</source>
+        <translation>Ajouté par vous</translation>
+    </message>
+    <message>
+        <source>No login items</source>
+        <translation>Aucun élément de connexion</translation>
+    </message>
+    <message>
+        <source>Add a login item</source>
+        <translation>Ajouter un élément de connexion</translation>
+    </message>
+    <message>
+        <source>Remove the selected login item</source>
+        <translation>Retirer l’élément de connexion sélectionné</translation>
+    </message>
+    <message>
+        <source>Allow in the Background</source>
+        <translation>Autoriser en arrière-plan</translation>
+    </message>
+    <message>
+        <source>Your own services keep running in the background after you log in.</source>
+        <translation>Vos propres services continuent de fonctionner en arrière-plan après la connexion.</translation>
+    </message>
+    <message>
+        <source>The change could not be made: %1.</source>
+        <translation>La modification n’a pas pu être faite : %1.</translation>
+    </message>
+    <message>
+        <source>Changing…</source>
+        <translation>Modification…</translation>
+    </message>
+    <message>
+        <source>No background items</source>
+        <translation>Aucun élément en arrière-plan</translation>
+    </message>
+</context>
+<context>
     <name>Main</name>
     <message>
         <source>Wi-Fi</source>
@@ -3858,6 +4199,14 @@
         <translation>Accessibilité</translation>
     </message>
     <message>
+        <source>General</source>
+        <translation>Général</translation>
+    </message>
+    <message>
+        <source>about storage date time language region login items startup</source>
+        <translation>informations stockage date heure langue région ouverture éléments démarrage</translation>
+    </message>
+    <message>
         <source>pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display</source>
         <translation>pointeur curseur taille souris grand couleur contour remplissage contraste transparence animation texte taille agrandir affichage</translation>
     </message>
@@ -3902,6 +4251,10 @@
         <translation>pointeur vitesse de déplacement défilement naturel toucher cliquer clic secondaire droit pavé tactile</translation>
     </message>
     <message>
+        <source>version system hardware processor memory computer name graphics serial</source>
+        <translation>version système matériel processeur mémoire nom ordinateur graphisme série</translation>
+    </message>
+    <message>
         <source>Keyboard</source>
         <translation>Clavier</translation>
     </message>
@@ -3911,11 +4264,39 @@
     </message>
     <message>
         <source>About</source>
-        <translation>À propos</translation>
+        <translation>Informations</translation>
     </message>
     <message>
-        <source>version system hardware processor memory</source>
-        <translation>version système matériel processeur mémoire</translation>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>disk space volume free used documents downloads pictures music videos trash</source>
+        <translation>disque espace volume libre utilisé documents téléchargements images musique vidéos corbeille</translation>
+    </message>
+    <message>
+        <source>Date &amp; Time</source>
+        <translation>Date et heure</translation>
+    </message>
+    <message>
+        <source>clock time zone city automatic network time ntp 24-hour</source>
+        <translation>horloge heure fuseau horaire ville automatique heure réseau ntp 24 heures</translation>
+    </message>
+    <message>
+        <source>Login Items</source>
+        <translation>Ouverture</translation>
+    </message>
+    <message>
+        <source>login items startup autostart open at login background services</source>
+        <translation>éléments de connexion ouverture démarrage automatique ouvrir à la connexion arrière-plan services</translation>
+    </message>
+    <message>
+        <source>Language &amp; Region</source>
+        <translation>Langue et région</translation>
+    </message>
+    <message>
+        <source>language region formats locale date number first day of week calendar</source>
+        <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier</translation>
     </message>
     <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>
@@ -5299,6 +5680,49 @@
     </message>
 </context>
 <context>
+    <name>SetDateTimeSheet</name>
+    <message>
+        <source>Set the date and time</source>
+        <translation>Régler la date et l’heure</translation>
+    </message>
+    <message>
+        <source>Set</source>
+        <translation>Régler</translation>
+    </message>
+    <message>
+        <source>Date</source>
+        <translation>Date</translation>
+    </message>
+    <message>
+        <source>Day</source>
+        <translation>Jour</translation>
+    </message>
+    <message>
+        <source>Month</source>
+        <translation>Mois</translation>
+    </message>
+    <message>
+        <source>Year</source>
+        <translation>Année</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Heure</translation>
+    </message>
+    <message>
+        <source>Hour</source>
+        <translation>Heures</translation>
+    </message>
+    <message>
+        <source>Minute</source>
+        <translation>Minutes</translation>
+    </message>
+    <message>
+        <source>Second</source>
+        <translation>Secondes</translation>
+    </message>
+</context>
+<context>
     <name>Sheet</name>
     <message>
         <source>OK</source>
@@ -5490,6 +5914,65 @@
     </message>
 </context>
 <context>
+    <name>StoragePage</name>
+    <message>
+        <source>Storage</source>
+        <translation>Stockage</translation>
+    </message>
+    <message>
+        <source>Installed Software</source>
+        <translation>Logiciels installés</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Downloads</source>
+        <translation>Téléchargements</translation>
+    </message>
+    <message>
+        <source>Desktop</source>
+        <translation>Bureau</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <source>Videos</source>
+        <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Trash</source>
+        <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autres</translation>
+    </message>
+    <message>
+        <source>Startup Disk</source>
+        <translation>Disque de démarrage</translation>
+    </message>
+    <message>
+        <source>%1 of %2 used</source>
+        <translation>%1 utilisés sur %2</translation>
+    </message>
+    <message>
+        <source>All Volumes…</source>
+        <translation>Tous les volumes…</translation>
+    </message>
+    <message>
+        <source>Calculating…</source>
+        <translation>Calcul en cours…</translation>
+    </message>
+</context>
+<context>
     <name>Store</name>
     <message>
         <source>the file is not valid JSON (%1)</source>
@@ -5583,6 +6066,10 @@
     <message>
         <source>invalid request</source>
         <translation>Demande non valide</translation>
+    </message>
+    <message>
+        <source>that item is not one of your own</source>
+        <translation>cet élément n’est pas l’un des vôtres</translation>
     </message>
     <message>
         <source>no Wi-Fi adapter</source>
@@ -5697,6 +6184,29 @@
     <message>
         <source>Log Out</source>
         <translation>Fermer la session</translation>
+    </message>
+</context>
+<context>
+    <name>TabBar</name>
+    <message>
+        <source>Tabs</source>
+        <translation>Onglets</translation>
+    </message>
+    <message>
+        <source>Close Tab</source>
+        <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Close Other Tabs</source>
+        <translation>Fermer les autres onglets</translation>
+    </message>
+    <message>
+        <source>Move Tab to New Window</source>
+        <translation>Placer l’onglet dans une nouvelle fenêtre</translation>
+    </message>
+    <message>
+        <source>New Tab</source>
+        <translation>Nouvel onglet</translation>
     </message>
 </context>
 <context>
@@ -5893,6 +6403,29 @@
     <message>
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>VolumesSheet</name>
+    <message>
+        <source>All Volumes</source>
+        <translation>Tous les volumes</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Startup Disk</source>
+        <translation>Disque de démarrage</translation>
+    </message>
+    <message>
+        <source>read-only</source>
+        <translation>lecture seule</translation>
+    </message>
+    <message>
+        <source>%1 available of %2</source>
+        <translation>%1 disponibles sur %2</translation>
     </message>
 </context>
 <context>

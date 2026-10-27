@@ -10,14 +10,22 @@ FocusScope {
     id: root
 
     required property var app
-    // The BrowserWindow (menus, sheets, Get Info windows, tabs).
+    // The BrowserWindow (menus, sheets, Get Info windows, tabs). Changes when the tab moves to another window.
     required property var win
     required property url startUrl
+    // Unique in this process; a dragged tab is named by it (TabBar, Main.qml).
+    property int tabId: 0
+    // A closed tab's snapshot() to reopen (File > Reopen Closed Tab): its location, history, view and arrangement.
+    property var restore: null
 
     property url url
     property var history: []
     property int historyIndex: -1
-    property string viewMode: Nav.normalizeViewMode(root.app.viewMode)
+    // The view and the arrangement of the shown folder (its own when chosen for it, else the defaults: Nav.viewFor,
+    // Nav.sortFor, FilesApp.folderView). Keep Folders on Top and Show Hidden Files stay global.
+    property string viewMode: root.restore ? Nav.normalizeViewMode(root.restore.viewMode) : Nav.viewFor("", root.app.folderView(root.startUrl).mode, root.app.viewMode)
+    property int sortKey: root.app.sortKey
+    property bool sortDescending: root.app.sortDescending
     // FolderModel listing `url` (icon and list views; the column view keeps one per column).
     property var folder: null
     property string searchText: ""
@@ -49,8 +57,8 @@ FocusScope {
     }
 
     function applyPrefs(m: var): void {
-        m.sortKey = root.app.sortKey;
-        m.sortDescending = root.app.sortDescending;
+        m.sortKey = root.sortKey;
+        m.sortDescending = root.sortDescending;
         m.foldersFirst = root.app.foldersFirst;
         m.showHidden = root.app.showHidden;
         m.previewSize = Tokens.filesIconSize * Tokens.filesThumbnailOversample;
@@ -63,7 +71,6 @@ FocusScope {
             root.applyPrefs(root.folder);
             if (root.view && root.view.applyPrefs)
                 root.view.applyPrefs();
-            root.viewMode = Nav.normalizeViewMode(root.app.viewMode);
         }
     }
 
@@ -76,8 +83,24 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        if (root.restore) {
+            root.sortKey = root.restore.sortKey;
+            root.sortDescending = root.restore.sortDescending;
+        }
         root.folder = root.createModel(root);
-        root.navigate(root.startUrl, true);
+        if (root.restore && root.restore.history.length > 0) {
+            root.history = root.restore.history;
+            root.historyIndex = Math.max(0, Math.min(root.restore.historyIndex, root.history.length - 1));
+            root.navigate(root.history[root.historyIndex], false);
+        } else {
+            root.navigate(root.startUrl, true);
+        }
+    }
+
+    // What File > Reopen Closed Tab needs to bring this tab back.
+    function snapshot(): var {
+        return {url: root.url, history: root.history.slice(), historyIndex: root.historyIndex, viewMode: root.viewMode, sortKey: root.sortKey,
+                sortDescending: root.sortDescending};
     }
 
     function focusView(): void {
@@ -93,6 +116,7 @@ FocusScope {
         root.renameModel = null;
         if (root.searchText !== "")
             root.setSearch("");
+        root.applyFolderView(target);
         root.url = target;
         root.folder.url = target;
         if (record && !(root.historyIndex >= 0 && root.app.sameUrl(root.history[root.historyIndex], target))) {
@@ -100,6 +124,28 @@ FocusScope {
             root.history = h.entries;
             root.historyIndex = h.index;
         }
+    }
+
+    // The view and the arrangement of `target` (F-3). Column view sticks while browsing (the column view itself navigates
+    // the tab), so a folder's own settings apply from the other views and when the tab opens.
+    function applyFolderView(target: url): void {
+        if (root.viewMode === "columns" && root.folder !== null && String(root.url) !== "")
+            return;
+        const stored = root.app.folderView(target);
+        root.viewMode = Nav.viewFor(String(root.url) === "" && !root.restore ? "" : root.viewMode, stored.mode, root.app.viewMode);
+        const sort = Nav.sortFor(stored, root.app.sortKey, root.app.sortDescending, key => root.app.defaultDescending(key));
+        root.setArrangement(sort.key, sort.descending);
+    }
+
+    function setArrangement(key: int, descending: bool): void {
+        if (key === root.sortKey && descending === root.sortDescending)
+            return;
+        root.sortKey = key;
+        root.sortDescending = descending;
+        if (root.folder)
+            root.applyPrefs(root.folder);
+        if (root.view && root.view.applyPrefs)
+            root.view.applyPrefs();
     }
 
     // After going up or back, select the folder we came from (macOS behavior).
@@ -132,10 +178,17 @@ FocusScope {
         root.selectChild(previous);
     }
 
+    // A view chosen for the shown folder: it opens in that view from now on (F-3).
     function setViewMode(mode: string): void {
         const m = Nav.normalizeViewMode(mode);
-        root.app.viewMode = m;
+        const leavingColumns = root.viewMode === "columns" && m !== "columns";
         root.viewMode = m;
+        root.app.setFolderView(root.url, {mode: m});
+        // Column view kept one arrangement for all its columns: the folder now shown alone takes its own.
+        if (leavingColumns) {
+            const sort = Nav.sortFor(root.app.folderView(root.url), root.app.sortKey, root.app.sortDescending, key => root.app.defaultDescending(key));
+            root.setArrangement(sort.key, sort.descending);
+        }
         Qt.callLater(root.focusView);
     }
 
@@ -158,19 +211,28 @@ FocusScope {
     }
 
     // Header click in the list view, or a Sort By menu choice.
+    // The shown folder keeps the arrangement chosen for it (F-3).
     function sortBy(key: int, toggle: bool): void {
-        const next = toggle ? Nav.sortClick(root.app.sortKey, root.app.sortDescending, key, root.app.defaultDescending(key))
+        const next = toggle ? Nav.sortClick(root.sortKey, root.sortDescending, key, root.app.defaultDescending(key))
                             : {key: key, descending: root.app.defaultDescending(key)};
-        root.app.sortKey = next.key;
-        root.app.sortDescending = next.descending;
+        root.setArrangement(next.key, next.descending);
+        root.app.setFolderView(root.url, {sortKey: next.key, sortDescending: next.descending});
+    }
+
+    function setSortDescending(on: bool): void {
+        root.setArrangement(root.sortKey, on);
+        root.app.setFolderView(root.url, {sortKey: root.sortKey, sortDescending: on});
     }
 
     // Opening ------------------------------------------------------------------------------------
 
-    function activate(row: int, model: var): void {
+    // A double-click. Cmd-double-click on a folder opens it in a new tab (Finder).
+    function activate(row: int, model: var, modifiers: int): void {
         if (row < 0)
             return;
-        if (model.isDirAt(row))
+        if (model.isDirAt(row) && (modifiers & Qt.ControlModifier))
+            root.win.newTab(model.urlAt(row), null);
+        else if (model.isDirAt(row))
             root.navigate(model.urlAt(row), true);
         else
             root.app.open([model.urlAt(row)]);
@@ -188,7 +250,7 @@ FocusScope {
                 if (firstDir === null)
                     firstDir = m.urlAt(rows[i]);
                 else
-                    root.win.newTab(m.urlAt(rows[i]));
+                    root.win.newTab(m.urlAt(rows[i]), null);
             } else {
                 files.push(m.urlAt(rows[i]));
             }
@@ -564,14 +626,14 @@ FocusScope {
     }
 
     function sortSubmenu(): var {
-        const k = root.app.sortKey;
+        const k = root.sortKey;
         return {id: "sortBy", text: qsTr("Sort By"), submenu: [
             {id: "sort:0", text: qsTr("Name"), checked: k === 0},
             {id: "sort:1", text: qsTr("Kind"), checked: k === 1},
             {id: "sort:2", text: qsTr("Date Modified"), checked: k === 2},
             {id: "sort:3", text: qsTr("Size"), checked: k === 3},
             {separator: true},
-            {id: "sortDescending", text: qsTr("Descending"), checked: root.app.sortDescending},
+            {id: "sortDescending", text: qsTr("Descending"), checked: root.sortDescending},
             {id: "foldersFirst", text: qsTr("Keep Folders on Top"), checked: root.app.foldersFirst}
         ]};
     }
@@ -606,7 +668,7 @@ FocusScope {
             root.openSelection();
             break;
         case "newTab":
-            root.win.newTab(model.selectedUrls()[0]);
+            root.win.newTab(model.selectedUrls()[0], null);
             break;
         case "trash":
             root.trashSelection();
@@ -657,7 +719,7 @@ FocusScope {
             root.toggleGalleryInfo();
             break;
         case "sortDescending":
-            root.app.sortDescending = !root.app.sortDescending;
+            root.setSortDescending(!root.sortDescending);
             break;
         case "foldersFirst":
             root.app.foldersFirst = !root.app.foldersFirst;

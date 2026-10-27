@@ -74,7 +74,7 @@ FocusScope {
             delegate: Item {
                 id: column
                 required property var modelData
-                readonly property bool active: root.tab.app.sortKey === column.modelData.key
+                readonly property bool active: root.tab.sortKey === column.modelData.key
 
                 width: column.modelData.key === 0 ? root.nameWidth : column.modelData.key === 2 ? Tokens.filesListDateWidth : column.modelData.key === 3 ? Tokens.filesListSizeWidth : Tokens.filesListKindWidth
                 height: header.height
@@ -119,7 +119,7 @@ FocusScope {
                     name: "chevron-down"
                     size: Tokens.filesChevronSize
                     color: Appearance.colors.textSecondary
-                    rotation: root.tab.app.sortDescending ? 0 : 180
+                    rotation: root.tab.sortDescending ? 0 : 180
                 }
 
                 MouseArea {
@@ -218,7 +218,7 @@ FocusScope {
             Accessible.description: [row.modifiedText, row.sizeText, row.kind].join(", ")
             Accessible.selectable: true
             Accessible.selected: row.selected
-            Accessible.onPressAction: root.tab.activate(row.index, root.model)
+            Accessible.onPressAction: root.tab.activate(row.index, root.model, Qt.NoModifier)
 
             Rectangle {
                 anchors.fill: parent
@@ -362,7 +362,7 @@ FocusScope {
                 }
                 onDoubleClicked: event => {
                     if (event.button === Qt.LeftButton)
-                        root.tab.activate(row.index, root.model);
+                        root.tab.activate(row.index, root.model, event.modifiers);
                 }
                 drag.onActiveChanged: {
                     if (drag.active) {

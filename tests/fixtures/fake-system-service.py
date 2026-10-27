@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""A fake NetworkManager or BlueZ for the Settings D-Bus tests (tests/integration/settings_dbus.sh, GF-049).
+"""A fake NetworkManager, BlueZ or the General pane's services for the Settings D-Bus tests (tests/integration/settings_dbus.sh,
+GF-049, ADR-0030).
 
-    fake-system-service.py nm|bluez --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
+    fake-system-service.py nm|bluez|general --log FILE --ready FILE [--fail 'Member=org.x.Error|message'] [--slow Member=SECONDS]
 
-It owns org.freedesktop.NetworkManager (or org.bluez) on the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
+It owns org.freedesktop.NetworkManager (or org.bluez; or hostname1, timedate1, timesync1, locale1 and a systemd user manager) on
+the bus named by DBUS_SYSTEM_BUS_ADDRESS, which the test sets to a
 PRIVATE dbus-daemon. It REFUSES to start on anything else: GF_TEST_BUS=1 must be set, GF_TEST_BUS_DIR must name the test's
 scratch directory, and every entry of the address must be a unix socket under that directory or loopback tcp (parsed, not
 matched: percent-escapes, dots and lists do not get past it; never a real system bus). It serves a small, fixed world (see below), keeps the state its methods change (the radio, the
@@ -13,6 +15,10 @@ what the Settings app sent. With --fail, the named method answers with that D-Bu
 The NetworkManager world: radio on; an Ethernet device and a Wi-Fi device wlan0 (connected, active AP 1); access points
 "Home" (secured, strong, active), "Home" (secured, weak), "Cafe" (open), a saved Wi-Fi profile for "Home" and an Ethernet one.
 The BlueZ world: adapter hci0 powered; paired Headphones (connected), paired Mouse, an unpaired device.
+The General world (one process, five names): hostname1 (the reference machine, a laptop), timedate1 (Europe/Paris, NTP on, a fixed
+time; ListTimezones), timesync1 (a server and the fallback list), locale1 (LANG=en_US.UTF-8), systemd1 (the user manager: one of
+the user's own services under GF_TEST_BUS_DIR/units, one a package ships; Enable/DisableUnitFiles, Reload). The Set* methods of
+hostname1 and timedate1 keep what they were given, so a read afterwards shows it.
 """
 import argparse
 import json
@@ -218,9 +224,73 @@ def bluez_world(svc):
     return "org.bluez"
 
 
+def general_world(svc):
+    directory = os.environ["GF_TEST_BUS_DIR"]
+    host, time_, sync, locale, systemd = ("/org/freedesktop/hostname1", "/org/freedesktop/timedate1", "/org/freedesktop/timesync1",
+                                          "/org/freedesktop/locale1", "/org/freedesktop/systemd1")
+
+    def setp(path, iface, name, value):
+        svc.props[(path, iface)][name] = value
+
+    hi = "org.freedesktop.hostname1"
+    svc.register(host, '<interface name="org.freedesktop.hostname1">'
+                       '<property name="PrettyHostname" type="s" access="read"/><property name="StaticHostname" type="s" access="read"/>'
+                       '<property name="Hostname" type="s" access="read"/><property name="Chassis" type="s" access="read"/>'
+                       '<property name="HardwareVendor" type="s" access="read"/><property name="HardwareModel" type="s" access="read"/>'
+                       '<method name="SetPrettyHostname"><arg direction="in" type="s"/><arg direction="in" type="b"/></method>'
+                       '<method name="SetStaticHostname"><arg direction="in" type="s"/><arg direction="in" type="b"/></method></interface>',
+                 methods={"SetPrettyHostname": lambda p: setp(host, hi, "PrettyHostname", V("s", p[0])),
+                          "SetStaticHostname": lambda p: setp(host, hi, "StaticHostname", V("s", p[0]))},
+                 props={"PrettyHostname": V("s", "Grassfield Reference"), "StaticHostname": V("s", "grassfield-reference"),
+                        "Hostname": V("s", "grassfield-reference"), "Chassis": V("s", "laptop"), "HardwareVendor": V("s", "Grassfield"),
+                        "HardwareModel": V("s", "Reference Laptop 14")})
+    ti = "org.freedesktop.timedate1"
+    svc.register(time_, '<interface name="org.freedesktop.timedate1">'
+                        '<property name="Timezone" type="s" access="read"/><property name="NTP" type="b" access="read"/>'
+                        '<property name="CanNTP" type="b" access="read"/><property name="NTPSynchronized" type="b" access="read"/>'
+                        '<property name="LocalRTC" type="b" access="read"/><property name="TimeUSec" type="t" access="read"/>'
+                        '<method name="SetNTP"><arg direction="in" type="b"/><arg direction="in" type="b"/></method>'
+                        '<method name="SetTimezone"><arg direction="in" type="s"/><arg direction="in" type="b"/></method>'
+                        '<method name="SetTime"><arg direction="in" type="x"/><arg direction="in" type="b"/><arg direction="in" type="b"/></method>'
+                        '<method name="ListTimezones"><arg direction="out" type="as"/></method></interface>',
+                 methods={"SetNTP": lambda p: setp(time_, ti, "NTP", V("b", p[0])),
+                          "SetTimezone": lambda p: setp(time_, ti, "Timezone", V("s", p[0])),
+                          "SetTime": lambda p: setp(time_, ti, "TimeUSec", V("t", p[0])),
+                          "ListTimezones": lambda p: V("(as)", (["Europe/Paris", "Europe/Zurich", "America/New_York", "UTC", "../etc/passwd"],))},
+                 props={"Timezone": V("s", "Europe/Paris"), "NTP": V("b", True), "CanNTP": V("b", True), "NTPSynchronized": V("b", True),
+                        "LocalRTC": V("b", False), "TimeUSec": V("t", 1792832460000000)})
+    svc.register(sync, '<interface name="org.freedesktop.timesync1.Manager">'
+                       '<property name="ServerName" type="s" access="read"/><property name="LinkNTPServers" type="as" access="read"/>'
+                       '<property name="SystemNTPServers" type="as" access="read"/><property name="FallbackNTPServers" type="as" access="read"/></interface>',
+                 props={"ServerName": V("s", "2.arch.pool.ntp.org"), "LinkNTPServers": V("as", []), "SystemNTPServers": V("as", []),
+                        "FallbackNTPServers": V("as", ["0.arch.pool.ntp.org", "1.arch.pool.ntp.org", "2.arch.pool.ntp.org"])})
+    svc.register(locale, '<interface name="org.freedesktop.locale1"><property name="Locale" type="as" access="read"/></interface>',
+                 props={"Locale": V("as", ["LANG=en_US.UTF-8"])})
+    units = {directory + "/units/sync.service": "enabled", directory + "/units/backup.service": "disabled",
+             "/usr/lib/systemd/user/shipped.service": "enabled"}
+
+    def enable(names, on):
+        for path in list(units):
+            if path.rsplit("/", 1)[-1] in names:
+                units[path] = "enabled" if on else "disabled"
+
+    svc.register(systemd, '<interface name="org.freedesktop.systemd1.Manager">'
+                          '<method name="ListUnitFilesByPatterns"><arg direction="in" type="as"/><arg direction="in" type="as"/><arg direction="out" type="a(ss)"/></method>'
+                          '<method name="EnableUnitFiles"><arg direction="in" type="as"/><arg direction="in" type="b"/><arg direction="in" type="b"/>'
+                          '<arg direction="out" type="b"/><arg direction="out" type="a(sss)"/></method>'
+                          '<method name="DisableUnitFiles"><arg direction="in" type="as"/><arg direction="in" type="b"/><arg direction="out" type="a(sss)"/></method>'
+                          '<method name="Reload"/></interface>',
+                 methods={"ListUnitFilesByPatterns": lambda p: V("(a(ss))", (sorted(units.items()),)),
+                          "EnableUnitFiles": lambda p: (enable(p[0], True), V("(ba(sss))", (False, [])))[1],
+                          "DisableUnitFiles": lambda p: (enable(p[0], False), V("(a(sss))", ([],)))[1],
+                          "Reload": lambda p: None})
+    return ["org.freedesktop.hostname1", "org.freedesktop.timedate1", "org.freedesktop.timesync1", "org.freedesktop.locale1",
+            "org.freedesktop.systemd1"]
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("service", choices=["nm", "bluez"])
+    ap.add_argument("service", choices=["nm", "bluez", "general"])
     ap.add_argument("--log", required=True)
     ap.add_argument("--ready", required=True)
     ap.add_argument("--fail", action="append", default=[])
@@ -236,13 +306,19 @@ def main():
         fail[member] = (name, message)
     slow = {spec.partition("=")[0]: float(spec.partition("=")[2]) for spec in args.slow}
     svc = Service(conn, args.log, fail, slow)
-    name = nm_world(svc) if args.service == "nm" else bluez_world(svc)
+    worlds = {"nm": nm_world, "bluez": bluez_world, "general": general_world}
+    names = worlds[args.service](svc)
+    names = names if isinstance(names, list) else [names]
+    owned = set()
 
     def acquired(c, n):
-        with open(args.ready, "w") as f:
-            f.write("ready\n")
+        owned.add(n)
+        if len(owned) == len(names):
+            with open(args.ready, "w") as f:
+                f.write("ready\n")
 
-    Gio.bus_own_name_on_connection(conn, name, Gio.BusNameOwnerFlags.NONE, acquired, None)
+    for name in names:
+        Gio.bus_own_name_on_connection(conn, name, Gio.BusNameOwnerFlags.NONE, acquired, None)
     GLib.MainLoop().run()
 
 

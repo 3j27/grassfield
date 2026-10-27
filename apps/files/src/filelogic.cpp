@@ -294,4 +294,16 @@ bool hiddenNetworkEntry(const QUrl &item, const QUrl &target)
     return target.scheme() == QLatin1String("afc") || item.fileName().startsWith(QLatin1String("afc-network"));
 }
 
+int keptWindowSide(const QVariant &value)
+{
+    bool ok = false;
+    const int side = value.toInt(&ok);
+    return ok && side >= kMinKeptWindowSide && side <= kMaxKeptWindowSide ? side : 0;
+}
+
+bool keepsWindowSize(int width, int height)
+{
+    return width >= kMinKeptWindowSide && height >= kMinKeptWindowSide && width <= kMaxKeptWindowSide && height <= kMaxKeptWindowSide;
+}
+
 } // namespace FileLogic

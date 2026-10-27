@@ -1,7 +1,9 @@
 #pragma once
 
+#include <QMap>
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 
 #include <functional>
 #include <memory>
@@ -51,6 +53,28 @@ private:
     std::shared_ptr<State> m_state;
     int m_shutdownWaitMs;
     std::function<void()> m_onAbandon;
+};
+
+// What runs per tag in the Backend, kept there and not in the pages, which every visit creates anew (integrator review of
+// PR #6: a page shown again lost its "waiting" state and sent a second polkit request while the first dialog was up; four such
+// blocked calls filled kMaxInFlight, and every read of the system bus then answered "timed out"):
+//  - actions that may wait for a password (polkit, omarchy-language): one per tag until it finished; the next one of that tag
+//    is refused, and the pages show their waiting state from map() (tag -> what);
+//  - shared queries (Backend::query's `shared`, opt-in): a command already running under a tag is not started again; its answer
+//    reaches whoever listens to that tag (Storage shown again gets the du and pacman counts in progress instead of starting two
+//    more). Any other query gets its own process and its own answer.
+class InFlight
+{
+public:
+    // Starts `key` under `tag`; false when the tag runs something already (nothing changes then).
+    bool begin(const QString &tag, const QString &key);
+    // Whether `tag` runs exactly `key`.
+    bool runs(const QString &tag, const QString &key) const;
+    void end(const QString &tag);
+    QVariantMap map() const;
+
+private:
+    QMap<QString, QString> m_items;
 };
 
 } // namespace grassfield::settings

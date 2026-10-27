@@ -42,6 +42,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `airplane.json` | state (`Airplane.js:82`) | shell | none | add v1 |
 | `show-desktop.json` | state (shell UX branch) | shell | check after the merge | add v1 |
 | `notifications.json`, `widgets.json`, `desktop-icons.json`, `search-usage.json` | state | shell | yes | none |
+| `files-views.json` (2026-10-26, Files PR 1) | state | Files / Files | 1 | none (versioned from the start) |
 
 Every existing reader of files versioned in place ignores unknown top-level keys (`RecentItemsLogic.normalize`,
 `Airplane.parse`, `WallpaperConfig.onlineStateOf`, `WallpaperState`'s `.displays`, the Settings status readers), so

@@ -2,6 +2,8 @@
 
 #include "runmode.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
@@ -17,8 +19,74 @@ bool devSession()
 
 bool isUuid(const QString &s)
 {
-    static const QRegularExpression re(QStringLiteral("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"));
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")));
     return re.match(s).hasMatch();
+}
+
+QList<Mount> parseMounts(const QByteArray &text)
+{
+    // fstab(5) escaping: \ooo (three octal digits) for a space, a tab, a newline or a backslash.
+    const auto unescape = [](const QByteArray &field) {
+        QByteArray out;
+        for (qsizetype i = 0; i < field.size(); ++i) {
+            if (field.at(i) == '\\' && i + 3 < field.size()) {
+                const QByteArray digits = field.mid(i + 1, 3);
+                bool ok = digits.size() == 3;
+                for (const char c : digits)
+                    ok = ok && c >= '0' && c <= '7';
+                if (ok) {
+                    out.append(char(digits.toInt(nullptr, 8)));
+                    i += 3;
+                    continue;
+                }
+            }
+            out.append(field.at(i));
+        }
+        return QString::fromUtf8(out);
+    };
+    QList<Mount> out;
+    for (const QByteArray &line : text.split('\n')) {
+        const QList<QByteArray> f = line.simplified().split(' ');
+        if (f.size() >= 3 && !f.at(0).isEmpty())
+            out.append({unescape(f.at(0)), unescape(f.at(1)), unescape(f.at(2))});
+    }
+    return out;
+}
+
+bool isLocalVolume(const QString &device, const QString &type)
+{
+    static const QStringList virtualTypes{QStringLiteral("tmpfs"), QStringLiteral("devtmpfs"), QStringLiteral("proc"), QStringLiteral("sysfs"),
+                                          QStringLiteral("overlay"), QStringLiteral("squashfs"), QStringLiteral("efivarfs"), QStringLiteral("ramfs"),
+                                          QStringLiteral("autofs"), QStringLiteral("cgroup2"), QStringLiteral("debugfs")};
+    if (type.startsWith(QLatin1String("fuse")) || virtualTypes.contains(type))
+        return false;
+    return device.startsWith(QLatin1String("/dev/")) || type == QLatin1String("zfs");
+}
+
+QString mountPointOf(const QList<Mount> &mounts, const QString &path)
+{
+    QString best;
+    for (const Mount &m : mounts) {
+        const bool holds = m.mountPoint == QLatin1String("/") || path == m.mountPoint || path.startsWith(m.mountPoint + QLatin1Char('/'));
+        if (holds && m.mountPoint.size() > best.size())
+            best = m.mountPoint;
+    }
+    return best;
+}
+
+QString xdgHome(const QString &value, const QString &fallback)
+{
+    return value.startsWith(QLatin1Char('/')) ? QDir::cleanPath(value) : fallback;
+}
+
+QStringList xdgDirs(const QString &value, const QString &fallback)
+{
+    QStringList out;
+    for (const QString &d : value.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+        if (d.startsWith(QLatin1Char('/')))
+            out << QDir::cleanPath(d);
+    }
+    return out.isEmpty() && value != fallback ? xdgDirs(fallback, fallback) : out;
 }
 
 bool isReadOnlyQuery(const QStringList &argv)
@@ -31,13 +99,45 @@ bool isReadOnlyQuery(const QStringList &argv)
     // session). nmcli and bluetoothctl are therefore neither queries nor actions here.
     if (program == QLatin1String("wpctl"))
         return args == QStringList{"status"};
-    // About pane (Backend::run): package versions and graphics adapters.
+    // About pane (Backend::run): package versions and graphics adapters. Storage pane: the installed packages' sizes (pacman -Qi).
     if (program == QLatin1String("pacman"))
-        return args.size() == 2 && args.at(0) == QLatin1String("-Q")
-            && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git"));
+        return args == QStringList{QStringLiteral("-Qi")}
+            || (args.size() == 2 && args.at(0) == QLatin1String("-Q")
+                && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git")));
     if (program == QLatin1String("lspci"))
         return args.isEmpty();
+    // Storage pane: the size of the user's folders.
+    if (program == QLatin1String("du"))
+        return isFolderSizeQuery(args);
+    // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
+    // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
     return false;
+}
+
+bool isFolderSizeQuery(const QStringList &args)
+{
+    // du -s -x --block-size=1 -- <1 to 16 folders of the user's home>: sizes only, never across file systems.
+    const QStringList head{QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--")};
+    if (args.size() < head.size() + 1 || args.size() > head.size() + 16 || args.mid(0, head.size()) != head)
+        return false;
+    const QString home = QDir::cleanPath(QDir::homePath());
+    for (const QString &path : args.mid(head.size())) {
+        if (!path.startsWith(QLatin1Char('/')) || path.contains(QLatin1String("/..")) || path.contains(QLatin1String("/./")) || path.size() > 4096)
+            return false;
+        for (const QChar c : path) {
+            if (c.unicode() <= 0x1f || c.unicode() == 0x7f)
+                return false;
+        }
+        if (QDir::cleanPath(path) != path || !(path == home || path.startsWith(home + QLatin1Char('/'))))
+            return false;
+    }
+    return true;
+}
+
+bool isLanguageCode(const QString &code)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[a-z]{2,3}(-[A-Za-z]{2,4})?")));
+    return re.match(code).hasMatch();
 }
 
 namespace {
@@ -108,6 +208,36 @@ bool numberIn(const QString &s, int min, int max)
 
 } // namespace
 
+bool isAutostartWrite(const QString &path, const QString &autostartDir, const QString &devRoot, bool dev)
+{
+    static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9._+-]{1,200}\\.desktop")));
+    // An absolute path already clean: "link/../autostart" would read as the folder in text while the kernel resolves the ".."
+    // through the link (counter-review of 2026-10-26).
+    if (!path.startsWith(QLatin1Char('/')) || QDir::cleanPath(path) != path)
+        return false;
+    const QFileInfo file(path);
+    if (autostartDir.isEmpty() || file.path() != QDir::cleanPath(autostartDir) || !name.match(file.fileName()).hasMatch())
+        return false;
+    if (file.isSymLink())
+        return false;
+    if (!dev)
+        return true;
+    // By the folder's real location, not its text: a symlink inside .dev must not lead a write out of it.
+    const QString devDir = devRoot.isEmpty() ? QString() : QFileInfo(devRoot + QStringLiteral("/.dev")).canonicalFilePath();
+    const QString real = resolvedPath(QDir::cleanPath(autostartDir));
+    return !devDir.isEmpty() && !real.isEmpty() && (real == devDir || real.startsWith(devDir + QLatin1Char('/')));
+}
+
+bool isIconFile(const QString &path)
+{
+    static const QRegularExpression raster(QRegularExpression::anchoredPattern(QStringLiteral(".+\\.(png|xpm|jpe?g)")),
+                                           QRegularExpression::CaseInsensitiveOption);
+    if (!path.startsWith(QLatin1Char('/')) || QDir::cleanPath(path) != path || !raster.match(path).hasMatch())
+        return false;
+    const QFileInfo info(path);
+    return info.isFile() && info.size() <= 1024 * 1024;
+}
+
 bool namesWallpaperTool(const QString &program)
 {
     return program == QLatin1String("grassfield-wallpaper") || program.endsWith(QLatin1String("/grassfield-wallpaper"));
@@ -132,13 +262,27 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open");
+    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language");
+}
+
+bool asksForPassword(const QStringList &argv)
+{
+    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language");
+}
+
+int actionTimeoutMs(const QStringList &argv, int requested)
+{
+    constexpr int kPromptMs = 130000;
+    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language") ? std::max(requested, kPromptMs) : requested;
 }
 
 bool isAllowedAction(const QStringList &argv)
 {
     if (argv.isEmpty() || !isActionProgram(argv.first()))
         return false;
+    // Omarchy's own per-user language switch (it generates the locale through Omarchy's sudoers grant or pkexec): one code.
+    if (argv.first() == QLatin1String("omarchy-language"))
+        return argv.size() == 2 && isLanguageCode(argv.at(1));
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

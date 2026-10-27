@@ -239,6 +239,10 @@ Scope {
     readonly property string accentColor: read("accent.color")
     // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
+    // auto | a locale name ("fr_CH"), and auto | monday … sunday (Settings > General > Language & Region): the formats of dates,
+    // times and numbers, and the first day of the week in the calendars.
+    readonly property string regionFormats: read("region.formats")
+    readonly property string regionFirstDayOfWeek: read("region.firstDayOfWeek")
     readonly property string iconMode: read("icons.mode")
     readonly property string iconTint: read("icons.tint")
     readonly property string folderColor: read("icons.folderColor")

@@ -64,6 +64,8 @@ const DEFAULTS = {
     "menubar.clockShowSeconds": false,
     "accent.color": "multicolor",
     "keyboard.shortcutStyle": "automatic",
+    "region.formats": "auto",
+    "region.firstDayOfWeek": "auto",
     "icons.mode": "default",
     "icons.tint": "accent",
     "icons.folderColor": "theme",
@@ -143,6 +145,8 @@ const ALL_DEFAULTS = {
     "menubar.clockShowSeconds": false,
     "accent.color": "multicolor",
     "keyboard.shortcutStyle": "automatic",
+    "region.formats": "auto",
+    "region.firstDayOfWeek": "auto",
     "icons.mode": "default",
     "icons.tint": "accent",
     "icons.folderColor": "theme",
@@ -218,6 +222,8 @@ const RULES = {
     "menubar.clockShowSeconds": {"type": "boolean"},
     "accent.color": {"type": "enum", "values": ["multicolor", "blue", "purple", "pink", "red", "orange", "yellow", "green", "graphite"]},
     "keyboard.shortcutStyle": {"type": "enum", "values": ["automatic", "mac", "pc"]},
+    "region.formats": {"type": "localeName", "pattern": "^(auto|[a-z]{2,3}(_[A-Z][a-z]{3})?_([A-Z]{2}|[0-9]{3}))$"},
+    "region.firstDayOfWeek": {"type": "enum", "values": ["auto", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
     "icons.mode": {"type": "enum", "values": ["default", "dark", "clear", "tinted"]},
     "icons.tint": {"type": "tint", "pattern": "^(accent|#[0-9a-fA-F]{6})$"},
     "icons.folderColor": {"type": "folderColor", "pattern": "^(theme|accent|#[0-9a-fA-F]{6})$"},
@@ -253,6 +259,8 @@ function validate(path, value) {
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected theme, accent or a #rrggbb colour";
     case "pointerColor":
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected a #rrggbb colour";
+    case "localeName":
+        return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected auto or a locale name such as fr_CH";
     case "wallpaperPath":
         // "" (no path) is valid: the source then reads as the built-in artwork.
         return value === "" || WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";

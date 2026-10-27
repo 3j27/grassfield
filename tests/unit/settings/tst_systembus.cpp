@@ -555,3 +555,211 @@ TEST(SystemBusReason, IsShortOneLineAndPlain)
     EXPECT_LE(reasonOf(QStringLiteral("org.x.Error: ") + QString(500, QLatin1Char('a'))).size(), 160);
     EXPECT_EQ(reasonOf(QString()), QString());
 }
+
+// ---- General (PR #6, ADR-0030): hostname1, timedate1 / timesync1, locale1 on the system bus; the user's services on the session bus.
+
+namespace
+{
+const QString kHost = QStringLiteral("org.freedesktop.hostname1");
+const QString kTime = QStringLiteral("org.freedesktop.timedate1");
+const QString kSync = QStringLiteral("org.freedesktop.timesync1");
+const QString kSystemdName = QStringLiteral("org.freedesktop.systemd1");
+
+// hostname1, timedate1 and timesync1 answering GetAll; every other call succeeds with no value.
+struct GeneralFixture {
+    FakeBus bus;
+    bool timesync = true;
+    GeneralFixture()
+    {
+        bus.handler = [this](const Call &c) -> BusReply {
+            if (c.member == QLatin1String("GetAll") && c.service == kHost)
+                return ok({QVariantMap{{"PrettyHostname", "Chapdel\x01's Laptop"}, {"StaticHostname", "chapdels-laptop"}, {"Hostname", "chapdels-laptop"},
+                                       {"Chassis", "laptop"}, {"HardwareVendor", "LENOVO"}, {"HardwareModel", "ThinkPad X1 Carbon Gen 11"}}});
+            if (c.member == QLatin1String("GetAll") && c.service == kTime)
+                return ok({QVariantMap{{"Timezone", "Europe/Paris"}, {"NTP", true}, {"CanNTP", true}, {"NTPSynchronized", true}, {"LocalRTC", false},
+                                       {"TimeUSec", QVariant::fromValue<qulonglong>(1792832460123456ULL)}}});
+            if (c.member == QLatin1String("GetAll") && c.service == kSync)
+                return timesync ? ok({QVariantMap{{"LinkNTPServers", QStringList{}}, {"SystemNTPServers", QStringList{"time.example.org"}},
+                                                  {"FallbackNTPServers", QStringList{"0.arch.pool.ntp.org", "time.example.org"}}, {"ServerName", "time.example.org"}}})
+                                : err(QStringLiteral("org.freedesktop.DBus.Error.ServiceUnknown: not activatable"));
+            if (c.member == QLatin1String("ListTimezones"))
+                return ok({QStringList{"Europe/Paris", "America/New_York", "../etc/passwd", "UTC"}});
+            if (c.member == QLatin1String("ListUnitFilesByPatterns"))
+                // One argument, the a(ss) array (QVariantList{QVariant(...)}: a braced QVariantList alone would be copied, not wrapped).
+                return ok(QVariantList{QVariant(QVariantList{QVariantList{"/home/u/.config/systemd/user/sync.service", "enabled"},
+                                        QVariantList{"/home/u/.config/systemd/user/backup.service", "disabled"},
+                                        QVariantList{"/home/u/.config/systemd/user/sub/x.service", "enabled"},
+                                        QVariantList{"/usr/lib/systemd/user/pipewire.service", "enabled"},
+                                        QVariantList{"/home/u/.local/share/systemd/user/mine.service", "enabled"}})});
+            return ok();
+        };
+    }
+};
+
+const QStringList kOwn{QStringLiteral("/home/u/.config/systemd/user"), QStringLiteral("/home/u/.local/share/systemd/user")};
+} // namespace
+
+TEST(SystemBusGeneral, HostStateIsHostname1sNamesAndHardware)
+{
+    GeneralFixture f;
+    const StateResult r = hostState(f.bus);
+    ASSERT_TRUE(r.ok);
+    EXPECT_EQ(r.json.value("pretty").toString(), QStringLiteral("Chapdel's Laptop")); // the control character is dropped
+    EXPECT_EQ(r.json.value("static").toString(), QStringLiteral("chapdels-laptop"));
+    EXPECT_EQ(r.json.value("chassis").toString(), QStringLiteral("laptop"));
+    EXPECT_EQ(r.json.value("vendor").toString(), QStringLiteral("LENOVO"));
+    EXPECT_EQ(r.json.value("model").toString(), QStringLiteral("ThinkPad X1 Carbon Gen 11"));
+}
+
+TEST(SystemBusGeneral, RenamingSetsThePrettyThenTheStaticNameInteractively)
+{
+    GeneralFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "host.setName"}, {"name", QStringLiteral("  Chapdel’s ThinkPad X1  ")}}), QString());
+    ASSERT_EQ(f.bus.calls.size(), 2);
+    EXPECT_EQ(f.bus.calls[0].member, QStringLiteral("SetPrettyHostname"));
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{QStringLiteral("Chapdel’s ThinkPad X1"), true}));
+    EXPECT_EQ(f.bus.calls[1].member, QStringLiteral("SetStaticHostname"));
+    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringLiteral("chapdel-s-thinkpad-x1"), true}));
+    // A name with nothing usable for a host name sets the pretty name only.
+    GeneralFixture g;
+    EXPECT_EQ(runAction(g.bus, {{"op", "host.setName"}, {"name", QStringLiteral("☃☃")}}), QString());
+    EXPECT_EQ(g.bus.members(), QStringList{QStringLiteral("hostname1.SetPrettyHostname")});
+}
+
+TEST(SystemBusGeneral, HostNamesFollowHostname1sRules)
+{
+    EXPECT_EQ(hostNameFor(QStringLiteral("Grassfield Reference")), QStringLiteral("grassfield-reference"));
+    EXPECT_EQ(hostNameFor(QStringLiteral("--Été 2026!!--")), QStringLiteral("t-2026"));
+    EXPECT_EQ(hostNameFor(QString(100, QLatin1Char('a'))).size(), 63);
+    EXPECT_EQ(hostNameFor(QString(62, QLatin1Char('a')) + QStringLiteral(" b")), QString(62, QLatin1Char('a')));
+    EXPECT_EQ(hostNameFor(QStringLiteral("!!!")), QString());
+}
+
+TEST(SystemBusGeneral, TimeStateReadsTimedate1AndTheServers)
+{
+    GeneralFixture f;
+    const StateResult r = timeState(f.bus);
+    ASSERT_TRUE(r.ok);
+    EXPECT_EQ(r.json.value("zone").toString(), QStringLiteral("Europe/Paris"));
+    EXPECT_TRUE(r.json.value("ntp").toBool());
+    EXPECT_TRUE(r.json.value("synced").toBool());
+    EXPECT_EQ(r.json.value("usec").toString(), QStringLiteral("1792832460123456"));
+    EXPECT_EQ(r.json.value("server").toString(), QStringLiteral("time.example.org"));
+    EXPECT_EQ(r.json.value("servers").toArray().size(), 2); // without duplicates
+    // Without timesyncd the time still reads; the source is unknown.
+    GeneralFixture g;
+    g.timesync = false;
+    const StateResult s = timeState(g.bus);
+    ASSERT_TRUE(s.ok);
+    EXPECT_EQ(s.json.value("servers").toArray().size(), 0);
+    // The zone list keeps only zone names.
+    const StateResult z = timeZones(f.bus);
+    ASSERT_TRUE(z.ok);
+    EXPECT_EQ(z.json.value("zones").toArray().size(), 3);
+}
+
+TEST(SystemBusGeneral, TimeActionsAreInteractiveTimedate1Calls)
+{
+    GeneralFixture f;
+    EXPECT_EQ(runAction(f.bus, {{"op", "time.ntp"}, {"on", false}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "time.zone"}, {"zone", "America/New_York"}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "time.set"}, {"usec", "1792832460000000"}}), QString());
+    ASSERT_EQ(f.bus.calls.size(), 3);
+    EXPECT_EQ(f.bus.calls[0].member, QStringLiteral("SetNTP"));
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{false, true}));
+    EXPECT_EQ(f.bus.calls[1].member, QStringLiteral("SetTimezone"));
+    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringLiteral("America/New_York"), true}));
+    EXPECT_EQ(f.bus.calls[2].member, QStringLiteral("SetTime"));
+    EXPECT_EQ(f.bus.calls[2].args, (QVariantList{QVariant::fromValue<qint64>(1792832460000000LL), false, true}));
+    for (const Call &c : f.bus.calls)
+        EXPECT_EQ(c.service, kTime);
+    EXPECT_TRUE(privilegedAction({{"op", "time.zone"}}));
+    EXPECT_TRUE(privilegedAction({{"op", "host.setName"}}));
+    EXPECT_FALSE(privilegedAction({{"op", "user.enable"}}));
+    EXPECT_TRUE(sessionAction({{"op", "user.enable"}}));
+    EXPECT_FALSE(sessionAction({{"op", "time.ntp"}}));
+}
+
+TEST(SystemBusGeneral, BadValuesNeverReachTheBus)
+{
+    GeneralFixture f;
+    const QList<QVariantMap> bad{
+        {{"op", "host.setName"}, {"name", QString()}},
+        {{"op", "host.setName"}, {"name", QStringLiteral("   ")}},
+        {{"op", "host.setName"}, {"name", QString(65, QLatin1Char('x'))}},
+        {{"op", "host.setName"}, {"name", QStringLiteral("two\nlines")}},
+        {{"op", "host.setName"}, {"name", 42}},
+        {{"op", "time.ntp"}, {"on", "true"}},
+        {{"op", "time.zone"}, {"zone", "../../etc/passwd"}},
+        {{"op", "time.zone"}, {"zone", "Europe/Paris\n"}},
+        {{"op", "time.zone"}, {"zone", QString(65, QLatin1Char('a'))}},
+        {{"op", "time.set"}, {"usec", "123"}},
+        {{"op", "time.set"}, {"usec", "99999999999999999"}},
+        {{"op", "time.set"}, {"usec", QVariant::fromValue<qlonglong>(1792832460000000LL)}},
+        {{"op", "time.set"}, {"usec", "1792832460000000; reboot"}},
+        {{"op", "user.enable"}, {"unit", "../x.service"}, {"on", true}},
+        {{"op", "user.enable"}, {"unit", "x.timer"}, {"on", true}},
+        {{"op", "user.enable"}, {"unit", "x.service"}, {"on", 1}},
+        {{"op", "user.enable"}, {"unit", "x.service\n"}, {"on", true}},
+        {{"op", "time.set"}, {"usec", "1792832460000000\n"}},
+    };
+    for (const QVariantMap &op : bad) {
+        EXPECT_FALSE(validAction(op)) << op.value("op").toString().toStdString();
+        EXPECT_FALSE(runAction(f.bus, op).isEmpty());
+    }
+    EXPECT_TRUE(f.bus.calls.isEmpty());
+    // The older shapes are anchored as well: a final newline is not part of a MAC, an SSID or a UUID.
+    EXPECT_FALSE(validAction({{"op", "bt.connect"}, {"mac", "AA:BB:CC:DD:EE:FF\n"}, {"connect", true}}));
+    EXPECT_FALSE(validAction({{"op", "wifi.connectOpen"}, {"hex", "43616665\n"}}));
+    EXPECT_FALSE(validAction({{"op", "wifi.connectKnown"}, {"uuid", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0\n"}}));
+    EXPECT_TRUE(validAction({{"op", "bt.connect"}, {"mac", "AA:BB:CC:DD:EE:FF"}, {"connect", true}}));
+}
+
+TEST(SystemBusGeneral, OnlyTheUsersOwnServicesAreListedAndSwitched)
+{
+    GeneralFixture f;
+    const StateResult r = userUnits(f.bus, kOwn);
+    ASSERT_TRUE(r.ok);
+    QStringList units;
+    for (const QJsonValue &u : r.json.value("units").toArray())
+        units << u.toObject().value("unit").toString();
+    EXPECT_EQ(units, (QStringList{"sync.service", "backup.service", "mine.service"})); // not a package's, not a sub-folder's
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "user.enable"}, {"unit", "backup.service"}, {"on", true}}, kOwn), QString());
+    EXPECT_EQ(f.bus.members(), (QStringList{"Manager.ListUnitFilesByPatterns", "Manager.EnableUnitFiles", "Manager.Reload"}));
+    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringList{"backup.service"}, false, false}));
+    f.bus.calls.clear();
+    EXPECT_EQ(runAction(f.bus, {{"op", "user.enable"}, {"unit", "sync.service"}, {"on", false}}, kOwn), QString());
+    EXPECT_EQ(f.bus.calls[1].member, QStringLiteral("DisableUnitFiles"));
+    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringList{"sync.service"}, false}));
+    // A unit a package ships is never switched, nor one that is not there.
+    f.bus.calls.clear();
+    EXPECT_FALSE(runAction(f.bus, {{"op", "user.enable"}, {"unit", "pipewire.service"}, {"on", false}}, kOwn).isEmpty());
+    EXPECT_FALSE(runAction(f.bus, {{"op", "user.enable"}, {"unit", "x.service"}, {"on", false}}, kOwn).isEmpty());
+    EXPECT_EQ(f.bus.members(), (QStringList{"Manager.ListUnitFilesByPatterns", "Manager.ListUnitFilesByPatterns"}));
+}
+
+TEST(SystemBusGeneral, ADevSessionReadsButNeverChangesTheSystem)
+{
+    GeneralFixture f;
+    GuardedCaller dev(f.bus, true);
+    EXPECT_TRUE(hostState(dev).ok);
+    EXPECT_TRUE(timeState(dev).ok);
+    EXPECT_TRUE(timeZones(dev).ok);
+    EXPECT_TRUE(userUnits(dev, kOwn).ok);
+    for (const QVariantMap &op : QList<QVariantMap>{{{"op", "host.setName"}, {"name", "x"}},
+                                                     {{"op", "time.ntp"}, {"on", false}},
+                                                     {{"op", "time.zone"}, {"zone", "UTC"}},
+                                                     {{"op", "time.set"}, {"usec", "1792832460000000"}},
+                                                     {{"op", "user.enable"}, {"unit", "sync.service"}, {"on", false}}})
+        EXPECT_FALSE(runAction(dev, op, kOwn).isEmpty()) << op.value("op").toString().toStdString();
+    for (const Call &c : f.bus.calls)
+        EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args)) << c.member.toStdString();
+    const QString props = QStringLiteral("org.freedesktop.DBus.Properties");
+    EXPECT_FALSE(isReadOnlyCall(kHost, kHost, QStringLiteral("SetStaticHostname"), {}));
+    EXPECT_FALSE(isReadOnlyCall(kTime, kTime, QStringLiteral("SetTimezone"), {}));
+    EXPECT_FALSE(isReadOnlyCall(kTime, props, QStringLiteral("Set"), {}));
+    EXPECT_FALSE(isReadOnlyCall(kSystemdName, QStringLiteral("org.freedesktop.systemd1.Manager"), QStringLiteral("EnableUnitFiles"), {}));
+    EXPECT_FALSE(isReadOnlyCall(QStringLiteral("org.freedesktop.locale1"), QStringLiteral("org.freedesktop.locale1"), QStringLiteral("SetLocale"), {}));
+    EXPECT_TRUE(isReadOnlyCall(kTime, kTime, QStringLiteral("ListTimezones"), {}));
+}

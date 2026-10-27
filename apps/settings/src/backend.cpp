@@ -1,7 +1,11 @@
 #include "backend.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include "runmode.h"
 
+#include <QCollator>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -14,6 +18,10 @@
 #include <QSaveFile>
 #include <QScreen>
 #include <QStandardPaths>
+#include <QStorageInfo>
+#include <QTimeZone>
+#include <QDateTime>
+#include <QLocale>
 #include <QTimer>
 
 #include "busjobs.h"
@@ -31,6 +39,7 @@ constexpr int kRunTimeoutMs = 3000;
 constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
+constexpr int kPrivilegedJobMs = 250000; // two calls that each wait for the polkit dialog (kPrivilegedMs, 120 s), ADR-0030
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 void forceCLocale(QProcess &p)
@@ -119,6 +128,9 @@ QString Backend::wallpaperRecentFile() const
 struct Backend::Bus {
     grassfield::settings::SystemBusConnection connection;
     grassfield::settings::BusJobs jobs{[this] { return connection.caller(); }};
+    // The session bus: the user's own service manager (Login Items).
+    grassfield::settings::SystemBusConnection sessionConnection{QDBusConnection::SessionBus, QStringLiteral("gf-settings-session-bus")}; // i18n-ignore: a connection name
+    grassfield::settings::BusJobs sessionJobs{[this] { return sessionConnection.caller(); }};
 };
 
 Backend::~Backend()
@@ -136,9 +148,16 @@ Backend::~Backend()
     m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
 }
 
-void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
+void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs, Track track)
 {
     auto *p = new QProcess(this);
+    // Once, whichever way the process ends: the query or action it held is over.
+    const auto settle = [this, tag, track] {
+        if (track == Track::Query)
+            m_queries.end(tag);
+        else if (track == Track::Action)
+            endAction(tag);
+    };
     forceCLocale(*p);
     auto *timer = new QTimer(p);
     timer->setSingleShot(true);
@@ -146,14 +165,16 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
         p->setProperty("timedOut", true);
         p->kill();
     });
-    connect(p, &QProcess::errorOccurred, this, [this, p, tag](QProcess::ProcessError e) {
+    connect(p, &QProcess::errorOccurred, this, [this, p, tag, settle](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
+            settle();
             emit failed(tag, p->errorString().left(kMaxReason));
             emit finished(tag, false, QString());
             p->deleteLater();
         }
     });
-    connect(p, &QProcess::finished, this, [this, p, tag](int code, QProcess::ExitStatus status) {
+    connect(p, &QProcess::finished, this, [this, p, tag, settle](int code, QProcess::ExitStatus status) {
+        settle();
         const bool ok = status == QProcess::NormalExit && code == 0;
         const QByteArray out = p->readAllStandardOutput();
         if (!ok)
@@ -172,7 +193,7 @@ bool Backend::wallpaperAllowed(const QStringList &argv) const
     return grassfield::settings::isWallpaperQuery(argv, {m_wallpaperTool, m_wallpaperCache, m_devRoot});
 }
 
-void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
+void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs, bool shared)
 {
     const bool helper = !argv.isEmpty() && grassfield::settings::namesWallpaperTool(argv.first());
     if (argv.isEmpty() || (helper ? !wallpaperAllowed(argv) : (m_dev && !grassfield::settings::isReadOnlyQuery(argv)))) {
@@ -181,7 +202,33 @@ void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
         emit finished(tag, false, QString());
         return;
     }
-    start(argv, tag, timeoutMs);
+    // Only by opt-in: a caller that counts its requests needs one answer each (counter-review of PR #6: a thumbnail asked for
+    // again while in flight left WallpaperPage's count one too high, and after two such requests no thumbnail loaded).
+    if (!shared) {
+        start(argv, tag, timeoutMs, Track::None);
+        return;
+    }
+    // A page shown again asks for what still runs (Storage's counts, up to two minutes each): it gets that answer.
+    const QString key = argv.join(QChar(0x1f));
+    if (m_queries.runs(tag, key))
+        return;
+    start(argv, tag, timeoutMs, m_queries.begin(tag, key) ? Track::Query : Track::None);
+}
+
+bool Backend::beginAction(const QString &tag, const QString &what)
+{
+    if (!m_actions.begin(tag, what)) {
+        qWarning().noquote() << "refused" << what << "while the previous action of" << tag << "still runs";
+        return false;
+    }
+    emit pendingActionsChanged();
+    return true;
+}
+
+void Backend::endAction(const QString &tag)
+{
+    m_actions.end(tag);
+    emit pendingActionsChanged();
 }
 
 bool Backend::act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs)
@@ -195,22 +242,29 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         qWarning().noquote() << "refused an action with an unknown program:" << what;
         return false;
     }
-    start(argv, tag, timeoutMs);
+    // One at a time per tag when it may wait for a password (a page shown again cannot start a second prompt).
+    const bool latch = grassfield::settings::asksForPassword(argv);
+    if (latch && !beginAction(tag, what))
+        return false;
+    start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs), latch ? Track::Action : Track::None);
     return true;
 }
 
 // One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
 // nothing a job holds outlives the Backend: busjobs.h). `job` returns "" on success, else the reason; its second argument
 // receives the output (JSON) of a query.
-void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs)
+void Backend::runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session,
+                     bool action)
 {
     const bool dev = m_dev;
-    m_bus->jobs.start(
+    (session ? m_bus->sessionJobs : m_bus->jobs).start(
         [dev, job = std::move(job)](grassfield::settings::BusCaller &real, QString *output) {
             grassfield::settings::GuardedCaller guarded(real, dev);
             return job(guarded, output);
         },
-        [this, tag](const QString &reason, const QString &output) {
+        [this, tag, action](const QString &reason, const QString &output) {
+            if (action)
+                endAction(tag);
             if (!reason.isEmpty()) {
                 emit failed(tag, reason);
                 emit finished(tag, false, QString());
@@ -224,19 +278,36 @@ void Backend::runBus(const QString &tag, std::function<QString(grassfield::setti
 void Backend::busQuery(const QString &what, const QString &tag)
 {
     using namespace grassfield::settings;
-    if (what != QLatin1String("wifi.state") && what != QLatin1String("bt.state")) {
+    static const QStringList known{QStringLiteral("wifi.state"), QStringLiteral("bt.state"), QStringLiteral("host.state"), QStringLiteral("time.state"),
+                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units")};
+    if (!known.contains(what)) {
         qWarning().noquote() << "refused a bus query that is not known:" << what;
         emit finished(tag, false, QString());
         return;
     }
-    const bool wifi = what == QLatin1String("wifi.state");
-    runBus(tag, [wifi](BusCaller &bus, QString *output) {
-        const StateResult r = wifi ? wifiState(bus) : bluetoothState(bus);
+    const QStringList own = userUnitDirs();
+    runBus(tag, [what, own](BusCaller &bus, QString *output) {
+        const StateResult r = what == QLatin1String("wifi.state") ? wifiState(bus)
+            : what == QLatin1String("bt.state")                  ? bluetoothState(bus)
+            : what == QLatin1String("host.state")                ? hostState(bus)
+            : what == QLatin1String("time.state")                ? timeState(bus)
+            : what == QLatin1String("time.zones")                ? timeZones(bus)
+            : what == QLatin1String("locale.state")              ? localeState(bus)
+                                                                 : userUnits(bus, own);
         if (!r.ok)
             return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
         *output = QString::fromUtf8(QJsonDocument(r.json).toJson(QJsonDocument::Compact));
         return QString();
-    }, kQueryJobMs);
+    }, kQueryJobMs, what == QLatin1String("user.units"));
+}
+
+QStringList Backend::userUnitDirs() const
+{
+    // The user's own unit directories (systemd.unit(5), the user manager's search path): config, then data.
+    using grassfield::settings::xdgHome;
+    const QString config = xdgHome(qEnvironmentVariable("XDG_CONFIG_HOME"), QDir::homePath() + QStringLiteral("/.config"));
+    const QString data = xdgHome(qEnvironmentVariable("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
+    return {QDir::cleanPath(config + QStringLiteral("/systemd/user")), QDir::cleanPath(data + QStringLiteral("/systemd/user"))};
 }
 
 bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &tag)
@@ -251,7 +322,13 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
         qWarning().noquote() << "refused a bus action that is not well formed:" << what;
         return false;
     }
-    runBus(tag, [op](BusCaller &bus, QString *) { return runAction(bus, op); }, kActionJobMs);
+    // A polkit action runs one at a time per tag: a page shown again while the dialog is up cannot send a second one, and
+    // blocked calls cannot fill the jobs' kMaxInFlight (integrator review of PR #6).
+    const bool latch = privilegedAction(op);
+    if (latch && !beginAction(tag, what))
+        return false;
+    const QStringList own = userUnitDirs();
+    runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, latch ? kPrivilegedJobMs : kActionJobMs, sessionAction(op), latch);
     return true;
 }
 
@@ -274,9 +351,172 @@ QVariantList Backend::screens() const
                                {"pixelWidth", qRound(g.width() * dpr)},
                                {"pixelHeight", qRound(g.height() * dpr)},
                                {"refreshRate", s->refreshRate()},
+                               // The panel's size in millimetres as the output reports it (About: the diagonal in inches).
+                               {"physicalWidth", s->physicalSize().width()},
+                               {"physicalHeight", s->physicalSize().height()},
                                {"primary", s == primary}});
     }
     return out;
+}
+
+QVariantList Backend::volumes() const
+{
+    // Local volumes only (systemguard.h isLocalVolume): this runs on the GUI thread, and the statfs of a network or FUSE mount
+    // whose server or daemon does not answer would block the window. The mount table is /proc/self/mounts (reading it stats
+    // nothing); the volume of the home is found in it, not by a statfs of the home. The start-up volume first, then the others
+    // by mount point; a btrfs subvolume mounted twice is one volume.
+    using namespace grassfield::settings;
+    QFile table(QStringLiteral("/proc/self/mounts"));
+    QList<Mount> mounts = table.open(QIODevice::ReadOnly) ? parseMounts(table.readAll()) : QList<Mount>{};
+    const QString homeMount = mountPointOf(mounts, QDir::homePath());
+    QVariantList out;
+    QStringList seen;
+    auto entry = [&homeMount](const QStorageInfo &v) {
+        return QVariantMap{{"root", v.rootPath()},
+                           {"name", v.name()},
+                           {"device", QString::fromUtf8(v.device())},
+                           {"type", QString::fromUtf8(v.fileSystemType())},
+                           {"total", double(v.bytesTotal())},
+                           {"available", double(v.bytesAvailable())},
+                           {"free", double(v.bytesFree())},
+                           {"readOnly", v.isReadOnly()},
+                           {"isRoot", v.isRoot()},
+                           {"holdsHome", v.rootPath() == homeMount}};
+    };
+    const QStorageInfo root = QStorageInfo::root();
+    if (root.isValid() && root.isReady()) {
+        out.append(entry(root));
+        seen << QString::fromUtf8(root.device());
+    }
+    std::sort(mounts.begin(), mounts.end(), [](const Mount &a, const Mount &b) { return a.mountPoint < b.mountPoint; });
+    for (const Mount &m : mounts) {
+        if (!isLocalVolume(m.device, m.type) || seen.contains(m.device) || m.mountPoint == QLatin1String("/") || m.mountPoint.startsWith(QLatin1String("/boot")))
+            continue;
+        const QStorageInfo v(m.mountPoint);
+        if (!v.isValid() || !v.isReady() || v.bytesTotal() <= 0)
+            continue;
+        seen << m.device;
+        out.append(entry(v));
+    }
+    return out;
+}
+
+QVariantMap Backend::zoneInfo(const QString &zone) const
+{
+    // Names of a time zone in the UI language (Date & Time: "Central European Summer Time", "France", "UTC+02:00"); pure, no
+    // privilege: Qt's own time zone data.
+    const QTimeZone tz(zone.toUtf8());
+    if (zone.isEmpty() || !tz.isValid())
+        return {};
+    const QDateTime now = QDateTime::currentDateTime();
+    const QLocale locale;
+    const QLocale::Territory territory = tz.territory();
+    return {{"longName", tz.displayName(now, QTimeZone::LongName, locale)},
+            {"shortName", tz.displayName(now, QTimeZone::ShortName, locale)},
+            {"offset", tz.displayName(now, QTimeZone::OffsetName, locale)},
+            {"offsetSeconds", tz.offsetFromUtc(now)},
+            {"territory", territory == QLocale::AnyTerritory ? QString() : QLocale::territoryToString(territory)}};
+}
+
+QVariantList Backend::regionLocales() const
+{
+    // The default locale is the UI language (translationloader.h). A region's name carries the script only when it is not
+    // the one the language and territory imply ("sr_Latn_RS", but "fr_CH").
+    const QLocale ui;
+    QList<QLocale> found;
+    QStringList names;
+    for (const QLocale &l : QLocale::matchingLocales(ui.language(), QLocale::AnyScript, QLocale::AnyTerritory)) {
+        if (l.territory() == QLocale::AnyTerritory)
+            continue;
+        const QString base = QLocale::languageToCode(l.language()) + QLatin1Char('_') + QLocale::territoryToCode(l.territory());
+        const QString name = QLocale(base).script() == l.script() ? base
+            : QLocale::languageToCode(l.language()) + QLatin1Char('_') + QLocale::scriptToCode(l.script()) + QLatin1Char('_') + QLocale::territoryToCode(l.territory());
+        if (names.contains(name))
+            continue;
+        names << name;
+        found << l;
+    }
+    QCollator collator(ui);
+    QList<int> order(found.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](int a, int b) { return collator.compare(found[a].nativeTerritoryName(), found[b].nativeTerritoryName()) < 0; });
+    QVariantList out;
+    for (int i : order)
+        out << QVariantMap{{"name", names[i]}, {"territory", found[i].nativeTerritoryName()}};
+    return out;
+}
+
+bool Backend::omarchyLanguage() const
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("omarchy-language")).isEmpty();
+}
+
+QString Backend::autostartDir() const
+{
+    const QString config = grassfield::settings::xdgHome(qEnvironmentVariable("XDG_CONFIG_HOME"), QDir::homePath() + QStringLiteral("/.config"));
+    return QDir::cleanPath(config + QStringLiteral("/autostart"));
+}
+
+QStringList Backend::systemAutostartDirs() const
+{
+    // $XDG_CONFIG_DIRS (default /etc/xdg), each with autostart/ (the XDG Autostart specification).
+    QStringList out;
+    for (const QString &d : grassfield::settings::xdgDirs(qEnvironmentVariable("XDG_CONFIG_DIRS"), QStringLiteral("/etc/xdg")))
+        out << QDir::cleanPath(d + QStringLiteral("/autostart"));
+    return out;
+}
+
+QStringList Backend::applicationDirs() const
+{
+    // The XDG Base Directory folders of the desktop entries: $XDG_DATA_HOME (default ~/.local/share) first, then $XDG_DATA_DIRS
+    // (default /usr/local/share:/usr/share), each with applications/.
+    using namespace grassfield::settings;
+    const QString home = xdgHome(qEnvironmentVariable("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
+    QStringList out;
+    for (const QString &d : QStringList{home} + xdgDirs(qEnvironmentVariable("XDG_DATA_DIRS"), QStringLiteral("/usr/local/share:/usr/share"))) {
+        const QString dir = QDir::cleanPath(d + QStringLiteral("/applications"));
+        if (!out.contains(dir))
+            out << dir;
+    }
+    return out;
+}
+
+QStringList Backend::currentDesktops() const
+{
+    return qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(QLatin1Char(':'), Qt::SkipEmptyParts);
+}
+
+QStringList Backend::desktopEntries(const QString &dir) const
+{
+    // The .desktop files of one folder (no recursion, regular files only), sorted.
+    QDir d(dir);
+    if (!dir.startsWith(QLatin1Char('/')) || !d.exists())
+        return {};
+    return d.entryList({QStringLiteral("*.desktop")}, QDir::Files | QDir::Readable, QDir::Name);
+}
+
+bool Backend::autostartWriteAllowed(const QString &path) const
+{
+    // systemguard.h: a plain <name>.desktop of the user's autostart folder, never a symlink, under <worktree>/.dev in a dev
+    // session (the isolated XDG_CONFIG_HOME of isolated.sh).
+    return grassfield::settings::isAutostartWrite(path, autostartDir(), m_devRoot, m_dev);
+}
+
+QString Backend::writeAutostart(const QString &path, const QString &text) const
+{
+    if (!autostartWriteAllowed(path))
+        return QStringLiteral("refused"); // i18n-ignore: a reason the page maps to its own sentence
+    return writeText(path, text);
+}
+
+QString Backend::removeAutostart(const QString &path) const
+{
+    if (!autostartWriteAllowed(path))
+        return QStringLiteral("refused"); // i18n-ignore: a reason the page maps to its own sentence
+    QFile f(path);
+    if (!f.exists())
+        return QString();
+    return f.remove() ? QString() : f.errorString();
 }
 
 QString Backend::qtVersion() const

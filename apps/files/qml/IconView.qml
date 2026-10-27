@@ -180,7 +180,7 @@ FocusScope {
             Accessible.name: DisplayName.text(cell.name)
             Accessible.selectable: true
             Accessible.selected: cell.selected
-            Accessible.onPressAction: root.tab.activate(cell.index, root.model)
+            Accessible.onPressAction: root.tab.activate(cell.index, root.model, Qt.NoModifier)
 
             Component.onCompleted: if (cell.canPreview) root.model.requestPreview(cell.index)
             onCanPreviewChanged: if (cell.canPreview) root.model.requestPreview(cell.index)
@@ -307,7 +307,7 @@ FocusScope {
                 }
                 onDoubleClicked: event => {
                     if (event.button === Qt.LeftButton)
-                        root.tab.activate(cell.index, root.model);
+                        root.tab.activate(cell.index, root.model, event.modifiers);
                 }
                 drag.onActiveChanged: {
                     if (drag.active) {

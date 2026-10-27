@@ -7,6 +7,7 @@
 #include "backend.h"
 #include "busjobs.h"
 #include "globalmenu.h"
+#include "iconprovider.h"
 #include "windowchrome.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
@@ -54,6 +55,8 @@ int main(int argc, char *argv[])
         if (arg.startsWith(QLatin1String("--section=")))
             startSection = arg.mid(10);
     }
+    // Login Items: the applications' icons (the engine owns the provider).
+    engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
     engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)},
                                  {"globalMenu", grassfield::apps::globalMenuAvailable()},
                                  {"startSection", startSection}});

@@ -3,7 +3,7 @@ import QtTest
 import "../../apps/files/qml/Nav.js" as Nav
 
 // grassfield-files pure navigation logic: grid and list keyboard moves, history, type-to-select,
-// header sort clicks, rubber band hit testing, column view prefix.
+// header sort clicks, rubber band hit testing, column view prefix, per-folder view and arrangement (F-3).
 TestCase {
     name: "FilesNav"
 
@@ -141,5 +141,34 @@ TestCase {
         compare(Nav.galleryInitialRow(3, 5), 3);
         compare(Nav.galleryInitialRow(7, 5), 0);
         compare(Nav.galleryInitialRow(-1, 0), -1);
+    }
+
+    // F-3: a folder's own view wins, else the view the tab already shows, else the default; column view sticks.
+    function test_viewForAFolder() {
+        compare(Nav.viewFor("", "list", "icons"), "list", "a new tab opens a folder in its own view");
+        compare(Nav.viewFor("", undefined, "gallery"), "gallery", "a new tab on a folder without one: the default");
+        compare(Nav.viewFor("", "bogus", "bogus"), "icons", "invalid values fall back to icons");
+        compare(Nav.viewFor("icons", "list", "icons"), "list", "browsing into a folder with its own view");
+        compare(Nav.viewFor("list", undefined, "icons"), "list", "browsing into a folder without one keeps the tab's view");
+        compare(Nav.viewFor("columns", "list", "icons"), "columns", "column view sticks while browsing");
+        compare(Nav.viewFor("gallery", "columns", "icons"), "columns", "a folder kept in columns opens in columns");
+    }
+
+    function test_sortForAFolder() {
+        const descendingOf = key => key === 2 || key === 3;
+        compare(Nav.sortFor({}, 0, false, descendingOf), {key: 0, descending: false}, "no entry: the defaults");
+        compare(Nav.sortFor({sortKey: 2}, 0, false, descendingOf), {key: 2, descending: true}, "a key alone takes its default order");
+        compare(Nav.sortFor({sortKey: 3, sortDescending: false}, 0, false, descendingOf), {key: 3, descending: false});
+        compare(Nav.sortFor({sortDescending: true}, 1, false, descendingOf), {key: 1, descending: true}, "an order alone");
+        compare(Nav.sortFor(null, 1, true, descendingOf), {key: 1, descending: true});
+    }
+
+    // Column view (ColumnView.qml): Cmd-double-click on a folder opens it in a new tab like the other views; a plain
+    // double-click on a folder does nothing more than its click (the next column); a file opens either way.
+    function test_columnDoubleClick() {
+        compare(Nav.columnDoubleClickOpens(true, true), true, "Cmd-double-click on a folder: a new tab");
+        compare(Nav.columnDoubleClickOpens(true, false), false, "a plain double-click on a folder: the column only");
+        compare(Nav.columnDoubleClickOpens(false, false), true, "a file opens");
+        compare(Nav.columnDoubleClickOpens(false, true), true, "a file opens with Cmd too");
     }
 }
