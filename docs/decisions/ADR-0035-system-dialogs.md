@@ -217,10 +217,10 @@ patching any upstream package (D1).
   interface of its own; hardened user units (`ConditionEnvironment=GRASSFIELD_SESSION=1`, `Type=dbus`, `NoNewPrivileges`,
   `ProtectSystem=strict`, `RestrictSUIDSGID`, `LockPersonality`; for the panels the home stays writable because the Save
   panel's New Folder and KIO's caches write there, and the network stays open for KIO's network places; the settings backend
-  gets `ProtectHome=read-only` except its settings file, `PrivateNetwork=yes`); resource budget: settings backend ≤ 15 MB RSS,
-  idle CPU 0; panels ≤ 80 MB while a panel is open, nothing when idle (exited); security model: both run as the user, return
-  only what the user picked or the user's own settings, never open or run a file (the calling app reads or writes the
-  returned path), and log no file name.
+  gets `ProtectHome=read-only` except its settings file, `PrivateNetwork=yes`); resource budget: settings backend ≤ 15 MB RSS
+  (restated in step 2b: ≤ 4 MB private, ≤ 20 MB resident, decision 2b-11), idle CPU 0; panels ≤ 80 MB while a panel is open,
+  nothing when idle (exited); security model: both run as the user, return only what the user picked or the user's own
+  settings, never open or run a file (the calling app reads or writes the returned path), and log no file name.
 - Cost: large (the biggest step): a new binary, a library split of Files, the panel QML, tests with a fake frontend on a
   private bus. Risk: medium (Qt Quick + KIO startup time: the first panel must open in ≤ 300 ms warm; Wayland parent import).
 
@@ -320,13 +320,16 @@ patching any upstream package (D1).
   options vary widely; the sheet shows only the options CUPS reports and the job goes to CUPS unchanged otherwise.
 
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
-Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland **only** from the portal
-(`gdk/wayland/gdksettings-wayland.c:443-540`); libadwaita 1.10 reads `color-scheme`, `accent-color` (snapped to its nine
-accents), `contrast` and `reduced-motion` from the portal (`src/adw-settings-impl-portal.c:252-370`); Qt 6.11's `gtk3` theme
-reads the portal's `color-scheme` and `contrast` but takes its palette from the in-process GTK 3 theme
-(`qgtk3storage.cpp:362-380, 595-640`); Chromium 155/156, Electron 43 and Firefox 158 read `color-scheme` and the RGB
-`accent-color` from the portal; LibreOffice and Flutter read `color-scheme`. GTK 3 reads `gtk-theme` from dconf, or from the
-portal's `org.gnome.*` keys when `GTK_USE_PORTAL=1` (`gtk 3.24.52 gdk/gdk.c:479-496`,
+Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal
+(`gdk/wayland/gdksettings-wayland.c:443-540`) **only when it runs in a sandbox or `GDK_DEBUG` contains `portals`**; a plain
+GTK 4 app outside a sandbox reads GSettings, i.e. the user's dconf (corrected in step 2b: step 0 read only the portal path;
+measured with GTK 4.24.1 on a headless Weston, scenario 7 of `tests/integration/portal_settings.sh`: without the flag the app
+keeps `Adwaita`, with it it takes the portal's theme and colour scheme live; decision 2b-1); libadwaita 1.10 reads
+`color-scheme`, `accent-color` (snapped to its nine accents), `contrast` and `reduced-motion` from the portal
+(`src/adw-settings-impl-portal.c:252-370`); Qt 6.11's `gtk3` theme reads the portal's `color-scheme` and `contrast` but takes
+its palette from the in-process GTK 3 theme (`qgtk3storage.cpp:362-380, 595-640`); Chromium 155/156, Electron 43 and Firefox
+158 read `color-scheme` and the RGB `accent-color` from the portal; LibreOffice and Flutter read `color-scheme`. GTK 3 reads
+`gtk-theme` from dconf, or from the portal's `org.gnome.*` keys when `GTK_USE_PORTAL=1` (`gtk 3.24.52 gdk/gdk.c:479-496`,
 `gdk/wayland/gdkscreen-wayland.c:714-804`, live through `SettingChanged`). x-d-p-gtk 1.15.3 publishes `color-scheme` and
 `contrast` only, from the user's dconf (Omarchy's `prefer-dark`/`Adwaita-dark`), and no `accent-color`. The portal merges
 Settings backends and the first listed wins per key (`xdg-desktop-portal src/settings.c:129-160`).
@@ -340,10 +343,11 @@ Decision:
     `config/schema/grassfield.schema.json` defines it), `contrast` (Increase Contrast),
     `reduced-motion` (Reduce Motion);
   - `org.gnome.desktop.interface`: `gtk-theme` (the Grassfield GTK theme for the appearance and the accent, owner decision
-    Q7: `Grassfield-<accent>` or `Grassfield-<accent>-dark`, CSS-only themes generated at build time from `ui/tokens/tokens.json`
-    that import GTK's built-in Adwaita/Default stylesheet and override only the accent, the selection colours and the radii;
-    MIT, no copy of Adwaita), `color-scheme`, `enable-animations` (not Reduce Motion); every other key falls through to
-    x-d-p-gtk (fonts and icons already come from the session dconf profile, ADR-0003 and ADR-0017).
+    Q7: `Grassfield-<accent>` or `Grassfield-<accent>-dark`, with `-hc` before `-dark` under Increase Contrast (decision
+    2b-2), CSS-only themes generated at build time from `ui/tokens/tokens.json` that import GTK's built-in Adwaita/Default
+    stylesheet (HighContrast/Default-hc with `-hc`) and override only the accent and the selection colours (the radii stay
+    GTK's, decision 2b-7); MIT, no copy of Adwaita), `color-scheme`, `enable-animations` (not Reduce Motion); every other key
+    falls through to x-d-p-gtk (fonts and icons already come from the session dconf profile, ADR-0003 and ADR-0017).
   The backend has no window and stays running for the session (the frontend listens to its `SettingChanged`); it is started
   with the session, before the shell, and its unit has `Restart=on-failure` (`RestartSec=1`; counter-review of PR #13: without
   it, live appearance changes stopped after a crash until the next read). The frontend's proxy follows the bus name to the new
@@ -356,6 +360,9 @@ Decision:
   palettes follow), LibreOffice's colours, udiskie and gcr-prompter while they remain. x-d-p-gtk unsets the variable for
   itself (`src/xdg-desktop-portal-gtk.c:231`), so it keeps reading dconf: its remaining dialogs (print, account) follow the
   user's GTK theme, not the Grassfield appearance (known limitation).
+- **`GDK_DEBUG=portals`** in the Grassfield session (`env-grassfield`, added to the flags the user already has; step 2b,
+  decision 2b-1): plain GTK 4 apps outside a sandbox then read their settings from the portal too (for files, print and
+  open-with GTK 4 already uses the portal by default, inventory § T).
 - **Not done:** `GTK_THEME` session-wide (it disables libadwaita's stylesheet, `adw-style-manager.c:454-470`, and freezes the
   theme); `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (Qt apps would lose the GTK palette, fonts and icons for Fusion, "Sans Serif
   9" and hicolor on Hyprland, `qgenericunixtheme.cpp:69-72, 117-121`); writing the user's dconf.
@@ -370,6 +377,164 @@ Decision:
   frontend's D-Bus timeout): the backend answers from memory only, never blocks, has no GUI (D-4's start-up loop), and is
   covered by a start-time test; with the backend absent the frontend answers from x-d-p-gtk alone. On the owner's GTK 4.22
   (inventory § Method), plain GTK 4 apps do not read `accent-color` (GTK 4.24); libadwaita apps do.
+
+**Delivered in step 2b.** `apps/portal-settings` (C++17, Qt Core and Qt D-Bus only; no window, no new dependency), installed
+as `/usr/lib/grassfield/grassfield-portal-settings`, with `packaging/systemd/grassfield-portal-settings.service`
+(`Type=dbus`, `ConditionEnvironment=GRASSFIELD_SESSION=1`, `TimeoutStartSec=5`, `Restart=on-failure`, `RestartSec=1`, at most
+5 starts a minute, `GTK_USE_PORTAL` and `QT_QPA_PLATFORMTHEME` unset, hardened: `NoNewPrivileges`, `ProtectSystem=strict`,
+`ProtectHome=read-only`, `PrivateTmp`, `PrivateNetwork`, `AF_UNIX` only, `@system-service` seccomp filter,
+`MemoryDenyWriteExecute`, no capabilities, `MemoryMax=64M`, `TasksMax=8`),
+`packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield_settings.service` (D-Bus activation through the unit),
+`packaging/systemd/xdg-desktop-portal.service.d/10-grassfield.conf` (the frontend wants the backend and starts after it,
+decision 2b-14), and under `/usr/share/grassfield/xdg/xdg-desktop-portal/` the session's `hyprland-portals.conf` (Settings
+only: `grassfield-settings;gtk`; every other interface keeps the stock file's routing, which the frontend still reads per
+interface) and `portals/grassfield-settings.portal`. `env-grassfield` puts `/usr/share/grassfield/xdg` first in
+`XDG_DATA_DIRS` (once, keeping the list or the default), sets `GTK_USE_PORTAL=1` and adds `portals` to `GDK_DEBUG`, all only
+when the routing file is readable, and records `GRASSFIELD_APPS_GTK_USE_PORTAL=1`; `grassfield-shell.service` unsets
+`GTK_USE_PORTAL` for the shell itself (gate P5), and the shell's launch environment (`shell/services/Apps.qml`) gives it back
+to every app it starts (decision 2b-12); `autostart.lua` starts the backend after the Secret Service handover without waiting
+for it (`--no-block`), then the shell. `ui/tools/gen-gtk-themes.py` generates the 36 themes at build time
+(`/usr/share/themes/Grassfield-*`); `ui/tools/gen-tokens.py` writes the accents the backend publishes
+(`apps/portal-settings/src/PaletteTokens.hpp`, checked by `--check`). The PKGBUILD builds and installs every piece (its
+`check()` runs the compositor's and the menu bridge's tests only, as before) and declares `xdg-desktop-portal` and
+`xdg-desktop-portal-gtk` (already installed by Omarchy; the session now relies on them).
+- **What it publishes.** `org.freedesktop.appearance`: `color-scheme` (1 dark, 2 light; decision 2b-4), `accent-color` (the
+  appearance's own accent, decision 2b-3), `contrast`, `reduced-motion`; `org.gnome.desktop.interface`: `gtk-theme`,
+  `color-scheme` (`prefer-dark`/`prefer-light`), `enable-animations`. `Read` of a key it does not own answers
+  `org.freedesktop.portal.Error.NotFound`, so the frontend asks x-d-p-gtk (fonts, icons, cursor). The file is watched
+  (directory and file, atomic replaces included, 50 ms debounce; while the directory does not exist yet, its nearest existing
+  parent) and, while the appearance is `auto`, the clock is read again every minute, never the file (decision 2b-8); only the
+  keys whose value changed are signalled. The file is read as ADR-0020 §2 requires (review of step 2b): never without a bound
+  (only a regular file is opened, without blocking, and checked again on the descriptor: a FIFO, a device or a directory is
+  never read; at most 1 MiB, read whole); a malformed or unreadable file keeps the last good settings (defaults only at
+  start, as the shell's own start); a missing file is a fresh start (the schema's defaults: dark, multicolor); the directory
+  is never created. Every read runs on a worker thread, one at a time: a read that hangs (a home on a network mount that
+  stops answering) is not waited for (ADR-0020's 5 s cut: logged once at 5 s), the calls are still answered at once with the
+  last settings, a change made meanwhile is read once more after it, and the start waits 3 s at most for the first read (the
+  unit allows 5 s). At start, once its name is owned, it signals every value once (decision 2b-9); when x-d-p-gtk signals a
+  value other than Grassfield's for a key Grassfield owns, it answers with its own (decision 2b-13). A dev run refuses any
+  bus but a private test bus (`apps/testbus.h`, shared with the handover).
+- **The GTK themes.** One per accent, appearance and contrast; each imports GTK's own stylesheet from the GTK library's
+  resources and then sets Grassfield's colours where that stylesheet draws its accent (selected rows and text, checked boxes,
+  radios and switches, suggested buttons, progress bars, sliders, level bars, focus rings, selected tabs, menu items under
+  the pointer, links), with the shell's colour roles (decision 2b-5): the GTK 4 focus ring opaque at
+  `control.focusOutlineOpacity` (decision 2b-15), hover, pressed and border shades as the shell's overlays
+  (`material.hoverOpacity`, `control.pressedOpacity`, `material.borderOpacity`), the selected tab's indicator at GTK's own
+  width (`gtk.tabIndicatorWidth`, 4 px in both versions), visited links blue; no CSS colour function (GTK 3 and the owner's
+  GTK 4.22 read them alike).
+- **Tests.** Unit (`tests/unit/portal-settings`, 12 tests, plain and ASan/UBSan): values, the `auto` schedule, the accents
+  from the tokens, the 36 theme names, the namespace filter, file changes signalled key by key, a malformed file keeping the
+  last good settings, a FIFO (at start and later), a device symlink, a directory, a file over 1 MiB and an unreadable file
+  never read, a read that hangs not waited for, the minute timer reading no file, the clock, a missing directory watched
+  until it appears, the announcement at start; `tests/unit/tst_applaunch.qml`: the launch environment's `GTK_USE_PORTAL`.
+  `tests/ci/gtk_themes.py`: 36 themes matching the backend's names, the imports, no copy of GTK's theme, no colour function,
+  the colour pairs' contrast. `tests/integration/gtk_themes.sh`: the 36 themes rendered with GTK 3 and GTK 4 on Xvfb against
+  GTK's own four stylesheets as controls (none of GTK's blue left, every Grassfield colour present, no stylesheet error).
+  `tests/integration/portal_settings.sh`: static checks of the routing, names, units, PKGBUILD and `env-grassfield`; then the
+  real xdg-desktop-portal 1.22.1 on a private bus with the backend D-Bus-activated and a stand-in for x-d-p-gtk: values
+  through the frontend, the stock routing kept for every other interface, `SettingChanged` for the changed keys only, the
+  client ending with Grassfield's values after x-d-p-gtk signals a dconf change, kill and reactivation by the next read, a
+  change made while the backend is down delivered when it starts with no read, its memory within budget, x-d-p-gtk alone when
+  the backend is absent, a fast start with a frontend that never answers, refusal outside the session and of a dev run on a
+  bus that is not a private test bus; and on a headless Weston, GTK 3 (`GTK_USE_PORTAL=1`), GTK 4 (`GDK_DEBUG=portals`) and
+  libadwaita apps following a change of appearance, accent and Increase Contrast within a second, with a GTK 4 app without
+  the flag as the control.
+- **Code quality.** `just check-tidy` covers the compositor only; a one-off clang-tidy run with the compositor's checks
+  (`clang-analyzer-*`, `bugprone-*`, `performance-*`; LLVM 23.1) over the backend and its tests: the analyzer's one finding
+  (the tests' never-deleted `QCoreApplication`), the signed bit operations and, after the review fixes, two widening
+  multiplications were fixed; what remains is Qt's idiom (static `QStringLiteral` and `QTime` constants, a `QDBusArgument`
+  operator returning its argument, moc's enum).
+- **Known limitations.** x-d-p-gtk's own dialogs (its file chooser until step 4, print until step 6, account) read the user's
+  dconf, so they keep Omarchy's look; GTK 3 and GTK 4 apps that open a file or a link through the portal may meet x-d-p-gtk's
+  app chooser where the portal asks (D-5 replaces it), as GTK 3 apps already did with Q3. The text highlight setting
+  (`accent.highlight`) does not reach GTK apps: their selected text uses the accent (decision 2b-6). The light yellow
+  accent's thin marks hold 1.86:1 on GTK's window (1.99:1 under high contrast; 2.0:1 on the shell's window, as the shell's
+  own). A GTK 3 or GTK 4 app the user starts with its own `GTK_THEME` keeps it. A `hyprland-portals.conf` of the user's
+  (`~/.config/xdg-desktop-portal`) or of the administrator's (`/etc/xdg-desktop-portal`) is read before the session's and
+  wins: with it, the apps take x-d-p-gtk's values (Omarchy's look) until it is removed. When x-d-p-gtk signals a dconf change
+  of a key Grassfield owns, apps see its value for an instant before Grassfield's (decision 2b-13). On the owner's GTK 4.22,
+  plain GTK 4 apps do not read `accent-color` (4.24 does); the Grassfield theme carries the accent anyway.
+
+**Decisions of step 2b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **2b-1. Plain GTK 4 apps read dconf, not the portal.** Measured (scenario 7): outside a sandbox GTK 4.24 takes its settings
+  from the portal only with `GDK_DEBUG=portals`. Options: (a) leave them on the user's dconf (Omarchy's theme, no live
+  appearance); (b) write the user's dconf (forbidden: the owner's files); (c) `GDK_DEBUG=portals` in `env-grassfield`, added
+  to the user's own flags. **Choice: (c).** GTK 4 apps then follow the appearance, accent and contrast live, as GTK 3 apps do
+  with `GTK_USE_PORTAL=1` (owner decision Q3, which took GTK 4 apps to read the portal already); the flag also makes GTK 4
+  prefer the portal where it would otherwise decide by itself (files, print and open-with already go there by default).
+  libadwaita apps read the portal's appearance keys either way.
+- **2b-2. Increase Contrast in GTK apps.** The themes import GTK's normal stylesheet, so publishing `contrast` alone reaches
+  libadwaita only. Options: (a) only that; (b) an `-hc` variant of every theme, importing GTK's own high-contrast stylesheet
+  (GTK 3 HighContrast and HighContrastInverse, GTK 4 Default-hc and Default-hc-dark) with the same Grassfield colours, named
+  by the backend under Increase Contrast. **Choice: (b)**: on macOS Increase Contrast applies to every app. The colours stay
+  (the shell's `contrastBoost` strengthens borders, separators and fills, not the accent; GTK's high-contrast stylesheet does
+  the same). 36 themes instead of Q7's 18, by Q7's own rule (one theme per state the user can choose).
+- **2b-3. Which accent colour.** Options: (a) one sRGB value in both appearances; (b) the appearance's own accent
+  (`accentLight`/`accentDark`, as the shell draws it). **Choice: (b)**: macOS's accent colours have a light and a dark
+  variant; a change of appearance signals `accent-color` too.
+- **2b-4. The light appearance's colour scheme.** Options: (a) `0`/`default` (no preference); (b) `2`/`prefer-light`.
+  **Choice: (b)**: macOS's Light appearance makes every app light; with no preference some apps choose dark.
+- **2b-5. Colour roles in the themes.** Options: (a) one accent everywhere (GTK's own model); (b) the shell's roles
+  (`Accent.js`): selection fills with the selection pair, thin marks with the accent, selected text with the highlight pair,
+  the focus ring in the accent where it holds `control.focusRingMinContrast` against the window and in the text colour
+  otherwise, links blue in every accent. **Choice: (b)**: GTK apps match the shell, and macOS draws links blue whatever the
+  accent.
+- **2b-6. The text highlight colour (`accent.highlight`).** Options: (a) themes per highlight colour too (324 themes); (b)
+  GTK apps follow the accent (the setting's default, "automatic"); (c) a theme generated per user at run time. **Choice:
+  (b)** for now: (a) fills the theme list of every GTK tool with hundreds of entries, (c) is a new mechanism (a writable
+  theme directory in the search path) for a setting few change; a user who sets a highlight colour sees it in the shell and
+  Grassfield's apps, and the accent's in GTK apps (known limitation, revisit with D-4's panel work).
+- **2b-7. Radii.** Q7's text included the radii. GTK's stylesheets draw controls at 5 px (both versions) and the control
+  token is 6 px, an estimate awaiting its F1 measurement; window corners already come from Hyprland's rounding for every
+  window (ADR-0024 C-1). Options: (a) override every `border-radius` rule (dozens per version, joined buttons included); (b)
+  keep GTK's. **Choice: (b)**: a 1 px difference on an unmeasured value does not justify rewriting GTK's geometry; revisit if
+  F1 measures a control radius far from 5 px.
+- **2b-8. When `auto` switches.** Options: (a) a timer set to the next switch time (the spec's first text); (b) the shell's
+  own rule, a recheck every minute with `apps/autoappearance.h`. **Choice: (b)**: apps switch in the same minute as the
+  shell, and a clock or time-zone change (suspend, NTP) needs no new timer. Cost: a timer each minute while the appearance is
+  `auto` (the clock only, no file read: integrator review of ea7ad8a), nothing sent when nothing changed.
+- **2b-9. A change made while the backend restarts.** After a crash systemd starts it again within a second, but a change
+  made in that second would reach no app until the next one. Options: (a) accept it; (b) the new process signals every value
+  once when its name is owned. **Choice: (b)**: the missed change is delivered, and a value an app already has changes
+  nothing (measured, scenario 7: after a restart GTK 3 and GTK 4 apps are told their theme name once more and keep their
+  state, libadwaita is told nothing). Cost: one theme reload per running GTK app per restart, only after a crash.
+- **2b-10. The backend's sandbox.** Unlike the handover (2c-6), the backend identifies no peer and reads one file of the
+  user's, so the namespace options (`ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp`, `PrivateNetwork`; in a
+  user unit they imply `PrivateUsers=self`) cost it nothing. **Choice:** keep them. If the namespace cannot be set up, the
+  unit fails and the frontend answers from x-d-p-gtk alone (the degraded behaviour above).
+- **2b-11. Its memory budget.** Step 0 set "15 MB of RSS" (D-4, spec A-FC3) before anything was measured. Measured (Qt 6.12,
+  the package's Release build, idle): 14.2 MB resident, of which 1.45 MB private; 12.7 MB are pages of shared libraries (Qt
+  Core, ICU, libstdc++, libc) that every Qt process of the session maps already; after serving the frontend, 15.5 MB
+  resident. Options: (a) keep 15 MB resident (failed by library pages the backend does not own); (b) budget what the backend
+  adds: its private memory, with a resident ceiling. **Choice: (b)**: private ≤ 4 MB and resident ≤ 20 MB, checked by
+  `tests/integration/portal_settings.sh` scenario 1; the unit's `MemoryMax=64M` stays the hard stop.
+- **2b-12. `GTK_USE_PORTAL` for the apps the shell starts** (review of step 2b). The shell's unit clears the variable: the
+  shell's gtk3 platform theme would otherwise ask the portal synchronously at start, and the lock screen and the polkit agent
+  would wait on it (gate P5). Every app the shell starts (Dock, Apps, Search, Open With) inherited that, so a GTK 3 app
+  opened there kept the dconf theme and its in-process file chooser, while the same app from a keyboard shortcut followed.
+  Options: (a) leave it; (b) let the shell keep the variable; (c) the shell's unit keeps clearing it, and the shell gives
+  `GTK_USE_PORTAL=1` back to the apps it starts, from `GRASSFIELD_APPS_GTK_USE_PORTAL` that `env-grassfield` records.
+  **Choice: (c)**: an app behaves the same however it is opened, as on macOS, and the shell never waits on the portal.
+- **2b-13. Another backend's signal for a key Grassfield owns** (review of step 2b). xdg-desktop-portal 1.22.1 passes every
+  backend's `SettingChanged` on to the apps (measured), so a dconf change that x-d-p-gtk signals (Omarchy's theme tool
+  writing `gtk-theme` or `color-scheme`) switched running apps to Adwaita until they restarted, while reads still answered
+  Grassfield's values. Options: (a) document it; (b) the backend answers each such signal with its own value. **Choice:
+  (b)**: the apps end with Grassfield's appearance and no step is asked of the user; cost: one signal more per such key, and
+  an instant with x-d-p-gtk's value (one theme reload). Only x-d-p-gtk is answered, by its bus name, and only for a value
+  other than Grassfield's (counter-review: answering any sender let a client make the backend signal, or ping-pong with it);
+  `tests/integration/portal_settings.sh` scenario 2 checks both.
+- **2b-14. The frontend starts after the backend** (integrator review of ea7ad8a). xdg-desktop-portal 1.22.1 creates its
+  proxy for each Settings backend once, when it starts; a backend whose D-Bus activation fails then is left out until the
+  frontend restarts, i.e. for the session, and no later read starts it again (measured: scenario 4b). The frontend is started
+  by D-Bus activation whenever the first portal client calls, which nothing orders after `autostart.lua`. Options: (a)
+  document it; (b) start the backend earlier in `autostart.lua` (a portal client can still come first); (c) a packaged
+  drop-in for `xdg-desktop-portal.service`: `Wants=` and `After=` the backend. **Choice: (c)**, and the backend loses the
+  `Requisite=graphical-session.target` of the first review, which would fail it when the frontend starts before that target.
+  In the Omarchy session the backend's `ConditionEnvironment` skips it, which neither fails nor delays the frontend.
+- **2b-15. The GTK 4 focus ring** (integrator review of ea7ad8a). It was drawn at 50 % alpha, so its checked contrast was not
+  the one drawn (blended, 92 of 108 cases under 3:1). Options: (a) keep the alpha and check the blended colour; (b) draw it
+  opaque. **Choice: (b)**: the shell's keyboard focus ring is opaque (`control.focusOutlineOpacity` 1.0, A11Y-08), and the
+  theme takes that token; the accent where it holds `control.focusRingMinContrast`, the text colour otherwise.
 
 ### D-9. Password and passphrase prompts (category S; S1–S9) — owner decision Q1, opus PASS required
 Upstream facts (inventory § S, read in source): gnome-keyring 51.1, pinentry-gnome3 (Arch's `/usr/bin/pinentry` picks it first
@@ -744,7 +909,10 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
   never opened since) lists nothing: the handover waits, asking nothing, until a KWallet client opens the wallet in some
   session. The values cross the user's own session bus in `plain` Secret Service sessions (decision 2c-4). A leftover
   from a KWallet older than ksecretd (`kwalletd6` itself holding the name) is not recognised and keeps the name until its
-  user manager stops.
+  user manager stops. While the wallet stays locked and lists nothing, the handover is not final: it starts ksecretd at each
+  login to list again (no question, nothing shown), for as long as the wallet stays that way
+  (decision 2c-11). A logout, or a crash, while KWallet's or the keychain's question is on screen ends the handover for good
+  (the marker already says `asked`, decision 2c-9) without the notice; what was not moved stays in KWallet.
 
 **Decisions of step 2c** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
 - **2c-1. When are the password questions asked?** Options: (a) unlock KWallet and the keychain at every session until the
@@ -800,6 +968,10 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
   (b) move them too. **Choice: (b)**, with the entries of older KWallet versions: in a Grassfield session QtKeychain apps
   (Nextcloud, KDE apps built with QtKeychain) look their secrets up through the Secret Service, which is gnome-keyring, so
   an entry left behind costs the user a sign-in; a copy of an entry that KWallet's own API keeps using does no harm.
+- **2c-11. A wallet that stays locked and lists nothing** (integrator note in the merge of PR #22, recorded in step 2b).
+  Options: (a) keep waiting, starting ksecretd at each login to list again; (b) give up after a number of logins. **Choice:
+  (a)**: the cost is a short start of ksecretd per login, invisible to the user, while giving up would strand passwords that a
+  later unlock of the wallet (by any KWallet client) would let move without any step from the user.
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
@@ -826,9 +998,11 @@ requests #8, #9 and #10 are merged (owner).
    - **2a**: the session's `kwalletrc` under `/usr/share/grassfield/xdg-config` with its `XDG_CONFIG_DIRS` line (D-12,
      Q17-b). Packaging only.
    - **2b**: `grassfield-portal-settings` (no window), the session's `hyprland-portals.conf` under
-     `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS` and `GTK_USE_PORTAL=1` in `env-grassfield`, `UnsetEnvironment` in the
-     backend's and the shell's units (D-4's start-up loop), the 18 generated GTK themes (Q7). Packaging, a new service and
-     one line of `grassfield-shell.service`; no shell code. After #8–#10.
+     `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS`, `GTK_USE_PORTAL=1` and `GDK_DEBUG=portals` in `env-grassfield`,
+     `UnsetEnvironment` in the backend's and the shell's units (D-4's start-up loop) with the shell giving `GTK_USE_PORTAL`
+     back to the apps it starts (decision 2b-12), the generated GTK themes (Q7; 36 with the Increase Contrast variants,
+     decision 2b-2). Packaging, a new service, one line of `grassfield-shell.service` and one function of the shell's (the
+     launch environment). After #8–#10.
    - **2c**: the Secret Service handover of Q17-b (D-12: a leftover ksecretd made to quit, KWallet's libsecret items moved to
      the keychain once), right after 2a; a secret path, so an opus PASS. No Settings or shell file.
 
@@ -916,7 +1090,8 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   gnome-keyring 51.1, pinentry 1.3.3, udiskie v2.7.0, KIO v6.31.0 (2dd4bdc), KWallet v6.31.0 (81eb09f), Chromium 156 and
   Electron 43 sources, Firefox 158, LibreOffice 26.8.1, Omarchy v4.0.4 (c668141) and v4.0.6 (237f1b4).
 - Not verified (no display in the cloud container; nested runs are the integrator's): every "Today" look, every runtime claim
-  marked UNVERIFIED in the inventory, and the live update of GTK 3 apps through `SettingChanged` (code-read only).
+  marked UNVERIFIED in the inventory. The live update of GTK 3, GTK 4 and libadwaita apps through `SettingChanged`, code-read
+  in step 0, is measured in step 2b on a headless Weston (`tests/integration/portal_settings.sh` scenario 7).
 
 ## Consequences
 - The Secret Service stays gnome-keyring's in the Grassfield session: KWallet's takeover is turned off by a session-only
@@ -932,8 +1107,9 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
 - The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12).
 - One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins), `/usr/share/grassfield/xdg` (the
   session's portal configuration) and `/usr/share/grassfield/xdg-config` (the session's `kwalletrc`, Q17-b).
-- The Grassfield session exports `GTK_USE_PORTAL=1` and prepends `XDG_DATA_DIRS` and `XDG_CONFIG_DIRS`; the Omarchy session is
-  unchanged (`env-grassfield` is read only for the Grassfield desktop name, ADR-0017).
+- The Grassfield session exports `GTK_USE_PORTAL=1`, adds `portals` to `GDK_DEBUG` and prepends `XDG_DATA_DIRS` and
+  `XDG_CONFIG_DIRS`; the Omarchy session is unchanged (`env-grassfield` is read only for the Grassfield desktop name,
+  ADR-0017).
 - New IPC targets `anr` and `picker`, the picker's one-time sockets and the prompter socket are listed in
   `docs/specs/security.md` in their steps.
 - The inventory is the checklist of the chantier: a row is closed when its step merges, with its evidence.

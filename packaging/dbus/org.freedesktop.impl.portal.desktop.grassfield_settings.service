@@ -1,0 +1,7 @@
+# The Settings portal backend of the Grassfield session (ADR-0035 D-4, D-8): started with the session, and by D-Bus
+# activation at the frontend's next call after a crash (through its unit). Outside a Grassfield session the unit's condition
+# fails, and the program refuses to run.
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.grassfield_settings
+Exec=/usr/lib/grassfield/grassfield-portal-settings
+SystemdService=grassfield-portal-settings.service
