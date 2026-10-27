@@ -13,12 +13,16 @@ Item {
     property bool destructive: false
     property bool withField: false
     property string placeholder: ""
+    // The field hides what is typed (a password); the host may show it again (a "Show password" check box).
+    property bool fieldPassword: false
     property string errorText: ""
     // function(text) returning an error message to keep the sheet open, or "" to close it.
     property var confirmHandler: null
     property Item focusBack: null
     // False: only the confirm button (an options sheet whose changes apply at once, macOS "Done").
     property bool showCancel: true
+    // The cancel button's text (Displays' countdown sheet says "Revert").
+    property string cancelText: qsTr("Cancel")
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -140,6 +144,9 @@ Item {
                     width: parent.width
                     focus: root.withField
                     placeholderText: root.placeholder
+                    echoMode: root.fieldPassword ? TextInput.Password : TextInput.Normal
+                    // A password (Wi-Fi's join): the input method neither learns, stores nor predicts it (GF-118).
+                    inputMethodHints: root.fieldPassword ? Qt.ImhSensitiveData | Qt.ImhNoPredictiveText : Qt.ImhNone
                     accessibleName: root.title
                     onTextChanged: root.errorText = ""
                 }
@@ -169,7 +176,7 @@ Item {
 
                     Button {
                         visible: root.showCancel
-                        text: qsTr("Cancel")
+                        text: root.cancelText
                         onClicked: root.cancel()
                     }
 

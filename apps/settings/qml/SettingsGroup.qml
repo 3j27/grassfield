@@ -11,6 +11,10 @@ Item {
     // automatically when you log in.").
     property string captionDetail: ""
     property string footnote: ""
+    // Something of the section is under way (macOS 27 Wi-Fi > Other Networks while it scans): a spinner at the caption's right.
+    property bool busy: false
+    // No group fill: the rows are groups of their own (macOS 27 Network > Other Services).
+    property bool plain: false
     default property alias rows: column.data
 
     width: parent ? parent.width : implicitWidth
@@ -38,6 +42,18 @@ Item {
         wrapMode: Text.Wrap
     }
 
+    Spinner {
+        visible: captionText.visible && root.busy
+        x: root.width - width - Tokens.settingsSpinnerInset
+        // Centred on the caption's capitals.
+        y: captionText.y + captionText.baselineOffset - captionMetrics.capitalHeight / 2 - height / 2
+    }
+
+    FontMetrics {
+        id: captionMetrics
+        font: captionText.font
+    }
+
     Text {
         id: detailText
         textFormat: Text.PlainText
@@ -52,9 +68,12 @@ Item {
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.settingsCaptionDetailSize
         wrapMode: Text.Wrap
+        lineHeightMode: Text.FixedHeight
+        lineHeight: Tokens.settingsCaptionDetailLineHeight
     }
 
     Rectangle {
+        visible: !root.plain
         anchors.fill: column
         radius: Tokens.radiusMenu
         color: Appearance.colors.groupFill

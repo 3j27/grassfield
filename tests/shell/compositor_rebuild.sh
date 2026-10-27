@@ -215,8 +215,11 @@ end
 package.preload["grassfield.omarchy"] = function()
   return { ok = true, monitors = true, problems = {}, guard_path = function() end }
 end
-local compositor = require("grassfield.compositor")
+-- session.lua starts its parse with Grassfield's modules unloaded (package.loaded): the real module, its choice fixed,
+-- comes from package.preload.
+local compositor = dofile(root .. "/config/hypr/grassfield/compositor.lua")
 compositor.choose = function() return os.getenv("GF_TEST_PLUGIN"), "packaged" end
+package.preload["grassfield.compositor"] = function() return compositor end
 local loaded = {}
 hl = {
   plugin = { load = function(p) loaded[#loaded + 1] = p end },

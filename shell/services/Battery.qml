@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.lib
 import Quickshell.Services.UPower
 import "BatteryLogic.js" as Logic
@@ -24,6 +25,24 @@ Singleton {
     readonly property bool lowPower: Logic.lowPower(PowerProfiles.profile)
     readonly property bool devSession: Mode.dev
     signal devSuppressed
+
+    // When the power source changes, Omarchy's profile remembered for that source applies (Settings > Battery > Low Power Mode
+    // sets the two; omarchy-powerprofiles-init does it once at login). Never in a dev session.
+    readonly property bool onBattery: UPower.onBattery
+    onOnBatteryChanged: {
+        if (!root.present || root.devSession) {
+            if (root.devSession && root.present)
+                console.info("dev guard: power profile for the power source suppressed");
+            return;
+        }
+        sourceProfile.running = false;
+        sourceProfile.running = true;
+    }
+
+    Process {
+        id: sourceProfile
+        command: ["sh", "-c", "command -v omarchy-powerprofiles-set >/dev/null && exec omarchy-powerprofiles-set autodetect"]
+    }
 
     function setLowPower(on: bool): void {
         if (devSession) {

@@ -28,6 +28,9 @@ QtObject {
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#292929",  // opaque app window, dark appearance: macOS 27 System Settings 39-42 grey, neutral (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
         groupFill: "#313131",  // inset group of an app window, dark appearance: macOS 27 System Settings groups #313030 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
+        statusOn: "#45C565",  // own green of a status dot, dark appearance: 5.8:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusWarn: "#E0B000",  // own yellow of a status dot, dark appearance: 6.4:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#232323",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
         windowTextSecondary: "#DCDCE4",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
         chipFill: "#FFFFFF"  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
@@ -56,6 +59,9 @@ QtObject {
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         windowBackground: "#FFFFFF",  // opaque app window, light appearance: macOS 27 System Settings content 255 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
         groupFill: "#F7F7F7",  // inset group of an app window, light appearance: macOS 27 System Settings groups 247 on 255, no border (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        statusOn: "#2E9E48",  // own green of a status dot (Wi-Fi Connected, a service that is up): 3.2:1 on the light group fill (a graphic: 3:1), the text beside it says the same [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusWarn: "#B78300",  // own yellow of a status dot (a service that is up without an address): 3.1:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+        statusOff: "#D7372F",  // own red of a status dot (a service that is not connected): 4.4:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#ECECEC",  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
         windowTextSecondary: "#6E6E73",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
         chipFill: "#FFFFFF"  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
@@ -535,6 +541,14 @@ QtObject {
     readonly property int controlSliderHeight: 22
     // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleWidth: 36
+    // the large switch of a pane's header row: track 44 x 20 [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeWidth: 44
+    // the large switch's track height [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeHeight: 20
+    // the large switch's knob: 26 x 16, inset 2 [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeKnobWidth: 26
+    // the large switch's knob height [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlToggleLargeKnobHeight: 16
     // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleHeight: 16
     // inner border of the security surfaces only (lock password field, polkit dialog; their spec pins it, reviewed separately); every other surface draws the one ring, control.focusOutline [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -555,12 +569,24 @@ QtObject {
     readonly property int controlToggleKnobWidth: 21
     // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobHeight: 12
-    // F1 gap 18: pill knob about 21x16 +-2 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
-    readonly property int controlSliderKnobWidth: 21
+    // pill knob 20 wide (macOS 27 Settings > Sound, Alert volume; F1 gap 18 read about 21x16 +-2) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int controlSliderKnobWidth: 20
     // F1 gap 18: Quick Settings slider track stays 4 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderTrackCompact: 4
+    // a stepped slider's stops: dots 2 wide under the track (macOS 27 Keyboard, key repeat) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int controlSliderStopSize: 2
+    // a stepped slider's stops centred 6.5 under the track's centre [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property real controlSliderStopOffset: 6.5
+    // a stepped slider's stops: the text colour at 0.27 (183 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property real controlSliderStopOpacity: 0.27
+    // a prominent segmented control (macOS 27 tabs): a hairline 1 wide and 14 tall, centred, between two unselected segments [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int controlSegmentDividerHeight: 14
+    // the tabs' hairline in the text colour at 0.23 (181 on 236) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real controlSegmentDividerOpacity: 0.23
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
+    // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
+    readonly property int controlPushPadding: 12
     // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -581,6 +607,12 @@ QtObject {
     readonly property int controlCheckSize: 14
     // GF-085: check box corner radius [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckRadius: 4
+    // macOS 27 Settings check box (Desktop & Dock, Show items): 16 x 16 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int controlCheckBoxSize: 16
+    // macOS 27: a check box's name 5.5 after its box [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real controlCheckBoxGap: 5.5
+    // macOS 27: the end of one check box's name to the next box in a row [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real controlCheckBoxSpacing: 16.5
     // GF-085: text field and search field height, 22 as the AppKit control [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlFieldHeight: 22
     // GF-085: stepper arrows column width [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
@@ -905,6 +937,8 @@ QtObject {
     readonly property int lockFieldWidth: 220
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockFieldHeight: 32
+    // estimate (no capture of a macOS lock screen with a message): the user's message wraps at twice the password field's width [ref: docs/audits/settings-parity-2026-10-26.md § Lock Screen]
+    readonly property int lockMessageMaxWidth: 440
     // A2: was a white fill at 0.22 (placeholder 1.4:1 over a white wallpaper); the password field is a dark frosted inset (shadow colour) over the scrim: placeholder 8.6:1, typed dots and caret 10.7:1, return arrow 3.1:1 when hovered, over any wallpaper, tested [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real lockFieldFillOpacity: 0.45
     // A2: alpha of the white focus ring of the password field; 3.5:1 or more against the scrim over any wallpaper, tested [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
@@ -932,6 +966,33 @@ QtObject {
     readonly property real idleDimOpacity: 0.55
     // estimate: idle dim fade-in in ms [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property int idleDimFade: 1000
+
+    // ADR-0032: the screen saver fades in over 1 s (macOS fades it in); it leaves at once on input
+    readonly property int saverFadeIn: 1000
+    // ADR-0032: the screen saver's clock, the lock screen's size (lock.clockSize)
+    readonly property int saverClockSize: 104
+    // ADR-0032: the screen saver's clock weight, the lock screen's (lock.clockWeight)
+    readonly property int saverClockWeight: 600
+    // ADR-0032: the screen saver's date, the lock screen's size (lock.dateSize)
+    readonly property int saverDateSize: 22
+    // ADR-0032: the screen saver's date weight, the lock screen's (lock.dateWeight)
+    readonly property int saverDateWeight: 600
+    // ADR-0032: the clock alone on black is drawn at 75 % white, so no pixel stays at full brightness for long
+    readonly property real saverClockOnlyOpacity: 0.75
+    // ADR-0032: the wallpaper under the clock is dimmed by the lock screen's shadow-colour scrim (lock.dimOpacity, A2: white text 5.3:1 or more over any wallpaper; tests/visual/test_contrast_tokens.py), the picture kept sharp
+    readonly property real saverWallpaperDimOpacity: 0.6
+    // ADR-0032: the clock alone stays this far from the screen's edges wherever it moves
+    readonly property int saverClockMargin: 48
+    // ADR-0032: the clock alone moves to a new place every minute (no pixel stays lit)
+    readonly property int saverClockMoveMs: 60000
+    // ADR-0032: the slideshow shows each picture for 8 s
+    readonly property int saverSlideIntervalMs: 8000
+    // ADR-0032: the slideshow's crossfade between two pictures
+    readonly property int saverSlideFadeMs: 1500
+    // ADR-0032: one slow pan of the artwork and of the slideshow's pictures, out and back
+    readonly property int saverDriftMs: 40000
+    // ADR-0032: the artwork and the slideshow's pictures are scaled up this much while they pan, so no edge shows
+    readonly property real saverDriftScale: 1.08
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int polkitIconSize: 40
@@ -1098,18 +1159,136 @@ QtObject {
     readonly property int settingsPointerBuildTimeoutMs: 60000
     // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerBuildKillMs: 3000
-    // estimate: Settings > Wallpaper, width of the Fit and Change picture pickers (French 'Toutes les 15 minutes' did not fit the 150 px picker) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperPickerWidth: 210
-    // ADR-0016: Settings > Wallpaper, thumbnails per row (macOS: 4)
-    readonly property int settingsWallpaperTileColumns: 4
-    // estimate: Settings > Wallpaper, gap between thumbnails [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperTileGap: 12
-    // estimate: Settings > Wallpaper, thumbnail corner radius [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperTileRadius: 6
-    // estimate: Settings > Wallpaper, height of the preview of the current wallpaper (width follows the display's aspect ratio) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsWallpaperPreviewHeight: 170
+    // macOS 27: between two wallpaper thumbnails (117.5 apart) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTileGap: 10
+    // macOS 27: a wallpaper thumbnail's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTileRadius: 4
+    // macOS 27: the current wallpaper's preview, top left of the pane [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperPreviewHeight: 100
     // ADR-0016: width in pixels of the cached thumbnails the helper writes (about 2.6 times the tile width, sharp on a 2x display)
     readonly property int settingsWallpaperThumbWidth: 320
+    // macOS 27: the current wallpaper's preview [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperPreviewWidth: 160
+    // macOS 27: the preview's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperPreviewRadius: 6
+    // macOS 27: a wallpaper thumbnail [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperTileWidth: 107.5
+    // macOS 27: a wallpaper thumbnail [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTileHeight: 71
+    // macOS 27: the top block's distance from the pane's edges [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperHeaderInset: 16
+    // macOS 27: the preview and its group below the content's top (68) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperHeaderTop: 4
+    // macOS 27: the top group's left edge from the preview's [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperGroupX: 170
+    // macOS 27: the push buttons (Screen Saver…) 10 under the top group [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperButtonsGap: 10
+    // macOS 27: Screen Saver… and Clock Appearance… 8 apart [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperButtonSpacing: 8
+    // macOS 27: the pane-wide separator under the buttons [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperSeparatorGap: 16
+    // macOS 27: the pane-wide separator under the preview [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperSeparatorPreviewGap: 25
+    // macOS 27: the first section title's baseline under the separator [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperTitleBaseline: 33.5
+    // macOS 27: a section's thumbnails below its title's baseline [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperTilesTop: 13
+    // macOS 27: a thumbnail's name, its baseline below the picture [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperLabelBaseline: 13.5
+    // macOS 27: the next title's baseline below the names' baseline [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperSectionGap: 47.5
+    // macOS 27: the next title's baseline below a row without names (Add Photo…) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperAddSectionGap: 43
+    // macOS 27: the light ring of the chosen wallpaper [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperRingWidth: 2
+    // macOS 27: the ring's outer edge outside the thumbnail [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperRingOutset: 1
+    // macOS 27: the chosen wallpaper's picture inside its thumbnail (0.5 clear inside the ring) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperChosenInset: 1.5
+    // macOS 27: the ring, the text colour at this opacity (about #D9D9D9 on white) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperRingOpacity: 0.15
+    // macOS 27: the Add Photo… symbol inks 30 x 23.5; the 24-grid add glyphs ink 22.5 x 18 units, so drawn at 32 [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property int settingsWallpaperAddIconSize: 32
+    // macOS 27: the symbol's ink 13 under the tile's top; the glyph box starts 5.5 above its ink (4 of 24 units at 32) [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperAddIconTop: 7.5
+    // macOS 27: the tile's name, its baseline below the tile's top [ref: docs/audits/settings-parity-2026-10-26.md § Wallpaper]
+    readonly property real settingsWallpaperAddLabelBaseline: 58.5
+    // macOS 27: the group of the Size and Magnification sliders [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockSlidersHeight: 69
+    // macOS 27: a slider's title, its baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockSliderTitleBaseline: 22.5
+    // macOS 27: the sliders' tracks centred this far under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockSliderCenter: 36
+    // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockSliderLabelBaseline: 56.5
+    // macOS 27: the Size slider (262-462) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockSizeSliderWidth: 200
+    // macOS 27: the Magnification slider from the group's left edge (490); it runs to 10 from the right edge [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsDockMagnificationX: 238
+    // macOS 27: the Magnification slider's Small tick, this fraction of the knob's travel (525 on 500-700) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockMagnificationSmallAt: 0.125
+    // Grassfield: the magnification at the Small tick (macOS gives no number; the schema's 1.0 does not grow); Large is the schema's 2.5 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockMagnificationSmall: 1.2
+    // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): the screen's picture, 16:10 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsScreenCornersPictureWidth: 200
+    // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): the screen's picture, 16:10 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsScreenCornersPictureHeight: 125
+    // estimate, no capture of macOS's Hot Corners sheet (Grassfield: Screen Corners): as the Wallpaper preview [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property int settingsScreenCornersPictureRadius: 6
+    // macOS 27: the rows of the Menu Bar controls, 43 apart [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property int settingsMenuBarControlRowHeight: 43
+    // macOS 27: a control row's check box from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property real settingsMenuBarCheckX: 13.5
+    // macOS 27: a control row's tile from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property int settingsMenuBarTileX: 36
+    // macOS 27: a control row's tile [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property int settingsMenuBarTileSize: 23
+    // macOS 27: a control row's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Menu Bar]
+    readonly property real settingsMenuBarTitleX: 63.5
+    // macOS 27 Notifications: the header card's tile [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTileSize: 28
+    // macOS 27 Notifications: the header card's tile from the card's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTileX: 10
+    // macOS 27 Notifications: the header card's tile under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsBannerTileTop: 11.5
+    // macOS 27 Notifications: the header card's name and text from the card's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTextX: 49
+    // macOS 27 Notifications: the header card's name, its baseline under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsBannerTitleBaseline: 22.5
+    // macOS 27 Notifications: the header card's text, its first baseline under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsBannerTextBaseline: 38.5
+    // macOS 27 Notifications: the header card's text lines 14 apart [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTextLineHeight: 14
+    // macOS 27 Notifications: the card ends 13 under the text's last baseline [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerBottom: 13
+    // macOS 27 Notifications and Focus: a row with a 28-pt picture, 52 tall (+1 separator) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsLargeRowHeight: 52
+    // macOS 27 Notifications and Focus: a row's app icon or tile [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsLargeRowPictureSize: 28
+    // macOS 27 Notifications: an app row's icon from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsAppRowIconX: 10
+    // macOS 27 Notifications: an app row's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property real settingsAppRowTitleX: 48.5
+    // macOS 27 Notifications: an app row's name, its baseline under the row's top (with a line under it) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsAppRowTitleBaseline: 23
+    // macOS 27 Notifications: an app row's second line, its baseline under the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsAppRowSubtitleBaseline: 39
+    // macOS 27 Focus: a focus's tile from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Focus]
+    readonly property int settingsFocusRowTileX: 12
+    // macOS 27 Focus: a focus's name from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Focus]
+    readonly property int settingsFocusRowTitleX: 53
+    // macOS 27 Lock Screen: a switch and its Set… push button 10 apart (609-645, 655-710) [ref: docs/audits/settings-parity-2026-10-26.md § Lock Screen]
+    readonly property int settingsAccessoryGap: 10
+    // macOS 27 Spotlight: the Results from Apps header, title and explanation, above its separator [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property real settingsResultsHeaderHeight: 51.5
+    // macOS 27 Spotlight: the result rows 42 apart (41 + the separator) [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property int settingsResultRowHeight: 42
+    // macOS 27 Spotlight: a result row's icon from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property real settingsResultIconX: 8.5
+    // macOS 27 Spotlight: a result row's icon [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property int settingsResultIconSize: 23
+    // macOS 27 Spotlight: a result row's name (and its separator) from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Search]
+    readonly property int settingsResultTitleX: 38
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
@@ -1172,6 +1351,16 @@ QtObject {
     readonly property int settingsNavChevronSize: 14
     // the row chevron's ink right edge 11 from the group edge; the glyph's own margin (4.1 at 14: its ink ends at 17 of 24) taken off [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsNavChevronInset: 7
+    // macOS 27 Accessibility: a hub row of a list pane is 42 tall; with its 1-pt separator the pitch is 43 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property int settingsNavCompactRowHeight: 42
+    // macOS 27 Accessibility: the hub row's tile is 23 x 23 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property int settingsNavCompactTileSize: 23
+    // macOS 27 Accessibility: the hub row's tile 8.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property real settingsNavCompactTileInset: 8.5
+    // macOS 27 Accessibility: the hub row's name, its ink from 40-41 [ref: docs/audits/settings-parity-2026-10-26.md § Accessibility]
+    readonly property int settingsNavCompactLabelInset: 40
+    // macOS 27 Privacy & Security: Location Services' value ends 10.5 before the chevron's ink; the chevron glyph's own margin (about 5.5 at 14) taken off [ref: docs/audits/settings-parity-2026-10-26.md § Privacy & Security]
+    readonly property int settingsNavValueGap: 5
     // the row chevron #B7B7B7 on #F7F7F7: the text colour (#262626) at 0.3 [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property real settingsNavChevronOpacity: 0.3
     // a pop-up button in a row: a 20-pt disc after its value [ref: docs/audits/settings-parity-2026-10-26.md § Controls]
@@ -1236,6 +1425,8 @@ QtObject {
     readonly property int settingsPreviewLineGap: 16
     // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
     readonly property int settingsCaptionDetailSize: 12
+    // macOS 27: a section title's explanation, its lines 14 apart (Notification Center) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsCaptionDetailLineHeight: 14
     // the explanation's baseline 16.5 below the section title's [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
     readonly property real settingsCaptionDetailGap: 16.5
     // a list's + / − footer: 23.5 tall with its top line [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
@@ -1280,6 +1471,510 @@ QtObject {
     readonly property int settingsStorageCountMs: 120000
     // the preview's second line: 18 to 18.5 between the inks of the date, the amount and the number, 17 between the text boxes [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewItemGap: 17
+    // a pane's header row (Wi-Fi, Bluetooth): its tile [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTileSize: 28
+    // the header row's tile: 11.5 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsHeaderRowTileTop: 11.5
+    // the header row's title and text start 48 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextInset: 48
+    // the header row's title (13 pt): baseline 23 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTitleBaseline: 23
+    // the header row's text (11 pt): first baseline 38 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextBaseline: 38
+    // the header row's text: lines 14 apart [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextLineHeight: 14
+    // the header row: 13.5 under the text's last baseline [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsHeaderRowBottom: 13.5
+    // the header row's large switch: top 9 below the group top, right edge 10 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowSwitchTop: 9
+    // the header row's text stops 12 before the switch [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsHeaderRowTextGap: 12
+    // the current network's row without Apple's Privacy Warning line (macOS 26) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiCurrentRowHeight: 54
+    // the current network's name: baseline 23.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentNameBaseline: 23.5
+    // the current network's status line: baseline 41.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentStatusBaseline: 41.5
+    // the lock, the signal glyph and Details…: centred 22 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiCurrentControlsCenter: 22
+    // the status dot: 9.5 across [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiStatusDotSize: 9.5
+    // the status dot's left edge from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiStatusDotInset: 12
+    // the status text: its ink at 29 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiStatusTextInset: 28.5
+    // the lock's box to the signal glyph's in the current network's row: their inks 17 apart (the lock's drawing has side bearings) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentLockGap: 13.5
+    // the signal glyph's ink to Details… [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCurrentSignalGap: 15.5
+    // a Known Network row [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiKnownRowHeight: 40
+    // an Other Networks row (+ its 1-pt separator: pitch 45) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiOtherRowHeight: 44
+    // the check mark's box: its ink (2.5 inside the box) at 21 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiCheckInset: 18.5
+    // a network's name at 40.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiNameInset: 40.5
+    // lock, signal glyph and (…): 11.5 between their inks [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiGlyphGap: 11.5
+    // the lock's box to the signal glyph's in a list row: their inks 11.5 apart (the lock's drawing has side bearings) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsWifiLockGap: 8.5
+    // the (…) circle's right edge from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiMoreInset: 22
+    // the (…) circle: 16.5 across (the glyph's ring fills its box) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiMoreSize: 17
+    // lock (ink 9 x 12.5) and check mark (ink 9.5 x 9) glyphs [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiGlyphSize: 15
+    // the signal glyph: ink 14.5 x 10.5 (14 x 10.7 at 14) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiSignalSize: 14
+    // the progress spinner beside a section title: 8 spokes 2 wide, from 2.25 to 7.75 off its centre [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerSize: 15.5
+    // the spinner's spokes [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsSpinnerSpokes: 8
+    // a spoke's width (round ends) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsSpinnerSpokeWidth: 2
+    // a spoke's length [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerSpokeLength: 5.5
+    // the lightest spoke, behind the darkest (the secondary colour) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerTailOpacity: 0.2
+    // the spinner's right edge from the group edge, centred on the section title [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real settingsSpinnerInset: 12.5
+    // the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsSpinnerStepMs: 125
+    // how long a requested scan shows the spinner (NetworkManager answers RequestScan at once and scans for a few seconds) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiScanMs: 8000
+    // the pane asks for a new scan this often while it is open, as macOS keeps scanning [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int settingsWifiRescanMs: 30000
+    // a Network service (Wi-Fi, Ethernet, Firewall): its own group, 52 tall, the groups 10 apart [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsServiceRowHeight: 52
+    // the service's status line (11 pt): baseline 39 below the group top; the name's baseline 23, as the header row's title [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsServiceStatusBaseline: 39
+    // the service's status dot: 8 across [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsServiceDotSize: 8
+    // the status dot at 48.5 from the group edge, under the name [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property real settingsServiceDotInset: 48.5
+    // the status text at 61.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property real settingsServiceStatusInset: 61.5
+    // an empty list's group (VPN: No VPN configurations): 36 tall, the text centred in the secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
+    readonly property int settingsEmptyListHeight: 36
+    // Bluetooth's header text: 12 pt (cap 9), larger than Wi-Fi's 11 [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextSize: 12
+    // Bluetooth's header text: lines 15 apart [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextLineHeight: 15
+    // Bluetooth's header text: first baseline 40 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextBaseline: 40
+    // Bluetooth's header row: 13 under the text's last baseline (68 tall with two lines) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderBottom: 13
+    // a note row under a header row (Bluetooth's name): 13 pt, secondary colour, first baseline 23 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsNoteBaseline: 23
+    // the note's lines 15 apart [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsNoteLineHeight: 15
+    // the note row: 12.5 under its last baseline (50 tall with two lines) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsNoteBottom: 12.5
+    // a device row (My Devices): 57 tall [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsDeviceRowHeight: 57
+    // the device's name (13 pt): baseline 26.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsDeviceNameBaseline: 26.5
+    // the device's status (13 pt, secondary colour): baseline 44.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsDeviceStatusBaseline: 44.5
+    // the device's name and status at 48.5 from the group edge [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property real settingsDeviceTextInset: 48.5
+    // the device's picture: Apple's is a product image (ink 19 x 30 centred at 24); Grassfield draws a 28-pt glyph centred there [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsDeviceGlyphSize: 28
+    // the device glyph's box at 10 from the group edge (centred at 24) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsDeviceGlyphInset: 10
+    // the (i) button: a 16.5-pt ring, the glyph's ring is 20/24 of its box [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsInfoSize: 20
+    // the (i) box's right edge 10 from the group edge (its ring 12) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsInfoInset: 10
+    // the (i) box's top 12 below the row top (its ring 14, beside the name) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsInfoTop: 12
+    // the charts' first row: the segmented control 10 from the edges and the top, the status under it (baseline 55), 68 tall [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartHeaderHeight: 68
+    // the charts' status line (13 pt): baseline 55 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartStatusBaseline: 55
+    // a chart's title (13 pt bold): baseline 22.5 below its row top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartTitleBaseline: 22.5
+    // a chart's top line: 29.5 below its row top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartTop: 29.5
+    // a chart's four bands: 22.5 apart (the plot 90 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartBand: 22.5
+    // a chart's plot: its left line 9.5 from the group edge, 400 wide [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartInset: 9.5
+    // a chart's plot: 400 wide (96 bars of 3 with 1-pt gaps over the last 24 hours) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartWidth: 400
+    // a chart's value labels (100 %, 50 %, 0 %) at 415 from the group edge, centred on their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelInset: 415
+    // a chart's labels: 12 pt, secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelSize: 12
+    // a chart's time labels: baseline 37.5 below the plot, 3 after their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartAxisBaseline: 37.5
+    // a time label 3 after its vertical line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelGap: 3
+    // the charging strip: 10.5 below the plot, 3 tall, under the bars of the charging times [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartChargeTop: 10.5
+    // the charging strip's height [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartChargeHeight: 3
+    // between two bars [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartBarGap: 1
+    // the dashed time lines: 2 on, 2 off [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartDash: 2
+    // the plot's lines: the text colour at 0.14 (#D7D7D7 on the group) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsChartGridOpacity: 0.14
+    // the date under the last chart's time labels, a line lower [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartDateGap: 22
+    // the charts' group: 20 under the date's baseline [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartBottom: 20
+    // a pane title with a status under it (macOS 27 Battery): the title's baseline 26 below the toolbar top, the status's 40 [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsToolbarSubtitleTitleBaseline: 26
+    // the pane title's status (13 pt, secondary colour): baseline 40 below the toolbar top [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsToolbarSubtitleBaseline: 40
+    // the status's glyph (the battery), 7.5 before its text [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property real settingsToolbarSubtitleGlyphGap: 7.5
+    // the device table's column header band, 27 between its two lines [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableHeaderHeight: 27
+    // the column titles (11 pt): baseline 19 below the top of the header's upper line [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableHeaderBaseline: 19
+    // the column titles 2 left of the rows' text (their ink: Name at 9, Type at 306.5) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableHeaderInset: 8
+    // the device table's rows, 24 tall [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableRowHeight: 24
+    // a device row's text (13 pt): baseline 17 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableRowBaseline: 17
+    // the Type column: the rows' type at 308 from the group's left edge (its ink at 308.5-309) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSoundTableTypeColumn: 308
+    // the header band and every second row: the fill colour at 0.03 (239 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableStripeOpacity: 0.03
+    // the line above the column header: the separator colour at 0.05 (235 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableTopLineOpacity: 0.05
+    // the line under the column header: the separator colour at 0.075 (229 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableHeaderLineOpacity: 0.075
+    // the selected device while the table does not have the focus: the fill colour at 0.1 (223 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSoundTableSelectionOpacity: 0.1
+    // a row with a slider (Alert volume): 39.5 apart [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowHeight: 40
+    // a row's slider from 228 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowSliderX: 228
+    // a row's slider from 228 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowSliderWidth: 205
+    // the speakers at both ends of a volume slider: ink 11 and 12 tall [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowGlyphSize: 18
+    // estimate: Input volume's low-end microphone, smaller than the high-end one as a slider's two speakers are (no macOS 27 capture of the row) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowSmallGlyphSize: 13
+    // the low-end speaker's box at 211, its ink (from 2.25 of 18) at 213.5 [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property int settingsSliderRowLowGlyphX: 211
+    // the high-end speaker's box (its ink reaches the box's right edge) 12.5 from the group's right edge [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSliderRowHighGlyphInset: 12.5
+    // the slider and its glyphs centred 19.5 below the row top [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSliderRowCenter: 19.5
+    // a slider row's title 1.5 above the row's middle (its cap top 13.5, the slider centred 19.5) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
+    readonly property real settingsSliderRowTitleOffset: -1.5
+    // the header band's separator 157 below the pane's top (209 below the window's, under a 52-pt toolbar) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplaySeparatorY: 157
+    // the first group 20 under the band's separator [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayFirstGroupY: 178
+    // the display's picture: its top 40.5 below the pane's top (92.5 below the window's) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayPictureTop: 40.5
+    // the display's picture 129 x 75 (a laptop with its base) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayPictureWidth: 129
+    // the display's picture 129 x 75 (a laptop with its base) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayPictureHeight: 75
+    // the display's name (13 pt bold): baseline 137 below the pane's top (189 below the window's) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayNameBaseline: 137
+    // estimate: between the pictures of two displays in the band (no macOS 27 capture with two displays) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayPictureGap: 32
+    // the band darkens to the text colour at this opacity at its bottom (244 on 255), from nothing at its top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayBandOpacity: 0.045
+    // the resolution choices' group 108 tall [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoicesHeight: 108
+    // the choices' cells share the group's width less 6 on each side [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoicesInset: 6
+    // a choice's window picture 47 x 47 [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceSize: 47
+    // a choice's picture 21.5 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceTop: 21.5
+    // estimate: a choice's window picture's corners (the capture's are about 5) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceRadius: 5
+    // the choice in use ringed in the accent, 2.5 wide, 1 outside the picture [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceRing: 2.5
+    // a choice's label (13 pt): baseline 86.5 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceLabelBaseline: 86.5
+    // a choice without a label: a hairline 80 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceLineY: 80
+    // a choice's hairline 8 in from its cell's sides [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceLineInset: 8
+    // a choice's hairline: the separator colour at 0.13 (214 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceLineOpacity: 0.13
+    // Grassfield's own window picture of a choice (lines for text): its controls and lines 4 from its sides at the default size, scaled with the choice's text [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceMargin: 4
+    // the window picture's controls, 4 wide at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceDot: 4
+    // the window picture's first line of text 12 below its top at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceTextTop: 12
+    // the window picture's lines of text 2.5 thick at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayChoiceText: 2.5
+    // the window picture's lines of text 3 apart at the default size [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayChoiceTextGap: 3
+    // Brightness's slider from 235 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessSliderX: 235
+    // Brightness's slider from 235 to 433 [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessSliderWidth: 198
+    // Brightness's low-end sun: its ink 16 wide (Grassfield's sun fills 7/8 of its box) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessLowGlyphSize: 18
+    // Brightness's high-end sun: its ink 17.5 wide [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsBrightnessHighGlyphSize: 20
+    // the push buttons under a pane's groups (Displays: Advanced…, Night Shift…) 20 under the last group [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsPushRowGap: 20
+    // macOS's 15 seconds before the previous display settings come back (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayTrialSeconds: 15
+    // estimate: how long the shell may take to say that it applied a trial before the page calls it not applied (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayAppliedMs: 4000
+    // estimate: ms the shell waits for Hyprland's answer to the reload that applies a display trial (reading the Lua configuration may take longer than a blur push's second; past it the trial stays applying and its deadline takes it back; ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayTrialAnswerMs: 3000
+    // macOS 27: the Appearance row (thumbnails and their names) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceRowHeight: 86
+    // macOS 27: an appearance thumbnail's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbWidth: 67
+    // macOS 27: an appearance thumbnail's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbHeight: 44
+    // macOS 27: an appearance thumbnail's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbRadius: 4
+    // macOS 27: the thumbnails' top below the row's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbTop: 13.5
+    // macOS 27: from one thumbnail's left edge to the next one's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceThumbPitch: 82
+    // macOS 27: the last thumbnail's right edge from the group's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbInset: 13.5
+    // macOS 27: between a chosen thumbnail and its accent ring [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbRingGap: 0.5
+    // macOS 27: a thumbnail's name, its baseline below the picture [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAppearanceCaptionBaseline: 16
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu bar strip's height, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbBarHeight: 0.1
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's left edge, a fraction of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuX: 0.02
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's top, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuY: 0.17
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's width, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuWidth: 0.57
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's height, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuHeight: 0.3
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's corners, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuRadius: 0.06
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu bar and the menu: the appearance's material tint at this opacity [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbMenuOpacity: 0.72
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's selection bar in from the menu's edges, a fraction of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbSelectionInset: 0.035
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the menu's selection bar's height, a fraction of the picture's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbSelectionHeight: 0.11
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window's left edge, a fraction of the picture's width (it runs off the right edge) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbWindowX: 0.26
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window's top, a fraction of the picture's height (it runs off the bottom edge) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbWindowY: 0.56
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window's corners, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbWindowRadius: 0.12
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the window buttons' centres, a fraction of the picture's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbLightY: 0.8
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): a window button's size, a fraction of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbLightSize: 0.09
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): the three window buttons' centres, fractions of the picture's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property var settingsAppearanceThumbLightX: [0.42, 0.56, 0.7]
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Auto: the dark desktop from this fraction of the picture's width to its right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbAutoSplit: 0.49
+    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Dark: the artwork under the shadow colour at this opacity (the darker wallpaper) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAppearanceThumbDarkWallpaper: 0.35
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock's size, a fraction of the picture's height
+    readonly property real settingsSaverThumbClockSize: 0.3
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock alone, its left edge, a fraction of the picture's width (off the centre: it moves every minute)
+    readonly property real settingsSaverThumbClockOnlyX: 0.18
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock alone, its top, a fraction of the picture's height
+    readonly property real settingsSaverThumbClockOnlyY: 0.3
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures in from the edges, a fraction of the picture's size
+    readonly property real settingsSaverThumbPhotoInset: 0.14
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's back picture tilted by this many degrees
+    readonly property int settingsSaverThumbPhotoTilt: 7
+    // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures' white border, a fraction of the picture's height
+    readonly property real settingsSaverThumbPhotoBorder: 0.04
+    // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsChoiceRingWidth: 3
+    // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassRowHeight: 232
+    // macOS 27: the glass preview's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewWidth: 268
+    // macOS 27: the glass preview's height [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewHeight: 180
+    // macOS 27: the glass preview's top below the row's separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewTop: 10
+    // macOS 27: the glass preview's corner radius [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassPreviewRadius: 16
+    // macOS 27: the glass controls on the preview (a pill, a round button, a search capsule) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassControlHeight: 35
+    // macOS 27: the glass controls' distance from the preview's top and sides [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassControlInset: 8.5
+    // macOS 27: between the glass controls [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassControlGap: 8
+    // macOS 27: the two-button glass pill [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassControlPillWidth: 72.5
+    // macOS 27: the glass search capsule [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassControlSearchWidth: 126.5
+    // macOS 27: the caption band along the preview's bottom [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionHeight: 34.5
+    // macOS 27: the caption's start from the preview's left edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionX: 16.5
+    // macOS 27: the caption's baseline below the band's top [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionBaseline: 31.5
+    // macOS 27: the caption's size (bold) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassCaptionSize: 17
+    // estimate: the caption band's fill over the picture (the window colour, almost opaque) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassCaptionOpacity: 0.9
+    // macOS 27: the glass slider's centre below the row's separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassSliderCenter: 214.5
+    // macOS 27: the glass slider's track [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassSliderWidth: 221.5
+    // macOS 27: the clear and tinted symbols at the slider's ends [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsGlassSymbolWidth: 16
+    // macOS 27: between a symbol and the slider [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsGlassSymbolGap: 5.5
+    // macOS 27: the Color row (swatches and the chosen one's name) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsAccentRowHeight: 61.5
+    // macOS 27: a colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentSwatchSize: 24
+    // macOS 27: between two colour swatches [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentSwatchGap: 12
+    // macOS 27: the swatches' top below the row's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentSwatchTop: 10
+    // macOS 27: between a chosen swatch or icon style and its accent ring [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentRingGap: 1
+    // macOS 27: the chosen colour's name, its baseline below the swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsAccentCaptionBaseline: 15
+    // macOS 27: the colour dot before a pop-up's value (Text highlight color, Folder color) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsColorDotSize: 16
+    // macOS 27: between the colour dot and the pop-up's value: 7 to its text box, 8 to its ink [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsColorDotGap: 7
+    // macOS 27: the Icon & widget style row [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsIconStyleRowHeight: 88
+    // macOS 27: an icon style's sample icon [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsIconStyleSize: 30
+    // macOS 27: the sample icons' top below the row's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsIconStyleTop: 13.5
+    // macOS 27: from one sample icon's centre to the next one's [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsIconStylePitch: 51.5
+    // macOS 27: the last sample icon's centre from the group's right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property real settingsIconStyleInset: 27.5
+    // macOS 27: an icon style's name, its baseline below the icon [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsIconStyleCaptionBaseline: 15
+    // macOS 27: the Folder color row, below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsFolderRowHeight: 40
+    // estimate: the keep sheet's countdown is read again this often, so the seconds it shows are never late by more than a quarter (ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayTickMs: 250
+    // Arrange…: Shift and an arrow key move a display along its edge by this part of its size (keyboard arrangement) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property real settingsDisplayNudge: 0.1
+    // Arrange…: the menu bar drawn along the top of each display's tile [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayMenuBarHeight: 3
+    // estimate: the shell reads the session configuration again this long after the last write of a Mouse, Trackpad or Keyboard choice (a slider writes on every step; ADR-0031 amendment) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsInputReloadMs: 500
+    // Keyboard's first group, the two repeat sliders side by side, 75 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatHeight: 75
+    // a repeat slider's title (13 pt): baseline 23 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatTitleBaseline: 23
+    // a repeat slider's track centred 42 below the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatSliderCenter: 42
+    // each repeat slider 214 wide [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatSliderWidth: 214
+    // Delay until repeat's column at 244 from the group's left edge [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatSecondX: 244
+    // a repeat slider's end labels: baseline 62 below the group's top (cap top 54.5) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsKeyboardRepeatLabelBaseline: 62
+    // Mouse and Trackpad: the two cards at the pane's top, 142 tall (window 52-194) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureCardHeight: 142
+    // the cards 4 in from the groups' edges (256 and 716 in the window, the groups 252-720) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureCardInset: 4
+    // the device card and the gesture's picture 10 apart [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureCardGap: 10
+    // the gesture's picture: corner 3 (circle-equivalent 2.3-3.6) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGesturePreviewRadius: 3
+    // the tabs' top 158 below the pane's top (window 210) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureTabsY: 158
+    // the first group's top 200 below the pane's top (window 252), 18 under the tabs [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureFirstGroupY: 200
+    // estimate: a pane without tabs (Grassfield's Mouse) puts its first group where the tabs would be [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureNoTabsGroupY: 158
+    // a row with an explanation under its title: 52 tall, its separator above it apart [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureRowHeight: 52
+    // a gesture row's title (13 pt): cap top 13, baseline 22.5 below the row's top (Tracking speed, Tap to click) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureTitleBaseline: 22.5
+    // a gesture row's explanation (11 pt, secondary): cap top 30.5, baseline 38.5 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureSubtitleBaseline: 38.5
+    // a gesture row's switch centred 19.25 below the row's top, beside the title [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureControlCenter: 19.25
+    // the row under the pointer: the text colour at 0.03 (240 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureHoverOpacity: 0.03
+    // Tracking speed's row, 50 tall [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackingRowHeight: 50
+    // Tracking speed's slider from 211.5 to 458 (10 from the group's right edge) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsTrackingSliderX: 211.5
+    // Tracking speed's track centred 17 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackingSliderCenter: 17
+    // Slow and Fast under the slider's ends: cap top 29.5, baseline 37 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackingLabelBaseline: 37
+    // the trackpad drawing 97 wide [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackpadWidth: 97
+    // the trackpad drawing 73.5 tall [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsTrackpadHeight: 73.5
+    // the trackpad drawing's top 35.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsTrackpadTop: 35.5
+    // the trackpad drawing's corner, about 9 [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsTrackpadRadius: 9
+    // the mouse drawing 46 wide, a capsule [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseWidth: 46
+    // the mouse drawing 87.5 tall [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsMouseHeight: 87.5
+    // the mouse drawing's top 28.5 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsMouseTop: 28.5
+    // estimate: Grassfield's two-button mouse, the buttons' line 32 below the drawing's top (its own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseButtonsHeight: 32
+    // estimate: Grassfield's mouse wheel, 5 wide (its own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseWheelWidth: 5
+    // estimate: Grassfield's mouse wheel, 12 tall, centred between the top and the buttons' line (its own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsMouseWheelHeight: 12
+    // the device drawings' line, 2 wide [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsDeviceLineWidth: 2
+    // the device drawings' line in the text colour at 0.25 (185 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsDeviceLineOpacity: 0.25
+    // a finger of the gesture: a dot 9 across [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureDotSize: 9
+    // a finger of the gesture in the accent at about 0.68 (80, 160, 255 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGestureDotOpacity: 0.68
+    // estimate: the fingers' travel, one stroke of the gesture (macOS plays a video) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGestureTravelMs: 900
+    // estimate: the pause between two strokes of the gesture [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property int settingsGesturePauseMs: 700
+    // estimate: a click or a tap of the gesture, the fingers' dots a fifth smaller in the middle of the stroke [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
+    readonly property real settingsGesturePressScale: 0.2
+    // a printer's row, 51 tall [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterRowHeight: 51
+    // the printer's picture at 11 from the group's edge [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterPictureX: 11
+    // the printer's picture 16 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterPictureTop: 16
+    // the printer's picture 30 wide [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterPictureWidth: 30
+    // the printer's picture 20.5 tall [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property real settingsPrinterPictureHeight: 20.5
+    // the printer's name: ink at 53 (the text 1 to its left: the glyph's side bearing) [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterNameX: 52
+    // the printer's name (13 pt): cap top 13.5, baseline 23 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterNameBaseline: 23
+    // the status dot at 54 [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterDotX: 54
+    // the status dot, 6 across [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterDotSize: 6
+    // the status: ink at 64 (the text 1 to its left) [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterStatusX: 63
+    // the status (11 pt, secondary): baseline 38 below the row's top [ref: docs/audits/settings-parity-2026-10-26.md § Printers]
+    readonly property int settingsPrinterStatusBaseline: 38
+    // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
+    readonly property int settingsPushRowHeight: 44
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164

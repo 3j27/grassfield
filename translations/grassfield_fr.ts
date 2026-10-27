@@ -152,35 +152,7 @@
     </message>
 </context>
 <context>
-    <name>AccessibilityPage</name>
-    <message>
-        <source>Accessibility</source>
-        <translation>Accessibilité</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
-    </message>
-    <message>
-        <source>Details: %1</source>
-        <translation>Détails&#xa0;: %1</translation>
-    </message>
-    <message>
-        <source>Pointer</source>
-        <translation>Pointeur</translation>
-    </message>
+    <name>AccessibilityDisplayPage</name>
     <message>
         <source>White</source>
         <translation>Blanc</translation>
@@ -218,19 +190,35 @@
         <translation>Vert</translation>
     </message>
     <message>
-        <source>%1×</source>
-        <translation>%1×</translation>
-    </message>
-    <message>
         <source>Display</source>
         <translation>Affichage</translation>
     </message>
     <message>
-        <source>Text Size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size, as on a Mac. Increase Contrast draws borders and separators stronger and secondary text in the primary colour.</source>
-        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages ; la barre des menus et les menus gardent leur taille, comme sur un Mac. Augmenter le contraste dessine les bordures et les séparateurs plus forts et le texte secondaire dans la couleur principale.</translation>
+        <source>The pointer colours could not be applied. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées. Le pointeur n’a pas changé.</translation>
     </message>
     <message>
-        <source>Increase Contrast</source>
+        <source>The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>Details: %1</source>
+        <translation>Détails&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Increase contrast draws borders and separators stronger and secondary text in the primary colour.</source>
+        <translation>Augmenter le contraste renforce les bordures et les séparateurs et affiche le texte secondaire dans la couleur principale.</translation>
+    </message>
+    <message>
+        <source>Increase contrast</source>
         <translation>Augmenter le contraste</translation>
     </message>
     <message>
@@ -238,7 +226,7 @@
         <translation>Bordures et séparateurs plus marqués, texte à pleine intensité.</translation>
     </message>
     <message>
-        <source>Reduce Transparency</source>
+        <source>Reduce transparency</source>
         <translation>Réduire la transparence</translation>
     </message>
     <message>
@@ -246,20 +234,16 @@
         <translation>Surfaces opaques au lieu de translucides.</translation>
     </message>
     <message>
-        <source>Reduce Motion</source>
-        <translation>Réduire les animations</translation>
+        <source>Text</source>
+        <translation>Texte</translation>
     </message>
     <message>
-        <source>Animations are shortened to quick crossfades, windows and Spaces included.</source>
-        <translation>Les animations sont remplacées par de courts fondus enchaînés, fenêtres et bureaux compris.</translation>
+        <source>Text size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size.</source>
+        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages&#xa0;; la barre des menus et les menus gardent leur taille.</translation>
     </message>
     <message>
-        <source>Text Size</source>
+        <source>Text size</source>
         <translation>Taille du texte</translation>
-    </message>
-    <message>
-        <source>The size of the text in the shell&apos;s panels and in Settings.</source>
-        <translation>La taille du texte dans les panneaux du shell et dans Réglages.</translation>
     </message>
     <message>
         <source>100%</source>
@@ -278,40 +262,8 @@
         <translation>130&#xa0;%</translation>
     </message>
     <message>
-        <source>Zoom</source>
-        <translation>Zoom</translation>
-    </message>
-    <message>
-        <source>Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.</source>
-        <translation>Super + Alt + 8 active ou désactive le zoom, Super + Alt + = et Super + Alt + - changent le niveau. L’écran est agrandi autour du pointeur.</translation>
-    </message>
-    <message>
-        <source>Magnify the screen.</source>
-        <translation>Agrandir l’écran.</translation>
-    </message>
-    <message>
-        <source>Zoom level</source>
-        <translation>Niveau de zoom</translation>
-    </message>
-    <message>
-        <source>Keyboard</source>
-        <translation>Clavier</translation>
-    </message>
-    <message>
-        <source>Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.</source>
-        <translation>Les touches rémanentes et les touches lentes demandent une prise en charge par le compositeur, que Hyprland n’a pas encore.</translation>
-    </message>
-    <message>
-        <source>Sticky Keys</source>
-        <translation>Touches rémanentes</translation>
-    </message>
-    <message>
-        <source>Not available</source>
-        <translation>Indisponible</translation>
-    </message>
-    <message>
-        <source>Slow Keys</source>
-        <translation>Touches lentes</translation>
+        <source>Pointer</source>
+        <translation>Pointeur</translation>
     </message>
     <message>
         <source>Applying the new pointer colours…</source>
@@ -344,6 +296,137 @@
     <message>
         <source>Reset Colour</source>
         <translation>Réinitialiser la couleur</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityKeyboardPage</name>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+    <message>
+        <source>Hardware</source>
+        <translation>Matériel</translation>
+    </message>
+    <message>
+        <source>Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.</source>
+        <translation>Les touches rémanentes et les touches lentes demandent une prise en charge par le compositeur, que Hyprland n’a pas encore.</translation>
+    </message>
+    <message>
+        <source>Sticky Keys</source>
+        <translation>Touches rémanentes</translation>
+    </message>
+    <message>
+        <source>Not available</source>
+        <translation>Indisponible</translation>
+    </message>
+    <message>
+        <source>Slow Keys</source>
+        <translation>Touches lentes</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityMotionPage</name>
+    <message>
+        <source>Motion</source>
+        <translation>Mouvement</translation>
+    </message>
+    <message>
+        <source>Reduce motion</source>
+        <translation>Réduire les animations</translation>
+    </message>
+    <message>
+        <source>Animations are shortened to quick crossfades, windows and Spaces included.</source>
+        <translation>Les animations sont remplacées par de courts fondus enchaînés, fenêtres et bureaux compris.</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityPage</name>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>Adapt this computer to the way you see and the way you move: zoom, the display, motion and the keyboard.</source>
+        <translation>Adaptez cet ordinateur à votre vue et à vos mouvements : zoom, affichage, mouvement et clavier.</translation>
+    </message>
+    <message>
+        <source>Vision</source>
+        <translation>Vue</translation>
+    </message>
+    <message>
+        <source>Motion</source>
+        <translation>Mouvement</translation>
+    </message>
+    <message>
+        <source>Physical and Motor</source>
+        <translation>Physique et motricité</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Affichage</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+</context>
+<context>
+    <name>AccessibilityZoomPage</name>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>%1×</source>
+        <translation>%1×</translation>
+    </message>
+    <message>
+        <source>Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.</source>
+        <translation>Super + Alt + 8 active ou désactive le zoom, Super + Alt + = et Super + Alt + - changent le niveau. L’écran est agrandi autour du pointeur.</translation>
+    </message>
+    <message>
+        <source>Magnify the screen.</source>
+        <translation>Agrandir l’écran.</translation>
+    </message>
+    <message>
+        <source>Zoom level</source>
+        <translation>Niveau de zoom</translation>
+    </message>
+</context>
+<context>
+    <name>AddPrinterSheet</name>
+    <message>
+        <source>Add Printer</source>
+        <translation>Ajouter une imprimante</translation>
+    </message>
+    <message>
+        <source>Printers on your network that print without a driver are listed. Adding one asks for an administrator&apos;s password.</source>
+        <translation>Les imprimantes de votre réseau qui impriment sans pilote sont listées. En ajouter une demande le mot de passe d’un administrateur.</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <source>Choose a printer.</source>
+        <translation>Choisissez une imprimante.</translation>
+    </message>
+    <message>
+        <source>Printers found</source>
+        <translation>Imprimantes trouvées</translation>
+    </message>
+    <message>
+        <source>No printers were found on your network.</source>
+        <translation>Aucune imprimante n’a été trouvée sur votre réseau.</translation>
+    </message>
+    <message>
+        <source>Looking for printers…</source>
+        <translation>Recherche d’imprimantes…</translation>
     </message>
 </context>
 <context>
@@ -585,12 +668,12 @@
         <translation>Apparence</translation>
     </message>
     <message>
-        <source>Accent colour</source>
-        <translation>Couleur d’accentuation</translation>
+        <source>Colour</source>
+        <translation>Couleur</translation>
     </message>
     <message>
-        <source>Colour of buttons, selections, toggles and focus rings in the shell and in the apps. Multicolour is the Grassfield green. The highlight colour follows the accent.</source>
-        <translation>Couleur des boutons, des sélections, des interrupteurs et des anneaux de focus dans le shell et dans les apps. Multicolore est le vert Grassfield. La couleur de surbrillance suit l’accent.</translation>
+        <source>Accent colour</source>
+        <translation>Couleur d’accentuation</translation>
     </message>
     <message>
         <source>Multicolour</source>
@@ -605,20 +688,8 @@
         <translation>Sombre</translation>
     </message>
     <message>
-        <source>Icon appearance</source>
-        <translation>Apparence des icônes</translation>
-    </message>
-    <message>
-        <source>Applies to app and file icons in the Dock, Apps, Search, the desktop and Files. Tinted maps each icon to shades of one colour.</source>
-        <translation>S’applique aux icônes d’app et de fichier du Dock, d’Apps, de la recherche, du bureau et de Fichiers. Teinté ramène chaque icône à des nuances d’une seule couleur.</translation>
-    </message>
-    <message>
         <source>Blue</source>
         <translation>Bleu</translation>
-    </message>
-    <message>
-        <source>Light or dark windows, menus and panels. Auto is light by day and dark at night.</source>
-        <translation>Fenêtres, menus et panneaux clairs ou sombres. Automatique est clair le jour et sombre la nuit.</translation>
     </message>
     <message>
         <source>Auto</source>
@@ -653,8 +724,24 @@
         <translation>Graphite</translation>
     </message>
     <message>
-        <source>Accent</source>
-        <translation>Accent</translation>
+        <source>Text highlight colour</source>
+        <translation>Couleur de surbrillance du texte</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Icon style</source>
+        <translation>Style des icônes</translation>
+    </message>
+    <message>
+        <source>Icon theme</source>
+        <translation>Thème d’icônes</translation>
+    </message>
+    <message>
+        <source>Glass effects</source>
+        <translation>Effets de verre</translation>
     </message>
     <message>
         <source>Default</source>
@@ -673,48 +760,16 @@
         <translation>Couleur de teinte</translation>
     </message>
     <message>
-        <source>Choose Tinted to use a tint colour.</source>
-        <translation>Choisissez Teinté pour utiliser une couleur de teinte.</translation>
-    </message>
-    <message>
         <source>Folder colour</source>
         <translation>Couleur des dossiers</translation>
-    </message>
-    <message>
-        <source>Applies to every folder icon in Files, the desktop and Get Info. A folder can have its own colour (Files, Customize Folder).</source>
-        <translation>S’applique à chaque icône de dossier dans Fichiers, sur le bureau et dans Lire les informations. Un dossier peut avoir sa propre couleur (Fichiers, Personnaliser le dossier).</translation>
     </message>
     <message>
         <source>Theme</source>
         <translation>Thème</translation>
     </message>
     <message>
-        <source>Material</source>
-        <translation>Matière</translation>
-    </message>
-    <message>
-        <source>Transparency applies to the menu bar, Dock, menus and panels. Reduce Transparency makes them opaque.</source>
-        <translation>La transparence s’applique à la barre des menus, au Dock, aux menus et aux panneaux. Réduire la transparence les rend opaques.</translation>
-    </message>
-    <message>
         <source>Transparency</source>
         <translation>Transparence</translation>
-    </message>
-    <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
-    </message>
-    <message>
-        <source>Reduce Transparency</source>
-        <translation>Réduire la transparence</translation>
-    </message>
-    <message>
-        <source>Opaque surfaces instead of translucent ones.</source>
-        <translation>Surfaces opaques au lieu de translucides.</translation>
-    </message>
-    <message>
-        <source>Material profile</source>
-        <translation>Profil de matière</translation>
     </message>
     <message>
         <source>Full uses live previews, Balanced refreshes them less often, Reduced uses still images.</source>
@@ -731,18 +786,6 @@
     <message>
         <source>Reduced</source>
         <translation>Réduit</translation>
-    </message>
-    <message>
-        <source>Motion</source>
-        <translation>Animation</translation>
-    </message>
-    <message>
-        <source>Reduce Motion</source>
-        <translation>Réduire les animations</translation>
-    </message>
-    <message>
-        <source>Animations are shortened to quick crossfades.</source>
-        <translation>Les animations sont remplacées par de courts fondus enchaînés.</translation>
     </message>
 </context>
 <context>
@@ -834,6 +877,33 @@
     </message>
 </context>
 <context>
+    <name>ArrangeSheet</name>
+    <message>
+        <source>Arrange Displays</source>
+        <translation>Disposer les écrans</translation>
+    </message>
+    <message>
+        <source>Drag a display to place it beside another.</source>
+        <translation>Faites glisser un écran pour le placer à côté d’un autre.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Display arrangement</source>
+        <translation>Disposition des écrans</translation>
+    </message>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>At %1, %2</source>
+        <translation>À %1, %2</translation>
+    </message>
+</context>
+<context>
     <name>AttributionCard</name>
     <message>
         <source>About This Wallpaper</source>
@@ -866,6 +936,17 @@
     <message>
         <source>Close</source>
         <translation>Fermer</translation>
+    </message>
+</context>
+<context>
+    <name>AuthAgent</name>
+    <message>
+        <source>Request cancelled</source>
+        <translation>Demande annulée</translation>
+    </message>
+    <message>
+        <source>What you type is ignored for a moment.</source>
+        <translation>Ce que vous tapez est ignoré pendant un instant.</translation>
     </message>
 </context>
 <context>
@@ -912,6 +993,14 @@
     <message>
         <source>This request arrived at %1, while the screen was locked. Click the sheet to answer it.</source>
         <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1 and waited while the screen saver was on. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1 et a attendu pendant que l’économiseur d’écran était affiché. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, right after another one. Click the sheet to answer it.</source>
+        <translation>Cette demande est arrivée à %1, juste après une autre. Cliquez sur la fenêtre pour y répondre.</translation>
     </message>
     <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.</source>
@@ -993,6 +1082,64 @@
     </message>
 </context>
 <context>
+    <name>BatteryChart</name>
+    <message>
+        <source>%1 %</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>BatteryInfoSheet</name>
+    <message>
+        <source>Battery Health</source>
+        <translation>État de la batterie</translation>
+    </message>
+    <message>
+        <source>Charging</source>
+        <translation>Charge</translation>
+    </message>
+    <message>
+        <source>Batteries hold less charge as they age. The maximum capacity is measured against the battery&apos;s design capacity.</source>
+        <translation>Les batteries conservent moins de charge en vieillissant. La capacité maximale est mesurée par rapport à la capacité d’origine de la batterie.</translation>
+    </message>
+    <message>
+        <source>Stopping the charge before the battery is full helps it last longer when the computer stays on its power adapter.</source>
+        <translation>Arrêter la charge avant que la batterie soit pleine prolonge sa durée de vie quand l’ordinateur reste sur son adaptateur secteur.</translation>
+    </message>
+    <message>
+        <source>This battery does not offer a charge limit.</source>
+        <translation>Cette batterie ne propose pas de limite de charge.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Maximum capacity</source>
+        <translation>Capacité maximale</translation>
+    </message>
+    <message>
+        <source>%1 %</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Inconnue</translation>
+    </message>
+    <message>
+        <source>Cycle count</source>
+        <translation>Nombre de cycles</translation>
+    </message>
+    <message>
+        <source>Limit charging to %1 %</source>
+        <translation>Limiter la charge à %1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Limit charging</source>
+        <translation>Limiter la charge</translation>
+    </message>
+</context>
+<context>
     <name>BatteryMenu</name>
     <message>
         <source>%1:%2</source>
@@ -1029,6 +1176,137 @@
     <message>
         <source>Battery: %1%</source>
         <translation>Batterie&#xa0;: %1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>BatteryOptionsSheet</name>
+    <message>
+        <source>Battery Options</source>
+        <translation>Options de la batterie</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>Show Percentage</source>
+        <translation>Afficher le pourcentage</translation>
+    </message>
+    <message>
+        <source>Show the battery percentage in the menu bar</source>
+        <translation>Afficher le pourcentage de la batterie dans la barre des menus</translation>
+    </message>
+</context>
+<context>
+    <name>BatteryPage</name>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>Fully Charged</source>
+        <translation>Chargée</translation>
+    </message>
+    <message>
+        <source>%1 % · %2 until full</source>
+        <translation>%1&#xa0;% · %2 avant charge complète</translation>
+    </message>
+    <message>
+        <source>%1 % · Charging</source>
+        <translation>%1&#xa0;% · En charge</translation>
+    </message>
+    <message>
+        <source>%1 % · %2 remaining</source>
+        <translation>%1&#xa0;% · %2 restantes</translation>
+    </message>
+    <message>
+        <source>%1 %</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>12 A</source>
+        <translation>0 h</translation>
+    </message>
+    <message>
+        <source>12 P</source>
+        <translation>12 h</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <comment>short month name, day of the month</comment>
+        <translation>%2 %1</translation>
+    </message>
+    <message>
+        <source>Power profiles are not available: power-profiles-daemon is not running.</source>
+        <translation>Les profils d’énergie ne sont pas disponibles&#xa0;: power-profiles-daemon n’est pas lancé.</translation>
+    </message>
+    <message>
+        <source>Low Power Mode</source>
+        <translation>Mode Économie d’énergie</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>Only on Battery</source>
+        <translation>Sur batterie uniquement</translation>
+    </message>
+    <message>
+        <source>Only on Power Adapter</source>
+        <translation>Sur adaptateur secteur uniquement</translation>
+    </message>
+    <message>
+        <source>Battery Health</source>
+        <translation>État de la batterie</translation>
+    </message>
+    <message>
+        <source>Service Recommended</source>
+        <translation>Réparation recommandée</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <source>Battery Health details</source>
+        <translation>Détails de l’état de la batterie</translation>
+    </message>
+    <message>
+        <source>Charging</source>
+        <translation>Charge</translation>
+    </message>
+    <message>
+        <source>Charging details</source>
+        <translation>Détails de la charge</translation>
+    </message>
+    <message>
+        <source>Period</source>
+        <translation>Période</translation>
+    </message>
+    <message>
+        <source>Last 24 Hours</source>
+        <translation>Dernières 24 heures</translation>
+    </message>
+    <message>
+        <source>Last 10 Days</source>
+        <translation>10 derniers jours</translation>
+    </message>
+    <message>
+        <source>Battery Level</source>
+        <translation>Niveau de la batterie</translation>
+    </message>
+    <message>
+        <source>The battery cannot be read: UPower did not answer.</source>
+        <translation>La batterie ne peut pas être lue&#xa0;: UPower n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>This computer has no battery.</source>
+        <translation>Cet ordinateur n’a pas de batterie.</translation>
     </message>
 </context>
 <context>
@@ -1403,6 +1681,72 @@
     </message>
 </context>
 <context>
+    <name>BluetoothDeviceRow</name>
+    <message>
+        <source>%1 %</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Details of %1</source>
+        <translation>Détails de %1</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
+    <message>
+        <source>Connect %1</source>
+        <translation>Connecter %1</translation>
+    </message>
+</context>
+<context>
+    <name>BluetoothDeviceSheet</name>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Address</source>
+        <translation>Adresse</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>%1 %</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Not Connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
+    <message>
+        <source>Forget This Device…</source>
+        <translation>Oublier cet appareil…</translation>
+    </message>
+</context>
+<context>
     <name>BluetoothList</name>
     <message>
         <source>No Bluetooth adapter</source>
@@ -1456,24 +1800,32 @@
         <translation>Bluetooth n’est pas disponible&#xa0;: aucun adaptateur trouvé ou le service Bluetooth n’est pas lancé.</translation>
     </message>
     <message>
+        <source>Connect accessories such as headphones, keyboards, mice and game controllers to this computer.</source>
+        <translation>Connectez à cet ordinateur des accessoires comme des écouteurs, des claviers, des souris et des manettes de jeu.</translation>
+    </message>
+    <message>
+        <source>Other devices see this computer as “%1”.</source>
+        <translation>Les autres appareils voient cet ordinateur sous le nom «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
         <source>My Devices</source>
         <translation>Mes appareils</translation>
     </message>
     <message>
-        <source>No paired devices. Pair a device with your system&apos;s Bluetooth tools.</source>
-        <translation>Aucun appareil associé. Associez un appareil avec les outils Bluetooth du système.</translation>
+        <source>No paired devices</source>
+        <translation>Aucun appareil jumelé</translation>
     </message>
     <message>
-        <source>Devices are paired outside Settings for now.</source>
-        <translation>Les appareils sont associés en dehors des Réglages pour l’instant.</translation>
+        <source>Nearby Devices</source>
+        <translation>Appareils à proximité</translation>
     </message>
     <message>
-        <source>Disconnect</source>
-        <translation>Déconnecter</translation>
+        <source>Searching…</source>
+        <translation>Recherche…</translation>
     </message>
     <message>
-        <source>Connect</source>
-        <translation>Connecter</translation>
+        <source>No devices found</source>
+        <translation>Aucun appareil trouvé</translation>
     </message>
 </context>
 <context>
@@ -2186,6 +2538,25 @@
     </message>
 </context>
 <context>
+    <name>CurrentNetworkRow</name>
+    <message>
+        <source>Secured</source>
+        <translation>Sécurisé</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvert</translation>
+    </message>
+    <message>
+        <source>Signal %1 %</source>
+        <translation>Signal %1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
+    </message>
+</context>
+<context>
     <name>CustomizeFolderWindow</name>
     <message>
         <source>Default</source>
@@ -2364,26 +2735,6 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>None</source>
-        <translation>Aucune</translation>
-    </message>
-    <message>
-        <source>Overview</source>
-        <translation>Vue d’ensemble</translation>
-    </message>
-    <message>
-        <source>Notifications</source>
-        <translation>Notifications</translation>
-    </message>
-    <message>
-        <source>Apps</source>
-        <translation>Apps</translation>
-    </message>
-    <message>
-        <source>Lock Screen</source>
-        <translation>Verrouiller l’écran</translation>
-    </message>
-    <message>
         <source>Dock</source>
         <translation>Dock</translation>
     </message>
@@ -2392,32 +2743,8 @@
         <translation>Agrandissement</translation>
     </message>
     <message>
-        <source>Icons grow under the pointer.</source>
-        <translation>Les icônes grossissent sous le pointeur.</translation>
-    </message>
-    <message>
-        <source>Magnification size</source>
-        <translation>Taille de l’agrandissement</translation>
-    </message>
-    <message>
-        <source>%1x</source>
-        <translation>%1x</translation>
-    </message>
-    <message>
-        <source>With Reduce Motion on, windows fade instead.</source>
-        <translation>Avec «&#xa0;Réduire les animations&#xa0;», les fenêtres s’estompent à la place.</translation>
-    </message>
-    <message>
-        <source>Minimize animation</source>
-        <translation>Animation de réduction</translation>
-    </message>
-    <message>
         <source>Size</source>
         <translation>Taille</translation>
-    </message>
-    <message>
-        <source>The size of the icons in the Dock. You can also drag the divider in the Dock.</source>
-        <translation>La taille des icônes du Dock. Vous pouvez aussi faire glisser la séparation dans le Dock.</translation>
     </message>
     <message>
         <source>Small</source>
@@ -2426,14 +2753,6 @@
     <message>
         <source>Large</source>
         <translation>Grand</translation>
-    </message>
-    <message>
-        <source>Position on screen</source>
-        <translation>Position à l’écran</translation>
-    </message>
-    <message>
-        <source>The Dock goes to the edge you choose. With several displays it is on the one where the pointer last reached that edge.</source>
-        <translation>Le Dock se place au bord choisi. Avec plusieurs écrans, il est sur celui où le pointeur a touché ce bord en dernier.</translation>
     </message>
     <message>
         <source>Left</source>
@@ -2448,6 +2767,10 @@
         <translation>Droite</translation>
     </message>
     <message>
+        <source>Minimized window animation</source>
+        <translation>Animation de réduction des fenêtres</translation>
+    </message>
+    <message>
         <source>Funnel</source>
         <translation>Entonnoir</translation>
     </message>
@@ -2456,40 +2779,16 @@
         <translation>Rétrécissement</translation>
     </message>
     <message>
-        <source>Automatically hide the Dock</source>
-        <translation>Masquer automatiquement le Dock</translation>
-    </message>
-    <message>
-        <source>Show recent applications in the Dock</source>
-        <translation>Afficher les applications récentes dans le Dock</translation>
-    </message>
-    <message>
-        <source>Apps you used recently that are not kept in the Dock appear in their own section before the Trash.</source>
-        <translation>Les apps utilisées récemment et non conservées dans le Dock apparaissent dans leur propre section avant la Corbeille.</translation>
-    </message>
-    <message>
         <source>Minimize windows into application icon</source>
         <translation>Réduire les fenêtres dans l’icône de l’application</translation>
-    </message>
-    <message>
-        <source>Off: each minimized window gets its own tile next to the Trash.</source>
-        <translation>Désactivé : chaque fenêtre réduite a sa propre icône près de la Corbeille.</translation>
     </message>
     <message>
         <source>Animate opening applications</source>
         <translation>Animer l’ouverture des applications</translation>
     </message>
     <message>
-        <source>The icon bounces while an application opens.</source>
-        <translation>L’icône rebondit pendant l’ouverture d’une application.</translation>
-    </message>
-    <message>
         <source>Show indicators for open applications</source>
         <translation>Afficher les indicateurs des applications ouvertes</translation>
-    </message>
-    <message>
-        <source>A small dot under the icon of each open application.</source>
-        <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
     </message>
     <message>
         <source>Choose a folder for the Dock</source>
@@ -2520,24 +2819,12 @@
         <translation>Ajouter un dossier…</translation>
     </message>
     <message>
-        <source>Desktop</source>
-        <translation>Bureau</translation>
-    </message>
-    <message>
         <source>Show items on the desktop</source>
         <translation>Afficher les éléments sur le bureau</translation>
     </message>
     <message>
-        <source>Files and folders of the Desktop folder appear on the wallpaper.</source>
-        <translation>Les fichiers et dossiers du dossier Bureau apparaissent sur le fond d’écran.</translation>
-    </message>
-    <message>
         <source>Windows</source>
         <translation>Fenêtres</translation>
-    </message>
-    <message>
-        <source>Double-click a window&apos;s title bar to</source>
-        <translation>Un double-clic sur la barre de titre d’une fenêtre permet de</translation>
     </message>
     <message>
         <source>Zoom</source>
@@ -2554,10 +2841,6 @@
     <message>
         <source>Drag windows to screen edges to tile</source>
         <translation>Faire glisser les fenêtres vers les bords de l’écran pour les disposer en mosaïque</translation>
-    </message>
-    <message>
-        <source>A window dragged to the left or right edge fills that half, to a corner that quarter.</source>
-        <translation>Une fenêtre glissée vers le bord gauche ou droit occupe cette moitié de l’écran, vers un coin ce quart.</translation>
     </message>
     <message>
         <source>Drag windows to menu bar to fill screen</source>
@@ -2580,6 +2863,38 @@
         <translation>Stages</translation>
     </message>
     <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Dock position on screen</source>
+        <translation>Position du Dock à l’écran</translation>
+    </message>
+    <message>
+        <source>Window title bar double-click action</source>
+        <translation>Action du double-clic sur la barre de titre</translation>
+    </message>
+    <message>
+        <source>Automatically hide and show the Dock</source>
+        <translation>Masquer et afficher automatiquement le Dock</translation>
+    </message>
+    <message>
+        <source>Show recent apps in Dock</source>
+        <translation>Afficher les apps récentes dans le Dock</translation>
+    </message>
+    <message>
+        <source>Desktop &amp; Stages</source>
+        <translation>Bureau et Stages</translation>
+    </message>
+    <message>
+        <source>Show items</source>
+        <translation>Afficher les éléments</translation>
+    </message>
+    <message>
+        <source>On Desktop</source>
+        <translation>Sur le bureau</translation>
+    </message>
+    <message>
         <source>Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.</source>
         <translation>Nécessite l’extension de compositeur Grassfield. L’interrupteur Stages est aussi dans les Réglages rapides.</translation>
     </message>
@@ -2588,44 +2903,8 @@
         <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
     </message>
     <message>
-        <source>Screen Corners</source>
-        <translation>Coins de l’écran</translation>
-    </message>
-    <message>
-        <source>Move the pointer into a screen corner to run the action.</source>
-        <translation>Placez le pointeur dans un coin de l’écran pour lancer l’action.</translation>
-    </message>
-    <message>
-        <source>Top left</source>
-        <translation>En haut à gauche</translation>
-    </message>
-    <message>
-        <source>Top left corner</source>
-        <translation>Coin supérieur gauche</translation>
-    </message>
-    <message>
-        <source>Top right</source>
-        <translation>En haut à droite</translation>
-    </message>
-    <message>
-        <source>Top right corner</source>
-        <translation>Coin supérieur droit</translation>
-    </message>
-    <message>
-        <source>Bottom left</source>
-        <translation>En bas à gauche</translation>
-    </message>
-    <message>
-        <source>Bottom left corner</source>
-        <translation>Coin inférieur gauche</translation>
-    </message>
-    <message>
-        <source>Bottom right</source>
-        <translation>En bas à droite</translation>
-    </message>
-    <message>
-        <source>Bottom right corner</source>
-        <translation>Coin inférieur droit</translation>
+        <source>Screen Corners…</source>
+        <translation>Coins de l’écran…</translation>
     </message>
 </context>
 <context>
@@ -2636,50 +2915,122 @@
     </message>
 </context>
 <context>
+    <name>DisplayHeader</name>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayKeepSheet</name>
+    <message>
+        <source>Keep these display settings?</source>
+        <translation>Conserver ces réglages d’affichage&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The previous settings come back in %1 s.</source>
+        <translation>Les réglages précédents reviennent dans %1&#xa0;s.</translation>
+    </message>
+    <message>
+        <source>Keep</source>
+        <translation>Conserver</translation>
+    </message>
+    <message>
+        <source>Revert</source>
+        <translation>Rétablir</translation>
+    </message>
+    <message>
+        <source>The new settings are not on the screen yet.</source>
+        <translation>Les nouveaux réglages ne sont pas encore à l’écran.</translation>
+    </message>
+</context>
+<context>
+    <name>Displays</name>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1&#xa0;Hz</translation>
+    </message>
+</context>
+<context>
     <name>DisplaysPage</name>
     <message>
         <source>Displays</source>
         <translation>Moniteurs</translation>
     </message>
     <message>
-        <source>No display information is available.</source>
-        <translation>Aucune information sur les moniteurs n’est disponible.</translation>
+        <source>The change could not be tried: %1</source>
+        <translation>Le changement n’a pas pu être essayé&#xa0;: %1</translation>
     </message>
     <message>
-        <source>Arrangement</source>
-        <translation>Disposition</translation>
+        <source>The display settings could not be saved for the next login: %1</source>
+        <translation>Les réglages d’affichage n’ont pas pu être enregistrés pour la prochaine ouverture de session&#xa0;: %1</translation>
     </message>
     <message>
-        <source>Display arrangement</source>
-        <translation>Disposition des moniteurs</translation>
+        <source>The display settings were taken back before they were kept.</source>
+        <translation>Les réglages d’affichage ont été rétablis avant d’être conservés.</translation>
     </message>
     <message>
-        <source>%1 (%2)</source>
-        <translation>%1 (%2)</translation>
+        <source>The display settings were not kept: the Grassfield shell did not answer.</source>
+        <translation>Les réglages d’affichage n’ont pas été conservés&#xa0;: le shell Grassfield n’a pas répondu.</translation>
     </message>
     <message>
-        <source>Resolution, scale and arrangement cannot be changed from Settings yet. They come from your Hyprland monitor configuration.</source>
-        <translation>La résolution, l’échelle et la disposition ne peuvent pas encore être modifiées depuis les Réglages. Elles proviennent de la configuration des moniteurs de Hyprland.</translation>
+        <source>The change was not applied: the Grassfield shell did not answer.</source>
+        <translation>Le changement n’a pas été appliqué&#xa0;: le shell Grassfield n’a pas répondu.</translation>
     </message>
     <message>
-        <source>Resolution</source>
-        <translation>Résolution</translation>
+        <source>Display settings are not available: the Grassfield shell has not described the displays.</source>
+        <translation>Les réglages des écrans ne sont pas disponibles&#xa0;: le shell Grassfield n’a pas décrit les écrans.</translation>
     </message>
     <message>
-        <source>Refresh Rate</source>
+        <source>Brightness</source>
+        <translation>Luminosité</translation>
+    </message>
+    <message>
+        <source>This display has no name Grassfield can keep its settings under.</source>
+        <translation>Cet écran n’a pas de nom sous lequel Grassfield puisse conserver ses réglages.</translation>
+    </message>
+    <message>
+        <source>Refresh rate</source>
         <translation>Fréquence de rafraîchissement</translation>
     </message>
     <message>
-        <source>%1 Hz</source>
-        <translation>%1&#xa0;Hz</translation>
+        <source>Rotation</source>
+        <translation>Rotation</translation>
     </message>
     <message>
-        <source>Scale</source>
-        <translation>Échelle</translation>
+        <source>Standard</source>
+        <translation>Standard</translation>
     </message>
     <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
+        <source>90°</source>
+        <translation>90°</translation>
+    </message>
+    <message>
+        <source>180°</source>
+        <translation>180°</translation>
+    </message>
+    <message>
+        <source>270°</source>
+        <translation>270°</translation>
+    </message>
+    <message>
+        <source>Arrange…</source>
+        <translation>Disposer…</translation>
+    </message>
+</context>
+<context>
+    <name>DoNotDisturbPage</name>
+    <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>Silences banners except critical ones; notifications still collect in the Notifications panel.</source>
+        <translation>Désactive les bannières sauf les critiques ; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
     </message>
 </context>
 <context>
@@ -3253,6 +3604,25 @@
     </message>
 </context>
 <context>
+    <name>FocusPage</name>
+    <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>Do Not Disturb is also in Quick Settings and, while it is on, in the menu bar.</source>
+        <translation>Ne pas déranger se trouve aussi dans les Réglages rapides et, quand il est activé, dans la barre des menus.</translation>
+    </message>
+    <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
+    </message>
+</context>
+<context>
     <name>FolderModel</name>
     <message>
         <source>Recents</source>
@@ -3357,6 +3727,36 @@
     </message>
 </context>
 <context>
+    <name>ForgetDeviceSheet</name>
+    <message>
+        <source>Forget “%1”?</source>
+        <translation>Oublier «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The device is removed from this computer. To use it again, pair it again.</source>
+        <translation>L’appareil est supprimé de cet ordinateur. Pour l’utiliser de nouveau, jumelez-le de nouveau.</translation>
+    </message>
+    <message>
+        <source>Forget Device</source>
+        <translation>Oublier l’appareil</translation>
+    </message>
+</context>
+<context>
+    <name>ForgetNetworkSheet</name>
+    <message>
+        <source>Forget Wi-Fi network “%1”?</source>
+        <translation>Oublier le réseau Wi-Fi «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>This computer will no longer join this network on its own, and its saved password is removed.</source>
+        <translation>Cet ordinateur ne rejoindra plus ce réseau de lui-même, et son mot de passe enregistré est supprimé.</translation>
+    </message>
+    <message>
+        <source>Forget</source>
+        <translation>Oublier</translation>
+    </message>
+</context>
+<context>
     <name>GalleryView</name>
     <message>
         <source>Gallery</source>
@@ -3403,6 +3803,13 @@
     </message>
 </context>
 <context>
+    <name>GestureHeader</name>
+    <message>
+        <source>Gestures</source>
+        <translation>Gestes</translation>
+    </message>
+</context>
+<context>
     <name>Glance</name>
     <message>
         <source>Glance</source>
@@ -3427,6 +3834,21 @@
     <message>
         <source>Open with Preview</source>
         <translation>Ouvrir avec la Visionneuse</translation>
+    </message>
+</context>
+<context>
+    <name>GlassPreview</name>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Welcome to Grassfield</source>
+        <translation>Bienvenue dans Grassfield</translation>
+    </message>
+    <message>
+        <source>Transparency</source>
+        <translation>Transparence</translation>
     </message>
 </context>
 <context>
@@ -4139,35 +4561,109 @@
     </message>
 </context>
 <context>
+    <name>InputSourcesSheet</name>
+    <message>
+        <source>Input Sources</source>
+        <translation>Méthodes de saisie</translation>
+    </message>
+    <message>
+        <source>Add an input source to type in another layout.</source>
+        <translation>Ajoutez une méthode de saisie pour écrire avec une autre disposition.</translation>
+    </message>
+    <message>
+        <source>Drag an input source to change the order: the first one is used at login. Press Control-Space to select the next input source.</source>
+        <translation>Faites glisser une méthode de saisie pour changer l’ordre&#xa0;: la première est utilisée à l’ouverture de session. Appuyez sur Contrôle-Espace pour sélectionner la méthode de saisie suivante.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Add an input source</source>
+        <translation>Ajouter une méthode de saisie</translation>
+    </message>
+    <message>
+        <source>Remove the selected input source</source>
+        <translation>Supprimer la méthode de saisie sélectionnée</translation>
+    </message>
+</context>
+<context>
     <name>KeyboardPage</name>
     <message>
         <source>Keyboard</source>
         <translation>Clavier</translation>
     </message>
     <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>Le changement n’a pas pu être enregistré&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Key repeat rate</source>
+        <translation>Fréquence de répétition des touches</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivée</translation>
+    </message>
+    <message>
+        <source>Slow</source>
+        <translation>Lente</translation>
+    </message>
+    <message>
+        <source>Fast</source>
+        <translation>Rapide</translation>
+    </message>
+    <message>
+        <source>Delay until repeat</source>
+        <translation>Délai avant répétition</translation>
+    </message>
+    <message>
+        <source>Long</source>
+        <translation>Long</translation>
+    </message>
+    <message>
+        <source>Short</source>
+        <translation>Court</translation>
+    </message>
+    <message>
         <source>Shortcuts in menus</source>
         <translation>Raccourcis dans les menus</translation>
     </message>
     <message>
-        <source>Automatic shows the Mac symbols (⌘ for Super) on a Mac or with an Apple keyboard, and the key names on other computers.</source>
-        <translation>Automatique affiche les symboles Mac (⌘ pour Super) sur un Mac ou avec un clavier Apple, et le nom des touches sur les autres ordinateurs.</translation>
+        <source>Automatic shows the symbols (⌘ for Super) when the computer or its keyboard has them on its keys, and the key names otherwise.</source>
+        <translation>Automatique affiche les symboles (⌘ pour Super) quand l’ordinateur ou son clavier les porte sur ses touches, et sinon le nom des touches.</translation>
     </message>
     <message>
         <source>Automatic</source>
         <translation>Automatique</translation>
     </message>
     <message>
-        <source>Mac Symbols</source>
-        <translation>Symboles Mac</translation>
-    </message>
-    <message>
         <source>Key Names</source>
         <translation>Noms des touches</translation>
     </message>
     <message>
-        <source>The shortcuts file could not be read: %1</source>
-        <translation>Le fichier des raccourcis n’a pas pu être lu&#xa0;: %1</translation>
+        <source>Symbols</source>
+        <translation>Symboles</translation>
     </message>
+    <message>
+        <source>Keyboard Shortcuts…</source>
+        <translation>Raccourcis clavier…</translation>
+    </message>
+    <message>
+        <source>Text Input</source>
+        <translation>Saisie de texte</translation>
+    </message>
+    <message>
+        <source>Input Sources</source>
+        <translation>Méthodes de saisie</translation>
+    </message>
+    <message>
+        <source>Edit…</source>
+        <translation>Modifier…</translation>
+    </message>
+</context>
+<context>
+    <name>KeyboardShortcutsSheet</name>
     <message>
         <source>Keyboard Shortcuts</source>
         <translation>Raccourcis clavier</translation>
@@ -4175,6 +4671,14 @@
     <message>
         <source>Shortcuts are read-only here. They are defined in %1.</source>
         <translation>Les raccourcis sont en lecture seule ici. Ils sont définis dans %1.</translation>
+    </message>
+    <message>
+        <source>The shortcuts file could not be read: %1</source>
+        <translation>Le fichier des raccourcis n’a pas pu être lu&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
     </message>
 </context>
 <context>
@@ -4241,6 +4745,33 @@
     </message>
 </context>
 <context>
+    <name>LayoutPickerSheet</name>
+    <message>
+        <source>Add an Input Source</source>
+        <translation>Ajouter une méthode de saisie</translation>
+    </message>
+    <message>
+        <source>Choose a keyboard layout.</source>
+        <translation>Choisissez une disposition de clavier.</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Keyboard layouts</source>
+        <translation>Dispositions de clavier</translation>
+    </message>
+    <message>
+        <source>No layouts</source>
+        <translation>Aucune disposition</translation>
+    </message>
+</context>
+<context>
     <name>Lock</name>
     <message>
         <source>Authentication service unavailable. The session stays locked.</source>
@@ -4279,6 +4810,25 @@
     </message>
 </context>
 <context>
+    <name>LockMessageSheet</name>
+    <message>
+        <source>Set a message to show on the lock screen</source>
+        <translation>Définir un message à afficher sur l’écran verrouillé</translation>
+    </message>
+    <message>
+        <source>Message</source>
+        <translation>Message</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>The message must be one line of at most 200 characters.</source>
+        <translation>Le message doit tenir sur une ligne de 200 caractères au plus.</translation>
+    </message>
+</context>
+<context>
     <name>LockPage</name>
     <message>
         <source>Lock Screen</source>
@@ -4289,20 +4839,80 @@
         <translation>Jamais</translation>
     </message>
     <message>
-        <source>1 minute</source>
-        <translation>1 minute</translation>
+        <source>For 1 hour</source>
+        <translation>Pendant 1 heure</translation>
     </message>
     <message>
-        <source>%1 minutes</source>
-        <translation>%1 minutes</translation>
+        <source>For %1 hours</source>
+        <translation>Pendant %1 heures</translation>
     </message>
     <message>
-        <source>The screen locks after this much time without keyboard or pointer input.</source>
-        <translation>L’écran se verrouille après ce délai sans saisie au clavier ni au pointeur.</translation>
+        <source>For 1 minute</source>
+        <translation>Pendant 1 minute</translation>
     </message>
     <message>
-        <source>Lock screen after inactivity</source>
-        <translation>Verrouiller l’écran après inactivité</translation>
+        <source>For %1 minutes</source>
+        <translation>Pendant %1 minutes</translation>
+    </message>
+    <message>
+        <source>After 1 hour</source>
+        <translation>Après 1 heure</translation>
+    </message>
+    <message>
+        <source>After %1 hours</source>
+        <translation>Après %1 heures</translation>
+    </message>
+    <message>
+        <source>After 1 minute</source>
+        <translation>Après 1 minute</translation>
+    </message>
+    <message>
+        <source>After %1 minutes</source>
+        <translation>Après %1 minutes</translation>
+    </message>
+    <message>
+        <source>The session does not lock by itself: a display that turned off comes back on with any input, without the password.</source>
+        <translation>La session ne se verrouille pas d’elle-même&#xa0;: un écran éteint se rallume à la moindre saisie, sans le mot de passe.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input. A display that turns off earlier is not locked: until the session locks, any input turns it back on without the password.</source>
+        <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur. Un écran qui s’éteint avant n’est pas verrouillé&#xa0;: tant que la session ne l’est pas, la moindre saisie le rallume sans le mot de passe.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, whether the displays are on or off.</source>
+        <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur, que les écrans soient allumés ou éteints.</translation>
+    </message>
+    <message>
+        <source>Turn display off on battery when inactive</source>
+        <translation>Éteindre l’écran sur batterie en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Turn display off on power adapter when inactive</source>
+        <translation>Éteindre l’écran sur l’adaptateur secteur en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Turn display off when inactive</source>
+        <translation>Éteindre l’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Require password after inactivity</source>
+        <translation>Exiger le mot de passe après une inactivité</translation>
+    </message>
+    <message>
+        <source>Show user name and photo</source>
+        <translation>Afficher le nom et la photo de l’utilisateur</translation>
+    </message>
+    <message>
+        <source>Show message when locked</source>
+        <translation>Afficher un message lorsque l’écran est verrouillé</translation>
+    </message>
+    <message>
+        <source>Set…</source>
+        <translation>Régler…</translation>
+    </message>
+    <message>
+        <source>Set the message</source>
+        <translation>Régler le message</translation>
     </message>
 </context>
 <context>
@@ -4442,10 +5052,6 @@
         <translation>informations stockage date heure langue région ouverture éléments démarrage</translation>
     </message>
     <message>
-        <source>pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display</source>
-        <translation>pointeur curseur taille souris grand couleur contour remplissage contraste transparence animation texte taille agrandir affichage</translation>
-    </message>
-    <message>
         <source>Desktop &amp; Dock</source>
         <translation>Bureau et Dock</translation>
     </message>
@@ -4478,14 +5084,6 @@
         <translation>inactivité verrouillage mot de passe</translation>
     </message>
     <message>
-        <source>Mouse &amp; Trackpad</source>
-        <translation>Souris et trackpad</translation>
-    </message>
-    <message>
-        <source>pointer tracking speed scrolling natural tap click secondary right click touchpad</source>
-        <translation>pointeur vitesse de déplacement défilement naturel toucher cliquer clic secondaire droit pavé tactile</translation>
-    </message>
-    <message>
         <source>version system hardware processor memory computer name graphics serial</source>
         <translation>version système matériel processeur mémoire nom ordinateur graphisme série</translation>
     </message>
@@ -4494,8 +5092,80 @@
         <translation>Clavier</translation>
     </message>
     <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>ethernet wired ip address router dns firewall</source>
+        <translation>ethernet filaire adresse ip routeur dns coupe-feu pare-feu</translation>
+    </message>
+    <message>
+        <source>VPN</source>
+        <translation>VPN</translation>
+    </message>
+    <message>
+        <source>vpn wireguard openvpn tunnel</source>
+        <translation>vpn wireguard openvpn tunnel réseau privé virtuel</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>battery power low power mode energy health charging charge limit</source>
+        <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
+    </message>
+    <message>
+        <source>vision physical motor zoom display motion keyboard</source>
+        <translation>vue physique motricité zoom affichage mouvement clavier</translation>
+    </message>
+    <message>
+        <source>search results history calculator conversions documents commands</source>
+        <translation>recherche résultats historique calculatrice conversions documents commandes</translation>
+    </message>
+    <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>do not disturb silence quiet banners</source>
+        <translation>ne pas déranger silence calme bannières concentration</translation>
+    </message>
+    <message>
+        <source>Privacy &amp; Security</source>
+        <translation>Confidentialité et sécurité</translation>
+    </message>
+    <message>
+        <source>privacy permissions location camera background screen sharing remote desktop apps flatpak portal</source>
+        <translation>confidentialité autorisations localisation caméra appareil photo arrière-plan partage d’écran bureau à distance apps flatpak portail</translation>
+    </message>
+    <message>
         <source>shortcuts keys bindings</source>
         <translation>raccourcis touches clavier</translation>
+    </message>
+    <message>
+        <source>Mouse</source>
+        <translation>Souris</translation>
+    </message>
+    <message>
+        <source>pointer tracking speed scrolling natural wheel bluetooth</source>
+        <translation>pointeur vitesse déplacement défilement naturel molette bluetooth</translation>
+    </message>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch</source>
+        <translation>pavé tactile touchpad pointeur vitesse déplacement défilement naturel toucher clic secondaire clic droit gestes balayer pincer</translation>
+    </message>
+    <message>
+        <source>Printers</source>
+        <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>printer printing print queue cups paper size default printer add remove airprint ipp everywhere</source>
+        <translation>imprimante impression imprimer file d’attente cups format de papier imprimante par défaut ajouter supprimer airprint ipp everywhere</translation>
     </message>
     <message>
         <source>About</source>
@@ -4534,6 +5204,82 @@
         <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier</translation>
     </message>
     <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>focus silence quiet banners notifications</source>
+        <translation>concentration silence calme bannières notifications</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>accessibility magnify magnifier zoom level larger screen</source>
+        <translation>accessibilité agrandir loupe zoom niveau plus grand écran</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Affichage</translation>
+    </message>
+    <message>
+        <source>accessibility contrast transparency text size larger pointer cursor size mouse large color colour outline fill</source>
+        <translation>accessibilité contraste transparence taille du texte plus grand pointeur curseur taille souris grand couleur contour remplissage</translation>
+    </message>
+    <message>
+        <source>Motion</source>
+        <translation>Mouvement</translation>
+    </message>
+    <message>
+        <source>accessibility reduce motion animations</source>
+        <translation>accessibilité réduire les animations mouvement</translation>
+    </message>
+    <message>
+        <source>accessibility sticky keys slow keys</source>
+        <translation>accessibilité touches rémanentes touches lentes</translation>
+    </message>
+    <message>
+        <source>Location Services</source>
+        <translation>Service de localisation</translation>
+    </message>
+    <message>
+        <source>privacy location where apps allow</source>
+        <translation>confidentialité localisation position apps autoriser</translation>
+    </message>
+    <message>
+        <source>Background Apps</source>
+        <translation>Apps en arrière-plan</translation>
+    </message>
+    <message>
+        <source>privacy background apps running allow</source>
+        <translation>confidentialité arrière-plan apps exécution autoriser</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>Appareil photo</translation>
+    </message>
+    <message>
+        <source>privacy camera webcam video apps allow</source>
+        <translation>confidentialité caméra appareil photo webcam vidéo apps autoriser</translation>
+    </message>
+    <message>
+        <source>Remote Desktop</source>
+        <translation>Bureau à distance</translation>
+    </message>
+    <message>
+        <source>privacy remote desktop control saved choices</source>
+        <translation>confidentialité bureau à distance contrôle choix enregistrés</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
+        <source>privacy screen sharing recording window saved choices</source>
+        <translation>confidentialité partage d’écran enregistrement fenêtre choix enregistrés</translation>
+    </message>
+    <message>
         <source>grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.</source>
         <translation>grassfield.json est inutilisable&#xa0;: %1. Les réglages sont en lecture seule jusqu’à la correction du fichier&#xa0;; le fichier n’a pas été modifié.</translation>
     </message>
@@ -4548,6 +5294,18 @@
     <message>
         <source>Search settings</source>
         <translation>Rechercher dans les réglages</translation>
+    </message>
+    <message>
+        <source>Delete your search history?</source>
+        <translation>Supprimer votre historique de recherche ?</translation>
+    </message>
+    <message>
+        <source>Search forgets the results you picked, so it no longer puts them first.</source>
+        <translation>Recherche oublie les résultats que vous avez choisis et ne les place plus en premier.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
     </message>
     <message>
         <source>Search</source>
@@ -4691,12 +5449,12 @@
         <translation>Barre des menus</translation>
     </message>
     <message>
-        <source>Automatically hide and show the menu bar</source>
-        <translation>Masquer et afficher automatiquement la barre des menus</translation>
+        <source>Show %1 in the menu bar</source>
+        <translation>Afficher « %1 » dans la barre des menus</translation>
     </message>
     <message>
-        <source>A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.</source>
-        <translation>Une barre des menus masquée glisse par-dessus la fenêtre quand le pointeur atteint le bord supérieur de l’écran.</translation>
+        <source>Automatically hide and show the menu bar</source>
+        <translation>Masquer et afficher automatiquement la barre des menus</translation>
     </message>
     <message>
         <source>Always</source>
@@ -4719,8 +5477,8 @@
         <translation>Afficher l’arrière-plan de la barre des menus</translation>
     </message>
     <message>
-        <source>Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.</source>
-        <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
+        <source>Battery Options…</source>
+        <translation>Options de la batterie…</translation>
     </message>
     <message>
         <source>Recent documents and applications</source>
@@ -4739,14 +5497,6 @@
         <translation>Options de l’horloge…</translation>
     </message>
     <message>
-        <source>Date, day of the week, 24-hour time, seconds.</source>
-        <translation>Date, jour de la semaine, heure sur 24 heures, secondes.</translation>
-    </message>
-    <message>
-        <source>The number of items the Recent Items menu lists. None hides the menu.</source>
-        <translation>Nombre d’éléments listés par le menu Éléments récents. « Aucune » masque le menu.</translation>
-    </message>
-    <message>
         <source>Menu Bar Controls</source>
         <translation>Commandes de la barre des menus</translation>
     </message>
@@ -4755,84 +5505,24 @@
         <translation>Wi-Fi</translation>
     </message>
     <message>
-        <source>The network status and its menu.</source>
-        <translation>L’état du réseau et son menu.</translation>
-    </message>
-    <message>
-        <source>Show Wi-Fi in the menu bar</source>
-        <translation>Afficher le Wi-Fi dans la barre des menus</translation>
-    </message>
-    <message>
         <source>Sound</source>
         <translation>Son</translation>
-    </message>
-    <message>
-        <source>The volume and the output devices.</source>
-        <translation>Le volume et les périphériques de sortie.</translation>
-    </message>
-    <message>
-        <source>Show Sound in the menu bar</source>
-        <translation>Afficher le son dans la barre des menus</translation>
     </message>
     <message>
         <source>Battery</source>
         <translation>Batterie</translation>
     </message>
     <message>
-        <source>Shown on a computer that has a battery.</source>
-        <translation>Affichée sur un ordinateur doté d’une batterie.</translation>
-    </message>
-    <message>
-        <source>Show Battery in the menu bar</source>
-        <translation>Afficher la batterie dans la barre des menus</translation>
-    </message>
-    <message>
-        <source>Show Percentage</source>
-        <translation>Afficher le pourcentage</translation>
-    </message>
-    <message>
-        <source>The charge level beside the battery.</source>
-        <translation>Le niveau de charge à côté de la batterie.</translation>
-    </message>
-    <message>
-        <source>Show the battery percentage in the menu bar</source>
-        <translation>Afficher le pourcentage de la batterie dans la barre des menus</translation>
-    </message>
-    <message>
         <source>Focus</source>
         <translation>Concentration</translation>
-    </message>
-    <message>
-        <source>A moon in the menu bar while Do Not Disturb is on; a click turns it off.</source>
-        <translation>Une lune dans la barre des menus tant que Ne pas déranger est activé ; un clic le désactive.</translation>
-    </message>
-    <message>
-        <source>Show Focus in the menu bar</source>
-        <translation>Afficher la concentration dans la barre des menus</translation>
     </message>
     <message>
         <source>Now Playing</source>
         <translation>En cours de lecture</translation>
     </message>
     <message>
-        <source>While a media player has a track, a button in the menu bar opens its controls.</source>
-        <translation>Tant qu’un lecteur multimédia a un morceau, un bouton de la barre des menus ouvre ses commandes.</translation>
-    </message>
-    <message>
-        <source>Show Now Playing in the menu bar</source>
-        <translation>Afficher « En cours de lecture » dans la barre des menus</translation>
-    </message>
-    <message>
         <source>Search</source>
         <translation>Recherche</translation>
-    </message>
-    <message>
-        <source>A magnifier button in the menu bar opens Search.</source>
-        <translation>Un bouton en forme de loupe dans la barre des menus ouvre la recherche.</translation>
-    </message>
-    <message>
-        <source>Show Search in the menu bar</source>
-        <translation>Afficher la recherche dans la barre des menus</translation>
     </message>
     <message>
         <source>Allow in the Menu Bar</source>
@@ -4845,10 +5535,6 @@
     <message>
         <source>Items from applications</source>
         <translation>Éléments des applications</translation>
-    </message>
-    <message>
-        <source>The status icons that applications such as chat and sync tools put in the menu bar.</source>
-        <translation>Les icônes d’état que des applications (messagerie, synchronisation) placent dans la barre des menus.</translation>
     </message>
     <message>
         <source>Show status items of applications in the menu bar</source>
@@ -4865,76 +5551,87 @@
 <context>
     <name>MousePage</name>
     <message>
-        <source>Mouse &amp; Trackpad</source>
-        <translation>Souris et trackpad</translation>
-    </message>
-    <message>
-        <source>Pointer</source>
-        <translation>Pointeur</translation>
-    </message>
-    <message>
         <source>The change could not be saved: %1.</source>
         <translation>La modification n’a pas pu être enregistrée&#xa0;: %1.</translation>
     </message>
     <message>
-        <source>Changes apply the next time you log in. Settings you write in your own input.lua take precedence.</source>
-        <translation>Les modifications s’appliquent à votre prochaine ouverture de session. Les réglages de votre propre input.lua restent prioritaires.</translation>
+        <source>Content tracks finger movement</source>
+        <translation>Le contenu suit le mouvement des doigts</translation>
     </message>
     <message>
-        <source>Tracking speed</source>
-        <translation>Vitesse de déplacement</translation>
-    </message>
-    <message>
-        <source>Slow</source>
-        <translation>Lente</translation>
-    </message>
-    <message>
-        <source>Fast</source>
-        <translation>Rapide</translation>
-    </message>
-    <message>
-        <source>Trackpad</source>
-        <translation>Trackpad</translation>
+        <source>Set Up Bluetooth Mouse…</source>
+        <translation>Configurer une souris Bluetooth…</translation>
     </message>
     <message>
         <source>Natural scrolling</source>
         <translation>Défilement naturel</translation>
     </message>
     <message>
-        <source>Content follows your fingers.</source>
-        <translation>Le contenu suit vos doigts.</translation>
-    </message>
-    <message>
-        <source>Tap to click</source>
-        <translation>Toucher pour cliquer</translation>
-    </message>
-    <message>
-        <source>Tap the trackpad with one finger to click.</source>
-        <translation>Touchez le trackpad avec un doigt pour cliquer.</translation>
-    </message>
-    <message>
-        <source>Secondary click</source>
-        <translation>Clic secondaire</translation>
-    </message>
-    <message>
-        <source>Two fingers</source>
-        <translation>Deux doigts</translation>
-    </message>
-    <message>
-        <source>Bottom right corner</source>
-        <translation>Coin inférieur droit</translation>
-    </message>
-    <message>
         <source>Mouse</source>
         <translation>Souris</translation>
     </message>
+</context>
+<context>
+    <name>NetworkDetailsSheet</name>
     <message>
-        <source>Content follows the wheel.</source>
-        <translation>Le contenu suit la molette.</translation>
+        <source>OK</source>
+        <translation>OK</translation>
     </message>
     <message>
-        <source>Natural scrolling, mouse</source>
-        <translation>Défilement naturel, souris</translation>
+        <source>Wi-Fi band</source>
+        <translation>Bande Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Link rate</source>
+        <translation>Débit de la liaison</translation>
+    </message>
+    <message>
+        <source>%1 Mbit/s</source>
+        <translation>%1&#xa0;Mbit/s</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Vitesse</translation>
+    </message>
+    <message>
+        <source>Security</source>
+        <translation>Sécurité</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>IP address</source>
+        <translation>Adresse IP</translation>
+    </message>
+    <message>
+        <source>Subnet mask</source>
+        <translation>Masque de sous-réseau</translation>
+    </message>
+    <message>
+        <source>Router</source>
+        <translation>Routeur</translation>
+    </message>
+    <message>
+        <source>DNS servers</source>
+        <translation>Serveurs DNS</translation>
+    </message>
+    <message>
+        <source>IPv6 address</source>
+        <translation>Adresse IPv6</translation>
+    </message>
+    <message>
+        <source>MAC address</source>
+        <translation>Adresse MAC</translation>
+    </message>
+    <message>
+        <source>No address: not connected</source>
+        <translation>Aucune adresse&#xa0;: non connecté</translation>
+    </message>
+    <message>
+        <source>Forget This Network…</source>
+        <translation>Oublier ce réseau…</translation>
     </message>
 </context>
 <context>
@@ -4961,10 +5658,131 @@
     </message>
 </context>
 <context>
+    <name>NetworkPage</name>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Ethernet %1</source>
+        <translation>Ethernet %1</translation>
+    </message>
+    <message>
+        <source>Ethernet</source>
+        <translation>Ethernet</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Cable unplugged</source>
+        <translation>Câble débranché</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Firewall</source>
+        <translation>Coupe-feu</translation>
+    </message>
+    <message>
+        <source>Not installed</source>
+        <translation>Non installé</translation>
+    </message>
+    <message>
+        <source>Active</source>
+        <translation>Actif</translation>
+    </message>
+    <message>
+        <source>Inactive</source>
+        <translation>Inactif</translation>
+    </message>
+    <message>
+        <source>Other Services</source>
+        <translation>Autres services</translation>
+    </message>
+    <message>
+        <source>The network is not available: NetworkManager did not answer.</source>
+        <translation>Le réseau n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkRow</name>
+    <message>
+        <source>Actions for %1</source>
+        <translation>Actions pour %1</translation>
+    </message>
+</context>
+<context>
     <name>NoticeDialog</name>
     <message>
         <source>OK</source>
         <translation>OK</translation>
+    </message>
+</context>
+<context>
+    <name>NotificationAppPage</name>
+    <message>
+        <source>Banners go away by themselves, Alerts stay until you dismiss them, None shows no banner: the notifications still collect in the Notifications panel. Default follows Show previews in Notifications.</source>
+        <translation>Les bannières disparaissent d’elles-mêmes, les alertes restent jusqu’à ce que vous les fermiez, Aucune n’affiche pas de bannière : les notifications s’accumulent quand même dans le panneau Notifications. Par défaut suit « Afficher les aperçus » dans Notifications.</translation>
+    </message>
+    <message>
+        <source>Alert style</source>
+        <translation>Style d’alerte</translation>
+    </message>
+    <message>
+        <source>Alert style for %1</source>
+        <translation>Style d’alerte pour %1</translation>
+    </message>
+    <message>
+        <source>Banners</source>
+        <translation>Bannières</translation>
+    </message>
+    <message>
+        <source>Alerts</source>
+        <translation>Alertes</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Show previews</source>
+        <translation>Afficher les aperçus</translation>
+    </message>
+    <message>
+        <source>Show previews for %1</source>
+        <translation>Afficher les aperçus pour %1</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>When Unlocked</source>
+        <translation>Quand déverrouillé</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
     </message>
 </context>
 <context>
@@ -5062,24 +5880,20 @@
         <translation>Aucune</translation>
     </message>
     <message>
-        <source>Default</source>
-        <translation>Par défaut</translation>
+        <source>%1, previews: %2</source>
+        <translation>%1, aperçus : %2</translation>
     </message>
     <message>
-        <source>Do Not Disturb</source>
-        <translation>Ne pas déranger</translation>
+        <source>Choose how notifications appear, how long they are kept, and how each app&apos;s notifications show.</source>
+        <translation>Choisissez comment les notifications apparaissent, combien de temps elles sont conservées et comment s’affichent celles de chaque app.</translation>
     </message>
     <message>
-        <source>Silences banners except critical ones; notifications still collect in the Notifications panel.</source>
-        <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
+        <source>Notifications Panel</source>
+        <translation>Panneau Notifications</translation>
     </message>
     <message>
-        <source>Never hides the text of notifications. When Unlocked hides it while the screen is locked. Each app below can use its own setting.</source>
-        <translation>Jamais masque le texte des notifications. Si déverrouillé le masque tant que l’écran est verrouillé. Chaque app ci-dessous peut avoir son propre réglage.</translation>
-    </message>
-    <message>
-        <source>How long the Notifications panel keeps notifications after a restart. The text of notifications from apps whose previews are Never is not kept.</source>
-        <translation>Durée pendant laquelle le panneau Notifications conserve les notifications après un redémarrage. Le texte des notifications des apps dont les aperçus sont réglés sur Jamais n’est pas conservé.</translation>
+        <source>The Notifications panel shows your notifications on the right of the screen. Click the clock in the menu bar to show or hide it.</source>
+        <translation>Le panneau Notifications affiche vos notifications à droite de l’écran. Cliquez sur l’horloge dans la barre des menus pour l’afficher ou le masquer.</translation>
     </message>
     <message>
         <source>Keep history</source>
@@ -5100,18 +5914,6 @@
     <message>
         <source>Apps appear here after they send a notification.</source>
         <translation>Les apps apparaissent ici après avoir envoyé une notification.</translation>
-    </message>
-    <message>
-        <source>Alerts stay on screen until you dismiss them; None shows no banner. Default follows the Show previews setting above.</source>
-        <translation>Les alertes restent à l’écran jusqu’à ce que vous les fermiez ; Aucune n’affiche pas de bannière. Par défaut suit le réglage Afficher les aperçus ci-dessus.</translation>
-    </message>
-    <message>
-        <source>Alert style for %1</source>
-        <translation>Style d’alerte pour %1</translation>
-    </message>
-    <message>
-        <source>Show previews for %1</source>
-        <translation>Afficher les aperçus pour %1</translation>
     </message>
     <message>
         <source>Show previews</source>
@@ -5491,6 +6293,263 @@
     </message>
 </context>
 <context>
+    <name>PrinterSheet</name>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>%1 — %2</source>
+        <comment>a printer&apos;s state — CUPS&apos;s message</comment>
+        <translation>%1 — %2</translation>
+    </message>
+    <message>
+        <source>Location</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Queue</source>
+        <translation>File d’attente</translation>
+    </message>
+    <message>
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
+        <source>Remove Printer…</source>
+        <translation>Supprimer l’imprimante…</translation>
+    </message>
+</context>
+<context>
+    <name>PrintersPage</name>
+    <message>
+        <source>Printers</source>
+        <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>Not Accepting Jobs</source>
+        <translation>N’accepte pas les tâches</translation>
+    </message>
+    <message>
+        <source>Printing</source>
+        <translation>Impression en cours</translation>
+    </message>
+    <message>
+        <source>Holding New Jobs</source>
+        <translation>Nouvelles tâches en attente</translation>
+    </message>
+    <message>
+        <source>Stopped</source>
+        <translation>Arrêtée</translation>
+    </message>
+    <message>
+        <source>Idle</source>
+        <translation>En veille</translation>
+    </message>
+    <message>
+        <source>%1, Default</source>
+        <translation>%1, par défaut</translation>
+    </message>
+    <message>
+        <source>Driverless (IPP Everywhere)</source>
+        <translation>Sans pilote (IPP Everywhere)</translation>
+    </message>
+    <message>
+        <source>USB</source>
+        <translation>USB</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>US Letter</source>
+        <translation>US Letter</translation>
+    </message>
+    <message>
+        <source>US Legal</source>
+        <translation>US Legal</translation>
+    </message>
+    <message>
+        <source>Tabloid</source>
+        <translation>Tabloïd</translation>
+    </message>
+    <message>
+        <source>Executive</source>
+        <translation>Executive</translation>
+    </message>
+    <message>
+        <source>JIS B5</source>
+        <translation>JIS B5</translation>
+    </message>
+    <message>
+        <source>Printing is not available: CUPS did not answer.</source>
+        <translation>L’impression n’est pas disponible&#xa0;: CUPS n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>Default printer</source>
+        <translation>Imprimante par défaut</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Default paper size</source>
+        <translation>Format de papier par défaut</translation>
+    </message>
+    <message>
+        <source>No printers</source>
+        <translation>Aucune imprimante</translation>
+    </message>
+    <message>
+        <source>Add Printer…</source>
+        <translation>Ajouter une imprimante…</translation>
+    </message>
+</context>
+<context>
+    <name>PrivacyCategoryPage</name>
+    <message>
+        <source>Apps you allow can find out where this computer is when they ask the desktop portal. When an app you do not allow asks, the portal refuses without a prompt; for an app not listed, you are asked the first time.</source>
+        <translation>Les apps que vous autorisez peuvent savoir où se trouve cet ordinateur quand elles le demandent au portail de bureau. Quand une app que vous n’autorisez pas le demande, le portail refuse sans rien vous demander&#xa0;; pour une app absente de la liste, la question vous est posée la première fois.</translation>
+    </message>
+    <message>
+        <source>Apps you allow may run in the background when they ask the desktop portal. An app you do not allow is refused when it asks; an app not listed is allowed the first time it asks.</source>
+        <translation>Les apps que vous autorisez peuvent s’exécuter en arrière-plan quand elles le demandent au portail de bureau. Une app que vous n’autorisez pas est refusée quand elle le demande&#xa0;; une app absente de la liste est autorisée la première fois qu’elle le demande.</translation>
+    </message>
+    <message>
+        <source>Apps you allow can use the camera when they ask the desktop portal. When an app you do not allow asks, the portal refuses without a prompt; for an app not listed, you are asked the first time. An app that can open the camera itself does not ask, and its switch does not limit it.</source>
+        <translation>Les apps que vous autorisez peuvent utiliser l’appareil photo quand elles le demandent au portail de bureau. Quand une app que vous n’autorisez pas le demande, le portail refuse sans rien vous demander&#xa0;; pour une app absente de la liste, la question vous est posée la première fois. Une app qui peut ouvrir l’appareil photo elle-même ne demande rien, et son interrupteur ne la limite pas.</translation>
+    </message>
+    <message>
+        <source>These apps can start a remote session again with the screens and devices you chose for them, without asking. Remove an app to be asked next time; if it is in a session now, end the session first.</source>
+        <translation>Ces apps peuvent ouvrir de nouveau une session à distance avec les écrans et les appareils que vous avez choisis pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois&#xa0;; si elle est en session, terminez d’abord la session.</translation>
+    </message>
+    <message>
+        <source>These apps can share the screen or window you chose for them again, without asking. Remove an app to be asked next time; if it is sharing now, stop sharing first.</source>
+        <translation>Ces apps peuvent partager de nouveau l’écran ou la fenêtre que vous avez choisi pour elles, sans demander. Supprimez une app pour que la question vous soit posée la prochaine fois&#xa0;; si elle partage en ce moment, arrêtez d’abord le partage.</translation>
+    </message>
+    <message>
+        <source>The permissions cannot be read: %1.</source>
+        <translation>Les autorisations ne peuvent pas être lues&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>The change could not be made: %1.</source>
+        <translation>La modification n’a pas pu être effectuée&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>This system&apos;s desktop portals do not provide this permission: no app can ask for it, and what is listed here changes nothing on this system.</source>
+        <translation>Les portails de bureau de ce système ne fournissent pas cette autorisation&#xa0;: aucune app ne peut la demander, et ce qui est listé ici ne change rien sur ce système.</translation>
+    </message>
+    <message>
+        <source>Not sandboxed: not limited</source>
+        <translation>Non isolée&#xa0;: pas limitée</translation>
+    </message>
+    <message>
+        <source>Not sandboxed: may use the camera directly</source>
+        <translation>Non isolée&#xa0;: peut utiliser l’appareil photo directement</translation>
+    </message>
+    <message>
+        <source>All devices: may use the camera directly</source>
+        <translation>Tous les périphériques&#xa0;: peut utiliser l’appareil photo directement</translation>
+    </message>
+    <message>
+        <source>No apps have asked</source>
+        <translation>Aucune app n’a demandé</translation>
+    </message>
+    <message>
+        <source>1 saved choice</source>
+        <translation>1 choix enregistré</translation>
+    </message>
+    <message>
+        <source>%1 saved choices</source>
+        <translation>%1 choix enregistrés</translation>
+    </message>
+    <message>
+        <source>No saved choices</source>
+        <translation>Aucun choix enregistré</translation>
+    </message>
+    <message>
+        <source>Add an app</source>
+        <translation>Ajouter une app</translation>
+    </message>
+    <message>
+        <source>Remove the selected app</source>
+        <translation>Supprimer l’app sélectionnée</translation>
+    </message>
+</context>
+<context>
+    <name>PrivacyPage</name>
+    <message>
+        <source>Privacy &amp; Security</source>
+        <translation>Confidentialité et sécurité</translation>
+    </message>
+    <message>
+        <source>Not used on this system</source>
+        <translation>Non utilisé sur ce système</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>1 app</source>
+        <translation>1 app</translation>
+    </message>
+    <message>
+        <source>%1 apps</source>
+        <translation>%1 apps</translation>
+    </message>
+    <message>
+        <source>Privacy</source>
+        <translation>Confidentialité</translation>
+    </message>
+    <message>
+        <source>Choose what apps that ask the desktop portal may do: use your location and your camera, keep running in the background, and share a screen you chose before.</source>
+        <translation>Choisissez ce que peuvent faire les apps qui passent par le portail de bureau&#xa0;: utiliser votre position et votre appareil photo, continuer à s’exécuter en arrière-plan et partager un écran choisi auparavant.</translation>
+    </message>
+    <message>
+        <source>These permissions apply when an app asks the desktop portal, as sandboxed apps (Flatpak, Snap) do. They do not limit apps that are not sandboxed, nor sandboxed apps given direct access to devices.</source>
+        <translation>Ces autorisations s’appliquent quand une app passe par le portail de bureau, comme le font les apps isolées (Flatpak, Snap). Elles ne limitent ni les apps non isolées, ni les apps isolées qui ont un accès direct aux périphériques.</translation>
+    </message>
+    <message>
+        <source>Location Services</source>
+        <translation>Service de localisation</translation>
+    </message>
+    <message>
+        <source>The permissions cannot be read: %1.</source>
+        <translation>Les autorisations ne peuvent pas être lues&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Background Apps</source>
+        <translation>Apps en arrière-plan</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>Appareil photo</translation>
+    </message>
+    <message>
+        <source>Remote Desktop</source>
+        <translation>Bureau à distance</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Files</source>
@@ -5576,10 +6635,48 @@
     </message>
 </context>
 <context>
+    <name>RemovePrinterSheet</name>
+    <message>
+        <source>Remove “%1”?</source>
+        <translation>Supprimer «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The printer is removed from this computer, with the print jobs waiting for it. To use it again, add it again.</source>
+        <translation>L’imprimante est supprimée de cet ordinateur, avec les tâches d’impression en attente. Pour l’utiliser de nouveau, ajoutez-la de nouveau.</translation>
+    </message>
+    <message>
+        <source>Remove Printer</source>
+        <translation>Supprimer l’imprimante</translation>
+    </message>
+</context>
+<context>
     <name>RenameField</name>
     <message>
         <source>Name</source>
         <translation>Nom</translation>
+    </message>
+</context>
+<context>
+    <name>ResolutionChoices</name>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Larger Text</source>
+        <translation>Texte plus grand</translation>
+    </message>
+    <message>
+        <source>More Space</source>
+        <translation>Plus d’espace</translation>
+    </message>
+    <message>
+        <source>Resolution</source>
+        <translation>Résolution</translation>
+    </message>
+    <message>
+        <source>looks like %1 × %2</source>
+        <translation>comme %1 × %2</translation>
     </message>
 </context>
 <context>
@@ -5598,6 +6695,147 @@
     </message>
 </context>
 <context>
+    <name>SaverView</name>
+    <message>
+        <source>dddd d MMMM</source>
+        <translation>dddd d MMMM</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenCornersSheet</name>
+    <message>
+        <source>Screen Corners</source>
+        <translation>Coins de l’écran</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Overview</source>
+        <translation>Vue d’ensemble</translation>
+    </message>
+    <message>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
+    </message>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
+        <source>Lock Screen</source>
+        <translation>Verrouiller l’écran</translation>
+    </message>
+    <message>
+        <source>Top left corner</source>
+        <translation>Coin supérieur gauche</translation>
+    </message>
+    <message>
+        <source>Top right corner</source>
+        <translation>Coin supérieur droit</translation>
+    </message>
+    <message>
+        <source>Bottom left corner</source>
+        <translation>Coin inférieur gauche</translation>
+    </message>
+    <message>
+        <source>Bottom right corner</source>
+        <translation>Coin inférieur droit</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenSaverSheet</name>
+    <message>
+        <source>Screen Saver</source>
+        <translation>Économiseur d’écran</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
+        <source>For 1 hour</source>
+        <translation>Pendant 1 heure</translation>
+    </message>
+    <message>
+        <source>For %1 hours</source>
+        <translation>Pendant %1 heures</translation>
+    </message>
+    <message>
+        <source>For 1 minute</source>
+        <translation>Pendant 1 minute</translation>
+    </message>
+    <message>
+        <source>For %1 minutes</source>
+        <translation>Pendant %1 minutes</translation>
+    </message>
+    <message>
+        <source>The session locks before the screen saver starts. You can change the timing in Lock Screen settings.</source>
+        <translation>La session se verrouille avant que l’économiseur d’écran ne démarre. Vous pouvez modifier les délais dans les réglages Écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>The display turns off before the screen saver starts. You can change the timing in Lock Screen settings.</source>
+        <translation>L’écran s’éteint avant que l’économiseur d’écran ne démarre. Vous pouvez modifier les délais dans les réglages Écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>Screen saver</source>
+        <translation>Économiseur d’écran</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>Slideshow</source>
+        <translation>Diaporama</translation>
+    </message>
+    <message>
+        <source>Clock</source>
+        <translation>Horloge</translation>
+    </message>
+    <message>
+        <source>Start screen saver when inactive</source>
+        <translation>Démarrer l’économiseur d’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Pictures folder</source>
+        <translation>Dossier Images</translation>
+    </message>
+    <message>
+        <source>Choose…</source>
+        <translation>Choisir…</translation>
+    </message>
+    <message>
+        <source>Choose the slideshow&apos;s folder</source>
+        <translation>Choisir le dossier du diaporama</translation>
+    </message>
+    <message>
+        <source>Lock Screen Settings…</source>
+        <translation>Réglages Écran verrouillé…</translation>
+    </message>
+    <message>
+        <source>Choose a folder of pictures</source>
+        <translation>Choisir un dossier d’images</translation>
+    </message>
+</context>
+<context>
     <name>ScrollBar</name>
     <message>
         <source>Scroll bar</source>
@@ -5609,6 +6847,18 @@
     <message>
         <source>Lock Screen</source>
         <translation>Verrouiller l’écran</translation>
+    </message>
+    <message>
+        <source>Mouse</source>
+        <translation>Souris</translation>
+    </message>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>gestures</source>
+        <translation>gestes</translation>
     </message>
     <message>
         <source>lock</source>
@@ -5883,6 +7133,18 @@
         <translation>pourcentage de la batterie</translation>
     </message>
     <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>search results</source>
+        <translation>résultats de recherche</translation>
+    </message>
+    <message>
+        <source>search history</source>
+        <translation>historique de recherche</translation>
+    </message>
+    <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
     </message>
@@ -5899,6 +7161,14 @@
         <translation>bannières</translation>
     </message>
     <message>
+        <source>Focus</source>
+        <translation>Concentration</translation>
+    </message>
+    <message>
+        <source>silence</source>
+        <translation>silence</translation>
+    </message>
+    <message>
         <source>idle</source>
         <translation>inactivité</translation>
     </message>
@@ -5907,8 +7177,24 @@
         <translation>mot de passe</translation>
     </message>
     <message>
-        <source>Mouse &amp; Trackpad</source>
-        <translation>Souris et trackpad</translation>
+        <source>Privacy &amp; Security</source>
+        <translation>Confidentialité et sécurité</translation>
+    </message>
+    <message>
+        <source>permissions</source>
+        <translation>autorisations</translation>
+    </message>
+    <message>
+        <source>location</source>
+        <translation>localisation</translation>
+    </message>
+    <message>
+        <source>camera</source>
+        <translation>appareil photo</translation>
+    </message>
+    <message>
+        <source>screen sharing</source>
+        <translation>partage d’écran</translation>
     </message>
     <message>
         <source>tracking speed</source>
@@ -5925,6 +7211,22 @@
     <message>
         <source>touchpad</source>
         <translation>pavé tactile</translation>
+    </message>
+    <message>
+        <source>Printers</source>
+        <translation>Imprimantes</translation>
+    </message>
+    <message>
+        <source>printer</source>
+        <translation>imprimante</translation>
+    </message>
+    <message>
+        <source>paper size</source>
+        <translation>format de papier</translation>
+    </message>
+    <message>
+        <source>print</source>
+        <translation>imprimer</translation>
     </message>
     <message>
         <source>Keyboard</source>
@@ -5984,6 +7286,65 @@
     <message>
         <source>Clear search</source>
         <translation>Effacer la recherche</translation>
+    </message>
+</context>
+<context>
+    <name>SearchPage</name>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Show %1 in Search</source>
+        <translation>Afficher %1 dans Recherche</translation>
+    </message>
+    <message>
+        <source>Search finds apps, documents, settings and answers on this computer, and runs system commands. What you type never leaves this computer.</source>
+        <translation>Recherche trouve les apps, les documents, les réglages et des réponses sur cet ordinateur, et lance les commandes système. Ce que vous tapez ne quitte jamais cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Search History</source>
+        <translation>Historique de recherche</translation>
+    </message>
+    <message>
+        <source>Delete Search History…</source>
+        <translation>Supprimer l’historique de recherche…</translation>
+    </message>
+    <message>
+        <source>Search Results</source>
+        <translation>Résultats de recherche</translation>
+    </message>
+    <message>
+        <source>Allows these results to appear in Search.</source>
+        <translation>Permet à ces résultats d’apparaître dans Recherche.</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>Calculator</source>
+        <translation>Calculatrice</translation>
+    </message>
+    <message>
+        <source>Conversions</source>
+        <translation>Conversions</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Recent Documents</source>
+        <translation>Documents récents</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>Réglages</translation>
+    </message>
+    <message>
+        <source>System Commands</source>
+        <translation>Commandes système</translation>
     </message>
 </context>
 <context>
@@ -6125,6 +7486,17 @@
     </message>
 </context>
 <context>
+    <name>SoundDeviceTable</name>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>Type</translation>
+    </message>
+</context>
+<context>
     <name>SoundList</name>
     <message>
         <source>Output</source>
@@ -6158,12 +7530,64 @@
         <translation>Son</translation>
     </message>
     <message>
+        <source>Built-in</source>
+        <translation>Intégré</translation>
+    </message>
+    <message>
+        <source>USB</source>
+        <translation>USB</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>HDMI or DisplayPort</source>
+        <translation>HDMI ou DisplayPort</translation>
+    </message>
+    <message>
+        <source>Digital</source>
+        <translation>Numérique</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Virtual</source>
+        <translation>Virtuel</translation>
+    </message>
+    <message>
         <source>Sound is not available: PipeWire did not answer or no audio device was found.</source>
         <translation>Le son n’est pas disponible&#xa0;: PipeWire n’a pas répondu ou aucun périphérique audio n’a été trouvé.</translation>
     </message>
     <message>
+        <source>Output &amp; Input</source>
+        <translation>Sortie et entrée</translation>
+    </message>
+    <message>
+        <source>Devices</source>
+        <translation>Périphériques</translation>
+    </message>
+    <message>
         <source>Output</source>
         <translation>Sortie</translation>
+    </message>
+    <message>
+        <source>Output devices</source>
+        <translation>Périphériques de sortie</translation>
+    </message>
+    <message>
+        <source>Input devices</source>
+        <translation>Périphériques d’entrée</translation>
+    </message>
+    <message>
+        <source>No output devices found</source>
+        <translation>Aucun périphérique de sortie trouvé</translation>
+    </message>
+    <message>
+        <source>No input devices found</source>
+        <translation>Aucun périphérique d’entrée trouvé</translation>
     </message>
     <message>
         <source>Output volume</source>
@@ -6188,6 +7612,13 @@
     <message>
         <source>Mute input</source>
         <translation>Couper l’entrée</translation>
+    </message>
+</context>
+<context>
+    <name>Spinner</name>
+    <message>
+        <source>In progress</source>
+        <translation>En cours</translation>
     </message>
 </context>
 <context>
@@ -6354,6 +7785,10 @@
         <source>%1 of %2 GB</source>
         <translation>%1 sur %2 Go</translation>
     </message>
+    <message>
+        <source>%1 GHz</source>
+        <translation>%1&#xa0;GHz</translation>
+    </message>
 </context>
 <context>
     <name>SystemBus</name>
@@ -6368,6 +7803,30 @@
     <message>
         <source>cannot create the directory of %1</source>
         <translation>Impossible de créer le dossier de %1</translation>
+    </message>
+    <message>
+        <source>too many displays</source>
+        <translation>trop d’écrans</translation>
+    </message>
+    <message>
+        <source>a display line is not well formed</source>
+        <translation>une ligne d’écran est mal formée</translation>
+    </message>
+    <message>
+        <source>a display appears twice</source>
+        <translation>un écran apparaît deux fois</translation>
+    </message>
+    <message>
+        <source>no folder for the display settings in this session</source>
+        <translation>aucun dossier pour les réglages des écrans dans cette session</translation>
+    </message>
+    <message>
+        <source>no folder for a display trial in this session</source>
+        <translation>aucun dossier pour un essai d’affichage dans cette session</translation>
+    </message>
+    <message>
+        <source>the trial is not well formed</source>
+        <translation>l’essai est mal formé</translation>
     </message>
     <message>
         <source>empty reply</source>
@@ -6414,12 +7873,40 @@
         <translation>Ce réseau n’est plus à portée</translation>
     </message>
     <message>
+        <source>the network could not be joined, and its new settings could not be removed: %1</source>
+        <translation>Impossible de rejoindre le réseau, et ses nouveaux réglages n’ont pas pu être supprimés&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>the network could not be joined</source>
+        <translation>Impossible de rejoindre le réseau</translation>
+    </message>
+    <message>
+        <source>the network&apos;s state could not be read: it may still be joining</source>
+        <translation>L’état du réseau n’a pas pu être lu&#xa0;: la connexion est peut-être encore en cours</translation>
+    </message>
+    <message>
+        <source>that network does not take a password</source>
+        <translation>Ce réseau ne prend pas de mot de passe</translation>
+    </message>
+    <message>
+        <source>no battery</source>
+        <translation>Aucune batterie</translation>
+    </message>
+    <message>
+        <source>that VPN is no longer saved</source>
+        <translation>Ce VPN n’est plus enregistré</translation>
+    </message>
+    <message>
         <source>no Bluetooth adapter</source>
         <translation>Aucun adaptateur Bluetooth</translation>
     </message>
     <message>
         <source>that device is not paired yet</source>
         <translation>Cet appareil n’est pas encore associé</translation>
+    </message>
+    <message>
+        <source>that device is no longer nearby</source>
+        <translation>Cet appareil n’est plus à proximité</translation>
     </message>
     <message>
         <source>that device is no longer paired</source>
@@ -6585,6 +8072,104 @@
     </message>
 </context>
 <context>
+    <name>TrackingSpeedRow</name>
+    <message>
+        <source>Tracking speed</source>
+        <translation>Vitesse de déplacement</translation>
+    </message>
+    <message>
+        <source>Slow</source>
+        <translation>Lente</translation>
+    </message>
+    <message>
+        <source>Fast</source>
+        <translation>Rapide</translation>
+    </message>
+</context>
+<context>
+    <name>TrackpadPage</name>
+    <message>
+        <source>Trackpad</source>
+        <translation>Trackpad</translation>
+    </message>
+    <message>
+        <source>The change could not be saved: %1.</source>
+        <translation>Le changement n’a pas pu être enregistré&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Point &amp; Click</source>
+        <translation>Pointer et cliquer</translation>
+    </message>
+    <message>
+        <source>Scroll &amp; Zoom</source>
+        <translation>Défiler et zoomer</translation>
+    </message>
+    <message>
+        <source>More Gestures</source>
+        <translation>Autres gestes</translation>
+    </message>
+    <message>
+        <source>Secondary click</source>
+        <translation>Clic secondaire</translation>
+    </message>
+    <message>
+        <source>Click or Tap with Two Fingers</source>
+        <translation>Cliquer ou toucher avec deux doigts</translation>
+    </message>
+    <message>
+        <source>Click with Two Fingers</source>
+        <translation>Cliquer avec deux doigts</translation>
+    </message>
+    <message>
+        <source>Click in Bottom Right Corner</source>
+        <translation>Cliquer dans le coin inférieur droit</translation>
+    </message>
+    <message>
+        <source>Tap to click</source>
+        <translation>Toucher pour cliquer</translation>
+    </message>
+    <message>
+        <source>Tap with one finger</source>
+        <translation>Toucher avec un doigt</translation>
+    </message>
+    <message>
+        <source>Natural scrolling</source>
+        <translation>Défilement naturel</translation>
+    </message>
+    <message>
+        <source>Content tracks finger movement</source>
+        <translation>Le contenu suit le mouvement des doigts</translation>
+    </message>
+    <message>
+        <source>Swipe between desktops</source>
+        <translation>Balayer entre les bureaux</translation>
+    </message>
+    <message>
+        <source>Swipe left or right with three fingers</source>
+        <translation>Balayer vers la gauche ou la droite avec trois doigts</translation>
+    </message>
+    <message>
+        <source>Overview</source>
+        <translation>Vue d’ensemble</translation>
+    </message>
+    <message>
+        <source>Swipe up with three fingers</source>
+        <translation>Balayer vers le haut avec trois doigts</translation>
+    </message>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
+        <source>Pinch with thumb and three fingers</source>
+        <translation>Pincer avec le pouce et trois doigts</translation>
+    </message>
+    <message>
+        <source>Set Up Bluetooth Trackpad…</source>
+        <translation>Configurer un trackpad Bluetooth…</translation>
+    </message>
+</context>
+<context>
     <name>TrayMenu</name>
     <message>
         <source>%1 menu</source>
@@ -6725,13 +8310,6 @@
     </message>
 </context>
 <context>
-    <name>VolumeRow</name>
-    <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
-    </message>
-</context>
-<context>
     <name>VolumesSheet</name>
     <message>
         <source>All Volumes</source>
@@ -6752,6 +8330,47 @@
     <message>
         <source>%1 available of %2</source>
         <translation>%1 disponibles sur %2</translation>
+    </message>
+</context>
+<context>
+    <name>VpnPage</name>
+    <message>
+        <source>VPN</source>
+        <translation>VPN</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Changing…</source>
+        <translation>Modification…</translation>
+    </message>
+    <message>
+        <source>WireGuard · %1</source>
+        <comment>the kind of VPN · its state</comment>
+        <translation>WireGuard · %1</translation>
+    </message>
+    <message>
+        <source>VPN · %1</source>
+        <comment>the kind of VPN · its state</comment>
+        <translation>VPN · %1</translation>
+    </message>
+    <message>
+        <source>VPN is not available: NetworkManager did not answer.</source>
+        <translation>Le VPN n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>No VPN configurations</source>
+        <translation>Aucune configuration VPN</translation>
     </message>
 </context>
 <context>
@@ -6933,6 +8552,10 @@
         <translation>Fond d’écran actuel&#xa0;: %1</translation>
     </message>
     <message>
+        <source>Screen Saver…</source>
+        <translation>Économiseur d’écran…</translation>
+    </message>
+    <message>
         <source>Use the Grassfield Wallpaper</source>
         <translation>Utiliser le fond d’écran Grassfield</translation>
     </message>
@@ -6967,6 +8590,10 @@
     <message>
         <source>Online</source>
         <translation>En ligne</translation>
+    </message>
+    <message>
+        <source>Wikimedia</source>
+        <translation>Wikimedia</translation>
     </message>
     <message>
         <source>Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.</source>
@@ -7029,10 +8656,6 @@
         <translation>Écran</translation>
     </message>
     <message>
-        <source>The wallpaper of every display that has none of its own.</source>
-        <translation>Le fond d’écran de chaque écran qui n’en a pas un propre.</translation>
-    </message>
-    <message>
         <source>This display has a wallpaper of its own.</source>
         <translation>Cet écran a son propre fond d’écran.</translation>
     </message>
@@ -7043,14 +8666,6 @@
     <message>
         <source>All Displays</source>
         <translation>Tous les écrans</translation>
-    </message>
-    <message>
-        <source>Follow All Displays</source>
-        <translation>Suivre Tous les écrans</translation>
-    </message>
-    <message>
-        <source>Removes the wallpaper of this display.</source>
-        <translation>Supprime le fond d’écran de cet écran.</translation>
     </message>
     <message>
         <source>Use the All Displays Wallpaper</source>
@@ -7067,10 +8682,6 @@
     <message>
         <source>Preparing the video</source>
         <translation>Préparation de la vidéo</translation>
-    </message>
-    <message>
-        <source>%1%</source>
-        <translation>%1&#xa0;%</translation>
     </message>
     <message>
         <source>Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.</source>
@@ -7125,24 +8736,12 @@
         <translation>Aucune image n’a été trouvée dans le dossier Images.</translation>
     </message>
     <message>
-        <source>Show Fewer</source>
-        <translation>Afficher moins</translation>
-    </message>
-    <message>
-        <source>Show All (%1)</source>
-        <translation>Tout afficher (%1)</translation>
-    </message>
-    <message>
         <source>Colours</source>
         <translation>Couleurs</translation>
     </message>
     <message>
         <source>Folders and Pictures</source>
         <translation>Dossiers et images</translation>
-    </message>
-    <message>
-        <source>Add a folder to change the picture at an interval, or a single picture.</source>
-        <translation>Ajoutez un dossier pour changer d’image à intervalle régulier, ou une seule image.</translation>
     </message>
     <message>
         <source>Shuffle %1</source>
@@ -7159,10 +8758,6 @@
     <message>
         <source>Videos</source>
         <translation>Vidéos</translation>
-    </message>
-    <message>
-        <source>Add a video to play it as the wallpaper. It is prepared once, and pauses on battery, when you are away and under a full-screen window.</source>
-        <translation>Ajoutez une vidéo pour la lire comme fond d’écran. Elle est préparée une seule fois, et se met en pause sur batterie, quand vous êtes absent et sous une fenêtre en plein écran.</translation>
     </message>
     <message>
         <source>Add Video…</source>
@@ -7187,6 +8782,17 @@
     <message>
         <source>Pictures (%1)</source>
         <translation>Images (%1)</translation>
+    </message>
+</context>
+<context>
+    <name>WallpaperSection</name>
+    <message>
+        <source>Show Fewer</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show All (%1)</source>
+        <translation>Tout afficher (%1)</translation>
     </message>
 </context>
 <context>
@@ -7344,6 +8950,30 @@
         <translation>Wi-Fi</translation>
     </message>
     <message>
+        <source>“%1” cannot be joined from here: its name is not plain text.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être rejoint d’ici&#xa0;: son nom n’est pas du texte simple.</translation>
+    </message>
+    <message>
+        <source>“%1” needs a sign-in (802.1X), which Grassfield does not set up yet.</source>
+        <translation>«&#xa0;%1&#xa0;» demande une identification (802.1X), que Grassfield ne configure pas encore.</translation>
+    </message>
+    <message>
+        <source>“%1” uses WEP, which is not secure: Grassfield does not join it.</source>
+        <translation>«&#xa0;%1&#xa0;» utilise le WEP, qui n’est pas sûr&#xa0;: Grassfield ne le rejoint pas.</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
+    <message>
+        <source>Forget This Network…</source>
+        <translation>Oublier ce réseau…</translation>
+    </message>
+    <message>
         <source>Connecting…</source>
         <translation>Connexion…</translation>
     </message>
@@ -7352,52 +8982,79 @@
         <translation>Connecté</translation>
     </message>
     <message>
-        <source>Needs a sign-in. Set it up in Quick Settings.</source>
-        <translation>Connexion requise. Configurez-la dans les Réglages rapides.</translation>
+        <source>No Wi-Fi hardware was found.</source>
+        <translation>Aucun matériel Wi-Fi n’a été trouvé.</translation>
     </message>
     <message>
-        <source>Needs a password. Join it from Quick Settings.</source>
-        <translation>Mot de passe requis. Rejoignez-le depuis les Réglages rapides.</translation>
+        <source>Connect this computer to the internet without a cable. Turn on Wi-Fi, then choose a network to join.</source>
+        <translation>Connectez cet ordinateur à Internet sans câble. Activez le Wi-Fi, puis choisissez un réseau à rejoindre.</translation>
+    </message>
+    <message>
+        <source>Known Network</source>
+        <translation>Réseau connu</translation>
+    </message>
+    <message>
+        <source>Known Networks</source>
+        <translation>Réseaux connus</translation>
+    </message>
+    <message>
+        <source>Other Networks</source>
+        <translation>Autres réseaux</translation>
+    </message>
+    <message>
+        <source>Looking for networks…</source>
+        <translation>Recherche de réseaux…</translation>
+    </message>
+    <message>
+        <source>No other networks found</source>
+        <translation>Aucun autre réseau trouvé</translation>
     </message>
     <message>
         <source>Known network</source>
         <translation>Réseau connu</translation>
     </message>
     <message>
+        <source>Needs a sign-in</source>
+        <translation>Demande une identification</translation>
+    </message>
+    <message>
+        <source>WEP, not joined</source>
+        <translation>WEP, non rejoint</translation>
+    </message>
+    <message>
         <source>Wi-Fi is not available: NetworkManager did not answer.</source>
         <translation>Le Wi-Fi n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
-    </message>
-    <message>
-        <source>Off</source>
-        <translation>Désactivé</translation>
-    </message>
-    <message>
-        <source>Not connected</source>
-        <translation>Non connecté</translation>
-    </message>
-    <message>
-        <source>Networks</source>
-        <translation>Réseaux</translation>
-    </message>
-    <message>
-        <source>No networks found.</source>
-        <translation>Aucun réseau trouvé.</translation>
     </message>
     <message>
         <source>Disconnect</source>
         <translation>Déconnecter</translation>
     </message>
+</context>
+<context>
+    <name>WifiPasswordSheet</name>
     <message>
-        <source>Secured</source>
-        <translation>Sécurisé</translation>
+        <source>Enter the password for “%1”</source>
+        <translation>Saisissez le mot de passe de «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
-        <source>Open</source>
-        <translation>Ouvert</translation>
+        <source>This network is secured. Its password is saved on this computer once it is joined.</source>
+        <translation>Ce réseau est sécurisé. Son mot de passe est enregistré sur cet ordinateur une fois le réseau rejoint.</translation>
     </message>
     <message>
-        <source>Signal %1 %</source>
-        <translation>Signal %1&#xa0;%</translation>
+        <source>Join</source>
+        <translation>Rejoindre</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>A Wi-Fi password has 8 to 63 characters (letters, digits and symbols), or 64 hexadecimal digits.</source>
+        <translation>Un mot de passe Wi-Fi compte de 8 à 63 caractères (lettres, chiffres et symboles), ou 64 chiffres hexadécimaux.</translation>
+    </message>
+    <message>
+        <source>Show password</source>
+        <translation>Afficher le mot de passe</translation>
     </message>
 </context>
 <context>

@@ -3,6 +3,7 @@
 #include "runmode.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include <QDir>
 #include <QFileInfo>
@@ -21,6 +22,20 @@ bool isUuid(const QString &s)
 {
     static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")));
     return re.match(s).hasMatch();
+}
+
+bool isPortalAppId(const QString &s)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_][A-Za-z0-9_.+-]{0,254}")));
+    return re.match(s).hasMatch() && !s.contains(QLatin1String(".."));
+}
+
+bool isPortalToken(const QString &s)
+{
+    // xdg-desktop-portal's own rule (xdp-session-persistence.c, restore token valid): xdp_is_valid_token, [A-Za-z0-9_]+ (its
+    // tokens are base64 of 16 random bytes with + and / made _, so one in 32 begins with _), or a legacy UUID.
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_]{1,128}")));
+    return re.match(s).hasMatch() || isUuid(s);
 }
 
 QList<Mount> parseMounts(const QByteArray &text)
@@ -97,8 +112,9 @@ bool isReadOnlyQuery(const QStringList &argv)
     const QStringList args = argv.mid(1);
     // Wi-Fi and Bluetooth are not commands any more: they go over D-Bus (systembus.h, whose own guard allows only reads in a dev
     // session). nmcli and bluetoothctl are therefore neither queries nor actions here.
+    // Sound pane: the devices, and their PipeWire node names (the Type column).
     if (program == QLatin1String("wpctl"))
-        return args == QStringList{"status"};
+        return args == QStringList{"status"} || args == QStringList{QStringLiteral("status"), QStringLiteral("-n")};
     // About pane (Backend::run): package versions and graphics adapters. Storage pane: the installed packages' sizes (pacman -Qi).
     if (program == QLatin1String("pacman"))
         return args == QStringList{QStringLiteral("-Qi")}
@@ -109,9 +125,45 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Storage pane: the size of the user's folders.
     if (program == QLatin1String("du"))
         return isFolderSizeQuery(args);
+    // Battery: the power profiles this machine offers (Omarchy's list of power-profiles-daemon's).
+    if (program == QLatin1String("omarchy-powerprofiles-list"))
+        return args.isEmpty();
+    // Printers (ADR-0030): the queues with their state, description and location; the default (the user's first); the device
+    // URIs; what cupsd and DNS-SD find (Add Printer); one queue's options (its paper sizes). `lpoptions -p <queue> -l` lists,
+    // it changes nothing; any other lpoptions form may write and is an action.
+    if (program == QLatin1String("lpstat"))
+        return args == QStringList{QStringLiteral("-l"), QStringLiteral("-p")} || args == QStringList{QStringLiteral("-d")}
+            || args == QStringList{QStringLiteral("-v")} || args == QStringList{QStringLiteral("-a")}
+            || args == QStringList{QStringLiteral("-l"), QStringLiteral("-e")};
+    if (program == QLatin1String("lpoptions"))
+        return args.size() == 3 && args.at(0) == QLatin1String("-p") && isPrinterName(args.at(1)) && args.at(2) == QLatin1String("-l");
     // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
     // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
     return false;
+}
+
+bool isPrinterName(const QString &name)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_.+@][A-Za-z0-9_.+@-]{0,126}")));
+    return re.match(name).hasMatch();
+}
+
+bool isPaperKeyword(const QString &keyword)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9][A-Za-z0-9._-]{0,39}")));
+    return re.match(keyword).hasMatch() && !keyword.startsWith(QLatin1String("Custom."));
+}
+
+bool isPrinterUri(const QString &uri)
+{
+    if (uri.size() > 1024)
+        return false;
+    for (const QChar c : uri) {
+        if (c.isSpace() || c.unicode() < 0x20 || c.unicode() == 0x7f || c.category() == QChar::Other_Format)
+            return false;
+    }
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("(dnssd|ipp|ipps|ippusb)://[^/?#][^#]*")));
+    return re.match(uri).hasMatch();
 }
 
 bool isFolderSizeQuery(const QStringList &args)
@@ -262,7 +314,54 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language");
+    return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
+        || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions");
+}
+
+bool isBacklightName(const QString &name)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_.:][A-Za-z0-9_.:-]{0,63}")));
+    return re.match(name).hasMatch();
+}
+
+bool isDisplayTrialId(const QString &id)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9]{1,32}")));
+    return re.match(id).hasMatch();
+}
+
+bool isDisplayLine(const QString &line)
+{
+    const QStringList f = line.split(QLatin1Char('\t'));
+    if (f.size() != 6 || f.at(0) != QLatin1String("v1") || !f.at(1).startsWith(QLatin1String("desc:")))
+        return false;
+    const QString desc = f.at(1).mid(5);
+    if (desc.isEmpty() || desc.toUtf8().size() > 160)
+        return false;
+    for (const QChar c : desc) {
+        if (c.unicode() < 0x20 || c.unicode() == 0x7f)
+            return false;
+    }
+    static const QRegularExpression mode(QRegularExpression::anchoredPattern(QStringLiteral("([0-9]{1,5})x([0-9]{1,5})@([0-9]{1,4})(\\.[0-9]{1,3})?")));
+    const QRegularExpressionMatch m = mode.match(f.at(2));
+    if (!m.hasMatch())
+        return false;
+    const int w = m.captured(1).toInt(), h = m.captured(2).toInt();
+    const double hz = (m.captured(3) + m.captured(4)).toDouble();
+    if (w < 1 || w > 16384 || h < 1 || h > 16384 || hz < 1 || hz > 1000)
+        return false;
+    static const QRegularExpression pos(QRegularExpression::anchoredPattern(QStringLiteral("(-?[0-9]{1,5})x(-?[0-9]{1,5})")));
+    const QRegularExpressionMatch p = pos.match(f.at(3));
+    if (!p.hasMatch() || std::abs(p.captured(1).toInt()) > 32768 || std::abs(p.captured(2).toInt()) > 32768)
+        return false;
+    static const QRegularExpression scale(QRegularExpression::anchoredPattern(QStringLiteral("[0-9](\\.[0-9]{1,6})?")));
+    if (!scale.match(f.at(4)).hasMatch())
+        return false;
+    const double sc = f.at(4).toDouble();
+    if (sc < 0.5 || sc > 4)
+        return false;
+    static const QRegularExpression transform(QRegularExpression::anchoredPattern(QStringLiteral("[0-7]")));
+    return transform.match(f.at(5)).hasMatch();
 }
 
 bool asksForPassword(const QStringList &argv)
@@ -283,6 +382,34 @@ bool isAllowedAction(const QStringList &argv)
     // Omarchy's own per-user language switch (it generates the locale through Omarchy's sudoers grant or pkexec): one code.
     if (argv.first() == QLatin1String("omarchy-language"))
         return argv.size() == 2 && isLanguageCode(argv.at(1));
+    // Battery > Low Power Mode: Omarchy remembers a power profile for the power adapter and one for the battery, and applies it
+    // (power-profiles-daemon, whose own polkit action lets the active session switch).
+    if (argv.first() == QLatin1String("omarchy-powerprofiles-set"))
+        return argv.size() == 3 && (argv.at(1) == QLatin1String("ac") || argv.at(1) == QLatin1String("battery"))
+            && (argv.at(2) == QLatin1String("power-saver") || argv.at(2) == QLatin1String("balanced") || argv.at(2) == QLatin1String("performance"));
+    // Displays > Brightness: the same command as the shell's Brightness.qml, one backlight and a whole percentage.
+    if (argv.first() == QLatin1String("brightnessctl")) {
+        static const QRegularExpression percent(QRegularExpression::anchoredPattern(QStringLiteral("(100|[1-9]?[0-9])%")));
+        return argv.size() == 6 && argv.at(1) == QLatin1String("-q") && argv.at(2) == QLatin1String("-d") && isBacklightName(argv.at(3))
+            && argv.at(4) == QLatin1String("set") && percent.match(argv.at(5)).hasMatch();
+    }
+    // Sound: exactly the three forms of the page (qml/System.js): a device made the default, its volume (0.00 to 1.00), its mute.
+    if (argv.first() == QLatin1String("wpctl")) {
+        static const QRegularExpression id(QRegularExpression::anchoredPattern(QStringLiteral("[0-9]{1,9}")));
+        static const QRegularExpression volume(QRegularExpression::anchoredPattern(QStringLiteral("0\\.[0-9]{2}|1\\.00")));
+        if (argv.size() == 3 && argv.at(1) == QLatin1String("set-default"))
+            return id.match(argv.at(2)).hasMatch();
+        if (argv.size() == 4 && argv.at(1) == QLatin1String("set-volume"))
+            return id.match(argv.at(2)).hasMatch() && volume.match(argv.at(3)).hasMatch();
+        if (argv.size() == 4 && argv.at(1) == QLatin1String("set-mute"))
+            return id.match(argv.at(2)).hasMatch() && (argv.at(3) == QLatin1String("0") || argv.at(3) == QLatin1String("1"));
+        return false;
+    }
+    // Printers: the user's default printer, or one queue's paper size (~/.cups/lpoptions).
+    if (argv.first() == QLatin1String("lpoptions"))
+        return (argv.size() == 3 && argv.at(1) == QLatin1String("-d") && isPrinterName(argv.at(2)))
+            || (argv.size() == 5 && argv.at(1) == QLatin1String("-p") && isPrinterName(argv.at(2)) && argv.at(3) == QLatin1String("-o")
+                && argv.at(4).startsWith(QLatin1String("PageSize=")) && isPaperKeyword(argv.at(4).mid(9)));
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

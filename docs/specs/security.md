@@ -189,6 +189,7 @@ does not check its gate.
 | lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
 | lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
 | idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
+| saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
 | search | toggle | action | SUPER+SPACE |
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
@@ -389,9 +390,77 @@ shell no longer relies on that alone:
   it appeared (the click goes on to what it hit: the field, Cancel, Allow). Both delays are timed by Timers in the model
   (`noteUnlock`, `noteShown`; a monotonic clock), never by `Date.now()` (review of 6e24d36: a wall-clock step would stretch
   or end a hold); a click before the sheet was ever noted as shown does not count. polkit gives no program name to the agent
-  (only the message, which names the program for pkexec). Tests: `tst_authdialogmodel` `test_heldGuard`,
-  `test_heldJustAfterUnlock` (real timers), `tst_authdialog` `test_11_heldNotice`, `tests/security/lock_surfaces.sh`
-  (wiring, no `Date` in the hold functions, eight polkit mutations). Seen on screen: NOT VERIFIED (L5).
+  (only the message, which names the program for pkexec). The screen saver holds a request the same way (ADR-0032, owner
+  decision 2026-10-26: over the opaque saver an unheld sheet looked like the lock's prompt and took the keys at once): one
+  that arrives while `SessionState.saverShown` (a mirror of the saver, set in shell.qml), or is open when the saver comes up
+  (its field emptied), is held and says "…and waited while the screen saver was on"; while the saver shows a press (any
+  button) or the wheel on the sheet goes nowhere (the waking input), and when the saver ends the click guard starts over
+  (`noteUncovered`), so no click in the next 500 ms gives the sheet the keyboard, whichever of the press and the saver's end
+  comes first (such a click still reaches the control it hits, as after an unlock: Cancel at worst; Allow with an empty
+  field does nothing). The saver keeps the keyboard meanwhile (the held sheet takes none). Fail mode: a wrong
+  `saverShown` never releases a hold; a wrong false (the Binding lost) brings back a sheet that takes the keyboard over the
+  saver, a wrong true holds every request and swallows every press on the sheet until the requester gives up (only the
+  shell.qml Binding writes it; `lock_surfaces.sh` checks that it is the only writer in shell/, apps/ and ui/: no
+  assignment, no other Binding or object property, no other quoted name). Two requests close together (reviews of f513b3b and
+  b5d7657): Quickshell 0.3.1 never queues; a request that arrives while one is open replaces it at once (the flow
+  switches without `active` changing; the replaced one is abandoned, never answered, which fails closed), and one that
+  arrives after the previous ended passes through no request. Both are held, "…right after another one": the replacing
+  one with its field emptied and its guard started over, and, if the user was typing into the sheet, with the keyboard
+  kept on a key sink, so the rest of a password and its Return reach neither field nor the window underneath; the next
+  one within 1 s (`AuthDialogModel.afterRequest`) like one after an unlock. Whether a request is in the sheet is a flag
+  (`flowShown`), never the previous flow read back (a reference to a destroyed flow reads null; review of
+  9ad4307..b38618f); should Quickshell destroy the abandoned flow before it hands over the next one, the model's flow
+  goes through null, the open request ends there, under the user's typing, so the sink lingers (below), and the next one
+  is held as one right after another and keeps the sink (`authagent_flows.sh` test_01b). A replacement
+  behind the lock or the saver keeps saying why it waited. The sink (checks of 38dbfe8 and c1ca44f): while it has the keys the sheet's field and identity
+  rows are disabled (`AuthDialog.inputEnabled`; its `focusField` does nothing then) and any focus the sheet gets goes back
+  to the sink (a press on one of its controls within the guard, the sheet focusing its field when it loads or after a
+  failure, which a same-user process can cause by killing the helper, or the window activated with the sheet's scope
+  focused, which is how a focus given while the window has no keyboard arrives), so no key reaches the held request's
+  field until a click past the guard; Esc on it cancels the held request (fails closed). A request that ends while the
+  sink has the keys (its requester gave up, or the request it replaced completed and Quickshell ended the current one),
+  or that ends unanswered while the sheet has the keyboard (security counter-review of f9e24e1, LOW-1: its requester gave
+  up, timed out or was destroyed while the user typed its password into its own field, and the rest of the password went to
+  the window underneath), leaves the window mapped with the keyboard on the sink, until no key came for 1 s, at most 3 s
+  (`sinkLingerMaxMs`), or a click, the lock or the saver; one that arrives meanwhile is held and keeps the sink.
+  "Unanswered": the user neither sent a password nor cancelled since polkit last asked (`AuthDialogModel.answered`: set by
+  `submit` and `cancel`, cleared by a failure, a new prompt or a new request, never when the request ends, so the agent
+  still reads it then); a request the user answered gives the keyboard back at once, as on macOS (a first Esc in a field with
+  text only empties it: not an answer). The linger is perceivable (LOW-3): where the sheet was, a card of the sheet's
+  material says "Request cancelled" and "What you type is ignored for a moment." (fixed, translated text, nothing of the
+  requester's; no control, no focus: a press on it reaches the backdrop, which ends the linger, and the keys stay on the
+  sink; blurred like the sheet), only while the sink lingers (not over a held request's sheet). The window's `visible`
+  and `takesKeys` read the base state only (`requestOpen`, `locked`, the hold, `sinkingKeys`), and `arrive` starts the
+  linger from it too: through an intermediate binding (`shown`, `lingering`) a change could be read before that binding saw
+  it, so the window went unmapped for a moment (a hidden PanelWindow is destroyed and made again, the compositor giving the
+  keyboard to the window underneath until the new surface maps) or the linger's timers never started. `requestOpen` is the
+  agent's own record of the request in the sheet, written only by `arrive` and never the model's `active`: at an end
+  `arrive` first reads whether the window had the keyboard, sets the sink, then lets `requestOpen` go, and changes the hold
+  after it (at an arrival it sets the hold before `requestOpen`), so the window never unmaps nor asks for the keyboard for
+  a held request on the way, whichever binding sees the end first (in this Qt the agent's handler runs first, so the
+  harness cannot tell the two apart: `lock_surfaces.sh` pins both). Upstream (for the upstream researcher; read in the
+  0.3.1 sources, not run):
+  the replaced request's flow and `AuthRequest` are overwritten without being deleted or answered (agentimpl.cpp
+  initiateAuthentication), so they leak with the first helper session alive and its client waiting; a later cancel of it
+  only logs a warning. Its completion can still end the current request (`isCompletedChanged` stays connected to
+  `finishAuthenticationRequest`), which the linger above covers. Queuing a new request instead of replacing the open one
+  upstream would remove the lever. Tests: `tst_authdialogmodel` `test_heldGuard` (with `noteUncovered`),
+  `test_heldJustAfterUnlock` (real timers), `tst_authdialog` `test_11_heldNotice`, `test_heldJustAfterAnotherRequest`;
+  `tests/security/authagent_flows.sh` (the real AuthAgent.qml with its Quickshell types replaced, `make_harness.py`: every
+  flow order Quickshell produces, every way the focus can move while the sink holds, the linger and what ends it, with real
+  key and mouse events; with `--panel`, in `FakePanel.qml`, a window made again each time it is shown and given the keyboard
+  only once mapped, beside a window underneath, the end of a request under the user's typing in every order, the flow
+  destroyed included (`window.qml` test_04: nothing typed after it reaches the window underneath, the window is never made
+  again, the keys go there again after the linger; it fails on f9e24e1); `--mutants` brings back each defect the reviews
+  found and checks it is caught: 26 mutants);
+  `tests/security/lock_surfaces.sh` (wiring, the saver's Binding and that it is the only writer of `saverShown`, one place
+  that gives the keyboard and three that take it
+  back, three that set the hold, the stacking of the sheet and its two guards, each hold Timer used only in its own
+  functions, the key sink, `typing` read first (with the end under the user's typing), the six places that release the sink,
+  the places that focus the field and the sheet's disabled input, the linger's timers and its start, `visible` and
+  `takesKeys` from the base state (`requestOpen`, written only by `arrive`, in its order), `answered` set and cleared only
+  where it may be, the ended notice (only while lingering, fixed plain text, no input or focus), no `Date` in the hold
+  functions, 57 polkit mutations). Seen on screen: NOT VERIFIED (L5; the ended notice too).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").
@@ -506,6 +575,17 @@ VERIFIED until run).
   `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
   dies meanwhile cannot leave the screen dark. Off in the nested dev session unless `idle devDisplayOff <s>` sets it
   (`lock_privacy.sh display-off`). NOT VERIFIED on hardware (L2†).
+- Display power-off while unlocked (2026-10-26, Settings > Lock Screen; ADR-0010 amendment of that date): a second
+  `IdleMonitor` (`respectInhibitors: true`, armed only while unlocked and no ScreenSaver cookie is held,
+  `IdleModel.inactiveOffArmed`) switches the displays off after `lock.displayOffBattery` / `lock.displayOffPower` minutes
+  without input (the power source from UPower; 0 = never) and does not lock. The idle lock is untouched. A lock that follows
+  lights the displays until it holds (the compositor confirms a lock only once it has drawn it; "on" is sent while a lock is
+  being acquired even if this instance believes them on, as after a shell restart: at start, then every 2 s until it holds, at most 5 times), then they go dark again
+  until input (the monitor stays armed while it is idle, `offForInactivity`); any input, an unlock without input (fingerprint)
+  or a change of power source switches them on. Always off in the nested dev session (no dev hook: nothing needed one). NOT VERIFIED on hardware or in nested here
+  (no compositor in the cloud container; L2†).
+- The lock surface (2026-10-26): `lock.showUser` false hides the picture and the name, `lock.showMessage` shows
+  `lock.message` (plain text, one line stored, at most two lines drawn) above them. Display only.
 - `org.freedesktop.ScreenSaver` inhibitors (GF-016 residual, done 2026-10-24; ADR-0008 and ADR-0010 amendments):
   Quickshell 0.3.1 cannot own a D-Bus name or serve methods (verified in its qmltypes: no D-Bus server type, only the
   DBusMenu client, the StatusNotifier, MPRIS and Notifications services and the Wayland `IdleInhibitor`), so the menu

@@ -77,9 +77,14 @@ Scope {
         {id: "accessibility", title: qsTr("Accessibility"), keywords: [qsTr("pointer"), qsTr("cursor"), qsTr("contrast"), qsTr("reduce motion"), qsTr("text size")]},
         {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("screen corners")]},
         {id: "menubar", title: qsTr("Menu Bar"), keywords: [qsTr("clock"), qsTr("menu bar background"), qsTr("status items"), qsTr("hide menu bar"), qsTr("battery percentage")]},
+        {id: "search", title: qsTr("Search"), keywords: [qsTr("search results"), qsTr("search history")]},
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
+        {id: "focus", title: qsTr("Focus"), keywords: [qsTr("do not disturb"), qsTr("silence")]},
         {id: "lock", title: qsTr("Lock Screen"), keywords: [qsTr("idle"), qsTr("password")]},
-        {id: "mouse", title: qsTr("Mouse & Trackpad"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling"), qsTr("tap to click"), qsTr("touchpad")]},
+        {id: "privacy", title: qsTr("Privacy & Security"), keywords: [qsTr("permissions"), qsTr("location"), qsTr("camera"), qsTr("screen sharing")]},
+        {id: "mouse", title: qsTr("Mouse"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling")]},
+        {id: "trackpad", title: qsTr("Trackpad"), keywords: [qsTr("touchpad"), qsTr("tracking speed"), qsTr("tap to click"), qsTr("gestures")]},
+        {id: "printers", title: qsTr("Printers"), keywords: [qsTr("printer"), qsTr("paper size"), qsTr("print")]},
         {id: "keyboard", title: qsTr("Keyboard"), keywords: [qsTr("shortcuts"), qsTr("keys")]},
         {id: "about", title: qsTr("About"), keywords: [qsTr("version"), qsTr("system"), qsTr("hardware")]}
     ].map(p => Object.assign({icon: SettingsPages.PAGES.find(d => d.id === p.id).icon}, p))
@@ -104,6 +109,34 @@ Scope {
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
     readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"
+
+    // The kinds of results shown (Settings > Search > Search Results; tests set them directly).
+    property bool showApps: Settings.searchShowApps
+    property bool showDocuments: Settings.searchShowDocuments
+    property bool showRecents: Settings.searchShowRecents
+    property bool showCalculator: Settings.searchShowCalculator
+    property bool showConversions: Settings.searchShowConversions
+    property bool showSettings: Settings.searchShowSettings
+    property bool showCommands: Settings.searchShowCommands
+    // Delete Search History: the results picked before this time are forgotten, in memory and in search-usage.json.
+    property real historyResetAt: Settings.searchHistoryResetAt
+    onHistoryResetAtChanged: forgetHistory()
+    onShowDocumentsChanged: {
+        if (!showDocuments) {
+            fileTimer.stop();
+            cancelFiles();
+            fileHits = [];
+        }
+    }
+
+    function forgetHistory(): void {
+        const kept = Ranking.forgetUsageBefore(usage, historyResetAt);
+        if (Object.keys(kept).length === Object.keys(usage).length)
+            return;
+        usage = kept;
+        if (usageFile.path !== "")
+            usageFile.setText(Ranking.serializeUsage(usage));
+    }
 
     // ---- state changes -------------------------------------------------------------------
 
@@ -158,7 +191,7 @@ Scope {
         cancelFiles();
         compute();
         const q = text.trim();
-        if (q.length >= 2 && !q.startsWith("-"))
+        if (showDocuments && q.length >= 2 && !q.startsWith("-"))
             fileTimer.restart();
         else
             fileTimer.stop();
@@ -217,13 +250,14 @@ Scope {
 
     function compute(): void {
         const q = query.trim();
-        const calc = q !== "" ? Calc.answer(q) : null;
-        const unit = q !== "" ? Units.answer(q) : null;
+        // Each kind of result only when Settings > Search shows it.
+        const calc = showCalculator && q !== "" ? Calc.answer(q) : null;
+        const unit = showConversions && q !== "" ? Units.answer(q) : null;
         const lq = Ranking.norm(q);
 
-        let apps = q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
+        let apps = showApps && q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
         let cmds = [];
-        if (q !== "") {
+        if (showCommands && q !== "") {
             for (const c of commandList()) {
                 const s = commandScore(c, lq);
                 if (s > 0)
@@ -231,16 +265,16 @@ Scope {
             }
             cmds.sort((a, b) => b.score - a.score);
         }
-        let pages = q !== "" ? SettingsPages.match(settingsPageList, q) : [];
+        let pages = showSettings && q !== "" ? SettingsPages.match(settingsPageList, q) : [];
         const seen = {};
         let docs = [];
-        for (const p of fileHits) {
+        for (const p of showDocuments ? fileHits : []) {
             seen[p] = true;
             docs.push(mkPath("file", p));
         }
         // macOS: an empty field shows no results; documents (recent included) appear from the first keystroke.
         let recents = [];
-        for (const r of q === "" ? [] : recentList) {
+        for (const r of q === "" || !showRecents ? [] : recentList) {
             if (recents.length >= Tokens.searchRecentCount)
                 break;
             if (seen[r.path])
@@ -362,7 +396,7 @@ Scope {
 
     function startFiles(): void {
         const term = query.trim();
-        if (term.length < 2 || term.startsWith("-"))
+        if (!showDocuments || term.length < 2 || term.startsWith("-"))
             return;
         fileSeq++;
         spawnSearch(fileSeq, term, "localsearch");
@@ -520,7 +554,11 @@ Scope {
         id: usageFile
         printErrors: false
         atomicWrites: true
-        onLoaded: root.usage = Ranking.parseUsage(usageFile.text())
+        // A history deleted while the shell was not running is forgotten now, on disk too.
+        onLoaded: {
+            root.usage = Ranking.parseUsage(usageFile.text());
+            root.forgetHistory();
+        }
     }
 
     // Recent documents, read only.

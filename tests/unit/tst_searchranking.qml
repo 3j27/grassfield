@@ -107,6 +107,20 @@ TestCase {
         compare(Object.keys(Ranking.parseUsage("{\"version\":1,\"usage\":{\"a\":{\"count\":\"x\",\"last\":1}}}")).length, 0);
     }
 
+    // Settings > Search > Delete Search History (search.historyResetAt): what was picked before is forgotten, later picks stay.
+    function test_forgetUsageBefore() {
+        const u = Ranking.newUsage();
+        Ranking.bumpUsage(u, "firefox", 1000);
+        Ranking.bumpUsage(u, "foot", 3000);
+        const kept = Ranking.forgetUsageBefore(u, 2000);
+        compare(Object.keys(kept), ["foot"]);
+        compare(kept.foot.last, 3000);
+        // Nothing deleted yet, or a time that is not a number: nothing is forgotten.
+        for (const at of [0, -1, NaN, "2000", undefined, null])
+            compare(Object.keys(Ranking.forgetUsageBefore(u, at)).length, 2, String(at));
+        compare(Object.keys(Ranking.forgetUsageBefore(u, 5000)).length, 0);
+    }
+
     function test_usageCap() {
         const usage = Ranking.newUsage();
         for (let i = 0; i < 700; i++)

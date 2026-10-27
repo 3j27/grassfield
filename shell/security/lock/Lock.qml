@@ -461,6 +461,8 @@ Singleton {
                 anchors.fill: parent
                 userName: root.userName
                 avatarSource: root.avatarSource
+                showUser: Settings.lockShowUser
+                lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""
                 authenticating: controller.authenticating
                 inputEnabled: controller.pamAvailable
                 message: controller.pamAvailable ? controller.message : qsTr("Authentication service unavailable. The session stays locked.")
