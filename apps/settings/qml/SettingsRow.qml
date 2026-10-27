@@ -13,6 +13,8 @@ Item {
     property string glyph: ""
     property string tileColor: "graphite"
     property real tileSize: Tokens.settingsNavTileSize
+    // The labels' offset from the row's middle (macOS 27 slider rows set their title a little higher).
+    property real labelsOffset: 0
     default property alias control: slot.data
 
     width: parent ? parent.width : implicitWidth
@@ -61,6 +63,7 @@ Item {
             right: slot.left
             rightMargin: Tokens.spacingLg
             verticalCenter: parent.verticalCenter
+            verticalCenterOffset: root.labelsOffset
         }
 
         Text {

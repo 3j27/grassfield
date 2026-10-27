@@ -94,3 +94,33 @@ Plan (next security milestone, each step reviewed and gated L1–L5):
 - S5: crash-injection test: a crash signal to the UI process while locked (the lock surface never goes away: no
   "lockscreen app died" screen) and while unlocked (the idle lock still fires); DT-01/DT-21 re-run against the security
   process.
+
+## Amendment 2026-10-26 (Settings > Lock Screen, macOS 27)
+**Display off while unlocked.** The idle module gains a second idle monitor: after `lock.displayOffBattery` (on battery,
+default 2 min) or `lock.displayOffPower` (on the power adapter, default 10 min) without input, the displays turn off (Hyprland
+DPMS) while the session stays unlocked; any input turns them on (the compositor also does at a key press or pointer motion).
+It respects the same inhibitors as the idle lock (an application holding a ScreenSaver cookie or a Wayland idle inhibitor
+keeps the displays on) and reads the power source from UPower (`Battery.onBattery`; unknown reads as the power adapter). It
+never locks and never delays the lock: the idle lock still fires at `lock.idleMinutes` from the first monitor, unchanged
+(dim at T-10 s, lock at T), and a lock that follows a display-off keeps the displays off until input instead of lighting them
+for the lock screen's own delay. A lock being acquired is never kept dark: the displays come on until the compositor
+confirms it (`Lock.holding`; it confirms a lock only once it has drawn it on every display), then go dark again if no input
+came (review of 6e61829: kept dark, the lock before sleep would wait out its budget and the ownership check would not run).
+An unlock without Wayland input (fingerprint) lights a session that went dark for inactivity. A change of power source or of
+the setting re-arms the monitor and lights the displays (as a Mac wakes its display when the adapter is plugged in); while
+locked it then leaves the dark lock screen to its own 30 s delay. An invalid or 0 value means never (turning the displays off
+is not what keeps the session safe). `IdleModel.inactiveDisplayOffSeconds`, `inactiveOffArmed`, `displaysOff`; tests/security/tst_idlemodel.qml. "Off" is
+now sent whenever the wanted state is recomputed (the compositor may have switched the displays on by itself, so a remembered
+"off" must not suppress the next one); "on" only when this module had them off, or while a lock is being acquired (an
+instance restarted with the displays dark believes them on; counter-review of a15c05e): at start, then every 2 s until the
+lock holds, at most 5 times (`IdleModel.ACQUIRE_DISPLAYS_ON_MS`, `ACQUIRE_DISPLAYS_ON_TRIES`: a lock that cannot hold, with no
+display connected, is not woken all night); only a change of state is logged. The changes of the lock's state are handled later in the turn, once
+(`Qt.callLater`), so a lock or an unlock sends no repeated "on". In the nested dev session it is always off (no dev hook: no
+test needed one; review of PR #9).
+
+**What the lock surface shows.** `lock.showUser` (default true) hides the account's picture and name (the password field
+stays); `lock.showMessage` with `lock.message` shows one line of plain text of the user's (at most 200 UTF-16 code units, no C0 or
+C1 control characters, line or paragraph separators, bidirectional overrides or isolates: refused otherwise by the settings
+contract, rule `plainText`) above them, at most two lines on screen.
+Display only: authentication, the lock state machine and every unlock path are unchanged, and the message is user text from
+the user's own configuration (no notification or window content: L4 holds).

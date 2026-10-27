@@ -11,9 +11,10 @@ Text {
     readonly property string reason: root.system ? (root.system.errors[root.tag] ?? "") : ""
 
     textFormat: Text.PlainText
+    // A hidden note takes no room in the page's column (a height bound to the visibility loops through the wrapped text's
+    // implicit height once the page is shown).
     visible: root.reason !== ""
     width: parent ? parent.width : implicitWidth
-    height: visible ? implicitHeight : 0
     leftPadding: Tokens.spacingMd
     rightPadding: Tokens.spacingMd
     wrapMode: Text.Wrap

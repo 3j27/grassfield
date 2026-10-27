@@ -8,6 +8,8 @@ Flickable {
 
     property string title: ""
     default property alias groups: column.data
+    // The groups' left edge in the pane (a block that spans the whole pane, Wallpaper's line, starts this far to the left).
+    readonly property real columnX: column.x
 
     contentWidth: width
     contentHeight: column.y + column.height + Tokens.settingsContentMargin

@@ -20,8 +20,8 @@ Scope {
     id: root
 
     readonly property bool registered: agent.isRegistered
-    // A request is open: its sheet shown, or held behind the lock. Read only by shell.qml for SessionState.authorizing (the
-    // clipboard history records nothing while it is true and 2 s after, ADR-0034 Q11); nothing in the agent reads it.
+    // A request is open: its sheet shown, or held (behind the lock or the screen saver, or queued). Read only by shell.qml for
+    // SessionState.authorizing (the clipboard history records nothing while it is true and 2 s after, ADR-0034 Q11).
     readonly property bool requestActive: dialogModel.active
 
     PolkitAgent {
@@ -44,36 +44,145 @@ Scope {
         flow: agent.isActive ? agent.flow : null
         // qmllint enable unresolved-type
 
-        onActiveChanged: {
-            root.heldWhileLocked = active && SessionState.locked;
-            root.heldByLock = active && dialogModel.arrivesHeld(SessionState.locked);
-            root.userFocused = false;
-            root.requestStartedAt = active ? new Date() : null;
+        // A request arrived, or none is left.
+        onActiveChanged: root.arrive(false)
+        // Another request replaces the one in the sheet: Quickshell 0.3.1 activates a new request at once, abandoning the open
+        // one (agentimpl.cpp initiateAuthentication; re-check of b5d7657), so `active` does not change. It is a new arrival,
+        // held (review of f513b3b, MEDIUM-2): keys typed for the first must not land in its field. One that arrives after the
+        // first ended passes through no request and is held by AuthDialogModel.afterRequest. Whether a request was in the sheet
+        // is a plain flag: Quickshell may destroy the flow it abandons before it hands over the next one, and a reference to a
+        // destroyed flow reads null (the next one then passed for a first request, not held; review of 9ad4307..b38618f).
+        onFlowChanged: {
+            const follows = root.flowShown && flow !== null && flow !== root.shownFlow;
+            root.flowShown = flow !== null;
+            root.shownFlow = flow;
+            if (follows)
+                root.arrive(true);
         }
     }
 
-    // The request arrived, or was open, while the session was locked (review of 1d2c856), or arrived within
-    // AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c): the sheet is shown without the keyboard until the
-    // user clicks it (AuthDialogModel.heldGuardMs after it appeared), so keys typed right after the unlock never reach its
-    // field; it says when the request arrived. Both delays are timed by the model's Timers (monotonic, review of 6e24d36);
-    // requestStartedAt is only the wall-clock time the notice prints (display, never compared).
+    // A request is in the sheet; the last flow seen (null once destroyed), to tell the same one handed over again from the next.
+    property bool flowShown: false
+    property var shownFlow: null
+
+    // A request arrives (`follows`: it replaced the one in the sheet) or none is left: whether it is held and why, the
+    // keyboard not given yet, the time its notice prints. One that follows starts empty and its click guard starts over. The
+    // keys keep going to the key sink when the request replaced the one that had the keyboard (the user was typing its
+    // password; re-check of b5d7657, MEDIUM-2), when the request ended unanswered while the window had the keyboard (its
+    // requester gave up, or Quickshell ended it, under the user's typing; security counter-review of f9e24e1, LOW-1: the rest
+    // of the password went to the window underneath), and whenever the sink already had them: a request that ends meanwhile
+    // leaves the sink lingering (`lingering`; check of 38dbfe8, MEDIUM-B), and one that arrives meanwhile keeps it and is
+    // held, as right after another (only a click past its guard gives it the keyboard). So the rest of what is typed reaches
+    // neither a field nor the window underneath. A request the user answered (sent or cancelled: AuthDialogModel.answered)
+    // gives the keyboard back at once, as on macOS. `typing` is read first, before this function changes what takesKeys
+    // reads: takesKeys and `visible` read `requestOpen`, which only this function writes, never `active`, so at a request's
+    // end they still say whether the window had the keyboard, whichever binding saw the end first. The writes keep the window
+    // mapped and its keyboard steady: the sink first (at an end the window keeps the keys through it before `requestOpen` lets
+    // go), `requestOpen` false before the hold changes at an end and true only after it at an arrival (a held request never
+    // asks for the keyboard on the way). No request left: the next one within heldAfterUnlockMs is held (noteEnded).
+    function arrive(follows: bool): void {
+        const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);
+        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());
+        root.sinkingKeys = typing;
+        if (!dialogModel.active)
+            root.requestOpen = false;
+        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : queued ? "queued" : "unlock";
+        root.heldByLock = dialogModel.active && (follows || typing || dialogModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
+        root.userFocused = false;
+        if (dialogModel.active)
+            root.requestOpen = true;
+        root.requestStartedAt = dialogModel.active ? new Date() : null;
+        if (!dialogModel.active)
+            dialogModel.noteEnded();
+        // The linger starts: from the base state, never `lingering`, whose binding may not have seen this change of `active`
+        // yet (check of c1ca44f: its timers then never started, and with no key after the end the linger never ended).
+        if (typing && !dialogModel.active && !SessionState.locked) {
+            sinkIdle.restart();
+            sinkCap.restart();
+        }
+        if (follows) {
+            dialogModel.clearRequested();
+            dialogModel.noteShown();
+        }
+    }
+
+    // The request arrived, or was open, while the session was locked (review of 1d2c856) or the screen saver showed (ADR-0032,
+    // owner decision 2026-10-26: over the opaque saver the sheet looked like the lock's prompt and took the keys at once),
+    // arrived within AuthDialogModel.heldAfterUnlockMs after an unlock (review of d8e654c), or followed another request in the
+    // same sheet: the sheet is shown without the keyboard until the user clicks it (AuthDialogModel.heldGuardMs after it
+    // appeared, after the saver ended or after the request before it), so keys typed right after the unlock, the wake or the
+    // previous answer never reach its field; it says when the request arrived and why it waited (`heldWhy`). Both delays are timed by the model's Timers (monotonic, review of 6e24d36); requestStartedAt is only the
+    // wall-clock time the notice prints (display, never compared).
     property bool heldByLock: false
-    property bool heldWhileLocked: false
+    property string heldWhy: "unlock"
+    // A request is in the sheet, as arrive last saw it (written only there): what the window's `visible` and `takesKeys`
+    // read instead of the model's `active` (see arrive). False at the start: the agent has no request when it is made (it
+    // registers asynchronously; the first request is an `active` change, so it goes through arrive).
+    property bool requestOpen: false
+    // The window keeps the keyboard on the key sink: a held request that replaced the one being typed into, or no request
+    // left after one ended unanswered while the window had the keys or the sink had them (`lingering`).
+    property bool sinkingKeys: false
+    onSinkingKeysChanged: if (sinkingKeys)
+        keySink.forceActiveFocus()
+    // The request ended while the sink had the keys, or unanswered while the sheet had them (its requester gave up, or the
+    // request it replaced completed): the window stays mapped, with the keyboard on the sink and a notice where the sheet was
+    // (endedNotice), until no key came for heldAfterUnlockMs (sinkIdle), at most sinkLingerMaxMs (sinkCap), or a click, the
+    // lock or the screen saver ends it (check of 38dbfe8, MEDIUM-B; security counter-review of f9e24e1, LOW-1 and LOW-3).
+    readonly property bool lingering: root.sinkingKeys && !dialogModel.active && !SessionState.locked
     property bool userFocused: false
     property var requestStartedAt: null
 
     Connections {
         target: SessionState
 
+        // The lock has the keyboard now: the sink lets go (a linger ends), and an open request is held.
         function onLockedChanged(): void {
             if (!SessionState.locked) {
                 dialogModel.noteUnlock();
-            } else if (dialogModel.active) {
+                return;
+            }
+            root.sinkingKeys = false;
+            if (dialogModel.active) {
                 root.heldByLock = true;
-                root.heldWhileLocked = true;
+                root.heldWhy = "locked";
                 root.userFocused = false;
             }
         }
+
+        // The screen saver came up: it holds the keyboard, so the sink lets go (a linger ends); an open request is held as by
+        // the lock, its field emptied. It ended over a held one: the click guard starts over, so no click in the next
+        // heldGuardMs gives the sheet the keyboard (such a click still reaches the control it hits, as after an unlock: Cancel
+        // at worst).
+        function onSaverShownChanged(): void {
+            if (SessionState.saverShown)
+                root.sinkingKeys = false;
+            if (!dialogModel.active || SessionState.locked)
+                return;
+            if (SessionState.saverShown) {
+                if (!root.heldByLock || root.userFocused)
+                    root.heldWhy = "saver";
+                root.heldByLock = true;
+                root.userFocused = false;
+                dialogModel.clearRequested();
+            } else if (root.heldByLock) {
+                dialogModel.noteUncovered();
+            }
+        }
+    }
+
+    // The sink's linger ends when no key came for heldAfterUnlockMs, and at the latest sinkLingerMaxMs after the request
+    // ended (both restarted by arrive; a key restarts sinkIdle). Neither touches a sink that holds a request's keys.
+    Timer {
+        id: sinkIdle
+        interval: dialogModel.heldAfterUnlockMs
+        onTriggered: if (root.lingering)
+            root.sinkingKeys = false
+    }
+    Timer {
+        id: sinkCap
+        interval: dialogModel.sinkLingerMaxMs
+        onTriggered: if (root.lingering)
+            root.sinkingKeys = false
     }
 
     // Registration is asynchronous; report a refusal once, after it had time to complete.
@@ -96,10 +205,17 @@ Scope {
         // once the user is back): the sheet is mapped, and takes the keyboard, only after the unlock (GF-116). The request
         // itself stays pending; nothing is answered or approved meanwhile.
         readonly property bool shown: dialogModel.active && !SessionState.locked
-        // The sheet holds the keyboard: shown, and not a held request the user has not clicked yet.
-        readonly property bool takesKeys: shown && (!root.heldByLock || root.userFocused)
+        // The window holds the keyboard: the sheet is shown and not a held request the user has not clicked yet, or the keys
+        // are on the sink (a held request's, or lingering after the request ended). Both this and `visible` read the base
+        // state only, never `shown` or `lingering`: when a request ends while the sink has the keys, an intermediate binding
+        // updated before the other went false for a moment, and a hidden PanelWindow is destroyed and made again, handing
+        // the keyboard to the window underneath meanwhile (check of c1ca44f, M1). The request is `requestOpen`, not the
+        // model's `active`: arrive alone moves it, after the sink, so a request that ends unanswered under the user's typing
+        // never unmaps the window before the sink holds the keys (security counter-review of f9e24e1, LOW-1).
+        readonly property bool takesKeys: !SessionState.locked && ((root.requestOpen && (!root.heldByLock || root.userFocused)) || root.sinkingKeys)
 
-        visible: shown
+        // Mapped with the sheet, and while the sink lingers (no sheet then, no dimming: the notice below says why).
+        visible: !SessionState.locked && (root.requestOpen || root.sinkingKeys)
         // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: a request that was not
         // held takes the keys at once; a held one waits for a click (takesKeys) with an empty field.
         onShownChanged: {
@@ -120,26 +236,48 @@ Scope {
             right: true
         }
         exclusionMode: ExclusionMode.Ignore
-        color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity)
+        color: win.shown ? Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity) : "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: win.takesKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-polkit"
         // qmllint disable missing-type
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blurRegion : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && (win.shown || root.lingering) ? blurRegion : null
         // qmllint enable missing-type
 
         Region {
             id: blurRegion
-            item: holder
+            item: root.lingering ? endedNotice : holder
             radius: Tokens.radiusDialog
         }
 
-        // Clicks outside the sheet do nothing (no click-outside cancel for authentication).
+        // The keys the window keeps (sinkingKeys) stop here: no field, nothing underneath, until a click past the guard gives
+        // the sheet its field, or the linger ends. Esc cancels a held request (it fails closed; check of 38dbfe8, LOW-1); a
+        // key while the sink lingers keeps it a while longer. The sheet's items are the only others in this window that take
+        // the focus: while the sink has the keys its field and identity rows are disabled, and the sheet hands any focus it
+        // gets back to the sink (the Loader below; check of 38dbfe8, MEDIUM-A, and of c1ca44f, M2).
+        Item {
+            id: keySink
+            Keys.onPressed: event => {
+                event.accepted = true;
+                if (root.lingering)
+                    sinkIdle.restart();
+                else if (event.key === Qt.Key_Escape)
+                    dialogModel.cancel();
+            }
+            Keys.onReleased: event => event.accepted = true
+        }
+
+        // Clicks outside the sheet do nothing (no click-outside cancel for authentication) but give the field the focus when
+        // the sheet has the keyboard for it; one while the sink lingers ends the linger.
         MouseArea {
             anchors.fill: parent
             onPressed: {
+                if (root.lingering) {
+                    root.sinkingKeys = false;
+                    return;
+                }
                 const dialog = holder.item as AuthDialog;
-                if (dialog)
+                if (dialog && win.takesKeys && !root.sinkingKeys)
                     dialog.focusField();
             }
         }
@@ -153,7 +291,64 @@ Scope {
                 // The action's theme icon (sanitized by the model), only when the theme has it (no broken image) and every
                 // file Qt could read for it is a regular file of bounded size (ThemeIcons, review of 2dfd992).
                 appIconSource: ThemeIcons.source(dialogModel.iconName)
-                heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhileLocked) : ""
+                heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhy) : ""
+                inputEnabled: !root.sinkingKeys
+                // The sheet got the focus while the sink has the keys (a press on one of its controls within the guard, its
+                // own focusField, or its window activated with the sheet's scope focused): the sink takes it back. A focus
+                // given while the window has no keyboard arrives here when the window gets it.
+                onActiveFocusChanged: if (activeFocus && root.sinkingKeys)
+                    keySink.forceActiveFocus()
+            }
+        }
+
+        // The linger made visible (security counter-review of f9e24e1, LOW-3): while the window keeps the keyboard after a
+        // request ended, a card where the sheet was says the request is gone and typing goes nowhere, so the user stops typing
+        // and knows why keys do nothing for a moment (macOS removes the sheet at once; it has no linger to explain). Fixed
+        // text, nothing of the requester's; no control and no focus: a press on it goes through to the backdrop, which ends
+        // the linger, and the keys stay on the sink.
+        Material {
+            id: endedNotice
+            objectName: "polkitEndedNotice"
+            visible: root.lingering
+            anchors.centerIn: parent
+            width: Tokens.panelDialogWidth
+            height: endedColumn.implicitHeight + 2 * Tokens.spacingLg
+            radius: Tokens.radiusDialog
+
+            Column {
+                id: endedColumn
+                x: Tokens.spacingLg
+                y: Tokens.spacingLg
+                width: endedNotice.width - 2 * Tokens.spacingLg
+                spacing: Tokens.spacingSm
+
+                Text {
+                    width: parent.width
+                    textFormat: Text.PlainText
+                    text: qsTr("Request cancelled")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyTitleSize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                    wrapMode: Text.Wrap
+                    Accessible.role: Accessible.AlertMessage
+                    Accessible.name: text
+                }
+
+                Text {
+                    width: parent.width
+                    textFormat: Text.PlainText
+                    text: qsTr("What you type is ignored for a moment.")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Appearance.colors.textSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                    font.weight: Tokens.typographySmallWeight
+                    wrapMode: Text.Wrap
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
             }
         }
 
@@ -167,10 +362,21 @@ Scope {
                 if (!dialogModel.heldClickAccepted())
                     return;
                 root.userFocused = true;
+                root.sinkingKeys = false;
                 const dialog = holder.item as AuthDialog;
                 if (dialog)
                     dialog.focusField();
             }
+        }
+
+        // While the screen saver shows, a press (any button) or the wheel on the sheet goes nowhere: it is the input that wakes
+        // the screen (the saver ends on it), never an answer, the field's focus or a middle-click paste into it.
+        MouseArea {
+            anchors.fill: parent
+            enabled: SessionState.saverShown
+            acceptedButtons: Qt.AllButtons
+            onPressed: mouse => mouse.accepted = true
+            onWheel: wheel => wheel.accepted = true
         }
     }
 

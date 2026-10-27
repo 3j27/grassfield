@@ -144,7 +144,7 @@ no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 
-Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 40 SVG icons are Grassfield's own
+Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 79 SVG icons are Grassfield's own
 (CC-BY-SA-4.0, owner decision D-9, 2026-10-23); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Authorship by an AI assistant and the licence choice: **needs legal review**.
 
