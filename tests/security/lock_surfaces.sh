@@ -362,6 +362,47 @@ expect("lock ownership check: the grace is 500 ms and only restart() and `runnin
        re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?^\s*readonly property int verifyGraceMs: 500[ \t]*\n\s*(\}|[A-Za-z_][\w.]*\s*:|readonly\s|property\s|function\s)", lock, re.S | re.M) is not None
        and len(re.findall(r"\bverifyGraceMs\s*:", lock)) == 1
        and sorted(re.sub(r"\s+", "", u) for u in grace_uses) == sorted(["secureGrace", "secureGrace.restart()", "secureGrace.running", "secureGrace.running"]))
+# Review of the lock's monitor queries (Quickshell 0.3.1 IPC, read in its source): Hyprland.refreshMonitors() from QML never
+# creates a monitor object, and one sent before Hyprland answered Quickshell's own first query (`j/status`) makes Quickshell
+# drop its start-up query: Hyprland.monitors then stays empty until a monitor event, and the stranded check, the ownership
+# check and verify() never get an answer (the re-lock after a foreign release was inert, the sleep delay ran out unconfirmed).
+#   queries  shell/security has one Hyprland.refreshMonitors() call, in Lock.qml requestMonitors() behind the guard on the
+#            live model's count (Machine.monitorQueryAllowed); every lock query goes through requestMonitors();
+#   watcher  monitorAnswers follows the live model, its delegates hand every answer to checkOwnership, and a monitor added
+#            while holding asks for a fresh answer at once (monitorsAdded);
+#   stranded only Hyprland's answers decide; an empty model is "unknown" (LockMachine, unit-tested): no takeover and no stop
+#            as "nothing stranded" until the ticks run out;
+#   log      the empty model is logged once: the flag is read before the warning, set after it, cleared only in monitorsAdded.
+refresh_hits = []
+for base, _, files in os.walk(f"{root}/shell/security"):
+    for name in sorted(files):
+        if name.endswith((".qml", ".js")):
+            rel = os.path.relpath(os.path.join(base, name), root)
+            refresh_hits += [rel for _ in re.finditer(r"\brefreshMonitors\s*\(", nocomments(read(rel)))]
+request = code(function(lock, "requestMonitors") or "")
+expect("lock monitor queries: one Hyprland.refreshMonitors() in shell/security, in requestMonitors() behind the empty-model guard (" + ", ".join(refresh_hits) + ")",
+       refresh_hits == ["shell/security/lock/Lock.qml"]
+       and re.fullmatch(r"\s*if\s*\(!Machine\.monitorQueryAllowed\(Hyprland\.monitors\.values\.length\)\)\s*\{\s*if\s*\(!emptyModelLogged\)\s*console\.warn\(\"[^\"]*\"\);\s*emptyModelLogged\s*=\s*true;\s*return false;\s*\}\s*Hyprland\.refreshMonitors\(\);\s*return true;\s*", request) is not None)
+expect("lock monitor queries: verify(), the ownership confirmation, the stranded check, ownershipProbe and monitorsAdded go through requestMonitors()",
+       re.search(r"verified\s*=\s*false;\s*requestMonitors\(\);\s*$", code(function(lock, "verify") or "")) is not None
+       and re.search(r"if\s*\(action\s*===\s*\"confirm\"\)\s*requestMonitors\(\);\s*else if", code(function(lock, "checkOwnership") or "")) is not None
+       and re.search(r"\}\s*else\s*\{\s*requestMonitors\(\);\s*\}\s*$", code(function(lock, "checkStranded") or "")) is not None
+       and re.search(r"Timer\s*\{\s*id:\s*ownershipProbe\b[^}]*?onTriggered:\s*root\.requestMonitors\(\)\s*\}", lock, re.S) is not None
+       and re.search(r"if\s*\(holding\)\s*requestMonitors\(\);\s*$", code(function(lock, "monitorsAdded") or "")) is not None)
+expect("lock ownership watcher: follows the live monitor model, every answer reaches checkOwnership, an added monitor calls monitorsAdded",
+       re.search(r"Instantiator\s*\{\s*id:\s*monitorAnswers\s+active:\s*root\.hyprland\s+model:\s*Hyprland\.monitors\s+onObjectAdded:\s*Qt\.callLater\(root\.monitorsAdded\)\s+"
+                 r"delegate:\s*Connections\s*\{\s*required property HyprlandMonitor modelData\s+target:\s*modelData\s+"
+                 r"function onLastIpcObjectChanged\(\):\s*void\s*\{\s*Qt\.callLater\(root\.checkOwnership\);\s*\}\s*\}\s*\}", lock) is not None)
+stranded = code(function(lock, "checkStranded") or "")
+expect("lock stranded check: only Hyprland's answers decide; unknown (an empty model) neither takes over nor stops before the ticks run out",
+       re.search(r"const monitors\s*=\s*Hyprland\.monitors\.values\.map\(m\s*=>\s*m\.lastIpcObject\);\s*const state\s*=\s*Machine\.compositorLockState\(monitors\);\s*"
+                 r"if\s*\(state\s*===\s*\"locked\"\)\s*\{[^}]*\}\s*else if\s*\(state\s*===\s*\"unlocked\"\)\s*\{\s*strandedProbe\.stop\(\);\s*\}\s*"
+                 r"else if\s*\(--strandedProbe\.remaining\s*<=\s*0\)\s*\{", stranded) is not None)
+expect("lock monitor queries: the empty model is logged once, the flag cleared only when a monitor appears",
+       re.search(r"^\s*property bool emptyModelLogged:\s*false\s*$", lock, re.M) is not None
+       and len(re.findall(r"\bemptyModelLogged\s*=\s*true;", lock)) == 1
+       and len(re.findall(r"\bemptyModelLogged\s*=\s*false;", lock)) == 1
+       and re.search(r"^\s*if\s*\(emptyModelLogged\)\s*\{\s*emptyModelLogged\s*=\s*false;", code(function(lock, "monitorsAdded") or "")) is not None)
 sleep = code(read("shell/security/idle/SleepInhibitor.qml"))
 idle = code(read("shell/security/idle/IdleModel.js"))
 # Reviews of 2dfd992 and eee45cc: a child is healthy only when its health Timer saw it running FAST_EXIT_MS AND it showed
@@ -497,7 +538,22 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 0' \
   'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.repeat = true;' \
   'shell/security/lock/Lock.qml#        interval: ownershipProbe.verifyGraceMs#        interval: ownershipProbe.verifyGraceMs; repeat: true' \
-  'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.interval = 3600000;'; do
+  'shell/security/lock/Lock.qml#                secureGrace.restart();#                secureGrace.restart(); secureGrace.interval = 3600000;' \
+  'shell/security/lock/Lock.qml#if (!Machine.monitorQueryAllowed(Hyprland.monitors.values.length)) {#if (false) {' \
+  'shell/security/lock/Lock.qml#if (!Machine.monitorQueryAllowed(Hyprland.monitors.values.length)) {#if (!Machine.monitorQueryAllowed(1)) {' \
+  'shell/security/lock/Lock.qml#        onTriggered: root.requestMonitors()#        onTriggered: Hyprland.refreshMonitors()' \
+  'shell/security/lock/Lock.qml#        verified = false;\n        requestMonitors();#        verified = false;\n        Hyprland.refreshMonitors();' \
+  'shell/security/lock/Lock.qml#        if (action === "confirm")\n            requestMonitors();#        if (action === "confirm")\n            Hyprland.refreshMonitors();' \
+  'shell/security/lock/Lock.qml#            requestMonitors(); // none while#            Hyprland.refreshMonitors(); // none while' \
+  'shell/security/lock/Lock.qml#        restore(false, "start");#        restore(false, "start");\n        Hyprland.refreshMonitors();' \
+  'shell/security/lock/Lock.qml#        active: root.hyprland\n        model: Hyprland.monitors#        active: false\n        model: Hyprland.monitors' \
+  'shell/security/lock/Lock.qml#        onObjectAdded: Qt.callLater(root.monitorsAdded)\n#' \
+  'shell/security/lock/Lock.qml#        if (holding)\n            requestMonitors();#        if (false)\n            requestMonitors();' \
+  'shell/security/lock/Lock.qml#                Qt.callLater(root.checkOwnership);#                ;' \
+  'shell/security/lock/Lock.qml#        } else if (state === "unlocked") {\n            strandedProbe.stop();#        } else if (state !== "locked") {\n            strandedProbe.stop();' \
+  'shell/security/lock/Lock.qml#            if (!emptyModelLogged)\n                console.warn(#            if (true)\n                console.warn(' \
+  'shell/security/lock/Lock.qml#            emptyModelLogged = true;#            ;' \
+  'shell/security/lock/Lock.qml#        if (emptyModelLogged) {\n            emptyModelLogged = false;#        if (emptyModelLogged) {\n            ;'; do
   IFS='#' read -r file from to <<<"$case_"
   cp "$root/$file" "$mut/$file"
   python3 -I - "$mut/$file" "$from" "$to" <<'PY'
