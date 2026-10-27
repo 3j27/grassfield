@@ -137,6 +137,7 @@ TestCase {
             activeAddress: "0x55d0c0ffee",
             closedSinceOpen: false,
             otherSurfaceOpen: false,
+            ownsItem: true,
             expired: false
         };
         verify(Logic.mayPaste(ok));
@@ -146,6 +147,7 @@ TestCase {
             activeAddress: "0x1",
             closedSinceOpen: true,
             otherSurfaceOpen: true,
+            ownsItem: false,
             expired: true
         };
         for (const k in refuse) {
@@ -169,12 +171,15 @@ TestCase {
             activeAddress: "0x55d0c0ffee",
             closedSinceOpen: false,
             otherSurfaceOpen: false,
+            ownsItem: true,
             expired: false
         };
         compare(Logic.pasteStep(ok), "send");
         const at = changes => Logic.pasteStep(Object.assign({}, ok, changes));
         compare(at({locked: true}), "locked", "this shell's lock, the target active");
         compare(at({helperLocked: true}), "locked", "another program's lock, the target active");
+        compare(at({ownsItem: false}), "the clipboard changed", "a Copy since, or another app took the clipboard");
+        compare(at({ownsItem: undefined}), "the clipboard changed");
         compare(at({closedSinceOpen: true}), "the window closed");
         compare(at({otherSurfaceOpen: true}), "another surface opened", "the target active behind a surface");
         compare(at({expired: true}), "the window did not come back", "the target came back too late");

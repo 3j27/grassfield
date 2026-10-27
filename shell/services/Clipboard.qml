@@ -303,8 +303,10 @@ Singleton {
         root.pasteTargetClosed = false;
     }
 
-    // Copy: the item goes on the clipboard and nothing is pasted; copyConfirmed or copyRefused follows.
+    // Copy: the item goes on the clipboard and nothing is pasted; copyConfirmed or copyRefused follows. A paste still waiting
+    // is dropped: the clipboard is about to hold this item, which Ctrl+V would paste instead of the one chosen.
     function copyItem(id: string): void {
+        root.cancelPaste("another item copied");
         root.pendingCopy = id;
         root.copy(id, false);
         root.copyWait.restart();
@@ -382,6 +384,22 @@ Singleton {
         root.pendingPaste = null;
     }
 
+    // What one check of a confirmed paste sees (Logic.pasteStep's input): the paste's own target and whether it closed, never
+    // the live pasteTarget; whether the helper still owns the item chosen (`A` names the owned item, "" once another app took
+    // the clipboard).
+    function pasteState(p: var, activeAddress: string): var {
+        return {
+            locked: SessionState.locked,
+            helperLocked: root.helperLocked,
+            rememberedAddress: p.target,
+            activeAddress: activeAddress,
+            closedSinceOpen: p.closed,
+            otherSurfaceOpen: FocusReturn.anyOpen(),
+            ownsItem: root.ownedId === p.id,
+            expired: root.pasteExpired
+        };
+    }
+
     function pasteTick(): void {
         const p = root.pendingPaste;
         if (p === null || !p.copied) {
@@ -389,15 +407,7 @@ Singleton {
             return;
         }
         const active = Compositor.activeWindow();
-        const step = Logic.pasteStep({
-            locked: SessionState.locked,
-            helperLocked: root.helperLocked,
-            rememberedAddress: p.target,
-            activeAddress: active ? active.address : "",
-            closedSinceOpen: p.closed,
-            otherSurfaceOpen: FocusReturn.anyOpen(),
-            expired: root.pasteExpired
-        });
+        const step = Logic.pasteStep(root.pasteState(p, active ? active.address : ""));
         if (step === "wait")
             return;
         if (step !== "send") {

@@ -212,6 +212,28 @@ ShellRoot {
                     search.show("");
                     check("Search opening again drops the paste", Clipboard.pendingPaste === null && Clipboard.lastPaste === "Search opened again");
                     search.hide();
+                    // The paste keeps its own target: a live pasteTarget that differs changes nothing it checks.
+                    pasteCopied();
+                    Clipboard.pasteTarget = "11111111";
+                    check("a check reads the paste's own target", Logic.pasteStep(Clipboard.pasteState(Clipboard.pendingPaste, "0x" + root.target)) === "send" && Logic.pasteStep(Clipboard.pasteState(Clipboard.pendingPaste, "0x11111111")) === "wait");
+                    Compositor.windowClosed(root.target);
+                }, 4 * Logic.PASTE_POLL_MS], [() => {
+                    check("the paste's own target closing drops it, whatever pasteTarget says (" + Clipboard.lastPaste + ")", Clipboard.pendingPaste === null && Clipboard.lastPaste === "the window closed");
+                    // Another app takes the clipboard (the helper's empty A) while the paste waits: Ctrl+V would paste its item.
+                    pasteCopied();
+                    owned("");
+                }, 4 * Logic.PASTE_POLL_MS], [() => {
+                    check("the clipboard taken by another app drops the paste (" + Clipboard.lastPaste + ")", Clipboard.pendingPaste === null && Clipboard.lastPaste === "the clipboard changed");
+                    // Return, then Copy on another row before the helper answers: the paste is dropped, the copy goes on.
+                    choosePaste();
+                    search.selected = 1;
+                    search.clipCopy(search.selectedClip());
+                    check("a Copy right after Return drops the paste", Clipboard.pendingPaste === null && Clipboard.lastPaste === "another item copied" && Clipboard.pendingCopy === root.ids[1]);
+                    owned(root.ids[2]);
+                    check("the late confirmation of the paste pastes nothing", search.open && Clipboard.pendingPaste === null && !Clipboard.pasteWatch.running);
+                    owned(root.ids[1]);
+                    check("the copy is confirmed", search.open && search.clipCopiedKey === "clip:" + root.ids[1]);
+                    search.hide();
                     // Nothing happens: the deadline drops the paste (the target never became active here).
                     pasteCopied();
                 }, Logic.PASTE_WAIT_MS + 6 * Logic.PASTE_POLL_MS], [() => {

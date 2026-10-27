@@ -143,12 +143,13 @@ function removeId(items, id) {
 }
 
 // Whether the paste may be sent now (ADR-0034 §4). s: {locked, helperLocked, rememberedAddress, activeAddress, closedSinceOpen,
-// otherSurfaceOpen, expired}. closedSinceOpen: Hyprland reported `closewindow` for the remembered address since Search opened
-// (an address can be reused by a new window); expired: the PASTE_WAIT_MS since the helper owned the item have passed (the
-// service measures them with one Qt timer, monotonic, never by counting checks).
+// otherSurfaceOpen, ownsItem, expired}. closedSinceOpen: Hyprland reported `closewindow` for the remembered address since Search
+// opened (an address can be reused by a new window); ownsItem: the helper still owns the item chosen (a Copy chosen since, or
+// another app taking the clipboard, would make Ctrl+V paste something else); expired: the PASTE_WAIT_MS since the helper owned
+// the item have passed (the service measures them with one Qt timer, monotonic, never by counting checks).
 function mayPaste(s) {
     if (!s || s.locked !== false || s.helperLocked !== false || s.closedSinceOpen !== false || s.otherSurfaceOpen !== false
-            || s.expired !== false)
+            || s.ownsItem !== true || s.expired !== false)
         return false;
     const want = Minimized.normalizeAddress(s.rememberedAddress || "");
     return want !== "" && Minimized.normalizeAddress(s.activeAddress || "") === want;
@@ -162,6 +163,8 @@ function pasteStep(s) {
         return "send";
     if (!s || s.locked !== false || s.helperLocked !== false)
         return "locked";
+    if (s.ownsItem !== true)
+        return "the clipboard changed";
     if (s.closedSinceOpen !== false)
         return "the window closed";
     if (s.otherSurfaceOpen !== false)
