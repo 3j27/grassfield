@@ -5,23 +5,22 @@
 # scripts/dev/nested-down.sh.
 #
 # Usage: tests/security/lock_privacy.sh [step...]   (default: every step, in this order)
-#   setup        marker image; on GF-REF, side by side, a foot window "gf-privacy-probe" filled with the marker colour
-#                (magenta) and a protected window (app id "Bitwarden") filled with green; three notifications whose
-#                image is the marker. Fixture self-check before the Bitwarden window opens: a capture must show the
-#                probe's magenta and the green of an unprotected twin ("gf-privacy-twin": the same foot options, size and
-#                place as the Bitwarden window), which then makes way for it. The test's only capture path, grim over
-#                Hyprland's capture protocols, honours no_screen_share (that is what DT-05 checks), so the twin is how
-#                the test knows that green renders at all. Without that proof every "0 marker px" and "0 green px"
-#                check below FAILS instead of passing.
-#   screenshare  DT-05 / SEC-01: in a capture of the unlocked desktop the probe window's region is magenta (control),
-#                the Bitwarden window's region is black and no green pixel shows (Omarchy's no_screen_share rule,
-#                config/hypr/grassfield/privacy.lua)
-#   control      the probe window's own region is magenta before locking (not the banners, which expire): the
-#                detector works
+#   setup        marker image; on GF-REF, side by side, three foot windows: "gf-privacy-probe" filled with the marker
+#                colour (magenta), "gf-privacy-twin" filled with green (unprotected) and "Bitwarden" (protected) with
+#                the twin's foot options and size; three notifications whose image is the marker. Fixture self-check
+#                before the Bitwarden window opens: a capture must show the probe's magenta and the twin's green. The
+#                test's only capture path, grim over Hyprland's capture protocols, honours no_screen_share (that is
+#                what DT-05 checks), so the twin is how the test knows that green renders at all. Without that proof
+#                every "0 marker px" and "0 green px" check below FAILS instead of passing.
+#   screenshare  DT-05 / SEC-01: in a capture of the unlocked desktop the probe is magenta and the twin green (controls),
+#                the Bitwarden window's region is black and its box holds no green pixel (Omarchy's no_screen_share
+#                rule, config/hypr/grassfield/privacy.lua)
+#   control      the probe and twin windows' own regions are magenta and green before locking (not the banners, which
+#                expire): the detectors work
 #   lock         `lock lid` (D-4: the nested outputs WAYLAND-1 and GF-REF are not external displays, so the lid locks)
 #   privacy      L4: while locked, two more notifications (one critical), and every surface IPC can open (Search, Apps,
 #                Notification Center, menu bar menu, Overview, Dock menu); captures of both outputs hold no marker
-#                and no green pixel; Hyprland reports LOCK on every monitor
+#                and no green pixel (the twin is unprotected window content); Hyprland reports LOCK on every monitor
 #   display-off  D-4: with `idle devDisplayOff 4` set before the lock, the shell turns the displays off after 4 s
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion
 #   cleanup      close the foot windows (the session stays locked)
@@ -152,23 +151,25 @@ fixture_ours() {
   [[ $(fixture_get instance) == "$sig" ]] || { why="no setup ran in this nested session (setup step)"; return 1; }
 }
 
-# Succeeds when the setup's self-check passed in this session and its probe and Bitwarden windows are still open;
-# sets why otherwise.
+# Succeeds when the setup's self-check passed in this session and its probe, twin and Bitwarden windows are still
+# open; sets why otherwise.
 fixture_proven() {
   fixture_ours || return 1
   [[ $(fixture_get proven) == 1 ]] || { why="the fixture self-check did not pass (setup step)"; return 1; }
   [[ $(client_info "$(fixture_get probe)") == *" gf-privacy-probe "* ]] || { why="the self-checked probe window is gone"; return 1; }
+  [[ $(client_info "$(fixture_get twin)") == *" gf-privacy-twin "* ]] || { why="the self-checked green twin window is gone"; return 1; }
   [[ $(client_info "$(fixture_get protected)") == *" Bitwarden "* ]] || { why="the self-checked Bitwarden window is gone"; return 1; }
 }
 
-# The inner part of a window (its box minus $inset on each side) cut from a capture of $out to $work/<name>.png and
-# measured for <colour>: prints "<fraction> <colour at its centre>", or "error none" (window gone, cut failed).
-region() { # <capture png> <window address> <name> <#rrggbb>
-  local x y w h png=$work/$3.png geometry centre
+# The inner part of a window (its box minus <inset>, default $inset, on each side) cut from a capture of $out to
+# $work/<name>.png and measured for <colour>: prints "<fraction> <colour at its centre>", or "error none" (window
+# gone, cut failed).
+region() { # <capture png> <window address> <name> <#rrggbb> [<inset>]
+  local x y w h png=$work/$3.png geometry centre i=${5:-$inset}
   read -r x y w h _ < <(client_info "$2")
   rm -f "$png"
-  [[ ${h:-} =~ ^[0-9]+$ ]] && ((w > 2 * inset && h > 2 * inset)) || { echo "error none"; return; }
-  geometry=$(awk -v x="$x" -v y="$y" -v w="$w" -v h="$h" -v mx="$mon_x" -v my="$mon_y" -v s="$mon_scale" -v i="$inset" \
+  [[ ${h:-} =~ ^[0-9]+$ ]] && ((w > 2 * i && h > 2 * i)) || { echo "error none"; return; }
+  geometry=$(awk -v x="$x" -v y="$y" -v w="$w" -v h="$h" -v mx="$mon_x" -v my="$mon_y" -v s="$mon_scale" -v i="$i" \
     'BEGIN { printf "%dx%d+%d+%d", (w - 2 * i) * s, (h - 2 * i) * s, (x - mx + i) * s, (y - my + i) * s }')
   magick "$1" -crop "$geometry" +repage "$png" 2>/dev/null || { echo "error none"; return; }
   centre=$(magick "$png" -alpha off -gravity center -crop 1x1+0+0 +repage -format '#%[hex:p{0,0}]' info: 2>/dev/null) || centre=none
@@ -272,22 +273,25 @@ foot_window() { # <app id> <rrggbb> <x> <y>
 }
 
 step_setup() {
-  local px py rx probe twin i m="" g="" pm="error" pc="none" gm="error" gc="none" ok=1 tx ty tw th bx by bw bh
+  local gap y x0 x1 x2 probe twin protected i m="" g="" pm="error" pc="none" gm="error" gc="none" ok=1 bx by bw bh
   rm -f "$fixture"
   echo "instance=$sig" >>"$fixture"
   magick -size 64x64 xc:"#ff00ff" "$marker" || { fail "setup: cannot draw the marker image"; return; }
   monitor_load || { fail "setup: $why"; return; }
-  px=$((mon_w / 10)) py=$(((mon_h - win_h) / 2)) rx=$((mon_w - mon_w / 10 - win_w))
-  ((rx - px - win_w >= 64 && mon_h >= win_h + 200)) \
-    || { fail "setup: $out (${mon_w}x${mon_h}) has no room for two ${win_w}x${win_h} windows side by side"; return; }
-  # New windows open on the output under the pointer.
-  "$root/scripts/dev/pointer.sh" output "$out" abs $((mon_w / 2)) $((mon_h / 2)) >/dev/null
-  foot_window gf-privacy-probe ff00ff "$px" "$py" || { fail "setup: marker window: $why"; return; }
+  # Three columns: probe, twin, Bitwarden.
+  gap=$(((mon_w - 3 * win_w) / 4)) y=$(((mon_h - win_h) / 2))
+  x0=$gap x1=$((2 * gap + win_w)) x2=$((3 * gap + 2 * win_w))
+  ((gap >= 32 && mon_h >= win_h + 200)) \
+    || { fail "setup: $out (${mon_w}x${mon_h}) has no room for three ${win_w}x${win_h} windows side by side"; return; }
+  # New windows open on the output under the pointer; it rests on bare desktop below the row (not on the Dock).
+  "$root/scripts/dev/pointer.sh" output "$out" abs $((mon_w / 2)) $((y + win_h + 80)) >/dev/null
+  foot_window gf-privacy-probe ff00ff "$x0" "$y" || { fail "setup: marker window: $why"; return; }
   probe=$win_addr
   echo "probe=$probe" >>"$fixture"
-  pass "setup: marker window (gf-privacy-probe) at ($px,$py) of $out"
-  foot_window gf-privacy-twin 00ff00 "$rx" "$py" || { fail "setup: twin window: $why"; return; }
+  pass "setup: marker window (gf-privacy-probe) at ($x0,$y) of $out"
+  foot_window gf-privacy-twin 00ff00 "$x1" "$y" || { fail "setup: twin window: $why"; return; }
   twin=$win_addr
+  echo "twin=$twin" >>"$fixture"
   apart "$probe" "$twin" || { fail "setup: the probe and twin windows overlap: $(client_info "$probe") / $(client_info "$twin")"; return; }
 
   # Self-check: each fixture colour renders, read in the windows' own regions (not the banners).
@@ -302,19 +306,16 @@ step_setup() {
   ((ok)) || return
   pass "setup: self-check: the probe window renders magenta ($pm of its region), an unprotected green window renders green ($gm)"
 
-  # The twin makes way for the Bitwarden window: same foot options, size and place; only the app id differs.
-  read -r tx ty tw th _ < <(client_info "$twin")
-  dev_stop "$dev/privacy-gf-privacy-twin.pid" "privacy twin foot" >/dev/null || true
-  for i in $(seq 1 20); do class_present gf-privacy-twin || break; sleep 0.25; done
-  class_present gf-privacy-twin && { fail "setup: the twin window did not close"; return; }
-  foot_window Bitwarden 00ff00 "$rx" "$py" || { fail "setup: protected window: $why"; return; }
-  read -r bx by bw bh _ < <(client_info "$win_addr")
-  near "${bx:-}" "${by:-}" "${tx:-}" "${ty:-}" && near "${bw:-}" "${bh:-}" "${tw:-}" "${th:-}" \
-    || { fail "setup: the Bitwarden window (${bw:-?}x${bh:-?} at ${bx:-?},${by:-?}) is not where the twin was (${tw:-?}x${th:-?} at ${tx:-?},${ty:-?})"; return; }
-  apart "$probe" "$win_addr" || { fail "setup: the probe and Bitwarden windows overlap"; return; }
-  echo "protected=$win_addr" >>"$fixture"
+  # The Bitwarden window: the twin's foot options and size, only the app id differs. The twin stays open through the
+  # lock: it is the unprotected window content the "0 green px" check on the lock screen is about.
+  foot_window Bitwarden 00ff00 "$x2" "$y" || { fail "setup: protected window: $why"; return; }
+  protected=$win_addr
+  read -r bx by bw bh _ < <(client_info "$protected")
+  apart "$probe" "$protected" && apart "$twin" "$protected" \
+    || { fail "setup: the Bitwarden window overlaps the probe or the twin: $(client_info "$protected")"; return; }
+  echo "protected=$protected" >>"$fixture"
   echo "proven=1" >>"$fixture"
-  pass "setup: protected window (app id Bitwarden) in the twin's place (${bw}x${bh} at $bx,$by)"
+  pass "setup: protected window (app id Bitwarden, the twin's options and size) at ($((bx - mon_x)),$((by - mon_y))) of $out, ${bw}x${bh}"
 
   for i in 1 2 3; do
     notify -i "$marker" -h "string:image-path:$marker" "L4 privacy $i" "token-$RANDOM$RANDOM"
@@ -324,37 +325,47 @@ step_setup() {
 }
 
 step_screenshare() {
-  local m="" g="" pm pc bk bc probe protected
+  local m="" g="" pm pc gm gc bk bc bg probe twin protected
   fixture_proven || { fail "screenshare: $why: the screen-share checks would prove nothing"; return; }
   monitor_load || { fail "screenshare: $why"; return; }
-  probe=$(fixture_get probe) protected=$(fixture_get protected)
-  settle screenshare "$probe" "#ff00ff" "$protected" "#000000" || true
+  probe=$(fixture_get probe) twin=$(fixture_get twin) protected=$(fixture_get protected)
+  settle screenshare "$probe" "#ff00ff" "$twin" "#00ff00" "$protected" "#000000" || true
   read -r m g < <(capture screenshare)
   [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "screenshare: the capture failed (no fresh $work/screenshare-*.png)"; return; }
   read -r pm pc < <(region "$work/screenshare-$out.png" "$probe" screenshare-probe "#ff00ff")
+  read -r gm gc < <(region "$work/screenshare-$out.png" "$twin" screenshare-twin "#00ff00")
   read -r bk bc < <(region "$work/screenshare-$out.png" "$protected" screenshare-bitwarden "#000000")
-  echo "screenshare capture: probe region magenta $pm (centre $pc), Bitwarden region black $bk (centre $bc); both outputs: magenta $m px, green $g px ($work/screenshare-*.png)"
+  # Green anywhere in the Bitwarden window's whole box (no inset): its own pixels leaking.
+  read -r _ _ < <(region "$work/screenshare-$out.png" "$protected" screenshare-bitwarden-box "#00ff00" 0)
+  bg=$(count_colour "$work/screenshare-bitwarden-box.png" "#00ff00")
+  echo "screenshare capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc), Bitwarden region black $bk (centre $bc), green px in the Bitwarden box $bg; both outputs: magenta $m px, green $g px ($work/screenshare-*.png)"
   at_least "$pm" 0.9 && pass "screenshare: the unprotected probe window is captured (control: $pm of its region magenta)" \
     || fail "screenshare: the probe window is not captured ($pm of its region magenta, centre $pc)"
+  at_least "$gm" 0.9 && pass "screenshare: the unprotected green twin is captured green (control: $gm of its region)" \
+    || fail "screenshare: the green twin is not captured green ($gm of its region, centre $gc): the green check would prove nothing"
   at_least "$bk" 0.9 && pass "screenshare: the Bitwarden window is black in the capture ($bk of its region)" \
     || fail "screenshare: the Bitwarden window's region is not black ($bk, centre $bc) (SEC-01)"
-  ((g == 0)) && pass "screenshare: no green pixel of the Bitwarden window is captured (the self-check saw its twin green)" \
-    || fail "screenshare: $g green px of the Bitwarden window were captured (SEC-01)"
+  [[ $bg == 0 ]] && pass "screenshare: no green pixel of the Bitwarden window is captured (its twin, same options, is)" \
+    || fail "screenshare: ${bg} green px of the Bitwarden window were captured (SEC-01)"
 }
 
 step_control() {
-  local m="" g="" pm pc probe
+  local m="" g="" pm pc gm gc probe twin
   monitor_load || { fail "control: $why"; return; }
   fixture_ours || { fail "control: $why"; return; }
-  probe=$(fixture_get probe)
+  probe=$(fixture_get probe) twin=$(fixture_get twin)
   [[ $(client_info "$probe") == *" gf-privacy-probe "* ]] || { fail "control: no probe window (run the setup step first)"; return; }
-  settle control "$probe" "#ff00ff" || true
+  [[ $(client_info "$twin") == *" gf-privacy-twin "* ]] || { fail "control: no green twin window (run the setup step first)"; return; }
+  settle control "$probe" "#ff00ff" "$twin" "#00ff00" || true
   read -r m g < <(capture control)
   [[ $m =~ ^[0-9]+$ && $g =~ ^[0-9]+$ ]] || { fail "control: the capture failed (no fresh $work/control-*.png)"; return; }
   read -r pm pc < <(region "$work/control-$out.png" "$probe" control-probe "#ff00ff")
-  echo "control capture: probe region magenta $pm (centre $pc); both outputs, banners included: magenta $m px ($work/control-*.png)"
+  read -r gm gc < <(region "$work/control-$out.png" "$twin" control-twin "#00ff00")
+  echo "control capture: probe region magenta $pm (centre $pc), twin region green $gm (centre $gc); both outputs, banners included: magenta $m px, green $g px ($work/control-*.png)"
   at_least "$pm" 0.9 && pass "control: the probe window shows the marker colour before the lock ($pm of its region): the detector works" \
     || fail "control: the probe window is not magenta before the lock ($pm of its region, centre $pc): the privacy check would prove nothing"
+  at_least "$gm" 0.9 && pass "control: the unprotected green twin shows green before the lock ($gm of its region)" \
+    || fail "control: the green twin is not green before the lock ($gm of its region, centre $gc): the green check would prove nothing"
 }
 
 step_lock() {
@@ -392,9 +403,9 @@ step_privacy() {
     fail "privacy: 0 marker px proves nothing: $why"
   fi
   if ((g != 0)); then
-    fail "privacy: $g green px on the lock screen"
+    fail "privacy: $g green px on the lock screen (the unprotected twin's content is visible, L4)"
   elif ((proven)); then
-    pass "privacy: no window content (0 green px)"
+    pass "privacy: no window content: the unprotected green twin is hidden (0 green px)"
   else
     fail "privacy: 0 green px proves nothing: $why"
   fi
