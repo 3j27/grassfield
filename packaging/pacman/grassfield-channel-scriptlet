@@ -7,8 +7,13 @@
 #             again from this build's template; anything else is left alone
 # Not the polkit action's program: run through pkexec it falls under polkit's generic org.freedesktop.policykit.exec. It
 # does not check pacman's db.lck (pacman holds it while scriptlets run). Exit 0 done, 1 failed, 2 usage.
-# Its only input is its argument vector: -p keeps bash from reading BASH_ENV or importing functions, and every exported
-# variable is removed before anything else runs (scriptlets inherit pacman's environment).
+# Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
+# environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it
+# starts, valid name or not (BASH_FUNC_x%% entries are not variables: compgen cannot see them, pacman-key, a bash script,
+# would import them). The variables bash exports itself (PWD, SHLVL) are removed last.
+if IFS= read -r -d '' _ </proc/$$/environ 2>/dev/null; then
+  exec /usr/bin/env -i /usr/bin/bash -p /usr/lib/grassfield/grassfield-channel-scriptlet "$@"
+fi
 while read -r gf_var; do unset -v "$gf_var" 2>/dev/null; done < <(compgen -e)
 unset -v gf_var
 GF_PROG=grassfield-channel-scriptlet

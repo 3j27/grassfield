@@ -9,8 +9,13 @@
 #   off               ("Turn Off…") the lines, the file, the synced files, then the Grassfield keys
 # Every verb is refused while pacman runs (its db.lck exists). Exit 0 done, 1 refused or failed (the message says which;
 # a failed step leaves pacman's configuration valid), 2 usage.
-# Its only input is its argument vector: -p keeps bash from reading BASH_ENV or importing functions, and every exported
-# variable is removed before anything else runs (pkexec gives a clean environment already).
+# Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
+# environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it
+# starts, valid name or not (BASH_FUNC_x%% entries are not variables: compgen cannot see them, pacman-key, a bash script,
+# would import them). The variables bash exports itself (PWD, SHLVL) are removed last.
+if IFS= read -r -d '' _ </proc/$$/environ 2>/dev/null; then
+  exec /usr/bin/env -i /usr/bin/bash -p /usr/lib/grassfield/grassfield-channel-helper "$@"
+fi
 while read -r gf_var; do unset -v "$gf_var" 2>/dev/null; done < <(compgen -e)
 unset -v gf_var
 GF_PROG=grassfield-channel-helper
