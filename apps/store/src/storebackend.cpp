@@ -11,6 +11,7 @@
 #include "storeenv.h"
 #include "translationloader.h"
 
+#include <QCollator>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -402,6 +403,7 @@ void StoreBackend::readNetwork()
 {
     if (env::offlineForced()) { // dev plumbing (ADR-0019)
         m_online = false;
+        *m_screenshotGate = screenshotsAllowed();
         return;
     }
     // Without a reachability backend (no NetworkManager) the Store counts as online: a fetch that fails says so.
@@ -416,6 +418,7 @@ void StoreBackend::readNetwork()
             const bool cameOnline = online && !m_online;
             m_online = online;
             m_metered = metered;
+            *m_screenshotGate = screenshotsAllowed();
             emit networkChanged();
             if (cameOnline && m_snapshot && !m_metered
                 && ((m_snapshot->catalogConfigured && catalogStale()) || m_snapshot->appstream.origin == AppStreamData::Origin::None))
@@ -670,9 +673,11 @@ QVariantList StoreBackend::installed() const
                                    {QStringLiteral("launcher"), true},
                                    {QStringLiteral("page"), false}});
     }
-    const auto byName = [](QVariantList &list) {
-        std::stable_sort(list.begin(), list.end(), [](const QVariant &a, const QVariant &b) {
-            return a.toMap().value(QStringLiteral("name")).toString().localeAwareCompare(b.toMap().value(QStringLiteral("name")).toString()) < 0;
+    const QCollator collator(m_formats); // our own, as view::detail's (storeview.cpp)
+    const auto byName = [&collator](QVariantList &list) {
+        std::stable_sort(list.begin(), list.end(), [&collator](const QVariant &a, const QVariant &b) {
+            return collator.compare(a.toMap().value(QStringLiteral("name")).toString(),
+                                    b.toMap().value(QStringLiteral("name")).toString()) < 0;
         });
     };
     for (auto [group, list] : {std::pair{QStringLiteral("arch"), &arch}, std::pair{QStringLiteral("omarchy"), &omarchy},

@@ -1,5 +1,6 @@
 #include "storeview.h"
 
+#include <QCollator>
 #include <QDate>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -175,8 +176,10 @@ QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, con
             if (!name.isEmpty() && !languages.contains(name))
                 languages.append(name);
         }
-        std::sort(languages.begin(), languages.end(), [](const QString &a, const QString &b) {
-            return a.localeAwareCompare(b) < 0;
+        // A collator of our own: localeAwareCompare's shared default one is never freed (LeakSanitizer, ICU 78).
+        const QCollator collator(locale);
+        std::sort(languages.begin(), languages.end(), [&collator](const QString &a, const QString &b) {
+            return collator.compare(a, b) < 0;
         });
         rated = component->rated;
         for (auto it = component->rating.cbegin(); it != component->rating.cend(); ++it)
