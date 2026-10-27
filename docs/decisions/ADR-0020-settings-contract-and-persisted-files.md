@@ -40,7 +40,8 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `show-desktop.json` | state (shell UX branch) | shell | check after the merge | add v1 |
 | `notifications.json`, `widgets.json`, `desktop-icons.json`, `search-usage.json` | state | shell | yes | none |
 | `files-views.json` (2026-10-26, Files PR 1) | state | Files / Files | 1 | none (versioned from the start) |
-| `clipboard/` (`index.json` + one `<id>.item` per item; ADR-0034, only when `search.clipboard.keepOnDisk` is on) | state (0700, files 0600) | `grassfield-clipboard-helper` / the helper only | 1 (`index.json`) | none (versioned from the start; bounded to 100 items and 64 MiB, expired at the chosen retention, deleted when the switch or the history is turned off) |
+| `clipboard/pinned/` (`index.json` + one `<id>.item` per item; ADR-0034, written when an item is pinned) | state (0700, files 0600) | `grassfield-clipboard-helper` / the helper only | 1 (`index.json`) | none (versioned from the start; at most 50 items and 32 MiB, never expired; emptied by unpin, Delete Item or Settings' "Also delete pinned items") |
+| `clipboard/history/` (same layout; ADR-0034, only when `search.clipboard.keepOnDisk` is on) | state (0700, files 0600) | `grassfield-clipboard-helper` / the helper only | 1 (`index.json`) | none (versioned from the start; at most 100 items and 64 MiB, expired at the chosen retention, deleted when the switch or the history is turned off and by Clear History) |
 | `clipboard/` thumbnails and previews (ADR-0034) | runtime (`$XDG_RUNTIME_DIR/grassfield`, tmpfs; 0700, files 0600) | the clipboard helper / the shell | n/a (PNG) | none (never on disk; removed with their item and when the helper starts or exits) |
 
 Every existing reader of files versioned in place ignores unknown top-level keys (`RecentItemsLogic.normalize`,
