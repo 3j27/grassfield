@@ -96,6 +96,18 @@ TestCase {
         compare(Logic.runtimeDir("", "/run/user/1000/wayland-1"), "");
     }
 
+    // The clear times given to the helper (--cleared-at, CH <ms>): whole milliseconds, digits only, 0 for anything else.
+    function test_clearTimeArg() {
+        compare(Logic.clearTimeArg(1792832460000), "1792832460000");
+        compare(Logic.clearTimeArg(5000.7), "5000");
+        compare(Logic.clearTimeArg(0), "0");
+        compare(Logic.clearTimeArg(-5), "0");
+        compare(Logic.clearTimeArg(NaN), "0");
+        compare(Logic.clearTimeArg("x"), "0");
+        compare(Logic.clearTimeArg(1e21), "0", "never 1e+21");
+        compare(Logic.clearTimeArg(undefined), "0");
+    }
+
     function test_retention() {
         compare(Logic.retentionMs("30m"), 1800000);
         compare(Logic.retentionMs("8h"), 28800000);

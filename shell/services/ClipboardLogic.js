@@ -23,6 +23,12 @@ const PROTECTED_CLASSES = ["^(1[p|P]assword)$", "^(Bitwarden)$", "chrome-nngceck
 const TERMINAL_CLASSES = ["alacritty", "kitty", "com.mitchellh.ghostty", "foot", "org.codeberg.dnkl.foot", "wezterm", "org.wezfurlong.wezterm"];
 const TERMINAL_PREFIXES = ["org.omarchy.", "tui."];
 
+// A clear's time as the helper takes it (--cleared-at, CH <ms>): whole milliseconds, digits only; 0 for none or a bad value.
+function clearTimeArg(ms) {
+    const n = Math.floor(Number(ms));
+    return isFinite(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? String(n) : "0";
+}
+
 function retentionMs(key) {
     return RETENTION[key] !== undefined ? RETENTION[key] : RETENTION["8h"];
 }
