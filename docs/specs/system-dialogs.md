@@ -321,6 +321,26 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   gcr's prompter, which is the bridge. The bridge therefore stores with libsecret's asynchronous calls (`secret_password_store`
   with a callback on its GLib main context), answers `addAuthInfo` at once, and makes no synchronous call that can cause a
   prompt; the unlock prompt then takes its turn in the queue.
+- SC10 the Secret Service handover (ADR-0035 D-12, owner decision Q17-b, step 2c; `grassfield-secrets-handover`, a user unit
+  the session starts before the shell). Nothing for the user to do. At the session's start a ksecretd left over from an
+  earlier session that still holds `org.freedesktop.secrets` is made to quit, so apps opened from the Dock find the keychain;
+  the shell waits for that at most 10 s. Once per user, everything KWallet holds is copied into the keychain: the passwords
+  that libsecret clients (Chromium, git helpers) saved while it held that name, and KWallet's own entries, which QtKeychain
+  apps now look up in the keychain (ADR-0035 decision 2c-10); never over an item the keychain already holds (of two items
+  with the same attributes, the most recently changed; never an empty value). KWallet keeps its copies. A user whose own
+  `kwalletrc` gives the Secret Service back to KWallet is left alone. KWallet asks for its password only when something must
+  move and the wallet is locked (its own dialog, K2), the keychain only when it is locked or does not exist yet, and the
+  handover asks at most once, ever (decision 2c-9). When something moved, one notice: "Saved passwords moved" / "Passwords
+  that apps had saved elsewhere on this computer are now kept with your other saved passwords." A refused or unanswered
+  question ends it for good, with one notice: "Saved passwords not moved" / "Passwords that apps had saved elsewhere on
+  this computer stay where they were. Apps that used them may ask you to sign in again." A peer that is not the expected
+  program, or an error before any question, leaves everything as it was, and the handover runs again at the next session.
+  No item, label or value is logged; the helper is not dumpable and its unit allows no core file and no swap. Code quality:
+  `just check-tidy` covers the compositor only; the helper is built with `-Wall -Wextra` (no warning), its tests run under
+  ASan and UBSan, and a one-off clang-tidy run with the compositor's checks (`clang-analyzer-*`, `bugprone-*`,
+  `performance-*`; 2026-10-27, LLVM 23.1) found no analyzer finding; the two findings worth a change were fixed (sizes
+  narrowed to int, a const local that blocked a move), and what remains is Qt's own idiom (static `QStringLiteral`
+  constants, `S_IW*` bit masks, a `QDBusArgument` operator returning its argument, an enum's base type).
 
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
@@ -344,6 +364,17 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
 - A-SC7 (L1) nested: pinentry-gnome3 with a throwaway GNUPGHOME and key asks through the Grassfield sheet (screenshot, "visual
   NOT verified" otherwise); udiskie with a loop-mounted LUKS image and an sftp location are the owner's L2 checks.
 - A-SC8 opus PASS.
+- A-SC9 (L0) the handover against fakes on a private bus (`tests/integration/secrets_handover.sh`): the items move once and
+  an item the keychain holds is kept; KWallet's own entries (stored as kwalletd 6.29 stores them) move too, and so does an
+  older entry KWallet lists only once open; nothing is final from a locked listing that lists nothing; an empty value is
+  not copied; a refused or unanswered question creates nothing, ends the handover for good with its notice, and the next
+  login asks nothing; a missing default keychain is created; a leftover ksecretd quits, or gets SIGTERM, before readiness;
+  a holder that is another program, or a Secret Service that is not gnome-keyring, is left alone and nothing is read or
+  written; both notices in English and French; of two items with the same attributes only the newest moves; the user's own
+  `kwalletrc` keeps KWallet and nothing is done; a dev run on any bus but a private test bus is refused; in a user namespace
+  like `PrivateUsers=self` no peer is identified and nothing is done (why the unit has no namespace option, checked
+  statically); the helper is not dumpable; with the real gnome-keyring as the keychain, what moved is read back through
+  libsecret; the real ksecretd quits when asked; no item, label or value in any output. Opus PASS (secret path).
 
 ### Known limitations
 Name ownership is the only authorization (upstream design): a same-user process can still show a fake stock prompt through
@@ -353,14 +384,14 @@ remembered network passwords are as safe as the keyring that holds them (Omarchy
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
 secrets are not asked (SC8); until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
 the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
-dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins. Until step 2c (ADR-0035 D-12, the handover)
-ships, two cases remain after 2a. (1) Secrets that libsecret clients saved while KWallet held the name stay in KWallet:
-the user sees Chromium without its saved passwords and signed out of sites, because Chromium creates a new key in the
-keychain when it cannot find its "Chrome Safe Storage" key there; nothing is deleted, and step 2c moves the items into the
-keychain once, at the session's start, before Chromium runs, with no step from the user (a Chromium that already made a new
-key keeps it, and what it saved under the old key stays unreadable). (2) A ksecretd left over from an earlier session or
-from the Omarchy session keeps the name until that user manager stops: the session then behaves as before 2a; step 2c makes
-it quit at the session's start, with nothing shown.
+dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins. The handover (SC10, step 2c) moves what
+KWallet holds into the keychain, and makes a leftover ksecretd quit; what remains: a Chromium that made a new key before the
+handover keeps it, and what it saved under the old key stays unreadable (the handover never overwrites); an app opened
+while the handover waits for the answer to KWallet's password question, or an app of Open at Login (started alongside the
+shell), can still find nothing in the keychain, and Chromium then makes a new key; a user who refuses the question keeps
+their passwords in KWallet only (asked once, ever); a locked wallet that ksecretd has never listed waits, unasked, until a
+KWallet client opens it; KWallet's question is KDE's dialog (K2); the values cross the user's own session bus in plain
+Secret Service sessions (ADR-0035 decision 2c-4).
 
 ## 6. Toolkit appearance (category C; ADR-0035 D-8)
 

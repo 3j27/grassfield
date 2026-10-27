@@ -7,6 +7,7 @@
 #include <QObject>
 
 #include <algorithm>
+#include <atomic>
 
 #include <chrono>
 #include <condition_variable>
@@ -15,7 +16,11 @@
 #include <optional>
 #include <thread>
 
+#include <cerrno>
+
 #include <fcntl.h>
+#include <linux/openat2.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 namespace ImageSize
@@ -68,7 +73,7 @@ private:
 };
 } // namespace
 
-Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *out)
+Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *out, QString *resolved)
 {
     if (!QDir::isAbsolutePath(path))
         return Refusal::Unreadable;
@@ -106,6 +111,8 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
                 return Refusal::NotRegular;
             if (out)
                 *out = st;
+            if (resolved)
+                *resolved = next;
             return Refusal::None;
         }
         if (!S_ISDIR(st.st_mode))
@@ -115,20 +122,57 @@ Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struc
     return Refusal::NotRegular; // the root folder itself
 }
 
-QSize read(const QString &path, const FolderStyleStore::Mounts &mounts)
+namespace
 {
-    struct stat checked {};
-    if (check(path, mounts, &checked) != Refusal::None)
-        return QSize();
-    // O_NONBLOCK: a FIFO swapped in after the check opens at once (and is refused below) instead of waiting for a writer.
-    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+int systemOpenat2(const char *path, int flags, quint64 resolve)
+{
+    struct open_how how {};
+    how.flags = static_cast<__u64>(flags);
+    how.resolve = static_cast<__u64>(resolve);
+    return static_cast<int>(::syscall(SYS_openat2, AT_FDCWD, path, &how, sizeof how));
+}
+
+std::atomic<Openat2> openat2Call{systemOpenat2};
+} // namespace
+
+void setOpenat2ForTests(Openat2 call)
+{
+    openat2Call.store(call ? call : systemOpenat2);
+}
+
+int openChecked(const QString &resolved, const struct stat &checked)
+{
+    // No link is followed anywhere in the path (openat2 RESOLVE_NO_SYMLINKS, Linux 5.6): a link swapped in after the check,
+    // for the file or for a folder above it, is refused (ELOOP) instead of followed, wherever it leads (a network share
+    // would block the open). Without openat2 the open is open() with O_NOFOLLOW, which refuses a link at the end of the
+    // path only: on a kernel without it (ENOSYS), and under a seccomp filter that answers EPERM for a system call it does
+    // not know (Flatpak, bubblewrap and container sandboxes do), where every Dimensions read would fail otherwise.
+    // O_NONBLOCK: a FIFO swapped in opens at once (and is refused below) instead of waiting for a writer.
+    const QByteArray path = QFile::encodeName(resolved);
+    const int flags = O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC | O_NOFOLLOW;
+    int fd = openat2Call.load()(path.constData(), flags, RESOLVE_NO_SYMLINKS);
+    if (fd < 0 && (errno == ENOSYS || errno == EPERM))
+        fd = ::open(path.constData(), flags);
     if (fd < 0)
-        return QSize();
+        return -1;
     struct stat opened {};
     if (::fstat(fd, &opened) != 0 || !S_ISREG(opened.st_mode) || opened.st_dev != checked.st_dev || opened.st_ino != checked.st_ino) {
         ::close(fd);
-        return QSize();
+        return -1;
     }
+    return fd;
+}
+
+QSize read(const QString &path, const FolderStyleStore::Mounts &mounts)
+{
+    struct stat checked {};
+    QString resolved;
+    if (check(path, mounts, &checked, &resolved) != Refusal::None)
+        return QSize();
+    // The path check() reached (a link to a picture is read through its target), never a link any more.
+    const int fd = openChecked(resolved, checked);
+    if (fd < 0)
+        return QSize();
     BudgetFile file;
     if (!file.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
         ::close(fd);

@@ -107,6 +107,8 @@ has() { # has <name>: true or false on the private bus
   dbus-send --bus="$bus" --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner \
     "string:$1" 2>/dev/null | awk '/boolean/ {print $2}'
 }
+owned() { [[ $(has "$1") == true ]]; } # asked again at every try of wait_until (a "$(has …)" argument is asked once)
+unowned() { ! owned "$1"; }
 run_ksecretd() { # run_ksecretd <name> [XDG_CONFIG_DIRS]: writes "compat=<bool> secrets=<bool>" to $tmp/<name>.out
   local d=$tmp/$1
   mkdir -p "$d/home/.config" "$d/run"; chmod 700 "$d/run"
@@ -114,11 +116,11 @@ run_ksecretd() { # run_ksecretd <name> [XDG_CONFIG_DIRS]: writes "compat=<bool> 
     XDG_RUNTIME_DIR="$d/run" DBUS_SESSION_BUS_ADDRESS="$bus" QT_QPA_PLATFORM=offscreen ${2:+XDG_CONFIG_DIRS="$2"} \
     timeout 30 "$ksecretd" >"$d/ksecretd.log" 2>&1 &
   kpid=$!
-  wait_until 10 test "$(has org.kde.secretservicecompat)" = true || true
+  wait_until 10 owned org.kde.secretservicecompat || true
   printf 'compat=%s secrets=%s\n' "$(has org.kde.secretservicecompat)" "$(has org.freedesktop.secrets)" >"$tmp/$1.out"
   kill "$kpid" 2>/dev/null; wait "$kpid" 2>/dev/null || true; kpid=""
   # The next run starts from a bus where neither name is owned.
-  wait_until 5 test "$(has org.kde.secretservicecompat)" = false || true
+  wait_until 5 unowned org.kde.secretservicecompat || true
 }
 if [[ -x $ksecretd ]] && command -v dbus-daemon >/dev/null && command -v dbus-send >/dev/null; then
   if ! start_bus; then

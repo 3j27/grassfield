@@ -197,15 +197,35 @@ Window {
         CustomizeFolderWindow {}
     }
 
+    // The windows this window opened for itself and that are still open (Get Info, Customize Folder): its transient
+    // children, placed and stacked with it and closed with it.
+    property var ownWindows: []
+    // One of them is the key window (FilesApp.focusWindow; never `active`: Qt reports a window and its transient children
+    // active together, whichever has the keyboard). Qt still counts this window as active then, and the shortcut matcher
+    // of QtQuick.Templates, loaded with Grassfield.Ui's controls (GF-085), matches this window's Shortcuts and its global
+    // menu's keys on that ground: Ctrl+W typed in Get Info closed this window, and Get Info with it. A key belongs to the
+    // key window alone (macOS), so this window's keys wait meanwhile (and those windows' own keys wait while this one is
+    // the key window: InfoWindow, CustomizeFolderWindow).
+    readonly property bool childIsKey: win.app.focusWindow !== null && win.app.focusWindow !== undefined && win.ownWindows.indexOf(win.app.focusWindow) >= 0
+
+    function openOwnWindow(component: Component, props: var): var {
+        const w = component.createObject(win, Object.assign({transientParent: win}, props));
+        if (w) {
+            win.ownWindows = win.ownWindows.concat([w]);
+            w.closing.connect(() => win.ownWindows = win.ownWindows.filter(o => o !== w));
+        }
+        return w;
+    }
+
     // Customize Folder for local folder URLs (a window per request, like Get Info).
     function customizeFolders(urls: var, name: string, iconName: string): void {
         if (urls && urls.length > 0)
-            customizeComponent.createObject(win, {app: win.app, urls: urls, folderName: name, iconName: iconName, transientParent: win});
+            win.openOwnWindow(customizeComponent, {app: win.app, urls: urls, folderName: name, iconName: iconName});
     }
 
     function showInfo(info: var): void {
         if (info && info.name !== undefined)
-            infoComponent.createObject(win, {app: win.app, info: info, browser: win, transientParent: win});
+            win.openOwnWindow(infoComponent, {app: win.app, info: info, browser: win});
     }
 
     function confirm(title: string, message: string, confirmText: string, action: var): void {
@@ -286,82 +306,96 @@ Window {
 
     // Shortcuts ------------------------------------------------------------------------------
     // Every key here except Delete is also the shortcut of a global menu item (GlobalMenu.qml): Qt then hands each
-    // press to one of the two, so a Shortcut acts on activatedAmbiguously exactly as on activated.
+    // press to one of the two, so a Shortcut acts on activatedAmbiguously exactly as on activated. None is live while one
+    // of this window's own windows is the key window (childIsKey): that window's keys are its own.
 
     Shortcut {
         sequence: "Ctrl+T"
+        enabled: !win.childIsKey
         onActivated: win.newTab(win.app.newWindowUrl, null)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+W"
+        enabled: !win.childIsKey
         onActivated: win.closeTab(win.currentIndex)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+W"
+        enabled: !win.childIsKey
         onActivated: win.close()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Alt+W"
+        enabled: !win.childIsKey
         onActivated: win.manager.closeAllWindows()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+N"
+        enabled: !win.childIsKey
         onActivated: win.manager.newWindow(win.app.newWindowUrl, null)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+T"
-        enabled: win.tabs.length <= 1
+        enabled: !win.childIsKey && win.tabs.length <= 1
         onActivated: win.app.tabBarShown = !win.app.tabBarShown
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Alt+Shift+T"
-        enabled: win.manager.closedTabs.length > 0
+        enabled: !win.childIsKey && win.manager.closedTabs.length > 0
         onActivated: win.manager.reopenClosedTab(win)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Tab", "Ctrl+Shift+]"]
+        enabled: !win.childIsKey
         onActivated: win.selectTab(win.currentIndex + 1)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Shift+Tab", "Ctrl+Shift+["]
+        enabled: !win.childIsKey
         onActivated: win.selectTab(win.currentIndex - 1)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+[", "Alt+Left"]
+        enabled: !win.childIsKey
         onActivated: win.tab.back()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+]", "Alt+Right"]
+        enabled: !win.childIsKey
         onActivated: win.tab.forward()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Up", "Alt+Up"]
+        enabled: !win.childIsKey
         onActivated: win.tab.up()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+O", "Ctrl+Down", "Alt+Down"]
+        enabled: !win.childIsKey
         onActivated: win.tab.openSelection()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Backspace"
+        enabled: !win.childIsKey
         onActivated: win.tab.trashSelection()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Delete"
+        enabled: !win.childIsKey
         onActivated: {
             if (!win.folder.isTrash)
                 win.tab.trashSelection();
@@ -369,134 +403,158 @@ Window {
     }
     Shortcut {
         sequence: "F2"
+        enabled: !win.childIsKey
         onActivated: win.tab.renameSelection()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+C"
+        enabled: !win.childIsKey
         onActivated: win.tab.copySelection(false)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+X"
+        enabled: !win.childIsKey
         onActivated: win.tab.copySelection(true)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+V"
+        enabled: !win.childIsKey
         onActivated: win.tab.paste()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+A"
+        enabled: !win.childIsKey
         onActivated: win.folder.selectAll()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+D"
+        enabled: !win.childIsKey
         onActivated: win.tab.duplicateSelection()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+I"
+        enabled: !win.childIsKey
         onActivated: win.tab.getInfo()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+N"
+        enabled: !win.childIsKey
         onActivated: win.tab.newFolder()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Z"
-        enabled: win.app.canUndo
+        enabled: !win.childIsKey && win.app.canUndo
         onActivated: win.app.undo()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         // Shift+Cmd+Z only: Cmd+Y is Glance (Finder's Quick Look).
         sequence: "Ctrl+Shift+Z"
-        enabled: win.app.canRedo
+        enabled: !win.childIsKey && win.app.canRedo
         onActivated: win.app.redo()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+F"
+        enabled: !win.childIsKey
         onActivated: search.forceActiveFocus()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+H"
+        enabled: !win.childIsKey
         onActivated: win.app.showHidden = !win.app.showHidden
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Shift+G", "Ctrl+L"]
+        enabled: !win.childIsKey
         onActivated: win.goToFolder()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+H"
+        enabled: !win.childIsKey
         onActivated: win.tab.navigate(Qt.url("file://" + win.app.homePath), true)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+R", "F5"]
+        enabled: !win.childIsKey
         onActivated: win.tab.folder.reload()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+1"
+        enabled: !win.childIsKey
         onActivated: win.tab.setViewModeByNumber(1)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+2"
+        enabled: !win.childIsKey
         onActivated: win.tab.setViewModeByNumber(2)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+3"
+        enabled: !win.childIsKey
         onActivated: win.tab.setViewModeByNumber(3)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+4"
+        enabled: !win.childIsKey
         onActivated: win.tab.setViewModeByNumber(4)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Alt+P"
+        enabled: !win.childIsKey
         onActivated: win.app.pathBarShown = !win.app.pathBarShown
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+/"
+        enabled: !win.childIsKey
         onActivated: win.app.statusBarShown = !win.app.statusBarShown
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Y"
+        enabled: !win.childIsKey
         onActivated: win.tab.glance()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+F"
+        enabled: !win.childIsKey
         onActivated: win.tab.navigate(win.app.recentsUrl(), true)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Meta+0"
+        enabled: !win.childIsKey
         onActivated: win.tab.toggleGroups()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Meta+S"
+        enabled: !win.childIsKey
         onActivated: win.app.sidebarShown = !win.app.sidebarShown
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+P"
+        enabled: !win.childIsKey
         onActivated: win.tab.togglePreview()
         onActivatedAmbiguously: activated()
     }
@@ -512,7 +570,7 @@ Window {
 
     Shortcut {
         sequence: "Ctrl+E"
-        enabled: win.canEject
+        enabled: !win.childIsKey && win.canEject
         onActivated: win.ejectVolume()
         onActivatedAmbiguously: activated()
     }

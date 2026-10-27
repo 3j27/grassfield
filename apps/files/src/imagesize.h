@@ -33,12 +33,25 @@ enum class Refusal {
 // Whether the picture at `path` may be opened: the path is walked one component at a time from the root, a symbolic
 // link followed by its text, and every component's filesystem is checked against `mounts` BEFORE it is looked at (local
 // disks, removable disks and memory only); the file at the end must be a regular file (lstat, nothing is opened). `st`
-// (optional) receives its status. A lstat: never on the GUI thread.
-Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *st = nullptr);
+// (optional) receives its status and `resolved` (optional) the path that was reached: every link in `path` followed, no
+// link left in it. A lstat: never on the GUI thread.
+Refusal check(const QString &path, const FolderStyleStore::Mounts &mounts, struct stat *st = nullptr, QString *resolved = nullptr);
+
+// Opens the file check() approved by the path check() reached (`resolved`), read only, without blocking (O_NONBLOCK,
+// O_NOCTTY) and without following a link anywhere in that path (openat2 RESOLVE_NO_SYMLINKS: a link swapped in after the
+// check, for the file or a folder above it, is refused, wherever it leads; where openat2 answers ENOSYS or EPERM, a kernel
+// without it or a sandbox's seccomp filter, open() with O_NOFOLLOW refuses one at the end only); the descriptor is returned
+// only when it is still the file checked (same device and inode, a regular file), -1 otherwise. Never on the GUI thread.
+int openChecked(const QString &resolved, const struct stat &checked);
+
+// Tests: the openat2 call openChecked() makes (`path` from the working directory, open flags, RESOLVE_* bits; a
+// descriptor, or -1 with errno set). A stand-in answering ENOSYS or EPERM takes the fallback; null restores the system
+// call.
+using Openat2 = int (*)(const char *path, int flags, quint64 resolve);
+void setOpenat2ForTests(Openat2 call);
 
 // The size as shown (a picture turned by its EXIF orientation reports the turned size), invalid when unknown or refused.
-// check() first; then the file is opened without blocking (O_NONBLOCK, O_NOCTTY) and the descriptor must be the file
-// checked (same device and inode, still regular); the format is the content's, and at most kReadBudget bytes are read.
+// check() first, then openChecked(); the format is the content's, and at most kReadBudget bytes are read.
 // Never on the GUI thread.
 QSize read(const QString &path, const FolderStyleStore::Mounts &mounts);
 

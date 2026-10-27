@@ -47,6 +47,8 @@ int main(int argc, char *argv[])
     QImageReader::setAllocationLimit(preview::kAllocationLimitMb);
 
     QGuiApplication app(argc, argv);
+    // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
+    grassfield::apps::reserveFirstShortcutId(app);
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
     new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm

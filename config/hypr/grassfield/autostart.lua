@@ -16,14 +16,18 @@ hl.on("hyprland.start", function()
   -- standby (no com.canonical.AppMenu.Registrar) until the shell reports the plugin's appmenu feature, so apps
   -- started without the plugin keep their in-window menus. Apps check for the registrar once, at their start.
   --
+  -- The Secret Service handover (ADR-0035 D-12) comes before the shell: `systemctl --user start` returns once a ksecretd left
+  -- over from an earlier session has let go of org.freedesktop.secrets (at most 10 s), so no app the user opens from the
+  -- Dock can reach KWallet there; the rest of the handover goes on in the background.
+  --
   -- grassfield-shell runs as a systemd user service so it restarts on crash (gate R1). It starts even when the
-  -- import or the bridge failed (";"): the bar then shows T0.
+  -- import, the bridge or the handover failed (";"): the bar then shows T0.
   --
   -- Session services that Omarchy's own session provides through its shell or its autostart (02 §5.3): crash and
   -- low-battery notifications, the pending-migrations notice, removable media (udiskie). Each unit has the same
   -- ConditionEnvironment and skips itself where it does not apply (no battery, no udiskie).
   local services = "grassfield-crash-watch.service grassfield-battery-watch.service grassfield-migrate-notify.service grassfield-automount.service"
-  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
+  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
 
   -- What Omarchy's autostart does besides starting its shell: the power profile for the current power source, the
   -- post-boot hooks of ~/.config/omarchy/hooks, and the lid state (clamshell with an external display at start).
