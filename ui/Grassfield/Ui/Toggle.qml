@@ -15,6 +15,8 @@ T.Control {
 
     implicitWidth: root.large ? Tokens.controlToggleLargeWidth : Tokens.controlToggleWidth
     implicitHeight: root.large ? Tokens.controlToggleLargeHeight : Tokens.controlToggleHeight
+    // Disabled: dimmed as a whole, as macOS draws a switch that cannot be changed (and as Button and CheckBox here).
+    opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox

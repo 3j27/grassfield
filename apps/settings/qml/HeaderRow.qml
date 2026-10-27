@@ -81,7 +81,6 @@ Item {
         y: Tokens.settingsHeaderRowSwitchTop
         accessibleName: root.title
         enabled: root.switchEnabled
-        opacity: enabled ? 1 : Tokens.materialDisabledOpacity
         checked: root.checked
         onToggled: c => root.toggled(c)
     }
