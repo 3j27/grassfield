@@ -61,6 +61,15 @@ QtObject {
     readonly property Timer clickGuard: Timer {
         interval: root.heldGuardMs
     }
+    // A request that arrives this soon after the previous one ended is held too (re-check of b5d7657, MEDIUM-1: `pkexec a;
+    // pkexec b` passes through no request between the two): keys typed after answering the first, or a password typed
+    // again, must not land in the next one's field.
+    readonly property Timer afterRequest: Timer {
+        interval: root.heldAfterUnlockMs
+    }
+    // The longest the agent keeps the keyboard on its key sink after a request ended while the user typed (AuthAgent
+    // `lingering`): their keys go nowhere meanwhile, then to the window underneath again.
+    readonly property int sinkLingerMaxMs: 3000
 
     // The session was unlocked: requests arriving in the next heldAfterUnlockMs are held.
     function noteUnlock(): void {
@@ -84,10 +93,21 @@ QtObject {
         clickGuard.restart();
     }
 
-    // A request is held when it arrives while the session is locked or the screen saver shows (`locked`), or within
-    // heldAfterUnlockMs of the last unlock.
+    // The request in the sheet ended (answered, cancelled or replaced by none): one arriving in the next heldAfterUnlockMs is
+    // held.
+    function noteEnded(): void {
+        afterRequest.restart();
+    }
+
+    // Whether a request arriving now comes right after another one ended.
+    function followsAnother(): bool {
+        return afterRequest.running;
+    }
+
+    // A request is held when it arrives while the session is locked or the screen saver shows (`locked`), within
+    // heldAfterUnlockMs of the last unlock, or within as long after the previous request ended.
     function arrivesHeld(locked: bool): bool {
-        return locked || unlockHold.running;
+        return locked || unlockHold.running || afterRequest.running;
     }
 
     // What the held sheet says, with the time the request arrived (the message names the program for pkexec).

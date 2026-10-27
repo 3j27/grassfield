@@ -8,7 +8,8 @@ Text {
     textFormat: Text.PlainText
     visible: system ? system.suppressedNote : false
     width: parent ? parent.width : implicitWidth
-    height: visible ? implicitHeight : 0
+    // Each page's Column skips it while it is hidden (a height bound to `visible` was a binding loop there).
+    height: implicitHeight
     leftPadding: Tokens.spacingMd
     text: qsTr("dev: not applied")
     color: Appearance.colors.textSecondary

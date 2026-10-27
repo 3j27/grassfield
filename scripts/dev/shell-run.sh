@@ -67,6 +67,20 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
   chmod 700 "$dev/run"
   # sockaddr_un.sun_path: 107 bytes for the bridge socket.
   ((${#dev} + 21 < 108)) || { echo "shell-run: $dev is too long for the bridge's Unix socket path" >&2; exit 1; }
+  # The desktop portal and the document portal never start on this bus (re-check of 06da80f, MEDIUM-1; owner decision
+  # 2026-10-26, ADR-0011): activated services inherit the owner's XDG_RUNTIME_DIR, Qt's gtk3 platform theme asks the portal
+  # when the shell or an app starts, and xdg-desktop-portal starts xdg-document-portal, which unmounts the owner's
+  # $XDG_RUNTIME_DIR/doc to mount its own. A service file of the same name in the bus's data home wins over the system's
+  # (written each run: dbus-daemon reads its folders again when they change); one in $XDG_RUNTIME_DIR/dbus-1/services would
+  # win over it, so the bus is not started when that folder names either.
+  mkdir -p "$apps_home/data/dbus-1/services"
+  for name in org.freedesktop.portal.Desktop org.freedesktop.portal.Documents; do
+    if [[ -n ${XDG_RUNTIME_DIR:-} ]] && grep -qsE "^[[:space:]]*Name[[:space:]]*=[[:space:]]*${name//./\\.}[[:space:]]*$" "$XDG_RUNTIME_DIR"/dbus-1/services/*.service; then
+      echo "shell-run: refusing: $XDG_RUNTIME_DIR/dbus-1/services names $name, which would start on the private bus" >&2
+      exit 1
+    fi
+    printf '[D-BUS Service]\nName=%s\nExec=/bin/false\n' "$name" >"$apps_home/data/dbus-1/services/$name.service"
+  done
   if ! { [[ -s $dev/bus.address ]] && dev_live_pid "$dev/bus.pid" >/dev/null; }; then
     dev_stop "$dev/bus.pid" "private D-Bus bus" >/dev/null || exit 1
     rm -f "$dev/bus.address" "$dev/bus.address.new"
@@ -90,6 +104,17 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
     unix:path=/tmp/dbus-*) ;;
     *) echo "shell-run: refusing: unexpected private bus address $bus" >&2; exit 1 ;;
   esac
+  # A bus kept from an earlier run may predate the portal block: it reads its service folders again (it watches only the
+  # folders that existed when it started), and a portal it already started is reported (the block cannot stop it).
+  if command -v dbus-send >/dev/null; then
+    dbus-send --bus="$bus" --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ReloadConfig >/dev/null 2>&1 ||
+      echo "shell-run: warning: the private bus did not read its service folders again" >&2
+    for name in org.freedesktop.portal.Desktop org.freedesktop.portal.Documents; do
+      if dbus-send --bus="$bus" --print-reply=literal --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner "string:$name" 2>/dev/null | grep -qw true; then
+        echo "shell-run: warning: $name already runs on the private bus (started before the block): just nested-down, then just nested-up" >&2
+      fi
+    done
+  fi
   bus_env=(DBUS_SESSION_BUS_ADDRESS="$bus")
   private=1
 
