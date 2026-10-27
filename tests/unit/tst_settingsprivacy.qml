@@ -42,7 +42,7 @@ TestCase {
             // user's own copy of its entry; Ghost only a hidden stub (not known to be the host's); the others are shown by
             // their id.
             property var files: ({
-                    "/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Photo Booth\nIcon=booth\n",
+                    "/apps/org.example.Booth.desktop": "[Desktop Entry]\nType=Application\nName=Booth Camera\nIcon=booth\n",
                     "/apps/org.example.Weather.desktop": "[Desktop Entry]\nType=Application\nName=Weather\n",
                     "/apps/org.example.Studio.desktop": "[Desktop Entry]\nType=Application\nName=My Studio\n",
                     "/apps/org.example.Ghost.desktop": "[Desktop Entry]\nType=Application\nName=Ghost\nHidden=true\n",
@@ -204,7 +204,7 @@ TestCase {
         verify(find(t.page, i => i.title === "org.example.Ghost" && i.showToggle !== undefined).showToggle, "a hidden stub only: in doubt, the switch stays");
         const c = make(categoryComp, {key: "camera"});
         answer(c);
-        const booth = find(c.page, i => i.title === "Photo Booth" && i.showToggle !== undefined);
+        const booth = find(c.page, i => i.title === "Booth Camera" && i.showToggle !== undefined);
         verify(booth.showToggle, "the camera's grant is read for the host too");
         compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
     }
@@ -282,7 +282,7 @@ TestCase {
         const system = createTemporaryObject(serviceComp, testCase, {backend: backend});
         const camera = createTemporaryObject(categoryComp, testCase, {backend: backend, system: system, key: "camera"});
         answer({backend: backend});
-        find(camera, i => i.title === "Photo Booth" && i.checked !== undefined).toggled(true);
+        find(camera, i => i.title === "Booth Camera" && i.checked !== undefined).toggled(true);
         backend.failed("privacy.camera.act", "Rejected");
         backend.finished("privacy.camera.act", false, "");
         verify(find(camera, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("Rejected") >= 0));
@@ -337,7 +337,7 @@ TestCase {
     function test_cameraSwitch() {
         const t = make(categoryComp, {key: "camera"});
         answer(t);
-        const booth = find(t.page, i => i.title === "Photo Booth" && i.checked !== undefined);
+        const booth = find(t.page, i => i.title === "Booth Camera" && i.checked !== undefined);
         verify(booth, "the name from org.example.Booth.desktop");
         compare(booth.subtitle, "org.example.Booth · Not sandboxed: may use the camera directly");
         compare(booth.checked, false);
