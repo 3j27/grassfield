@@ -13,14 +13,23 @@
 # the package is larger by the debug sections, there is no split -debug package).
 #
 # One version source (D-11): the VERSION file at the repository root. pkgver is that version without the hyphen
-# (1.0.0-rc1 -> 1.0.0rc1, which pacman orders before 1.0.0); pkgrel restarts at 1 with every new VERSION.
+# (1.0.0-rc1 -> 1.0.0rc1, which pacman orders before 1.0.0); pkgrel restarts at 1 with every new VERSION. A rebuild of the
+# same VERSION for the [grassfield] channels (a new Hyprland, ADR-0033 e, owner decision O7) sets GRASSFIELD_PKGREL, a
+# positive integer, instead of a commit; unset, the pkgrel below is used.
+#
+# grassfield-desktop depends on grassfield-keyring (ADR-0033 b.2, owner decision O12), built by grassfieldhq/grassfield-
+# packages and holding no key until the owner's signing key exists (O20): install that package once before `makepkg -si`.
 
 _here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _ver=$(tr -d '[:space:]' <"$_here/../../VERSION")
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor grassfield-icons)
 pkgver=${_ver//-/}
-pkgrel=3
+if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; then
+  echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
+  exit 1
+fi
+pkgrel=${GRASSFIELD_PKGREL:-3}
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -63,7 +72,7 @@ prepare() {
   # of another commit with the same VERSION would answer "no work to do" and ship that commit's plugin and libraries under
   # this commit's BUILD-COMMIT. Every build and output directory goes, and the files are extracted with the time of now (tar -m).
   # ${srcdir:?}: an empty $srcdir must stop here, never turn these into paths at the root.
-  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT"
+  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/pacman"
   mkdir -p "$srcdir/snapshot"
   git -C "$repo" archive --format=tar HEAD | tar -x -m -C "$srcdir/snapshot"
   git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"
@@ -113,6 +122,10 @@ build() {
   # file missing) and when a listed logo, a dangling link or a forbidden word remains.
   python3 -I "$(_root)/packaging/arch/icons-compose.py" --mactahoe "$srcdir/mactahoe-icon-theme" --pebble "$srcdir/pebble-icon-theme" \
     --branding "$(_root)/branding/icons/theme" --list "$(_root)/packaging/arch/icons-apple-logos.txt" --out "$srcdir/grassfield-icons"
+  # Software Update (ADR-0033): the [grassfield] section templates, this build's repository values and its pinned key,
+  # checked (the key file must be the pinned fingerprint, public only) and generated from packaging/pacman/repository.conf.
+  python3 -I "$(_root)/packaging/pacman/generate.py" --conf "$(_root)/packaging/pacman/repository.conf" \
+    --key "$(_root)/packaging/pacman/grassfield-signing-key.asc" --out "$srcdir/pacman"
 }
 
 check() {
@@ -133,7 +146,9 @@ package_grassfield-desktop() {
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
   # with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
+  # Software Update (ADR-0033): grassfield-keyring (the [grassfield] keys, none until the owner's key exists; O12, O20),
+  # pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync), declared as omarchy declares them.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
@@ -199,9 +214,21 @@ package_grassfield-desktop() {
   find "$root/packaging/bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/" {} +
   # The commands a person types are on PATH.
   install -d "$pkgdir/usr/bin"
-  for tool in grassfield-login grassfield-login-check grassfield-nightshift; do
+  for tool in grassfield-login grassfield-login-check grassfield-nightshift grassfield-channel-set; do
     ln -s "../lib/grassfield/$tool" "$pkgdir/usr/bin/$tool"
   done
+  # Software Update (ADR-0033 c; OPUS SECURITY REVIEW for these root programs): grassfield-channel-helper (the program of
+  # the polkit action below, run by grassfield-channel-set through pkexec) and grassfield-channel-scriptlet (this
+  # package's pre_remove and post_upgrade) over their shared library, the only Grassfield code that runs as root; the
+  # templates they write /etc/pacman.d/grassfield.conf from; Omarchy's pre-refresh-pacman hook that grassfield-channel-set
+  # links. grassfield-channel-set and grassfield-update-check come from packaging/bin above.
+  install -m755 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel-helper" \
+    "$root/packaging/pacman/grassfield-channel-scriptlet"
+  install -m644 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel.sh"
+  install -Dm644 "$root/packaging/pacman/org.grassfield.packages.policy" "$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
+  install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
+    "$srcdir/pacman/grassfield-beta.conf" "$srcdir/pacman/grassfield-signing-key.asc"
+  install -Dm755 "$root/packaging/pacman/pre-refresh-pacman" "$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"
   # GF-032: stand-ins that keep Omarchy's update, theme and font tools from starting Omarchy's shell in this session.
   find "$root/packaging/shims" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/omarchy-shims/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
