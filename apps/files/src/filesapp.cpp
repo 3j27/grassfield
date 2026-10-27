@@ -419,33 +419,19 @@ void FilesApp::setTabBarShown(bool on)
     emit prefsChanged();
 }
 
-namespace
-{
-// A kept window size outside these bounds is ignored (a corrupt value never opens a giant or invisible window).
-constexpr int kMinKeptSide = 200;
-constexpr int kMaxKeptSide = 16384;
-
-int keptSide(const QVariant &value)
-{
-    bool ok = false;
-    const int side = value.toInt(&ok);
-    return ok && side >= kMinKeptSide && side <= kMaxKeptSide ? side : 0;
-}
-} // namespace
-
 int FilesApp::windowWidth() const
 {
-    return keptSide(m_settings.value(QStringLiteral("window/width")));
+    return FileLogic::keptWindowSide(m_settings.value(QStringLiteral("window/width")));
 }
 
 int FilesApp::windowHeight() const
 {
-    return keptSide(m_settings.value(QStringLiteral("window/height")));
+    return FileLogic::keptWindowSide(m_settings.value(QStringLiteral("window/height")));
 }
 
 void FilesApp::rememberWindowSize(int width, int height)
 {
-    if (width < kMinKeptSide || height < kMinKeptSide || width > kMaxKeptSide || height > kMaxKeptSide)
+    if (!FileLogic::keepsWindowSize(width, height))
         return;
     if (width == windowWidth() && height == windowHeight())
         return;

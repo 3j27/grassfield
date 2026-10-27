@@ -218,6 +218,26 @@ TestCase {
         compare(s.b.calls, [], "the target window closed meanwhile: the tab stays");
     }
 
+    // ADR-0026 part 1: a new window opens at the kept size, never below the window minimum; without one, at its own default.
+    function test_newWindowSizeIsClampedToTheMinimum() {
+        const main = createTemporaryObject(mainComponent, test);
+        verify(main);
+        mainApp.windowWidth = 250;
+        mainApp.windowHeight = 300;
+        let w = main.newWindow("file:///sandbox", null);
+        compare(w.width, Tokens.filesWindowMinWidth);
+        compare(w.height, Tokens.filesWindowMinHeight);
+        mainApp.windowWidth = 1000;
+        mainApp.windowHeight = 700;
+        w = main.newWindow("file:///sandbox", null);
+        compare(w.width, 1000);
+        compare(w.height, 700);
+        mainApp.windowWidth = 0;
+        mainApp.windowHeight = 0;
+        w = main.newWindow("file:///sandbox", null);
+        compare(w.width, 0, "no kept size: the window keeps its default (Tokens.filesWindowWidth in BrowserWindow)");
+    }
+
     // A file drop as another application makes it: it proposes a move (a file manager does on the same volume).
     function fileDrop(hasUrls: bool): var {
         return {
