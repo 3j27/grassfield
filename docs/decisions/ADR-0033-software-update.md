@@ -585,6 +585,42 @@ were recorded in `fd49abc` and confirmed again after the first review.
   - a pointer switch can fail one run; a rollback is a new snapshot (h.2);
   - a Hyprland update can come before the matching plugin.
 
+## Step 1 as built (2026-10-27, branch `claude/software-update-step1`)
+Landed in this repository:
+- `packaging/pacman/`: `repository.conf` (still the `.invalid` base and no key, O11), the empty
+  `grassfield-signing-key.asc`, `generate.py` (build time: checks the values and the key file, which must be exactly the
+  pinned public key, and writes `/usr/share/grassfield/pacman/{repository.conf,grassfield-stable.conf,grassfield-beta.conf,
+  grassfield-signing-key.asc}`), `grassfield-channel-helper`, `grassfield-channel-scriptlet`, `grassfield-channel.sh`,
+  `org.grassfield.packages.policy`, `pre-refresh-pacman` (the hook);
+- `packaging/bin/grassfield-channel-set` (also `/usr/bin`) and `packaging/bin/grassfield-update-check`;
+- `packaging/arch/PKGBUILD` (`GRASSFIELD_PKGREL`, the three dependencies, the files above) and
+  `grassfield-desktop.install` (`pre_remove`, `post_upgrade`);
+- the Omarchy pins of `docs/upstream/omarchy.lock`;
+- `tests/shell/update_check.sh` (the checker, logic layer) and `tests/integration/software_update.sh` (the container test).
+
+Moved to step 2, with the shell code that uses them: the shim's `omarchy.system-update` forward (its target, the shell's
+`update check` IPC, belongs to the step 2 shell service), `updates.automaticCheck` (a key goes through
+`ui/Grassfield/Ui/SettingsContract.js`, the settings vectors and the store, which the open Settings stack #8-#10 changes;
+its only reader is the step 2 scheduler) and `software-update.json` (written by that service). The pins of
+`omarchy-update-status` and `omarchy-launch-floating-terminal-with-presentation` move with their derived files. The
+waiter of d.5 is the checker's `--after-update-lock` mode, which the step 2 service starts.
+
+Choices made within this ADR:
+- "Reads no environment variable" (c.1): both root programs start as `#!/bin/bash -p` (no `BASH_ENV`, no imported
+  function) and remove every exported variable before sourcing their library, which then sets `PATH=/usr/bin`, `LC_ALL=C`,
+  `umask 022` and `cd /`.
+- One change at a time: both root programs take `flock` on `/run/grassfield-channel.lock`. The helper refuses when it
+  is held; the scriptlet program waits up to 120 s, since the helper can start just before a pacman transaction whose
+  scriptlet runs it, and two rewrites of `pacman.conf` could otherwise lose one another.
+- `[grassfield]` lines whose file is missing (pacman cannot run at all then) are removed first by `set`, `restore` and
+  `off`, so `pacman-key` and `pacman-conf` can run; `grassfield-channel-set` shows that state as `repair`, and its
+  `repair` runs `set stable` there.
+- The checker keeps its failure count, the Server lines it last synced and its last success in `health-db/` (ADR-0020's
+  row). Its `--offline` flag carries the shell's connectivity: a failure while offline is not counted.
+- A notes file whose `channel` is not the client's channel is refused, like any other invalid notes.
+- `grassfield-channel-set` honours `GRASSFIELD_UPDATE_PKEXEC` only in a dev session (ADR-0019's predicate) and never makes
+  or removes the hook link there; without the stand-in, a dev session refuses the change.
+
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:
 - **MAJOR 1**, a failing `[grassfield]` stops every update: a2 (Q1), mirrors, atomic publication (h.2, Q2), rotation
