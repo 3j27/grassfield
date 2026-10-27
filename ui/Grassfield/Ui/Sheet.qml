@@ -23,6 +23,8 @@ Item {
     property bool showCancel: true
     // The cancel button's text (Displays' countdown sheet says "Revert").
     property string cancelText: qsTr("Cancel")
+    // False while the confirm button may not act yet (the Store's sheet while it checks a plan): Return does nothing either.
+    property bool confirmEnabled: true
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -62,6 +64,8 @@ Item {
     }
 
     function confirm(): void {
+        if (!root.confirmEnabled)
+            return;
         const cb = root.confirmHandler;
         const error = cb ? cb(field.text) : "";
         if (error && error !== "") {
@@ -184,6 +188,7 @@ Item {
                         text: root.confirmText
                         primary: !root.destructive
                         destructive: root.destructive
+                        enabled: root.confirmEnabled
                         onClicked: root.confirm()
                     }
                 }

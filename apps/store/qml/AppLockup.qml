@@ -133,4 +133,14 @@ FocusScope {
             root.open();
         }
     }
+
+    // The context menu of an installed app (spec SR22: Open, Show in Store, Uninstall…), from the window (Main.qml).
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: eventPoint => {
+            const w = root.Window.window;
+            if (w && w.showAppMenu !== undefined)
+                w.showAppMenu(root.app, root, eventPoint.position.x, eventPoint.position.y);
+        }
+    }
 }
