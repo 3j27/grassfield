@@ -84,6 +84,8 @@ ce: appeared ["x"] 0 body "x"
 ce: done'
 desc="one notice per new set, cleared when the errors are gone, nothing for the same set or a reply that is not JSON"
 check test "$got" == "$want"
+desc="the shell root posts the notice with ConfigErrors' escaped body"
+check grep -q 'Notifications.postInternal(qsTr("Some settings could not be applied"), noticeBody(lines, rest))' shell/shell.qml
 desc="a reload during a read is read once more after it: 7 reads in all"
 check test "$(cat "$tmp/ce/reads" 2>/dev/null)" == 7
 if ((fail)); then

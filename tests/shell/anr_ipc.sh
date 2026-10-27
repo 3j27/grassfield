@@ -6,7 +6,7 @@
 #   1 a hang of foot "~": the shell answers ok, marks pid 4242 (anr status), the stand-in waits and runs no dialog;
 #   2 the stand-in ends (Hyprland kills it): the mark is gone within 1 s;
 #   3 the stand-in sees one "shared" window (its client list is older) but the shell knows two processes: refused, the stock
-#     dialog runs, nothing is marked;
+#     dialog runs, nothing is marked; 3b once Hyprland announced the other window's new title (windowtitlev2), accepted;
 #   4 a stand-in of another compositor (another HYPRLAND_INSTANCE_SIGNATURE): refused, stock dialog;
 #   5 direct calls: a pid of 1, a missing prefix, an empty instance: "refused", nothing marked; no reason is told.
 # The probe runs as a dev session (anr status is a dev hook) and the stand-in reaches it through GRASSFIELD_SHELL_DIR
@@ -45,12 +45,12 @@ printf '[%s, %s]' "$(client 0x1 4242 foot "~")" "$(client 0x2 5000 foot shared)"
 
 cat >"$tmp/fake.py" <<'PY'
 import os, socket, sys, threading
-base, clients = sys.argv[1], open(sys.argv[2], "rb").read()
+base, clients_path = sys.argv[1], sys.argv[2]
 held = []
 def answer(c):
     data = c.recv(65536).decode(errors="replace")
     if "clients" in data:
-        c.sendall(clients)
+        c.sendall(open(clients_path, "rb").read())
     elif "j/" in data[:8]:
         c.sendall(b"[]")
     else:
@@ -67,18 +67,36 @@ def serve_requests():
     while True:
         c, _ = s.accept()
         threading.Thread(target=answer, args=(c,), daemon=True).start()
+events_held = []
 def serve_events():
     s = socket.socket(socket.AF_UNIX)
     s.bind(os.path.join(base, ".socket2.sock"))
     s.listen(4)
-    held = []
     while True:
         c, _ = s.accept()
-        held.append(c)
+        events_held.append(c)
+def push_events():
+    # Lines the test appends to the "events" file go to every connected client, as Hyprland's event socket sends them.
+    path, sent = sys.argv[3], 0
+    while True:
+        try:
+            data = open(path, "rb").read()
+        except OSError:
+            data = b""
+        if len(data) > sent:
+            for c in list(events_held):
+                try:
+                    c.sendall(data[sent:])
+                except OSError:
+                    events_held.remove(c)
+            sent = len(data)
+        threading.Event().wait(0.05)
 threading.Thread(target=serve_events, daemon=True).start()
+threading.Thread(target=push_events, daemon=True).start()
 serve_requests()
 PY
-python3 -I "$tmp/fake.py" "$tmp/runtime/hypr/$sig" "$tmp/clients-shell.json" &
+: >"$tmp/events"
+python3 -I "$tmp/fake.py" "$tmp/runtime/hypr/$sig" "$tmp/clients-shell.json" "$tmp/events" &
 fake=$!
 for _ in $(seq 50); do [[ -S $tmp/runtime/hypr/$sig/.socket.sock && -S $tmp/runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
@@ -132,6 +150,21 @@ desc="3 a window the shell knows under two processes: refused, the stock dialog 
 check bash -c 'for ((i = 0; i < 60; i++)); do kill -0 "$1" 2>/dev/null || break; sleep 0.05; done; [[ $(cat "$2/stock.ran" 2>/dev/null) == "$1" ]]' _ "$standin" "$tmp"
 desc="3 nothing is marked"
 check test -z "$(marks)"
+
+# 3b. The other process's window is renamed, as Hyprland does it: its client list changes and it sends windowtitlev2 (the
+# shell reads the live title, and Compositor re-reads the list on that event). The "shared" window is now one process's
+# and the report is accepted.
+printf '[%s, %s, %s]' "$(client 0x1 4242 foot "~")" "$(client 0x2 5000 foot shared)" "$(client 0x3 5001 foot renamed)" >"$tmp/clients-shell.json.new"
+mv "$tmp/clients-shell.json.new" "$tmp/clients-shell.json"
+printf 'windowtitlev2>>3,renamed\n' >>"$tmp/events"
+sleep 0.5
+hang shared
+sleep 1.5
+desc="3b once Hyprland renamed the other process's window: the same report is accepted, pid 5000 marked"
+check test "$(marks)" == 5000
+kill -KILL "$standin"
+wait "$standin" 2>/dev/null || true
+gone_within_1s || true
 
 # 4.
 hang "~" other-instance

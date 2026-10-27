@@ -33,7 +33,15 @@ status() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 qs i
 marked() { [[ $(status | jq --argjson p "$1" '[.[] | select(.pid == $p)] | length' 2>/dev/null) == 1 ]]; }
 not_marked() { [[ $(status | jq --argjson p "$1" '[.[] | select(.pid == $p)] | length' 2>/dev/null) == 0 ]]; }
 standin_of() { status | jq -r --argjson p "$1" '.[] | select(.pid == $p) | .standin' 2>/dev/null; }
-stock_dialogs() { pgrep -c -u "$(id -u)" -f '^/usr/bin/hyprland-dialog ' || true; }
+# Stock dialogs of this nested instance: started by the stand-in (/usr/bin/hyprland-dialog) or by Hyprland itself when the
+# stand-in is not in its PATH (hyprland-dialog), with this instance's signature in their environment.
+stock_dialogs() {
+  local p n=0
+  for p in $(pgrep -u "$(id -u)" -f '^(/usr/bin/)?hyprland-dialog ' || true); do
+    tr '\0' '\n' <"/proc/$p/environ" 2>/dev/null | grep -qx "HYPRLAND_INSTANCE_SIGNATURE=$sig" && n=$((n + 1))
+  done
+  echo "$n"
+}
 wait_for() { local secs=$1 n; shift; for ((n = 0; n < secs * 5; n++)); do "$@" && return 0; sleep 0.2; done; return 1; }
 
 [[ $(status) == "["* ]] || { echo "anr: the dev shell has no anr target or refused its status (run this tree's shell)"; exit 2; }
