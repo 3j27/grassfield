@@ -274,6 +274,7 @@
  {"path": "tests/shell/wallpaper_tool_dev_gate.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_video_heavy.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/shell/audio_dev_guard.sh", "layer": "headless"},
+ {"path": "tests/shell/displays_publish.sh", "layer": "headless"},
  {"path": "tests/shell/displays_trial.sh", "layer": "headless"},
  {"path": "tests/shell/osd_keyboard.sh", "layer": "headless"},
  {"path": "tests/shell/stack_watch.sh", "layer": "headless"},
