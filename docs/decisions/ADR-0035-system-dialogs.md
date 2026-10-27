@@ -403,12 +403,15 @@ for it (`--no-block`), then the shell. `ui/tools/gen-gtk-themes.py` generates th
   `org.freedesktop.portal.Error.NotFound`, so the frontend asks x-d-p-gtk (fonts, icons, cursor). The file is watched
   (directory and file, atomic replaces included, 50 ms debounce; while the directory does not exist yet, its nearest existing
   parent) and `auto` is resolved again every minute (decision 2b-8); only the keys whose value changed are signalled. The
-  file is read as ADR-0020 §2 requires (review of step 2b): never without a bound (opened without blocking and checked on the
-  descriptor: a FIFO, a device or a directory is never read; at most 1 MiB, read whole); a malformed or unreadable file keeps
-  the last good settings (defaults only at start, as the shell's own start); a missing file is a fresh start (the schema's
-  defaults: dark, multicolor); the directory is never created. At start, once its name is owned, it signals every value once
-  (decision 2b-9); when another Settings backend signals a key it owns, it answers with its own value (decision 2b-13). A dev
-  run refuses any bus but a private test bus (`apps/testbus.h`, shared with the handover).
+  file is read as ADR-0020 §2 requires (review of step 2b): never without a bound (only a regular file is opened, without
+  blocking, and checked again on the descriptor: a FIFO, a device or a directory is never read; at most 1 MiB, read whole); a
+  malformed or unreadable file keeps the last good settings (defaults only at start, as the shell's own start); a missing
+  file is a fresh start (the schema's defaults: dark, multicolor); the directory is never created. ADR-0020's 5 s cut of a
+  read that hangs is not implemented: on a home that stops answering (a hung network mount) the read blocks the backend,
+  the frontend's calls time out and the apps keep x-d-p-gtk's values; the login does not wait (`--no-block`). At start,
+  once its name is owned, it signals every value once (decision 2b-9); when x-d-p-gtk signals a value other than
+  Grassfield's for a key Grassfield owns, it answers with its own (decision 2b-13). A dev run refuses any bus but a private
+  test bus (`apps/testbus.h`, shared with the handover).
 - **The GTK themes.** One per accent, appearance and contrast; each imports GTK's own stylesheet from the GTK library's
   resources and then sets Grassfield's colours where that stylesheet draws its accent (selected rows and text, checked boxes,
   radios and switches, suggested buttons, progress bars, sliders, level bars, focus rings, selected tabs, menu items under
@@ -512,7 +515,9 @@ for it (`--no-block`), then the shell. `ui/tools/gen-gtk-themes.py` generates th
   writing `gtk-theme` or `color-scheme`) switched running apps to Adwaita until they restarted, while reads still answered
   Grassfield's values. Options: (a) document it; (b) the backend answers each such signal with its own value. **Choice:
   (b)**: the apps end with Grassfield's appearance and no step is asked of the user; cost: one signal more per such key, and
-  an instant with x-d-p-gtk's value (one theme reload).
+  an instant with x-d-p-gtk's value (one theme reload). Only x-d-p-gtk is answered, by its bus name, and only for a value
+  other than Grassfield's (counter-review: answering any sender let a client make the backend signal, or ping-pong with
+  it); `tests/integration/portal_settings.sh` scenario 2 checks both.
 
 ### D-9. Password and passphrase prompts (category S; S1–S9) — owner decision Q1, opus PASS required
 Upstream facts (inventory § S, read in source): gnome-keyring 51.1, pinentry-gnome3 (Arch's `/usr/bin/pinentry` picks it first

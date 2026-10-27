@@ -403,17 +403,19 @@ apply to every app.
 - AP1 `grassfield-portal-settings` (no window, QtCore + QtDBus, started with the session) serves
   `org.freedesktop.impl.portal.Settings` (`Read`, `ReadAll` with the namespace filter, the `SettingChanged` signal, property
   `version` 1; the frontend's `ReadOne` is its `Read`) for `org.freedesktop.appearance` (`color-scheme` u: 1 dark, 2 light;
-  `accent-color` (ddd) sRGB, the accent of the current appearance; `contrast` u: 1 when Increase Contrast; `reduced-motion` u:
-  1 when Reduce Motion) and `org.gnome.desktop.interface` (`gtk-theme`, `color-scheme` `prefer-dark`/`prefer-light`,
-  `enable-animations`), from the Grassfield settings file, watched (its nearest existing parent while its directory does
-  not exist yet) and read as ADR-0020 §2 requires: never without a bound (a FIFO, a device or a directory is never read, at
-  most 1 MiB, read whole, never blocking); a malformed or unreadable file keeps the last good settings (defaults only at
-  start); a missing file means the schema's defaults. `auto` follows `AutoAppearance`'s schedule, checked again every
-  minute as the shell does (ADR-0035 decision 2b-8). A key it does not own answers `org.freedesktop.portal.Error.NotFound`
-  (the frontend then asks x-d-p-gtk). Only the keys whose value changed are signalled; once its bus name is owned it
-  signals every value once (decision 2b-9); it answers another backend's `SettingChanged` for a key it owns with its own
-  value (decision 2b-13). A dev run refuses any bus but a private test bus. Budget: ≤ 4 MB private and ≤ 20 MB resident
-  memory, no CPU while nothing changes but one file read a minute (decision 2b-11).
+  `accent-color` (ddd) sRGB, the accent of the current appearance; `contrast` u: 1 when Increase Contrast; `reduced-motion`
+  u: 1 when Reduce Motion) and `org.gnome.desktop.interface` (`gtk-theme`, `color-scheme` `prefer-dark`/`prefer-light`,
+  `enable-animations`), from the Grassfield settings file, watched (its nearest existing parent while its directory does not
+  exist yet) and read as ADR-0020 §2 requires: never without a bound (a FIFO, a device or a directory is never read, at most
+  1 MiB, read whole; no wait on a FIFO or a device, but a home that stops answering blocks it: ADR-0020's 5 s cut is not
+  implemented here, the apps then keep x-d-p-gtk's values); a malformed or unreadable file keeps the last good settings
+  (defaults only at start); a missing file means the schema's defaults. `auto` follows `AutoAppearance`'s schedule, checked
+  again every minute as the shell does (ADR-0035 decision 2b-8). A key it does not own answers
+  `org.freedesktop.portal.Error.NotFound` (the frontend then asks x-d-p-gtk). Only the keys whose value changed are
+  signalled; once its bus name is owned it signals every value once (decision 2b-9); it answers x-d-p-gtk's `SettingChanged`
+  (by its bus name) for a key it owns and a value other than its own with its own value (decision 2b-13). A dev run refuses
+  any bus but a private test bus. Budget: ≤ 4 MB private and ≤ 20 MB resident memory, no CPU while nothing changes but one
+  file read a minute (decision 2b-11).
 - AP1b its unit has `Restart=on-failure` (`RestartSec=1`; counter-review of PR #13): a crashed backend is back within about a
   second, so live changes resume without waiting for a read. The frontend's proxy is bound to the bus name, not to the process,
   and follows its new owner (xdg-desktop-portal 1.22.1 `src/settings.c:333-339`, `G_DBUS_PROXY_FLAGS_NONE`; GLib 2.90.1
