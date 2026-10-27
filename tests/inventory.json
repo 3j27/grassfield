@@ -205,6 +205,7 @@
  {"path": "tests/unit/clipboard-helper/tst_diskstore.cpp", "layer": "logic"},
  {"path": "tests/unit/clipboard-helper/tst_thumbnail.cpp", "layer": "logic"},
  {"path": "tests/unit/secrets-handover/tst_logic.cpp", "layer": "logic"},
+ {"path": "tests/unit/portal-settings/tst_portalvalues.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_systembus.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_busjobs.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_backend.cpp", "layer": "logic"},

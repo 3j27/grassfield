@@ -1,0 +1,260 @@
+// The Settings portal backend (apps/portal-settings, ADR-0035 D-8): the values it publishes for the Grassfield settings, the
+// namespace filter of ReadAll, and the backend object itself on a scratch settings file (no bus): what it answers, and which
+// SettingChanged signals a change of the file or of the clock brings.
+#include "portalvalues.h"
+#include "settingsbackend.h"
+
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QSaveFile>
+#include <QTemporaryDir>
+
+#include <gtest/gtest.h>
+
+using namespace grassfield::portal;
+
+namespace {
+
+QJsonObject json(const char *text)
+{
+    return QJsonDocument::fromJson(QByteArray(text)).object();
+}
+
+const QTime kNoon(12, 0);
+const QTime kNight(21, 0);
+
+void ensureApp()
+{
+    static int argc = 1;
+    static char name[] = "portal-settings-unit-tests";
+    static char *argv[] = {name, nullptr};
+    // One application for the whole test process, kept until it exits.
+    static QCoreApplication *app = QCoreApplication::instance() ? nullptr : new QCoreApplication(argc, argv);
+    Q_UNUSED(app);
+}
+
+// Runs the event loop until `done` or `ms` elapse.
+template<typename F>
+bool spin(F done, int ms = 3000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!done() && timer.elapsed() < ms)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    return done();
+}
+
+void writeAtomically(const QString &path, const QByteArray &text)
+{
+    QSaveFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    file.write(text);
+    ASSERT_TRUE(file.commit());
+}
+
+} // namespace
+
+TEST(PortalValues, TheSchemaDefaultsWhenTheFileSaysNothing)
+{
+    const Input in = readInput(QJsonObject());
+    EXPECT_EQ(in.appearance, QStringLiteral("dark"));
+    EXPECT_EQ(in.accent, QStringLiteral("multicolor"));
+    EXPECT_FALSE(in.increaseContrast);
+    EXPECT_FALSE(in.reduceMotion);
+    // Wrong types keep the defaults too, as the shell reads them.
+    const Input odd = readInput(json(R"({"appearance": 3, "accent": "blue", "accessibility": {"reduceMotion": "yes"}})"));
+    EXPECT_EQ(odd.appearance, QStringLiteral("dark"));
+    EXPECT_EQ(odd.accent, QStringLiteral("multicolor"));
+    EXPECT_FALSE(odd.reduceMotion);
+}
+
+TEST(PortalValues, AppearanceAndTheAutoSchedule)
+{
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "light"})")), kNight).colorScheme(), 2u);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "dark"})")), kNoon).colorScheme(), 1u);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "auto"})")), kNoon).colorScheme(), 2u);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "auto"})")), kNight).colorScheme(), 1u);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "auto"})")), QTime(6, 59)).colorScheme(), 1u);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "auto"})")), QTime(7, 0)).colorScheme(), 2u);
+}
+
+TEST(PortalValues, TheAccentOfEachAppearanceFromTheTokens)
+{
+    const Values light = values(readInput(json(R"({"appearance": "light", "accent": {"color": "blue"}})")), kNoon);
+    EXPECT_EQ(light.accentRgb, 0x1F5FCCu);
+    EXPECT_DOUBLE_EQ(light.red(), 0x1F / 255.0);
+    EXPECT_DOUBLE_EQ(light.blue(), 0xCC / 255.0);
+    const Values dark = values(readInput(json(R"({"appearance": "dark", "accent": {"color": "blue"}})")), kNoon);
+    EXPECT_EQ(dark.accentRgb, 0x5AA2FFu);
+    // multicolor is the Grassfield green of each appearance; an unknown name reads as multicolor.
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "light"})")), kNoon).accentRgb, 0x26763Fu);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "dark"})")), kNoon).accentRgb, 0x4FB36Bu);
+    const Values unknown = values(readInput(json(R"({"accent": {"color": "teal"}})")), kNoon);
+    EXPECT_EQ(unknown.accentName, QStringLiteral("multicolor"));
+    // Every accent of Accent.js has a theme name, in both appearances, with and without Increase Contrast.
+    int names = 0;
+    for (const auto &accent : tokens::kAccents) {
+        for (const bool hc : {false, true}) {
+            for (const char *appearance : {"light", "dark"}) {
+                ++names;
+                const Values v = values(readInput(QJsonObject{
+                                            {QStringLiteral("appearance"), QLatin1String(appearance)},
+                                            {QStringLiteral("accent"), QJsonObject{{QStringLiteral("color"), QLatin1String(accent.name)}}},
+                                            {QStringLiteral("accessibility"), QJsonObject{{QStringLiteral("increaseContrast"), hc}}}}),
+                                        kNoon);
+                EXPECT_EQ(v.gtkTheme(), QStringLiteral("Grassfield-%1%2%3")
+                                            .arg(QLatin1String(accent.name), hc ? QStringLiteral("-hc") : QString(),
+                                                 v.dark ? QStringLiteral("-dark") : QString()));
+            }
+        }
+    }
+    EXPECT_EQ(names, 36);
+}
+
+TEST(PortalValues, GtkThemeColourSchemeAndAnimations)
+{
+    const Values v = values(readInput(json(R"({"appearance": "light", "accent": {"color": "graphite"},
+                                               "accessibility": {"increaseContrast": true, "reduceMotion": true}})")), kNoon);
+    EXPECT_EQ(v.gtkTheme(), QStringLiteral("Grassfield-graphite-hc"));
+    EXPECT_EQ(v.gnomeColorScheme(), QStringLiteral("prefer-light"));
+    const SettingsMap map = SettingsBackend::toMap(v);
+    EXPECT_EQ(map.value(QStringLiteral("org.freedesktop.appearance")).value(QStringLiteral("contrast")).toUInt(), 1u);
+    EXPECT_EQ(map.value(QStringLiteral("org.freedesktop.appearance")).value(QStringLiteral("reduced-motion")).toUInt(), 1u);
+    EXPECT_FALSE(map.value(QStringLiteral("org.gnome.desktop.interface")).value(QStringLiteral("enable-animations")).toBool());
+    const auto accent = map.value(QStringLiteral("org.freedesktop.appearance")).value(QStringLiteral("accent-color")).value<AccentColor>();
+    EXPECT_DOUBLE_EQ(accent.green, 0x61 / 255.0);
+}
+
+TEST(PortalValues, ReadAllNamespaceFilter)
+{
+    const QString appearance = QStringLiteral("org.freedesktop.appearance");
+    EXPECT_TRUE(namespaceMatches({}, appearance));
+    EXPECT_TRUE(namespaceMatches({QString()}, appearance));
+    EXPECT_TRUE(namespaceMatches({appearance}, appearance));
+    EXPECT_TRUE(namespaceMatches({QStringLiteral("org.freedesktop.*")}, appearance));
+    EXPECT_FALSE(namespaceMatches({QStringLiteral("org.gnome.*")}, appearance));
+    EXPECT_FALSE(namespaceMatches({QStringLiteral("org.freedesktop.appearance.x")}, appearance));
+}
+
+TEST(SettingsBackend, AnswersFromTheFileAndSignalsOnlyWhatChanged)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/grassfield.json");
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "pink"}})");
+    SettingsBackend::Options options;
+    options.configFile = file;
+    options.clock = [] { return kNoon; };
+    SettingsBackend backend(options);
+
+    EXPECT_EQ(backend.ReadAll({}).size(), 2);
+    EXPECT_EQ(backend.ReadAll({QStringLiteral("org.gnome.*")}).keys(), QStringList{QStringLiteral("org.gnome.desktop.interface")});
+    EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
+              QStringLiteral("Grassfield-pink"));
+    // A key it does not own: no value (on the bus, the NotFound error that sends the frontend to the next backend).
+    EXPECT_FALSE(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("font-name")).variant().isValid());
+
+    QStringList changed;
+    QObject::connect(&backend, &SettingsBackend::SettingChanged, [&](const QString &ns, const QString &key, const QDBusVariant &) {
+        changed << ns + QLatin1Char(' ') + key;
+    });
+    // The accent changes: the accent colour and the GTK theme, nothing else.
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "orange"}})");
+    ASSERT_TRUE(spin([&] { return changed.size() >= 2; })) << changed.join(QLatin1Char(',')).toStdString();
+    spin([] { return false; }, 200);
+    changed.sort();
+    EXPECT_EQ(changed, (QStringList{QStringLiteral("org.freedesktop.appearance accent-color"),
+                                    QStringLiteral("org.gnome.desktop.interface gtk-theme")}));
+    // Reduce Motion: the two motion keys; after an atomic replace the file is still watched.
+    changed.clear();
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "orange"}, "accessibility": {"reduceMotion": true}})");
+    ASSERT_TRUE(spin([&] { return changed.size() >= 2; }));
+    changed.sort();
+    EXPECT_EQ(changed, (QStringList{QStringLiteral("org.freedesktop.appearance reduced-motion"),
+                                    QStringLiteral("org.gnome.desktop.interface enable-animations")}));
+    // Increase Contrast: the contrast key and the GTK theme, which becomes the accent's -hc variant.
+    changed.clear();
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "orange"},
+                              "accessibility": {"reduceMotion": true, "increaseContrast": true}})");
+    ASSERT_TRUE(spin([&] { return changed.size() >= 2; }));
+    spin([] { return false; }, 200);
+    changed.sort();
+    EXPECT_EQ(changed, (QStringList{QStringLiteral("org.freedesktop.appearance contrast"),
+                                    QStringLiteral("org.gnome.desktop.interface gtk-theme")}));
+    EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
+              QStringLiteral("Grassfield-orange-hc"));
+    // A file that is not JSON reads as the defaults (dark, multicolor): every key that differs from them changes.
+    changed.clear();
+    writeAtomically(file, "{not json");
+    ASSERT_TRUE(spin([&] { return changed.contains(QStringLiteral("org.freedesktop.appearance color-scheme")); }));
+    EXPECT_EQ(backend.Read(QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("gtk-theme")).variant().toString(),
+              QStringLiteral("Grassfield-multicolor-dark"));
+    // Written again with the same values: no signal.
+    changed.clear();
+    writeAtomically(file, "{}");
+    spin([] { return false; }, 300);
+    EXPECT_TRUE(changed.isEmpty()) << changed.join(QLatin1Char(',')).toStdString();
+}
+
+TEST(SettingsBackend, AutoFollowsTheClock)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/grassfield.json");
+    writeAtomically(file, R"({"appearance": "auto"})");
+    QTime now = kNoon;
+    SettingsBackend::Options options;
+    options.configFile = file;
+    options.recheckMs = 30;
+    options.clock = [&now] { return now; };
+    SettingsBackend backend(options);
+    EXPECT_EQ(backend.Read(QStringLiteral("org.freedesktop.appearance"), QStringLiteral("color-scheme")).variant().toUInt(), 2u);
+    QStringList changed;
+    QObject::connect(&backend, &SettingsBackend::SettingChanged, [&](const QString &ns, const QString &key, const QDBusVariant &) {
+        changed << ns + QLatin1Char(' ') + key;
+    });
+    now = kNight;
+    ASSERT_TRUE(spin([&] { return changed.contains(QStringLiteral("org.freedesktop.appearance color-scheme")); }));
+    EXPECT_EQ(backend.Read(QStringLiteral("org.freedesktop.appearance"), QStringLiteral("color-scheme")).variant().toUInt(), 1u);
+    EXPECT_TRUE(changed.contains(QStringLiteral("org.gnome.desktop.interface gtk-theme")));
+}
+
+TEST(SettingsBackend, NoFileMeansTheDefaults)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    SettingsBackend::Options options;
+    options.configFile = dir.path() + QStringLiteral("/missing/grassfield.json");
+    options.clock = [] { return kNoon; };
+    SettingsBackend backend(options);
+    EXPECT_EQ(backend.Read(QStringLiteral("org.freedesktop.appearance"), QStringLiteral("color-scheme")).variant().toUInt(), 1u);
+    EXPECT_FALSE(QFileInfo::exists(dir.path() + QStringLiteral("/missing"))); // never created
+}
+
+TEST(SettingsBackend, AnnouncesEveryValueOnce)
+{
+    ensureApp();
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/grassfield.json");
+    writeAtomically(file, R"({"appearance": "light", "accent": {"color": "red"}})");
+    SettingsBackend::Options options;
+    options.configFile = file;
+    options.clock = [] { return kNoon; };
+    SettingsBackend backend(options);
+    QMap<QString, QVariant> announced;
+    int count = 0;
+    QObject::connect(&backend, &SettingsBackend::SettingChanged, [&](const QString &ns, const QString &key, const QDBusVariant &value) {
+        ++count;
+        announced.insert(ns + QLatin1Char(' ') + key, value.variant());
+    });
+    backend.announceAll();
+    EXPECT_EQ(count, 7);
+    EXPECT_EQ(announced.size(), 7);
+    EXPECT_EQ(announced.value(QStringLiteral("org.gnome.desktop.interface gtk-theme")).toString(), QStringLiteral("Grassfield-red"));
+    EXPECT_EQ(announced.value(QStringLiteral("org.freedesktop.appearance color-scheme")).toUInt(), 2u);
+}
