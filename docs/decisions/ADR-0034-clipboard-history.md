@@ -110,8 +110,8 @@ Each question was asked in French with these options (the first one marked "Reco
       the copy is not recorded, never truncated; a formatted part over its cap or late is dropped and the plain text kept.
       Text must decode (UTF-8; Latin-1 for `STRING` and `TEXT` only) and not be blank;
    f. an image is decoded only to make its thumbnail, and never in the helper: a worker process (the same binary,
-      `--thumbnail <png|jpeg|webp> <max px>`, started per image with an empty environment, the image's bytes on stdin and
-      nothing of the history) reads it with `QImageReader` given that one format, `setAutoDetectImageFormat(false)` and
+      `--thumbnail <png|jpeg|webp> <max px>`, started per image with an environment holding only `LC_ALL=C`, the image's bytes
+      on stdin and nothing of the history) reads it with `QImageReader` given that one format, `setAutoDetectImageFormat(false)` and
       `setDecideFormatFromContent(false)`, so no other image plugin (PDF, SVG, TIFF, JPEG 2000…) can be reached; it checks the
       size before decoding (at most 8,192 px a side and 64 megapixels, allocation limit 256 MiB) and runs under
       `RLIMIT_AS` 1 GiB, `RLIMIT_CPU` 2 s, `RLIMIT_FSIZE` 0, `PR_SET_PDEATHSIG`, and a 2 s wall deadline after which it is
@@ -136,7 +136,8 @@ Each question was asked in French with these options (the first one marked "Reco
    state the compositor reports (`L 1` / `L 0`), an offer to decide (`O <n> <kind>`), item metadata (id, kind, MIME types,
    size, time, pinned, formatted, title: the first line cut to 200 characters with control characters removed, an excerpt of
    at most 400 characters for the text thumbnail, the thumbnail path, the source app), removals, "the clipboard now holds
-   item n", search results (ids), notices (pin limit), and its state (`ok`, `unsupported`, `paused`). The full text stays in
+   item n", search results (ids), notices (pin limit), and its state (`ok`, `unsupported`, `error <why>`; a pause is the
+   shell's own command and is not echoed). The full text stays in
    the helper: the search runs there (case- and accent-insensitive substring of the plain text and file names).
    The shell answers `Y` only while the history is on, the session is not locked by either source (6), no authorization
    dialog is shown and none closed in the last 2 s (Q11), and the active window is not a password manager
@@ -219,7 +220,9 @@ Each question was asked in French with these options (the first one marked "Reco
    first, then writes `search.clipboard.clearedAt`, the pattern of `search.historyResetAt` in PR #9) delete every unpinned
    item, memory and `history/`; Settings' confirmation also offers "Also delete pinned items" (writes
    `search.clipboard.pinnedClearedAt` as well), which empties `pinned/`: that is the "clear all". Turning the history off
-   (`search.clipboard.enabled`, off by default) stops the helper and deletes the unpinned items; pinned items stay in
+   (`search.clipboard.enabled`, off by default) stops the helper and deletes the unpinned items (a running helper deletes its
+   `history/` before it ends; otherwise the shell runs it once with `--clear-history`, also at each shell start while the
+   history is off; a helper started with the history store off deletes any `history/` left); pinned items stay in
    `pinned/`, unread and not shown, until the history is turned on again (or deleted from Settings: with the history off,
    the shell runs the helper once with `--clear-pinned`). The current clipboard is left as it is (both systems clear the
    history, not the clipboard).
