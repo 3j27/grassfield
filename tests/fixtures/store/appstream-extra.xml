@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<components version="1.0" origin="archlinux-arch-extra">
+  <component type="desktop-application">
+    <id>org.gimp.GIMP</id>
+    <pkgname>gimp</pkgname>
+    <name>GNU Image Manipulation Program</name>
+    <name xml:lang="fr">Programme de manipulation d'images GNU</name>
+    <name xml:lang="de">GNU-Bildbearbeitungsprogramm</name>
+    <summary>Create images and edit photographs</summary>
+    <summary xml:lang="fr">Créer des images et retoucher des photos</summary>
+    <description>
+      <p>GIMP is an <em>image</em> editor.&#x202E;</p>
+      <ul><li>Layers</li><li>Masks   and
+        filters</li></ul>
+    </description>
+    <description xml:lang="fr"><p>GIMP est un éditeur.</p></description>
+    <developer id="org.gimp"><name>The GIMP Team</name></developer>
+    <project_license>GPL-3.0-or-later</project_license>
+    <categories><category>Graphics</category><category>RasterGraphics</category></categories>
+    <keywords><keyword>photo</keyword><keyword xml:lang="fr">retouche</keyword></keywords>
+    <launchable type="desktop-id">gimp.desktop</launchable>
+    <icon type="cached" width="64" height="64">gimp_org.gimp.GIMP.png</icon>
+    <icon type="cached" width="128" height="128">gimp_org.gimp.GIMP.png</icon>
+    <icon type="cached" width="1024" height="1024">too-big.png</icon>
+    <icon type="remote">https://example.com/remote.png</icon>
+    <screenshots>
+      <screenshot><image type="source">https://example.com/second.png</image></screenshot>
+      <screenshot type="default"><image type="thumbnail" width="224">https://example.com/thumb.png</image><image type="source">https://example.com/first.png</image></screenshot>
+      <screenshot><image type="source">http://example.com/insecure.png</image></screenshot>
+    </screenshots>
+    <url type="homepage">https://www.gimp.org/</url>
+  </component>
+  <component type="desktop-application">
+    <id>com.valvesoftware.Steam.desktop</id>
+    <pkgname>steam</pkgname>
+    <name>Steam</name>
+    <summary>Launcher for the Steam software distribution service</summary>
+    <developer_name>Valve Corporation</developer_name>
+    <project_license>LicenseRef-proprietary</project_license>
+    <categories><category>Game</category></categories>
+    <url type="homepage">http://store.steampowered.com/</url>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Paint</id>
+    <pkgname>paint</pkgname>
+    <name>Paint</name>
+    <summary>Draw</summary>
+    <categories><category>2DGraphics</category></categories>
+    <keywords><keyword>drawing</keyword></keywords>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Gone</id>
+    <pkgname>not-in-any-repository</pkgname>
+    <name>Gone</name>
+  </component>
+  <component type="console-application">
+    <id>org.example.Cli</id>
+    <pkgname>cli-tool</pkgname>
+    <name>Cli</name>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.NoPackage</id>
+    <name>No package</name>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Cafe</id>
+    <pkgname>cafe</pkgname>
+    <name>Café Écrit</name>
+    <summary>Notes for coffee lovers</summary>
+  </component>
+</components>

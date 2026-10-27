@@ -67,8 +67,11 @@ Window {
             root.browser.customizeFolders([root.info.url], root.info.name, root.info.iconName);
     }
 
+    // Only while this window is the key window: Qt also matches a window's Shortcuts while its transient parent (the
+    // browser) has the keyboard, and Escape or Ctrl+W typed there closed Get Info or went astray.
     Shortcut {
         sequences: [StandardKey.Close, "Escape"]
+        enabled: root.app.focusWindow === root
         onActivated: root.close()
     }
 
