@@ -176,6 +176,7 @@
  {"path": "tests/unit/stack-helper/tst_helper.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_systembus.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_busjobs.cpp", "layer": "logic"},
+ {"path": "tests/unit/settings/tst_backend.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_wallpaperlogic.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_commonsfetch.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_videotool.cpp", "layer": "logic"},

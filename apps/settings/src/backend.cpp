@@ -193,13 +193,19 @@ bool Backend::wallpaperAllowed(const QStringList &argv) const
     return grassfield::settings::isWallpaperQuery(argv, {m_wallpaperTool, m_wallpaperCache, m_devRoot});
 }
 
-void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
+void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs, bool shared)
 {
     const bool helper = !argv.isEmpty() && grassfield::settings::namesWallpaperTool(argv.first());
     if (argv.isEmpty() || (helper ? !wallpaperAllowed(argv) : (m_dev && !grassfield::settings::isReadOnlyQuery(argv)))) {
         if (!argv.isEmpty())
             qWarning().noquote() << "dev guard: refused a command that is not a read-only query:" << argv.first();
         emit finished(tag, false, QString());
+        return;
+    }
+    // Only by opt-in: a caller that counts its requests needs one answer each (counter-review of PR #6: a thumbnail asked for
+    // again while in flight left WallpaperPage's count one too high, and after two such requests no thumbnail loaded).
+    if (!shared) {
+        start(argv, tag, timeoutMs, Track::None);
         return;
     }
     // A page shown again asks for what still runs (Storage's counts, up to two minutes each): it gets that answer.

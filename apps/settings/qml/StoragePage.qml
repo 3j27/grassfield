@@ -71,9 +71,10 @@ SettingsPage {
         return id === "used" ? Appearance.withAlpha(Appearance.colors.text, 2 * Tokens.settingsStorageFreeOpacity) : Tokens.colorAccentLight[root.tile(id)];
     }
 
+    // Shared: the page shown again while the counts run gets their answers instead of starting them again (Backend.query).
     Component.onCompleted: {
-        root.backend.query(General.duArgv(root.backend.homeDir), "storage.du", Tokens.settingsStorageCountMs);
-        root.backend.query(["pacman", "-Qi"], "storage.packages", Tokens.settingsStorageCountMs);
+        root.backend.query(General.duArgv(root.backend.homeDir), "storage.du", Tokens.settingsStorageCountMs, true);
+        root.backend.query(["pacman", "-Qi"], "storage.packages", Tokens.settingsStorageCountMs, true);
     }
 
     Connections {
