@@ -68,6 +68,9 @@ if [ -r /usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf ]; th
         *) export XDG_DATA_DIRS="/usr/share/grassfield/xdg:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
     esac
     export GTK_USE_PORTAL=1
+    # The shell's unit clears GTK_USE_PORTAL for the shell itself (gate P5); the shell gives it back to the apps it starts
+    # from this one (shell/services/Apps.qml launchEnvironment).
+    export GRASSFIELD_APPS_GTK_USE_PORTAL=1
     case ",${GDK_DEBUG:-}," in
         *,portals,*) ;;
         *) export GDK_DEBUG="${GDK_DEBUG:+$GDK_DEBUG,}portals" ;;

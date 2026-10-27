@@ -137,6 +137,8 @@ Singleton {
     // A real Grassfield session (uwsm, GRASSFIELD_SESSION=1, not a dev session) with uwsm's app launcher: every
     // application the shell starts gets a scope of its own (AppLaunch.scopedArgv), never the shell's unit.
     readonly property bool realSession: Mode.session && !devSession
+    // GTK_USE_PORTAL=1 for the apps the shell starts when the session routes GTK to the portal (launchEnvironment).
+    readonly property var portalEnvironment: AppLaunch.portalEnvironment(Quickshell.env("GRASSFIELD_APPS_GTK_USE_PORTAL"))
     property bool uwsmApp: false
     readonly property bool scopedLaunch: realSession && uwsmApp
 
@@ -537,11 +539,13 @@ Singleton {
         return launchEnvironment();
     }
 
-    // Environment added to every application the shell starts: the isolated homes in a dev session, and the pointer
-    // size the user chose when it differs from the session's (XCURSOR_SIZE and HYPRCURSOR_SIZE; applications read them
-    // when they start, so open ones keep their size). Never the owner's systemd or uwsm environment.
+    // Environment added to every application the shell starts: the isolated homes in a dev session, GTK_USE_PORTAL=1 when
+    // the session routes GTK to the portal (the shell's own unit clears it; ADR-0035 D-8), and the pointer size the user
+    // chose when it differs from the session's (XCURSOR_SIZE and HYPRCURSOR_SIZE; applications read them when they start,
+    // so open ones keep their size). Never the owner's systemd or uwsm environment.
     function launchEnvironment(): var {
-        return AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), Pointer.launchEnvironment());
+        const base = AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), portalEnvironment);
+        return AppLaunch.mergeEnvironment(base, Pointer.launchEnvironment());
     }
 
     // Open With (desktop menu): the shown apps that can open every one of `paths` (`resolved`: path -> real type, from
