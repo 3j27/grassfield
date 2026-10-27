@@ -140,8 +140,9 @@ DEST=(usr/lib/grassfield/grassfield-channel-helper usr/lib/grassfield/grassfield
 missing=""
 for d in "${DEST[@]}"; do grep -qF "\$pkgdir/$d" /src/packaging/arch/PKGBUILD || grep -qF "\$pkgdir/${d%/*}/" /src/packaging/arch/PKGBUILD || missing+=" $d"; done
 grep -q 'grassfield-channel-set; do' /src/packaging/arch/PKGBUILD || missing+=" usr/bin/grassfield-channel-set"
-grep -q 'wl-clipboard pacman-contrib fakeroot)' /src/packaging/arch/PKGBUILD || missing+=" depends"
-expect "the PKGBUILD installs every path used here and depends on pacman-contrib and fakeroot (grassfield-keyring held back, O21)${missing:+ (missing:$missing)}" test -z "$missing"
+deps=" $(sed -n '/^package_grassfield-desktop()/,/^}/s/^  depends=(\(.*\))$/\1/p' /src/packaging/arch/PKGBUILD) "
+for p in grassfield-keyring pacman-contrib fakeroot; do [[ $deps == *" $p "* ]] || missing+=" depends:$p"; done
+expect "the PKGBUILD installs every path used here and grassfield-desktop depends on grassfield-keyring, pacman-contrib and fakeroot${missing:+ (missing:$missing)}" test -z "$missing"
 
 say "packages (makepkg as builder) and repositories"
 B=/home/builder/build
