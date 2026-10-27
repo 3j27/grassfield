@@ -28,6 +28,10 @@
 #                  from before (TL10)
 #   locked         while the foreign locker fixture holds the session lock (tests/security/foreign_locker, released over
 #                  its IPC, nothing typed), tile and arrange move nothing and leave the records unchanged (TL34, D4)
+# Expected boxes come from the output's reserved area read right before each placement (the plugin reads it at placement,
+# TL1: the shell's menu bar and Dock may claim their zones after the run starts). A failed check prints the plugin's
+# [grassfield] WARN and ERR lines logged since the previous check. The plugin verbs are called directly (they return a
+# no-op dispatcher), never through a Lua function that returns nothing.
 # Usage (bare command, nested session of this tree running with the plugin loaded): tests/compositor/tiling.sh
 # Logs and captures: .dev/tiling/run-<timestamp>/.
 set -uo pipefail
@@ -50,10 +54,18 @@ say() { printf '%s %s\n' "$(date '+%H:%M:%S.%3N')" "$*" | tee -a "$log"; }
 nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; }
 pointer() { timeout 30 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
 fail=0
+hyprlog=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$DEV_NESTED_SIG/hyprland.log
+log_lines() { grep -ac "" "$hyprlog" 2>/dev/null || echo 0; }
+log_mark=$(log_lines)
+plugin_warnings() {
+  local l
+  tail -n +"$((log_mark + 1))" "$hyprlog" 2>/dev/null | grep -a '\[grassfield\]' | grep -aE 'WARN|ERR' | tail -n 5 | while IFS= read -r l; do say "  plugin: $l"; done
+}
 check() {
   local name=$1
   shift
-  if "$@"; then say "PASS: $name"; else say "FAIL: $name"; fail=1; fi
+  if "$@"; then say "PASS: $name"; else say "FAIL: $name"; plugin_warnings; fail=1; fi
+  log_mark=$(log_lines)
 }
 
 nestctl -j grassfield 2>/dev/null | jq -e '.features | index("window-tiling")' >/dev/null 2>&1 || { say "SKIP: the plugin does not advertise window-tiling (load this tree's plugin)"; exit 2; }
@@ -98,9 +110,27 @@ say "foot ${w0}x${h0} at $x0,$y0 ($addr)"
 
 # Free area and the expected boxes (core/Tiling.cpp: margin 8 around and between, titlebar above each surface), read
 # once the session settled: right after nested-up the menu bar may not reserve its strip yet.
-read -r ax ay aw ah < <(area_of "$out")
 m=8 tb=$GF_TB_HEIGHT
-halfw=$(((aw - 3 * m) / 2)) halfh=$(((ah - 3 * m) / 2))
+# The free area of GF-REF now and the boxes derived from it; called right before each placement.
+area_now() {
+  read -r ax ay aw ah < <(area_of "$out")
+  halfw=$(((aw - 3 * m) / 2)) halfh=$(((ah - 3 * m) / 2))
+  ry=$((ay + m + tb)) fullh=$((ah - 2 * m - tb))
+  rx=$((ax + 2 * m + halfw))
+  case ${side:-} in
+    right) tx=$rx ;;
+    left) tx=$((ax + m)) ;;
+  esac
+}
+# Wait until the reserved area has not changed for 1 s (at most 10 s): the shell's menu bar and Dock claim their zones.
+prev="" same=0
+for _ in $(seq 1 40); do
+  cur=$(area_of "$out")
+  if [[ $cur == "$prev" ]]; then same=$((same + 1)); else same=0; prev=$cur; fi
+  ((same >= 4)) && break
+  sleep 0.25
+done
+area_now
 say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 
 # drag WHERE_X WHERE_Y [hold-capture-name] (layout coordinates): press on the titlebar's middle, glide to the point,
@@ -128,14 +158,13 @@ is_box() { # x y w h (surface), 1 px slack
 }
 size_is() { local _x _y w h _a; read -r _x _y w h _a < <(geometry); say "  foot ${w}x${h} (want ${1}x${2})"; (( w == $1 && h == $2 )); }
 
-ry=$((ay + m + tb)) fullh=$((ah - 2 * m - tb))
 left_n=$(neighbour_on left) right_n=$(neighbour_on right)
 say "layout: left edge ${left_n:-free}, right edge ${right_n:-free}"
 # The edge the tiling cases use (free), and the one the shared-edge case uses (another output there).
 if [[ -z $right_n ]]; then
-  side=right edge_x=$((mx + mw - 1)) tx=$((ax + 2 * m + halfw))
+  side=right edge_x=$((mx + mw - 1))
 elif [[ -z $left_n ]]; then
-  side=left edge_x=$mx tx=$((ax + m))
+  side=left edge_x=$mx
 else
   say "SKIP: both edges of $out are shared ($left_n, $right_n): no free edge to tile at"
   exit 2
@@ -171,6 +200,7 @@ if [[ -n $pattern_addr ]]; then
   sleep 1
   "$root/scripts/dev/shot.sh" tiling-pattern-baseline "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-pattern-baseline.png" "$run/" 2>/dev/null
 fi
+area_now
 drag "$edge_x" $((my + mh / 2)) "tiling-preview-$side"
 if [[ -n $pattern_addr ]]; then
   d0=$(detail "$run/tiling-pattern-baseline.png")
@@ -185,6 +215,7 @@ sleep 0.5
 check "free-edge: released at the free $side edge, the window fills the $side half" is_box "$tx" "$ry" "$halfw" "$fullh"
 drag $((mx + mw / 2)) $((my + mh / 2))
 check "drag-out: dragged away from the tile, the window gets ${w0}x${h0} back" size_is "$w0" "$h0"
+area_now
 drag "$edge_x" $((my + 40))
 check "top-corner: released at the top of the $side edge, the top-$side quarter" is_box "$tx" "$ry" "$halfw" $((halfh - tb))
 drag $((mx + mw / 2)) $((my + mh / 2))
@@ -197,15 +228,17 @@ if [[ -n $shared_side ]]; then
 else
   say "SKIP: shared-edge (no output touches $out)"
 fi
+area_now
 drag $((mx + mw / 2)) $((my + 2)) tiling-preview-fill
 check "menu-bar: released on the menu bar, the free area is filled" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
 drag $((mx + mw / 2)) $((my + mh / 2))
 check "drag-out after fill: ${w0}x${h0} again" size_is "$w0" "$h0"
 
-nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"left\") end)()" >>"$log" 2>&1
+area_now
+nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"left\")" >>"$log" 2>&1
 sleep 0.8
 check "ipc: tile(address, \"left\") places the left half" is_box $((ax + m)) "$ry" "$halfw" "$fullh"
-nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"previous\") end)()" >>"$log" 2>&1
+nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
 sleep 0.8
 check "ipc: tile(address, \"previous\") gives ${w0}x${h0} back" size_is "$w0" "$h0"
 
@@ -234,10 +267,18 @@ if [[ -n $neighbour ]] && (( x + w / 2 < nbx || x + w / 2 >= nbx + nbw )); then
   nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
   sleep 0.8
 elif [[ -n $neighbour ]]; then
-  nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"left\") end)()" >>"$log" 2>&1
+  on_neighbour() {
+    local mon want
+    mon=$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .monitor')
+    want=$(nestctl monitors -j | jq -r --arg o "$neighbour" '.[] | select(.name == $o) | .id')
+    say "  monitor of the window: ${mon:-?} (want $neighbour, id ${want:-?})"
+    [[ -n $mon && $mon == "$want" ]]
+  }
+  check "other-output: the window dropped on $neighbour belongs to its Desktop (as after Hyprland's own move)" on_neighbour
+  nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"left\")" >>"$log" 2>&1
   sleep 0.8
   check "other-output: tile(address, \"left\") after a drag onto $neighbour places its left half there" is_box $((nx + m)) $((ny + m + tb)) $(((nw - 3 * m) / 2)) $((nh - 2 * m - tb))
-  nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"previous\") end)()" >>"$log" 2>&1
+  nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
   sleep 0.8
   nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
   sleep 0.8
@@ -245,10 +286,10 @@ else
   say "SKIP: other-output (no neighbouring output)"
 fi
 
-nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingEdges\", \"false\") end)()" >>"$log" 2>&1
+nestctl dispatch "hl.plugin.grassfield.config(\"tilingEdges\", \"false\")" >>"$log" 2>&1
 drag "$edge_x" $((my + mh / 2))
 check "options: with tilingEdges false the $side edge does not tile" size_is "$w0" "$h0"
-nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingEdges\", \"true\") end)()" >>"$log" 2>&1
+nestctl dispatch "hl.plugin.grassfield.config(\"tilingEdges\", \"true\")" >>"$log" 2>&1
 
 if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange")' >/dev/null 2>&1; then
   tiling_state() { nestctl grassfield-tiling 2>>"$log"; }
@@ -284,11 +325,10 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
       say "  record of $1: $got (want $2)"
       [[ $got == "$2" ]]
     }
-    arrange() { nestctl dispatch "(function() hl.plugin.grassfield.arrange('$1') end)()" >>"$log" 2>&1; sleep 0.8; }
-    tile_ipc() { nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$1\", \"$2\") end)()" >>"$log" 2>&1; sleep 0.8; }
+    arrange() { nestctl dispatch "hl.plugin.grassfield.arrange('$1')" >>"$log" 2>&1; sleep 0.8; }
+    tile_ipc() { nestctl dispatch "hl.plugin.grassfield.tile(\"$1\", \"$2\")" >>"$log" 2>&1; sleep 0.8; }
     to_ws() { nestctl dispatch "hl.dsp.window.move({ workspace = \"$2\", follow = false, window = \"address:$1\" })" >>"$log" 2>&1; sleep 0.8; }
-    rx=$((ax + 2 * m + halfw))
-
+    area_now
     arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr\"]}"
     check "arrange: left-right from the first window, which takes the left half" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
     check "arrange: the next window in stacking order fills the right half" box_of tiling-foot2 "$rx" "$ry" "$halfw" "$fullh"
@@ -304,10 +344,11 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     check "invalid: an unknown layout changes nothing (generation $gen0 -> $gen1)" test "$gen0" = "$gen1"
     check "invalid: the window keeps its tile" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
 
-    nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingMargins\", \"false\") end)()" >>"$log" 2>&1
+    area_now
+    nestctl dispatch "hl.plugin.grassfield.config(\"tilingMargins\", \"false\")" >>"$log" 2>&1
     sleep 0.8
     check "margins off: the arrangement is placed again without margins" box_of tiling-foot "$ax" $((ay + tb)) $((aw / 2)) $((ah - tb))
-    nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingMargins\", \"true\") end)()" >>"$log" 2>&1
+    nestctl dispatch "hl.plugin.grassfield.config(\"tilingMargins\", \"true\")" >>"$log" 2>&1
     sleep 0.8
     check "margins on: placed again with margins" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
 

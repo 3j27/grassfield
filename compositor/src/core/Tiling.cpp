@@ -62,6 +62,16 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
+    std::optional<size_t> outputUnder(const Rect& box, std::span<const Rect> outputs) {
+        const double mx = box.x + box.w / 2, my = box.y + box.h / 2;
+        for (size_t i = 0; i < outputs.size(); ++i) {
+            const Rect& o = outputs[i];
+            if (mx >= o.x && mx < o.x + o.w && my >= o.y && my < o.y + o.h)
+                return i;
+        }
+        return std::nullopt;
+    }
+
     int gridStep(double scale) {
         if (!std::isfinite(scale) || scale <= 0)
             return 1;

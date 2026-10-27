@@ -75,6 +75,11 @@ namespace gf::tiling {
     // The place a drag would tile into with the pointer at (x, y), or none.
     std::optional<Place> placeForPointer(double x, double y, const Output& output, const DragOptions& options);
 
+    // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
+    // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
+    // Desktop). `outputs`: the outputs' logical boxes.
+    std::optional<size_t> outputUnder(const Rect& box, std::span<const Rect> outputs);
+
     // ---- geometry (TL1-TL8) ----
 
     // A zone of the work area on a 12 x 12 grid: halves, thirds and quarters are exact twelfths.

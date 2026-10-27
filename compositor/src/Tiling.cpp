@@ -708,16 +708,39 @@ namespace gf::tiler {
         const auto m = monitor && monitor->m_enabled ? monitor : monitorOf(w);
         if (!m)
             return false;
-        const auto    target    = w->layoutTarget();
-        const CBox    current   = target->position();
-        const int64_t workspace = w->m_workspace->m_id;
-        const auto    band      = gf::chrome::bandOf(w);
-        const CBox    surface   = toCBox(tiling::surfaceOf(placeFrame(w, place, areaFor(m), m->m_name, workspace), band));
+        const auto target  = w->layoutTarget();
+        const CBox current = target->position();
+        const auto band    = gf::chrome::bandOf(w);
+        const CBox surface = toCBox(tiling::surfaceOf(placeFrame(w, place, areaFor(m), m->m_name, w->m_workspace->m_id), band));
         g_layoutManager->setTargetGeom(surface, target);
+        followOutput(w); // tiled on another output (a drag's release there, tile() after a drag over): that output's Desktop
+        const int64_t workspace = w->m_workspace ? w->m_workspace->m_id : 0;
         s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = place, .layout = {}, .zone = -1}, m->m_name, workspace, 0);
         logRequest(Log::DEBUG, "tile {:x}: {} on {}", idOf(w), tiling::nameOf(place), m->m_name);
         notify(tiling::Reason::Placed);
         return true;
+    }
+
+    void followOutput(const PHLWINDOW& w) {
+        const auto target = w ? w->layoutTarget() : nullptr;
+        if (!target || !target->floating() || !g_layoutManager)
+            return;
+        const CBox                box = target->position();
+        const auto                all = monitors();
+        std::vector<tiling::Rect> boxes;
+        boxes.reserve(all.size());
+        for (const auto& m : all)
+            boxes.push_back(toRect(m->logicalBox()));
+        const auto i = tiling::outputUnder(toRect(box), boxes);
+        if (!i)
+            return; // off every output: it keeps its Desktop
+        const auto& m  = all[*i];
+        const auto  ws = m->m_activeSpecialWorkspace ? m->m_activeSpecialWorkspace : m->m_activeWorkspace;
+        if (!ws || !ws->m_space || ws->m_space == target->space())
+            return;
+        target->assignToSpace(ws->m_space);
+        g_layoutManager->setTargetGeom(box, target);
+        logRequest(Log::DEBUG, "window {:x} moved by the plugin onto {}: now on its Desktop {}", idOf(w), m->m_name, ws->m_name);
     }
 
     bool isTiled(const PHLWINDOW& w) {
@@ -817,6 +840,10 @@ namespace gf::tiler {
             }
             windows.push_back(w);
         }
+        // A window belongs to the Desktop of the output it is on (macOS), whatever moved it there: the plugin's titlebar
+        // drag before this fix, or a move Hyprland's own action makes without changing its Desktop (Actions::move).
+        for (const auto& w : windows)
+            followOutput(w);
         const auto first     = windows.front();
         const auto workspace = first->m_workspace;
         const auto m         = request->output.empty() ? monitorOf(first) : monitorByName(request->output);

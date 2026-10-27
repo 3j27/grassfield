@@ -206,7 +206,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   when margins are on); with Alt, the opposite side too; on a corner with Alt, the window fills the work area. The window
   is then tiled (it has a box from before).
 - **TL21** Unchanged rules: an output edge shared with another output never tiles (the drag moves the window over); the
-  corner band is `tiling.cornerBand` (96) along a free side edge; the edge distance is `tiling.edge` (4).
+  corner band is `tiling.cornerBand` (96) along a free side edge; the edge distance is `tiling.edge` (4). Since step 1 a
+  window the plugin moves onto another output (its titlebar drag, a tile there) belongs to the Desktop that output shows,
+  as after Hyprland's own move; `arrange` first gives each window it names the Desktop of the output it is on (ADR-0036
+  D9).
 
 ### Popover and Window menu (step 3, waits for the merge of PRs #8-#10)
 - **TL22** Hover: the pointer resting on the zoom light for `tiling.hoverDelay` (about a second on macOS; measured in

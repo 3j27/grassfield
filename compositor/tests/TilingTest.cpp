@@ -154,6 +154,16 @@ namespace {
     }
 }
 
+TEST(TilingOutputs, AMovedWindowBelongsToTheOutputUnderItsMiddle) {
+    // WAYLAND-1 (1440 wide) left of GF-REF (1920 wide), as in the nested session.
+    const std::array<Rect, 2> outputs{Rect{0, 0, 1440, 900}, Rect{1440, 0, 1920, 1080}};
+    EXPECT_EQ(outputUnder(Rect{1300, 100, 800, 500}, outputs), 1U) << "its middle (1700) is on GF-REF, its top-left is not";
+    EXPECT_EQ(outputUnder(Rect{900, 100, 800, 500}, outputs), 0U) << "its middle (1300) is on WAYLAND-1";
+    EXPECT_EQ(outputUnder(Rect{1040, 100, 800, 500}, outputs), 1U) << "a middle on the shared edge belongs to the right-hand output";
+    EXPECT_FALSE(outputUnder(Rect{300, 900, 800, 400}, outputs).has_value()) << "its middle is below WAYLAND-1: it keeps its Desktop";
+    EXPECT_FALSE(outputUnder(Rect{0, 0, 10, 10}, std::span<const Rect>{}).has_value());
+}
+
 TEST(TilingGrid, TheStepIsWholeInLogicalAndDevicePixels) {
     EXPECT_EQ(gridStep(1.0), 1);
     EXPECT_EQ(gridStep(2.0), 1);

@@ -54,6 +54,13 @@ namespace gf::tiler {
     // Whether `w` is in its tile (its record is Tiled and its box is the one the plugin gave it).
     bool isTiled(const PHLWINDOW& w);
 
+    // The plugin moved the floating window `w` (its titlebar drag, a tile): it now belongs to the Desktop shown on the
+    // output under its middle, as after Hyprland's own move (CDragStateController::mouseMove assigns the target to that
+    // output's active special or regular workspace). Hyprland never sees the plugin's drag (R13): without this a window
+    // dragged to another output kept the old output's Desktop and monitor. Its box is kept exactly (assigning a target to
+    // another space lets the floating algorithm fit it in the new work area, DefaultFloatingAlgorithm::movedTarget).
+    void followOutput(const PHLWINDOW& w);
+
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.
     std::optional<CBox> beginMove(const PHLWINDOW& w);

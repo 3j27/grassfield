@@ -929,6 +929,8 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
                 gf::logRequest(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
                 damageSnap(input.grab.snap);
                 gf::tiler::endMove(input.grab.window.lock()); // a tiled window dragged away is Free
+                if (input.grab.moved)
+                    gf::tiler::followOutput(input.grab.window.lock());
                 input.grab = {};
             }
             return;
@@ -957,6 +959,9 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
                 gf::tiler::tile(w, grab.snap->place, grab.snap->monitor.lock());
         }
         gf::tiler::endMove(grab.window.lock()); // no-op unless the window is still Moving
+        // Dropped on another output: the window takes that output's Desktop, as after Hyprland's own move (R13).
+        if (grab.dragging && grab.moved)
+            gf::tiler::followOutput(grab.window.lock());
         // Released on the Stages strip (macOS: a window dragged onto the strip becomes a stage of its own): the plugin does
         // what the shell's op move "new" does; the shell cannot see a titlebar drag (stages.md, Shell side work item 1).
         if (grab.dragging && grab.moved && g_pInputManager) {
@@ -991,6 +996,8 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
             gf::logRequest(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
             damageSnap(input.grab.snap);
             gf::tiler::endMove(input.grab.window.lock());
+            if (input.grab.moved)
+                gf::tiler::followOutput(input.grab.window.lock());
             input.grab = {};
             return;
         }
