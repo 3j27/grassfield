@@ -97,9 +97,9 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   distinct windows, at most the layout's zone count; `zone` 0-based with exactly one window and `fill` false or absent; ids of the
   token catalogue `tiling.layout*`), windows[i] takes zone i and, with `fill` (default true), the next tileable windows in
   stacking order on that output and Desktop (and active stage) fill the rest; the windows placed form a tile group.
-  Event `tiling`, a change notice `{"v":"gfc/1","type":"tiling","gen":N}` plus `reason` (at most 70 bytes); the state is
-  the reply of `hyprctl grassfield-tiling` (per output: work area, class, grid step, tiled windows with state, place or
-  layout and zone, group, box). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
+  Event `tiling`, a change notice `{"v":"gfc/1","type":"tiling","gen":N}` plus `reason` (at most 79 bytes: a 20-digit
+  `gen` and `unavailable`); the state is the reply of `hyprctl grassfield-tiling` (per output: work area, class, grid
+  step, tiled windows with state, place or layout and zone, group, box). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
   and the tiling listeners registered. `config("titlebarDoubleClick", "fill")` joins the allowlist (the shell sends it in
   step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing; `tile` and `arrange` are
   refused while the session is locked (`reason:"locked"`, TL34).

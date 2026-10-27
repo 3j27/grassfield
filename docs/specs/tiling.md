@@ -118,7 +118,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   area beside it, not an exact half (M44).
 - **TL8** Size limits (M46-M48, W27): a window whose minimum is larger than its zone gets its minimum, aligned to the
   zone's edge on the work area's border so it stays on the output; in an arrangement the neighbours shrink to make room
-  when their minimum allows, else the frames overlap. A maximum smaller than the zone: the window takes its maximum,
+  when their minimum allows, else the frames overlap; the other zones on the window's side of that edge follow it when
+  every zone facing them made room (Left & Quarters: the other quarter meets the narrower half, no hole). A maximum smaller than the zone: the window takes its maximum,
   centred in the zone. X11 resize increments round the size down. The minimum used is, for an xdg window, the larger of
   its protocol minimum and a `min_size` window rule (a rule replaces the client's minimum in `CWindow::minSize()`,
   Window.cpp:2885-2889, while Hyprland's commit clamp still applies the protocol minimum, Window.cpp:2741-2747); for an
