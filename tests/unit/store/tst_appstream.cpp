@@ -226,3 +226,40 @@ TEST(AppStream, RealPackage)
     EXPECT_FALSE(everything.join(u'\n').contains(QStringLiteral("escaped")));
     EXPECT_FALSE(everything.join(u'\n').contains(QStringLiteral(".PKGINFO")));
 }
+
+// The product page's facts (spec SR10, SR11): only the component's own children count, so an <id> of <provides>,
+// <suggests> or <extends>, or the <name> and <description> of an <agreement> or a <release>, never replaces its own.
+TEST(AppStream, ProductPageFacts)
+{
+    const QList<AppStreamComponent> list = parseAppStream(storetest::readFixture(QStringLiteral("appstream-product.xml")));
+    ASSERT_EQ(list.size(), 2);
+    const AppStreamComponent &c = list.at(0);
+    EXPECT_EQ(c.id, QStringLiteral("org.example.Sketch"));
+    EXPECT_EQ(c.name.en, QStringLiteral("Sketch Pad"));
+    EXPECT_EQ(c.description.en, QStringLiteral("The app's own text."));
+    EXPECT_EQ(c.homepage, QStringLiteral("https://sketch.example.org/"));
+    EXPECT_EQ(c.bugtracker, QStringLiteral("https://sketch.example.org/issues"));
+    // The default screenshot first, each with its English caption ("" for none).
+    EXPECT_EQ(c.screenshots, (QStringList{QStringLiteral("https://sketch.example.org/1.png"), QStringLiteral("https://sketch.example.org/2.png"),
+                                          QStringLiteral("https://sketch.example.org/3.png")}));
+    EXPECT_EQ(c.screenshotCaptions, (QStringList{QStringLiteral("The first one"), QStringLiteral("The second one"), QString()}));
+    // Three releases at most, newest first as listed; the day from `date`, else `timestamp`, else none.
+    ASSERT_EQ(c.releases.size(), 3);
+    EXPECT_EQ(c.releases.at(0).version, QStringLiteral("2.1"));
+    EXPECT_EQ(c.releases.at(0).date, QStringLiteral("2026-09-30"));
+    EXPECT_EQ(c.releases.at(0).description.en, QStringLiteral("Faster brushes.\n• New eraser"));
+    EXPECT_EQ(c.releases.at(0).description.fr, QStringLiteral("Pinceaux plus rapides."));
+    EXPECT_EQ(c.releases.at(1).date, QStringLiteral("2026-01-01"));
+    EXPECT_EQ(c.releases.at(2).version, QStringLiteral("1.9"));
+    EXPECT_TRUE(c.releases.at(2).date.isEmpty());
+    // OARS: the strongest level of each group; none and unknown groups are left out.
+    EXPECT_TRUE(c.rated);
+    EXPECT_EQ(c.rating, (QMap<QString, int>{{QStringLiteral("violence"), 2}, {QStringLiteral("social"), 3}}));
+    // Languages translated at least by half, or without a percentage; a code that is not one is dropped.
+    EXPECT_EQ(c.languages, (QStringList{QStringLiteral("fr"), QStringLiteral("de_DE"), QStringLiteral("pt_BR")}));
+    // An empty <content_rating> is a rating with nothing in it; no element at all is no rating.
+    EXPECT_TRUE(list.at(1).rated);
+    EXPECT_TRUE(list.at(1).rating.isEmpty());
+    const QList<AppStreamComponent> extra = parseAppStream(storetest::readFixture(QStringLiteral("appstream-extra.xml")));
+    EXPECT_FALSE(find(extra, QStringLiteral("org.gimp.GIMP"))->rated);
+}

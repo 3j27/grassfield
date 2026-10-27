@@ -9,10 +9,18 @@
 
 #include <QByteArray>
 #include <QList>
+#include <QMap>
 #include <QString>
 #include <QStringList>
 
 namespace grassfield::store {
+
+// One <release> of a component, newest first as AppStream lists them (What's New, spec SR10).
+struct AppStreamRelease {
+    QString version;
+    QString date; // yyyy-MM-dd, from `date` or `timestamp`; "" when neither parses
+    LocalizedText description;
+};
 
 struct AppStreamComponent {
     QString id;      // as AppStream spells it (some end in .desktop)
@@ -26,7 +34,15 @@ struct AppStreamComponent {
     QString desktopId;    // the launchable of type desktop-id
     QString cachedIcon;   // the largest cached icon: "<width>x<height>/<file>"
     QStringList screenshots; // https URLs of the source images, default first
+    QStringList screenshotCaptions; // the same length: each one's caption in English, "" when it has none
     QString homepage;     // https only
+    QString bugtracker;   // https only
+    QList<AppStreamRelease> releases; // at most 3
+    QStringList languages; // the <lang> codes of <languages> (at least half translated when a percentage is given)
+    // <content_rating type="oars-1.0|oars-1.1">: whether there is one, and the strongest intensity of each OARS group
+    // (violence, drugs, sex, language, social, money) as 1 mild, 2 moderate, 3 intense; a group at none is left out.
+    bool rated = false;
+    QMap<QString, int> rating;
 };
 
 // gzip (RFC 1952) to bytes; empty when it is not gzip, is damaged, or would pass maxBytes.

@@ -176,7 +176,7 @@ for variant in "" --asan; do
       if grep -q 'SKIPPED' /tmp/tests.log; then
         echo "FAIL: a test was skipped although the real gpgv is here"; fail=1
       else
-        echo "PASS: unit tests${variant:+ ($variant)}, RealGpgv, RealPacmanKeyring, RealPackage and RealHttpsServer included"
+        echo "PASS: unit tests${variant:+ ($variant)}, RealGpgv, RealPacmanKeyring, RealPackage, RealHttpsServer and RealSignedCatalog included"
       fi
     else
       tail -30 /tmp/tests.log; echo "FAIL: unit tests${variant:+ ($variant)}"; fail=1

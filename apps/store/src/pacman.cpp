@@ -3,6 +3,7 @@
 #include "catalog.h"
 #include "childprocess.h"
 
+#include <QDateTime>
 #include <QRegularExpression>
 
 #include <cmath>
@@ -56,6 +57,12 @@ qint64 parseSize(const QString &text)
     return qint64(std::llround(m.captured(1).toDouble() * std::pow(1024.0, power)));
 }
 
+QDate parseBuildDate(const QString &text)
+{
+    // LC_ALL=C's %c: "Thu Oct 15 08:27:03 2026", the day padded with a space below 10. The day is all the Store shows.
+    return QDateTime::fromString(text.simplified(), QStringLiteral("ddd MMM d HH:mm:ss yyyy")).date();
+}
+
 std::optional<PackageInfo> parsePackageInfo(const QByteArray &pacmanSi)
 {
     // "Key            : value" lines; a value that goes on is indented under it. The first record only.
@@ -92,6 +99,8 @@ std::optional<PackageInfo> parsePackageInfo(const QByteArray &pacmanSi)
             info.downloadSize = parseSize(value);
         else if (key == QLatin1String("Installed Size"))
             info.installedSize = parseSize(value);
+        else if (key == QLatin1String("Build Date"))
+            info.buildDate = parseBuildDate(value);
     }
     if (!isPackageName(info.name))
         return std::nullopt;

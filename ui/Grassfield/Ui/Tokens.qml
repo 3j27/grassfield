@@ -569,6 +569,8 @@ QtObject {
     readonly property int controlToggleKnobWidth: 21
     // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobHeight: 12
+    // estimate: a disabled switch keeps its track (visible when off, on white too) and fades its knob, and its accent when on (macOS 27) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property real controlToggleDisabledKnobOpacity: 0.5
     // pill knob 20 wide (macOS 27 Settings > Sound, Alert volume; F1 gap 18 read about 21x16 +-2) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
     readonly property int controlSliderKnobWidth: 20
     // F1 gap 18: Quick Settings slider track stays 4 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -2879,6 +2881,293 @@ QtObject {
     readonly property real titlebarPreviewRimOpacity: 0.22
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property int titlebarPreviewRimWidth: 2
+
+    // window 1180 pt wide (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeWindowWidth: 1180
+    // window 724 pt tall (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeWindowHeight: 724
+    // estimate: the sidebar and one column of cards [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeWindowMinWidth: 760
+    // estimate: the sidebar's items and the account row [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeWindowMinHeight: 520
+    // sidebar 220 pt, flush with the window (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarWidth: 220
+    // the selection pill and the search field 10 pt from both sidebar edges (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarInset: 10
+    // the search field's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property real storeSidebarSearchTop: 59.5
+    // the search field 29 pt tall (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarSearchHeight: 29
+    // the first row's top (Discover) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarListTop: 106
+    // rows 38 pt apart, the selected one a 38-pt pill (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarRowHeight: 38
+    // the pill's corner (circle fit on its top-left corner) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarRowRadius: 9
+    // the pill #D7D7D6 on the sidebar's #EDEDEC: the text colour at 10 % (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property real storeSidebarSelectionOpacity: 0.1
+    // estimate: the reference's glyph ink is 17 to 20 pt (Discover's 17.5); ours fills about 4/5 of its box (the sparkle's ink 17.4 at 22) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSidebarIconSize: 22
+    // the glyphs' centre from the window's left edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property real storeSidebarIconCentre: 29.5
+    // the labels' ink from the window's left edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarLabelX: 49
+    // label cap height 10 (Inter's cap 0.727) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeSidebarLabelSize: Math.round(14 * Appearance.textScale)
+    // the account circle 36 pt across (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeAccountCircle: 36
+    // the circle 18 pt from the window's left edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeAccountInset: 18
+    // the circle 18 pt above the window's bottom edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeAccountBottom: 18
+    // estimate: the account row's hover and focus area around the 36-pt circle [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeAccountRowHeight: 44
+    // the name 8 pt after the circle (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeAccountNameGap: 8
+    // estimate: the initials in the circle [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeAccountInitialsSize: Math.round(14 * Appearance.textScale)
+    // A2: the capture's grey (about #9EA4AE) darkened until white initials hold 4.5:1 (computed 4.8:1) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property string storeAccountCircleFill: "#6E7480"
+    // white initials on the account circle (4.8:1 on accountCircleFill, computed) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property string storeAccountInitials: "#FFFFFF"
+    // the page's content 40 pt from the sidebar edge and from the window's right edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeContentMargin: 40
+    // the content's width at the reference window: two cards per row from there (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeContentReferenceWidth: 880
+    // Discover's cap height 25.5 (SF 0.705; Inter's 0.727 gives 35) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storePageTitleSize: Math.round(35 * Appearance.textScale)
+    // the title's cap top at 67, its baseline at 92.5 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property real storePageTitleBaseline: 92.5
+    // the title's ink 44 pt from the sidebar edge, 4 pt inside the content: Inter's D sits 2 pt closer to its origin than the reference face (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storePageTitleInset: 2
+    // the hero's top: the first block under a page's title (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTop: 108
+    // the hero card 340 pt tall (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroHeight: 340
+    // the hero's corner (circle fit on its top-left corner) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroRadius: 12
+    // 20 pt between hero cards: the next one peeks 20 pt in the right margin (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroGap: 20
+    // the hero's texts 27.5 pt in from its left edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTextInset: 28
+    // the hero's text column, where its lines wrap and elide (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTextWidth: 300
+    // the eyebrow's cap height 9.5 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroEyebrowSize: Math.round(13 * Appearance.textScale)
+    // the eyebrow's cap top 50 pt under the hero's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property real storeHeroEyebrowBaseline: 59.5
+    // the title's cap height 18 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTitleSize: Math.round(25 * Appearance.textScale)
+    // the title's first cap top 80 pt under the hero's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTitleBaseline: 98
+    // the title's lines 30 pt apart (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTitleLineHeight: Math.round(30 * Appearance.textScale)
+    // estimate: the hero title's medium weight [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeHeroTitleWeight: 500
+    // the text's baseline 35 pt under the title's last (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroTextGap: Math.round(35 * Appearance.textScale)
+    // the text's cap height 10 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeHeroBodySize: Math.round(14 * Appearance.textScale)
+    // white text on the hero's tint, which StoreView::heroTint darkens until it holds 6:1 (A2 for the secondary lines too) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property string storeHeroText: "#FFFFFF"
+    // the eyebrow and the text a step under the title (white at 80 % holds 4.5:1 on a tint that holds 6:1 with white, computed) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeHeroSecondaryOpacity: 0.8
+    // own value: the hero's tint for an app whose icon gives no colour, a dark Grassfield green (white on it 10:1, computed) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property string storeHeroFallbackTint: "#2F4A39"
+    // estimate: the tint stays even under the text, the left 40 % [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeHeroGradientStart: 0.4
+    // estimate: the tint lighter towards the icon (Qt.lighter factor) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeHeroGradientLift: 1.35
+    // estimate: the icon's centre at 70 % of the card's width, in place of the artwork [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeHeroIconCentre: 0.7
+    // estimate: the app's icon on the hero [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeHeroIconSize: 200
+    // estimate: the eyebrows' semibold capitals [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeEyebrowWeight: 600
+    // 36 pt between the hero and the cards (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeBlockGap: 36
+    // cards 430 x 230 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardHeight: 230
+    // cards 20 pt apart (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardGap: 20
+    // the card's corner (circle fit on its top-left corner) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardRadius: 14
+    // the card's texts 33 pt in from its left edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardTextInset: 33
+    // the text column ends 15 pt before the artwork (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardTextGap: 15
+    // the eyebrow's cap height 8 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardEyebrowSize: Math.round(11 * Appearance.textScale)
+    // the eyebrow's cap top 28 pt under the card's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardEyebrowBaseline: 36
+    // the title's cap height 18 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardTitleSize: Math.round(25 * Appearance.textScale)
+    // the title's first cap top 45.5 pt under the card's top (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property real storeCardTitleBaseline: 63.5
+    // the title's lines 28 pt apart (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardTitleLineHeight: Math.round(28 * Appearance.textScale)
+    // the card title in the regular weight (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardTitleWeight: 400
+    // the grey line's baseline 29 pt under the title's last (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardTextGapBelowTitle: Math.round(29 * Appearance.textScale)
+    // the grey line's cap height 9.5 (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardBodySize: Math.round(13 * Appearance.textScale)
+    // the round artwork 170 pt across, its right edge 15 pt from the card's (505 to 675) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardArtwork: 170
+    // the artwork 15 pt from the card's right edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
+    readonly property int storeCardArtworkInset: 15
+    // estimate: the artwork's disc: the app's tint at this opacity over the window colour [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeCardArtworkWash: 0.22
+    // estimate: the app's icon in the artwork's disc [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCardIconSize: 104
+    // estimate: a carousel's round arrow [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCarouselArrowSize: 32
+    // estimate: the arrows 12 pt in from the carousel's edges [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCarouselArrowInset: 12
+    // estimate: the arrow's disc over the cards [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeCarouselArrowFillOpacity: 0.85
+    // estimate: a carousel's turn (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCarouselMoveMs: 250
+    // estimate: an app's icon in a row or a list [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupIconSize: 64
+    // estimate: a row item's space above and below [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupPadding: 12
+    // estimate: between a row item's icon, texts and button [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupGap: 12
+    // estimate: between a row item's lines [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupLineGap: 2
+    // estimate: a row item's name [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupNameSize: Math.round(14 * Appearance.textScale)
+    // estimate: a row item's name, semibold [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupNameWeight: 600
+    // estimate: a row item's summary [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupSummarySize: Math.round(13 * Appearance.textScale)
+    // estimate: a column of row items: three at the reference width [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupMinWidth: 280
+    // estimate: a row item's hover outside its content [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupHoverInset: 8
+    // estimate: a row item's hover corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeLockupHoverRadius: 10
+    // estimate: between columns of row items [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeGridColumnGap: 24
+    // estimate: a row block's title and a page's headings [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeShelfTitleSize: Math.round(22 * Appearance.textScale)
+    // estimate: under a row block's title [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeShelfTitleGap: 12
+    // estimate: the source, a licence, small notes [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeBadgeSize: Math.round(12 * Appearance.textScale)
+    // estimate: a description, the Updates lines [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeBodySize: Math.round(14 * Appearance.textScale)
+    // estimate: a description's line height (proportional) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeBodyLineHeight: 1.25
+    // estimate: the longest line of a description [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeTextMaxWidth: 680
+    // estimate: an empty page's message under the title area [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeEmptyTop: 80
+    // estimate: No Results [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeEmptyTextSize: Math.round(20 * Appearance.textScale)
+    // estimate: between an empty page's heading, its reason and its button [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeEmptyGap: 12
+    // estimate: under a page's last block [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePageBottom: 40
+    // estimate: the arrows' scroll step [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeKeyScrollStep: 40
+    // estimate: the room kept above or below an item the keyboard brings into view [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeFocusScrollMargin: 20
+    // estimate: an app's Get or Open capsule [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonHeight: 28
+    // estimate: the narrowest Get capsule [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonMinWidth: 72
+    // estimate: the capsule's label inset [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonPadding: 14
+    // estimate: the capsule's bold label [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonTextSize: Math.round(13 * Appearance.textScale)
+    // estimate: the product page's button [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonLargeHeight: 30
+    // estimate: the product page's narrowest button [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonLargeMinWidth: 80
+    // estimate: the product page's button label [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeButtonLargeTextSize: Math.round(14 * Appearance.textScale)
+    // estimate: the label of a button not offered yet (step 2: installing comes with step 3) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeButtonDisabledOpacity: 0.45
+    // estimate: a category tile [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryHeight: 64
+    // estimate: a column of category tiles: three at the reference width [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryMinWidth: 240
+    // estimate: between category tiles [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryGap: 16
+    // estimate: a category tile's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryRadius: 12
+    // estimate: a category tile's glyph and name inset [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryInset: 16
+    // estimate: a category tile's glyph [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryIconSize: 28
+    // estimate: a category tile's name [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeCategoryTextSize: Math.round(15 * Appearance.textScale)
+    // estimate: a product page's header under the toolbar [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductTop: 72
+    // estimate: a product page's icon [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductIconSize: 128
+    // estimate: between the icon and the texts [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductHeaderGap: 24
+    // estimate: between the header's lines [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductLineGap: 4
+    // estimate: the app's name [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductNameSize: Math.round(26 * Appearance.textScale)
+    // estimate: the app's summary [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductSummarySize: Math.round(15 * Appearance.textScale)
+    // estimate: above the button row [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductButtonGap: 8
+    // estimate: between the button, the source and the licence [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeProductButtonRowGap: 12
+    // estimate: the screenshots' height [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeScreenshotHeight: 300
+    // estimate: between screenshots [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeScreenshotGap: 16
+    // estimate: a screenshot placeholder's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeScreenshotRadius: 10
+    // estimate: a screenshot's width while it loads, for its height [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeScreenshotPlaceholderRatio: 1.6
+    // estimate: a column of Information: four at the reference width [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeInfoMinWidth: 200
+    // estimate: between Information's columns [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeInfoColumnGap: 24
+    // estimate: between Information's rows [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeInfoRowGap: 16
+    // estimate: between an item's label and value [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeInfoLineGap: 2
+    // estimate: an Information label [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeInfoLabelSize: Math.round(12 * Appearance.textScale)
+    // estimate: an Information value [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeInfoValueSize: Math.round(13 * Appearance.textScale)
+    // estimate: the offline notice's inset [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticePadding: 10
+    // estimate: the offline notice's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeRadius: 10
+    // estimate: the notice's hairline rim, so that it stands out from cards and tiles [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeRimWidth: 1
+    // estimate: the rim at twice a separator's opacity (Appearance.separatorOpacity) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeRimContrast: 2
+    // estimate: the offline notice's glyph [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeIconSize: 16
+    // estimate: the offline notice above the window's bottom [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeNoticeBottom: 16
+    // estimate: the generic icon's tile corner for its size (the app icon shape) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeIconRadiusRatio: 0.225
+    // estimate: the generic icon's glyph for the tile's size, while an app's icon is missing or loading [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeIconPlaceholderGlyphRatio: 0.45
+    // estimate: the search field's longest query [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSearchMaxLength: 200
+    // estimate: the Store's settings window [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSettingsWidth: 480
+    // estimate: the Store's settings window at most [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSettingsMaxHeight: 640
+    // estimate: the settings window's margin [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSettingsMargin: 20
+    // estimate: between the settings' groups [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSettingsGroupGap: 20
+    // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSettingsLineGap: 8
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4
