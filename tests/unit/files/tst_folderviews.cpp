@@ -88,7 +88,7 @@ TEST(FolderViews, KeysIgnoreATrailingSlashAndDotSegments)
 
 TEST(FolderViews, InvalidFieldsReadAsUnset)
 {
-    const auto e = FolderViews::parse(QJsonDocument::fromJson(R"({"url":"file:///a","mode":"cover","sortKey":7,"descending":"yes"})").object());
+    const auto e = FolderViews::parse(QJsonDocument::fromJson(R"({"url":"file:///a","mode":"cover","sortKey":8,"descending":"yes"})").object());
     EXPECT_TRUE(e.isEmpty());
     const auto f = FolderViews::parse(QJsonDocument::fromJson(R"({"mode":"list","sortKey":2.5,"descending":false})").object());
     EXPECT_EQ(f.mode, QStringLiteral("list"));
@@ -502,6 +502,56 @@ TEST(FolderViews, ATakenLockDefersTheWriteWithoutWaiting)
     EXPECT_EQ(check.entry(QStringLiteral("file:///b")), entry(QStringLiteral("gallery"), 2));
 }
 
+// A lock path that is not a lock file (a directory, a FIFO, a link) is no other Files writing: Refused at once, never Busy
+// (FilesApp retried Busy every 5 s for the whole session), never opened (QLockFile would read a FIFO to check it for
+// staleness and wait for a writer). The choice stays pending and is written once the path is cleared (opus
+// counter-review of PR #5).
+TEST(FolderViews, ALockPathThatIsNoLockFileIsRefused)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString file = dir->filePath(QStringLiteral("files-views.json"));
+    const QString lockPath = file + QStringLiteral(".lock");
+    FolderViews views(file);
+    ASSERT_EQ(views.set(QStringLiteral("file:///a"), entry(QStringLiteral("list"))), kWritten);
+    const QByteArray before = readAll(file);
+    const auto refusedAtOnce = [&](const char *what) {
+        // On a thread of its own: a write that opened the FIFO would never return; leave it behind and fail.
+        auto result = std::make_shared<std::atomic<int>>(-1);
+        auto error = std::make_shared<QString>();
+        auto store = std::make_shared<FolderViews>(file);
+        std::thread([result, error, store] { result->store(int(store->set(QStringLiteral("file:///b"), entry(QStringLiteral("gallery")), error.get()))); }).detach();
+        QElapsedTimer timer;
+        timer.start();
+        while (result->load() < 0 && timer.elapsed() < 2000)
+            QThread::msleep(5);
+        ASSERT_GE(result->load(), 0) << what << ": the write blocked";
+        EXPECT_EQ(FolderViews::WriteResult(result->load()), FolderViews::WriteResult::Refused) << what;
+        EXPECT_TRUE(error->contains(QLatin1String("lock"))) << what << ": " << qPrintable(*error);
+        EXPECT_TRUE(store->hasPending()) << what << ": the choice stays pending";
+        EXPECT_EQ(readAll(file), before) << what << ": the file is left as it is";
+    };
+    ASSERT_TRUE(QDir().mkdir(lockPath));
+    refusedAtOnce("a directory");
+    QString error;
+    EXPECT_EQ(views.set(QStringLiteral("file:///c"), entry(QStringLiteral("icons")), &error), FolderViews::WriteResult::Refused);
+    EXPECT_EQ(views.flush(), FolderViews::WriteResult::Refused) << "again, not Busy";
+    EXPECT_TRUE(QFileInfo(lockPath).isDir()) << "the directory is left as it is";
+    ASSERT_TRUE(QDir().rmdir(lockPath));
+    ASSERT_EQ(::mkfifo(QFile::encodeName(lockPath).constData(), 0600), 0);
+    refusedAtOnce("a FIFO");
+    ASSERT_TRUE(QFile::remove(lockPath));
+    ASSERT_TRUE(QFile::link(dir->filePath(QStringLiteral("elsewhere")), lockPath));
+    refusedAtOnce("a link");
+    ASSERT_TRUE(QFile::remove(lockPath));
+    // Cleared: the pending choice is written.
+    EXPECT_EQ(views.flush(), kWritten);
+    FolderViews check(file);
+    check.load();
+    EXPECT_EQ(check.entry(QStringLiteral("file:///c")).mode, QStringLiteral("icons"));
+}
+
 // Four processes writing at once lose nothing: a write that finds the lock taken is flushed again (FilesApp does it on a
 // timer; the review's load test lost 7 of 800 writes with a 500 ms wait and no retry).
 TEST(FolderViews, NoWriteIsLostBetweenProcesses)
@@ -629,4 +679,29 @@ TEST(FolderViews, ReadsFollowChangesThatKeepTheTime)
     ASSERT_EQ(::utimensat(AT_FDCWD, encoded.constData(), times, 0), 0);
     views.refresh();
     EXPECT_EQ(views.entry(QStringLiteral("file:///a")).mode, QStringLiteral("gallery"));
+}
+
+TEST(FolderViews, GroupingAndTheNewSortKeysRoundTrip)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString file = dir->filePath(QStringLiteral("files-views.json"));
+    FolderViews views(file);
+    FolderViews::Entry e = entry(QStringLiteral("icons"), 6);
+    e.groupBy = 2;
+    ASSERT_EQ(views.set(QStringLiteral("file:///a"), e), kWritten);
+    FolderViews::Entry none;
+    none.groupBy = 0;
+    ASSERT_EQ(views.set(QStringLiteral("file:///b"), none), kWritten) << "no groups is a choice of its own";
+    FolderViews again(file);
+    again.load();
+    EXPECT_EQ(again.entry(QStringLiteral("file:///a")).sortKey, 6);
+    EXPECT_EQ(again.entry(QStringLiteral("file:///a")).groupBy, 2);
+    EXPECT_EQ(again.entry(QStringLiteral("file:///b")).groupBy, 0);
+    EXPECT_EQ(again.entry(QStringLiteral("file:///b")).sortKey, -1);
+    // Out of range: unset.
+    EXPECT_EQ(FolderViews::parse(QJsonObject{{QStringLiteral("groupBy"), 9}, {QStringLiteral("sortKey"), 8}}).groupBy, -1);
+    EXPECT_EQ(FolderViews::parse(QJsonObject{{QStringLiteral("sortKey"), 8}}).sortKey, -1);
+    EXPECT_EQ(FolderViews::parse(QJsonObject{{QStringLiteral("groupBy"), 1.5}}).groupBy, -1);
 }

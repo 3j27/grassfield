@@ -5,11 +5,15 @@
 
 #include <QCoreApplication>
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QJSValue>
 #include <QList>
+#include <QMimeData>
 #include <QObject>
+#include <QPointF>
 #include <QPointer>
 #include <QSettings>
+#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -65,8 +69,17 @@ class FilesApp : public QObject
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY prefsChanged)
     // The gallery view shows its info panel (name, kind, dates, tags of the shown item).
     Q_PROPERTY(bool galleryInfo READ galleryInfo WRITE setGalleryInfo NOTIFY prefsChanged)
+    // View > Show Preview (Shift+Cmd+P) in the icon and list views (view/preview) and the column view's preview column
+    // (view/columnPreview); the gallery's is galleryInfo.
+    Q_PROPERTY(bool previewPane READ previewPane WRITE setPreviewPane NOTIFY prefsChanged)
+    Q_PROPERTY(bool columnPreview READ columnPreview WRITE setColumnPreview NOTIFY prefsChanged)
     // View > Show Tab Bar (Finder, Shift+Cmd+T): the tab bar stays visible with one tab (view/tabBar, every window).
     Q_PROPERTY(bool tabBarShown READ tabBarShown WRITE setTabBarShown NOTIFY prefsChanged)
+    // View > Show Path Bar (Alt+Cmd+P), Show Status Bar (Cmd+/), Show Sidebar (Ctrl+Cmd+S): hidden, hidden and shown by
+    // default, as in the Finder (decision F-11; view/pathBar, view/statusBar, view/sidebar, every window).
+    Q_PROPERTY(bool pathBarShown READ pathBarShown WRITE setPathBarShown NOTIFY prefsChanged)
+    Q_PROPERTY(bool statusBarShown READ statusBarShown WRITE setStatusBarShown NOTIFY prefsChanged)
+    Q_PROPERTY(bool sidebarShown READ sidebarShown WRITE setSidebarShown NOTIFY prefsChanged)
     // The size of the last browser window resized or closed (ADR-0026 part 1), 0 when none was kept yet. Read when a
     // window opens only: a window never follows another one's size.
     Q_PROPERTY(int windowWidth READ windowWidth NOTIFY windowSizeChanged)
@@ -84,7 +97,8 @@ class FilesApp : public QObject
 
 public:
     explicit FilesApp(const QList<QUrl> &initialUrls, QObject *parent = nullptr);
-    // Writes the view settings still pending (the only wait for another process's lock, bounded).
+    // Writes the view settings still pending (the only wait for another process's lock, bounded), and waits for the
+    // pictures being turned.
     ~FilesApp() override;
 
     QObject *places() const;
@@ -125,6 +139,16 @@ public:
     void setGalleryInfo(bool on);
     bool tabBarShown() const;
     void setTabBarShown(bool on);
+    bool pathBarShown() const;
+    void setPathBarShown(bool on);
+    bool statusBarShown() const;
+    void setStatusBarShown(bool on);
+    bool sidebarShown() const;
+    void setSidebarShown(bool on);
+    bool previewPane() const;
+    void setPreviewPane(bool on);
+    bool columnPreview() const;
+    void setColumnPreview(bool on);
     int windowWidth() const;
     int windowHeight() const;
     QUrl newWindowUrl() const;
@@ -140,6 +164,13 @@ public:
     Q_INVOKABLE QVariantMap folderView(const QUrl &url) const;
     // Sets the given fields (mode, sortKey, sortDescending) for `url`; other fields stay as stored.
     Q_INVOKABLE void setFolderView(const QUrl &url, const QVariantMap &fields);
+
+    // Quick actions of the preview pane (ImageRotate): the local pictures among `urls` that Files can turn without a loss
+    // (JPEG through its orientation tag; PNG, BMP), none for a selection of more than kMaxQuickActionItems (each is looked
+    // at on disk as the selection changes); and the turn itself, on a thread of its own (errors in the banner).
+    static constexpr int kMaxQuickActionItems = 100;
+    Q_INVOKABLE QList<QUrl> rotatableImages(const QList<QUrl> &urls) const;
+    Q_INVOKABLE void rotateImages(const QList<QUrl> &urls, bool clockwise);
 
     // Makes `parent` the owner of `object` (QObject parent). A tab moved to another window must belong to it: setting an
     // item's visual parent in QML keeps its first owner, whose destruction would take the tab along.
@@ -202,6 +233,10 @@ public:
     Q_INVOKABLE void toggleColorTag(const QList<QUrl> &urls, int index);
     // Adds `tag` (a stored tag name) to the local items among `urls` (a drop on a sidebar tag).
     Q_INVOKABLE void addTag(const QList<QUrl> &urls, const QString &tag);
+    // Adds a tag the user typed (TagLogic::typedTag: a colour's shown name is that colour tag).
+    Q_INVOKABLE void addTypedTag(const QList<QUrl> &urls, const QString &typed);
+    // Removes `tag` (a stored tag name) from the local items among `urls`.
+    Q_INVOKABLE void removeTag(const QList<QUrl> &urls, const QString &tag);
     // A tag's shown name (colour tags translated).
     Q_INVOKABLE QString tagName(const QString &tag) const;
     // Palette index of a colour tag, -1 for other tags.
@@ -210,6 +245,16 @@ public:
     // local folder, the folder of a tag search, else the home folder.
     Q_INVOKABLE QUrl tagSearchUrl(const QString &tag, const QUrl &from) const;
     Q_INVOKABLE bool isTagSearch(const QUrl &url) const;
+    // Recents (Go > Recents, the sidebar's first place; docs/specs/files.md "Views and selection").
+    Q_INVOKABLE bool isRecents(const QUrl &url) const;
+    Q_INVOKABLE QUrl recentsUrl() const;
+    // Recents is sorted by when the files were last opened unless chosen otherwise for it (Finder).
+    Q_PROPERTY(int recentsSortKey READ recentsSortKey CONSTANT)
+    int recentsSortKey() const;
+    // A spring-loaded folder replaced the view under a drag that has not moved since: the window gets its last drag
+    // move again, so the new view under the pointer becomes the drop target (a drop without moving lands in the opened
+    // folder, as in the Finder). Nothing happens when no drag is over `window`.
+    Q_INVOKABLE void refreshDrag(QObject *window);
     Q_INVOKABLE QString searchedTag(const QUrl &url) const;
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.
@@ -249,6 +294,13 @@ signals:
     void folderStylesChanged(const QList<QUrl> &urls);
     void allFolderStylesChanged();
     void folderStyleRevisionChanged();
+    // A drag from another application ended over `window`: it left or was canceled (`dropped` false: what it
+    // spring-loaded goes back) or was dropped there (it stays, whichever view took the drop).
+    void outsideDragEnded(QObject *window, bool dropped);
+
+protected:
+    // Remembers the last drag move over each window (refreshDrag).
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void track(KJob *job, const QString &activity);
@@ -303,8 +355,23 @@ private:
     int m_folderStyleRevision = 0;
     // Read on first use and again when it changes (the state directory may not exist before a view is chosen).
     mutable FolderViews m_folderViews;
+    // The last drag move over each window (refreshDrag); dropped when the drag leaves or drops.
+    struct DragState {
+        QPointF position;
+        Qt::DropActions actions;
+        QPointer<const QMimeData> mime;
+        Qt::MouseButtons buttons;
+        Qt::KeyboardModifiers modifiers;
+        // The drag started in Files (its end reaches the views by Drag.onDragFinished).
+        bool local = false;
+    };
+    QHash<QObject *, DragState> m_drags;
+    // Pictures are turned here, one batch at a time and in order (two turns of one picture never overlap).
+    QThreadPool m_rotations;
     // A view setting that found the lock taken by another Files process is written again by this timer, never waited for
     // on the UI thread; the pause doubles from kFolderViewsRetryFirstMs up to kFolderViewsRetryMaxMs.
     QTimer m_folderViewsRetry;
     int m_folderViewsRetryMs = 0;
+    // The last refusal logged: the same reason is logged once until a write succeeds (every view choice tries again).
+    QString m_folderViewsRefusal;
 };

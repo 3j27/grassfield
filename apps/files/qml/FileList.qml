@@ -11,10 +11,49 @@ FocusScope {
     required property var model
 
     readonly property real nameWidth: Math.max(Tokens.filesListNameMinWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
+    // The columns keep their widths: a list narrower than them (a narrow window, the preview pane) scrolls sideways, the
+    // header with it (macOS).
+    readonly property real columnsWidth: root.nameWidth + Tokens.filesListDateWidth + Tokens.filesListSizeWidth + Tokens.filesListKindWidth
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.filesListRowHeight))
     // The rows have moved up under the toolbar (the window draws the toolbar's hairline then, macOS).
     readonly property bool scrolled: list.contentY > list.originY
 
+    // Rubber band (Finder): a drag from the empty space under the rows, or from a row outside its icon and name, selects
+    // the rows it covers (with Shift or Cmd, added to the selection there was). Points in list.contentItem coordinates.
+    property bool banding: false
+    property point bandOrigin
+    property point bandEnd
+    property var bandBase: []
+
+    function bandPress(item: Item, x: real, y: real, modifiers: int): void {
+        root.bandOrigin = item.mapToItem(list.contentItem, x, y);
+        root.bandEnd = root.bandOrigin;
+        root.bandBase = (modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) ? root.model.selectedUrls() : [];
+        root.banding = false;
+    }
+
+    function bandMove(item: Item, x: real, y: real): void {
+        const p = item.mapToItem(list.contentItem, x, y);
+        if (!root.banding && Math.abs(p.x - root.bandOrigin.x) + Math.abs(p.y - root.bandOrigin.y) < Tokens.filesDragThreshold)
+            return;
+        root.banding = true;
+        root.bandEnd = p;
+        const groups = root.model.groupBy > 0 ? root.model.groups : [];
+        const rows = groups.length > 0 ? Nav.groupedRowsInSpan(root.bandOrigin.y, p.y, Tokens.filesListRowHeight, Tokens.filesListGroupHeight, groups)
+                                       : Nav.cellsInRect(0, root.bandOrigin.y, 0, p.y, 1, Tokens.filesListRowHeight, 1, list.count);
+        const urls = root.bandBase.slice();
+        for (let i = 0; i < rows.length; i++)
+            urls.push(root.model.urlAt(rows[i]));
+        root.model.selectUrls(urls);
+        // Scroll while the band reaches past the edges.
+        const inList = item.mapToItem(list, x, y);
+        if (inList.y > list.height)
+            list.contentY = Math.min(list.contentY + Tokens.spacingSm, Math.max(list.originY, list.contentHeight - list.height + list.originY));
+        else if (inList.y < 0)
+            list.contentY = Math.max(list.originY, list.contentY - Tokens.spacingSm);
+    }
+
+    clip: true
     Accessible.role: Accessible.Table
     Accessible.name: qsTr("Files")
 
@@ -51,16 +90,21 @@ FocusScope {
         width: Tokens.filesListIconSize
         height: Tokens.filesListIconSize
         Drag.dragType: Drag.Automatic
-        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+        // No link: Wayland drag and drop has none (a drop proposing it is refused); Files makes an alias itself
+        // for Option-Cmd (FilesApp.drop).
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
         Drag.proposedAction: Qt.MoveAction
-        Drag.onDragFinished: dragProxy.Drag.active = false
+        Drag.onDragFinished: dropAction => {
+            dragProxy.Drag.active = false;
+            root.tab.dragFinished(dropAction);
+        }
     }
 
     // Header ------------------------------------------------------------------------------------
     Row {
         id: header
-        x: list.x
-        width: list.width
+        x: list.x - (list.contentX - list.originX)
+        width: list.contentWidth
         height: Tokens.filesListHeaderHeight
 
         Repeater {
@@ -143,6 +187,8 @@ FocusScope {
     DropArea {
         anchors.fill: list
         keys: ["text/uri-list"]
+        // Recents is a list, not a place (Finder): the drag is refused there and shows it.
+        onEntered: event => event.accepted = !root.tab.app.isRecents(root.model.url)
         onDropped: drop => {
             if (drop.hasUrls) {
                 root.tab.dropUrls(drop.urls, root.model.url, root.model);
@@ -152,6 +198,7 @@ FocusScope {
     }
 
     MouseArea {
+        id: background
         anchors.fill: list
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: mouse => {
@@ -159,10 +206,18 @@ FocusScope {
             if (mouse.button === Qt.RightButton) {
                 const p = mapToItem(null, mouse.x, mouse.y);
                 root.tab.contextMenu(root.model, -1, p.x, p.y, false);
-            } else {
-                root.model.clearSelection();
+                return;
             }
+            root.bandPress(background, mouse.x, mouse.y, mouse.modifiers);
+            if (root.bandBase.length === 0)
+                root.model.clearSelection();
         }
+        onPositionChanged: mouse => {
+            if (pressed && mouse.buttons === Qt.LeftButton)
+                root.bandMove(background, mouse.x, mouse.y);
+        }
+        onReleased: root.banding = false
+        onCanceled: root.banding = false
     }
 
     ListView {
@@ -175,6 +230,8 @@ FocusScope {
         anchors.bottom: parent.bottom
         model: root.model
         clip: true
+        contentWidth: Math.max(list.width, root.columnsWidth)
+        flickableDirection: Flickable.AutoFlickIfNeeded
         focus: true
         activeFocusOnTab: true
         keyNavigationEnabled: false
@@ -186,6 +243,42 @@ FocusScope {
         Accessible.name: qsTr("Files")
 
         Keys.onPressed: event => root.tab.handleViewKey(event, root.model, key => Nav.listMove(root.model.currentRow, key, list.count, root.pageRows))
+
+        // View > Group By: a header above each group (no capture of the Finder's grouped list: visual NOT verified).
+        section.property: root.model && root.model.groupBy > 0 ? "group" : ""
+        section.criteria: ViewSection.FullString
+        section.delegate: Item {
+            id: groupHeader
+
+            required property string section
+
+            width: list.contentWidth
+            height: Tokens.filesListGroupHeight
+            Accessible.role: Accessible.Heading
+            Accessible.name: groupHeader.section
+
+            Text {
+                textFormat: Text.PlainText
+                x: Tokens.spacingSm + Tokens.spacingXs
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Tokens.spacingXs
+                width: parent.width - 2 * x
+                text: groupHeader.section
+                elide: Text.ElideRight
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                x: Tokens.spacingXs
+                width: parent.width - 2 * x
+                height: Tokens.appsBorderWidth
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            }
+        }
 
         delegate: FocusScope {
             id: row
@@ -210,7 +303,7 @@ FocusScope {
             readonly property color foreground: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
             readonly property color secondary: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.textSecondary
 
-            width: list.width
+            width: list.contentWidth
             height: Tokens.filesListRowHeight
             opacity: row.hidden ? Tokens.filesHiddenOpacity : 1
             Accessible.role: Accessible.Row
@@ -326,6 +419,8 @@ FocusScope {
                 anchors.fill: parent
                 enabled: row.isDir && !row.selected
                 keys: ["text/uri-list"]
+                onEntered: root.tab.springHover(row.url)
+                onExited: root.tab.springLeave(row.url)
                 onDropped: event => {
                     if (event.hasUrls) {
                         root.tab.dropUrls(event.urls, row.url, root.model);
@@ -339,9 +434,12 @@ FocusScope {
                 anchors.fill: parent
                 enabled: !row.renaming
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                drag.target: dragProxy
+                drag.target: mouse.bandStart ? null : dragProxy
                 drag.threshold: Tokens.filesDragThreshold
                 property bool collapseOnRelease: false
+                // Pressed outside the icon and the name: a drag draws a rubber band, a click selects the row.
+                property bool bandStart: false
+                property int pressModifiers: 0
 
                 onPressed: event => {
                     list.forceActiveFocus();
@@ -351,14 +449,41 @@ FocusScope {
                         return;
                     }
                     const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier);
+                    const nameEnd = rowDots.visible ? rowDots.x + rowDots.width : nameText.x + Math.min(nameText.paintedWidth, nameText.width);
+                    mouse.bandStart = event.x > nameEnd + Tokens.spacingSm;
+                    if (mouse.bandStart) {
+                        mouse.pressModifiers = mods;
+                        root.bandPress(mouse, event.x, event.y, mods);
+                        return;
+                    }
                     collapseOnRelease = row.selected && mods === 0;
                     if (!row.selected || mods !== 0)
                         root.model.select(row.index, mods);
                 }
-                onReleased: {
+                onPositionChanged: event => {
+                    if (mouse.bandStart && pressed && event.buttons === Qt.LeftButton)
+                        root.bandMove(mouse, event.x, event.y);
+                }
+                onReleased: event => {
+                    if (mouse.bandStart) {
+                        if (!root.banding)
+                            root.model.select(row.index, mouse.pressModifiers);
+                        root.banding = false;
+                        mouse.bandStart = false;
+                        return;
+                    }
                     if (collapseOnRelease && !drag.active)
                         root.model.select(row.index, 0);
                     collapseOnRelease = false;
+                }
+                // A band whose row went away (scrolled far past the cache) or whose press was taken ends there.
+                onCanceled: mouse.endBand()
+                Component.onDestruction: mouse.endBand()
+                function endBand(): void {
+                    if (!mouse.bandStart)
+                        return;
+                    mouse.bandStart = false;
+                    root.banding = false;
                 }
                 onDoubleClicked: event => {
                     if (event.button === Qt.LeftButton)
@@ -369,11 +494,25 @@ FocusScope {
                         collapseOnRelease = false;
                         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
                         dragProxy.Drag.imageSource = "image://icon/" + row.iconName;
+                        root.tab.dragStarted();
                         dragProxy.Drag.active = true;
                     }
                 }
             }
         }
+    }
+
+    Rectangle {
+        parent: list.contentItem
+        z: 1
+        visible: root.banding
+        x: Math.min(root.bandOrigin.x, root.bandEnd.x)
+        y: Math.min(root.bandOrigin.y, root.bandEnd.y)
+        width: Math.abs(root.bandEnd.x - root.bandOrigin.x)
+        height: Math.abs(root.bandEnd.y - root.bandOrigin.y)
+        color: Appearance.withAlpha(Appearance.colors.accent, Tokens.filesRubberBandOpacity)
+        border.width: Tokens.appsBorderWidth
+        border.color: Appearance.colors.accent
     }
 
     ScrollBar {

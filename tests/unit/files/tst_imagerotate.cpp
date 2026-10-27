@@ -1,0 +1,338 @@
+// Unit tests for apps/files/src/imagerotate.{h,cpp} (gtest): the preview pane's Rotate Left / Rotate Right
+// (docs/specs/files.md "Preview pane"). Built and run by scripts/dev/test.sh. The file tests only write under
+// GRASSFIELD_TEST_TMP, a directory inside the repository's .dev/ (set by scripts/dev/test.sh); they skip without it.
+#include "imagerotate.h"
+
+#include <QBuffer>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QImage>
+#include <QImageReader>
+#include <QTemporaryDir>
+
+#include <memory>
+#include <sys/stat.h>
+#include <sys/xattr.h>
+
+#include <unistd.h>
+
+#include <gtest/gtest.h>
+
+using namespace ImageRotate;
+
+namespace
+{
+std::unique_ptr<QTemporaryDir> sandbox()
+{
+    const QString base = qEnvironmentVariable("GRASSFIELD_TEST_TMP");
+    if (base.isEmpty() || !QDir::cleanPath(base).contains(QLatin1String("/.dev/")))
+        return nullptr;
+    QDir().mkpath(base);
+    auto dir = std::make_unique<QTemporaryDir>(base + QStringLiteral("/imagerotate-XXXXXX"));
+    return dir->isValid() ? std::move(dir) : nullptr;
+}
+
+// A 40 x 20 picture: left half red, right half blue.
+QImage picture()
+{
+    QImage image(40, 20, QImage::Format_RGB32);
+    for (int y = 0; y < 20; y++) {
+        for (int x = 0; x < 40; x++)
+            image.setPixel(x, y, x < 20 ? qRgb(255, 0, 0) : qRgb(0, 0, 255));
+    }
+    return image;
+}
+
+QByteArray encoded(const QImage &image, const char *format)
+{
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, format);
+    return bytes;
+}
+
+QByteArray readAll(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+}
+} // namespace
+
+TEST(ImageRotate, AQuarterTurnFollowsTheExifTable)
+{
+    EXPECT_EQ(turned(1, true), 6);
+    EXPECT_EQ(turned(6, true), 3);
+    EXPECT_EQ(turned(3, true), 8);
+    EXPECT_EQ(turned(8, true), 1);
+    EXPECT_EQ(turned(1, false), 8);
+    EXPECT_EQ(turned(8, false), 3);
+    // Mirrored pictures stay mirrored.
+    EXPECT_EQ(turned(2, true), 7);
+    EXPECT_EQ(turned(7, true), 4);
+    EXPECT_EQ(turned(4, true), 5);
+    EXPECT_EQ(turned(5, true), 2);
+    EXPECT_EQ(turned(0, true), 6) << "an unknown value reads as 1";
+    for (int o = 1; o <= 8; o++)
+        EXPECT_EQ(turned(turned(o, true), false), o);
+}
+
+TEST(ImageRotate, OnlyLosslessKindsTurn)
+{
+    EXPECT_EQ(methodFor("image/jpeg"), Method::Orientation);
+    EXPECT_EQ(methodFor("image/png"), Method::Reencode);
+    EXPECT_EQ(methodFor("image/tiff"), Method::None) << "Qt would write it uncompressed and without its tags";
+    EXPECT_EQ(methodFor("image/bmp"), Method::Reencode);
+    EXPECT_EQ(methodFor("image/webp"), Method::None);
+    EXPECT_EQ(methodFor("image/gif"), Method::None);
+    EXPECT_EQ(methodFor("application/pdf"), Method::None);
+}
+
+TEST(ImageRotate, TheMinimalSegmentParses)
+{
+    const QByteArray jpeg = QByteArray("\xFF\xD8", 2) + exifSegment(6) + QByteArray("\xFF\xDA\x00\x02", 4);
+    const JpegOrientation where = findOrientation(jpeg);
+    EXPECT_TRUE(where.valid);
+    EXPECT_TRUE(where.exif);
+    EXPECT_TRUE(where.bigEndian);
+    EXPECT_EQ(where.value, 6);
+    ASSERT_GE(where.offset, 0);
+    EXPECT_EQ(quint8(jpeg.at(where.offset + 1)), 6);
+}
+
+TEST(ImageRotate, ALittleEndianTagIsFound)
+{
+    // II TIFF, IFD0 with one entry: orientation 3.
+    QByteArray tiff("II\x2A\x00\x08\x00\x00\x00", 8);
+    tiff.append("\x01\x00", 2);
+    tiff.append("\x12\x01\x03\x00\x01\x00\x00\x00\x03\x00\x00\x00", 12);
+    tiff.append("\x00\x00\x00\x00", 4);
+    const QByteArray body = QByteArray("Exif\0\0", 6) + tiff;
+    QByteArray segment("\xFF\xE1", 2);
+    segment.append(char(0));
+    segment.append(char(body.size() + 2));
+    const QByteArray jpeg = QByteArray("\xFF\xD8", 2) + segment + body + QByteArray("\xFF\xDA\x00\x02", 4);
+    const JpegOrientation where = findOrientation(jpeg);
+    EXPECT_TRUE(where.valid);
+    EXPECT_FALSE(where.bigEndian);
+    EXPECT_EQ(where.value, 3);
+}
+
+TEST(ImageRotate, BrokenFilesAreNotJpeg)
+{
+    EXPECT_FALSE(findOrientation(QByteArray("GIF89a")).valid);
+    EXPECT_FALSE(findOrientation(QByteArray("\xFF\xD8\xFF\xE1\xFF\xFF", 6)).valid) << "a segment longer than the file";
+}
+
+TEST(ImageRotate, AJpegWithoutExifGetsOneAndKeepsItsTagsAndMode)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString path = dir->filePath(QStringLiteral("photo.jpg"));
+    ASSERT_TRUE(picture().save(path, "JPEG", 95));
+    ASSERT_EQ(::chmod(QFile::encodeName(path).constData(), 0640), 0);
+    const bool xattrs = ::lsetxattr(QFile::encodeName(path).constData(), "user.xdg.tags", "Red", 3, 0) == 0;
+    const QByteArray before = readAll(path);
+    EXPECT_EQ(rotate(path, "image/jpeg", true), QString());
+    const QByteArray after = readAll(path);
+    EXPECT_EQ(after.size(), before.size() + exifSegment(6).size()) << "only the segment was added";
+    EXPECT_EQ(findOrientation(after).value, 6);
+    QImageReader reader(path);
+    EXPECT_EQ(reader.transformation(), QImageIOHandler::TransformationRotate90);
+    reader.setAutoTransform(true);
+    EXPECT_EQ(reader.read().size(), QSize(20, 40)) << "shown turned";
+    struct stat st {};
+    ASSERT_EQ(::stat(QFile::encodeName(path).constData(), &st), 0);
+    EXPECT_EQ(st.st_mode & 0777, 0640u);
+    if (xattrs) {
+        char value[8] = {};
+        EXPECT_EQ(::lgetxattr(QFile::encodeName(path).constData(), "user.xdg.tags", value, sizeof value), 3);
+        EXPECT_EQ(QByteArray(value, 3), QByteArray("Red"));
+    }
+    EXPECT_TRUE(QDir(dir->path()).entryList(QDir::Hidden | QDir::Files).filter(QStringLiteral(".grassfield-rotate")).isEmpty()) << "no temporary file left";
+}
+
+TEST(ImageRotate, AJpegWithAnOrientationChangesInPlace)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString path = dir->filePath(QStringLiteral("photo.jpg"));
+    QByteArray jpeg = encoded(picture(), "JPEG");
+    jpeg.insert(2, exifSegment(6));
+    QFile f(path);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(jpeg);
+    f.close();
+    struct stat st1 {}, st2 {};
+    ASSERT_EQ(::stat(QFile::encodeName(path).constData(), &st1), 0);
+    EXPECT_EQ(rotate(path, "image/jpeg", true), QString());
+    EXPECT_EQ(findOrientation(readAll(path)).value, 3);
+    EXPECT_EQ(rotate(path, "image/jpeg", false), QString());
+    EXPECT_EQ(rotate(path, "image/jpeg", false), QString());
+    EXPECT_EQ(findOrientation(readAll(path)).value, 1) << "back upright after two anticlockwise turns";
+    EXPECT_EQ(rotate(path, "image/jpeg", false), QString());
+    EXPECT_EQ(findOrientation(readAll(path)).value, 8);
+    ASSERT_EQ(::stat(QFile::encodeName(path).constData(), &st2), 0);
+    EXPECT_EQ(st1.st_ino, st2.st_ino) << "the same file, two bytes changed";
+    EXPECT_EQ(readAll(path).size(), jpeg.size());
+}
+
+TEST(ImageRotate, APngIsWrittenAgainTurned)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString path = dir->filePath(QStringLiteral("shot.png"));
+    ASSERT_TRUE(picture().save(path, "PNG"));
+    EXPECT_EQ(rotate(path, "image/png", false), QString());
+    const QImage turnedImage(path);
+    ASSERT_EQ(turnedImage.size(), QSize(20, 40));
+    // Anticlockwise: the red left half is now the bottom half.
+    EXPECT_EQ(turnedImage.pixel(10, 35), qRgb(255, 0, 0));
+    EXPECT_EQ(turnedImage.pixel(10, 5), qRgb(0, 0, 255));
+}
+
+TEST(ImageRotate, AnimatedPngsAndHardLinkedFilesAreRefused)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    // An APNG: an acTL chunk (animation control) right after IHDR. Qt reads its first frame only.
+    const QString still = dir->filePath(QStringLiteral("still.png"));
+    ASSERT_TRUE(picture().save(still, "PNG"));
+    QFile in(still);
+    ASSERT_TRUE(in.open(QIODevice::ReadOnly));
+    QByteArray png = in.readAll();
+    in.close();
+    const qint64 afterIhdr = 8 + 12 + 13;
+    QByteArray actl("\x00\x00\x00\x08"
+                    "acTL"
+                    "\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00",
+                    20);
+    png.insert(afterIhdr, actl);
+    const QString animated = dir->filePath(QStringLiteral("animated.png"));
+    QFile out(animated);
+    ASSERT_TRUE(out.open(QIODevice::WriteOnly));
+    out.write(png);
+    out.close();
+    EXPECT_EQ(rotate(animated, "image/png", true), QStringLiteral("animated pictures are not turned"));
+    QFile check(animated);
+    ASSERT_TRUE(check.open(QIODevice::ReadOnly));
+    EXPECT_EQ(check.readAll(), png) << "untouched, byte for byte";
+
+    // A file with another name: a new file would leave the other name on the old picture.
+    const QString twin = dir->filePath(QStringLiteral("twin.png"));
+    ASSERT_EQ(::link(QFile::encodeName(still).constData(), QFile::encodeName(twin).constData()), 0);
+    EXPECT_EQ(rotate(still, "image/png", true), QStringLiteral("it has other names (hard links), so it was left as it is"));
+    EXPECT_EQ(QImage(still).size(), QSize(40, 20));
+}
+
+TEST(ImageRotate, LinksAndOtherKindsAreRefused)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    const QString path = dir->filePath(QStringLiteral("shot.png"));
+    ASSERT_TRUE(picture().save(path, "PNG"));
+    const QString link = dir->filePath(QStringLiteral("link.png"));
+    ASSERT_TRUE(QFile::link(path, link));
+    EXPECT_FALSE(rotate(link, "image/png", true).isEmpty());
+    EXPECT_FALSE(rotate(path, "image/gif", true).isEmpty());
+    EXPECT_EQ(QImage(path).size(), QSize(40, 20)) << "untouched";
+}
+
+TEST(ImageRotate, TheContentDecidesNotTheName)
+{
+    EXPECT_EQ(methodForContent(encoded(picture(), "JPEG")), Method::Orientation);
+    QByteArray format;
+    EXPECT_EQ(methodForContent(encoded(picture(), "PNG"), &format), Method::Reencode);
+    EXPECT_EQ(format, QByteArray("png"));
+    EXPECT_EQ(methodForContent(encoded(picture(), "BMP"), &format), Method::Reencode);
+    EXPECT_EQ(format, QByteArray("bmp"));
+    EXPECT_EQ(methodForContent(QByteArray::fromBase64("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")), Method::None) << "GIF";
+    ASSERT_FALSE(encoded(picture(), "TIFF").isEmpty());
+    EXPECT_EQ(methodForContent(encoded(picture(), "TIFF")), Method::None);
+    ASSERT_FALSE(encoded(picture(), "WEBP").isEmpty());
+    EXPECT_EQ(methodForContent(encoded(picture(), "WEBP")), Method::None);
+    EXPECT_EQ(methodForContent(QByteArray("BMnot a bitmap at all")), Method::None) << "BM alone is not a bitmap";
+    EXPECT_EQ(methodForContent(QByteArray()), Method::None);
+}
+
+TEST(ImageRotate, AMisnamedPictureIsNeverReencodedLossily)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    // A JPEG named .png (the review's photo.png): turned through its orientation tag, its compressed data untouched,
+    // never written again as a JPEG at quality 75.
+    const QByteArray jpeg = encoded(picture(), "JPEG");
+    const QString photo = dir->filePath(QStringLiteral("photo.png"));
+    {
+        QFile f(photo);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(jpeg);
+    }
+    for (int i = 0; i < 4; i++)
+        EXPECT_EQ(rotate(photo, "image/png", true), QString()) << "turn " << i;
+    const QByteArray after = readAll(photo);
+    const JpegOrientation where = findOrientation(after);
+    EXPECT_EQ(where.value, 1) << "four quarter turns";
+    EXPECT_EQ(after.size(), jpeg.size() + exifSegment(1).size()) << "one orientation segment added, nothing re-encoded";
+    const qint64 at = findOrientation(jpeg).insertAt;
+    EXPECT_EQ(after.left(at) + after.mid(at + exifSegment(1).size()), jpeg) << "the JPEG's own segments and data, byte for byte";
+
+    // A PNG named .bmp is written again as a PNG, pixel for pixel.
+    const QString shot = dir->filePath(QStringLiteral("shot.bmp"));
+    ASSERT_TRUE(picture().save(shot, "PNG"));
+    EXPECT_EQ(rotate(shot, "image/bmp", false), QString());
+    const QByteArray turnedPng = readAll(shot);
+    EXPECT_TRUE(turnedPng.startsWith(QByteArray("\x89PNG", 4)));
+    QImage image;
+    ASSERT_TRUE(image.loadFromData(turnedPng, "PNG"));
+    ASSERT_EQ(image.size(), QSize(20, 40));
+    EXPECT_EQ(image.pixel(10, 35), qRgb(255, 0, 0));
+    EXPECT_EQ(image.pixel(10, 5), qRgb(0, 0, 255));
+
+    // A GIF, a TIFF or a WebP named like a lossless kind is left as it is, byte for byte (Qt has no GIF writer: a 1 x 1 one).
+    const QByteArray gif = QByteArray::fromBase64("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+    ASSERT_EQ(QImage::fromData(gif).size(), QSize(1, 1));
+    for (const char *format : {"GIF", "TIFF", "WEBP"}) {
+        const QByteArray bytes = qstrcmp(format, "GIF") == 0 ? gif : encoded(picture(), format);
+        ASSERT_FALSE(bytes.isEmpty()) << "no " << format << " writer";
+        const QString path = dir->filePath(QStringLiteral("other-%1.png").arg(QLatin1String(format)));
+        {
+            QFile f(path);
+            ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+            f.write(bytes);
+        }
+        EXPECT_FALSE(rotate(path, "image/png", true).isEmpty()) << format;
+        EXPECT_EQ(readAll(path), bytes) << format << " untouched";
+    }
+}
+
+TEST(ImageRotate, AFileOverTheLimitIsRefusedUnread)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    // A real PNG at the start of a sparse file one byte over the limit (nothing is written to disk past the picture).
+    const QString path = dir->filePath(QStringLiteral("huge.png"));
+    const QByteArray png = encoded(picture(), "PNG");
+    {
+        QFile f(path);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(png);
+        ASSERT_TRUE(f.resize(kMaxFileSize + 1));
+    }
+    EXPECT_EQ(rotate(path, "image/png", true), QStringLiteral("it is larger than 128 MB, so it was left as it is"));
+    EXPECT_EQ(QFileInfo(path).size(), kMaxFileSize + 1);
+    QFile f(path);
+    ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+    EXPECT_EQ(f.read(png.size()), png) << "untouched";
+    // At the limit itself, the size is not what refuses it (a PNG followed by zeros is still a PNG to Qt's reader).
+    ASSERT_TRUE(QFile::resize(path, kMaxFileSize));
+    EXPECT_NE(rotate(path, "image/png", true), QStringLiteral("it is larger than 128 MB, so it was left as it is"));
+}
