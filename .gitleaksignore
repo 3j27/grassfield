@@ -1,0 +1,4 @@
+# Findings reviewed as false positives (gitleaks fingerprints: commit:file:rule:line).
+# Omarchy's public package-signing key fingerprint (bin/omarchy-update-keyring at Omarchy v4.0.4), held in a variable named
+# *_KEY in the first commit of the ADR-0035 probe script; the variable was renamed in a later commit. Not a secret.
+5fbaf6aada9156805a2bc99aca7be24c89b2c783:docs/audits/dialogs-2026-10-27/probes.sh:generic-api-key:38
